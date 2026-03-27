@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.themoviedb.org)",
+      "WebFetch(domain:trakt.tv)",
+      "WebFetch(domain:www.sidereel.com)",
+      "WebFetch(domain:letterboxd.com)",
+      "WebFetch(domain:www.serializd.com)"
+    ]
+  }
+}

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binge.nu</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#eeece8;color:#222;font-size:13px;display:flex;min-height:100vh}
+
+.sidebar{width:210px;background:#1e2028;color:#9a9aaa;flex-shrink:0;display:flex;flex-direction:column;font-size:12px}
+.sb-head{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05)}
+.logo{font-size:17px;font-weight:800;color:#d97b35}
+.logo span{font-weight:400;color:#555;font-size:11px}
+.sb-search{margin:6px 10px;display:flex;align-items:center;gap:5px;padding:4px 9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:3px}
+.sb-search input{background:none;border:none;color:#bbb;font-size:11px;font-family:inherit;outline:none;width:100%}
+.sb-search input::placeholder{color:#4a4a55}
+
+.sb-label{padding:12px 16px 3px;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#3e3e48;font-weight:600}
+.sb-item{display:flex;align-items:center;justify-content:space-between;padding:5px 16px;cursor:pointer;border-left:2px solid transparent}
+.sb-item:hover{background:rgba(255,255,255,0.02);color:#ccc}
+.sb-item.active{background:rgba(217,123,53,0.07);color:#eee;border-left-color:#d97b35;font-weight:600}
+.sb-badge{font-size:10px;color:#d97b35}
+
+.sb-providers{padding:4px 0;border-top:1px solid rgba(255,255,255,0.04);margin-top:auto}
+.sb-prov{display:flex;align-items:center;justify-content:space-between;padding:2px 16px;font-size:11px}
+.sb-dot{width:5px;height:5px;border-radius:50%;margin-right:5px;display:inline-block}
+.sb-prov-ct{color:#3e3e48;font-size:10px}
+.sb-foot{padding:8px 16px;border-top:1px solid rgba(255,255,255,0.04);font-size:10px;color:#3e3e48}
+.sb-foot a{color:#d97b35;text-decoration:none}
+
+.main{flex:1;overflow-y:auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 18px;background:#faf8f5;border-bottom:1px solid #ddd}
+.top-tabs{display:flex;gap:0}
+.top-tab{font-size:11px;color:#888;padding:6px 12px;border-bottom:2px solid transparent;cursor:pointer}
+.top-tab:hover{color:#555}
+.top-tab.active{color:#d97b35;border-bottom-color:#d97b35;font-weight:600}
+.user-area{display:flex;align-items:center;gap:5px;font-size:11px;color:#888}
+.avatar{width:20px;height:20px;border-radius:50%;background:#d97b35;color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}
+
+.content{padding:14px 18px}
+
+/* Calendar - plain table, not a "component" */
+.cal{background:#faf8f5;border:1px solid #ddd;border-radius:3px;margin-bottom:14px}
+.cal-top{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #eee;font-size:11px}
+.cal-title{font-weight:700;color:#555}
+.cal-arrows{color:#999;cursor:pointer;font-size:12px}
+.cal-arrows a{color:#999;text-decoration:none;margin:0 6px}
+.cal-arrows a:hover{color:#d97b35}
+.cal-row{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-hd{font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#aaa;padding:4px 6px;text-align:center;background:#f5f3ee;border-bottom:1px solid #eee;border-right:1px solid #eee;font-weight:600}
+.cal-hd:last-child{border-right:none}
+.cal-hd.today{color:#d97b35;font-weight:700}
+.cal-cell{border-right:1px solid #eee;min-height:52px;padding:4px 5px;font-size:10px;color:#999}
+.cal-cell:last-child{border-right:none}
+.cal-cell .show{color:#222;font-weight:600;font-size:10px;line-height:1.3}
+.cal-cell .ep{color:#888;font-size:9px}
+.cal-cell .where{color:#d97b35;font-size:9px}
+
+/* Panels */
+.panel{background:#faf8f5;border:1px solid #ddd;border-radius:3px;margin-bottom:14px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #eee}
+.panel-title{font-size:11px;font-weight:700;color:#555}
+.panel-link{font-size:10px;color:#d97b35;text-decoration:none}
+.panel-tabs{display:flex;gap:1px;margin-left:10px}
+.ptab{padding:2px 7px;font-size:10px;border-radius:2px;cursor:pointer;color:#999}
+.ptab.active{background:#d97b35;color:#fff}
+
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:4px 8px;font-size:9px;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #eee;background:#f5f3ee}
+td{padding:5px 8px;border-bottom:1px solid #f0eee8;font-size:12px}
+tr:hover td{background:#f5f0ea}
+tr{cursor:pointer}
+.poster{width:26px;height:39px;border-radius:2px;background:#ddd8d0;flex-shrink:0}
+.t-name{font-weight:600;font-size:12px}
+.t-sub{font-size:10px;color:#999}
+.t-next{font-size:11px;color:#555}
+.prov{font-size:9px;padding:1px 4px;border:1px solid #ddd;border-radius:2px;color:#888;display:inline-block;margin-right:2px}
+.prov.mine{border-color:#d97b35;color:#d97b35}
+.prog{display:flex;align-items:center;gap:4px}
+.prog-bar{width:48px;height:3px;background:#e5e0d8;border-radius:1px;overflow:hidden}
+.prog-fill{height:100%;background:#d97b35;border-radius:1px}
+.prog-txt{font-size:10px;color:#bbb}
+.rating{color:#d97b35;font-weight:600;font-size:11px}
+
+/* Expanded series detail - just indented rows, not a "card" */
+.detail{background:#f5f2ec;border-top:1px solid #e5e0d8}
+.detail-top{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid #e5e0d8}
+.detail-poster{width:40px;height:60px;border-radius:2px;background:#d5d0c5;flex-shrink:0}
+.detail-info{flex:1;font-size:11px}
+.detail-name{font-weight:700;font-size:13px;margin-bottom:1px}
+.detail-meta{color:#888;font-size:10px}
+.detail-next{margin-top:4px;color:#555;font-size:11px}
+.detail-stars{color:#d97b35;font-size:12px;margin-top:2px}
+.detail-actions{display:flex;gap:4px;margin-top:6px}
+.d-btn{padding:3px 10px;border:1px solid #ddd;border-radius:2px;font-size:10px;font-family:inherit;cursor:pointer;background:#faf8f5;color:#555}
+.d-btn:hover{background:#eee}
+.d-btn.primary{background:#d97b35;color:#fff;border-color:#d97b35}
+
+.seasons{padding:4px 12px 8px}
+.season-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e8e4dc;font-size:11px}
+.season-row:last-child{border-bottom:none}
+.s-name{font-weight:600;color:#555}
+.s-name span{font-weight:400;color:#aaa;font-size:10px}
+.s-bar{display:flex;align-items:center;gap:5px;flex:1;max-width:180px;margin:0 16px}
+.s-track{flex:1;height:3px;background:#e5e0d8;border-radius:1px;overflow:hidden}
+.s-fill{height:100%;background:#d97b35;border-radius:1px}
+.s-txt{font-size:9px;color:#bbb}
+.s-btn{padding:2px 10px;border-radius:2px;font-size:9px;font-weight:600;border:none;cursor:pointer}
+.s-btn.done{background:#2e7d32;color:#fff}
+.s-btn.go{background:#d97b35;color:#fff}
+
+/* Poster grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:7px;padding:8px 12px}
+.g-poster{aspect-ratio:2/3;background:#ddd8d0;border-radius:2px;margin-bottom:3px;position:relative}
+.g-provs{position:absolute;bottom:2px;left:2px;display:flex;gap:1px}
+.g-prov{font-size:7px;padding:1px 3px;background:rgba(0,0,0,0.65);color:#ddd;border-radius:1px}
+.g-prov.mine{background:#d97b35;color:#fff}
+.g-title{font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-meta{font-size:9px;color:#999}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sb-head"><div class="logo">binge <span>.nu</span></div></div>
+  <div class="sb-search"><input placeholder="Sok..."></div>
+  <div class="sb-label">Oversikt</div>
+  <a class="sb-item active">Dashboard<span class="sb-badge">3</span></a>
+  <a class="sb-item">Utforska</a>
+  <a class="sb-item">Kalender</a>
+  <div class="sb-label">Samling</div>
+  <a class="sb-item">Tittar pa<span class="sb-badge">12</span></a>
+  <a class="sb-item">Vill se<span class="sb-badge">23</span></a>
+  <a class="sb-item">Har sett<span class="sb-badge">47</span></a>
+  <a class="sb-item">Droppat<span class="sb-badge">4</span></a>
+  <div class="sb-providers">
+    <div class="sb-label">Tjanster</div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#E50914"></span>Netflix</span><span class="sb-prov-ct">14</span></div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#0063e5"></span>Disney+</span><span class="sb-prov-ct">8</span></div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#555"></span>Apple TV+</span><span class="sb-prov-ct">5</span></div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#0f79af"></span>SVT Play</span><span class="sb-prov-ct">3</span></div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#7b2fbe"></span>HBO Max</span><span class="sb-prov-ct">6</span></div>
+    <div class="sb-prov"><span><span class="sb-dot" style="background:#ff6b00"></span>Viaplay</span><span class="sb-prov-ct">2</span></div>
+  </div>
+  <div class="sb-foot"><a href="#">Installningar</a></div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="top-tabs">
+      <span class="top-tab active">Dashboard</span>
+      <span class="top-tab">Kalender</span>
+      <span class="top-tab">Serier</span>
+      <span class="top-tab">Filmer</span>
+    </div>
+    <div class="user-area"><div class="avatar">M</div>Malin</div>
+  </div>
+
+  <div class="content">
+
+    <!-- Weekly calendar - plain -->
+    <div class="cal">
+      <div class="cal-top">
+        <span class="cal-title">Vecka 13 — 24-30 mars</span>
+        <span class="cal-arrows"><a href="#">&larr; v12</a><a href="#">v14 &rarr;</a></span>
+      </div>
+      <div class="cal-row">
+        <div class="cal-hd">man 24</div>
+        <div class="cal-hd today">tis 25</div>
+        <div class="cal-hd">ons 26</div>
+        <div class="cal-hd">tor 27</div>
+        <div class="cal-hd">fre 28</div>
+        <div class="cal-hd">lor 29</div>
+        <div class="cal-hd">son 30</div>
+      </div>
+      <div class="cal-row">
+        <div class="cal-cell">—</div>
+        <div class="cal-cell"><div class="show">Severance</div><div class="ep">S2E8</div><div class="where">Apple TV+</div></div>
+        <div class="cal-cell"><div class="show">The Bear</div><div class="ep">S3E5</div><div class="where">Disney+</div></div>
+        <div class="cal-cell">—</div>
+        <div class="cal-cell"><div class="show">Black Mirror</div><div class="ep">S7E1</div><div class="where">Netflix</div></div>
+        <div class="cal-cell">—</div>
+        <div class="cal-cell">—</div>
+      </div>
+    </div>
+
+    <!-- Watching table -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="display:flex;align-items:center">
+          <span class="panel-title">Tittar pa</span>
+          <div class="panel-tabs"><span class="ptab active">Alla</span><span class="ptab">Serier</span><span class="ptab">Film</span></div>
+        </div>
+        <a class="panel-link" href="#">Alla 12 &rarr;</a>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Titel</th><th>Nasta avsnitt</th><th>Progress</th><th>Var</th><th>Betyg</th></tr></thead>
+        <tbody>
+          <tr><td><div class="poster"></div></td><td><div class="t-name">Severance</div><div class="t-sub">Sci-Fi, 2022-</div></td><td class="t-next">S2E8</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:85%"></div></div><span class="prog-txt">17/20</span></div></td><td><span class="prov mine">Apple TV+</span></td><td class="rating">5.0</td></tr>
+          <tr><td><div class="poster"></div></td><td><div class="t-name">The Bear</div><div class="t-sub">Drama, 2022-</div></td><td class="t-next">S3E5</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:60%"></div></div><span class="prog-txt">24/40</span></div></td><td><span class="prov">Disney+</span></td><td class="rating">4.5</td></tr>
+          <tr><td><div class="poster"></div></td><td><div class="t-name">Slow Horses</div><div class="t-sub">Thriller, 2022-</div></td><td class="t-next">S4E2</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:25%"></div></div><span class="prog-txt">7/28</span></div></td><td><span class="prov mine">Apple TV+</span></td><td class="rating">4.0</td></tr>
+          <tr><td><div class="poster"></div></td><td><div class="t-name">Shogun</div><div class="t-sub">Drama, 2024</div></td><td class="t-next">S1E8</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:70%"></div></div><span class="prog-txt">7/10</span></div></td><td><span class="prov">Disney+</span></td><td class="rating">4.5</td></tr>
+          <tr><td><div class="poster"></div></td><td><div class="t-name">The Diplomat</div><div class="t-sub">Drama, 2023-</div></td><td class="t-next">S2E3</td><td><div class="prog"><div class="prog-bar"><div class="prog-fill" style="width:45%"></div></div><span class="prog-txt">13/30</span></div></td><td><span class="prov mine">Netflix</span></td><td class="rating">3.5</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Expanded detail for Severance - just more rows, not a separate "card" -->
+      <div class="detail">
+        <div class="detail-top">
+          <div class="detail-poster"></div>
+          <div class="detail-info">
+            <div class="detail-name">Severance</div>
+            <div class="detail-meta">Apple TV+ · Sci-Fi, Thriller · 2022- · Pagar</div>
+            <div class="detail-stars">★★★★★</div>
+            <div class="detail-next">Nasta: S2E8 (25 mars)</div>
+            <div class="detail-actions">
+              <button class="d-btn primary">Markera S2E8 sedd</button>
+              <button class="d-btn">Anteckning</button>
+              <button class="d-btn">Sluta folja</button>
+            </div>
+          </div>
+        </div>
+        <div class="seasons">
+          <div class="season-row">
+            <div class="s-name">Sasong 2 <span>(10 avs)</span></div>
+            <div class="s-bar"><div class="s-track"><div class="s-fill" style="width:70%"></div></div><span class="s-txt">7/10</span></div>
+            <button class="s-btn go">Fortsatt</button>
+          </div>
+          <div class="season-row">
+            <div class="s-name">Sasong 1 <span>(10 avs)</span></div>
+            <div class="s-bar"><div class="s-track"><div class="s-fill" style="width:100%"></div></div><span class="s-txt">10/10</span></div>
+            <button class="s-btn done">Sedd</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Want to watch -->
+    <div class="panel">
+      <div class="panel-head">
+        <div style="display:flex;align-items:center">
+          <span class="panel-title">Vill se</span>
+          <div class="panel-tabs"><span class="ptab active">Alla</span><span class="ptab">Mina tjanster</span></div>
+        </div>
+        <a class="panel-link" href="#">23 &rarr;</a>
+      </div>
+      <div class="grid">
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov mine">Netflix</span></div></div><div class="g-title">The Brutalist</div><div class="g-meta">2024 · 7.8</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov">Disney+</span></div></div><div class="g-title">Anora</div><div class="g-meta">2024 · 7.4</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov mine">Netflix</span><span class="g-prov">HBO</span></div></div><div class="g-title">Dune: Part Two</div><div class="g-meta">2024 · 8.3</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov">HBO</span></div></div><div class="g-title">Nosferatu</div><div class="g-meta">2024 · 7.1</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov mine">Netflix</span></div></div><div class="g-title">Conclave</div><div class="g-meta">2024 · 7.6</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov mine">Apple</span></div></div><div class="g-title">Killers of the FM</div><div class="g-meta">2023 · 7.6</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov">Viaplay</span></div></div><div class="g-title">Zone of Interest</div><div class="g-meta">2023 · 7.4</div></div>
+        <div class="g-card"><div class="g-poster"><div class="g-provs"><span class="g-prov">HBO</span></div></div><div class="g-title">A Real Pain</div><div class="g-meta">2024 · 7.3</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

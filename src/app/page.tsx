@@ -1,0 +1,106 @@
+'use client';
+
+import Link from 'next/link';
+import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
+import WatchingTable from '@/components/dashboard/WatchingTable';
+import WantToWatchGrid from '@/components/dashboard/WantToWatchGrid';
+import TitleGrid from '@/components/title/TitleGrid';
+import { useWatchlist } from '@/hooks/useWatchlist';
+import { useCalendarEntries } from '@/hooks/useCalendar';
+import { useAuth } from '@/hooks/useAuth';
+import { useTrending } from '@/hooks/useTMDB';
+
+function LandingPage() {
+  const { signIn } = useAuth();
+  const { data: trending } = useTrending('all', 'week');
+  const items = (trending?.results ?? []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 10);
+
+  return (
+    <div>
+      <div className="text-center py-8">
+        <h1 className="text-[24px] font-extrabold text-accent mb-1">
+          binge<span className="font-normal text-text-muted text-[18px]">.nu</span>
+        </h1>
+        <p className="text-sm text-text-secondary mb-4 max-w-[400px] mx-auto">
+          Håll koll på vad du tittar på och var det finns att streama i Sverige.
+        </p>
+        <button
+          onClick={signIn}
+          className="px-5 py-2 bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold"
+        >
+          Logga in med Google
+        </button>
+        <div className="mt-2">
+          <Link href="/login/" className="text-xs text-accent no-underline">
+            Eller skapa konto med e-post
+          </Link>
+        </div>
+      </div>
+
+      {items.length > 0 && (
+        <div className="bg-surface border border-border-main rounded-sm">
+          <div className="px-3 py-[6px] border-b border-border-light">
+            <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
+          </div>
+          <TitleGrid items={items} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OnboardingCTA() {
+  return (
+    <div className="bg-surface border border-accent/30 rounded-sm mb-[14px] px-4 py-4 text-center">
+      <h2 className="text-sm font-bold text-text-primary mb-1">Välkommen till Binge!</h2>
+      <p className="text-xs text-text-muted mb-3">
+        Börja genom att lägga till serier och filmer du tittar på.
+      </p>
+      <div className="flex justify-center gap-2">
+        <Link
+          href="/series/"
+          className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline"
+        >
+          Utforska serier
+        </Link>
+        <Link
+          href="/films/"
+          className="px-3 py-[5px] bg-surface text-text-secondary border border-border-main rounded-sm text-xs font-semibold no-underline"
+        >
+          Utforska filmer
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const { user, loading } = useAuth();
+  const { items, getByStatus } = useWatchlist();
+  const watching = getByStatus('watching');
+  const wantToWatch = getByStatus('want_to_watch');
+  const calendarEntries = useCalendarEntries();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="text-sm text-text-muted">Laddar...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LandingPage />;
+  }
+
+  const isEmpty = items.length === 0;
+
+  return (
+    <>
+      {isEmpty && <OnboardingCTA />}
+      <WeeklyCalendar entries={calendarEntries} />
+      <WatchingTable items={watching} />
+      <WantToWatchGrid items={wantToWatch} />
+    </>
+  );
+}
