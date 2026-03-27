@@ -1,11 +1,12 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { usePopularTV, usePopularMovies } from '@/hooks/useTMDB';
 import TitleGrid from '@/components/title/TitleGrid';
-import type { MediaType } from '@/types';
+import type { MediaType, TMDBSearchResult } from '@/types';
 
 const CONFIG = {
   tv: { title: 'Serier', popularLabel: 'Populära serier', emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!', hrefPrefix: '/tv/' },
@@ -15,10 +16,25 @@ const CONFIG = {
 export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
   const { getByStatus } = useWatchlist();
   const watching = getByStatus('watching', mediaType);
-  const { data: popularTV } = usePopularTV();
-  const { data: popularMovies } = usePopularMovies();
+  const [page, setPage] = useState(1);
+  const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
+
+  const { data: popularTV, isLoading: tvLoading } = usePopularTV(mediaType === 'tv' ? page : 1);
+  const { data: popularMovies, isLoading: movieLoading } = usePopularMovies(mediaType === 'movie' ? page : 1);
   const popular = mediaType === 'tv' ? popularTV : popularMovies;
-  const popularResults = (popular?.results ?? []).map(r => ({ ...r, media_type: mediaType }));
+  const isLoading = mediaType === 'tv' ? tvLoading : movieLoading;
+
+  useEffect(() => {
+    if (!popular?.results) return;
+    const typed = popular.results.map(r => ({ ...r, media_type: mediaType }));
+    if (page === 1) {
+      setAllResults(typed);
+    } else {
+      setAllResults(prev => [...prev, ...typed]);
+    }
+  }, [popular, page, mediaType]);
+
+  const hasMore = popular && page < popular.total_pages && page < 5;
   const cfg = CONFIG[mediaType];
 
   return (
@@ -33,7 +49,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
               Alla {watching.length} →
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {watching.slice(0, 10).map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
@@ -57,8 +73,18 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
         <div className="px-3 py-[6px] border-b border-border-light">
           <span className="text-sm font-bold text-text-secondary">{cfg.popularLabel}</span>
         </div>
-        <TitleGrid items={popularResults} />
+        <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
       </div>
+
+      {hasMore && (
+        <button
+          onClick={() => setPage(p => p + 1)}
+          disabled={isLoading}
+          className="mt-3 px-4 py-[5px] bg-surface border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+        >
+          {isLoading ? 'Laddar...' : 'Visa fler'}
+        </button>
+      )}
     </div>
   );
 }

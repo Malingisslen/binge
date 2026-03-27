@@ -21,7 +21,7 @@ function SkeletonCard() {
 export default function TitleGrid({ items, loading }: TitleGridProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[7px] px-3 py-2">
+      <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
         {Array.from({ length: 10 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
@@ -30,7 +30,7 @@ export default function TitleGrid({ items, loading }: TitleGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[7px] px-3 py-2">
+    <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
       {items.map(item => (
         <TitleCard key={`${item.media_type ?? 'unknown'}-${item.id}`} item={item} />
       ))}

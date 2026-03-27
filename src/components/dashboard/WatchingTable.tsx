@@ -66,8 +66,8 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           <tr>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[36px]"></th>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Nästa avsnitt</th>
-            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Progress</th>
+            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Senast sedd</th>
+            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Säsong</th>
             <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
           </tr>
@@ -76,9 +76,9 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           {filtered.map(item => {
             const poster = posterUrl(item.posterPath, 'w92');
             const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
-            const nextEp = item.lastWatchedSeason && item.lastWatchedEpisode
-              ? `S${item.lastWatchedSeason}E${item.lastWatchedEpisode + 1}`
-              : item.mediaType === 'tv' ? 'S1E1' : '—';
+            const lastEp = item.lastWatchedSeason && item.lastWatchedEpisode
+              ? `S${item.lastWatchedSeason}E${item.lastWatchedEpisode}`
+              : null;
             const isExpanded = expandedId === item.tmdbId;
 
             return (
@@ -87,7 +87,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
                 item={item}
                 poster={poster}
                 href={href}
-                nextEp={nextEp}
+                lastEp={lastEp}
                 isExpanded={isExpanded}
                 onToggle={() => setExpandedId(isExpanded ? null : item.tmdbId)}
               />
@@ -106,11 +106,11 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   );
 }
 
-function WatchingRow({ item, poster, href, nextEp, isExpanded, onToggle }: {
+function WatchingRow({ item, poster, href, lastEp, isExpanded, onToggle }: {
   item: WatchlistItem;
   poster: string | null;
   href: string;
-  nextEp: string;
+  lastEp: string | null;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -136,15 +136,12 @@ function WatchingRow({ item, poster, href, nextEp, isExpanded, onToggle }: {
           </div>
         </td>
         <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-sm text-text-secondary">
-          {nextEp}
+          {lastEp ?? '—'}
         </td>
-        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
-          <div className="flex items-center gap-1">
-            <div className="w-[48px] h-[3px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
-              <div className="h-full bg-accent rounded-[1px]" style={{ width: '0%' }} />
-            </div>
-            <span className="text-xs text-[#bbb]">—</span>
-          </div>
+        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+          {item.lastWatchedSeason
+            ? `${item.lastWatchedSeason}/${item.totalSeasons ?? '?'}`
+            : '—'}
         </td>
         <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
           <ProviderPills providerIds={item.providers} />

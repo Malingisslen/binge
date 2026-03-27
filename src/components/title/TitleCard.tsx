@@ -27,8 +27,12 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
     <div className="group relative">
       <Link href={href} className="no-underline text-text-primary">
         <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden">
-          {poster && (
+          {poster ? (
             <img src={poster} alt={title} className="w-full h-full object-cover" loading="lazy" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center px-2">
+              <span className="text-[10px] text-text-muted text-center line-clamp-2">{title}</span>
+            </div>
           )}
           {providers && providers.length > 0 && (
             <div className="absolute bottom-[2px] left-[2px] flex gap-[1px]">

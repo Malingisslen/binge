@@ -23,7 +23,7 @@ export default function TopBar() {
             key={tab.href}
             href={tab.href}
             className={`text-sm px-3 py-[6px] border-b-2 no-underline cursor-pointer hover:text-text-secondary ${
-              pathname === tab.href
+              (tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href.replace(/\/$/, '')))
                 ? 'text-accent border-b-accent font-semibold'
                 : 'text-text-muted border-b-transparent'
             }`}

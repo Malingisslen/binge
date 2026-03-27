@@ -2,6 +2,7 @@
 
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 
 export default function SettingsPage() {
@@ -10,6 +11,7 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const { user, signOut, updateProviders } = useAuth();
+  const { show: toast } = useToast();
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
@@ -62,6 +64,7 @@ function SettingsContent() {
                         ? user.myProviders.filter(id => id !== provider.id)
                         : [...user.myProviders, provider.id];
                       updateProviders(updated);
+                      toast('Tjänster uppdaterade');
                     }}
                     className="accent-accent w-[14px] h-[14px]"
                   />

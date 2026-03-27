@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Plus, Check } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
 import { STATUS_LABELS } from '@/lib/watchStatus';
@@ -19,6 +20,7 @@ interface QuickAddButtonProps {
 export default function QuickAddButton({
   tmdbId, mediaType, title, posterPath, releaseYear,
 }: QuickAddButtonProps) {
+  const { user, signIn } = useAuth();
   const { getItem, addItem, removeItem } = useWatchlist();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -48,8 +50,11 @@ export default function QuickAddButton({
       onClick={e => { e.preventDefault(); e.stopPropagation(); }}
     >
       <button
-        onClick={() => setOpen(!open)}
-        className={`w-[22px] h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer ${
+        onClick={() => {
+          if (!user) { signIn(); return; }
+          setOpen(!open);
+        }}
+        className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer ${
           current
             ? 'bg-accent text-white'
             : 'bg-black/60 text-white hover:bg-accent'
