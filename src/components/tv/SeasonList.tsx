@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { TMDBSeason } from '@/types';
 import SeasonRow from './SeasonRow';
 import { useEpisodeProgress } from '@/hooks/useEpisodeProgress';
@@ -7,14 +8,17 @@ import { useEpisodeProgress } from '@/hooks/useEpisodeProgress';
 interface SeasonListProps {
   tmdbId: number;
   seasons: TMDBSeason[];
-  onSeasonClick: (seasonNumber: number) => void;
 }
 
-export default function SeasonList({ tmdbId, seasons, onSeasonClick }: SeasonListProps) {
-  const { getSeasonProgress, markSeasonWatched } = useEpisodeProgress(tmdbId);
+export default function SeasonList({ tmdbId, seasons }: SeasonListProps) {
+  const { getSeasonProgress, markSeasonWatched, isWatched, markEpisodeWatched } = useEpisodeProgress(tmdbId);
+  const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
 
-  // Filter out specials (season 0) by default
   const displaySeasons = seasons.filter(s => s.season_number > 0);
+
+  const toggle = (seasonNumber: number) => {
+    setExpandedSeason(prev => prev === seasonNumber ? null : seasonNumber);
+  };
 
   return (
     <div className="px-3 py-1">
@@ -26,8 +30,13 @@ export default function SeasonList({ tmdbId, seasons, onSeasonClick }: SeasonLis
             name={season.name}
             episodeCount={season.episode_count}
             watchedCount={progress.watched}
-            onMarkWatched={() => markSeasonWatched(season.season_number, season.episode_count)}
-            onContinue={() => onSeasonClick(season.season_number)}
+            expanded={expandedSeason === season.season_number}
+            tmdbId={tmdbId}
+            seasonNumber={season.season_number}
+            onToggle={() => toggle(season.season_number)}
+            isWatched={isWatched}
+            markEpisodeWatched={markEpisodeWatched}
+            markSeasonWatched={markSeasonWatched}
           />
         );
       })}

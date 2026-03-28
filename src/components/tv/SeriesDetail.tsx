@@ -77,7 +77,6 @@ export default function SeriesDetail({ show }: SeriesDetailProps) {
       <SeasonList
         tmdbId={show.id}
         seasons={show.seasons}
-        onSeasonClick={() => {}}
       />
     </div>
   );

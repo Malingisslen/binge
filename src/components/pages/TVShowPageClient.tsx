@@ -8,13 +8,11 @@ import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { useRouter } from 'next/navigation';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
   const { data: show, isLoading } = useTVShow(showId);
   const { getItem, updateRating, updateNotes } = useWatchlist();
-  const router = useRouter();
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
@@ -127,7 +125,6 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <SeasonList
             tmdbId={show.id}
             seasons={show.seasons}
-            onSeasonClick={num => router.push(`/tv/${show.id}/season/${num}`)}
           />
         </div>
       </div>

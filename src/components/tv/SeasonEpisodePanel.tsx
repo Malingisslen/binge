@@ -1,0 +1,77 @@
+'use client';
+
+import { useTVSeason } from '@/hooks/useTMDB';
+import EpisodeRow from './EpisodeRow';
+
+interface SeasonEpisodePanelProps {
+  tmdbId: number;
+  seasonNumber: number;
+  isWatched: (season: number, episode: number) => boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean) => Promise<void>;
+  markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+}
+
+export default function SeasonEpisodePanel({
+  tmdbId, seasonNumber, isWatched, markEpisodeWatched, markSeasonWatched,
+}: SeasonEpisodePanelProps) {
+  const { data: season, isLoading } = useTVSeason(tmdbId, seasonNumber);
+
+  if (isLoading) {
+    return (
+      <div className="bg-[#f5f2ec] border-t border-[#e8e4dc] px-4 py-2 text-xs text-text-muted">
+        Laddar...
+      </div>
+    );
+  }
+
+  if (!season?.episodes?.length) {
+    return (
+      <div className="bg-[#f5f2ec] border-t border-[#e8e4dc] px-4 py-2 text-xs text-text-muted">
+        Inga avsnitt hittades.
+      </div>
+    );
+  }
+
+  const episodes = season.episodes;
+  const watchedCount = episodes.filter(ep => isWatched(seasonNumber, ep.episode_number)).length;
+  const allWatched = watchedCount >= episodes.length;
+
+  return (
+    <div className="bg-[#f5f2ec] border-t border-[#e8e4dc]">
+      <div className="px-4 pt-2 pb-1 flex gap-2">
+        {!allWatched && (
+          <button
+            onClick={() => markSeasonWatched(seasonNumber, episodes.length)}
+            className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-accent text-white"
+          >
+            Markera alla sedda
+          </button>
+        )}
+        {watchedCount > 0 && (
+          <button
+            onClick={async () => {
+              for (const ep of episodes) {
+                if (isWatched(seasonNumber, ep.episode_number)) {
+                  await markEpisodeWatched(seasonNumber, ep.episode_number, false);
+                }
+              }
+            }}
+            className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border border-border-main cursor-pointer bg-surface text-text-secondary"
+          >
+            Avmarkera alla
+          </button>
+        )}
+      </div>
+      <div className="px-4 pb-2">
+        {episodes.map(ep => (
+          <EpisodeRow
+            key={ep.id}
+            episode={ep}
+            watched={isWatched(seasonNumber, ep.episode_number)}
+            onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}

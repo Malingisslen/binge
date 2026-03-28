@@ -15,7 +15,13 @@ export function useEpisodeProgress(tmdbId: number) {
     const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
     const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
-        setProgress(snap.data() as EpisodeProgress);
+        const raw = snap.data();
+        // Filter out corrupted dot-notation keys (e.g. "seasons.1.5") from old bug
+        if (raw.seasons && typeof raw.seasons === 'object') {
+          setProgress(raw as EpisodeProgress);
+        } else {
+          setProgress({ tmdbId: raw.tmdbId ?? tmdbId, seasons: {} } as EpisodeProgress);
+        }
       } else {
         setProgress(null);
       }
@@ -24,7 +30,7 @@ export function useEpisodeProgress(tmdbId: number) {
   }, [uid, tmdbId]);
 
   const isWatched = useCallback((season: number, episode: number): boolean => {
-    return progress?.seasons[String(season)]?.[String(episode)]?.watched ?? false;
+    return progress?.seasons?.[String(season)]?.[String(episode)]?.watched ?? false;
   }, [progress]);
 
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean) => {
@@ -32,9 +38,13 @@ export function useEpisodeProgress(tmdbId: number) {
     const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
     await setDoc(ref, {
       tmdbId,
-      [`seasons.${season}.${episode}`]: {
-        watched,
-        watchedAt: watched ? serverTimestamp() : null,
+      seasons: {
+        [String(season)]: {
+          [String(episode)]: {
+            watched,
+            watchedAt: watched ? serverTimestamp() : null,
+          },
+        },
       },
     }, { merge: true });
   }, [uid, tmdbId]);
@@ -53,11 +63,11 @@ export function useEpisodeProgress(tmdbId: number) {
   }, [uid, tmdbId]);
 
   const getSeasonProgress = useCallback((season: number): { watched: number; total: number } => {
-    const seasonData = progress?.seasons[String(season)];
-    if (!seasonData) return { watched: 0, total: 0 };
+    const seasonData = progress?.seasons?.[String(season)];
+    if (!seasonData || typeof seasonData !== 'object') return { watched: 0, total: 0 };
     const entries = Object.values(seasonData);
     return {
-      watched: entries.filter(e => e.watched).length,
+      watched: entries.filter(e => e && typeof e === 'object' && e.watched).length,
       total: entries.length,
     };
   }, [progress]);
