@@ -62,13 +62,13 @@ export function useEpisodeProgress(tmdbId: number) {
     }, { merge: true });
   }, [uid, tmdbId]);
 
-  const getSeasonProgress = useCallback((season: number): { watched: number; total: number } => {
+  const getSeasonProgress = useCallback((season: number, episodeCount?: number): { watched: number; total: number } => {
     const seasonData = progress?.seasons?.[String(season)];
-    if (!seasonData || typeof seasonData !== 'object') return { watched: 0, total: 0 };
+    if (!seasonData || typeof seasonData !== 'object') return { watched: 0, total: episodeCount ?? 0 };
     const entries = Object.values(seasonData);
     return {
       watched: entries.filter(e => e && typeof e === 'object' && e.watched).length,
-      total: entries.length,
+      total: episodeCount ?? entries.length,
     };
   }, [progress]);
 

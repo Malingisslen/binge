@@ -3,15 +3,19 @@
 import { useState } from 'react';
 import type { TMDBSeason } from '@/types';
 import SeasonRow from './SeasonRow';
-import { useEpisodeProgress } from '@/hooks/useEpisodeProgress';
 
 interface SeasonListProps {
   tmdbId: number;
   seasons: TMDBSeason[];
+  isWatched: (season: number, episode: number) => boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean) => Promise<void>;
+  markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+  getSeasonProgress: (season: number, episodeCount?: number) => { watched: number; total: number };
 }
 
-export default function SeasonList({ tmdbId, seasons }: SeasonListProps) {
-  const { getSeasonProgress, markSeasonWatched, isWatched, markEpisodeWatched } = useEpisodeProgress(tmdbId);
+export default function SeasonList({
+  tmdbId, seasons, isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress,
+}: SeasonListProps) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
 
   const displaySeasons = seasons.filter(s => s.season_number > 0);
@@ -23,7 +27,7 @@ export default function SeasonList({ tmdbId, seasons }: SeasonListProps) {
   return (
     <div className="px-3 py-1">
       {displaySeasons.map(season => {
-        const progress = getSeasonProgress(season.season_number);
+        const progress = getSeasonProgress(season.season_number, season.episode_count);
         return (
           <SeasonRow
             key={season.id}

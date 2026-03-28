@@ -6,6 +6,7 @@ import StatusButton from '@/components/title/StatusButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import TitleGrid from '@/components/title/TitleGrid';
+import NotesTextarea from '@/components/title/NotesTextarea';
 import { useWatchlist } from '@/hooks/useWatchlist';
 
 export default function MoviePageClient({ id }: { id: string }) {
@@ -92,12 +93,9 @@ export default function MoviePageClient({ id }: { id: string }) {
 
           {watchlistItem && (
             <div className="mb-3">
-              <textarea
-                placeholder="Anteckning..."
-                value={watchlistItem.notes ?? ''}
-                onChange={e => updateNotes(movie.id, e.target.value || null)}
-                maxLength={500}
-                className="w-full max-w-[400px] h-[60px] px-2 py-1 text-base border border-border-main rounded-sm bg-surface font-[inherit] resize-none outline-none focus:border-accent"
+              <NotesTextarea
+                value={watchlistItem.notes}
+                onChange={notes => updateNotes(movie.id, notes)}
               />
             </div>
           )}

@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { useTVSeason } from '@/hooks/useTMDB';
-import { useEpisodeProgress } from '@/hooks/useEpisodeProgress';
+import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import EpisodeRow from '@/components/tv/EpisodeRow';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
   const seasonNum = parseInt(num, 10);
   const { data: season, isLoading } = useTVSeason(seriesId, seasonNum);
-  const { isWatched, markEpisodeWatched, markSeasonWatched } = useEpisodeProgress(seriesId);
+  const { isWatched, markEpisodeWatched, markSeasonWatched } = useEpisodeProgressWithSync(seriesId);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!season) return <div className="text-sm text-text-muted py-4">Säsongen hittades inte.</div>;

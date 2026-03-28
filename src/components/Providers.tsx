@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { WatchlistProvider } from '@/contexts/WatchlistContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { useState, type ReactNode } from 'react';
 
@@ -18,9 +19,11 @@ export default function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ToastProvider>
-          {children}
-        </ToastProvider>
+        <WatchlistProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </WatchlistProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

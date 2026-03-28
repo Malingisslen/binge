@@ -7,12 +7,16 @@ import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
 import TitleGrid from '@/components/title/TitleGrid';
+import NotesTextarea from '@/components/title/NotesTextarea';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
+import { tvShowStatusLabel } from '@/lib/watchStatus';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
   const { data: show, isLoading } = useTVShow(showId);
   const { getItem, updateRating, updateNotes } = useWatchlist();
+  const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
@@ -30,10 +34,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const recommendations = show.recommendations?.results?.slice(0, 8) ?? [];
   const nextEp = show.next_episode_to_air;
 
-  const statusLabel = show.status === 'Ended' ? 'Avslutad' :
-    show.status === 'Returning Series' ? 'Pågår' :
-    show.status === 'Canceled' ? 'Inställd' :
-    show.status === 'In Production' ? 'Under produktion' : show.status;
+  const statusLabel = tvShowStatusLabel(show.status);
 
   return (
     <div>
@@ -107,12 +108,9 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
           {watchlistItem && (
             <div className="mb-3">
-              <textarea
-                placeholder="Anteckning..."
-                value={watchlistItem.notes ?? ''}
-                onChange={e => updateNotes(show.id, e.target.value || null)}
-                maxLength={500}
-                className="w-full max-w-[400px] h-[60px] px-2 py-1 text-base border border-border-main rounded-sm bg-surface font-[inherit] resize-none outline-none focus:border-accent"
+              <NotesTextarea
+                value={watchlistItem.notes}
+                onChange={notes => updateNotes(show.id, notes)}
               />
             </div>
           )}
@@ -125,6 +123,10 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <SeasonList
             tmdbId={show.id}
             seasons={show.seasons}
+            isWatched={isWatched}
+            markEpisodeWatched={markEpisodeWatched}
+            markSeasonWatched={markSeasonWatched}
+            getSeasonProgress={getSeasonProgress}
           />
         </div>
       </div>
