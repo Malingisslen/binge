@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { X } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
 import type { TMDBTVShow } from '@/types';
 import RatingStars from '@/components/title/RatingStars';
@@ -9,9 +10,10 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 
 interface SeriesDetailProps {
   show: TMDBTVShow;
+  onClose?: () => void;
 }
 
-export default function SeriesDetail({ show }: SeriesDetailProps) {
+export default function SeriesDetail({ show, onClose }: SeriesDetailProps) {
   const poster = posterUrl(show.poster_path, 'w154');
   const providers = show['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
@@ -29,7 +31,15 @@ export default function SeriesDetail({ show }: SeriesDetailProps) {
 
   return (
     <div className="bg-[#f5f2ec] border-t border-[#e5e0d8]">
-      <div className="flex gap-[10px] px-3 py-[10px] border-b border-[#e5e0d8]">
+      <div className="flex gap-[10px] px-3 py-[10px] border-b border-[#e5e0d8] relative">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-[6px] right-[6px] text-text-muted hover:text-text-primary bg-transparent border-none cursor-pointer p-0"
+          >
+            <X size={14} />
+          </button>
+        )}
         {poster ? (
           <img src={poster} alt={show.name} className="w-[40px] h-[60px] rounded-sm object-cover shrink-0" />
         ) : (

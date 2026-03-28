@@ -15,14 +15,14 @@ interface WatchingTableProps {
   items: WatchlistItem[];
 }
 
-function ExpandedRow({ tmdbId }: { tmdbId: number }) {
+function ExpandedRow({ tmdbId, onClose }: { tmdbId: number; onClose: () => void }) {
   const { data: show, isLoading } = useTVShow(tmdbId);
   if (isLoading) return <tr><td colSpan={6} className="px-3 py-2 text-sm text-text-muted">Laddar...</td></tr>;
   if (!show) return null;
   return (
     <tr>
       <td colSpan={6} className="p-0">
-        <SeriesDetail show={show} />
+        <SeriesDetail show={show} onClose={onClose} />
       </td>
     </tr>
   );
@@ -151,7 +151,7 @@ function WatchingRow({ item, poster, href, lastEp, isExpanded, onToggle }: {
         </td>
       </tr>
       {isExpanded && item.mediaType === 'tv' && (
-        <ExpandedRow tmdbId={item.tmdbId} />
+        <ExpandedRow tmdbId={item.tmdbId} onClose={onToggle} />
       )}
     </>
   );
