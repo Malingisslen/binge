@@ -14,6 +14,7 @@ export interface WatchlistItem {
   lastWatchedSeason: number | null;
   lastWatchedEpisode: number | null;
   dropped: boolean;
+  rewatchCount: number;
   providers: number[];
   addedAt: Date;
   updatedAt: Date;

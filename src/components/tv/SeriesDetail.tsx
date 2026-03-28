@@ -22,7 +22,7 @@ export default function SeriesDetail({ show, onClose }: SeriesDetailProps) {
   const providers = show['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
   const { getItem, updateRating, updateNotes, removeItem } = useWatchlist();
-  const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(show.id);
+  const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress, getTotalProgress } = useEpisodeProgressWithSync(show.id);
   const watchlistItem = getItem(show.id);
 
   const [showNotes, setShowNotes] = useState(false);
@@ -64,6 +64,11 @@ export default function SeriesDetail({ show, onClose }: SeriesDetailProps) {
             onChange={r => watchlistItem && updateRating(show.id, r)}
             readonly={!watchlistItem}
           />
+          {show.number_of_episodes > 0 && (
+            <div className="text-xs text-text-muted mt-[2px]">
+              {getTotalProgress()}/{show.number_of_episodes} avsnitt sedda
+            </div>
+          )}
           {nextEp && (
             <div className="mt-1 text-text-secondary text-sm">
               Nästa: S{nextEp.season_number}E{nextEp.episode_number} ({nextEp.air_date})

@@ -6,7 +6,12 @@ import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import type { WatchStatus } from '@/types';
 
-type SortKey = 'updatedAt' | 'title' | 'rating' | 'releaseYear';
+type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
+
+function fmtDate(d: Date | null): string {
+  if (!d) return '—';
+  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 type ViewMode = 'table' | 'grid';
 type MediaFilter = 'all' | 'movie' | 'tv';
 
@@ -31,6 +36,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
         case 'title': return a.title.localeCompare(b.title, 'sv');
         case 'rating': return (b.rating ?? 0) - (a.rating ?? 0);
         case 'releaseYear': return (b.releaseYear ?? 0) - (a.releaseYear ?? 0);
+        case 'addedAt': return b.addedAt.getTime() - a.addedAt.getTime();
+        case 'watchedAt': return (b.watchedAt?.getTime() ?? 0) - (a.watchedAt?.getTime() ?? 0);
         default: return b.updatedAt.getTime() - a.updatedAt.getTime();
       }
     });
@@ -68,6 +75,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           <option value="title">Titel A-Ö</option>
           <option value="rating">Betyg</option>
           <option value="releaseYear">År</option>
+          <option value="addedAt">Tillagd</option>
+          <option value="watchedAt">Sedd datum</option>
         </select>
 
         <div className="flex gap-[1px] ml-auto">
@@ -99,6 +108,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">År</th>
+                <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tillagd</th>
+                <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Sedd</th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
               </tr>
             </thead>
@@ -119,7 +130,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table">
                       <Link href={href} className="no-underline text-text-primary">
-                        <div className="font-semibold text-base">{item.title}</div>
+                        <div className="font-semibold text-base">
+                          {item.title}
+                          {item.rewatchCount > 0 && (
+                            <span className="ml-1 text-xxs text-text-muted font-normal">x{item.rewatchCount + 1}</span>
+                          )}
+                        </div>
                       </Link>
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
@@ -127,6 +143,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {item.releaseYear ?? '—'}
+                    </td>
+                    <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                      {fmtDate(item.addedAt)}
+                    </td>
+                    <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                      {fmtDate(item.watchedAt)}
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table text-accent font-semibold text-sm">
                       {item.rating ? item.rating.toFixed(1) : '—'}
@@ -136,7 +158,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-sm text-text-muted">
+                  <td colSpan={7} className="px-3 py-4 text-center text-sm text-text-muted">
                     Inga titlar att visa
                   </td>
                 </tr>

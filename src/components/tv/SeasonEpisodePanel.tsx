@@ -7,7 +7,7 @@ interface SeasonEpisodePanelProps {
   tmdbId: number;
   seasonNumber: number;
   isWatched: (season: number, episode: number) => boolean;
-  markEpisodeWatched: (season: number, episode: number, watched: boolean) => Promise<void>;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
 }
 
@@ -68,7 +68,8 @@ export default function SeasonEpisodePanel({
             key={ep.id}
             episode={ep}
             watched={isWatched(seasonNumber, ep.episode_number)}
-            onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched)}
+            onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched, episodes.length)}
+            onMarkUpTo={() => markSeasonWatched(seasonNumber, ep.episode_number)}
           />
         ))}
       </div>

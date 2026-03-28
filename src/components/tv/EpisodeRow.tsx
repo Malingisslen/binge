@@ -7,9 +7,10 @@ interface EpisodeRowProps {
   episode: TMDBEpisode;
   watched: boolean;
   onToggle: (watched: boolean) => void;
+  onMarkUpTo?: () => void;
 }
 
-export default function EpisodeRow({ episode, watched, onToggle }: EpisodeRowProps) {
+export default function EpisodeRow({ episode, watched, onToggle, onMarkUpTo }: EpisodeRowProps) {
   const still = stillUrl(episode.still_path, 'w185');
 
   return (
@@ -32,6 +33,14 @@ export default function EpisodeRow({ episode, watched, onToggle }: EpisodeRowPro
         <div className="text-xs text-text-muted">
           {episode.air_date ?? '—'}
           {episode.runtime ? ` · ${episode.runtime} min` : ''}
+          {onMarkUpTo && !watched && (
+            <button
+              onClick={e => { e.stopPropagation(); onMarkUpTo(); }}
+              className="text-xxs text-accent cursor-pointer bg-transparent border-none p-0 ml-1 hover:underline font-[inherit]"
+            >
+              Markera hit
+            </button>
+          )}
         </div>
         {episode.overview && (
           <div className="text-xs text-text-muted mt-[2px] line-clamp-2">{episode.overview}</div>

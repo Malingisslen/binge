@@ -8,7 +8,7 @@ interface SeasonListProps {
   tmdbId: number;
   seasons: TMDBSeason[];
   isWatched: (season: number, episode: number) => boolean;
-  markEpisodeWatched: (season: number, episode: number, watched: boolean) => Promise<void>;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
   getSeasonProgress: (season: number, episodeCount?: number) => { watched: number; total: number };
 }

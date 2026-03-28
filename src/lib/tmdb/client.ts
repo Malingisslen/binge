@@ -5,6 +5,7 @@ import type {
   TMDBSeasonDetail,
   TMDBSearchResult,
   TMDBListResponse,
+  TMDBProviderData,
 } from '@/types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -98,6 +99,11 @@ export function discoverMovies(params: Record<string, string> = {}): Promise<TMD
 
 export function discoverTV(params: Record<string, string> = {}): Promise<TMDBListResponse<TMDBSearchResult>> {
   return tmdbFetch('/discover/tv', { watch_region: 'SE', ...params });
+}
+
+// Watch providers (lightweight — no credits, recs, etc.)
+export function getWatchProviders(mediaType: 'movie' | 'tv', id: number): Promise<{ results: { SE?: TMDBProviderData } }> {
+  return tmdbFetch(`/${mediaType}/${id}/watch/providers`);
 }
 
 // Helper: extract year from date string

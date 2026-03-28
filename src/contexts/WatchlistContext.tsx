@@ -52,6 +52,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
     lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
     dropped: (data.dropped as boolean) ?? dropped,
+    rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
     addedAt: toDate(data.addedAt),
     updatedAt: toDate(data.updatedAt),
@@ -61,7 +62,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
 
 interface WatchlistState {
   items: WatchlistItem[];
-  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped'>) => Promise<void>;
+  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'>) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
@@ -96,7 +97,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [uid]);
 
-  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped'>) => {
+  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
     await setDoc(ref, {
@@ -111,12 +112,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const currentItem = items.find(i => i.tmdbId === tmdbId);
+    const isRewatch = status === 'sedd' && currentItem?.status === 'sedd';
     await setDoc(ref, {
       status,
       updatedAt: serverTimestamp(),
       ...(status === 'sedd' ? { watchedAt: serverTimestamp() } : {}),
+      ...(isRewatch ? { rewatchCount: (currentItem?.rewatchCount ?? 0) + 1 } : {}),
     }, { merge: true });
-  }, [uid]);
+  }, [uid, items]);
 
   const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
     if (!uid) return;

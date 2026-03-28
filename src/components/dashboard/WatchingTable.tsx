@@ -130,7 +130,12 @@ function WatchingRow({ item, poster, href, lastEp, isExpanded, onToggle }: {
           </Link>
         </td>
         <td className="px-2 py-[5px] border-b border-border-table">
-          <div className="font-semibold text-base">{item.title}</div>
+          <div className="font-semibold text-base">
+            {item.title}
+            {item.rewatchCount > 0 && (
+              <span className="ml-1 text-xxs text-text-muted font-normal">x{item.rewatchCount + 1}</span>
+            )}
+          </div>
           <div className="text-xs text-text-muted">
             {item.releaseYear ?? '—'}
           </div>
