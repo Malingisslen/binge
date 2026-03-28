@@ -33,6 +33,9 @@ export default function EpisodeRow({ episode, watched, onToggle }: EpisodeRowPro
           {episode.air_date ?? '—'}
           {episode.runtime ? ` · ${episode.runtime} min` : ''}
         </div>
+        {episode.overview && (
+          <div className="text-xs text-text-muted mt-[2px] line-clamp-2">{episode.overview}</div>
+        )}
       </div>
     </div>
   );
