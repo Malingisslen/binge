@@ -3,13 +3,14 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { getTVShow } from '@/lib/tmdb/client';
+import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 
 export interface CalendarEntry {
   tmdbId: number;
   title: string;
   episodeCode: string;
+  episodeName?: string;
   airDate: string;
   provider?: string;
 }
@@ -19,6 +20,7 @@ export function useCalendarEntries() {
   const watchingTV = getByStatus('watching', 'tv');
   const tmdbIds = watchingTV.map(i => i.tmdbId);
 
+  // Fetch show details to get season info and providers
   const { data: shows } = useQuery({
     queryKey: ['calendar-shows', [...tmdbIds].sort().join(',')],
     queryFn: async () => {
@@ -32,29 +34,64 @@ export function useCalendarEntries() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const entries: CalendarEntry[] = useMemo(() => {
+  // For each show, fetch the latest/current season's episodes
+  const seasonQueries = useMemo(() => {
     if (!shows) return [];
+    return shows
+      .filter(s => s !== null)
+      .map(show => {
+        const latestSeason = show!.number_of_seasons;
+        return { showId: show!.id, seasonNum: latestSeason, show: show! };
+      });
+  }, [shows]);
+
+  const { data: seasonData } = useQuery({
+    queryKey: ['calendar-seasons', seasonQueries.map(q => `${q.showId}-${q.seasonNum}`).join(',')],
+    queryFn: async () => {
+      const results = await Promise.all(
+        seasonQueries.map(async q => {
+          try {
+            const season = await getTVSeason(q.showId, q.seasonNum);
+            return { ...q, season };
+          } catch {
+            return { ...q, season: null };
+          }
+        })
+      );
+      return results;
+    },
+    enabled: seasonQueries.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const entries: CalendarEntry[] = useMemo(() => {
+    if (!seasonData) return [];
     const result: CalendarEntry[] = [];
 
-    for (const show of shows) {
-      if (!show) continue;
-      const nextEp = show.next_episode_to_air;
-      if (nextEp?.air_date) {
-        const providers = show['watch/providers']?.results?.SE;
-        const flatrate = providers?.flatrate?.[0];
-        const providerName = flatrate ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name) : undefined;
+    for (const item of seasonData) {
+      if (!item.season?.episodes) continue;
 
+      const providers = item.show['watch/providers']?.results?.SE;
+      const flatrate = providers?.flatrate?.[0];
+      const providerName = flatrate
+        ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name)
+        : undefined;
+
+      for (const ep of item.season.episodes) {
+        if (!ep.air_date) continue;
         result.push({
-          tmdbId: show.id,
-          title: show.name,
-          episodeCode: `S${nextEp.season_number}E${nextEp.episode_number}`,
-          airDate: nextEp.air_date,
+          tmdbId: item.showId,
+          title: item.show.name,
+          episodeCode: `S${ep.season_number}E${ep.episode_number}`,
+          episodeName: ep.name,
+          airDate: ep.air_date,
           provider: providerName,
         });
       }
     }
+
     return result;
-  }, [shows]);
+  }, [seasonData]);
 
   return entries;
 }
