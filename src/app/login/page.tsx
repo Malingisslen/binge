@@ -20,7 +20,10 @@ export default function LoginPage() {
 
   async function handleGoogle() {
     setError('');
-    try { await signIn(); } catch { setError('Inloggning misslyckades.'); }
+    try { await signIn(); } catch (err) {
+      console.error('Google sign-in failed:', err);
+      setError('Inloggning misslyckades.');
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {

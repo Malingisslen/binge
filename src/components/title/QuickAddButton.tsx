@@ -50,8 +50,11 @@ export default function QuickAddButton({
       onClick={e => { e.preventDefault(); e.stopPropagation(); }}
     >
       <button
-        onClick={() => {
-          if (!user) { signIn(); return; }
+        onClick={async () => {
+          if (!user) {
+            try { await signIn(); } catch { toast('Inloggning misslyckades'); }
+            return;
+          }
           setOpen(!open);
         }}
         className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer ${
