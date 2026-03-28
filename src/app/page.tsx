@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
 import WatchingTable from '@/components/dashboard/WatchingTable';
-import WantToWatchGrid from '@/components/dashboard/WantToWatchGrid';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -77,8 +76,7 @@ function OnboardingCTA() {
 export default function DashboardPage() {
   const { user, loading } = useAuth();
   const { items, getByStatus } = useWatchlist();
-  const watching = getByStatus('watching');
-  const wantToWatch = getByStatus('want_to_watch');
+  const following = getByStatus('följer');
   const calendarEntries = useCalendarEntries();
 
   if (loading) {
@@ -99,8 +97,7 @@ export default function DashboardPage() {
     <>
       {isEmpty && <OnboardingCTA />}
       <WeeklyCalendar entries={calendarEntries} />
-      <WatchingTable items={watching} />
-      <WantToWatchGrid items={wantToWatch} />
+      <WatchingTable items={following} />
     </>
   );
 }

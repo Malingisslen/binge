@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import type { WatchStatus } from '@/types';
 import SearchDropdown from '@/components/search/SearchDropdown';
 
 const NAV_ITEMS = [
@@ -16,10 +17,8 @@ const NAV_ITEMS = [
 ];
 
 const COLLECTION_ITEMS = [
-  { label: 'Tittar på', href: '/my/watching', status: 'watching' as const },
-  { label: 'Vill se', href: '/my/want-to-watch', status: 'want_to_watch' as const },
-  { label: 'Har sett', href: '/my/watched', status: 'watched' as const },
-  { label: 'Droppat', href: '/my/dropped', status: 'dropped' as const },
+  { label: 'Följer', href: '/my/following', status: 'följer' as const },
+  { label: 'Sedd', href: '/my/watched', status: 'sedd' as const },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
@@ -52,10 +51,10 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   );
 
   const { statusCounts, providerCounts } = useMemo(() => {
-    const sc = { watching: 0, want_to_watch: 0, watched: 0, dropped: 0 };
+    const sc: Record<WatchStatus, number> = { 'följer': 0, 'sedd': 0 };
     const pc: Record<number, number> = {};
     for (const i of items) {
-      if (i.status in sc) sc[i.status as keyof typeof sc]++;
+      if (i.status in sc) sc[i.status]++;
       for (const pid of i.providers ?? []) pc[pid] = (pc[pid] ?? 0) + 1;
     }
     return { statusCounts: sc, providerCounts: pc };

@@ -17,8 +17,10 @@ export interface CalendarEntry {
 
 export function useCalendarEntries() {
   const { getByStatus } = useWatchlist();
-  const watchingTV = getByStatus('watching', 'tv');
-  const tmdbIds = watchingTV.map(i => i.tmdbId);
+  const followingTV = getByStatus('följer', 'tv');
+  // Only show calendar for shows the user has actually started watching
+  const activeTV = followingTV.filter(i => i.lastWatchedSeason !== null || i.lastWatchedEpisode !== null);
+  const tmdbIds = activeTV.map(i => i.tmdbId);
 
   // Fetch show details to get season info and providers
   const { data: shows } = useQuery({

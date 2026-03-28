@@ -20,11 +20,29 @@ function toDate(val: unknown): Date {
   return new Date();
 }
 
+function migrateStatus(raw: string): { status: WatchStatus; dropped: boolean } {
+  switch (raw) {
+    case 'watching':
+    case 'want_to_watch':
+      return { status: 'följer', dropped: false };
+    case 'watched':
+      return { status: 'sedd', dropped: false };
+    case 'dropped':
+      return { status: 'följer', dropped: true };
+    case 'följer':
+    case 'sedd':
+      return { status: raw as WatchStatus, dropped: false };
+    default:
+      return { status: 'följer', dropped: false };
+  }
+}
+
 function docToItem(data: Record<string, unknown>): WatchlistItem {
+  const { status, dropped } = migrateStatus(data.status as string);
   return {
     tmdbId: data.tmdbId as number,
     mediaType: data.mediaType as MediaType,
-    status: data.status as WatchStatus,
+    status,
     rating: (data.rating as number) ?? null,
     notes: (data.notes as string) ?? null,
     title: data.title as string,
@@ -33,6 +51,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     totalSeasons: (data.totalSeasons as number) ?? null,
     lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
     lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
+    dropped: (data.dropped as boolean) ?? dropped,
     providers: (data.providers as number[]) ?? [],
     addedAt: toDate(data.addedAt),
     updatedAt: toDate(data.updatedAt),
@@ -42,7 +61,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
 
 interface WatchlistState {
   items: WatchlistItem[];
-  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt'>) => Promise<void>;
+  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped'>) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
@@ -77,14 +96,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [uid]);
 
-  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt'>) => {
+  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
     await setDoc(ref, {
       ...item,
+      dropped: false,
       addedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      watchedAt: item.status === 'watched' ? serverTimestamp() : null,
+      watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
     }, { merge: true });
   }, [uid]);
 
@@ -94,7 +114,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     await setDoc(ref, {
       status,
       updatedAt: serverTimestamp(),
-      ...(status === 'watched' ? { watchedAt: serverTimestamp() } : {}),
+      ...(status === 'sedd' ? { watchedAt: serverTimestamp() } : {}),
     }, { merge: true });
   }, [uid]);
 

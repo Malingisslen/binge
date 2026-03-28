@@ -40,7 +40,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
       <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
         <div className="flex items-center">
-          <span className="text-sm font-bold text-text-secondary">Tittar på</span>
+          <span className="text-sm font-bold text-text-secondary">Följer</span>
           <div className="flex gap-[1px] ml-[10px]">
             {(['all', 'tv', 'movie'] as const).map(tab => (
               <span
@@ -57,7 +57,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
             ))}
           </div>
         </div>
-        <Link href="/my/watching" className="text-xs text-accent no-underline">
+        <Link href="/my/following" className="text-xs text-accent no-underline">
           Alla {items.length} →
         </Link>
       </div>

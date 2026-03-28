@@ -22,7 +22,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   const [view, setView] = useState<ViewMode>('table');
 
   const filtered = useMemo(() => {
-    let result = status ? items.filter(i => i.status === status) : items;
+    let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
     if (mediaFilter !== 'all') {
       result = result.filter(i => i.mediaType === mediaFilter);
     }

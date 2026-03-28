@@ -15,7 +15,7 @@ const CONFIG = {
 
 export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
   const { getByStatus } = useWatchlist();
-  const watching = getByStatus('watching', mediaType);
+  const following = getByStatus('följer', mediaType);
   const [page, setPage] = useState(1);
   const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
 
@@ -41,16 +41,16 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
     <div>
       <h1 className="text-md font-bold text-text-primary mb-3">{cfg.title}</h1>
 
-      {watching.length > 0 ? (
+      {following.length > 0 ? (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
           <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Tittar på</span>
-            <Link href="/my/watching/" className="text-xs text-accent no-underline">
-              Alla {watching.length} →
+            <span className="text-sm font-bold text-text-secondary">Följer</span>
+            <Link href="/my/following/" className="text-xs text-accent no-underline">
+              Alla {following.length} →
             </Link>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
-            {watching.slice(0, 10).map(item => {
+            {following.slice(0, 10).map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
                 <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-text-primary">

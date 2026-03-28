@@ -1,5 +1,5 @@
 export type MediaType = 'movie' | 'tv';
-export type WatchStatus = 'watching' | 'want_to_watch' | 'watched' | 'dropped';
+export type WatchStatus = 'följer' | 'sedd';
 
 export interface WatchlistItem {
   tmdbId: number;
@@ -13,6 +13,7 @@ export interface WatchlistItem {
   totalSeasons: number | null;
   lastWatchedSeason: number | null;
   lastWatchedEpisode: number | null;
+  dropped: boolean;
   providers: number[];
   addedAt: Date;
   updatedAt: Date;
