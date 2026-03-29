@@ -2,16 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, arrayUnion, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserList, UserListItem } from '@/types';
-
-function toDate(val: unknown): Date {
-  if (val instanceof Timestamp) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date();
-}
 
 function docToList(id: string, data: Record<string, unknown>): UserList {
   return {

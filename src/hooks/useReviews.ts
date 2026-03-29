@@ -1,16 +1,11 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Review, MediaType } from '@/types';
-
-function toDate(val: unknown): Date {
-  if (val instanceof Timestamp) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date();
-}
 
 export function useReviewsForTitle(tmdbId: number) {
   return useQuery({

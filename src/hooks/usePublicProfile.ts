@@ -1,15 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc, getDocs, collection, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { toDate } from '@/lib/firebase/utils';
 import type { UserProfile, WatchlistItem, WatchStatus, MediaType } from '@/types';
-
-function toDate(val: unknown): Date {
-  if (val instanceof Timestamp) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date();
-}
 
 export function usePublicProfile(username: string) {
   return useQuery({

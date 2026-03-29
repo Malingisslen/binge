@@ -8,17 +8,11 @@ import {
   setDoc,
   deleteDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { WatchlistItem, WatchStatus, MediaType } from '@/types';
-
-function toDate(val: unknown): Date {
-  if (val instanceof Timestamp) return val.toDate();
-  if (val instanceof Date) return val;
-  return new Date();
-}
 
 function migrateStatus(raw: string): { status: WatchStatus; dropped: boolean } {
   switch (raw) {
