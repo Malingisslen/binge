@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useMemo } from 'react';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { profileUrl } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -10,24 +10,27 @@ export default function PersonPageClient({ id }: { id: string }) {
   const { data: person, isLoading } = usePerson(personId);
   const { data: credits } = usePersonCredits(personId);
 
+  const uniqueCredits = useMemo(() => {
+    const allCredits = [
+      ...(credits?.cast ?? []).map(c => ({ ...c, role: c.character })),
+      ...(credits?.crew ?? []).filter(c => c.job === 'Director' || c.job === 'Creator').map(c => ({ ...c, role: c.job })),
+    ];
+    const seen = new Set<string>();
+    return allCredits
+      .filter(c => {
+        const key = `${c.media_type}-${c.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return c.media_type === 'movie' || c.media_type === 'tv';
+      })
+      .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+  }, [credits]);
+
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!person) return <div className="text-sm text-text-muted py-4">Personen hittades inte.</div>;
 
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
-
-  // Combine cast + crew credits, deduplicate by id+media_type, sort by popularity
-  const allCredits = [
-    ...(credits?.cast ?? []).map(c => ({ ...c, role: c.character })),
-    ...(credits?.crew ?? []).filter(c => c.job === 'Director' || c.job === 'Creator').map(c => ({ ...c, role: c.job })),
-  ];
-  const seen = new Set<string>();
-  const uniqueCredits = allCredits.filter(c => {
-    const key = `${c.media_type}-${c.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return c.media_type === 'movie' || c.media_type === 'tv';
-  }).sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
 
   return (
     <div>

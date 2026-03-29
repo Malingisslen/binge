@@ -1,21 +1,19 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useTVShow } from '@/hooks/useTMDB';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, profileUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
-import TitleGrid from '@/components/title/TitleGrid';
 import NotesTextarea from '@/components/title/NotesTextarea';
+import RecommendationsSection from '@/components/title/RecommendationsSection';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
-import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
-import type { TMDBProvider } from '@/types';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
@@ -24,7 +22,11 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
-  const [onlyMyServices, setOnlyMyServices] = useState(false);
+
+  const mappedRecs = useMemo(
+    () => (show?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
+    [show?.recommendations]
+  );
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
@@ -39,7 +41,6 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
   const genres = show.genres.map(g => g.name).join(', ');
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
-  const recommendations = show.recommendations?.results?.slice(0, 8) ?? [];
   const nextEp = show.next_episode_to_air;
   const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
   const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
@@ -172,9 +173,9 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <div className="flex gap-3 overflow-x-auto pb-1">
             {cast.map(person => (
               <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
-                {person.profile_path ? (
+                {profileUrl(person.profile_path) ? (
                   <img
-                    src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
+                    src={profileUrl(person.profile_path)!}
                     alt={person.name}
                     className="w-[70px] h-[90px] object-cover rounded-sm mb-[2px]"
                     loading="lazy"
@@ -191,61 +192,10 @@ export default function TVShowPageClient({ id }: { id: string }) {
       )}
 
       <RecommendationsSection
-        recommendations={recommendations.map(r => ({ ...r, media_type: 'tv' as const }))}
+        recommendations={mappedRecs}
         myProviders={myProviders}
-        onlyMyServices={onlyMyServices}
-        setOnlyMyServices={setOnlyMyServices}
         label="Liknande serier"
       />
-    </div>
-  );
-}
-
-function RecommendationsSection({ recommendations, myProviders, onlyMyServices, setOnlyMyServices, label }: {
-  recommendations: (import('@/types').TMDBSearchResult & { media_type: 'movie' | 'tv' })[];
-  myProviders: number[];
-  onlyMyServices: boolean;
-  setOnlyMyServices: (v: boolean) => void;
-  label: string;
-}) {
-  const rawProviderMap = useSearchProviders(recommendations);
-
-  const filtered = useMemo(() => {
-    if (!onlyMyServices || myProviders.length === 0) return recommendations;
-    return recommendations.filter(r => {
-      const p = rawProviderMap[`${r.media_type}-${r.id}`];
-      return p?.flatrate?.some(f => myProviders.includes(f.provider_id));
-    });
-  }, [recommendations, onlyMyServices, myProviders, rawProviderMap]);
-
-  const providerMap = useMemo(() => {
-    const map: Record<string, TMDBProvider[]> = {};
-    for (const [key, data] of Object.entries(rawProviderMap)) {
-      if (data.flatrate) map[key] = data.flatrate;
-    }
-    return map;
-  }, [rawProviderMap]);
-
-  if (recommendations.length === 0) return null;
-
-  return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-sm font-bold text-text-secondary">{label}</h2>
-        {myProviders.length > 0 && (
-          <span
-            onClick={() => setOnlyMyServices(!onlyMyServices)}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              onlyMyServices ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
-          >
-            Mina tjänster
-          </span>
-        )}
-      </div>
-      <div className="bg-surface border border-border-main rounded-sm">
-        <TitleGrid items={filtered} providerMap={providerMap} />
-      </div>
     </div>
   );
 }
