@@ -3,9 +3,10 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useSearchBox } from '@/hooks/useSearchBox';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import type { WatchStatus } from '@/types';
 import SearchDropdown from '@/components/search/SearchDropdown';
@@ -25,25 +26,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const { items } = useWatchlist();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchFocused(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   const myProviderIds = user?.myProviders ?? [];
   const subscribedProviders = SWEDISH_PROVIDERS.filter(
@@ -84,8 +67,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <SearchDropdown
             query={debouncedQuery}
             onSelect={() => {
-              setSearchQuery('');
-              setSearchFocused(false);
+              clearSearch();
               onClose?.();
             }}
           />

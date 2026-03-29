@@ -82,8 +82,8 @@ function SettingsContent() {
                       min="0"
                       step="1"
                       placeholder="kr/mån"
-                      value={user.providerCosts?.[provider.id] ?? ''}
-                      onChange={e => {
+                      defaultValue={user.providerCosts?.[provider.id] ?? ''}
+                      onBlur={e => {
                         const val = parseInt(e.target.value, 10);
                         const costs = { ...user.providerCosts };
                         if (isNaN(val) || val <= 0) delete costs[provider.id];

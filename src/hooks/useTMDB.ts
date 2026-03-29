@@ -77,18 +77,20 @@ export function usePopularTV(page = 1) {
   });
 }
 
-export function useDiscoverMovies(params: Record<string, string> = {}) {
+export function useDiscoverMovies(params: Record<string, string> | null = {}) {
   return useQuery({
     queryKey: ['discover-movies', params],
-    queryFn: () => discoverMovies(params),
+    queryFn: () => discoverMovies(params!),
+    enabled: params !== null,
     staleTime: STALE_TIME,
   });
 }
 
-export function useDiscoverTV(params: Record<string, string> = {}) {
+export function useDiscoverTV(params: Record<string, string> | null = {}) {
   return useQuery({
     queryKey: ['discover-tv', params],
-    queryFn: () => discoverTV(params),
+    queryFn: () => discoverTV(params!),
+    enabled: params !== null,
     staleTime: STALE_TIME,
   });
 }

@@ -45,8 +45,8 @@ export default function ProviderPageClient({ id }: { id: string }) {
     return base;
   }, [providerId, tab, page, oneMonthAgo]);
 
-  const { data: movies, isLoading: moviesLoading } = useDiscoverMovies(tab !== 'tv' ? movieParams : {});
-  const { data: tv, isLoading: tvLoading } = useDiscoverTV(tab !== 'movies' ? tvParams : {});
+  const { data: movies, isLoading: moviesLoading } = useDiscoverMovies(tab !== 'tv' ? movieParams : null);
+  const { data: tv, isLoading: tvLoading } = useDiscoverTV(tab !== 'movies' ? tvParams : null);
 
   useEffect(() => { setPage(1); setAllResults([]); }, [tab, providerId]);
 

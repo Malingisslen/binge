@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
 import WatchingTable from '@/components/dashboard/WatchingTable';
 import SearchDropdown from '@/components/search/SearchDropdown';
+import { useSearchBox } from '@/hooks/useSearchBox';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -16,25 +16,7 @@ function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
   const items = (trending?.results ?? []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 10);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchFocused(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (
     <div>
@@ -60,10 +42,7 @@ function LandingPage() {
           {searchFocused && debouncedQuery.length >= 2 && (
             <SearchDropdown
               query={debouncedQuery}
-              onSelect={() => {
-                setSearchQuery('');
-                setSearchFocused(false);
-              }}
+              onSelect={clearSearch}
             />
           )}
         </div>
