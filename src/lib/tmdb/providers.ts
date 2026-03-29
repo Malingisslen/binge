@@ -7,7 +7,6 @@ export interface SwedishProvider {
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
-  // Flatrate (subscription)
   { id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate' },
   { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate' },
   { id: 337, name: 'Disney+', shortName: 'Disney+', color: '#0063E5', type: 'flatrate' },
@@ -24,7 +23,6 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   { id: 335, name: 'YouTube Premium', shortName: 'YT', color: '#FF0000', type: 'flatrate' },
   { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate' },
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'flatrate' },
-  // Rent / buy
   { id: 35, name: 'Rakuten TV', shortName: 'Rakuten', color: '#BF0000', type: 'rent' },
   { id: 3, name: 'Google Play Movies', shortName: 'Google', color: '#4285F4', type: 'rent' },
   { id: 2, name: 'Apple TV', shortName: 'Apple', color: '#555555', type: 'rent' },

@@ -8,10 +8,11 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   signOut as firebaseSignOut,
+  deleteUser,
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/config';
 import type { UserProfile } from '@/types';
 
@@ -25,6 +26,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -37,6 +39,7 @@ const AuthContext = createContext<AuthState>({
   signOut: async () => {},
   updateProviders: async () => {},
   updateDefaultView: async () => {},
+  deleteAccount: async () => {},
 });
 
 async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
@@ -127,22 +130,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut(auth);
   }, []);
 
-  const updateProviders = useCallback(async (providers: number[]) => {
+  const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
     if (!uid) return;
-    const ref = doc(db, 'users', uid);
-    await setDoc(ref, { myProviders: providers, updatedAt: serverTimestamp() }, { merge: true });
-    setUser(prev => prev ? { ...prev, myProviders: providers } : null);
+    await setDoc(doc(db, 'users', uid), { [field]: value, updatedAt: serverTimestamp() }, { merge: true });
+    setUser(prev => prev ? { ...prev, [field]: value } : null);
   }, [uid]);
 
-  const updateDefaultView = useCallback(async (view: 'table' | 'grid') => {
-    if (!uid) return;
-    const ref = doc(db, 'users', uid);
-    await setDoc(ref, { defaultView: view, updatedAt: serverTimestamp() }, { merge: true });
-    setUser(prev => prev ? { ...prev, defaultView: view } : null);
-  }, [uid]);
+  const updateProviders = useCallback((providers: number[]) => updateUserField('myProviders', providers), [updateUserField]);
+  const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
+
+  const deleteAccount = useCallback(async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    const id = currentUser.uid;
+    const batch = writeBatch(db);
+    const [watchlistSnap, progressSnap] = await Promise.all([
+      getDocs(collection(db, 'users', id, 'watchlist')),
+      getDocs(collection(db, 'users', id, 'episodeProgress')),
+    ]);
+    watchlistSnap.docs.forEach(d => batch.delete(d.ref));
+    progressSnap.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(doc(db, 'users', id));
+    await batch.commit();
+    await deleteUser(currentUser);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

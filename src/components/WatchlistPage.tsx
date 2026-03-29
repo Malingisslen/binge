@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -28,6 +28,10 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   const [sort, setSort] = useState<SortKey>('updatedAt');
   const [view, setView] = useState<ViewMode>(user?.defaultView ?? 'table');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (user?.defaultView) setView(user.defaultView);
+  }, [user?.defaultView]);
 
   const filtered = useMemo(() => {
     let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
@@ -59,7 +63,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           {(['all', 'tv', 'movie'] as const).map(f => (
             <span
               key={f}
-              onClick={() => setMediaFilter(f)}
+              onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
               className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
                 mediaFilter === f ? 'bg-accent text-white' : 'text-text-muted'
               }`}
@@ -108,7 +112,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           {status === 'följer' && (
             <button
               onClick={async () => {
-                for (const id of Array.from(selected)) await updateStatus(id, 'sedd');
+                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'sedd')));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
@@ -119,7 +123,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           {status === 'sedd' && (
             <button
               onClick={async () => {
-                for (const id of Array.from(selected)) await updateStatus(id, 'följer');
+                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'följer')));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
@@ -129,7 +133,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           )}
           <button
             onClick={async () => {
-              for (const id of Array.from(selected)) await removeItem(id);
+              await Promise.all(Array.from(selected).map(id => removeItem(id)));
               setSelected(new Set());
             }}
             className="px-2 py-[2px] text-xs border border-red-300 rounded-sm cursor-pointer bg-surface text-red-600 font-[inherit]"
@@ -180,12 +184,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                       <input
                         type="checkbox"
                         checked={selected.has(item.tmdbId)}
-                        onChange={() => {
-                          const next = new Set(selected);
+                        onChange={() => setSelected(prev => {
+                          const next = new Set(prev);
                           if (next.has(item.tmdbId)) next.delete(item.tmdbId);
                           else next.add(item.tmdbId);
-                          setSelected(next);
-                        }}
+                          return next;
+                        })}
                         className="accent-accent w-[13px] h-[13px] cursor-pointer"
                       />
                     </td>

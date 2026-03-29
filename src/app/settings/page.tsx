@@ -5,9 +5,6 @@ import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
-import { collection, getDocs, writeBatch, doc as firestoreDoc } from 'firebase/firestore';
-import { deleteUser } from 'firebase/auth';
-import { db, auth } from '@/lib/firebase/config';
 
 export default function SettingsPage() {
   return <AuthGuard><SettingsContent /></AuthGuard>;
@@ -120,30 +117,13 @@ function SettingsContent() {
 function DeleteAccountSection() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { deleteAccount } = useAuth();
   const { show: toast } = useToast();
 
   const handleDelete = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-
     setDeleting(true);
     try {
-      const uid = currentUser.uid;
-      const batch = writeBatch(db);
-
-      // Delete watchlist subcollection
-      const watchlistSnap = await getDocs(collection(db, 'users', uid, 'watchlist'));
-      watchlistSnap.docs.forEach(d => batch.delete(d.ref));
-
-      // Delete episodeProgress subcollection
-      const progressSnap = await getDocs(collection(db, 'users', uid, 'episodeProgress'));
-      progressSnap.docs.forEach(d => batch.delete(d.ref));
-
-      // Delete user profile doc
-      batch.delete(firestoreDoc(db, 'users', uid));
-
-      await batch.commit();
-      await deleteUser(currentUser);
+      await deleteAccount();
     } catch (err: unknown) {
       const msg = err instanceof Error && err.message.includes('requires-recent-login')
         ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
