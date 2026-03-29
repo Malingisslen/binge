@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/hooks/useAuth';
 import type { WatchStatus } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
@@ -21,10 +22,12 @@ interface WatchlistPageProps {
 }
 
 export default function WatchlistPage({ status, title }: WatchlistPageProps) {
-  const { items } = useWatchlist();
+  const { items, removeItem, updateStatus } = useWatchlist();
+  const { user } = useAuth();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
-  const [view, setView] = useState<ViewMode>('table');
+  const [view, setView] = useState<ViewMode>(user?.defaultView ?? 'table');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const filtered = useMemo(() => {
     let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
@@ -99,11 +102,65 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
         </div>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
+          <span className="text-xs text-text-secondary">{selected.size} markerade</span>
+          {status === 'följer' && (
+            <button
+              onClick={async () => {
+                for (const id of Array.from(selected)) await updateStatus(id, 'sedd');
+                setSelected(new Set());
+              }}
+              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
+            >
+              Markera sedd
+            </button>
+          )}
+          {status === 'sedd' && (
+            <button
+              onClick={async () => {
+                for (const id of Array.from(selected)) await updateStatus(id, 'följer');
+                setSelected(new Set());
+              }}
+              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
+            >
+              Flytta till Följer
+            </button>
+          )}
+          <button
+            onClick={async () => {
+              for (const id of Array.from(selected)) await removeItem(id);
+              setSelected(new Set());
+            }}
+            className="px-2 py-[2px] text-xs border border-red-300 rounded-sm cursor-pointer bg-surface text-red-600 font-[inherit]"
+          >
+            Ta bort
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="px-2 py-[2px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-muted font-[inherit] ml-auto"
+          >
+            Avmarkera
+          </button>
+        </div>
+      )}
+
       {view === 'table' ? (
         <div className="bg-surface border border-border-main rounded-sm">
           <table className="w-full border-collapse">
             <thead>
               <tr>
+                <th className="px-2 py-1 border-b border-border-light bg-cal-header w-[28px]">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={e => {
+                      if (e.target.checked) setSelected(new Set(filtered.map(i => i.tmdbId)));
+                      else setSelected(new Set());
+                    }}
+                    className="accent-accent w-[13px] h-[13px] cursor-pointer"
+                  />
+                </th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[36px]"></th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
                 <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>
@@ -119,6 +176,19 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                 const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
                 return (
                   <tr key={item.tmdbId} className="cursor-pointer hover:[&>td]:bg-surface-hover">
+                    <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(item.tmdbId)}
+                        onChange={() => {
+                          const next = new Set(selected);
+                          if (next.has(item.tmdbId)) next.delete(item.tmdbId);
+                          else next.add(item.tmdbId);
+                          setSelected(next);
+                        }}
+                        className="accent-accent w-[13px] h-[13px] cursor-pointer"
+                      />
+                    </td>
                     <td className="px-2 py-[5px] border-b border-border-table">
                       <Link href={href}>
                         {poster ? (
@@ -158,7 +228,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center text-sm text-text-muted">
+                  <td colSpan={8} className="px-3 py-4 text-center text-sm text-text-muted">
                     Inga titlar att visa
                   </td>
                 </tr>

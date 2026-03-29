@@ -24,6 +24,7 @@ interface AuthState {
   register: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
+  updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -35,6 +36,7 @@ const AuthContext = createContext<AuthState>({
   register: async () => {},
   signOut: async () => {},
   updateProviders: async () => {},
+  updateDefaultView: async () => {},
 });
 
 async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
@@ -48,6 +50,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       email: data.email ?? firebaseUser.email ?? '',
       photoURL: data.photoURL ?? firebaseUser.photoURL,
       myProviders: data.myProviders ?? [],
+      defaultView: data.defaultView ?? 'table',
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       notificationSettings: data.notificationSettings ?? {
@@ -62,6 +65,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     email: firebaseUser.email ?? '',
     photoURL: firebaseUser.photoURL,
     myProviders: [],
+    defaultView: 'table',
     createdAt: new Date(),
     updatedAt: new Date(),
     notificationSettings: {
@@ -130,8 +134,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(prev => prev ? { ...prev, myProviders: providers } : null);
   }, [uid]);
 
+  const updateDefaultView = useCallback(async (view: 'table' | 'grid') => {
+    if (!uid) return;
+    const ref = doc(db, 'users', uid);
+    await setDoc(ref, { defaultView: view, updatedAt: serverTimestamp() }, { merge: true });
+    setUser(prev => prev ? { ...prev, defaultView: view } : null);
+  }, [uid]);
+
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView }}>
       {children}
     </AuthContext.Provider>
   );

@@ -38,6 +38,7 @@ export interface UserProfile {
   email: string;
   photoURL: string | null;
   myProviders: number[];
+  defaultView: 'table' | 'grid';
   createdAt: Date;
   updatedAt: Date;
   notificationSettings: {

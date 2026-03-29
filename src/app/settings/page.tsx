@@ -1,16 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { collection, getDocs, writeBatch, doc as firestoreDoc } from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
+import { db, auth } from '@/lib/firebase/config';
 
 export default function SettingsPage() {
   return <AuthGuard><SettingsContent /></AuthGuard>;
 }
 
 function SettingsContent() {
-  const { user, signOut, updateProviders } = useAuth();
+  const { user, signOut, updateProviders, updateDefaultView } = useAuth();
   const { show: toast } = useToast();
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
@@ -80,8 +84,109 @@ function SettingsContent() {
         </div>
       </div>
 
+      <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
+        <div className="px-3 py-[6px] border-b border-border-light">
+          <span className="text-sm font-bold text-text-secondary">Visning</span>
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-xs text-text-muted mb-2">Standardvy för listor.</p>
+          <div className="flex gap-2">
+            {(['table', 'grid'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => { updateDefaultView(v); toast('Inställning sparad'); }}
+                className={`px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer ${
+                  user.defaultView === v
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
+                }`}
+              >
+                {v === 'table' ? 'Tabell' : 'Rutnät'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <DeleteAccountSection />
+
       <div className="text-xxs text-text-muted mt-4">
         This product uses the TMDB API but is not endorsed or certified by TMDB.
+      </div>
+    </div>
+  );
+}
+
+function DeleteAccountSection() {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { show: toast } = useToast();
+
+  const handleDelete = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    setDeleting(true);
+    try {
+      const uid = currentUser.uid;
+      const batch = writeBatch(db);
+
+      // Delete watchlist subcollection
+      const watchlistSnap = await getDocs(collection(db, 'users', uid, 'watchlist'));
+      watchlistSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Delete episodeProgress subcollection
+      const progressSnap = await getDocs(collection(db, 'users', uid, 'episodeProgress'));
+      progressSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Delete user profile doc
+      batch.delete(firestoreDoc(db, 'users', uid));
+
+      await batch.commit();
+      await deleteUser(currentUser);
+    } catch (err: unknown) {
+      const msg = err instanceof Error && err.message.includes('requires-recent-login')
+        ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
+        : 'Något gick fel. Försök igen.';
+      toast(msg);
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="bg-surface border border-red-200 rounded-sm mb-[14px]">
+      <div className="px-3 py-[6px] border-b border-red-100">
+        <span className="text-sm font-bold text-red-600">Ta bort konto</span>
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs text-text-muted mb-2">
+          All data raderas permanent — watchlist, betyg, avsnittsprogress och inställningar.
+        </p>
+        {!confirming ? (
+          <button
+            onClick={() => setConfirming(true)}
+            className="px-3 py-[3px] border border-red-300 rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-red-600 hover:bg-red-50"
+          >
+            Ta bort mitt konto
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-red-600 text-white disabled:opacity-50"
+            >
+              {deleting ? 'Raderar...' : 'Ja, ta bort permanent'}
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="px-3 py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary"
+            >
+              Avbryt
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
