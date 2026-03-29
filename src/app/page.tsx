@@ -1,8 +1,11 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { Search } from 'lucide-react';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
 import WatchingTable from '@/components/dashboard/WatchingTable';
+import SearchDropdown from '@/components/search/SearchDropdown';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -13,6 +16,25 @@ function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
   const items = (trending?.results ?? []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 10);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div>
@@ -20,18 +42,40 @@ function LandingPage() {
         <h1 className="text-[24px] font-extrabold text-accent mb-1">
           binge<span className="font-normal text-text-muted text-[18px]">.nu</span>
         </h1>
-        <p className="text-sm text-text-secondary mb-4 max-w-[400px] mx-auto">
-          Håll koll på vad du tittar på och var det finns att streama i Sverige.
+        <p className="text-sm text-text-secondary mb-2 max-w-[400px] mx-auto">
+          Sök efter en film eller serie — se var den finns att streama i Sverige.
         </p>
-        <button
-          onClick={signIn}
-          className="px-5 py-2 bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold"
-        >
-          Logga in med Google
-        </button>
-        <div className="mt-2">
+        <div className="relative max-w-[400px] mx-auto mb-4" ref={searchRef}>
+          <div className="flex items-center gap-[5px] px-3 py-[6px] bg-surface border border-border-main rounded-sm">
+            <Search size={14} className="text-text-muted shrink-0" />
+            <input
+              type="text"
+              placeholder="Sök film eller serie..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              className="bg-transparent border-none text-text-primary text-sm font-[inherit] outline-none w-full placeholder:text-text-muted"
+            />
+          </div>
+          {searchFocused && debouncedQuery.length >= 2 && (
+            <SearchDropdown
+              query={debouncedQuery}
+              onSelect={() => {
+                setSearchQuery('');
+                setSearchFocused(false);
+              }}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={signIn}
+            className="px-4 py-[5px] bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-xs font-semibold"
+          >
+            Logga in med Google
+          </button>
           <Link href="/login/" className="text-xs text-accent no-underline">
-            Eller skapa konto med e-post
+            Skapa konto
           </Link>
         </div>
       </div>

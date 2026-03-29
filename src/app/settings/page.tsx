@@ -11,7 +11,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, signOut, updateProviders, updateDefaultView } = useAuth();
+  const { user, signOut, updateProviders, updateDefaultView, updateProviderCosts } = useAuth();
   const { show: toast } = useToast();
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
@@ -56,28 +56,54 @@ function SettingsContent() {
             {flatrateProviders.map(provider => {
               const isSelected = user.myProviders.includes(provider.id);
               return (
-                <label key={provider.id} className="flex items-center gap-2 py-[3px] cursor-pointer text-base">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => {
-                      const updated = isSelected
-                        ? user.myProviders.filter(id => id !== provider.id)
-                        : [...user.myProviders, provider.id];
-                      updateProviders(updated);
-                      toast('Tjänster uppdaterade');
-                    }}
-                    className="accent-accent w-[14px] h-[14px]"
-                  />
-                  <span
-                    className="w-[8px] h-[8px] rounded-full inline-block"
-                    style={{ background: provider.color }}
-                  />
-                  {provider.name}
-                </label>
+                <div key={provider.id} className="flex items-center gap-2 py-[3px]">
+                  <label className="flex items-center gap-2 cursor-pointer text-base flex-1">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        const updated = isSelected
+                          ? user.myProviders.filter(id => id !== provider.id)
+                          : [...user.myProviders, provider.id];
+                        updateProviders(updated);
+                        toast('Tjänster uppdaterade');
+                      }}
+                      className="accent-accent w-[14px] h-[14px]"
+                    />
+                    <span
+                      className="w-[8px] h-[8px] rounded-full inline-block"
+                      style={{ background: provider.color }}
+                    />
+                    {provider.name}
+                  </label>
+                  {isSelected && (
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="kr/mån"
+                      value={user.providerCosts?.[provider.id] ?? ''}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        const costs = { ...user.providerCosts };
+                        if (isNaN(val) || val <= 0) delete costs[provider.id];
+                        else costs[provider.id] = val;
+                        updateProviderCosts(costs);
+                      }}
+                      className="w-[70px] px-1 py-[1px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none text-right"
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
+          {Object.keys(user.providerCosts ?? {}).length > 0 && (
+            <div className="mt-2 pt-2 border-t border-border-light">
+              <div className="text-xs text-text-secondary font-semibold">
+                Totalt: {Object.values(user.providerCosts).reduce((sum, v) => sum + v, 0)} kr/mån
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -26,6 +26,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
+  updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthState>({
   signOut: async () => {},
   updateProviders: async () => {},
   updateDefaultView: async () => {},
+  updateProviderCosts: async () => {},
   deleteAccount: async () => {},
 });
 
@@ -54,6 +56,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       photoURL: data.photoURL ?? firebaseUser.photoURL,
       myProviders: data.myProviders ?? [],
       defaultView: data.defaultView ?? 'table',
+      providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       notificationSettings: data.notificationSettings ?? {
@@ -69,6 +72,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     photoURL: firebaseUser.photoURL,
     myProviders: [],
     defaultView: 'table',
+    providerCosts: {},
     createdAt: new Date(),
     updatedAt: new Date(),
     notificationSettings: {
@@ -138,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProviders = useCallback((providers: number[]) => updateUserField('myProviders', providers), [updateUserField]);
   const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
+  const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
 
   const deleteAccount = useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -156,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

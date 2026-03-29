@@ -39,6 +39,7 @@ export interface UserProfile {
   photoURL: string | null;
   myProviders: number[];
   defaultView: 'table' | 'grid';
+  providerCosts: Record<number, number>;
   createdAt: Date;
   updatedAt: Date;
   notificationSettings: {

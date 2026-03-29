@@ -139,7 +139,12 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           {subscribedProviders.map(provider => {
             const count = providerCounts[provider.id] ?? 0;
             return (
-              <div key={provider.id} className="flex items-center justify-between px-4 py-[2px] text-sm">
+              <Link
+                key={provider.id}
+                href={`/provider/${provider.id}/`}
+                onClick={onClose}
+                className="flex items-center justify-between px-4 py-[2px] text-sm no-underline text-text-sidebar hover:text-[#ccc]"
+              >
                 <span className="flex items-center">
                   <span
                     className="w-[5px] h-[5px] rounded-full mr-[5px] inline-block"
@@ -150,7 +155,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                 {count > 0 && (
                   <span className="text-xs text-text-sidebar">{count}</span>
                 )}
-              </div>
+              </Link>
             );
           })}
         </div>

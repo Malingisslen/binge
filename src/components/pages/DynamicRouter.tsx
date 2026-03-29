@@ -5,11 +5,15 @@ import MoviePageClient from './MoviePageClient';
 import TVShowPageClient from './TVShowPageClient';
 import SeasonPageClient from './SeasonPageClient';
 import PersonPageClient from './PersonPageClient';
+import ProviderPageClient from './ProviderPageClient';
 
 export default function DynamicRouter({ fallback }: { fallback: React.ReactNode }) {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
 
+  if (segments[0] === 'provider' && segments[1]) {
+    return <ProviderPageClient id={segments[1]} />;
+  }
   if (segments[0] === 'person' && segments[1]) {
     return <PersonPageClient id={segments[1]} />;
   }
