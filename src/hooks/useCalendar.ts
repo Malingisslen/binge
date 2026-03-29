@@ -9,6 +9,8 @@ import { getProvider } from '@/lib/tmdb/providers';
 export interface CalendarEntry {
   tmdbId: number;
   title: string;
+  season: number;
+  episode: number;
   episodeCode: string;
   episodeName?: string;
   airDate: string;
@@ -84,6 +86,8 @@ export function useCalendarEntries() {
         result.push({
           tmdbId: item.showId,
           title: item.show.name,
+          season: ep.season_number,
+          episode: ep.episode_number,
           episodeCode: `S${ep.season_number}E${ep.episode_number}`,
           episodeName: ep.name,
           airDate: ep.air_date,
@@ -109,6 +113,20 @@ export function getWeekStart(date: Date): Date {
 
 export function formatWeekday(date: Date): string {
   return date.toLocaleDateString('sv-SE', { weekday: 'short' }).slice(0, 3);
+}
+
+export function getMonthDays(year: number, month: number): Date[] {
+  const first = new Date(year, month, 1);
+  const startDay = first.getDay() || 7; // Monday=1
+  const start = new Date(first);
+  start.setDate(start.getDate() - (startDay - 1));
+  const days: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  return days;
 }
 
 export function getWeekNumber(date: Date): number {

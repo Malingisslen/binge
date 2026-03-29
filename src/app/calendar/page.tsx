@@ -4,7 +4,11 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
+import MonthlyCalendar from '@/components/calendar/MonthlyCalendar';
+import CalendarEntryItem from '@/components/calendar/CalendarEntryItem';
 import { useCalendarEntries, getWeekStart, type CalendarEntry } from '@/hooks/useCalendar';
+
+type CalendarView = 'week' | 'month';
 
 export default function CalendarPage() {
   return <AuthGuard><CalendarContent /></AuthGuard>;
@@ -12,6 +16,7 @@ export default function CalendarPage() {
 
 function CalendarContent() {
   const entries = useCalendarEntries();
+  const [view, setView] = useState<CalendarView>('week');
   const [weekStart] = useState(() => getWeekStart(new Date()));
   const today = new Date().toISOString().split('T')[0];
 
@@ -29,8 +34,28 @@ function CalendarContent() {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-3">Kalender</h1>
-      <WeeklyCalendar entries={entries} />
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="text-md font-bold text-text-primary">Kalender</h1>
+        <div className="flex gap-[1px]">
+          {(['week', 'month'] as const).map(v => (
+            <span
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+                view === v ? 'bg-accent text-white' : 'text-text-muted'
+              }`}
+            >
+              {v === 'week' ? 'Vecka' : 'Månad'}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {view === 'week' ? (
+        <WeeklyCalendar entries={entries} />
+      ) : (
+        <MonthlyCalendar entries={entries} />
+      )}
 
       {newThisWeek.length > 0 && (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
@@ -39,25 +64,18 @@ function CalendarContent() {
           </div>
           <div className="px-3 py-2">
             {newThisWeek.map((entry, i) => (
-              <Link
+              <div
                 key={`${entry.tmdbId}-${entry.episodeCode}-${i}`}
-                href={`/tv/${entry.tmdbId}/`}
-                className="flex items-center justify-between py-[4px] border-b border-border-light last:border-b-0 no-underline text-text-primary"
+                className="flex items-center justify-between py-[4px] border-b border-border-light last:border-b-0"
               >
-                <div>
-                  <span className="text-base font-semibold">{entry.title}</span>
-                  <span className="text-xs text-text-muted ml-2">{entry.episodeCode}</span>
+                <CalendarEntryItem entry={entry} />
+                <div className="flex items-center gap-2 shrink-0 ml-2">
                   {entry.episodeName && (
-                    <span className="text-xs text-text-muted ml-1">— {entry.episodeName}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {entry.provider && (
-                    <span className="text-xxs text-accent">{entry.provider}</span>
+                    <span className="text-xs text-text-muted">— {entry.episodeName}</span>
                   )}
                   <span className="text-xxs text-text-muted">{entry.airDate}</span>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>

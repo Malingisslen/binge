@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { getWeekStart, formatWeekday, getWeekNumber, type CalendarEntry } from '@/hooks/useCalendar';
+import CalendarEntryItem from './CalendarEntryItem';
 
 interface WeeklyCalendarProps {
   entries?: CalendarEntry[];
@@ -94,11 +95,7 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
                 <span>—</span>
               ) : (
                 dayEntries.map((entry, j) => (
-                  <div key={j} className="mb-1">
-                    <div className="text-text-primary font-semibold text-xs leading-tight">{entry.title}</div>
-                    <div className="text-text-muted text-xxs">{entry.episodeCode}</div>
-                    {entry.provider && <div className="text-accent text-xxs">{entry.provider}</div>}
-                  </div>
+                  <CalendarEntryItem key={j} entry={entry} compact />
                 ))
               )}
             </div>
@@ -125,11 +122,7 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
                   <span>—</span>
                 ) : (
                   dayEntries.map((entry, j) => (
-                    <div key={j} className="mb-1">
-                      <span className="text-text-primary font-semibold">{entry.title}</span>
-                      {' '}<span className="text-text-muted text-xxs">{entry.episodeCode}</span>
-                      {entry.provider && <span className="text-accent text-xxs ml-1">{entry.provider}</span>}
-                    </div>
+                    <CalendarEntryItem key={j} entry={entry} />
                   ))
                 )}
               </div>
