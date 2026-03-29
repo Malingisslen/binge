@@ -6,6 +6,8 @@ import type {
   TMDBSearchResult,
   TMDBListResponse,
   TMDBProviderData,
+  TMDBPerson,
+  TMDBPersonCredits,
 } from '@/types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -54,15 +56,24 @@ export function searchMulti(query: string, page = 1): Promise<TMDBSearchResponse
 // Movie
 export function getMovie(id: number): Promise<TMDBMovie> {
   return tmdbFetch(`/movie/${id}`, {
-    append_to_response: 'watch/providers,recommendations,credits',
+    append_to_response: 'watch/providers,recommendations,credits,videos',
   });
 }
 
 // TV
 export function getTVShow(id: number): Promise<TMDBTVShow> {
   return tmdbFetch(`/tv/${id}`, {
-    append_to_response: 'watch/providers,recommendations,credits',
+    append_to_response: 'watch/providers,recommendations,credits,videos,external_ids',
   });
+}
+
+// Person
+export function getPerson(id: number): Promise<TMDBPerson> {
+  return tmdbFetch(`/person/${id}`);
+}
+
+export function getPersonCredits(id: number): Promise<TMDBPersonCredits> {
+  return tmdbFetch(`/person/${id}/combined_credits`);
 }
 
 export function getTVSeason(seriesId: number, seasonNumber: number): Promise<TMDBSeasonDetail> {

@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useTVShow } from '@/hooks/useTMDB';
 import { posterUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
@@ -9,14 +11,20 @@ import SeasonList from '@/components/tv/SeasonList';
 import TitleGrid from '@/components/title/TitleGrid';
 import NotesTextarea from '@/components/title/NotesTextarea';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
+import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
+import type { TMDBProvider } from '@/types';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
   const { data: show, isLoading } = useTVShow(showId);
   const { getItem, updateRating, updateNotes } = useWatchlist();
+  const { user } = useAuth();
+  const myProviders = user?.myProviders ?? [];
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
+  const [onlyMyServices, setOnlyMyServices] = useState(false);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
@@ -33,8 +41,10 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
   const recommendations = show.recommendations?.results?.slice(0, 8) ?? [];
   const nextEp = show.next_episode_to_air;
-
-  const statusLabel = tvShowStatusLabel(show.status);
+  const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
+  const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+    ?? show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
+  const imdbId = show.external_ids?.imdb_id;
 
   return (
     <div>
@@ -51,8 +61,18 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <div className="text-sm text-text-muted mb-1">
             {yearStart}{yearEnd ? `–${yearEnd}` : '-'} · {show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''} · {genres}
           </div>
+          {creators.length > 0 && (
+            <div className="text-xs text-text-muted mb-1">
+              Skapare: {creators.map((c, i) => (
+                <span key={c.id}>{i > 0 && ', '}<Link href={`/person/${c.id}/`} className="text-text-secondary no-underline hover:text-accent">{c.name}</Link></span>
+              ))}
+            </div>
+          )}
           <div className="text-xs text-text-muted mb-2">
-            Status: {statusLabel} · TMDB: {show.vote_average.toFixed(1)}/10
+            Status: {tvShowStatusLabel(show.status)} · TMDB: {show.vote_average.toFixed(1)}/10
+            {imdbId && (
+              <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" className="text-text-muted ml-2 no-underline hover:text-accent">IMDb</a>
+            )}
           </div>
 
           <div className="flex items-center gap-2 mb-3">
@@ -117,6 +137,21 @@ export default function TVShowPageClient({ id }: { id: string }) {
         </div>
       </div>
 
+      {trailer && (
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-text-secondary mb-2">Trailer</h2>
+          <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
+            <iframe
+              src={`https://www.youtube.com/embed/${trailer.key}`}
+              title={trailer.name}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full border-none"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="mb-4">
         <h2 className="text-sm font-bold text-text-secondary mb-2">Säsonger</h2>
         <div className="bg-surface border border-border-main rounded-sm">
@@ -136,7 +171,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <h2 className="text-sm font-bold text-text-secondary mb-2">Skådespelare</h2>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {cast.map(person => (
-              <div key={person.id} className="shrink-0 w-[70px]">
+              <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
                 {person.profile_path ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w185${person.profile_path}`}
@@ -149,20 +184,68 @@ export default function TVShowPageClient({ id }: { id: string }) {
                 )}
                 <div className="text-xs font-semibold truncate">{person.name}</div>
                 <div className="text-xxs text-text-muted truncate">{person.character}</div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
       )}
 
-      {recommendations.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary mb-2">Liknande serier</h2>
-          <div className="bg-surface border border-border-main rounded-sm">
-            <TitleGrid items={recommendations.map(r => ({ ...r, media_type: 'tv' as const }))} />
-          </div>
-        </div>
-      )}
+      <RecommendationsSection
+        recommendations={recommendations.map(r => ({ ...r, media_type: 'tv' as const }))}
+        myProviders={myProviders}
+        onlyMyServices={onlyMyServices}
+        setOnlyMyServices={setOnlyMyServices}
+        label="Liknande serier"
+      />
+    </div>
+  );
+}
+
+function RecommendationsSection({ recommendations, myProviders, onlyMyServices, setOnlyMyServices, label }: {
+  recommendations: (import('@/types').TMDBSearchResult & { media_type: 'movie' | 'tv' })[];
+  myProviders: number[];
+  onlyMyServices: boolean;
+  setOnlyMyServices: (v: boolean) => void;
+  label: string;
+}) {
+  const rawProviderMap = useSearchProviders(recommendations);
+
+  const filtered = useMemo(() => {
+    if (!onlyMyServices || myProviders.length === 0) return recommendations;
+    return recommendations.filter(r => {
+      const p = rawProviderMap[`${r.media_type}-${r.id}`];
+      return p?.flatrate?.some(f => myProviders.includes(f.provider_id));
+    });
+  }, [recommendations, onlyMyServices, myProviders, rawProviderMap]);
+
+  const providerMap = useMemo(() => {
+    const map: Record<string, TMDBProvider[]> = {};
+    for (const [key, data] of Object.entries(rawProviderMap)) {
+      if (data.flatrate) map[key] = data.flatrate;
+    }
+    return map;
+  }, [rawProviderMap]);
+
+  if (recommendations.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-sm font-bold text-text-secondary">{label}</h2>
+        {myProviders.length > 0 && (
+          <span
+            onClick={() => setOnlyMyServices(!onlyMyServices)}
+            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+              onlyMyServices ? 'bg-accent text-white' : 'text-text-muted'
+            }`}
+          >
+            Mina tjänster
+          </span>
+        )}
+      </div>
+      <div className="bg-surface border border-border-main rounded-sm">
+        <TitleGrid items={filtered} providerMap={providerMap} />
+      </div>
     </div>
   );
 }

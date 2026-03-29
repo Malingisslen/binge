@@ -77,6 +77,8 @@ export interface TMDBMovie {
     cast: TMDBCastMember[];
     crew: TMDBCrewMember[];
   };
+  imdb_id?: string | null;
+  videos?: { results: TMDBVideo[] };
   recommendations?: { results: TMDBSearchResult[] };
   'watch/providers'?: { results: { SE?: TMDBProviderData } };
 }
@@ -103,8 +105,36 @@ export interface TMDBTVShow {
     cast: TMDBCastMember[];
     crew: TMDBCrewMember[];
   };
+  external_ids?: { imdb_id?: string | null };
+  videos?: { results: TMDBVideo[] };
   recommendations?: { results: TMDBSearchResult[] };
   'watch/providers'?: { results: { SE?: TMDBProviderData } };
+}
+
+export interface TMDBVideo {
+  id: string;
+  key: string;
+  name: string;
+  site: string;
+  type: string;
+  official: boolean;
+}
+
+export interface TMDBPerson {
+  id: number;
+  name: string;
+  biography: string;
+  birthday: string | null;
+  deathday: string | null;
+  place_of_birth: string | null;
+  profile_path: string | null;
+  known_for_department: string;
+}
+
+export interface TMDBPersonCredits {
+  id: number;
+  cast: (TMDBSearchResult & { character?: string })[];
+  crew: (TMDBSearchResult & { job?: string; department?: string })[];
 }
 
 export interface TMDBSeason {

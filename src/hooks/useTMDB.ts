@@ -11,6 +11,8 @@ import {
   getPopularTV,
   discoverMovies,
   discoverTV,
+  getPerson,
+  getPersonCredits,
 } from '@/lib/tmdb/client';
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -87,6 +89,24 @@ export function useDiscoverTV(params: Record<string, string> = {}) {
   return useQuery({
     queryKey: ['discover-tv', params],
     queryFn: () => discoverTV(params),
+    staleTime: STALE_TIME,
+  });
+}
+
+export function usePerson(id: number | null) {
+  return useQuery({
+    queryKey: ['person', id],
+    queryFn: () => getPerson(id!),
+    enabled: id !== null,
+    staleTime: STALE_TIME,
+  });
+}
+
+export function usePersonCredits(id: number | null) {
+  return useQuery({
+    queryKey: ['person-credits', id],
+    queryFn: () => getPersonCredits(id!),
+    enabled: id !== null,
     staleTime: STALE_TIME,
   });
 }

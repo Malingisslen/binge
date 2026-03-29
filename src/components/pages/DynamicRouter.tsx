@@ -4,11 +4,15 @@ import { usePathname } from 'next/navigation';
 import MoviePageClient from './MoviePageClient';
 import TVShowPageClient from './TVShowPageClient';
 import SeasonPageClient from './SeasonPageClient';
+import PersonPageClient from './PersonPageClient';
 
 export default function DynamicRouter({ fallback }: { fallback: React.ReactNode }) {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
 
+  if (segments[0] === 'person' && segments[1]) {
+    return <PersonPageClient id={segments[1]} />;
+  }
   if (segments[0] === 'movie' && segments[1]) {
     return <MoviePageClient id={segments[1]} />;
   }
