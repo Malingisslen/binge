@@ -37,6 +37,9 @@ export interface UserProfile {
   displayName: string;
   email: string;
   photoURL: string | null;
+  username: string | null;
+  bio: string;
+  isPublic: boolean;
   myProviders: number[];
   defaultView: 'table' | 'grid';
   providerCosts: Record<number, number>;
@@ -46,6 +49,39 @@ export interface UserProfile {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
   };
+}
+
+export interface UserList {
+  id: string;
+  uid: string;
+  title: string;
+  description: string;
+  isPublic: boolean;
+  items: UserListItem[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserListItem {
+  tmdbId: number;
+  mediaType: MediaType;
+  title: string;
+  posterPath: string | null;
+  addedAt: Date;
+}
+
+export interface Review {
+  id: string;
+  uid: string;
+  tmdbId: number;
+  mediaType: MediaType;
+  text: string;
+  spoiler: boolean;
+  rating: number | null;
+  displayName: string;
+  username: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // TMDB types

@@ -10,6 +10,7 @@ import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
 import NotesTextarea from '@/components/title/NotesTextarea';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
+import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
@@ -190,6 +191,8 @@ export default function TVShowPageClient({ id }: { id: string }) {
           </div>
         </div>
       )}
+
+      <ReviewList tmdbId={show.id} mediaType="tv" />
 
       <RecommendationsSection
         recommendations={mappedRecs}

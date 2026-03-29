@@ -17,11 +17,13 @@ const NAV_ITEMS = [
   { label: 'Kalender', href: '/calendar', section: 'Översikt' },
   { label: 'Statistik', href: '/stats', section: 'Översikt' },
   { label: 'För dig', href: '/recommendations', section: 'Översikt' },
+  { label: 'Flöde', href: '/feed', section: 'Översikt' },
 ];
 
 const COLLECTION_ITEMS = [
   { label: 'Följer', href: '/my/following', status: 'följer' as const },
   { label: 'Sedd', href: '/my/watched', status: 'sedd' as const },
+  { label: 'Listor', href: '/my/lists', status: null },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
@@ -109,7 +111,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           }`}
         >
           {item.label}
-          {statusCounts[item.status] > 0 && (
+          {item.status && statusCounts[item.status] > 0 && (
             <span className="text-xs text-accent">{statusCounts[item.status]}</span>
           )}
         </Link>

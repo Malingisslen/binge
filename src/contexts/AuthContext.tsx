@@ -27,6 +27,9 @@ interface AuthState {
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
+  updateUsername: (username: string) => Promise<void>;
+  updateBio: (bio: string) => Promise<void>;
+  updateIsPublic: (isPublic: boolean) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -41,6 +44,9 @@ const AuthContext = createContext<AuthState>({
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
+  updateUsername: async () => {},
+  updateBio: async () => {},
+  updateIsPublic: async () => {},
   deleteAccount: async () => {},
 });
 
@@ -54,6 +60,9 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       displayName: data.displayName ?? firebaseUser.displayName ?? '',
       email: data.email ?? firebaseUser.email ?? '',
       photoURL: data.photoURL ?? firebaseUser.photoURL,
+      username: (data.username as string) ?? null,
+      bio: (data.bio as string) ?? '',
+      isPublic: (data.isPublic as boolean) ?? false,
       myProviders: data.myProviders ?? [],
       defaultView: data.defaultView ?? 'table',
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
@@ -70,6 +79,9 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     displayName: firebaseUser.displayName ?? '',
     email: firebaseUser.email ?? '',
     photoURL: firebaseUser.photoURL,
+    username: null,
+    bio: '',
+    isPublic: false,
     myProviders: [],
     defaultView: 'table',
     providerCosts: {},
@@ -143,6 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProviders = useCallback((providers: number[]) => updateUserField('myProviders', providers), [updateUserField]);
   const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
+  const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
+  const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
+
+  const updateUsername = useCallback(async (username: string) => {
+    if (!uid || !user) return;
+    const { claimUsername } = await import('@/lib/firebase/username');
+    await claimUsername(uid, username, user.username);
+    setUser(prev => prev ? { ...prev, username } : null);
+  }, [uid, user]);
 
   const deleteAccount = useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -156,12 +177,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     watchlistSnap.docs.forEach(d => batch.delete(d.ref));
     progressSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(doc(db, 'users', id));
+    if (user?.username) batch.delete(doc(db, 'usernames', user.username));
     await batch.commit();
     await deleteUser(currentUser);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

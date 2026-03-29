@@ -9,6 +9,7 @@ import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import NotesTextarea from '@/components/title/NotesTextarea';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
+import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -171,6 +172,8 @@ export default function MoviePageClient({ id }: { id: string }) {
           </div>
         </div>
       )}
+
+      <ReviewList tmdbId={movie.id} mediaType="movie" />
 
       <RecommendationsSection
         recommendations={mappedRecs}
