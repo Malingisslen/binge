@@ -170,12 +170,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return;
     const id = currentUser.uid;
     const batch = writeBatch(db);
-    const [watchlistSnap, progressSnap] = await Promise.all([
+    const [watchlistSnap, progressSnap, notifSnap] = await Promise.all([
       getDocs(collection(db, 'users', id, 'watchlist')),
       getDocs(collection(db, 'users', id, 'episodeProgress')),
+      getDocs(collection(db, 'users', id, 'notifications')),
     ]);
     watchlistSnap.docs.forEach(d => batch.delete(d.ref));
     progressSnap.docs.forEach(d => batch.delete(d.ref));
+    notifSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(doc(db, 'users', id));
     if (user?.username) batch.delete(doc(db, 'usernames', user.username));
     await batch.commit();
