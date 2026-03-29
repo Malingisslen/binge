@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
 import { useFollowing } from '@/hooks/useFollow';
-import { collection, query, where, orderBy, limit, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { toDate } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 
 export default function FeedPage() {
@@ -47,7 +48,7 @@ function FeedContent() {
               mediaType: data.mediaType as string,
               status: data.status as string,
               posterPath: (data.posterPath as string) ?? null,
-              updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(),
+              updatedAt: toDate(data.updatedAt),
             };
           });
         })
