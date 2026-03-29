@@ -67,6 +67,11 @@ export function getTVShow(id: number): Promise<TMDBTVShow> {
   });
 }
 
+// Recommendations (standalone — lighter than full detail call)
+export function getRecommendations(mediaType: 'movie' | 'tv', id: number): Promise<TMDBListResponse<TMDBSearchResult>> {
+  return tmdbFetch(`/${mediaType}/${id}/recommendations`);
+}
+
 // Person
 export function getPerson(id: number): Promise<TMDBPerson> {
   return tmdbFetch(`/person/${id}`);

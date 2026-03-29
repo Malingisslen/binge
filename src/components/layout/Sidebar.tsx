@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { label: 'Dashboard', href: '/', section: 'Översikt' },
   { label: 'Utforska', href: '/discover', section: 'Översikt' },
   { label: 'Kalender', href: '/calendar', section: 'Översikt' },
+  { label: 'Statistik', href: '/stats', section: 'Översikt' },
+  { label: 'För dig', href: '/recommendations', section: 'Översikt' },
 ];
 
 const COLLECTION_ITEMS = [
