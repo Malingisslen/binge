@@ -8,7 +8,7 @@ import StatusButton from '@/components/title/StatusButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
-import NotesTextarea from '@/components/title/NotesTextarea';
+import NotesBlock from '@/components/title/NotesBlock';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -130,14 +130,7 @@ export default function MoviePageClient({ id }: { id: string }) {
             <p className="text-base text-text-secondary leading-relaxed mb-3">{movie.overview}</p>
           )}
 
-          {watchlistItem && watchlistItem.notes && (
-            <div className="mb-3">
-              <NotesTextarea
-                value={watchlistItem.notes}
-                onChange={notes => updateNotes(movie.id, notes)}
-              />
-            </div>
-          )}
+          {watchlistItem && <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />}
         </div>
       </div>
 

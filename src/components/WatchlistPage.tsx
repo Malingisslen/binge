@@ -224,8 +224,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {fmtDate(item.watchedAt)}
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table text-accent font-semibold text-sm">
-                      {item.rating ? item.rating.toFixed(1) : '—'}
+                    <td className="px-2 py-[5px] border-b border-border-table font-semibold text-sm">
+                      {item.rating ? <span className="text-accent">{item.rating.toFixed(1)}</span> : <span className="text-text-muted font-normal">—</span>}
                     </td>
                   </tr>
                 );
