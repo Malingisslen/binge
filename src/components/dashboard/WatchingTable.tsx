@@ -154,8 +154,7 @@ function ProviderPills({ providerIds }: { providerIds: number[] }) {
 
   return (
     <span>
-      {providerIds.slice(0, 2).map(id => {
-        const p = getProvider(id);
+      {providerIds.map(id => ({ id, p: getProvider(id) })).filter((x): x is { id: number; p: NonNullable<ReturnType<typeof getProvider>> } => !!x.p).slice(0, 2).map(({ id, p }) => {
         const isMine = myProviders.includes(id);
         return (
           <span
@@ -164,7 +163,7 @@ function ProviderPills({ providerIds }: { providerIds: number[] }) {
               isMine ? 'border-accent text-accent' : 'border-border-main text-text-muted'
             }`}
           >
-            {p?.shortName ?? '?'}
+            {p.shortName}
           </span>
         );
       })}

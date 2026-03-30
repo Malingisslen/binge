@@ -38,12 +38,16 @@ export default function SeasonRow({
             {name} <span className="font-normal text-text-muted text-xs">({episodeCount} avs)</span>
           </span>
         </div>
-        <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
-          <div className="flex-1 h-[3px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
-            <div className="h-full bg-accent rounded-[1px]" style={{ width: `${pct}%` }} />
+        {episodeCount > 0 ? (
+          <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
+            <div className="flex-1 h-[3px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
+              <div className="h-full bg-accent rounded-[1px]" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xxs text-[#bbb]">{watchedCount}/{episodeCount}</span>
           </div>
-          <span className="text-xxs text-[#bbb]">{watchedCount}/{episodeCount}</span>
-        </div>
+        ) : (
+          <span className="text-xxs text-text-muted mx-4">Kommande</span>
+        )}
         {isDone && (
           <span className="px-[10px] py-[2px] rounded-sm text-xxs font-semibold bg-season-done text-white">
             Sedd

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search } from 'lucide-react';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
 import WatchingTable from '@/components/dashboard/WatchingTable';
+import SubscriptionAdvisorWidget from '@/components/dashboard/SubscriptionAdvisorWidget';
 import SearchDropdown from '@/components/search/SearchDropdown';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -123,6 +124,7 @@ export default function DashboardPage() {
     <>
       {isEmpty && <OnboardingCTA />}
       <WeeklyCalendar entries={calendarEntries} />
+      <SubscriptionAdvisorWidget />
       <WatchingTable items={following} />
     </>
   );

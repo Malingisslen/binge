@@ -130,7 +130,7 @@ export default function MoviePageClient({ id }: { id: string }) {
             <p className="text-base text-text-secondary leading-relaxed mb-3">{movie.overview}</p>
           )}
 
-          {watchlistItem && (
+          {watchlistItem && watchlistItem.notes && (
             <div className="mb-3">
               <NotesTextarea
                 value={watchlistItem.notes}

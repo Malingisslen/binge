@@ -135,7 +135,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
             <p className="text-base text-text-secondary leading-relaxed mb-3">{show.overview}</p>
           )}
 
-          {watchlistItem && (
+          {watchlistItem && watchlistItem.notes && (
             <div className="mb-3">
               <NotesTextarea
                 value={watchlistItem.notes}

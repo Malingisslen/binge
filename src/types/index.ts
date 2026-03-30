@@ -247,3 +247,44 @@ export interface TMDBListResponse<T> {
   total_results: number;
   results: T[];
 }
+
+// Subscription advisor types
+export type AdvisorStatus = 'active' | 'upcoming' | 'pause';
+
+export interface AdvisedShow {
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  nextAirDate: string | null;
+  nextEpisodeCode: string | null;
+  isEnded: boolean;
+  providerIds: number[];
+}
+
+export interface ProviderAdvisory {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  monthlyCost: number | null;
+  status: AdvisorStatus;
+  shows: AdvisedShow[];
+  nextAirDate: string | null;
+}
+
+export interface SubscribeAdvisory {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  shows: AdvisedShow[];
+  nearestAirDate: string | null;
+}
+
+export interface AdvisorResult {
+  providers: ProviderAdvisory[];
+  subscribeAdvice: SubscribeAdvisory[];
+  monthlySavings: number;
+  totalMonthlyCost: number;
+  isLoading: boolean;
+}
