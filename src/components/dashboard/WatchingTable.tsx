@@ -21,7 +21,7 @@ function ExpandedRow({ tmdbId, onClose }: { tmdbId: number; onClose: () => void 
   if (!show) return null;
   return (
     <tr>
-      <td colSpan={6} className="p-0">
+      <td colSpan={6} className="p-0" onClick={e => e.stopPropagation()}>
         <SeriesDetail show={show} onClose={onClose} />
       </td>
     </tr>

@@ -21,6 +21,7 @@ const NAV_ITEMS = [
 ];
 
 const COLLECTION_ITEMS = [
+  { label: 'Alla', href: '/my/all', status: null },
   { label: 'Följer', href: '/my/following', status: 'följer' as const },
   { label: 'Sedd', href: '/my/watched', status: 'sedd' as const },
   { label: 'Listor', href: '/my/lists', status: null },
@@ -119,12 +120,12 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </Link>
       ))}
 
-      {mounted && subscribedProviders.length > 0 && (
+      {mounted && (
         <div className="mt-auto pt-1 border-t border-white/[0.04]">
           <div className="px-4 pt-3 pb-[3px] text-xxs uppercase tracking-[1.5px] text-sidebar-label font-semibold">
             Tjänster
           </div>
-          {subscribedProviders.map(provider => {
+          {subscribedProviders.length > 0 ? subscribedProviders.map(provider => {
             const count = providerCounts[provider.id] ?? 0;
             return (
               <Link
@@ -145,7 +146,11 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                 )}
               </Link>
             );
-          })}
+          }) : (
+            <Link href="/settings" onClick={onClose} className="block px-4 py-[2px] text-sm no-underline text-text-sidebar hover:text-[#ccc]">
+              Lägg till tjänster →
+            </Link>
+          )}
         </div>
       )}
 

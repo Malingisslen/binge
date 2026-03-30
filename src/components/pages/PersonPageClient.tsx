@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { profileUrl } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -25,6 +25,11 @@ export default function PersonPageClient({ id }: { id: string }) {
       })
       .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
   }, [credits]);
+
+  useEffect(() => {
+    if (person) document.title = `${person.name} — Binge.nu`;
+    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
+  }, [person]);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!person) return <div className="text-sm text-text-muted py-4">Personen hittades inte.</div>;

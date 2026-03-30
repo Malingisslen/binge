@@ -74,6 +74,11 @@ export default function ProviderPageClient({ id }: { id: string }) {
   const hasMore = tab !== 'new' && page < 5 && ((tab === 'movies' ? movies : tv)?.total_pages ?? 0) > page;
   const providerName = provider?.name ?? SWEDISH_PROVIDERS.find(p => p.id === providerId)?.name ?? `Tjänst ${providerId}`;
 
+  useEffect(() => {
+    document.title = `${providerName} — Binge.nu`;
+    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
+  }, [providerName]);
+
   return (
     <div>
       <h1 className="text-md font-bold text-text-primary mb-1">{providerName}</h1>

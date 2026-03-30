@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useTVShow } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
+import AddToListButton from '@/components/title/AddToListButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
@@ -28,6 +29,11 @@ export default function TVShowPageClient({ id }: { id: string }) {
     () => (show?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
     [show?.recommendations]
   );
+
+  useEffect(() => {
+    if (show) document.title = `${show.name} — Binge.nu`;
+    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
+  }, [show]);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
@@ -93,6 +99,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
               readonly={!watchlistItem}
               size="md"
             />
+            <AddToListButton tmdbId={show.id} mediaType="tv" title={show.name} posterPath={show.poster_path} />
           </div>
 
           {nextEp && (

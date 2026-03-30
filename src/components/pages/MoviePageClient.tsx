@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useMovie } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
+import AddToListButton from '@/components/title/AddToListButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import NotesTextarea from '@/components/title/NotesTextarea';
@@ -24,6 +25,11 @@ export default function MoviePageClient({ id }: { id: string }) {
     () => (movie?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'movie' as const })),
     [movie?.recommendations]
   );
+
+  useEffect(() => {
+    if (movie) document.title = `${movie.title} — Binge.nu`;
+    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
+  }, [movie]);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!movie) return <div className="text-sm text-text-muted py-4">Filmen hittades inte.</div>;
@@ -94,6 +100,7 @@ export default function MoviePageClient({ id }: { id: string }) {
               readonly={!watchlistItem}
               size="md"
             />
+            <AddToListButton tmdbId={movie.id} mediaType="movie" title={movie.title} posterPath={movie.poster_path} />
           </div>
 
           {(flatrate.length > 0 || rent.length > 0 || buy.length > 0) && (
