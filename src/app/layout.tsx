@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="sv">
-      <body className="flex min-h-screen">
+    <html lang="sv" suppressHydrationWarning>
+      <body className="flex min-h-screen" suppressHydrationWarning>
         <Providers>
           <div className="hidden md:block">
             <Sidebar />
