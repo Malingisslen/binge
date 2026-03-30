@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearchBox } from '@/hooks/useSearchBox';
@@ -31,6 +31,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { user } = useAuth();
   const { items } = useWatchlist();
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const myProviderIds = user?.myProviders ?? [];
   const subscribedProviders = SWEDISH_PROVIDERS.filter(
@@ -111,13 +113,13 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           }`}
         >
           {item.label}
-          {item.status && statusCounts[item.status] > 0 && (
+          {mounted && item.status && statusCounts[item.status] > 0 && (
             <span className="text-xs text-accent">{statusCounts[item.status]}</span>
           )}
         </Link>
       ))}
 
-      {subscribedProviders.length > 0 && (
+      {mounted && subscribedProviders.length > 0 && (
         <div className="mt-auto pt-1 border-t border-white/[0.04]">
           <div className="px-4 pt-3 pb-[3px] text-xxs uppercase tracking-[1.5px] text-sidebar-label font-semibold">
             Tjänster

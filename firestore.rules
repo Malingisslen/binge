@@ -1,14 +1,55 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // User profile — owner only (public read handled by isPublic check in app)
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if resource.data.isPublic == true;
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Notifications — owner only
+    match /users/{uid}/notifications/{notifId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Follow system
+    match /users/{uid}/following/{targetUid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+    }
+    match /users/{uid}/followers/{followerUid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+      allow write: if request.auth != null && request.auth.uid == followerUid;
+    }
+
+    // Username lookup — anyone can read, owner can create/delete
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    // Reviews — public read, author write
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    // Lists — public read if isPublic, owner write
+    match /lists/{listId} {
+      allow read: if resource.data.isPublic == true
+        || (request.auth != null && request.auth.uid == resource.data.uid);
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
   }
 }

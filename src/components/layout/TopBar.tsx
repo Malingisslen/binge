@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
@@ -24,6 +24,8 @@ export default function TopBar() {
   const bellRef = useRef<HTMLDivElement>(null);
   const closeBell = useCallback(() => setBellOpen(false), []);
   useClickOutside(bellRef, closeBell);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <div className="flex items-center justify-between px-[18px] py-[6px] bg-surface border-b border-border-main">
@@ -43,7 +45,7 @@ export default function TopBar() {
         ))}
       </div>
       <div className="flex items-center gap-[8px] text-sm text-text-muted">
-        {user && (
+        {mounted && user && (
           <div className="relative" ref={bellRef}>
             <button
               onClick={() => setBellOpen(!bellOpen)}
@@ -97,21 +99,21 @@ export default function TopBar() {
             )}
           </div>
         )}
-        {user ? (
+        {mounted && user ? (
           <>
             <div className="w-5 h-5 rounded-full bg-accent text-white flex items-center justify-center text-xxs font-bold">
               {user.displayName.charAt(0).toUpperCase()}
             </div>
             {user.displayName}
           </>
-        ) : (
+        ) : mounted ? (
           <button
             onClick={signIn}
             className="text-accent bg-transparent border-none cursor-pointer font-[inherit] text-sm"
           >
             Logga in
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );
