@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
 import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
@@ -101,8 +102,10 @@ export default function DashboardPage() {
   const { items, getByStatus } = useWatchlist();
   const following = getByStatus('följer');
   const calendarEntries = useCalendarEntries();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
         <div className="text-sm text-text-muted">Laddar...</div>

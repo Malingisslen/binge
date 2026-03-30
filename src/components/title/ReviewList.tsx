@@ -19,7 +19,13 @@ export default function ReviewList({ tmdbId, mediaType }: ReviewListProps) {
   const [text, setText] = useState('');
   const [spoiler, setSpoiler] = useState(false);
 
-  if (isLoading || !reviews) return null;
+  if (isLoading) return null;
+  if (!reviews) return (
+    <div className="mb-4">
+      <h2 className="text-sm font-bold text-text-secondary mb-2">Recensioner</h2>
+      <p className="text-xs text-text-muted">Kunde inte ladda recensioner.</p>
+    </div>
+  );
 
   const myReview = reviews.find(r => r.uid === uid);
   const otherReviews = reviews.filter(r => r.uid !== uid);
