@@ -26,6 +26,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
     if (tab === 'new') {
       base.sort_by = 'primary_release_date.desc';
       base['primary_release_date.gte'] = oneMonthAgo;
+      base['vote_count.gte'] = '5';
     } else {
       base.sort_by = 'popularity.desc';
     }
@@ -38,6 +39,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
     if (tab === 'new') {
       base.sort_by = 'first_air_date.desc';
       base['first_air_date.gte'] = oneMonthAgo;
+      base['vote_count.gte'] = '5';
     } else {
       base.sort_by = 'popularity.desc';
     }

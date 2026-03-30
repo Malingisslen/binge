@@ -1,14 +1,25 @@
 'use client';
 
 import { useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
-import { profileUrl } from '@/lib/tmdb/client';
+import { profileUrl, getPersonEn } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
 
 export default function PersonPageClient({ id }: { id: string }) {
   const personId = parseInt(id, 10);
   const { data: person, isLoading } = usePerson(personId);
   const { data: credits } = usePersonCredits(personId);
+
+  // Fallback to English bio if Swedish is empty
+  const { data: personEn } = useQuery({
+    queryKey: ['person-en', personId],
+    queryFn: () => getPersonEn(personId),
+    enabled: !!person && !person.biography,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const biography = person?.biography || personEn?.biography || '';
 
   const uniqueCredits = useMemo(() => {
     const allCredits = [
@@ -54,8 +65,8 @@ export default function PersonPageClient({ id }: { id: string }) {
             {birthYear && ` · Född ${birthYear}`}
             {person.place_of_birth && ` · ${person.place_of_birth}`}
           </div>
-          {person.biography && (
-            <p className="text-base text-text-secondary leading-relaxed mb-3 line-clamp-6">{person.biography}</p>
+          {biography && (
+            <p className="text-base text-text-secondary leading-relaxed mb-3 line-clamp-6">{biography}</p>
           )}
         </div>
       </div>

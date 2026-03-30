@@ -91,13 +91,9 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
                 i < 6 ? 'border-r border-r-border-light' : ''
               }`}
             >
-              {dayEntries.length === 0 ? (
-                <span>—</span>
-              ) : (
-                dayEntries.map((entry, j) => (
-                  <CalendarEntryItem key={j} entry={entry} compact />
-                ))
-              )}
+              {dayEntries.map((entry, j) => (
+                <CalendarEntryItem key={j} entry={entry} compact />
+              ))}
             </div>
           );
         })}
@@ -118,13 +114,9 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
                 {formatWeekday(day)} {day.getDate()}
               </div>
               <div className="flex-1 px-2 py-[6px] text-xs text-text-muted min-h-[32px]">
-                {dayEntries.length === 0 ? (
-                  <span>—</span>
-                ) : (
-                  dayEntries.map((entry, j) => (
-                    <CalendarEntryItem key={j} entry={entry} />
-                  ))
-                )}
+                {dayEntries.map((entry, j) => (
+                  <CalendarEntryItem key={j} entry={entry} />
+                ))}
               </div>
             </div>
           );

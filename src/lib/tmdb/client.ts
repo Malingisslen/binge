@@ -77,6 +77,10 @@ export function getPerson(id: number): Promise<TMDBPerson> {
   return tmdbFetch(`/person/${id}`);
 }
 
+export function getPersonEn(id: number): Promise<TMDBPerson> {
+  return tmdbFetch(`/person/${id}`, { language: 'en-US' });
+}
+
 export function getPersonCredits(id: number): Promise<TMDBPersonCredits> {
   return tmdbFetch(`/person/${id}/combined_credits`);
 }

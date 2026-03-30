@@ -66,8 +66,6 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           <tr>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[36px]"></th>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Senast sedd</th>
-            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Säsong</th>
             <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
             <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
           </tr>
@@ -76,9 +74,6 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           {filtered.map(item => {
             const poster = posterUrl(item.posterPath, 'w92');
             const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
-            const lastEp = item.lastWatchedSeason && item.lastWatchedEpisode
-              ? `S${item.lastWatchedSeason}E${item.lastWatchedEpisode}`
-              : null;
             const isExpanded = expandedId === item.tmdbId;
 
             return (
@@ -87,7 +82,6 @@ export default function WatchingTable({ items }: WatchingTableProps) {
                 item={item}
                 poster={poster}
                 href={href}
-                lastEp={lastEp}
                 isExpanded={isExpanded}
                 onToggle={() => setExpandedId(isExpanded ? null : item.tmdbId)}
               />
@@ -95,7 +89,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           })}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-3 py-4 text-center text-sm text-text-muted">
+              <td colSpan={4} className="px-3 py-4 text-center text-sm text-text-muted">
                 Inga titlar att visa
               </td>
             </tr>
@@ -106,11 +100,10 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   );
 }
 
-function WatchingRow({ item, poster, href, lastEp, isExpanded, onToggle }: {
+function WatchingRow({ item, poster, href, isExpanded, onToggle }: {
   item: WatchlistItem;
   poster: string | null;
   href: string;
-  lastEp: string | null;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -139,14 +132,6 @@ function WatchingRow({ item, poster, href, lastEp, isExpanded, onToggle }: {
           <div className="text-xs text-text-muted">
             {item.releaseYear ?? '—'}
           </div>
-        </td>
-        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-sm text-text-secondary">
-          {lastEp ?? '—'}
-        </td>
-        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
-          {item.lastWatchedSeason
-            ? `${item.lastWatchedSeason}/${item.totalSeasons ?? '?'}`
-            : '—'}
         </td>
         <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
           <ProviderPills providerIds={item.providers} />
