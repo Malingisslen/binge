@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import ProviderDot from '@/components/ui/ProviderDot';
 import type { WatchStatus } from '@/types';
 import SearchDropdown from '@/components/search/SearchDropdown';
 
@@ -135,11 +136,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                 onClick={onClose}
                 className="flex items-center justify-between px-4 py-[2px] text-sm no-underline text-text-sidebar hover:text-[#ccc]"
               >
-                <span className="flex items-center">
-                  <span
-                    className="w-[5px] h-[5px] rounded-full mr-[5px] inline-block"
-                    style={{ background: provider.color }}
-                  />
+                <span className="flex items-center gap-[5px]">
+                  <ProviderDot color={provider.color} size={5} />
                   {provider.name}
                 </span>
                 {count > 0 && (

@@ -261,23 +261,21 @@ export interface AdvisedShow {
   providerIds: number[];
 }
 
-export interface ProviderAdvisory {
+export interface ProviderBase {
   providerId: number;
   providerName: string;
   shortName: string;
   color: string;
+  shows: AdvisedShow[];
+}
+
+export interface ProviderAdvisory extends ProviderBase {
   monthlyCost: number | null;
   status: AdvisorStatus;
-  shows: AdvisedShow[];
   nextAirDate: string | null;
 }
 
-export interface SubscribeAdvisory {
-  providerId: number;
-  providerName: string;
-  shortName: string;
-  color: string;
-  shows: AdvisedShow[];
+export interface SubscribeAdvisory extends ProviderBase {
   nearestAirDate: string | null;
 }
 

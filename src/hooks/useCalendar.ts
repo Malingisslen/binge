@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
+import { formatEpisodeCode } from '@/lib/utils';
+import type { TMDBTVShow } from '@/types';
 
 export interface CalendarEntry {
   tmdbId: number;
@@ -20,31 +22,28 @@ export interface CalendarEntry {
 export function useCalendarEntries() {
   const { getByStatus } = useWatchlist();
   const followingTV = getByStatus('följer', 'tv');
-  const tmdbIds = followingTV.map(i => i.tmdbId);
+  const tmdbIds = useMemo(() => followingTV.map(i => i.tmdbId), [followingTV]);
 
-  // Fetch show details to get season info and providers
-  const { data: shows } = useQuery({
-    queryKey: ['calendar-shows', [...tmdbIds].sort().join(',')],
-    queryFn: async () => {
-      if (tmdbIds.length === 0) return [];
-      const results = await Promise.all(
-        tmdbIds.map(id => getTVShow(id).catch(() => null))
-      );
-      return results.filter(Boolean);
-    },
-    enabled: tmdbIds.length > 0,
-    staleTime: 10 * 60 * 1000,
+  const showQueries = useQueries({
+    queries: tmdbIds.map(id => ({
+      queryKey: ['tv', id],
+      queryFn: () => getTVShow(id),
+      staleTime: 10 * 60 * 1000,
+    })),
   });
 
-  // For each show, fetch the latest/current season's episodes
+  const shows = useMemo(
+    () => showQueries.map(q => q.data).filter((d): d is TMDBTVShow => d != null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showQueries.map(q => q.dataUpdatedAt).join(',')]
+  );
+
   const seasonQueries = useMemo(() => {
-    if (!shows) return [];
-    return shows
-      .filter(s => s !== null)
-      .map(show => {
-        const latestSeason = show!.number_of_seasons;
-        return { showId: show!.id, seasonNum: latestSeason, show: show! };
-      });
+    return shows.map(show => ({
+      showId: show.id,
+      seasonNum: show.number_of_seasons,
+      show,
+    }));
   }, [shows]);
 
   const { data: seasonData } = useQuery({
@@ -86,7 +85,7 @@ export function useCalendarEntries() {
           title: item.show.name,
           season: ep.season_number,
           episode: ep.episode_number,
-          episodeCode: `S${ep.season_number}E${ep.episode_number}`,
+          episodeCode: formatEpisodeCode(ep.season_number, ep.episode_number),
           episodeName: ep.name,
           airDate: ep.air_date,
           provider: providerName,

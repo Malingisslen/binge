@@ -5,6 +5,7 @@ import { usePublicProfile, usePublicWatchlist } from '@/hooks/usePublicProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useFollowerCount, useFollowingCount } from '@/hooks/useFollow';
 import FollowButton from '@/components/social/FollowButton';
+import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
@@ -100,11 +101,3 @@ export default function UserProfilePageClient({ username }: { username: string }
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-surface border border-border-main rounded-sm px-3 py-2 text-center">
-      <div className="text-[20px] font-bold text-accent">{value}</div>
-      <div className="text-xxs text-text-muted uppercase tracking-[0.5px]">{label}</div>
-    </div>
-  );
-}

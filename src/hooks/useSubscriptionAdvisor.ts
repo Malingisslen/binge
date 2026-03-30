@@ -6,6 +6,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShow } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
+import { formatEpisodeCode } from '@/lib/utils';
 import type { TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult } from '@/types';
 
 function isEnded(status: string): boolean {
@@ -18,7 +19,7 @@ function getNextAirInfo(show: TMDBTVShow): { date: string | null; code: string |
     const ep = show.next_episode_to_air;
     return {
       date: ep.air_date,
-      code: `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`,
+      code: formatEpisodeCode(ep.season_number, ep.episode_number),
     };
   }
   const now = new Date().toISOString().split('T')[0];
@@ -28,7 +29,7 @@ function getNextAirInfo(show: TMDBTVShow): { date: string | null; code: string |
   if (futureSeason?.air_date) {
     return {
       date: futureSeason.air_date,
-      code: `S${String(futureSeason.season_number).padStart(2, '0')}E01`,
+      code: formatEpisodeCode(futureSeason.season_number, 1),
     };
   }
   return { date: null, code: null };
@@ -68,16 +69,17 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   });
 
   const isLoading = showQueries.some(q => q.isLoading);
-  const shows = showQueries
-    .map(q => q.data)
-    .filter((d): d is TMDBTVShow => d != null);
+  const shows = useMemo(
+    () => showQueries.map(q => q.data).filter((d): d is TMDBTVShow => d != null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showQueries.map(q => q.dataUpdatedAt).join(',')]
+  );
 
   return useMemo(() => {
     if (myProviders.length === 0) {
       return { providers: [], subscribeAdvice: [], monthlySavings: 0, totalMonthlyCost: 0, isLoading };
     }
 
-    // Build AdvisedShow for each fetched show
     const advisedShows: AdvisedShow[] = shows.map(show => {
       const seProviders = show['watch/providers']?.results?.SE?.flatrate ?? [];
       const { date, code } = getNextAirInfo(show);
@@ -92,7 +94,6 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       };
     });
 
-    // Group shows by provider ID
     const showsByProvider = new Map<number, AdvisedShow[]>();
     for (const show of advisedShows) {
       for (const pid of show.providerIds) {
@@ -102,7 +103,6 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       }
     }
 
-    // Build advisories for subscribed providers
     const providerAdvisories: ProviderAdvisory[] = [];
     for (const pid of myProviders) {
       const provider = getProvider(pid);
@@ -134,11 +134,9 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       });
     }
 
-    // Sort: active first, then upcoming, then pause
     const statusOrder = { active: 0, upcoming: 1, pause: 2 };
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
-    // Build subscribe suggestions for non-subscribed providers
     const subscribeAdvice: SubscribeAdvisory[] = [];
     const myProviderSet = new Set(myProviders);
     const nonSubscribedProviders = new Map<number, AdvisedShow[]>();

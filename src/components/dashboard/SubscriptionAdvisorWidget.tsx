@@ -1,17 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import ProviderDot from '@/components/ui/ProviderDot';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
+import { formatSwedishDate, pluralSv } from '@/lib/utils';
 import type { ProviderAdvisory } from '@/types';
-
-function formatNextDate(dateStr: string | null): string {
-  if (!dateStr) return 'Inget kommande';
-  const today = new Date().toISOString().split('T')[0];
-  if (dateStr === today) return 'idag';
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
-}
 
 function StatusLabel({ status }: { status: ProviderAdvisory['status'] }) {
   if (status === 'active') return <span className="text-accent text-xs">Aktiv</span>;
@@ -20,13 +13,7 @@ function StatusLabel({ status }: { status: ProviderAdvisory['status'] }) {
 }
 
 export default function SubscriptionAdvisorWidget() {
-  const { user } = useAuth();
   const advisor = useSubscriptionAdvisor();
-
-  if (!user) return null;
-
-  const myProviders = user.myProviders ?? [];
-  if (myProviders.length === 0) return null;
 
   if (advisor.isLoading && advisor.providers.length === 0) {
     return (
@@ -58,17 +45,14 @@ export default function SubscriptionAdvisorWidget() {
       <div className="px-3 py-1">
         {advisor.providers.map(p => (
           <div key={p.providerId} className="flex items-center gap-2 py-[3px]">
-            <span
-              className="w-[6px] h-[6px] rounded-full shrink-0"
-              style={{ backgroundColor: p.color }}
-            />
+            <ProviderDot color={p.color} />
             <span className="text-xs text-text-primary w-[80px] truncate">{p.shortName}</span>
             <span className="w-[36px]"><StatusLabel status={p.status} /></span>
             <span className="text-xs text-text-muted flex-1">
-              {p.shows.length} {p.shows.length === 1 ? 'serie' : 'serier'}
+              {pluralSv(p.shows.length, 'serie', 'serier')}
             </span>
             <span className="text-xs text-text-muted text-right">
-              {p.status !== 'pause' ? `Nästa: ${formatNextDate(p.nextAirDate)}` : ''}
+              {p.status !== 'pause' ? `Nästa: ${formatSwedishDate(p.nextAirDate, 'Inget kommande')}` : ''}
               {p.status === 'pause' && p.monthlyCost ? `${p.monthlyCost} kr/mån` : ''}
             </span>
           </div>
@@ -80,7 +64,7 @@ export default function SubscriptionAdvisorWidget() {
                 <span className="text-text-secondary">Teckna {sa.shortName}</span>
                 {' \u2014 '}
                 {sa.shows[0].title}
-                {sa.nearestAirDate && ` startar ${formatNextDate(sa.nearestAirDate)}`}
+                {sa.nearestAirDate && ` startar ${formatSwedishDate(sa.nearestAirDate)}`}
               </div>
             ))}
           </div>

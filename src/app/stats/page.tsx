@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react';
 import AuthGuard from '@/components/AuthGuard';
+import ProviderDot from '@/components/ui/ProviderDot';
+import StatCard from '@/components/ui/StatCard';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider } from '@/lib/tmdb/providers';
 
@@ -127,8 +129,8 @@ function StatsContent() {
           <div className="px-3 py-2">
             {stats.topProviders.slice(0, 8).map(p => (
               <div key={p.id} className="flex items-center justify-between py-[2px]">
-                <span className="flex items-center text-base">
-                  <span className="w-[6px] h-[6px] rounded-full mr-[6px] inline-block" style={{ background: p.provider?.color }} />
+                <span className="flex items-center gap-[6px] text-base">
+                  <ProviderDot color={p.provider?.color ?? '#888'} />
                   {p.provider?.name}
                 </span>
                 <span className="text-xs text-text-muted">{p.count} titlar</span>
@@ -160,11 +162,3 @@ function StatsContent() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-surface border border-border-main rounded-sm px-3 py-2 text-center">
-      <div className="text-[20px] font-bold text-accent">{value}</div>
-      <div className="text-xxs text-text-muted uppercase tracking-[0.5px]">{label}</div>
-    </div>
-  );
-}
