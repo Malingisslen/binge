@@ -133,7 +133,7 @@ function StatsContent() {
                   <ProviderDot color={p.provider?.color ?? '#888'} />
                   {p.provider?.name}
                 </span>
-                <span className="text-xs text-text-muted">{p.count} titlar</span>
+                <span className="text-xs text-text-muted">{p.count} {p.count === 1 ? 'titel' : 'titlar'}</span>
               </div>
             ))}
           </div>

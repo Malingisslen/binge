@@ -16,7 +16,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
       {list.description && (
         <p className="text-xs text-text-muted mb-2">{list.description}</p>
       )}
-      <span className="text-xxs text-text-muted">{list.items.length} titlar</span>
+      <span className="text-xxs text-text-muted">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
 
       <div className="bg-surface border border-border-main rounded-sm mt-3">
         <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">

@@ -83,7 +83,7 @@ function ListsContent() {
                 {list.title}
               </Link>
               <div className="text-xs text-text-muted">
-                {list.items.length} titlar · {list.isPublic ? 'Publik' : 'Privat'}
+                {list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'} · {list.isPublic ? 'Publik' : 'Privat'}
               </div>
             </div>
             <button

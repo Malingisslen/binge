@@ -55,7 +55,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-md font-bold text-text-primary">{title}</h1>
-        <span className="text-xs text-text-muted">{filtered.length} titlar</span>
+        <span className="text-xs text-text-muted">{filtered.length} {filtered.length === 1 ? 'titel' : 'titlar'}</span>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
