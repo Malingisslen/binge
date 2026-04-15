@@ -31,6 +31,7 @@ interface AuthState {
   updateBio: (bio: string) => Promise<void>;
   updateIsPublic: (isPublic: boolean) => Promise<void>;
   updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
+  updateHiddenCountries: (countries: string[]) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -49,6 +50,7 @@ const AuthContext = createContext<AuthState>({
   updateBio: async () => {},
   updateIsPublic: async () => {},
   updateHideNonLatinTitles: async () => {},
+  updateHiddenCountries: async () => {},
   deleteAccount: async () => {},
 });
 
@@ -68,6 +70,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       myProviders: data.myProviders ?? [],
       defaultView: data.defaultView ?? 'table',
       hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
+      hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
@@ -88,6 +91,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     myProviders: [],
     defaultView: 'table',
     hideNonLatinTitles: false,
+    hiddenCountries: [],
     providerCosts: {},
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -162,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
   const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
+  const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
 
   const updateUsername = useCallback(async (username: string) => {
     if (!uid || !user) return;
@@ -190,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

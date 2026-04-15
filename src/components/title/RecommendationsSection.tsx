@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import TitleGrid from './TitleGrid';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
-import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import type { TMDBSearchResult, TMDBProvider } from '@/types';
 
 interface RecommendationsSectionProps {
@@ -17,7 +17,10 @@ export default function RecommendationsSection({ recommendations, myProviders, l
   const [onlyMyServices, setOnlyMyServices] = useState(false);
   const { user } = useAuth();
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
-  const visibleRecs = hideNonLatin ? recommendations.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : recommendations;
+  const hiddenCountries = user?.hiddenCountries ?? [];
+  const visibleRecs = recommendations.filter(r =>
+    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+    !isFromHiddenCountry(r.origin_country, hiddenCountries));
   const rawProviderMap = useSearchProviders(visibleRecs);
 
   const filtered = useMemo(() => {

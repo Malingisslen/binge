@@ -6,3 +6,11 @@ export function hasNonLatinTitle(title: string | undefined): boolean {
   if (!title) return false;
   return NON_LATIN_RE.test(title);
 }
+
+export function isFromHiddenCountry(
+  originCountry: string[] | undefined,
+  hiddenCountries: string[]
+): boolean {
+  if (!originCountry?.length || !hiddenCountries.length) return false;
+  return originCountry.every(c => hiddenCountries.includes(c));
+}

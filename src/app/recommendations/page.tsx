@@ -7,7 +7,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getRecommendations } from '@/lib/tmdb/client';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
-import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 
 export default function RecommendationsPage() {
   return <AuthGuard><RecsContent /></AuthGuard>;
@@ -60,7 +60,10 @@ function RecsContent() {
   }, [seeds, recQueries, watchedIds]);
 
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
-  const filteredRecs = hideNonLatin ? allRecs.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allRecs;
+  const hiddenCountries = user?.hiddenCountries ?? [];
+  const filteredRecs = allRecs.filter(r =>
+    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+    !isFromHiddenCountry(r.origin_country, hiddenCountries));
 
   const isLoading = recQueries.some(q => q.isLoading);
 

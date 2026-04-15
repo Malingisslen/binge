@@ -43,6 +43,7 @@ export interface UserProfile {
   myProviders: number[];
   defaultView: 'table' | 'grid';
   hideNonLatinTitles: boolean;
+  hiddenCountries: string[];
   providerCosts: Record<number, number>;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +99,7 @@ export interface TMDBSearchResult {
   release_date?: string;
   first_air_date?: string;
   genre_ids: number[];
+  origin_country?: string[];
 }
 
 export interface TMDBMovie {

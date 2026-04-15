@@ -7,7 +7,7 @@ import { discoverMovies, discoverTV, getMovieGenres, getTVGenres } from '@/lib/t
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
 import type { TMDBSearchResult } from '@/types';
-import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 
 type Tab = 'trending' | 'movies' | 'tv';
 type SortOption = 'popularity.desc' | 'vote_average.desc' | 'primary_release_date.desc';
@@ -47,12 +47,17 @@ export default function DiscoverPage() {
 
   const { data: trending, isLoading: trendingLoading } = useTrending('all', 'week');
 
+  const hiddenCountries = user?.hiddenCountries ?? [];
+
   const discoverParams: Record<string, string> = {
     sort_by: sort,
     page: String(page),
     ...(genre ? { with_genres: genre } : {}),
     ...(myServices && user?.myProviders.length
       ? { with_watch_providers: user.myProviders.join('|') }
+      : {}),
+    ...(hiddenCountries.length
+      ? { without_origin_country: hiddenCountries.join(',') }
       : {}),
   };
 
@@ -77,8 +82,11 @@ export default function DiscoverPage() {
   const isLoading = tab === 'trending' ? trendingLoading : discoverLoading;
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const items = tab === 'trending'
-    ? (trending?.results ?? []).filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)))
-    : hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allResults;
+    ? (trending?.results ?? []).filter(r =>
+        (r.media_type === 'movie' || r.media_type === 'tv') &&
+        (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+        !isFromHiddenCountry(r.origin_country, hiddenCountries))
+    : (hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allResults);
   const hasMore = tab !== 'trending' && discoverData && page < discoverData.total_pages;
 
   return (
