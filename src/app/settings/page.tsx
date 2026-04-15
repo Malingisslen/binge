@@ -11,7 +11,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, signOut, updateProviders, updateDefaultView, updateProviderCosts } = useAuth();
+  const { user, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateHideNonLatinTitles } = useAuth();
   const { show: toast } = useToast();
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
@@ -130,6 +130,26 @@ function SettingsContent() {
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
+        <div className="px-3 py-[6px] border-b border-border-light">
+          <span className="text-sm font-bold text-text-secondary">Innehållsfilter</span>
+        </div>
+        <div className="px-3 py-2">
+          <label className="flex items-center gap-2 cursor-pointer text-base">
+            <input
+              type="checkbox"
+              checked={user.hideNonLatinTitles}
+              onChange={e => { updateHideNonLatinTitles(e.target.checked); toast(e.target.checked ? 'Filter aktiverat' : 'Filter avaktiverat'); }}
+              className="accent-accent w-[14px] h-[14px]"
+            />
+            Dölj titlar med icke-latinska alfabet
+          </label>
+          <p className="text-xs text-text-muted mt-1 ml-[22px]">
+            Filtrerar bort titlar på t.ex. koreanska, ryska eller thailändska från utforska och rekommendationer.
+          </p>
         </div>
       </div>
 

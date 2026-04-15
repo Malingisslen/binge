@@ -7,6 +7,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getRecommendations } from '@/lib/tmdb/client';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 
 export default function RecommendationsPage() {
   return <AuthGuard><RecsContent /></AuthGuard>;
@@ -58,6 +59,9 @@ function RecsContent() {
     return result.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0)).slice(0, 20);
   }, [seeds, recQueries, watchedIds]);
 
+  const hideNonLatin = user?.hideNonLatinTitles ?? false;
+  const filteredRecs = hideNonLatin ? allRecs.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allRecs;
+
   const isLoading = recQueries.some(q => q.isLoading);
 
   return (
@@ -67,17 +71,17 @@ function RecsContent() {
         Baserat på dina högst betygsatta titlar, exklusive det du redan följer.
       </p>
 
-      {isLoading && allRecs.length === 0 ? (
+      {isLoading && filteredRecs.length === 0 ? (
         <div className="text-sm text-text-muted py-4">Laddar rekommendationer...</div>
-      ) : allRecs.length === 0 ? (
+      ) : filteredRecs.length === 0 ? (
         <div className="text-sm text-text-muted py-4">
           Betygsätt fler titlar för att få personliga rekommendationer.
         </div>
       ) : (
         <RecommendationsSection
-          recommendations={allRecs}
+          recommendations={filteredRecs}
           myProviders={myProviders}
-          label={`${allRecs.length} förslag`}
+          label={`${filteredRecs.length} förslag`}
         />
       )}
     </div>

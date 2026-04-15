@@ -42,6 +42,7 @@ export interface UserProfile {
   isPublic: boolean;
   myProviders: number[];
   defaultView: 'table' | 'grid';
+  hideNonLatinTitles: boolean;
   providerCosts: Record<number, number>;
   createdAt: Date;
   updatedAt: Date;

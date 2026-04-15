@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react';
 import TitleGrid from './TitleGrid';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
+import { useAuth } from '@/hooks/useAuth';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import type { TMDBSearchResult, TMDBProvider } from '@/types';
 
 interface RecommendationsSectionProps {
@@ -13,15 +15,18 @@ interface RecommendationsSectionProps {
 
 export default function RecommendationsSection({ recommendations, myProviders, label }: RecommendationsSectionProps) {
   const [onlyMyServices, setOnlyMyServices] = useState(false);
-  const rawProviderMap = useSearchProviders(recommendations);
+  const { user } = useAuth();
+  const hideNonLatin = user?.hideNonLatinTitles ?? false;
+  const visibleRecs = hideNonLatin ? recommendations.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : recommendations;
+  const rawProviderMap = useSearchProviders(visibleRecs);
 
   const filtered = useMemo(() => {
-    if (!onlyMyServices || myProviders.length === 0) return recommendations;
-    return recommendations.filter(r => {
+    if (!onlyMyServices || myProviders.length === 0) return visibleRecs;
+    return visibleRecs.filter(r => {
       const p = rawProviderMap[`${r.media_type}-${r.id}`];
       return p?.flatrate?.some(f => myProviders.includes(f.provider_id));
     });
-  }, [recommendations, onlyMyServices, myProviders, rawProviderMap]);
+  }, [visibleRecs, onlyMyServices, myProviders, rawProviderMap]);
 
   const providerMap = useMemo(() => {
     const map: Record<string, TMDBProvider[]> = {};
@@ -31,7 +36,7 @@ export default function RecommendationsSection({ recommendations, myProviders, l
     return map;
   }, [rawProviderMap]);
 
-  if (recommendations.length === 0) return null;
+  if (visibleRecs.length === 0) return null;
 
   return (
     <div className="mb-4">

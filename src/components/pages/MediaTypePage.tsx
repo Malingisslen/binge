@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/hooks/useAuth';
 import { usePopularTV, usePopularMovies } from '@/hooks/useTMDB';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import TitleGrid from '@/components/title/TitleGrid';
 import type { MediaType, TMDBSearchResult } from '@/types';
 
@@ -15,6 +17,8 @@ const CONFIG = {
 
 export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
   const { getByStatus } = useWatchlist();
+  const { user } = useAuth();
+  const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const following = getByStatus('följer', mediaType);
   const [page, setPage] = useState(1);
   const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
@@ -73,7 +77,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
         <div className="px-3 py-[6px] border-b border-border-light">
           <span className="text-sm font-bold text-text-secondary">{cfg.popularLabel}</span>
         </div>
-        <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
+        <TitleGrid items={hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allResults} loading={isLoading && allResults.length === 0} />
       </div>
 
       {hasMore && (

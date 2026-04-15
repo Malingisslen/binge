@@ -13,11 +13,14 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrending } from '@/hooks/useTMDB';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 
 function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
-  const items = (trending?.results ?? []).filter(r => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 10);
+  const items = (trending?.results ?? [])
+    .filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !hasNonLatinTitle(r.title ?? r.name))
+    .slice(0, 10);
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (

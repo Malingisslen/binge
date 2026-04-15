@@ -30,6 +30,7 @@ interface AuthState {
   updateUsername: (username: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
   updateIsPublic: (isPublic: boolean) => Promise<void>;
+  updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -47,6 +48,7 @@ const AuthContext = createContext<AuthState>({
   updateUsername: async () => {},
   updateBio: async () => {},
   updateIsPublic: async () => {},
+  updateHideNonLatinTitles: async () => {},
   deleteAccount: async () => {},
 });
 
@@ -65,6 +67,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       isPublic: (data.isPublic as boolean) ?? false,
       myProviders: data.myProviders ?? [],
       defaultView: data.defaultView ?? 'table',
+      hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
@@ -84,6 +87,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     isPublic: false,
     myProviders: [],
     defaultView: 'table',
+    hideNonLatinTitles: false,
     providerCosts: {},
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -157,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
   const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
+  const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
 
   const updateUsername = useCallback(async (username: string) => {
     if (!uid || !user) return;
@@ -185,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );
