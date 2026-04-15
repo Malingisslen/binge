@@ -44,7 +44,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-3">{cfg.title}</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-3">{cfg.title}</h1>
 
       {following.length > 0 ? (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">

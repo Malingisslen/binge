@@ -56,7 +56,7 @@ function SearchResults() {
   return (
     <>
       <div className="mb-3">
-        <h1 className="text-md font-bold text-text-primary">
+        <h1 className="text-[18px] font-bold text-text-primary">
           Sökresultat för &quot;{query}&quot;
         </h1>
         {data && (

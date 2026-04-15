@@ -30,7 +30,7 @@ function ListsContent() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h1 className="text-md font-bold text-text-primary">Mina listor</h1>
+        <h1 className="text-[18px] font-bold text-text-primary">Mina listor</h1>
         <button
           onClick={() => setShowForm(true)}
           className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white"

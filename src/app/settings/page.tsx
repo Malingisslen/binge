@@ -22,7 +22,7 @@ function SettingsContent() {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-3">Inställningar</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-3">Inställningar</h1>
 
       <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
         <div className="px-3 py-[6px] border-b border-border-light">

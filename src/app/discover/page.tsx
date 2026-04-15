@@ -91,7 +91,7 @@ export default function DiscoverPage() {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-3">Utforska</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-3">Utforska</h1>
 
       <div className="flex gap-[1px] mb-3">
         {([

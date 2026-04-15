@@ -35,7 +35,7 @@ function CalendarContent() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h1 className="text-md font-bold text-text-primary">Kalender</h1>
+        <h1 className="text-[18px] font-bold text-text-primary">Kalender</h1>
         <div className="flex gap-[1px]">
           {(['week', 'month'] as const).map(v => (
             <span

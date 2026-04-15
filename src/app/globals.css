@@ -13,6 +13,13 @@ body {
   background: #eeece8;
   color: #222;
   font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
 }
 
 /* Scrollbar styling */

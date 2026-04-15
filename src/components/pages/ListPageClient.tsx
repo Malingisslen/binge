@@ -12,7 +12,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-1">{list.title}</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-1">{list.title}</h1>
       {list.description && (
         <p className="text-xs text-text-muted mb-2">{list.description}</p>
       )}

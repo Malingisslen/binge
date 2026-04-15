@@ -83,7 +83,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-1">{providerName}</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-1">{providerName}</h1>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-[1px]">
           {([['new', 'Nytt'], ['movies', 'Filmer'], ['tv', 'Serier']] as const).map(([key, label]) => (

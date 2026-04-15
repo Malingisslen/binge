@@ -24,7 +24,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
           <Link href={`/tv/${seriesId}`} className="text-xs text-accent no-underline">
             ← Tillbaka till serien
           </Link>
-          <h1 className="text-md font-bold text-text-primary mt-1">{season.name}</h1>
+          <h1 className="text-[18px] font-bold text-text-primary mt-1">{season.name}</h1>
           <span className="text-xs text-text-muted">
             {watchedCount}/{episodes.length} avsnitt sedda
           </span>

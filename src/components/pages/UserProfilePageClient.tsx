@@ -23,7 +23,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   if (!profile.isPublic && uid !== myUid) {
     return (
       <div className="text-center py-8">
-        <div className="text-md font-bold text-text-primary mb-1">@{username}</div>
+        <div className="text-[18px] font-bold text-text-primary mb-1">@{username}</div>
         <p className="text-sm text-text-muted">Den här profilen är privat.</p>
       </div>
     );

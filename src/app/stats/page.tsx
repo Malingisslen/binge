@@ -59,7 +59,7 @@ function StatsContent() {
   if (stats.total === 0) {
     return (
       <div>
-        <h1 className="text-md font-bold text-text-primary mb-3">Statistik</h1>
+        <h1 className="text-[18px] font-bold text-text-primary mb-3">Statistik</h1>
         <p className="text-sm text-text-muted">Lägg till titlar i din lista för att se statistik.</p>
       </div>
     );
@@ -67,7 +67,7 @@ function StatsContent() {
 
   return (
     <div>
-      <h1 className="text-md font-bold text-text-primary mb-3">Statistik</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-3">Statistik</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
         <StatCard label="Totalt" value={stats.total} />

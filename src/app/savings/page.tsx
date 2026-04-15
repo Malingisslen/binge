@@ -97,7 +97,7 @@ function SavingsContent() {
   if (advisor.isLoading && advisor.providers.length === 0) {
     return (
       <div>
-        <h1 className="text-md font-bold text-text-primary mb-3">Streamingrådgivare</h1>
+        <h1 className="text-[18px] font-bold text-text-primary mb-3">Streamingrådgivare</h1>
         <p className="text-sm text-text-muted">Laddar...</p>
       </div>
     );
@@ -106,7 +106,7 @@ function SavingsContent() {
   if (advisor.providers.length === 0) {
     return (
       <div>
-        <h1 className="text-md font-bold text-text-primary mb-3">Streamingrådgivare</h1>
+        <h1 className="text-[18px] font-bold text-text-primary mb-3">Streamingrådgivare</h1>
         <p className="text-sm text-text-muted">
           <Link href="/settings" className="text-accent no-underline">Lägg till tjänster i inställningar</Link> för att se rådgivning.
         </p>
@@ -120,7 +120,7 @@ function SavingsContent() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h1 className="text-md font-bold text-text-primary">Streamingrådgivare</h1>
+        <h1 className="text-[18px] font-bold text-text-primary">Streamingrådgivare</h1>
         <div className="flex gap-[1px]">
           {([30, 60, 90] as const).map(days => (
             <span
