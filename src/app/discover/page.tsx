@@ -43,7 +43,16 @@ export default function DiscoverPage() {
     staleTime: 60 * 60 * 1000,
   });
 
-  const genres = tab === 'movies' ? movieGenres?.genres : tab === 'tv' ? tvGenres?.genres : [];
+  // Merge both genre lists for trending (which has both movies and TV)
+  const genres = tab === 'movies'
+    ? movieGenres?.genres
+    : tab === 'tv'
+    ? tvGenres?.genres
+    : (() => {
+        const all = [...(movieGenres?.genres ?? []), ...(tvGenres?.genres ?? [])];
+        const seen = new Set<number>();
+        return all.filter(g => { if (seen.has(g.id)) return false; seen.add(g.id); return true; }).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+      })();
 
   const { data: trending, isLoading: trendingLoading } = useTrending('all', 'week');
 
@@ -81,11 +90,13 @@ export default function DiscoverPage() {
 
   const isLoading = tab === 'trending' ? trendingLoading : discoverLoading;
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
+  const genreId = genre ? parseInt(genre, 10) : null;
   const items = tab === 'trending'
     ? (trending?.results ?? []).filter(r =>
         (r.media_type === 'movie' || r.media_type === 'tv') &&
         (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
-        !isFromHiddenCountry(r.origin_country, hiddenCountries))
+        !isFromHiddenCountry(r.origin_country, hiddenCountries) &&
+        (!genreId || r.genre_ids?.includes(genreId)))
     : (hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) : allResults);
   const hasMore = tab !== 'trending' && discoverData && page < discoverData.total_pages;
 
@@ -111,8 +122,7 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      {tab !== 'trending' && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
           {/* Genre filter */}
           <select
             value={genre}
@@ -125,19 +135,21 @@ export default function DiscoverPage() {
             ))}
           </select>
 
-          {/* Sort */}
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value as SortOption)}
-            className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
-          >
-            {Object.entries(SORT_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          {/* Sort — only for discover tabs */}
+          {tab !== 'trending' && (
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value as SortOption)}
+              className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
+            >
+              {Object.entries(SORT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          )}
 
           {/* My services toggle */}
-          {user && user.myProviders.length > 0 && (
+          {tab !== 'trending' && user && user.myProviders.length > 0 && (
             <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
               <input
                 type="checkbox"
@@ -149,7 +161,6 @@ export default function DiscoverPage() {
             </label>
           )}
         </div>
-      )}
 
       <div className="bg-surface border border-border-main rounded-sm">
         <TitleGrid items={items} loading={isLoading && items.length === 0} />

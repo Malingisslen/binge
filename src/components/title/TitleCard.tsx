@@ -1,13 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { Film, Tv } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
 import { getDisplayTitle, getReleaseYear } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider } from '@/lib/tmdb/providers';
 import type { TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from './QuickAddButton';
+
+const MAX_BADGES = 3;
 
 interface TitleCardProps {
   item: TMDBSearchResult;
@@ -16,27 +20,36 @@ interface TitleCardProps {
 
 export default function TitleCard({ item, providers }: TitleCardProps) {
   const { user } = useAuth();
+  const { getItem } = useWatchlist();
   const href = item.media_type === 'movie' ? `/movie/${item.id}/` : `/tv/${item.id}/`;
   const title = getDisplayTitle(item);
   const year = getReleaseYear(item);
   const poster = posterUrl(item.poster_path, 'w342');
   const myProviders = user?.myProviders ?? [];
   const isTrackable = item.media_type === 'movie' || item.media_type === 'tv';
+  const isTracked = isTrackable && !!getItem(item.id);
+  const Icon = item.media_type === 'tv' ? Tv : Film;
+
+  const visibleBadges = providers?.slice(0, MAX_BADGES) ?? [];
+  const extraCount = (providers?.length ?? 0) - MAX_BADGES;
 
   return (
     <div className="group relative">
       <Link href={href} className="no-underline text-text-primary">
-        <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden">
+        <div className={`aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden ${
+          isTracked ? 'ring-2 ring-accent' : ''
+        }`}>
           {poster ? (
             <img src={poster} alt={title} className="w-full h-full object-cover" loading="lazy" />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center px-2">
-              <span className="text-[10px] text-text-muted text-center line-clamp-2">{title}</span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
+              <Icon size={20} className="text-text-muted opacity-40" />
+              <span className="text-[10px] text-text-muted text-center line-clamp-3 leading-tight">{title}</span>
             </div>
           )}
-          {providers && providers.length > 0 && (
+          {visibleBadges.length > 0 && (
             <div className="absolute bottom-[2px] left-[2px] flex gap-[1px]">
-              {providers.map(p => {
+              {visibleBadges.map(p => {
                 const mapped = getProvider(p.provider_id);
                 const isMine = myProviders.includes(p.provider_id);
                 return (
@@ -52,6 +65,11 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
                   </span>
                 );
               })}
+              {extraCount > 0 && (
+                <span className="text-[7px] px-[3px] py-[1px] rounded-[1px] bg-black/65 text-[#ddd]">
+                  +{extraCount}
+                </span>
+              )}
             </div>
           )}
         </div>
