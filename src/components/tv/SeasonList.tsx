@@ -37,6 +37,7 @@ export default function SeasonList({
             expanded={expandedSeason === season.season_number}
             tmdbId={tmdbId}
             seasonNumber={season.season_number}
+            previousSeasons={displaySeasons.map(s => ({ season_number: s.season_number, episode_count: s.episode_count }))}
             onToggle={() => toggle(season.season_number)}
             isWatched={isWatched}
             markEpisodeWatched={markEpisodeWatched}

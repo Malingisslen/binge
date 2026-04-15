@@ -10,6 +10,7 @@ interface SeasonRowProps {
   expanded: boolean;
   tmdbId: number;
   seasonNumber: number;
+  previousSeasons?: { season_number: number; episode_count: number }[];
   onToggle: () => void;
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
@@ -17,7 +18,7 @@ interface SeasonRowProps {
 }
 
 export default function SeasonRow({
-  name, episodeCount, watchedCount, expanded, tmdbId, seasonNumber,
+  name, episodeCount, watchedCount, expanded, tmdbId, seasonNumber, previousSeasons,
   onToggle, isWatched, markEpisodeWatched, markSeasonWatched,
 }: SeasonRowProps) {
   const pct = episodeCount > 0 ? (watchedCount / episodeCount) * 100 : 0;
@@ -58,6 +59,7 @@ export default function SeasonRow({
         <SeasonEpisodePanel
           tmdbId={tmdbId}
           seasonNumber={seasonNumber}
+          previousSeasons={previousSeasons}
           isWatched={isWatched}
           markEpisodeWatched={markEpisodeWatched}
           markSeasonWatched={markSeasonWatched}

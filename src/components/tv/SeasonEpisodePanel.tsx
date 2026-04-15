@@ -6,13 +6,14 @@ import EpisodeRow from './EpisodeRow';
 interface SeasonEpisodePanelProps {
   tmdbId: number;
   seasonNumber: number;
+  previousSeasons?: { season_number: number; episode_count: number }[];
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
 }
 
 export default function SeasonEpisodePanel({
-  tmdbId, seasonNumber, isWatched, markEpisodeWatched, markSeasonWatched,
+  tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched,
 }: SeasonEpisodePanelProps) {
   const { data: season, isLoading } = useTVSeason(tmdbId, seasonNumber);
 
@@ -69,7 +70,18 @@ export default function SeasonEpisodePanel({
             episode={ep}
             watched={isWatched(seasonNumber, ep.episode_number)}
             onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched, episodes.length)}
-            onMarkUpTo={() => markSeasonWatched(seasonNumber, ep.episode_number)}
+            onMarkUpTo={async () => {
+              // Mark all previous seasons as fully watched
+              if (previousSeasons) {
+                for (const ps of previousSeasons) {
+                  if (ps.season_number > 0 && ps.season_number < seasonNumber) {
+                    await markSeasonWatched(ps.season_number, ps.episode_count);
+                  }
+                }
+              }
+              // Mark episodes up to this one in the current season
+              await markSeasonWatched(seasonNumber, ep.episode_number);
+            }}
           />
         ))}
       </div>
