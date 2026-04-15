@@ -2,7 +2,10 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import {
+  Search, LayoutDashboard, Compass, Calendar, BarChart3,
+  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List,
+} from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -13,21 +16,21 @@ import type { WatchStatus } from '@/types';
 import SearchDropdown from '@/components/search/SearchDropdown';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/', section: 'Översikt' },
-  { label: 'Utforska', href: '/discover', section: 'Översikt' },
-  { label: 'Kalender', href: '/calendar', section: 'Översikt' },
-  { label: 'Statistik', href: '/stats', section: 'Översikt' },
-  { label: 'Rådgivare', href: '/savings', section: 'Översikt' },
-  { label: 'För dig', href: '/recommendations', section: 'Översikt' },
-  { label: 'Flöde', href: '/feed', section: 'Översikt' },
+  { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Utforska', href: '/discover', icon: Compass },
+  { label: 'Kalender', href: '/calendar', icon: Calendar },
+  { label: 'Statistik', href: '/stats', icon: BarChart3 },
+  { label: 'Prenumerationer', href: '/savings', icon: CreditCard },
+  { label: 'Rekommendationer', href: '/recommendations', icon: Star },
+  { label: 'Flöde', href: '/feed', icon: Rss },
 ];
 
 const COLLECTION_ITEMS = [
-  { label: 'Alla', href: '/my/all', status: null },
-  { label: 'Följer', href: '/my/following', status: 'följer' as const },
-  { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se' as const },
-  { label: 'Sedd', href: '/my/watched', status: 'sedd' as const },
-  { label: 'Listor', href: '/my/lists', status: null },
+  { label: 'Alla', href: '/my/all', status: null, icon: Library },
+  { label: 'Följer', href: '/my/following', status: 'följer' as const, icon: Eye },
+  { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se' as const, icon: BookmarkCheck },
+  { label: 'Sedd', href: '/my/watched', status: 'sedd' as const, icon: Clock },
+  { label: 'Listor', href: '/my/lists', status: null, icon: List },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
@@ -52,6 +55,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     }
     return { statusCounts: sc, providerCounts: pc };
   }, [items]);
+
+  const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   return (
     <aside className="w-sidebar bg-sidebar-bg text-text-sidebar flex flex-col text-base shrink-0 h-screen overflow-y-auto">
@@ -87,41 +92,51 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       <div className="px-4 pt-3 pb-[3px] text-xxs uppercase tracking-[1.5px] text-sidebar-label font-semibold">
         Översikt
       </div>
-      {NAV_ITEMS.map(item => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onClose}
-          className={`flex items-center justify-between px-4 py-[5px] cursor-pointer border-l-2 no-underline text-text-sidebar hover:bg-white/[0.02] hover:text-[#ccc] ${
-            pathname === item.href
-              ? 'bg-accent/[0.07] !text-text-sidebar-active border-l-accent font-semibold'
-              : 'border-l-transparent'
-          }`}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {NAV_ITEMS.map(item => {
+        const active = isActive(item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClose}
+            className={`flex items-center gap-[8px] px-4 py-[5px] cursor-pointer border-l-[3px] no-underline hover:bg-white/[0.05] hover:text-[#ccc] ${
+              active
+                ? 'bg-accent/[0.12] text-white border-l-accent font-semibold'
+                : 'text-text-sidebar border-l-transparent'
+            }`}
+          >
+            <Icon size={14} className={active ? 'text-accent' : 'text-text-sidebar opacity-50'} />
+            {item.label}
+          </Link>
+        );
+      })}
 
       <div className="px-4 pt-3 pb-[3px] text-xxs uppercase tracking-[1.5px] text-sidebar-label font-semibold">
         Samling
       </div>
-      {COLLECTION_ITEMS.map(item => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onClose}
-          className={`flex items-center justify-between px-4 py-[5px] cursor-pointer border-l-2 no-underline text-text-sidebar hover:bg-white/[0.02] hover:text-[#ccc] ${
-            pathname === item.href
-              ? 'bg-accent/[0.07] !text-text-sidebar-active border-l-accent font-semibold'
-              : 'border-l-transparent'
-          }`}
-        >
-          {item.label}
-          {mounted && item.status && statusCounts[item.status] > 0 && (
-            <span className="text-xs text-accent">{statusCounts[item.status]}</span>
-          )}
-        </Link>
-      ))}
+      {COLLECTION_ITEMS.map(item => {
+        const active = isActive(item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClose}
+            className={`flex items-center gap-[8px] px-4 py-[5px] cursor-pointer border-l-[3px] no-underline hover:bg-white/[0.05] hover:text-[#ccc] ${
+              active
+                ? 'bg-accent/[0.12] text-white border-l-accent font-semibold'
+                : 'text-text-sidebar border-l-transparent'
+            }`}
+          >
+            <Icon size={14} className={active ? 'text-accent' : 'text-text-sidebar opacity-50'} />
+            <span className="flex-1">{item.label}</span>
+            {mounted && item.status && statusCounts[item.status] > 0 && (
+              <span className="text-xs text-accent">{statusCounts[item.status]}</span>
+            )}
+          </Link>
+        );
+      })}
 
       {mounted && (
         <div className="mt-auto pt-1 border-t border-white/[0.04]">
@@ -135,7 +150,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                 key={provider.id}
                 href={`/provider/${provider.id}/`}
                 onClick={onClose}
-                className="flex items-center justify-between px-4 py-[2px] text-sm no-underline text-text-sidebar hover:text-[#ccc]"
+                className="flex items-center justify-between px-4 py-[2px] text-sm no-underline text-text-sidebar hover:text-[#ccc] hover:bg-white/[0.03]"
               >
                 <span className="flex items-center gap-[5px]">
                   <ProviderDot color={provider.color} size={5} />
