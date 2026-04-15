@@ -11,6 +11,7 @@ import type { TMDBTVShow } from '@/types';
 export interface CalendarEntry {
   tmdbId: number;
   title: string;
+  posterPath: string | null;
   season: number;
   episode: number;
   episodeCode: string;
@@ -83,6 +84,7 @@ export function useCalendarEntries() {
         result.push({
           tmdbId: item.showId,
           title: item.show.name,
+          posterPath: item.show.poster_path,
           season: ep.season_number,
           episode: ep.episode_number,
           episodeCode: formatEpisodeCode(ep.season_number, ep.episode_number),

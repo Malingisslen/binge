@@ -106,16 +106,25 @@ function UnwatchedSection({ episodes }: { episodes: CalendarEntry[] }) {
         {showIds.map(showId => {
           const showEps = episodes.filter(e => e.tmdbId === showId);
           const title = showEps[0]?.title;
+          const posterPath = showEps[0]?.posterPath;
+          const poster = posterPath ? `https://image.tmdb.org/t/p/w92${posterPath}` : null;
           return (
-            <div key={showId} className="mb-2 last:mb-0">
-              <Link href={`/tv/${showId}/`} className="text-base font-semibold text-text-primary no-underline hover:text-accent">
-                {title}
-              </Link>
-              <div className="text-xs text-text-muted">
-                {showEps.length} avsnitt — {showEps[0]?.episodeCode} till {showEps[showEps.length - 1]?.episodeCode}
-                {showEps[0]?.provider && (
-                  <span className="text-accent ml-1">{showEps[0].provider}</span>
-                )}
+            <div key={showId} className="flex items-center gap-[10px] py-[6px] border-b border-border-light last:border-b-0">
+              {poster && (
+                <Link href={`/tv/${showId}/`} className="shrink-0">
+                  <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
+                </Link>
+              )}
+              <div className="flex-1 min-w-0">
+                <Link href={`/tv/${showId}/`} className="text-base font-semibold text-text-primary no-underline hover:text-accent">
+                  {title}
+                </Link>
+                <div className="text-xs text-text-muted">
+                  {showEps.length} avsnitt — {showEps[0]?.episodeCode} till {showEps[showEps.length - 1]?.episodeCode}
+                  {showEps[0]?.provider && (
+                    <span className="text-accent ml-1">{showEps[0].provider}</span>
+                  )}
+                </div>
               </div>
             </div>
           );

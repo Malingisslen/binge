@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { posterUrl } from '@/lib/tmdb/client';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 
@@ -12,6 +13,7 @@ interface CalendarEntryItemProps {
 export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemProps) {
   const { isWatched, markEpisodeWatched } = useEpisodeProgressWithSync(entry.tmdbId);
   const watched = isWatched(entry.season, entry.episode);
+  const poster = posterUrl(entry.posterPath, 'w92');
 
   const handleToggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -21,7 +23,7 @@ export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemP
 
   if (compact) {
     return (
-      <div className="mb-1 flex items-start gap-[3px]">
+      <div className="mb-1 flex items-start gap-[4px]">
         <button
           onClick={handleToggle}
           className={`shrink-0 mt-[2px] w-[12px] h-[12px] rounded-[1px] border cursor-pointer ${
@@ -39,7 +41,7 @@ export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemP
   }
 
   return (
-    <div className="mb-1 flex items-center gap-[5px]">
+    <div className="mb-1 flex items-center gap-[6px]">
       <button
         onClick={handleToggle}
         className={`shrink-0 w-[12px] h-[12px] rounded-[1px] border cursor-pointer ${
@@ -47,6 +49,11 @@ export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemP
         }`}
         title={watched ? 'Markera osedd' : 'Markera sedd'}
       />
+      {poster && (
+        <Link href={`/tv/${entry.tmdbId}/`} className="shrink-0">
+          <img src={poster} alt="" className="w-[22px] h-[33px] rounded-sm object-cover" />
+        </Link>
+      )}
       <Link href={`/tv/${entry.tmdbId}/`} className="no-underline flex-1 min-w-0">
         <span className="text-text-primary font-semibold">{entry.title}</span>
         {' '}<span className="text-text-muted text-xxs">{entry.episodeCode}</span>
