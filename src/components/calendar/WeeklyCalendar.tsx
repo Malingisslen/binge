@@ -50,6 +50,12 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
   const lastDay = days[days.length - 1];
   const rangeStr = `${days[0].getDate()}–${lastDay.getDate()} ${lastDay.toLocaleDateString('sv-SE', { month: 'long' })}`;
 
+  // Check if any day in the week has entries
+  const hasAnyEntries = days.some(day => {
+    const dateStr = day.toISOString().split('T')[0];
+    return (entriesByDate.get(dateStr)?.length ?? 0) > 0;
+  });
+
   return (
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
       <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light text-sm">
@@ -63,65 +69,79 @@ export default function WeeklyCalendar({ entries = [] }: WeeklyCalendarProps) {
           </a>
         </span>
       </div>
-      {/* Desktop: 7-col grid */}
-      <div className="hidden md:grid grid-cols-7">
-        {days.map((day, i) => {
-          const isToday = day.getTime() === today.getTime();
-          return (
-            <div
-              key={i}
-              className={`text-xxs uppercase tracking-[0.5px] text-text-muted px-[6px] py-1 text-center bg-cal-header border-b border-border-light font-semibold ${
-                i < 6 ? 'border-r border-r-border-light' : ''
-              } ${isToday ? '!text-accent !font-bold' : ''}`}
-            >
-              {formatWeekday(day)} {day.getDate()}
-            </div>
-          );
-        })}
-      </div>
-      <div className="hidden md:grid grid-cols-7">
-        {days.map((day, i) => {
-          const dateStr = day.toISOString().split('T')[0];
-          const dayEntries = entriesByDate.get(dateStr) ?? [];
 
-          return (
-            <div
-              key={i}
-              className={`min-h-[52px] px-[5px] py-1 text-xs text-text-muted ${
-                i < 6 ? 'border-r border-r-border-light' : ''
-              }`}
-            >
-              {dayEntries.map((entry, j) => (
-                <CalendarEntryItem key={j} entry={entry} compact />
-              ))}
-            </div>
-          );
-        })}
-      </div>
+      {!hasAnyEntries ? (
+        <div className="px-3 py-4 text-center text-xs text-text-muted">
+          Inga avsnitt denna vecka
+        </div>
+      ) : (
+        <>
+          {/* Desktop: 7-col grid */}
+          <div className="hidden md:grid grid-cols-7">
+            {days.map((day, i) => {
+              const isToday = day.getTime() === today.getTime();
+              const dateStr = day.toISOString().split('T')[0];
+              const dayEntries = entriesByDate.get(dateStr) ?? [];
+              return (
+                <div
+                  key={i}
+                  className={`text-xxs uppercase tracking-[0.5px] text-text-muted px-[6px] py-1 text-center bg-cal-header border-b border-border-light font-semibold ${
+                    i < 6 ? 'border-r border-r-border-light' : ''
+                  } ${isToday ? '!text-accent !font-bold' : ''} ${dayEntries.length === 0 ? 'opacity-40' : ''}`}
+                >
+                  {formatWeekday(day)} {day.getDate()}
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden md:grid grid-cols-7">
+            {days.map((day, i) => {
+              const dateStr = day.toISOString().split('T')[0];
+              const dayEntries = entriesByDate.get(dateStr) ?? [];
 
-      {/* Mobile: vertical list */}
-      <div className="md:hidden">
-        {days.map((day, i) => {
-          const isToday = day.getTime() === today.getTime();
-          const dateStr = day.toISOString().split('T')[0];
-          const dayEntries = entriesByDate.get(dateStr) ?? [];
+              return (
+                <div
+                  key={i}
+                  className={`min-h-[52px] px-[5px] py-1 text-xs text-text-muted ${
+                    i < 6 ? 'border-r border-r-border-light' : ''
+                  }`}
+                >
+                  {dayEntries.map((entry, j) => (
+                    <CalendarEntryItem key={j} entry={entry} compact />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
 
-          return (
-            <div key={i} className="flex border-b border-border-light last:border-b-0">
-              <div className={`w-[60px] shrink-0 px-2 py-[6px] text-xxs uppercase font-semibold bg-cal-header ${
-                isToday ? 'text-accent font-bold' : 'text-text-muted'
-              }`}>
-                {formatWeekday(day)} {day.getDate()}
-              </div>
-              <div className="flex-1 px-2 py-[6px] text-xs text-text-muted min-h-[32px]">
-                {dayEntries.map((entry, j) => (
-                  <CalendarEntryItem key={j} entry={entry} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+          {/* Mobile: only show days with entries */}
+          <div className="md:hidden">
+            {days.map((day, i) => {
+              const isToday = day.getTime() === today.getTime();
+              const dateStr = day.toISOString().split('T')[0];
+              const dayEntries = entriesByDate.get(dateStr) ?? [];
+              if (dayEntries.length === 0 && !isToday) return null;
+
+              return (
+                <div key={i} className="flex border-b border-border-light last:border-b-0">
+                  <div className={`w-[60px] shrink-0 px-2 py-[6px] text-xxs uppercase font-semibold bg-cal-header ${
+                    isToday ? 'text-accent font-bold' : 'text-text-muted'
+                  }`}>
+                    {formatWeekday(day)} {day.getDate()}
+                  </div>
+                  <div className="flex-1 px-2 py-[6px] text-xs text-text-muted min-h-[32px]">
+                    {dayEntries.length > 0 ? dayEntries.map((entry, j) => (
+                      <CalendarEntryItem key={j} entry={entry} />
+                    )) : (
+                      <span className="text-text-muted opacity-40">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

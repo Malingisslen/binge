@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useTVShow } from '@/hooks/useTMDB';
@@ -36,6 +36,12 @@ export default function WatchingTable({ items }: WatchingTableProps) {
     filter === 'all' || i.mediaType === filter
   );
 
+  // Only show VAR column if >50% of items have provider data
+  const showProviderCol = useMemo(() => {
+    const withProviders = filtered.filter(i => i.providers?.length > 0).length;
+    return withProviders > filtered.length * 0.5;
+  }, [filtered]);
+
   return (
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
       <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
@@ -64,14 +70,16 @@ export default function WatchingTable({ items }: WatchingTableProps) {
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[36px]"></th>
-            <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-            <th className="hidden md:table-cell text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
-            <th className="text-left px-2 py-1 text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
+            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
+            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
+            {showProviderCol && (
+              <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
+            )}
+            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map(item => {
+          {filtered.map((item, idx) => {
             const poster = posterUrl(item.posterPath, 'w92');
             const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
             const isExpanded = expandedId === item.tmdbId;
@@ -84,12 +92,14 @@ export default function WatchingTable({ items }: WatchingTableProps) {
                 href={href}
                 isExpanded={isExpanded}
                 onToggle={() => setExpandedId(isExpanded ? null : item.tmdbId)}
+                showProviderCol={showProviderCol}
+                striped={idx % 2 === 1}
               />
             );
           })}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-3 py-4 text-center text-sm text-text-muted">
+              <td colSpan={showProviderCol ? 4 : 3} className="px-3 py-4 text-center text-sm text-text-muted">
                 Inga titlar att visa
               </td>
             </tr>
@@ -100,25 +110,28 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   );
 }
 
-function WatchingRow({ item, poster, href, isExpanded, onToggle }: {
+function WatchingRow({ item, poster, href, isExpanded, onToggle, showProviderCol, striped }: {
   item: WatchlistItem;
   poster: string | null;
   href: string;
   isExpanded: boolean;
   onToggle: () => void;
+  showProviderCol: boolean;
+  striped: boolean;
 }) {
+  const bgClass = striped ? 'bg-surface-hover/40' : '';
   return (
     <>
       <tr
         onClick={item.mediaType === 'tv' ? onToggle : undefined}
-        className={`${item.mediaType === 'tv' ? 'cursor-pointer' : ''} hover:[&>td]:bg-surface-hover`}
+        className={`${item.mediaType === 'tv' ? 'cursor-pointer' : ''} hover:[&>td]:bg-surface-hover ${bgClass}`}
       >
         <td className="px-2 py-[5px] border-b border-border-table">
           <Link href={href} onClick={e => e.stopPropagation()}>
             {poster ? (
-              <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover" />
+              <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
             ) : (
-              <div className="w-[26px] h-[39px] rounded-sm bg-[#ddd8d0]" />
+              <div className="w-[32px] h-[48px] rounded-sm bg-[#ddd8d0]" />
             )}
           </Link>
         </td>
@@ -133,9 +146,11 @@ function WatchingRow({ item, poster, href, isExpanded, onToggle }: {
             {item.releaseYear ?? '—'}
           </div>
         </td>
-        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
-          <ProviderPills providerIds={item.providers} />
-        </td>
+        {showProviderCol && (
+          <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
+            <ProviderPills providerIds={item.providers} />
+          </td>
+        )}
         <td className="px-2 py-[5px] border-b border-border-table font-semibold text-sm">
           {item.rating ? <span className="text-accent">{item.rating.toFixed(1)}</span> : <span className="text-text-muted font-normal">—</span>}
         </td>
