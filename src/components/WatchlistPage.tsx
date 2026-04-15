@@ -60,7 +60,9 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="flex gap-[1px]">
-          {(['all', 'tv', 'movie'] as const).map(f => (
+          {(['all', 'tv', 'movie'] as const)
+            .filter(f => status !== 'följer' || f !== 'movie')
+            .map(f => (
             <span
               key={f}
               onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
