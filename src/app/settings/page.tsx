@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
@@ -48,11 +48,7 @@ function SettingsContent() {
 
       <UsernameSection />
 
-      <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-        <div className="px-3 py-[6px] border-b border-border-light">
-          <span className="text-sm font-bold text-text-secondary">Mina streamingtjänster</span>
-        </div>
-        <div className="px-3 py-2">
+      <CollapsibleSection title="Mina streamingtjänster" defaultOpen={user.myProviders.length === 0}>
           <p className="text-xs text-text-muted mb-2">
             Välj vilka tjänster du prenumererar på. Dessa markeras i hela appen.
           </p>
@@ -108,8 +104,7 @@ function SettingsContent() {
               </div>
             </div>
           )}
-        </div>
-      </div>
+      </CollapsibleSection>
 
       <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
         <div className="px-3 py-[6px] border-b border-border-light">
@@ -394,6 +389,22 @@ function DeleteAccountSection() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
+      <div
+        className="flex items-center justify-between px-3 py-[6px] border-b border-border-light cursor-pointer hover:bg-surface-hover/50"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="text-sm font-bold text-text-secondary">{title}</span>
+        {open ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
+      </div>
+      {open && <div className="px-3 py-2">{children}</div>}
     </div>
   );
 }

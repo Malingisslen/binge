@@ -186,7 +186,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
         {/* Synopsis */}
         {show.overview && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Handling</h2>
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Handling</h2>
             <p className="text-sm text-text-secondary leading-relaxed">{show.overview}</p>
           </div>
         )}
@@ -195,7 +195,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
         {/* Seasons */}
         <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Säsonger</h2>
+          <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Säsonger</h2>
           <div className="bg-surface border border-border-main rounded-sm">
             <SeasonList
               tmdbId={show.id}
@@ -211,7 +211,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
         {/* Trailer */}
         {trailer && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Trailer</h2>
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Trailer</h2>
             <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
               <iframe
                 src={`https://www.youtube.com/embed/${trailer.key}`}
@@ -227,7 +227,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
         {/* Cast with round images */}
         {cast.length > 0 && (
           <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Skådespelare</h2>
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Skådespelare</h2>
             <div className="flex gap-3 overflow-x-auto pb-1">
               {cast.map(person => (
                 <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">

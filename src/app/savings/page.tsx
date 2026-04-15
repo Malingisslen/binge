@@ -137,8 +137,8 @@ function SavingsContent() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
-        <StatCard label="Total kr/mån" value={advisor.totalMonthlyCost > 0 ? advisor.totalMonthlyCost : '\u2014'} />
-        <StatCard label="Besparing/mån" value={advisor.monthlySavings > 0 ? advisor.monthlySavings : '\u2014'} />
+        <StatCard label="Total kr/mån" value={advisor.totalMonthlyCost > 0 ? `${advisor.totalMonthlyCost} kr` : 'Ange i inst.'} />
+        <StatCard label="Besparing/mån" value={advisor.monthlySavings > 0 ? `${advisor.monthlySavings} kr` : 'Ange i inst.'} />
         <StatCard label="Aktiva" value={activeCount} />
         <StatCard label="Pausa" value={pauseCount} />
       </div>

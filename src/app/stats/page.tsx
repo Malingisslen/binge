@@ -170,7 +170,7 @@ function StatsContent() {
       )}
 
       {/* Aktivitet per månad — proper bar chart */}
-      {stats.activityMonths.length > 0 && (
+      {stats.activityMonths.length > 1 && (
         <div className="bg-surface border border-border-main rounded-sm mb-4">
           <div className="px-3 py-[6px] border-b border-border-light">
             <span className="text-sm font-bold text-text-secondary">Aktivitet per månad</span>

@@ -123,6 +123,7 @@ export default function DiscoverPage() {
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {tab === 'trending' && <span className="text-xs text-text-muted">Filtrera:</span>}
           {/* Genre filter */}
           <select
             value={genre}

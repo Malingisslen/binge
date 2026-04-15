@@ -59,10 +59,10 @@ export default function StatusButton({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer ${
+        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold ${
           current
             ? 'bg-accent text-white border-accent'
-            : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
+            : 'bg-accent text-white border-accent hover:bg-accent/90'
         }`}
       >
         {current ? labelFor(current.status) : '+ Lägg till'}

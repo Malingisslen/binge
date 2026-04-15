@@ -39,7 +39,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   // Only show VAR column if >50% of items have provider data
   const showProviderCol = useMemo(() => {
     const withProviders = filtered.filter(i => i.providers?.length > 0).length;
-    return withProviders > filtered.length * 0.5;
+    return withProviders > filtered.length * 0.25;
   }, [filtered]);
 
   return (
@@ -48,7 +48,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
         <div className="flex items-center">
           <span className="text-sm font-bold text-text-secondary">Följer</span>
           <div className="flex gap-[1px] ml-[10px]">
-            {(['all', 'tv', 'movie'] as const).map(tab => (
+            {(['all', 'tv'] as const).map(tab => (
               <span
                 key={tab}
                 onClick={() => setFilter(tab)}
