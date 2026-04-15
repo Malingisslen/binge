@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { Search, Film, Tv } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import RatingStars from '@/components/title/RatingStars';
 import type { WatchStatus } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
@@ -22,12 +24,13 @@ interface WatchlistPageProps {
 }
 
 export default function WatchlistPage({ status, title }: WatchlistPageProps) {
-  const { items, removeItem, updateStatus } = useWatchlist();
+  const { items, removeItem, updateStatus, updateRating } = useWatchlist();
   const { user } = useAuth();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
-  const [view, setView] = useState<ViewMode>(user?.defaultView ?? 'table');
+  const [view, setView] = useState<ViewMode>('grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (user?.defaultView) setView(user.defaultView);
@@ -37,6 +40,10 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
     let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
     if (mediaFilter !== 'all') {
       result = result.filter(i => i.mediaType === mediaFilter);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(i => i.title.toLowerCase().includes(q));
     }
     result = [...result].sort((a, b) => {
       switch (sort) {
@@ -49,7 +56,9 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort]);
+  }, [items, status, mediaFilter, sort, searchQuery]);
+
+  const totalCount = status ? items.filter(i => i.status === status).length : items.length;
 
   return (
     <div>
@@ -87,6 +96,19 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           <option value="addedAt">Tillagd</option>
           <option value="watchedAt">Sedd datum</option>
         </select>
+
+        {totalCount > 10 && (
+          <div className="flex items-center gap-[5px] px-2 py-[2px] bg-surface border border-border-main rounded-sm">
+            <Search size={11} className="text-text-muted shrink-0" />
+            <input
+              type="text"
+              placeholder="Sök titel..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none text-xs text-text-primary font-[inherit] outline-none w-[100px] placeholder:text-text-muted"
+            />
+          </div>
+        )}
 
         <div className="flex gap-[1px] ml-auto">
           <span
@@ -152,11 +174,11 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
       )}
 
       {view === 'table' ? (
-        <div className="bg-surface border border-border-main rounded-sm">
+        <div className="bg-surface border border-border-main rounded-sm overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="px-2 py-1 border-b border-border-light bg-cal-header w-[28px]">
+                <th className="px-2 py-[6px] border-b border-border-light bg-cal-header w-[28px]">
                   <input
                     type="checkbox"
                     checked={filtered.length > 0 && selected.size === filtered.length}
@@ -167,7 +189,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     className="accent-accent w-[13px] h-[13px] cursor-pointer"
                   />
                 </th>
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[36px]"></th>
+                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">År</th>
@@ -177,11 +199,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(item => {
+              {filtered.map((item, idx) => {
                 const poster = posterUrl(item.posterPath, 'w92');
                 const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+                const Icon = item.mediaType === 'tv' ? Tv : Film;
                 return (
-                  <tr key={item.tmdbId} className="cursor-pointer hover:[&>td]:bg-surface-hover">
+                  <tr key={item.tmdbId} className={`cursor-pointer hover:[&>td]:bg-surface-hover ${idx % 2 === 1 ? 'bg-surface-hover/40' : ''}`}>
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
@@ -198,9 +221,11 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     <td className="px-2 py-[5px] border-b border-border-table">
                       <Link href={href}>
                         {poster ? (
-                          <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover" />
+                          <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
                         ) : (
-                          <div className="w-[26px] h-[39px] rounded-sm bg-[#ddd8d0]" />
+                          <div className="w-[32px] h-[48px] rounded-sm bg-[#ddd8d0] flex items-center justify-center">
+                            <Icon size={14} className="text-text-muted opacity-40" />
+                          </div>
                         )}
                       </Link>
                     </td>
@@ -226,8 +251,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {fmtDate(item.watchedAt)}
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table font-semibold text-sm">
-                      {item.rating ? <span className="text-accent">{item.rating.toFixed(1)}</span> : <span className="text-text-muted font-normal">—</span>}
+                    <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
+                      <RatingStars
+                        rating={item.rating}
+                        onChange={r => updateRating(item.tmdbId, r)}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 );
@@ -244,15 +273,21 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
         </div>
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[7px] px-3 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {filtered.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+              const Icon = item.mediaType === 'tv' ? Tv : Film;
               return (
                 <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
                   <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden">
-                    {poster && (
+                    {poster ? (
                       <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
+                        <Icon size={20} className="text-text-muted opacity-40" />
+                        <span className="text-[10px] text-text-muted text-center line-clamp-3 leading-tight">{item.title}</span>
+                      </div>
                     )}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
