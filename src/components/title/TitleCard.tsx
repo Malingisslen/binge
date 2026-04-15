@@ -34,13 +34,13 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
   const extraCount = (providers?.length ?? 0) - MAX_BADGES;
 
   return (
-    <div className="group relative">
+    <div className="group relative transition-transform duration-150 hover:-translate-y-[1px]">
       <Link href={href} className="no-underline text-text-primary">
         <div className={`aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden ${
           isTracked ? 'ring-2 ring-accent' : ''
         }`}>
           {poster ? (
-            <img src={poster} alt={title} className="w-full h-full object-cover" loading="lazy" />
+            <img src={poster} alt={title} className="w-full h-full object-cover transition-opacity duration-300" loading="lazy" />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
               <Icon size={20} className="text-text-muted opacity-40" />

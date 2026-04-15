@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
 import { useFollowing } from '@/hooks/useFollow';
@@ -66,11 +67,20 @@ function FeedContent() {
       {isLoading && <div className="text-sm text-text-muted py-4">Laddar...</div>}
 
       {!isLoading && followingUids.length === 0 && (
-        <p className="text-sm text-text-muted">Följ andra användare för att se deras aktivitet här.</p>
+        <div className="bg-surface border border-border-main rounded-sm px-4 py-8 text-center">
+          <Users size={32} className="text-text-muted mx-auto mb-2 opacity-40" />
+          <div className="text-sm font-semibold text-text-secondary mb-1">Följ vänner</div>
+          <p className="text-xs text-text-muted mb-3">Se vad andra tittar på genom att följa deras profiler.</p>
+          <Link href="/search" className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline">
+            Sök användare
+          </Link>
+        </div>
       )}
 
       {feedItems && feedItems.length === 0 && followingUids.length > 0 && (
-        <p className="text-sm text-text-muted">Ingen aktivitet de senaste 2 veckorna.</p>
+        <div className="bg-surface border border-border-main rounded-sm px-4 py-6 text-center">
+          <p className="text-sm text-text-muted">Ingen aktivitet de senaste 2 veckorna.</p>
+        </div>
       )}
 
       <div className="space-y-[6px]">
