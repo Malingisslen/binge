@@ -5,7 +5,7 @@ import type { WatchStatus, MediaType } from '@/types';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
-import { STATUS_LABELS } from '@/lib/watchStatus';
+import { STATUS_LABELS, MOVIE_STATUS_LABELS } from '@/lib/watchStatus';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -31,6 +31,7 @@ export default function StatusButton({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
+  const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -49,7 +50,7 @@ export default function StatusButton({
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: providers ?? current?.providers ?? [],
     });
-    toast(`${title} — ${STATUS_LABELS[status]}`);
+    toast(`${title} — ${labels[status]}`);
     setOpen(false);
   }
 
@@ -63,11 +64,11 @@ export default function StatusButton({
             : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
         }`}
       >
-        {current ? STATUS_LABELS[current.status] : '+ Lägg till'}
+        {current ? labels[current.status] : '+ Lägg till'}
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-surface border border-border-main rounded-sm z-40 min-w-[130px]">
-          {(Object.keys(STATUS_LABELS) as WatchStatus[]).map(status => (
+          {(Object.keys(labels) as WatchStatus[]).map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
@@ -75,7 +76,7 @@ export default function StatusButton({
                 current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
               } bg-transparent`}
             >
-              {STATUS_LABELS[status]}
+              {labels[status]}
             </button>
           ))}
           {current && (

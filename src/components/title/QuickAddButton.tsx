@@ -6,7 +6,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
-import { STATUS_LABELS } from '@/lib/watchStatus';
+import { STATUS_LABELS, MOVIE_STATUS_LABELS } from '@/lib/watchStatus';
 import type { WatchStatus, MediaType } from '@/types';
 
 interface QuickAddButtonProps {
@@ -26,6 +26,7 @@ export default function QuickAddButton({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
+  const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -39,7 +40,7 @@ export default function QuickAddButton({
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: current?.providers ?? [],
     });
-    toast(`${title} — ${STATUS_LABELS[status]}`);
+    toast(`${title} — ${labels[status]}`);
     setOpen(false);
   }
 
@@ -62,13 +63,13 @@ export default function QuickAddButton({
             ? 'bg-accent text-white'
             : 'bg-black/60 text-white hover:bg-accent'
         }`}
-        title={current ? STATUS_LABELS[current.status] : 'Lägg till'}
+        title={current ? labels[current.status] : 'Lägg till'}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
       {open && (
         <div className="absolute top-full right-0 mt-1 bg-surface border border-border-main rounded-sm z-50 min-w-[110px] shadow-lg">
-          {(Object.keys(STATUS_LABELS) as WatchStatus[]).map(status => (
+          {(Object.keys(labels) as WatchStatus[]).map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
@@ -76,7 +77,7 @@ export default function QuickAddButton({
                 current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
               } bg-transparent`}
             >
-              {STATUS_LABELS[status]}
+              {labels[status]}
             </button>
           ))}
           {current && (
