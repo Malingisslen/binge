@@ -25,6 +25,7 @@ const NAV_ITEMS = [
 const COLLECTION_ITEMS = [
   { label: 'Alla', href: '/my/all', status: null },
   { label: 'Följer', href: '/my/following', status: 'följer' as const },
+  { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se' as const },
   { label: 'Sedd', href: '/my/watched', status: 'sedd' as const },
   { label: 'Listor', href: '/my/lists', status: null },
 ];
@@ -43,7 +44,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   );
 
   const { statusCounts, providerCounts } = useMemo(() => {
-    const sc: Record<WatchStatus, number> = { 'följer': 0, 'sedd': 0 };
+    const sc: Record<WatchStatus, number> = { 'följer': 0, 'vill_se': 0, 'sedd': 0 };
     const pc: Record<number, number> = {};
     for (const i of items) {
       if (i.status in sc) sc[i.status]++;

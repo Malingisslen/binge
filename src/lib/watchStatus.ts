@@ -2,16 +2,18 @@ import type { WatchStatus } from '@/types';
 
 export const STATUS_LABELS: Record<WatchStatus, string> = {
   'följer': 'Följer',
+  'vill_se': 'Vill se',
   'sedd': 'Sedd',
 };
 
-export const MOVIE_STATUS_LABELS: Record<WatchStatus, string> = {
-  'följer': 'Vill se',
+// Movies don't use "Följer" — only "Vill se" and "Sedd"
+export const MOVIE_STATUS_LABELS: Partial<Record<WatchStatus, string>> = {
+  'vill_se': 'Vill se',
   'sedd': 'Sedd',
 };
 
 export function statusLabel(status: WatchStatus, mediaType?: 'movie' | 'tv'): string {
-  if (mediaType === 'movie') return MOVIE_STATUS_LABELS[status];
+  if (mediaType === 'movie' && status in MOVIE_STATUS_LABELS) return MOVIE_STATUS_LABELS[status]!;
   return STATUS_LABELS[status];
 }
 

@@ -17,13 +17,15 @@ import type { WatchlistItem, WatchStatus, MediaType } from '@/types';
 function migrateStatus(raw: string): { status: WatchStatus; dropped: boolean } {
   switch (raw) {
     case 'watching':
-    case 'want_to_watch':
       return { status: 'följer', dropped: false };
+    case 'want_to_watch':
+      return { status: 'vill_se', dropped: false };
     case 'watched':
       return { status: 'sedd', dropped: false };
     case 'dropped':
       return { status: 'följer', dropped: true };
     case 'följer':
+    case 'vill_se':
     case 'sedd':
       return { status: raw as WatchStatus, dropped: false };
     default:

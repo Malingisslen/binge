@@ -48,7 +48,7 @@ export function usePublicWatchlist(uid: string | null) {
         return {
           tmdbId: data.tmdbId as number,
           mediaType: data.mediaType as MediaType,
-          status: (data.status === 'watching' || data.status === 'want_to_watch' ? 'följer' : data.status === 'watched' ? 'sedd' : data.status) as WatchStatus,
+          status: (data.status === 'watching' ? 'följer' : data.status === 'want_to_watch' ? 'vill_se' : data.status === 'watched' ? 'sedd' : data.status) as WatchStatus,
           rating: (data.rating as number) ?? null,
           notes: null,
           title: data.title as string,

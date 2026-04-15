@@ -109,7 +109,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
           <span className="text-xs text-text-secondary">{selected.size} markerade</span>
-          {status === 'följer' && (
+          {(status === 'följer' || status === 'vill_se') && (
             <button
               onClick={async () => {
                 await Promise.all(Array.from(selected).map(id => updateStatus(id, 'sedd')));
@@ -123,12 +123,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           {status === 'sedd' && (
             <button
               onClick={async () => {
-                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'följer')));
+                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'vill_se')));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
             >
-              Flytta till Följer
+              Flytta till Vill se
             </button>
           )}
           <button

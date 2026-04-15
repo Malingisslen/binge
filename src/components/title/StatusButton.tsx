@@ -32,6 +32,7 @@ export default function StatusButton({
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
   const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
+  const labelFor = (s: WatchStatus) => labels[s] ?? STATUS_LABELS[s];
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -50,7 +51,7 @@ export default function StatusButton({
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: providers ?? current?.providers ?? [],
     });
-    toast(`${title} — ${labels[status]}`);
+    toast(`${title} — ${labelFor(status)}`);
     setOpen(false);
   }
 
@@ -64,7 +65,7 @@ export default function StatusButton({
             : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
         }`}
       >
-        {current ? labels[current.status] : '+ Lägg till'}
+        {current ? labelFor(current.status) : '+ Lägg till'}
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-surface border border-border-main rounded-sm z-40 min-w-[130px]">
@@ -76,7 +77,7 @@ export default function StatusButton({
                 current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
               } bg-transparent`}
             >
-              {labels[status]}
+              {labelFor(status)}
             </button>
           ))}
           {current && (

@@ -27,6 +27,7 @@ export default function QuickAddButton({
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
   const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
+  const labelFor = (s: WatchStatus) => labels[s] ?? STATUS_LABELS[s];
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -40,7 +41,7 @@ export default function QuickAddButton({
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: current?.providers ?? [],
     });
-    toast(`${title} — ${labels[status]}`);
+    toast(`${title} — ${labelFor(status)}`);
     setOpen(false);
   }
 
@@ -63,7 +64,7 @@ export default function QuickAddButton({
             ? 'bg-accent text-white'
             : 'bg-black/60 text-white hover:bg-accent'
         }`}
-        title={current ? labels[current.status] : 'Lägg till'}
+        title={current ? labelFor(current.status) : 'Lägg till'}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
@@ -77,7 +78,7 @@ export default function QuickAddButton({
                 current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
               } bg-transparent`}
             >
-              {labels[status]}
+              {labelFor(status)}
             </button>
           ))}
           {current && (

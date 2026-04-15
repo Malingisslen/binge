@@ -77,7 +77,7 @@ function FeedContent() {
         {feedItems?.map((item, i) => {
           const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`;
           const poster = posterUrl(item.posterPath, 'w92');
-          const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : 'uppdaterade';
+          const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : item.status === 'vill_se' ? 'vill se' : 'uppdaterade';
           return (
             <div key={`${item.uid}-${item.tmdbId}-${i}`} className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2">
               {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" />}
