@@ -84,9 +84,9 @@ export default function DiscoverPage() {
   const items = tab === 'trending'
     ? (trending?.results ?? []).filter(r =>
         (r.media_type === 'movie' || r.media_type === 'tv') &&
-        (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+        (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
         !isFromHiddenCountry(r.origin_country, hiddenCountries))
-    : (hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name)) : allResults);
+    : (hideNonLatin ? allResults.filter(r => !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) : allResults);
   const hasMore = tab !== 'trending' && discoverData && page < discoverData.total_pages;
 
   return (

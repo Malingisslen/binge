@@ -80,7 +80,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
         </div>
         <TitleGrid
           items={allResults.filter(r =>
-            (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+            (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
             !isFromHiddenCountry(r.origin_country, hiddenCountries))}
           loading={isLoading && allResults.length === 0}
         />

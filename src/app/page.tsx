@@ -19,7 +19,7 @@ function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
   const items = (trending?.results ?? [])
-    .filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !hasNonLatinTitle(r.title ?? r.name))
+    .filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
     .slice(0, 10);
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 

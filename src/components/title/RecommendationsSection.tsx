@@ -19,7 +19,7 @@ export default function RecommendationsSection({ recommendations, myProviders, l
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const hiddenCountries = user?.hiddenCountries ?? [];
   const visibleRecs = recommendations.filter(r =>
-    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
     !isFromHiddenCountry(r.origin_country, hiddenCountries));
   const rawProviderMap = useSearchProviders(visibleRecs);
 

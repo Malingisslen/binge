@@ -62,7 +62,7 @@ function RecsContent() {
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const hiddenCountries = user?.hiddenCountries ?? [];
   const filteredRecs = allRecs.filter(r =>
-    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name)) &&
+    (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
     !isFromHiddenCountry(r.origin_country, hiddenCountries));
 
   const isLoading = recQueries.some(q => q.isLoading);
