@@ -43,6 +43,16 @@ export function stillUrl(path: string | null, size: 'w185' | 'w300' | 'w500' = '
   return `${IMAGE_BASE}/${size}${path}`;
 }
 
+export function backdropUrl(path: string | null, size: 'w300' | 'w780' | 'w1280' | 'original' = 'w1280'): string | null {
+  if (!path) return null;
+  return `${IMAGE_BASE}/${size}${path}`;
+}
+
+export function logoUrl(path: string | null, size: 'w45' | 'w92' | 'w154' | 'w185' = 'w92'): string | null {
+  if (!path) return null;
+  return `${IMAGE_BASE}/${size}${path}`;
+}
+
 export function profileUrl(path: string | null, size: 'w45' | 'w185' | 'w500' = 'w185'): string | null {
   if (!path) return null;
   return `${IMAGE_BASE}/${size}${path}`;

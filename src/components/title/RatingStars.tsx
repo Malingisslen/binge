@@ -5,7 +5,7 @@ import { useState } from 'react';
 interface RatingStarsProps {
   rating: number | null;
   onChange?: (rating: number) => void;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   readonly?: boolean;
 }
 
@@ -13,7 +13,7 @@ export default function RatingStars({ rating, onChange, size = 'sm', readonly = 
   const [hover, setHover] = useState<number | null>(null);
 
   const display = hover ?? rating ?? 0;
-  const starSize = size === 'sm' ? 'text-sm' : 'text-base';
+  const starSize = size === 'lg' ? 'text-[18px]' : size === 'md' ? 'text-base' : 'text-sm';
 
   return (
     <span

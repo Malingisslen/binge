@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
-import { posterUrl, profileUrl } from '@/lib/tmdb/client';
+import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import RatingStars from '@/components/title/RatingStars';
@@ -24,6 +25,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
+  const [showRentBuy, setShowRentBuy] = useState(false);
 
   const mappedRecs = useMemo(
     () => (show?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
@@ -40,10 +42,12 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
   const watchlistItem = getItem(show.id);
   const poster = posterUrl(show.poster_path, 'w500');
+  const backdrop = backdropUrl(show.backdrop_path);
   const providers = show['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
+  const hasRentBuy = rent.length > 0 || buy.length > 0;
   const yearStart = show.first_air_date?.substring(0, 4) ?? '—';
   const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
   const genres = show.genres.map(g => g.name).join(', ');
@@ -55,150 +59,206 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const imdbId = show.external_ids?.imdb_id;
 
   return (
-    <div>
-      <div className="flex flex-col md:flex-row gap-4 mb-4">
-        <div className="shrink-0">
+    <div className="-m-[14px_-18px] md:-m-[14px_-18px]">
+      {/* Hero backdrop */}
+      <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
+        {backdrop && (
+          <img
+            src={backdrop}
+            alt=""
+            className="w-full h-full object-cover object-[center_20%] opacity-60"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={show.name} className="w-[120px] md:w-[180px] rounded-sm" />
+            <img src={poster} alt={show.name} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
           ) : (
-            <div className="w-[180px] aspect-[2/3] bg-[#ddd8d0] rounded-sm" />
-          )}
-        </div>
-        <div className="flex-1">
-          <h1 className="text-[18px] font-bold text-text-primary mb-1">{show.name}</h1>
-          <div className="text-sm text-text-muted mb-1">
-            {yearStart}{yearEnd ? `–${yearEnd}` : '-'} · {show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''} · {genres}
-          </div>
-          {creators.length > 0 && (
-            <div className="text-xs text-text-muted mb-1">
-              Skapare: {creators.map((c, i) => (
-                <span key={c.id}>{i > 0 && ', '}<Link href={`/person/${c.id}/`} className="text-text-secondary no-underline hover:text-accent">{c.name}</Link></span>
-              ))}
+            <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
+              <Tv size={32} className="text-text-muted" />
             </div>
           )}
-          <div className="text-xs text-text-muted mb-2">
-            Status: {tvShowStatusLabel(show.status)} · TMDB: {show.vote_average.toFixed(1)}/10
-            {imdbId && (
-              <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" className="text-text-muted ml-2 no-underline hover:text-accent">IMDb</a>
-            )}
+          <div className="relative z-10 pb-1">
+            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{show.name}</h1>
+            <div className="text-sm text-text-secondary">
+              {yearStart}{yearEnd ? `–${yearEnd}` : '-'} · {show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''} · {genres}
+            </div>
           </div>
+        </div>
+      </div>
 
-          <div className="flex items-center gap-2 mb-3">
-            <StatusButton
-              tmdbId={show.id}
-              mediaType="tv"
-              title={show.name}
-              posterPath={show.poster_path}
-              releaseYear={parseInt(yearStart, 10) || null}
-              totalSeasons={show.number_of_seasons}
-              providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
-            />
+      {/* Content */}
+      <div className="px-[18px] pt-4">
+        {/* Creator + status */}
+        {creators.length > 0 && (
+          <div className="text-xs text-text-muted mb-1">
+            Skapare: {creators.map((c, i) => (
+              <span key={c.id}>{i > 0 && ', '}<Link href={`/person/${c.id}/`} className="text-text-secondary no-underline hover:text-accent">{c.name}</Link></span>
+            ))}
+          </div>
+        )}
+        <div className="text-xs text-text-muted mb-3">
+          Status: {tvShowStatusLabel(show.status)} · TMDB: {show.vote_average.toFixed(1)}/10
+          {imdbId && (
+            <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" className="text-text-muted ml-2 no-underline hover:text-accent">IMDb</a>
+          )}
+        </div>
+
+        {/* CTA actions — prominent */}
+        <div className="flex items-center gap-3 mb-4">
+          <StatusButton
+            tmdbId={show.id}
+            mediaType="tv"
+            title={show.name}
+            posterPath={show.poster_path}
+            releaseYear={parseInt(yearStart, 10) || null}
+            totalSeasons={show.number_of_seasons}
+            providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
+          />
+          <div>
+            {watchlistItem && (
+              <div className="text-xxs text-text-muted mb-[2px]">Ditt betyg</div>
+            )}
             <RatingStars
               rating={watchlistItem?.rating ?? null}
               onChange={r => watchlistItem && updateRating(show.id, r)}
               readonly={!watchlistItem}
-              size="md"
-            />
-            <AddToListButton tmdbId={show.id} mediaType="tv" title={show.name} posterPath={show.poster_path} />
-          </div>
-
-          {nextEp && (
-            <div className="text-sm text-text-secondary mb-2">
-              Nästa avsnitt: S{nextEp.season_number}E{nextEp.episode_number} — {nextEp.name} ({nextEp.air_date})
-            </div>
-          )}
-
-          {(flatrate.length > 0 || rent.length > 0 || buy.length > 0) && (
-            <div className="mb-3">
-              {flatrate.length > 0 && (
-                <div className="mb-1">
-                  <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Streama:</span>
-                  {flatrate.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                </div>
-              )}
-              {rent.length > 0 && (
-                <div className="mb-1">
-                  <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                </div>
-              )}
-              {buy.length > 0 && (
-                <div className="mb-1">
-                  <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {show.overview && (
-            <p className="text-base text-text-secondary leading-relaxed mb-3">{show.overview}</p>
-          )}
-
-          {watchlistItem && <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />}
-        </div>
-      </div>
-
-      {trailer && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary mb-2">Trailer</h2>
-          <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
-            <iframe
-              src={`https://www.youtube.com/embed/${trailer.key}`}
-              title={trailer.name}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full border-none"
+              size="lg"
             />
           </div>
+          <AddToListButton tmdbId={show.id} mediaType="tv" title={show.name} posterPath={show.poster_path} />
         </div>
-      )}
 
-      <div className="mb-4">
-        <h2 className="text-sm font-bold text-text-secondary mb-2">Säsonger</h2>
-        <div className="bg-surface border border-border-main rounded-sm">
-          <SeasonList
-            tmdbId={show.id}
-            seasons={show.seasons}
-            isWatched={isWatched}
-            markEpisodeWatched={markEpisodeWatched}
-            markSeasonWatched={markSeasonWatched}
-            getSeasonProgress={getSeasonProgress}
-          />
-        </div>
-      </div>
+        {/* Next episode */}
+        {nextEp && (
+          <div className="text-sm text-text-secondary mb-3 bg-surface border border-border-main rounded-sm px-3 py-2">
+            Nästa avsnitt: <span className="font-semibold">S{nextEp.season_number}E{nextEp.episode_number}</span> — {nextEp.name} ({nextEp.air_date})
+          </div>
+        )}
 
-      {cast.length > 0 && (
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary mb-2">Skådespelare</h2>
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            {cast.map(person => (
-              <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
-                {profileUrl(person.profile_path) ? (
-                  <img
-                    src={profileUrl(person.profile_path)!}
-                    alt={person.name}
-                    className="w-[70px] h-[90px] object-cover rounded-sm mb-[2px]"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="w-[70px] h-[90px] bg-[#ddd8d0] rounded-sm mb-[2px]" />
+        {/* Providers — streaming prominent, rent/buy collapsed */}
+        {(flatrate.length > 0 || hasRentBuy) && (
+          <div className="mb-4 bg-surface border border-border-main rounded-sm p-3">
+            {flatrate.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xxs text-text-muted uppercase tracking-[0.5px] font-semibold">Streama:</span>
+                {flatrate.map(p => {
+                  const logo = logoUrl(p.logo_path);
+                  return logo ? (
+                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" />
+                  ) : (
+                    <ProviderTag key={p.provider_id} provider={p} size="md" />
+                  );
+                })}
+              </div>
+            )}
+            {hasRentBuy && (
+              <>
+                {flatrate.length > 0 && <div className="border-t border-border-light my-2" />}
+                <button
+                  onClick={() => setShowRentBuy(!showRentBuy)}
+                  className="flex items-center gap-1 text-xs text-text-muted bg-transparent border-none cursor-pointer p-0 font-[inherit] hover:text-text-secondary"
+                >
+                  Hyr & köp
+                  {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+                {showRentBuy && (
+                  <div className="mt-2 space-y-1">
+                    {rent.length > 0 && (
+                      <div>
+                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Hyr:</span>
+                        {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                      </div>
+                    )}
+                    {buy.length > 0 && (
+                      <div>
+                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Köp:</span>
+                        {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                      </div>
+                    )}
+                  </div>
                 )}
-                <div className="text-xs font-semibold truncate">{person.name}</div>
-                <div className="text-xxs text-text-muted truncate">{person.character}</div>
-              </Link>
-            ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Synopsis */}
+        {show.overview && (
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Handling</h2>
+            <p className="text-sm text-text-secondary leading-relaxed">{show.overview}</p>
+          </div>
+        )}
+
+        {watchlistItem && <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />}
+
+        {/* Seasons */}
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Säsonger</h2>
+          <div className="bg-surface border border-border-main rounded-sm">
+            <SeasonList
+              tmdbId={show.id}
+              seasons={show.seasons}
+              isWatched={isWatched}
+              markEpisodeWatched={markEpisodeWatched}
+              markSeasonWatched={markSeasonWatched}
+              getSeasonProgress={getSeasonProgress}
+            />
           </div>
         </div>
-      )}
 
-      <ReviewList tmdbId={show.id} mediaType="tv" />
+        {/* Trailer */}
+        {trailer && (
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Trailer</h2>
+            <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
+              <iframe
+                src={`https://www.youtube.com/embed/${trailer.key}`}
+                title={trailer.name}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full h-full border-none"
+              />
+            </div>
+          </div>
+        )}
 
-      <RecommendationsSection
-        recommendations={mappedRecs}
-        myProviders={myProviders}
-        label="Liknande serier"
-      />
+        {/* Cast with round images */}
+        {cast.length > 0 && (
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-light mb-2">Skådespelare</h2>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {cast.map(person => (
+                <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
+                  {profileUrl(person.profile_path) ? (
+                    <img
+                      src={profileUrl(person.profile_path)!}
+                      alt={person.name}
+                      className="w-[50px] h-[50px] object-cover rounded-full mb-[4px] mx-auto"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-[50px] h-[50px] rounded-full bg-[#ddd8d0] mb-[4px] mx-auto flex items-center justify-center text-xs text-text-muted font-semibold">
+                      {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                  )}
+                  <div className="text-xs font-semibold truncate text-center">{person.name}</div>
+                  <div className="text-xxs text-text-muted truncate text-center">{person.character}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <ReviewList tmdbId={show.id} mediaType="tv" />
+
+        <RecommendationsSection
+          recommendations={mappedRecs}
+          myProviders={myProviders}
+          label="Liknande serier"
+        />
+      </div>
     </div>
   );
 }
