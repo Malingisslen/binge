@@ -29,8 +29,11 @@ function LandingPage() {
         <h1 className="text-[24px] font-extrabold text-accent mb-1">
           binge<span className="font-normal text-text-muted text-[18px]">.nu</span>
         </h1>
-        <p className="text-sm text-text-secondary mb-2 max-w-[400px] mx-auto">
-          Sök efter en film eller serie — se var den finns att streama i Sverige.
+        <p className="text-[15px] font-semibold text-text-primary mb-1 max-w-[440px] mx-auto">
+          Håll koll på vad du tittar på — och var det streamas.
+        </p>
+        <p className="text-xs text-text-muted mb-3 max-w-[400px] mx-auto">
+          Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
         </p>
         <div className="relative max-w-[400px] mx-auto mb-4" ref={searchRef}>
           <div className="flex items-center gap-[5px] px-3 py-[6px] bg-surface border border-border-main rounded-sm">
@@ -51,7 +54,7 @@ function LandingPage() {
             />
           )}
         </div>
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center justify-center gap-3 mb-6">
           <button
             onClick={signIn}
             className="px-4 py-[5px] bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-xs font-semibold"
@@ -61,6 +64,20 @@ function LandingPage() {
           <Link href="/login/" className="text-xs text-accent no-underline">
             Skapa konto
           </Link>
+        </div>
+        <div className="grid grid-cols-3 gap-4 max-w-[480px] mx-auto text-center">
+          <div>
+            <div className="text-xs font-bold text-text-secondary mb-[2px]">Streaming-koll</div>
+            <div className="text-xxs text-text-muted leading-snug">Se direkt vilken tjänst som har titeln du söker i Sverige.</div>
+          </div>
+          <div>
+            <div className="text-xs font-bold text-text-secondary mb-[2px]">Avsnittkalender</div>
+            <div className="text-xxs text-text-muted leading-snug">Håll reda på när nya avsnitt av dina serier släpps.</div>
+          </div>
+          <div>
+            <div className="text-xs font-bold text-text-secondary mb-[2px]">Sparrådgivare</div>
+            <div className="text-xxs text-text-muted leading-snug">Få tips om vilka tjänster du kan pausa och spara pengar.</div>
+          </div>
         </div>
       </div>
 

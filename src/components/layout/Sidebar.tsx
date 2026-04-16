@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { label: 'Utforska', href: '/discover', icon: Compass },
   { label: 'Kalender', href: '/calendar', icon: Calendar },
   { label: 'Statistik', href: '/stats', icon: BarChart3 },
-  { label: 'Prenumerationer', href: '/savings', icon: CreditCard },
+  { label: 'Streamingrådgivare', href: '/savings', icon: CreditCard },
   { label: 'Rekommendationer', href: '/recommendations', icon: Star },
   { label: 'Flöde', href: '/feed', icon: Rss },
 ];
@@ -157,7 +157,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
                   {provider.name}
                 </span>
                 {count > 0 && (
-                  <span className="text-xs text-text-sidebar">{count}</span>
+                  <span className="text-xs text-text-sidebar">{count} {count === 1 ? 'titel' : 'titlar'}</span>
                 )}
               </Link>
             );

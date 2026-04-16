@@ -28,6 +28,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   const { user } = useAuth();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
+  const showAddedCol = status !== 'sedd';
+  const showWatchedCol = status === 'sedd' || !status;
   const [view, setView] = useState<ViewMode>('grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -193,8 +195,8 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">År</th>
-                <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tillagd</th>
-                <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Sedd</th>
+                {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tillagd</th>}
+                {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Sedd</th>}
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
               </tr>
             </thead>
@@ -245,12 +247,12 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {item.releaseYear ?? '—'}
                     </td>
-                    <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    {showAddedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {fmtDate(item.addedAt)}
-                    </td>
-                    <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    </td>}
+                    {showWatchedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {fmtDate(item.watchedAt)}
-                    </td>
+                    </td>}
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <RatingStars
                         rating={item.rating}

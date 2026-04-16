@@ -25,6 +25,7 @@ export default function SubscriptionAdvisorWidget() {
         </Link>
       </div>
       <div className="px-3 py-2 space-y-[6px]">
+        <p className="text-xxs text-text-muted mb-1">Baserat på dina tjänster och serier du följer.</p>
         {pausable.length > 0 && (
           <div className="text-xs text-text-secondary">
             Du kan pausa{' '}

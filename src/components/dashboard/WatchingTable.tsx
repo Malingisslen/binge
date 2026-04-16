@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useTVShow } from '@/hooks/useTMDB';
@@ -36,11 +36,8 @@ export default function WatchingTable({ items }: WatchingTableProps) {
     filter === 'all' || i.mediaType === filter
   );
 
-  // Only show VAR column if >50% of items have provider data
-  const showProviderCol = useMemo(() => {
-    const withProviders = filtered.filter(i => i.providers?.length > 0).length;
-    return withProviders > filtered.length * 0.25;
-  }, [filtered]);
+  const { user } = useAuth();
+  const showProviderCol = (user?.myProviders ?? []).length > 0;
 
   return (
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">

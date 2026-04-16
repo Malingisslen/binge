@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
@@ -29,6 +30,7 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
   const isTrackable = item.media_type === 'movie' || item.media_type === 'tv';
   const isTracked = isTrackable && !!getItem(item.id);
   const Icon = item.media_type === 'tv' ? Tv : Film;
+  const [imgError, setImgError] = useState(false);
 
   const visibleBadges = providers?.slice(0, MAX_BADGES) ?? [];
   const extraCount = (providers?.length ?? 0) - MAX_BADGES;
@@ -39,8 +41,8 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
         <div className={`aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden ${
           isTracked ? 'ring-2 ring-accent' : ''
         }`}>
-          {poster ? (
-            <img src={poster} alt={title} className="w-full h-full object-cover transition-opacity duration-300" loading="lazy" />
+          {poster && !imgError ? (
+            <img src={poster} alt={title} className="w-full h-full object-cover transition-opacity duration-300" loading="lazy" onError={() => setImgError(true)} />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
               <Icon size={20} className="text-text-muted opacity-40" />
