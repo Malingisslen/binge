@@ -6,8 +6,9 @@ import { Search, Film, Tv } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { getProvider } from '@/lib/tmdb/providers';
 import RatingStars from '@/components/title/RatingStars';
-import type { WatchStatus } from '@/types';
+import type { WatchStatus, WatchlistItem } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
@@ -15,7 +16,7 @@ function fmtDate(d: Date | null): string {
   if (!d) return '—';
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-type ViewMode = 'table' | 'grid';
+type ViewMode = 'table' | 'grid' | 'cards';
 type MediaFilter = 'all' | 'movie' | 'tv';
 
 interface WatchlistPageProps {
@@ -30,7 +31,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   const [sort, setSort] = useState<SortKey>('updatedAt');
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
-  const [view, setView] = useState<ViewMode>('grid');
+  const [view, setView] = useState<ViewMode>(status === 'följer' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -122,6 +123,14 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
             Tabell
           </span>
           <span
+            onClick={() => setView('cards')}
+            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+              view === 'cards' ? 'bg-accent text-white' : 'text-text-muted'
+            }`}
+          >
+            Kort
+          </span>
+          <span
             onClick={() => setView('grid')}
             className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
               view === 'grid' ? 'bg-accent text-white' : 'text-text-muted'
@@ -175,7 +184,22 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
         </div>
       )}
 
-      {view === 'table' ? (
+      {view === 'cards' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]">
+          {filtered.map(item => (
+            <WatchlistCard
+              key={item.tmdbId}
+              item={item}
+              onRate={r => updateRating(item.tmdbId, r)}
+            />
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-full bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
+              Inga titlar att visa
+            </div>
+          )}
+        </div>
+      ) : view === 'table' ? (
         <div className="bg-surface border border-border-main rounded-sm overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -254,11 +278,16 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                       {fmtDate(item.watchedAt)}
                     </td>}
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
-                      <RatingStars
-                        rating={item.rating}
-                        onChange={r => updateRating(item.tmdbId, r)}
-                        size="sm"
-                      />
+                      <span className="inline-flex items-center gap-[4px]">
+                        <RatingStars
+                          rating={item.rating}
+                          onChange={r => updateRating(item.tmdbId, r)}
+                          size="sm"
+                        />
+                        {item.rating !== null && (
+                          <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -302,6 +331,99 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function WatchlistCard({ item, onRate }: { item: WatchlistItem; onRate: (r: number | null) => void }) {
+  const { user } = useAuth();
+  const myProviders = user?.myProviders ?? [];
+  const poster = posterUrl(item.posterPath, 'w185');
+  const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+  const Icon = item.mediaType === 'tv' ? Tv : Film;
+
+  const progressPct = useMemo(() => {
+    if (item.mediaType !== 'tv') return null;
+    if (!item.totalSeasons || !item.lastWatchedSeason) return 0;
+    const seasonPart = (item.lastWatchedSeason - 1) / item.totalSeasons;
+    const episodePart = item.lastWatchedEpisode ? 1 / (item.totalSeasons * 20) : 0;
+    return Math.min(100, Math.round((seasonPart + episodePart) * 100));
+  }, [item]);
+
+  const progressLabel = (() => {
+    if (item.mediaType === 'movie') return item.status === 'sedd' ? 'Sedd' : '—';
+    if (!item.totalSeasons) return '—';
+    if (item.status === 'sedd') return 'Klar';
+    if (item.lastWatchedSeason) return `S${item.lastWatchedSeason}${item.lastWatchedEpisode ? ` · E${item.lastWatchedEpisode}` : ''}`;
+    return 'Ej påbörjad';
+  })();
+
+  const providersToShow = item.providers.slice(0, 3);
+
+  return (
+    <div className="bg-surface border border-border-main rounded-sm p-[10px] flex gap-[10px] hover:border-accent/40 transition-colors">
+      <Link href={href} className="shrink-0">
+        {poster ? (
+          <img src={poster} alt="" className="w-[50px] h-[75px] rounded-sm object-cover" loading="lazy" />
+        ) : (
+          <div className="w-[50px] h-[75px] rounded-sm bg-[#ddd8d0] flex items-center justify-center">
+            <Icon size={16} className="text-text-muted opacity-40" />
+          </div>
+        )}
+      </Link>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <Link href={href} className="no-underline text-text-primary min-w-0">
+            <div className="text-xs font-semibold truncate">{item.title}</div>
+          </Link>
+          <span className="shrink-0">
+            {item.rating !== null ? (
+              <span className="inline-flex items-center gap-[3px]">
+                <RatingStars rating={item.rating} onChange={onRate} size="sm" />
+                <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+              </span>
+            ) : (
+              <RatingStars rating={null} onChange={onRate} size="sm" />
+            )}
+          </span>
+        </div>
+        <div className="text-xxs text-text-muted mt-[1px]">
+          {item.releaseYear ?? '—'}
+          {item.mediaType === 'tv' && item.totalSeasons ? ` · ${item.totalSeasons} säsong${item.totalSeasons === 1 ? '' : 'er'}` : ''}
+        </div>
+        {providersToShow.length > 0 && (
+          <div className="mt-[4px] flex flex-wrap gap-[2px]">
+            {providersToShow.map(id => {
+              const p = getProvider(id);
+              if (!p) return null;
+              const isMine = myProviders.includes(id);
+              return (
+                <span
+                  key={id}
+                  className={`text-xxs px-1 py-[1px] border rounded-sm inline-block ${
+                    isMine ? 'border-accent text-accent' : 'border-border-main text-text-muted'
+                  }`}
+                >
+                  {p.shortName}
+                </span>
+              );
+            })}
+          </div>
+        )}
+        {item.mediaType === 'tv' && (
+          <div className="mt-[5px] flex items-center gap-[6px]">
+            <div className="flex-1 h-[3px] bg-[#eee] rounded-sm overflow-hidden">
+              <div
+                className={`h-full ${item.status === 'sedd' ? 'bg-[#2e7d32]' : 'bg-accent'}`}
+                style={{ width: `${progressPct ?? 0}%` }}
+              />
+            </div>
+            <span className={`text-xxs ${item.status === 'sedd' ? 'text-[#2e7d32]' : 'text-text-muted'}`}>
+              {progressLabel}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

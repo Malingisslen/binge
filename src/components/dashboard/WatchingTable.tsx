@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
 import SeriesDetail from '@/components/tv/SeriesDetail';
+import RatingStars from '@/components/title/RatingStars';
 
 type TabFilter = 'all' | 'tv' | 'movie';
 
@@ -35,9 +36,6 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   const filtered = items.filter(i =>
     filter === 'all' || i.mediaType === filter
   );
-
-  const { user } = useAuth();
-  const showProviderCol = (user?.myProviders ?? []).length > 0;
 
   return (
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
@@ -69,9 +67,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           <tr>
             <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
             <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-            {showProviderCol && (
-              <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
-            )}
+            <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
             <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
           </tr>
         </thead>
@@ -89,14 +85,13 @@ export default function WatchingTable({ items }: WatchingTableProps) {
                 href={href}
                 isExpanded={isExpanded}
                 onToggle={() => setExpandedId(isExpanded ? null : item.tmdbId)}
-                showProviderCol={showProviderCol}
                 striped={idx % 2 === 1}
               />
             );
           })}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={showProviderCol ? 4 : 3} className="px-3 py-4 text-center text-sm text-text-muted">
+              <td colSpan={4} className="px-3 py-4 text-center text-sm text-text-muted">
                 Inga titlar att visa
               </td>
             </tr>
@@ -107,13 +102,12 @@ export default function WatchingTable({ items }: WatchingTableProps) {
   );
 }
 
-function WatchingRow({ item, poster, href, isExpanded, onToggle, showProviderCol, striped }: {
+function WatchingRow({ item, poster, href, isExpanded, onToggle, striped }: {
   item: WatchlistItem;
   poster: string | null;
   href: string;
   isExpanded: boolean;
   onToggle: () => void;
-  showProviderCol: boolean;
   striped: boolean;
 }) {
   const bgClass = striped ? 'bg-surface-hover/40' : '';
@@ -143,13 +137,18 @@ function WatchingRow({ item, poster, href, isExpanded, onToggle, showProviderCol
             {item.releaseYear ?? '—'}
           </div>
         </td>
-        {showProviderCol && (
-          <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
-            <ProviderPills providerIds={item.providers} />
-          </td>
-        )}
+        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
+          <ProviderPills providerIds={item.providers} />
+        </td>
         <td className="px-2 py-[5px] border-b border-border-table font-semibold text-sm">
-          {item.rating ? <span className="text-accent">{item.rating.toFixed(1)}</span> : <span className="text-text-muted font-normal">—</span>}
+          {item.rating ? (
+            <span className="inline-flex items-center gap-[4px]">
+              <RatingStars rating={item.rating} readonly size="sm" />
+              <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+            </span>
+          ) : (
+            <span className="text-text-muted font-normal">—</span>
+          )}
         </td>
       </tr>
       {isExpanded && item.mediaType === 'tv' && (

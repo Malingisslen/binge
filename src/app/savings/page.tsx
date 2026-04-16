@@ -114,12 +114,14 @@ function SavingsContent() {
     );
   }
 
-  const activeCount = advisor.providers.filter(p => p.status === 'active' || p.status === 'upcoming').length;
-  const pauseCount = advisor.providers.filter(p => p.status === 'pause').length;
+  const activeProviders = advisor.providers.filter(p => p.status === 'active' || p.status === 'upcoming');
+  const pauseProviders = advisor.providers.filter(p => p.status === 'pause');
+  const activeCount = activeProviders.length;
+  const pauseCount = pauseProviders.length;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h1 className="text-[18px] font-bold text-text-primary">Streamingrådgivare</h1>
         <div className="flex gap-[1px]">
           {([30, 60, 90] as const).map(days => (
@@ -135,12 +137,42 @@ function SavingsContent() {
           ))}
         </div>
       </div>
+      <p className="text-xs text-text-muted mb-3">
+        Analys av dina {activeCount + pauseCount} streamingtjänster baserat på serier du följer.
+      </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
-        <StatCard label="Total kr/mån" value={advisor.totalMonthlyCost > 0 ? `${advisor.totalMonthlyCost} kr` : <Link href="/settings" className="text-accent no-underline">Ange kostnad →</Link>} />
-        <StatCard label="Besparing/mån" value={advisor.monthlySavings > 0 ? `${advisor.monthlySavings} kr` : <Link href="/settings" className="text-accent no-underline">Ange kostnad →</Link>} />
-        <StatCard label="Aktiva" value={activeCount} />
-        <StatCard label="Pausa" value={pauseCount} />
+      {(pauseCount > 0 || activeCount > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px] mb-[14px]">
+          {pauseCount > 0 && (
+            <div className="bg-surface border border-border-main border-l-[3px] border-l-[#2e7d32] rounded-sm px-3 py-[10px]">
+              <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-[#2e7d32] mb-1">Kan pausas</div>
+              <div className="text-xs font-semibold text-text-primary">
+                {pauseProviders.map(p => p.shortName).join(', ')}
+              </div>
+              <div className="text-xxs text-text-muted mt-[2px]">
+                Inga serier du följer sänder de närmaste {lookAhead} dagarna.
+                {advisor.monthlySavings > 0 ? ` Sparar ${advisor.monthlySavings} kr/mån.` : ''}
+              </div>
+            </div>
+          )}
+          {activeCount > 0 && (
+            <div className="bg-surface border border-border-main border-l-[3px] border-l-accent rounded-sm px-3 py-[10px]">
+              <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-accent mb-1">Behåll</div>
+              <div className="text-xs font-semibold text-text-primary">
+                {activeProviders.map(p => p.shortName).join(', ')}
+              </div>
+              <div className="text-xxs text-text-muted mt-[2px]">
+                {activeProviders.reduce((sum, p) => sum + p.shows.length, 0)} serier du följer.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-[10px] mb-4">
+        <StatCard label="Kostnad/mån" value={advisor.totalMonthlyCost > 0 ? `${advisor.totalMonthlyCost} kr` : <Link href="/settings" className="text-accent no-underline">Ange →</Link>} />
+        <StatCard label="Kan pausas" value={pauseCount > 0 ? <span className="text-[#2e7d32]">{pauseCount} {pauseCount === 1 ? 'tjänst' : 'tjänster'}</span> : '—'} />
+        <StatCard label="Behåll" value={`${activeCount} ${activeCount === 1 ? 'tjänst' : 'tjänster'}`} />
       </div>
 
       <h2 className="text-sm font-bold text-text-secondary mb-2">Dina tjänster</h2>
@@ -150,25 +182,22 @@ function SavingsContent() {
 
       {advisor.subscribeAdvice.length > 0 && (
         <>
-          <h2 className="text-sm font-bold text-text-secondary mb-2 mt-4">Teckna</h2>
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted mt-5 mb-1">Serier på tjänster du inte har</h2>
+          <p className="text-xxs text-text-muted mb-2">Serier du följer men som kräver en tjänst du inte har.</p>
           {advisor.subscribeAdvice.map(sa => (
-            <div key={sa.providerId} className="bg-surface border border-border-main rounded-sm mb-[10px]">
-              <div className="flex items-center gap-2 px-3 py-[6px] border-b border-border-light">
-                <ProviderDot color={sa.color} size={7} />
-                <span className="text-sm font-bold text-text-secondary flex-1">{sa.providerName}</span>
-                <span className="text-xs text-text-muted">
+            <div key={sa.providerId} className="bg-surface border border-border-light rounded-sm mb-[8px] opacity-90">
+              <div className="flex items-center gap-2 px-3 py-[5px] border-b border-border-light">
+                <ProviderDot color={sa.color} size={6} />
+                <span className="text-xs font-semibold text-text-secondary flex-1">{sa.providerName}</span>
+                <span className="text-xxs text-text-muted">
                   {pluralSv(sa.shows.length, 'serie', 'serier')}
+                  {sa.nearestAirDate ? ` · nästa ${formatSwedishDate(sa.nearestAirDate)}` : ''}
                 </span>
               </div>
               <div className="px-3 py-1">
-                {sa.shows.map(show => (
+                {sa.shows.slice(0, 3).map(show => (
                   <ShowRow key={show.tmdbId} show={show} />
                 ))}
-                {sa.nearestAirDate && (
-                  <div className="text-xs text-text-muted py-1 border-t border-border-light mt-1">
-                    Teckna {sa.shortName} från ~{formatSwedishDate(sa.nearestAirDate)}
-                  </div>
-                )}
               </div>
             </div>
           ))}

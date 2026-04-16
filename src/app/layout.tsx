@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Providers from '@/components/Providers';
-import Sidebar from '@/components/layout/Sidebar';
-import TopBar from '@/components/layout/TopBar';
-import MobileNav from '@/components/layout/MobileNav';
+import AppShell from '@/components/layout/AppShell';
 
 export const metadata: Metadata = {
   title: 'Binge.nu — Håll koll på vad du tittar på',
@@ -24,18 +22,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="sv" suppressHydrationWarning>
-      <body className="flex min-h-screen" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <Providers>
-          <div className="hidden md:block">
-            <Sidebar />
-          </div>
-          <MobileNav />
-          <div className="flex-1 overflow-y-auto">
-            <TopBar />
-            <main className="p-[14px_18px]">
-              {children}
-            </main>
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

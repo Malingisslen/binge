@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
 import { useFollowing } from '@/hooks/useFollow';
+import { useAuth } from '@/hooks/useAuth';
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
@@ -16,6 +16,7 @@ export default function FeedPage() {
 
 function FeedContent() {
   const { followingUids } = useFollowing();
+  const { user } = useAuth();
 
   const { data: feedItems, isLoading } = useQuery({
     queryKey: ['feed', followingUids],
@@ -67,13 +68,37 @@ function FeedContent() {
       {isLoading && <div className="text-sm text-text-muted py-4">Laddar...</div>}
 
       {!isLoading && followingUids.length === 0 && (
-        <div className="bg-surface border border-border-main rounded-sm px-4 py-8 text-center">
-          <Users size={32} className="text-text-muted mx-auto mb-2 opacity-40" />
-          <div className="text-sm font-semibold text-text-secondary mb-1">Följ vänner</div>
-          <p className="text-xs text-text-muted mb-3">Se vad andra tittar på genom att följa deras profiler.</p>
-          <Link href="/search" className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline">
-            Sök användare
-          </Link>
+        <div className="bg-surface border border-border-main rounded-sm px-4 py-4">
+          <p className="text-xs text-text-secondary mb-3 leading-relaxed">
+            Se vad dina vänner tittar på, betygsätter och lägger till. Följ andra användare för att se deras aktivitet här.
+          </p>
+          <div className="border border-dashed border-border-main rounded-sm p-[10px] mb-3">
+            <div className="text-xxs uppercase tracking-[0.5px] text-text-muted mb-[6px]">Så här ser det ut</div>
+            <div className="flex gap-2 items-center py-[3px] opacity-50">
+              <div className="w-[20px] h-[20px] rounded-full bg-accent shrink-0" />
+              <div>
+                <div className="text-xxs"><b>Anna</b> <span className="text-text-muted">betygsatte</span> <b>The Bear</b> <span className="text-accent">★★★★★</span></div>
+                <div className="text-xxs text-text-muted">2 timmar sedan</div>
+              </div>
+            </div>
+            <div className="flex gap-2 items-center py-[3px] opacity-50">
+              <div className="w-[20px] h-[20px] rounded-full bg-[#6a7d5e] shrink-0" />
+              <div>
+                <div className="text-xxs"><b>Erik</b> <span className="text-text-muted">började följa</span> <b>Severance</b></div>
+                <div className="text-xxs text-text-muted">5 timmar sedan</div>
+              </div>
+            </div>
+          </div>
+          <div className="text-center">
+            <Link href="/search" className="inline-block px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline">
+              Sök användare att följa
+            </Link>
+            {user?.username && (
+              <div className="text-xxs text-text-muted mt-[4px]">
+                eller dela din profillänk: <span className="text-text-secondary">binge.nu/u/{user.username}</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

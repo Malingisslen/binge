@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
-import { formatSwedishDate } from '@/lib/utils';
 
 export default function SubscriptionAdvisorWidget() {
   const advisor = useSubscriptionAdvisor();
@@ -11,44 +10,38 @@ export default function SubscriptionAdvisorWidget() {
   if (advisor.providers.length === 0) return null;
 
   const pausable = advisor.providers.filter(p => p.status === 'pause');
-  const teckna = advisor.subscribeAdvice.slice(0, 2);
+  const teckna = advisor.subscribeAdvice.slice(0, 1);
   const hasTips = pausable.length > 0 || teckna.length > 0;
 
   if (!hasTips) return null;
 
+  const message = (() => {
+    if (pausable.length > 0) {
+      const names = pausable.map(p => p.shortName).join(' och ');
+      const savings = advisor.monthlySavings > 0 ? ` Sparar ${advisor.monthlySavings} kr/mån.` : '';
+      return (
+        <span>
+          Du kan pausa <b>{names}</b> — inga serier sänds just nu.{savings}
+        </span>
+      );
+    }
+    if (teckna.length > 0) {
+      const sa = teckna[0];
+      return (
+        <span>
+          Teckna <b>{sa.shortName}</b> för {sa.shows.slice(0, 2).map(s => s.title).join(', ')}
+        </span>
+      );
+    }
+    return null;
+  })();
+
   return (
-    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-      <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
-        <span className="text-sm font-bold text-text-secondary">Streamingtips</span>
-        <Link href="/savings" className="text-xs text-text-muted no-underline hover:text-accent">
-          Detaljer →
-        </Link>
-      </div>
-      <div className="px-3 py-2 space-y-[6px]">
-        <p className="text-xxs text-text-muted mb-1">Baserat på dina tjänster och serier du följer.</p>
-        {pausable.length > 0 && (
-          <div className="text-xs text-text-secondary">
-            Du kan pausa{' '}
-            <span className="font-semibold">
-              {pausable.map(p => p.shortName).join(' och ')}
-            </span>
-            {' — inga serier sänds just nu.'}
-            {pausable.length === 1 && pausable[0].monthlyCost
-              ? ` Sparar ${pausable[0].monthlyCost} kr/mån.`
-              : advisor.monthlySavings > 0
-              ? ` Sparar ${advisor.monthlySavings} kr/mån.`
-              : ''}
-          </div>
-        )}
-        {teckna.map(sa => (
-          <div key={sa.providerId} className="text-xs text-text-secondary">
-            Teckna <span className="font-semibold">{sa.shortName}</span>
-            {sa.nearestAirDate && ` från ${formatSwedishDate(sa.nearestAirDate)}`}
-            {' — '}
-            {sa.shows.slice(0, 2).map(s => s.title).join(', ')}
-          </div>
-        ))}
-      </div>
+    <div className="bg-accent/[0.04] border border-accent/60 rounded-sm mb-[14px] px-3 py-[6px] flex items-center justify-between gap-2">
+      <span className="text-xs text-text-secondary">{message}</span>
+      <Link href="/savings" className="text-xs text-accent no-underline shrink-0">
+        Mer →
+      </Link>
     </div>
   );
 }

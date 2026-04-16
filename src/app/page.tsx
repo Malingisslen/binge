@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
+import UpcomingCards from '@/components/dashboard/UpcomingCards';
 import WatchingTable from '@/components/dashboard/WatchingTable';
 import SubscriptionAdvisorWidget from '@/components/dashboard/SubscriptionAdvisorWidget';
 import SearchDropdown from '@/components/search/SearchDropdown';
@@ -24,70 +24,69 @@ function LandingPage() {
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (
-    <div>
-      <div className="text-center py-8">
-        <h1 className="text-[24px] font-extrabold text-accent mb-1">
-          binge<span className="font-normal text-text-muted text-[18px]">.nu</span>
-        </h1>
-        <p className="text-[15px] font-semibold text-text-primary mb-1 max-w-[440px] mx-auto">
-          Håll koll på vad du tittar på — och var det streamas.
-        </p>
-        <p className="text-xs text-text-muted mb-3 max-w-[400px] mx-auto">
-          Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
-        </p>
-        <div className="relative max-w-[400px] mx-auto mb-4" ref={searchRef}>
-          <div className="flex items-center gap-[5px] px-3 py-[6px] bg-surface border border-border-main rounded-sm">
-            <Search size={14} className="text-text-muted shrink-0" />
-            <input
-              type="text"
-              placeholder="Sök film eller serie..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              className="bg-transparent border-none text-text-primary text-sm font-[inherit] outline-none w-full placeholder:text-text-muted"
-            />
+    <div className="min-h-screen bg-page">
+      <section className="bg-gradient-to-b from-[#1e2028] to-[#2a2a3a] text-white">
+        <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
+          <h1 className="text-[32px] font-extrabold text-accent mb-2">
+            binge<span className="font-normal text-white/60 text-[22px]">.nu</span>
+          </h1>
+          <p className="text-[17px] font-semibold mb-2 max-w-[520px] mx-auto">
+            Håll koll på vad du tittar på — och var det streamas.
+          </p>
+          <p className="text-sm text-white/60 mb-5 max-w-[480px] mx-auto leading-relaxed">
+            Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
+          </p>
+          <div className="relative max-w-[440px] mx-auto mb-4" ref={searchRef}>
+            <div className="flex items-center gap-[5px] px-3 py-[8px] bg-white/[0.08] border border-white/10 rounded-sm">
+              <Search size={14} className="text-white/50 shrink-0" />
+              <input
+                type="text"
+                placeholder="Sök film eller serie..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                className="bg-transparent border-none text-white text-sm font-[inherit] outline-none w-full placeholder:text-white/40"
+              />
+            </div>
+            {searchFocused && debouncedQuery.length >= 2 && (
+              <SearchDropdown
+                query={debouncedQuery}
+                onSelect={clearSearch}
+              />
+            )}
           </div>
-          {searchFocused && debouncedQuery.length >= 2 && (
-            <SearchDropdown
-              query={debouncedQuery}
-              onSelect={clearSearch}
-            />
-          )}
-        </div>
-        <div className="flex items-center justify-center gap-3 mb-6">
           <button
             onClick={signIn}
-            className="px-4 py-[5px] bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-xs font-semibold"
+            className="px-5 py-[7px] bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
           >
             Logga in med Google
           </button>
-          <Link href="/login/" className="text-xs text-accent no-underline">
-            Skapa konto
-          </Link>
-        </div>
-        <div className="grid grid-cols-3 gap-4 max-w-[480px] mx-auto text-center">
-          <div>
-            <div className="text-xs font-bold text-text-secondary mb-[2px]">Streaming-koll</div>
-            <div className="text-xxs text-text-muted leading-snug">Se direkt vilken tjänst som har titeln du söker i Sverige.</div>
-          </div>
-          <div>
-            <div className="text-xs font-bold text-text-secondary mb-[2px]">Avsnittkalender</div>
-            <div className="text-xxs text-text-muted leading-snug">Håll reda på när nya avsnitt av dina serier släpps.</div>
-          </div>
-          <div>
-            <div className="text-xs font-bold text-text-secondary mb-[2px]">Sparrådgivare</div>
-            <div className="text-xxs text-text-muted leading-snug">Få tips om vilka tjänster du kan pausa och spara pengar.</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-[520px] mx-auto text-center">
+            <div>
+              <div className="text-xs font-bold text-white mb-[2px]">Streaming-koll</div>
+              <div className="text-xxs text-white/50 leading-snug">Se direkt vilken tjänst som har titeln du söker i Sverige.</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white mb-[2px]">Avsnittkalender</div>
+              <div className="text-xxs text-white/50 leading-snug">Håll reda på när nya avsnitt av dina serier släpps.</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white mb-[2px]">Sparrådgivare</div>
+              <div className="text-xxs text-white/50 leading-snug">Få tips om vilka tjänster du kan pausa och spara pengar.</div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {items.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
+        <section className="max-w-[1000px] mx-auto px-4 py-8">
+          <div className="bg-surface border border-border-main rounded-sm">
+            <div className="px-3 py-[6px] border-b border-border-light">
+              <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
+            </div>
+            <TitleGrid items={items} />
           </div>
-          <TitleGrid items={items} />
-        </div>
+        </section>
       )}
     </div>
   );
@@ -143,7 +142,7 @@ export default function DashboardPage() {
   return (
     <>
       {isEmpty && <OnboardingCTA />}
-      <WeeklyCalendar entries={calendarEntries} />
+      <UpcomingCards entries={calendarEntries} />
       <SubscriptionAdvisorWidget />
       <WatchingTable items={following} />
     </>
