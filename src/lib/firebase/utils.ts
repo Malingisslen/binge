@@ -5,3 +5,7 @@ export function toDate(val: unknown): Date {
   if (val instanceof Date) return val;
   return new Date();
 }
+
+export function randomId(): string {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+}

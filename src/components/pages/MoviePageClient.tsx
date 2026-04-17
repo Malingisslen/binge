@@ -7,6 +7,7 @@ import { useMovie } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import AddToListButton from '@/components/title/AddToListButton';
+import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import NotesBlock from '@/components/title/NotesBlock';
@@ -132,6 +133,13 @@ export default function MoviePageClient({ id }: { id: string }) {
             />
           </div>
           <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
+          <AddToGroupButton
+            tmdbId={movie.id}
+            mediaType="movie"
+            title={displayTitle}
+            posterPath={movie.poster_path}
+            releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
+          />
         </div>
 
         {/* Providers — streaming prominent, rent/buy collapsed */}

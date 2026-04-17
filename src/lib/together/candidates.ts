@@ -3,14 +3,13 @@ import type {
   ProviderMode,
   SessionCandidate,
   SessionConfig,
-  SessionParticipant,
   TMDBSearchResult,
 } from '@/types';
 
 const MAX_CANDIDATES = 30;
 
 export function computeSessionProviders(
-  participants: SessionParticipant[],
+  participants: ReadonlyArray<{ providers: number[] }>,
   mode: ProviderMode,
 ): number[] {
   const lists = participants
