@@ -149,6 +149,48 @@ export interface SessionSwipe {
   updatedAt: Date;
 }
 
+// Permanenta grupper (Fas 2)
+export type GroupRole = 'owner' | 'member';
+
+export interface GroupDefaults {
+  providerMode: ProviderMode;
+  aggregation: AggregationStrategy;
+  mediaType: SessionMediaType;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  ownerUid: string;
+  memberUids: string[];
+  defaults: GroupDefaults;
+  inviteToken: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GroupMember {
+  uid: string;
+  displayName: string;
+  username: string | null;
+  photoURL: string | null;
+  providers: number[];
+  role: GroupRole;
+  joinedAt: Date;
+  notifications: boolean;
+}
+
+export interface GroupWatchlistItem {
+  tmdbId: number;
+  mediaType: MediaType;
+  title: string;
+  posterPath: string | null;
+  releaseYear: number | null;
+  addedBy: string;
+  addedAt: Date;
+  memberRatings: Record<string, number>;
+}
+
 // TMDB types
 export interface TMDBSearchResult {
   id: number;

@@ -7,6 +7,7 @@ import { useTVShow } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import AddToListButton from '@/components/title/AddToListButton';
+import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
@@ -129,6 +130,13 @@ export default function TVShowPageClient({ id }: { id: string }) {
             />
           </div>
           <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
+          <AddToGroupButton
+            tmdbId={show.id}
+            mediaType="tv"
+            title={displayTitle}
+            posterPath={show.poster_path}
+            releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
+          />
         </div>
 
         {/* Next episode */}
