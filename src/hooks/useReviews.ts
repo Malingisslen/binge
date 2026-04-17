@@ -42,7 +42,15 @@ export function useReviewActions() {
   const { uid, user } = useAuth();
   const queryClient = useQueryClient();
 
-  const submitReview = async (tmdbId: number, mediaType: MediaType, text: string, spoiler: boolean, rating: number | null, existingId?: string) => {
+  const submitReview = async (
+    tmdbId: number,
+    mediaType: MediaType,
+    text: string,
+    spoiler: boolean,
+    rating: number | null,
+    existingId?: string,
+    titleMeta?: { title: string; posterPath: string | null },
+  ) => {
     if (!uid || !user) return;
     const reviewData = {
       uid,
@@ -53,6 +61,7 @@ export function useReviewActions() {
       rating,
       displayName: user.displayName,
       username: user.username,
+      ...(titleMeta ? { title: titleMeta.title, posterPath: titleMeta.posterPath } : {}),
       updatedAt: serverTimestamp(),
     };
     if (existingId) {

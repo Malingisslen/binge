@@ -42,6 +42,23 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
       allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+
+      // Likes — varje inloggad user äger sitt eget like-dok (doc-id = uid)
+      match /likes/{uid} {
+        allow read: if true;
+        allow create, delete: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Comments — alla inloggade kan kommentera; ägaren eller review-ägaren kan ta bort
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && request.resource.data.uid == request.auth.uid;
+        allow delete: if request.auth != null && (
+          resource.data.uid == request.auth.uid
+          || get(/databases/$(database)/documents/reviews/$(reviewId)).data.uid == request.auth.uid
+        );
+      }
     }
 
     // Lists — public read if isPublic, owner write

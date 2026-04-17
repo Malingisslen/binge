@@ -262,7 +262,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
           </div>
         )}
 
-        <ReviewList tmdbId={show.id} mediaType="tv" />
+        <ReviewList tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
 
         <RecommendationsSection
           recommendations={mappedRecs}

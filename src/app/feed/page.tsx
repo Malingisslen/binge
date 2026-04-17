@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { Heart, MessageCircle } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import QuickAddButton from '@/components/title/QuickAddButton';
 import { useFollowing } from '@/hooks/useFollow';
@@ -11,6 +12,36 @@ import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import type { MediaType } from '@/types';
+
+interface FeedWatchlistItem {
+  kind: 'watchlist';
+  uid: string;
+  displayName: string;
+  username: string | null;
+  title: string;
+  tmdbId: number;
+  mediaType: string;
+  status: string;
+  posterPath: string | null;
+  updatedAt: Date;
+}
+
+interface FeedReviewItem {
+  kind: 'review';
+  uid: string;
+  displayName: string;
+  username: string | null;
+  reviewId: string;
+  tmdbId: number;
+  mediaType: string;
+  title: string;
+  text: string;
+  spoiler: boolean;
+  posterPath: string | null;
+  updatedAt: Date;
+}
+
+type FeedItem = FeedWatchlistItem | FeedReviewItem;
 
 export default function FeedPage() {
   return <AuthGuard><FeedContent /></AuthGuard>;
@@ -22,14 +53,14 @@ function FeedContent() {
 
   const { data: feedItems, isLoading } = useQuery({
     queryKey: ['feed', followingUids],
-    queryFn: async () => {
+    queryFn: async (): Promise<FeedItem[]> => {
       if (followingUids.length === 0) return [];
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
       const results = await Promise.all(
         followingUids.slice(0, 30).map(async uid => {
-          const [profileSnap, watchlistSnap] = await Promise.all([
+          const [profileSnap, watchlistSnap, reviewsSnap] = await Promise.all([
             getDoc(doc(db, 'users', uid)),
             getDocs(query(
               collection(db, 'users', uid, 'watchlist'),
@@ -37,13 +68,20 @@ function FeedContent() {
               orderBy('updatedAt', 'desc'),
               limit(5),
             )),
+            getDocs(query(
+              collection(db, 'reviews'),
+              where('uid', '==', uid),
+              limit(10),
+            )),
           ]);
           const profile = profileSnap.data();
           const displayName = profile?.displayName ?? 'Okänd';
           const username = profile?.username ?? null;
-          return watchlistSnap.docs.map(d => {
+
+          const watchlistItems: FeedItem[] = watchlistSnap.docs.map(d => {
             const data = d.data();
             return {
+              kind: 'watchlist',
               uid,
               displayName,
               username,
@@ -55,6 +93,29 @@ function FeedContent() {
               updatedAt: toDate(data.updatedAt),
             };
           });
+
+          const reviewItems: FeedReviewItem[] = [];
+          for (const d of reviewsSnap.docs) {
+            const data = d.data();
+            const createdAt = toDate(data.createdAt);
+            if (createdAt < twoWeeksAgo) continue;
+            reviewItems.push({
+              kind: 'review',
+              uid,
+              displayName,
+              username,
+              reviewId: d.id,
+              tmdbId: data.tmdbId as number,
+              mediaType: data.mediaType as string,
+              title: (data.title as string) ?? 'Okänd titel',
+              text: data.text as string,
+              spoiler: (data.spoiler as boolean) ?? false,
+              posterPath: null,
+              updatedAt: createdAt,
+            });
+          }
+
+          return [...watchlistItems, ...reviewItems];
         })
       );
       return results.flat().sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
@@ -112,38 +173,73 @@ function FeedContent() {
 
       <div className="space-y-[6px]">
         {feedItems?.map((item, i) => {
-          const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`;
-          const poster = posterUrl(item.posterPath, 'w92');
-          const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : item.status === 'vill_se' ? 'vill se' : 'uppdaterade';
-          return (
-            <div key={`${item.uid}-${item.tmdbId}-${i}`} className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2 items-center">
-              {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" />}
-              <div className="flex-1 min-w-0">
-                <div className="text-xs">
-                  {item.username ? (
-                    <Link href={`/user/${item.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">{item.displayName}</Link>
-                  ) : (
-                    <span className="font-semibold">{item.displayName}</span>
-                  )}
-                  <span className="text-text-muted"> {statusLabel} </span>
-                  <Link href={href} className="font-semibold text-text-primary no-underline hover:text-accent">{item.title}</Link>
-                </div>
-                <div className="text-xxs text-text-muted mt-[1px]">
-                  {item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}
-                </div>
-              </div>
-              <div className="shrink-0">
-                <QuickAddButton
-                  tmdbId={item.tmdbId}
-                  mediaType={item.mediaType as MediaType}
-                  title={item.title}
-                  posterPath={item.posterPath}
-                  releaseYear={null}
-                />
-              </div>
-            </div>
-          );
+          const key = item.kind === 'review' ? `r-${item.reviewId}` : `w-${item.uid}-${item.tmdbId}-${i}`;
+          if (item.kind === 'review') return <FeedReviewCard key={key} item={item} />;
+          return <FeedWatchlistCard key={key} item={item} />;
         })}
+      </div>
+    </div>
+  );
+}
+
+function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
+  const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`;
+  const poster = posterUrl(item.posterPath, 'w92');
+  const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : item.status === 'vill_se' ? 'vill se' : 'uppdaterade';
+  return (
+    <div className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2 items-center">
+      {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <div className="text-xs">
+          {item.username ? (
+            <Link href={`/user/${item.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">{item.displayName}</Link>
+          ) : (
+            <span className="font-semibold">{item.displayName}</span>
+          )}
+          <span className="text-text-muted"> {statusLabel} </span>
+          <Link href={href} className="font-semibold text-text-primary no-underline hover:text-accent">{item.title}</Link>
+        </div>
+        <div className="text-xxs text-text-muted mt-[1px]">
+          {item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}
+        </div>
+      </div>
+      <div className="shrink-0">
+        <QuickAddButton
+          tmdbId={item.tmdbId}
+          mediaType={item.mediaType as MediaType}
+          title={item.title}
+          posterPath={item.posterPath}
+          releaseYear={null}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FeedReviewCard({ item }: { item: FeedReviewItem }) {
+  const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/#review-${item.reviewId}`;
+  const preview = item.text.length > 160 ? item.text.slice(0, 160) + '…' : item.text;
+  return (
+    <div className="bg-surface border border-border-main rounded-sm px-3 py-2">
+      <div className="text-xs mb-1">
+        {item.username ? (
+          <Link href={`/user/${item.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">{item.displayName}</Link>
+        ) : (
+          <span className="font-semibold">{item.displayName}</span>
+        )}
+        <span className="text-text-muted"> recenserade </span>
+        <Link href={href} className="font-semibold text-text-primary no-underline hover:text-accent">{item.title}</Link>
+      </div>
+      {item.spoiler ? (
+        <div className="text-xxs text-text-muted italic">Spoiler — öppna recensionen för att läsa.</div>
+      ) : (
+        <p className="text-xs text-text-secondary leading-relaxed m-0 mb-[4px]">{preview}</p>
+      )}
+      <div className="flex items-center gap-3 text-xxs text-text-muted pt-[4px] border-t border-border-light">
+        <span>{item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}</span>
+        <Link href={href} className="inline-flex items-center gap-[3px] text-text-muted hover:text-accent no-underline">
+          <Heart size={10} /> <MessageCircle size={10} /> Läs och svara
+        </Link>
       </div>
     </div>
   );
