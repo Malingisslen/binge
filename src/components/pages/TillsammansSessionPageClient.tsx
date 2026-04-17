@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy } from 'lucide-react';
+import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy, Radio } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession, getStoredParticipantId, storeParticipantId } from '@/hooks/useSession';
 import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
@@ -199,6 +199,21 @@ function SessionMain({
   const [view, setView] = useState<'card' | 'table'>('card');
   const [shareCopied, setShareCopied] = useState(false);
   const [vetoConfirm, setVetoConfirm] = useState<SessionCandidate | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Re-evaluera "live"-statusen var 3:e sekund så banner blinkar av/på i takt
+  // med att deltagare går idle. onSnapshot räcker inte — lastActiveAt ändras
+  // bara på nya svepningar.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const liveParticipants = useMemo(
+    () => participants.filter(p => now - p.lastActiveAt.getTime() < 10_000),
+    [participants, now],
+  );
+  const isFullyLive = participants.length >= 2 && liveParticipants.length === participants.length;
 
   const effectiveProviders = useMemo(
     () => computeSessionProviders(participants, session.config.providerMode),
@@ -280,6 +295,13 @@ function SessionMain({
         <span className="text-xxs text-text-muted">({sessionId.slice(0, 6)})</span>
       </div>
 
+      {isFullyLive && (
+        <div className="flex items-center gap-2 px-3 py-[5px] mb-[6px] bg-[#2e7d32]/[0.08] border border-[#2e7d32]/30 rounded-sm text-xs">
+          <Radio size={11} className="text-[#2e7d32] animate-pulse" />
+          <span className="text-[#2e7d32] font-semibold">Live — alla deltagare är aktiva just nu</span>
+        </div>
+      )}
+
       <div className="bg-surface border border-border-main rounded-sm mb-[8px]">
         <div className="flex items-center gap-2 px-3 py-[6px] border-b border-border-light text-xs">
           <Share2 size={12} className="text-text-muted" />
@@ -298,14 +320,16 @@ function SessionMain({
           {participants.map(p => {
             const prog = participantSwipeProgress(swipes, filteredCandidates, p.id);
             const isMe = p.id === me.id;
+            const isLive = liveParticipants.some(lp => lp.id === p.id);
             return (
               <span
                 key={p.id}
-                className={`px-[6px] py-[1px] border rounded-sm text-xxs ${
+                className={`inline-flex items-center gap-[4px] px-[6px] py-[1px] border rounded-sm text-xxs ${
                   isMe ? 'border-accent text-accent font-semibold' : 'border-border-main text-text-secondary'
                 }`}
-                title={`${prog.done}/${prog.total} svepningar`}
+                title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
               >
+                {isLive && <span className="w-[5px] h-[5px] rounded-full bg-[#2e7d32]" />}
                 {p.displayName}{p.isHost ? ' ★' : ''} <span className="text-text-muted">({prog.done}/{prog.total})</span>
               </span>
             );

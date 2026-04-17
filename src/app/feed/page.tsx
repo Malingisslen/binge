@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
+import QuickAddButton from '@/components/title/QuickAddButton';
 import { useFollowing } from '@/hooks/useFollow';
 import { useAuth } from '@/hooks/useAuth';
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
+import type { MediaType } from '@/types';
 
 export default function FeedPage() {
   return <AuthGuard><FeedContent /></AuthGuard>;
@@ -114,7 +116,7 @@ function FeedContent() {
           const poster = posterUrl(item.posterPath, 'w92');
           const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : item.status === 'vill_se' ? 'vill se' : 'uppdaterade';
           return (
-            <div key={`${item.uid}-${item.tmdbId}-${i}`} className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2">
+            <div key={`${item.uid}-${item.tmdbId}-${i}`} className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2 items-center">
               {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" />}
               <div className="flex-1 min-w-0">
                 <div className="text-xs">
@@ -129,6 +131,15 @@ function FeedContent() {
                 <div className="text-xxs text-text-muted mt-[1px]">
                   {item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}
                 </div>
+              </div>
+              <div className="shrink-0">
+                <QuickAddButton
+                  tmdbId={item.tmdbId}
+                  mediaType={item.mediaType as MediaType}
+                  title={item.title}
+                  posterPath={item.posterPath}
+                  releaseYear={null}
+                />
               </div>
             </div>
           );

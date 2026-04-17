@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFollowerCount, useFollowingCount } from '@/hooks/useFollow';
 import { useTasteMatch } from '@/hooks/useTasteVector';
 import FollowButton from '@/components/social/FollowButton';
+import ProfileStatsPanel from '@/components/social/ProfileStatsPanel';
 import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
 
@@ -59,6 +60,8 @@ export default function UserProfilePageClient({ username }: { username: string }
         <StatCard label="Sedd" value={watched.length} />
         <StatCard label="Medelbetyg" value={avgRating > 0 ? avgRating.toFixed(1) : '—'} />
       </div>
+
+      <ProfileStatsPanel items={watchlist ?? []} />
 
       {!isOwnProfile && (
         <div className="bg-surface border border-border-main rounded-sm px-3 py-2 mb-4">
