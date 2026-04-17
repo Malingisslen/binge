@@ -3,13 +3,18 @@
 import { useMemo } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { usePublicWatchlist } from '@/hooks/usePublicProfile';
+import { useAuth } from '@/hooks/useAuth';
 import { buildTasteVector, isUsableVector } from '@/lib/taste/vector';
 import { matchPercent } from '@/lib/taste/similarity';
 import type { TasteVector } from '@/types';
 
 export function useMyTasteVector(): TasteVector {
   const { items } = useWatchlist();
-  return useMemo(() => buildTasteVector(items), [items]);
+  const { user } = useAuth();
+  return useMemo(
+    () => buildTasteVector(items, user?.calibrationGenres ?? null),
+    [items, user?.calibrationGenres],
+  );
 }
 
 export function useTasteMatch(targetUid: string | null): {
