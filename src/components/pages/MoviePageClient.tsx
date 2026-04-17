@@ -14,6 +14,7 @@ import RecommendationsSection from '@/components/title/RecommendationsSection';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 
 export default function MoviePageClient({ id }: { id: string }) {
   const movieId = parseInt(id, 10);
@@ -29,13 +30,14 @@ export default function MoviePageClient({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (movie) document.title = `${movie.title} — Binge.nu`;
+    if (movie) document.title = `${preferOriginalTitle(movie.title, movie.original_title)} — Binge.nu`;
     return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
   }, [movie]);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!movie) return <div className="text-sm text-text-muted py-4">Filmen hittades inte.</div>;
 
+  const displayTitle = preferOriginalTitle(movie.title, movie.original_title);
   const watchlistItem = getItem(movie.id);
   const poster = posterUrl(movie.poster_path, 'w500');
   const backdrop = backdropUrl(movie.backdrop_path);
@@ -53,7 +55,7 @@ export default function MoviePageClient({ id }: { id: string }) {
     ?? movie.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
 
   return (
-    <div className="-m-[14px_-18px] md:-m-[14px_-18px]">
+    <div className="-mt-[14px] -mx-[18px]">
       {/* Hero backdrop */}
       <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (
@@ -66,14 +68,14 @@ export default function MoviePageClient({ id }: { id: string }) {
         <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={movie.title} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
+            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
           ) : (
             <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
               <Film size={32} className="text-text-muted" />
             </div>
           )}
           <div className="relative z-10 pb-1">
-            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{movie.title}</h1>
+            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{displayTitle}</h1>
             <div className="text-sm text-text-secondary">
               {year} · {movie.runtime} min · {genres}
             </div>
@@ -113,7 +115,7 @@ export default function MoviePageClient({ id }: { id: string }) {
           <StatusButton
             tmdbId={movie.id}
             mediaType="movie"
-            title={movie.title}
+            title={displayTitle}
             posterPath={movie.poster_path}
             releaseYear={parseInt(year, 10) || null}
             providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
@@ -129,7 +131,7 @@ export default function MoviePageClient({ id }: { id: string }) {
               size="lg"
             />
           </div>
-          <AddToListButton tmdbId={movie.id} mediaType="movie" title={movie.title} posterPath={movie.poster_path} />
+          <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
         </div>
 
         {/* Providers — streaming prominent, rent/buy collapsed */}

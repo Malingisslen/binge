@@ -3,14 +3,14 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { posterUrl } from '@/lib/tmdb/client';
+import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
 
 function fmtShortDate(iso: string): string {
-  const d = new Date(iso);
-  const weekday = d.toLocaleDateString('sv-SE', { weekday: 'short' }).slice(0, 3);
+  const d = new Date(iso + 'T00:00:00');
   const day = d.getDate();
   const month = d.toLocaleDateString('sv-SE', { month: 'short' }).replace('.', '');
-  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${day} ${month}`;
+  return `${shortSwedishWeekday(iso)} ${day} ${month}`;
 }
 
 interface UpcomingCardsProps {
@@ -59,16 +59,14 @@ export default function UpcomingCards({ entries }: UpcomingCardsProps) {
           </Link>
         );
       })}
-      <Link
-        href="/calendar"
-        className="min-w-[180px] shrink-0 bg-surface border border-border-main rounded-sm px-3 py-[8px] flex items-center justify-center text-center text-xxs text-text-muted no-underline hover:border-accent/40 transition-colors"
-      >
-        {upcoming.length === 0 ? (
+      {upcoming.length < 6 && (
+        <Link
+          href="/calendar"
+          className="min-w-[180px] shrink-0 bg-surface border border-border-main rounded-sm px-3 py-[8px] flex items-center justify-center text-center text-xxs text-text-muted no-underline hover:border-accent/40 transition-colors"
+        >
           <span>Inga fler avsnitt denna vecka<br /><span className="text-accent">Kalender →</span></span>
-        ) : (
-          <span className="text-accent">Hela kalendern →</span>
-        )}
-      </Link>
+        </Link>
+      )}
     </div>
   );
 }

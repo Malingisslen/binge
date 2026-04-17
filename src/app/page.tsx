@@ -61,18 +61,18 @@ function LandingPage() {
           >
             Logga in med Google
           </button>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-[520px] mx-auto text-center">
-            <div>
-              <div className="text-xs font-bold text-white mb-[2px]">Streaming-koll</div>
-              <div className="text-xxs text-white/50 leading-snug">Se direkt vilken tjänst som har titeln du söker i Sverige.</div>
+          <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
+            <div className="text-center">
+              <div className="text-xs font-bold text-accent mb-[3px]">Streaming-koll</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
-            <div>
-              <div className="text-xs font-bold text-white mb-[2px]">Avsnittkalender</div>
-              <div className="text-xxs text-white/50 leading-snug">Håll reda på när nya avsnitt av dina serier släpps.</div>
+            <div className="text-center">
+              <div className="text-xs font-bold text-accent mb-[3px]">Avsnittkalender</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
-            <div>
-              <div className="text-xs font-bold text-white mb-[2px]">Sparrådgivare</div>
-              <div className="text-xxs text-white/50 leading-snug">Få tips om vilka tjänster du kan pausa och spara pengar.</div>
+            <div className="text-center">
+              <div className="text-xs font-bold text-accent mb-[3px]">Sparrådgivare</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>
         </div>

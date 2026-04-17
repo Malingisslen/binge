@@ -6,9 +6,18 @@ import { Search, Film, Tv } from 'lucide-react';
 import { posterUrl } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useCalendarEntries } from '@/hooks/useCalendar';
 import { getProvider } from '@/lib/tmdb/providers';
 import RatingStars from '@/components/title/RatingStars';
+import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
 import type { WatchStatus, WatchlistItem } from '@/types';
+
+function upcomingWeekday(isoDate: string | undefined): string | null {
+  if (!isoDate) return null;
+  if (isoDate < todayIso()) return null;
+  if (daysBetween(todayIso(), new Date(isoDate + 'T00:00:00')) > 4) return null;
+  return shortSwedishWeekday(isoDate);
+}
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
@@ -34,10 +43,23 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   const [view, setView] = useState<ViewMode>(status === 'följer' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const calendarEntries = useCalendarEntries();
+  const nextAirByTmdbId = useMemo(() => {
+    const m = new Map<number, string>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (const e of calendarEntries) {
+      if (new Date(e.airDate) < today) continue;
+      const prev = m.get(e.tmdbId);
+      if (!prev || e.airDate < prev) m.set(e.tmdbId, e.airDate);
+    }
+    return m;
+  }, [calendarEntries]);
 
   useEffect(() => {
+    if (status === 'följer') return;
     if (user?.defaultView) setView(user.defaultView);
-  }, [user?.defaultView]);
+  }, [user?.defaultView, status]);
 
   const filtered = useMemo(() => {
     let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
@@ -71,34 +93,36 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="flex gap-[1px]">
-          {(['all', 'tv', 'movie'] as const)
-            .filter(f => status !== 'följer' || f !== 'movie')
-            .map(f => (
-            <span
-              key={f}
-              onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
-              className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                mediaFilter === f ? 'bg-accent text-white' : 'text-text-muted'
-              }`}
-            >
-              {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
-            </span>
-          ))}
-        </div>
+        {status !== 'följer' && (
+          <div className="flex gap-[1px]">
+            {(['all', 'tv', 'movie'] as const).map(f => (
+              <span
+                key={f}
+                onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
+                className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+                  mediaFilter === f ? 'bg-accent text-white' : 'text-text-muted'
+                }`}
+              >
+                {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
+              </span>
+            ))}
+          </div>
+        )}
 
-        <select
-          value={sort}
-          onChange={e => setSort(e.target.value as SortKey)}
-          className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
-        >
-          <option value="updatedAt">Senast ändrad</option>
-          <option value="title">Titel A-Ö</option>
-          <option value="rating">Betyg</option>
-          <option value="releaseYear">År</option>
-          <option value="addedAt">Tillagd</option>
-          <option value="watchedAt">Sedd datum</option>
-        </select>
+        {status !== 'följer' && (
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as SortKey)}
+            className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
+          >
+            <option value="updatedAt">Senast ändrad</option>
+            <option value="title">Titel A-Ö</option>
+            <option value="rating">Betyg</option>
+            <option value="releaseYear">År</option>
+            <option value="addedAt">Tillagd</option>
+            <option value="watchedAt">Sedd datum</option>
+          </select>
+        )}
 
         {totalCount > 10 && (
           <div className="flex items-center gap-[5px] px-2 py-[2px] bg-surface border border-border-main rounded-sm">
@@ -190,7 +214,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
             <WatchlistCard
               key={item.tmdbId}
               item={item}
-              onRate={r => updateRating(item.tmdbId, r)}
+              nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
             />
           ))}
           {filtered.length === 0 && (
@@ -335,7 +359,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
   );
 }
 
-function WatchlistCard({ item, onRate }: { item: WatchlistItem; onRate: (r: number | null) => void }) {
+function WatchlistCard({ item, nextAirDate }: { item: WatchlistItem; nextAirDate?: string }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const poster = posterUrl(item.posterPath, 'w185');
@@ -344,18 +368,23 @@ function WatchlistCard({ item, onRate }: { item: WatchlistItem; onRate: (r: numb
 
   const progressPct = useMemo(() => {
     if (item.mediaType !== 'tv') return null;
+    if (item.status === 'sedd') return 100;
     if (!item.totalSeasons || !item.lastWatchedSeason) return 0;
     const seasonPart = (item.lastWatchedSeason - 1) / item.totalSeasons;
     const episodePart = item.lastWatchedEpisode ? 1 / (item.totalSeasons * 20) : 0;
     return Math.min(100, Math.round((seasonPart + episodePart) * 100));
   }, [item]);
 
-  const progressLabel = (() => {
-    if (item.mediaType === 'movie') return item.status === 'sedd' ? 'Sedd' : '—';
-    if (!item.totalSeasons) return '—';
-    if (item.status === 'sedd') return 'Klar';
-    if (item.lastWatchedSeason) return `S${item.lastWatchedSeason}${item.lastWatchedEpisode ? ` · E${item.lastWatchedEpisode}` : ''}`;
-    return 'Ej påbörjad';
+  const upcomingWd = upcomingWeekday(nextAirDate);
+  const progressLabel: { text: string; tone: 'done' | 'accent' | 'muted' } = (() => {
+    if (item.mediaType === 'movie') {
+      return { text: item.status === 'sedd' ? 'Sedd' : '—', tone: item.status === 'sedd' ? 'done' : 'muted' };
+    }
+    if (item.status === 'sedd') return { text: 'Klar', tone: 'done' };
+    if (upcomingWd) return { text: `Nytt ${upcomingWd.toLowerCase()}`, tone: 'accent' };
+    if (!item.totalSeasons) return { text: '—', tone: 'muted' };
+    if (item.lastWatchedSeason) return { text: `Pågår S${item.lastWatchedSeason}`, tone: 'muted' };
+    return { text: 'Ej påbörjad', tone: 'muted' };
   })();
 
   const providersToShow = item.providers.slice(0, 3);
@@ -379,11 +408,11 @@ function WatchlistCard({ item, onRate }: { item: WatchlistItem; onRate: (r: numb
           <span className="shrink-0">
             {item.rating !== null ? (
               <span className="inline-flex items-center gap-[3px]">
-                <RatingStars rating={item.rating} onChange={onRate} size="sm" />
+                <RatingStars rating={item.rating} readonly size="sm" />
                 <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
               </span>
             ) : (
-              <RatingStars rating={null} onChange={onRate} size="sm" />
+              <span className="text-xxs text-text-muted/60">Ej betygsatt</span>
             )}
           </span>
         </div>
@@ -414,12 +443,16 @@ function WatchlistCard({ item, onRate }: { item: WatchlistItem; onRate: (r: numb
           <div className="mt-[5px] flex items-center gap-[6px]">
             <div className="flex-1 h-[3px] bg-[#eee] rounded-sm overflow-hidden">
               <div
-                className={`h-full ${item.status === 'sedd' ? 'bg-[#2e7d32]' : 'bg-accent'}`}
+                className={`h-full ${progressLabel.tone === 'done' ? 'bg-[#2e7d32]' : 'bg-accent'}`}
                 style={{ width: `${progressPct ?? 0}%` }}
               />
             </div>
-            <span className={`text-xxs ${item.status === 'sedd' ? 'text-[#2e7d32]' : 'text-text-muted'}`}>
-              {progressLabel}
+            <span className={`text-xxs ${
+              progressLabel.tone === 'done' ? 'text-[#2e7d32]'
+              : progressLabel.tone === 'accent' ? 'text-accent font-semibold'
+              : 'text-text-muted'
+            }`}>
+              {progressLabel.text}
             </span>
           </div>
         )}

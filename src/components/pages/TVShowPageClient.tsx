@@ -17,6 +17,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
+import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
@@ -33,13 +34,14 @@ export default function TVShowPageClient({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (show) document.title = `${show.name} — Binge.nu`;
+    if (show) document.title = `${preferOriginalTitle(show.name, show.original_name)} — Binge.nu`;
     return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
   }, [show]);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
 
+  const displayTitle = preferOriginalTitle(show.name, show.original_name);
   const watchlistItem = getItem(show.id);
   const poster = posterUrl(show.poster_path, 'w500');
   const backdrop = backdropUrl(show.backdrop_path);
@@ -59,7 +61,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const imdbId = show.external_ids?.imdb_id;
 
   return (
-    <div className="-m-[14px_-18px] md:-m-[14px_-18px]">
+    <div className="-mt-[14px] -mx-[18px]">
       {/* Hero backdrop */}
       <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (
@@ -72,14 +74,14 @@ export default function TVShowPageClient({ id }: { id: string }) {
         <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={show.name} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
+            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
           ) : (
             <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
               <Tv size={32} className="text-text-muted" />
             </div>
           )}
           <div className="relative z-10 pb-1">
-            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{show.name}</h1>
+            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{displayTitle}</h1>
             <div className="text-sm text-text-secondary">
               {yearStart}{yearEnd ? `–${yearEnd}` : '-'} · {show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''} · {genres}
             </div>
@@ -109,7 +111,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
           <StatusButton
             tmdbId={show.id}
             mediaType="tv"
-            title={show.name}
+            title={displayTitle}
             posterPath={show.poster_path}
             releaseYear={parseInt(yearStart, 10) || null}
             totalSeasons={show.number_of_seasons}
@@ -126,7 +128,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
               size="lg"
             />
           </div>
-          <AddToListButton tmdbId={show.id} mediaType="tv" title={show.name} posterPath={show.poster_path} />
+          <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
         </div>
 
         {/* Next episode */}

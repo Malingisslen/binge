@@ -10,8 +10,6 @@ import type { WatchlistItem } from '@/types';
 import SeriesDetail from '@/components/tv/SeriesDetail';
 import RatingStars from '@/components/title/RatingStars';
 
-type TabFilter = 'all' | 'tv' | 'movie';
-
 interface WatchingTableProps {
   items: WatchlistItem[];
 }
@@ -30,49 +28,31 @@ function ExpandedRow({ tmdbId, onClose }: { tmdbId: number; onClose: () => void 
 }
 
 export default function WatchingTable({ items }: WatchingTableProps) {
-  const [filter, setFilter] = useState<TabFilter>('all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  const filtered = items.filter(i =>
-    filter === 'all' || i.mediaType === filter
-  );
+  const visible = items.slice(0, 8);
+  const hasMore = items.length > visible.length;
 
   return (
     <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
       <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
-        <div className="flex items-center">
-          <span className="text-sm font-bold text-text-secondary">Följer</span>
-          <div className="flex gap-[1px] ml-[10px]">
-            {(['all', 'tv'] as const).map(tab => (
-              <span
-                key={tab}
-                onClick={() => setFilter(tab)}
-                className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                  filter === tab
-                    ? 'bg-accent text-white'
-                    : 'text-text-muted'
-                }`}
-              >
-                {tab === 'all' ? 'Alla' : tab === 'tv' ? 'Serier' : 'Film'}
-              </span>
-            ))}
-          </div>
-        </div>
+        <span className="text-sm font-bold text-text-secondary">
+          Följer <span className="text-text-muted font-normal">· {items.length} {items.length === 1 ? 'titel' : 'titlar'}</span>
+        </span>
         <Link href="/my/following" className="text-xs text-accent no-underline">
-          Alla {items.length} →
+          Visa alla →
         </Link>
       </div>
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
-            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-            <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Var</th>
-            <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
+            <th className="text-left px-3 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
+            <th className="text-left px-3 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
+            <th className="text-left px-3 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Streamas på</th>
+            <th className="text-left px-3 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map((item, idx) => {
+          {visible.map((item, idx) => {
             const poster = posterUrl(item.posterPath, 'w92');
             const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
             const isExpanded = expandedId === item.tmdbId;
@@ -89,7 +69,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
               />
             );
           })}
-          {filtered.length === 0 && (
+          {visible.length === 0 && (
             <tr>
               <td colSpan={4} className="px-3 py-4 text-center text-sm text-text-muted">
                 Inga titlar att visa
@@ -98,6 +78,13 @@ export default function WatchingTable({ items }: WatchingTableProps) {
           )}
         </tbody>
       </table>
+      {hasMore && (
+        <div className="px-3 py-[6px] text-center border-t border-border-light">
+          <Link href="/my/following" className="text-xs text-accent no-underline">
+            Visa alla {items.length} →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -117,37 +104,37 @@ function WatchingRow({ item, poster, href, isExpanded, onToggle, striped }: {
         onClick={item.mediaType === 'tv' ? onToggle : undefined}
         className={`${item.mediaType === 'tv' ? 'cursor-pointer' : ''} hover:[&>td]:bg-surface-hover ${bgClass}`}
       >
-        <td className="px-2 py-[5px] border-b border-border-table">
+        <td className="px-3 py-[5px] border-b border-border-table w-[44px]">
           <Link href={href} onClick={e => e.stopPropagation()}>
             {poster ? (
-              <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
+              <img src={poster} alt="" className="w-[28px] h-[42px] rounded-sm object-cover" />
             ) : (
-              <div className="w-[32px] h-[48px] rounded-sm bg-[#ddd8d0]" />
+              <div className="w-[28px] h-[42px] rounded-sm bg-[#ddd8d0]" />
             )}
           </Link>
         </td>
-        <td className="px-2 py-[5px] border-b border-border-table">
-          <div className="font-semibold text-base">
+        <td className="px-3 py-[5px] border-b border-border-table">
+          <div className="font-semibold text-xs">
             {item.title}
             {item.rewatchCount > 0 && (
               <span className="ml-1 text-xxs text-text-muted font-normal">x{item.rewatchCount + 1}</span>
             )}
           </div>
-          <div className="text-xs text-text-muted">
+          <div className="text-xxs text-text-muted">
             {item.releaseYear ?? '—'}
           </div>
         </td>
-        <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table">
+        <td className="px-3 py-[5px] border-b border-border-table">
           <ProviderPills providerIds={item.providers} />
         </td>
-        <td className="px-2 py-[5px] border-b border-border-table font-semibold text-sm">
+        <td className="px-3 py-[5px] border-b border-border-table">
           {item.rating ? (
             <span className="inline-flex items-center gap-[4px]">
               <RatingStars rating={item.rating} readonly size="sm" />
               <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
             </span>
           ) : (
-            <span className="text-text-muted font-normal">—</span>
+            <span className="text-text-muted">—</span>
           )}
         </td>
       </tr>

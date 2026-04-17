@@ -6,6 +6,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import { formatEpisodeCode } from '@/lib/utils';
+import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import type { TMDBTVShow } from '@/types';
 
 export interface CalendarEntry {
@@ -83,7 +84,7 @@ export function useCalendarEntries() {
         if (!ep.air_date) continue;
         result.push({
           tmdbId: item.showId,
-          title: item.show.name,
+          title: preferOriginalTitle(item.show.name, item.show.original_name),
           posterPath: item.show.poster_path,
           season: ep.season_number,
           episode: ep.episode_number,
