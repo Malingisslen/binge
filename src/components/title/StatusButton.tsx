@@ -15,6 +15,7 @@ interface StatusButtonProps {
   releaseYear: number | null;
   totalSeasons?: number | null;
   providers?: number[];
+  genreIds?: number[];
 }
 
 export default function StatusButton({
@@ -25,6 +26,7 @@ export default function StatusButton({
   releaseYear,
   totalSeasons,
   providers,
+  genreIds,
 }: StatusButtonProps) {
   const { getItem, addItem, removeItem } = useWatchlist();
   const { show: toast } = useToast();
@@ -50,6 +52,7 @@ export default function StatusButton({
       lastWatchedSeason: current?.lastWatchedSeason ?? null,
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: providers ?? current?.providers ?? [],
+      genreIds: genreIds ?? current?.genreIds ?? [],
     });
     toast(`${title} — ${labelFor(status)}`);
     setOpen(false);

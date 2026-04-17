@@ -1,4 +1,12 @@
-import type { SessionCandidate, SessionParticipant, SessionSwipe, VoteKind } from '@/types';
+import type {
+  AggregationStrategy,
+  SessionCandidate,
+  SessionParticipant,
+  SessionSwipe,
+  TasteVector,
+  VoteKind,
+} from '@/types';
+import { scoreCandidateForUser } from '@/lib/taste/similarity';
 
 export interface CandidateResult {
   candidate: SessionCandidate;
@@ -7,18 +15,53 @@ export interface CandidateResult {
   noCount: number;
   vetoed: boolean;
   score: number;
+  tasteScore: number;
   allVoted: boolean;
   missing: string[];
+}
+
+// Aggregeringsstrategier (Fas 3) — smak-scores modulerar vote-baserad score.
+//
+// - least_misery: straffar oenighet hårt, föredrar min-smak (ingen ska hata)
+// - average: belönar brett gillande (summan av smak-scores)
+// - fair: enstaka topp-pick får slå igenom (max-smak)
+//
+// Om smakvektorer saknas för deltagare (t.ex. gäster) blir taste-bidraget 0
+// och vi faller tillbaka till klassisk vote-scoring (yes − no × 0.5).
+function aggregateTaste(
+  scores: number[],
+  strategy: AggregationStrategy,
+): number {
+  if (scores.length === 0) return 0;
+  switch (strategy) {
+    case 'least_misery': return Math.min(...scores);
+    case 'fair': return Math.max(...scores);
+    case 'average':
+    default:
+      return scores.reduce((s, x) => s + x, 0) / scores.length;
+  }
+}
+
+function votePenalty(strategy: AggregationStrategy): number {
+  switch (strategy) {
+    case 'least_misery': return 0.7;
+    case 'fair': return 0.3;
+    case 'average':
+    default: return 0.5;
+  }
 }
 
 export function scoreCandidates(params: {
   candidates: SessionCandidate[];
   participants: SessionParticipant[];
   swipes: SessionSwipe[];
+  tasteByPid?: Map<string, TasteVector>;
+  aggregation?: AggregationStrategy;
 }): CandidateResult[] {
-  const { candidates, participants, swipes } = params;
+  const { candidates, participants, swipes, tasteByPid, aggregation = 'least_misery' } = params;
   const swipeMap = new Map(swipes.map(s => [s.tmdbId, s]));
   const pids = participants.map(p => p.id);
+  const penalty = votePenalty(aggregation);
 
   return candidates.map(c => {
     const votes = swipeMap.get(c.tmdbId)?.votes ?? {};
@@ -30,13 +73,27 @@ export function scoreCandidates(params: {
       else if (v === 'veto') veto = true;
     }
     const missing = pids.filter(pid => !votes[pid]);
+
+    const tasteScores: number[] = [];
+    if (tasteByPid) {
+      for (const p of participants) {
+        const tv = tasteByPid.get(p.id);
+        if (tv) tasteScores.push(scoreCandidateForUser(c.genreIds, tv));
+      }
+    }
+    const tasteScore = aggregateTaste(tasteScores, aggregation);
+
+    const voteScore = yes - no * penalty;
+    const score = veto ? -Infinity : voteScore + tasteScore;
+
     return {
       candidate: c,
       votes,
       yesCount: yes,
       noCount: no,
       vetoed: veto,
-      score: veto ? -Infinity : yes - no * 0.5,
+      score,
+      tasteScore,
       allVoted: missing.length === 0,
       missing,
     };

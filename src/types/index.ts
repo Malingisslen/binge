@@ -16,9 +16,16 @@ export interface WatchlistItem {
   dropped: boolean;
   rewatchCount: number;
   providers: number[];
+  genreIds: number[];
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;
+}
+
+// Fas 3 — smakvektor (genre-viktad profil för taste-match)
+export interface TasteVector {
+  genres: Record<number, number>;
+  sampleSize: number;
 }
 
 export interface EpisodeProgress {
