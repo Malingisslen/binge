@@ -117,6 +117,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
             releaseYear={parseInt(yearStart, 10) || null}
             totalSeasons={show.number_of_seasons}
             providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
+            genreIds={show.genres.map(g => g.id)}
           />
           <div>
             {watchlistItem && (

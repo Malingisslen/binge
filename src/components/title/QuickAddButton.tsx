@@ -40,6 +40,7 @@ export default function QuickAddButton({
       lastWatchedSeason: current?.lastWatchedSeason ?? null,
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
       providers: current?.providers ?? [],
+      genreIds: current?.genreIds ?? [],
     });
     toast(`${title} — ${labelFor(status)}`);
     setOpen(false);

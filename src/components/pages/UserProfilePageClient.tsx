@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePublicProfile, usePublicWatchlist } from '@/hooks/usePublicProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useFollowerCount, useFollowingCount } from '@/hooks/useFollow';
+import { useTasteMatch } from '@/hooks/useTasteVector';
 import FollowButton from '@/components/social/FollowButton';
 import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
@@ -14,6 +15,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   const { uid: myUid } = useAuth();
   const { data: followerCount } = useFollowerCount(data?.uid ?? null);
   const { data: followingCount } = useFollowingCount(data?.uid ?? null);
+  const taste = useTasteMatch(data?.uid ?? null);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!data) return <div className="text-sm text-text-muted py-4">Användaren hittades inte.</div>;
@@ -57,6 +59,28 @@ export default function UserProfilePageClient({ username }: { username: string }
         <StatCard label="Sedd" value={watched.length} />
         <StatCard label="Medelbetyg" value={avgRating > 0 ? avgRating.toFixed(1) : '—'} />
       </div>
+
+      {!isOwnProfile && (
+        <div className="bg-surface border border-border-main rounded-sm px-3 py-2 mb-4">
+          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-[2px]">
+            Smak-match med dig
+          </div>
+          {taste.percent != null ? (
+            <div className="flex items-baseline gap-2">
+              <span className="text-[22px] font-bold text-accent leading-none">{taste.percent}%</span>
+              <span className="text-xxs text-text-muted">
+                baserat på {taste.mySampleSize} titlar från dig och {taste.theirSampleSize} från {profile.displayName}
+              </span>
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted">
+              {taste.mySampleSize < 5
+                ? 'Lägg till och betygsätt fler titlar för att se smak-match.'
+                : `${profile.displayName} har för få betygsatta titlar för att räkna ut matchning.`}
+            </div>
+          )}
+        </div>
+      )}
 
       {following.length > 0 && (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">

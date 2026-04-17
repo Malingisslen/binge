@@ -9,6 +9,7 @@ import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress } from '@/lib/together/matching';
+import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
 import type { SessionCandidate, SessionParticipant, VoteKind } from '@/types';
 
@@ -216,9 +217,17 @@ function SessionMain({
     );
   }, [session.candidates, effectiveProviders, session.config.providerMode]);
 
+  const tasteByPid = useSessionTasteVectors(participants);
+
   const scored = useMemo(
-    () => scoreCandidates({ candidates: filteredCandidates, participants, swipes }),
-    [filteredCandidates, participants, swipes],
+    () => scoreCandidates({
+      candidates: filteredCandidates,
+      participants,
+      swipes,
+      tasteByPid,
+      aggregation: session.config.aggregation,
+    }),
+    [filteredCandidates, participants, swipes, tasteByPid, session.config.aggregation],
   );
 
   const matches = useMemo(

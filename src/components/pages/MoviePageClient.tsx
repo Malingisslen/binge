@@ -120,6 +120,7 @@ export default function MoviePageClient({ id }: { id: string }) {
             posterPath={movie.poster_path}
             releaseYear={parseInt(year, 10) || null}
             providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
+            genreIds={movie.genres.map(g => g.id)}
           />
           <div>
             {watchlistItem && (

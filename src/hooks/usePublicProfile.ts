@@ -60,6 +60,7 @@ export function usePublicWatchlist(uid: string | null) {
           dropped: (data.dropped as boolean) ?? false,
           rewatchCount: (data.rewatchCount as number) ?? 0,
           providers: (data.providers as number[]) ?? [],
+          genreIds: (data.genreIds as number[]) ?? [],
           addedAt: toDate(data.addedAt),
           updatedAt: toDate(data.updatedAt),
           watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
