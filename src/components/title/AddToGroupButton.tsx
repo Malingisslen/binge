@@ -5,9 +5,11 @@ import { UsersRound } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups } from '@/hooks/useGroups';
 import { useClickOutside } from '@/hooks/useClickOutside';
-import { addToGroupWatchlist, removeFromGroupWatchlist } from '@/lib/firebase/groups';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import {
+  addToGroupWatchlist,
+  hasInGroupWatchlist,
+  removeFromGroupWatchlist,
+} from '@/lib/firebase/groups';
 import type { MediaType } from '@/types';
 
 interface Props {
@@ -31,11 +33,9 @@ export default function AddToGroupButton({
   useClickOutside(ref, close);
 
   const refreshPresence = useCallback(async () => {
-    const checks = await Promise.all(groups.map(async g => {
-      const snap = await getDocs(collection(db, 'groups', g.id, 'watchlist'));
-      const has = snap.docs.some(d => Number(d.id) === tmdbId);
-      return [g.id, has] as const;
-    }));
+    const checks = await Promise.all(
+      groups.map(async g => [g.id, await hasInGroupWatchlist(g.id, tmdbId)] as const),
+    );
     setPresence(Object.fromEntries(checks));
   }, [groups, tmdbId]);
 

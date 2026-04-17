@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
+import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
 import { useAuth } from '@/hooks/useAuth';
 import { createGroup } from '@/lib/firebase/groups';
 import type {
@@ -69,7 +70,7 @@ function NyGruppContent() {
       </p>
 
       <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
-        <Section title="Gruppnamn">
+        <FormSection title="Gruppnamn">
           <input
             type="text"
             value={name}
@@ -78,10 +79,10 @@ function NyGruppContent() {
             maxLength={48}
             className="w-full max-w-[360px] px-2 py-1 text-base border border-border-main rounded-sm bg-white"
           />
-        </Section>
+        </FormSection>
 
-        <Section title="Default: vad?">
-          <RadioGroup
+        <FormSection title="Default: vad?">
+          <FormRadioGroup
             name="mediaType"
             value={mediaType}
             onChange={v => setMediaType(v as SessionMediaType)}
@@ -91,10 +92,10 @@ function NyGruppContent() {
               { value: 'both', label: 'Blandat' },
             ]}
           />
-        </Section>
+        </FormSection>
 
-        <Section title="Default: provider-läge">
-          <RadioGroup
+        <FormSection title="Default: provider-läge">
+          <FormRadioGroup
             name="providerMode"
             value={providerMode}
             onChange={v => setProviderMode(v as ProviderMode)}
@@ -103,10 +104,10 @@ function NyGruppContent() {
               { value: 'union', label: 'Någon har (union)', desc: 'Inkluderar titlar som bara någon har' },
             ]}
           />
-        </Section>
+        </FormSection>
 
-        <Section title="Default: aggregering">
-          <RadioGroup
+        <FormSection title="Default: aggregering">
+          <FormRadioGroup
             name="aggregation"
             value={aggregation}
             onChange={v => setAggregation(v as AggregationStrategy)}
@@ -116,7 +117,7 @@ function NyGruppContent() {
               { value: 'fair', label: 'Turordning', desc: 'Var och en får prio i tur' },
             ]}
           />
-        </Section>
+        </FormSection>
 
         <p className="px-3 py-2 text-xxs text-text-muted border-t border-border-light">
           Defaults används när du startar en ny session med gruppen — du kan
@@ -144,45 +145,6 @@ function NyGruppContent() {
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="px-3 py-[10px] border-b border-border-light last:border-b-0">
-      <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-[6px]">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function RadioGroup<T extends string>({
-  name, value, onChange, options,
-}: {
-  name: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string; desc?: string }[];
-}) {
-  return (
-    <div className="space-y-[3px]">
-      {options.map(opt => (
-        <label key={opt.value} className="flex items-start gap-2 cursor-pointer text-xs py-[2px]">
-          <input
-            type="radio"
-            name={name}
-            value={opt.value}
-            checked={value === opt.value}
-            onChange={() => onChange(opt.value)}
-            className="accent-accent w-[12px] h-[12px] mt-[2px]"
-          />
-          <div>
-            <div className="text-text-primary">{opt.label}</div>
-            {opt.desc && <div className="text-xxs text-text-muted">{opt.desc}</div>}
-          </div>
-        </label>
-      ))}
     </div>
   );
 }

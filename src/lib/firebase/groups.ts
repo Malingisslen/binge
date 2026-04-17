@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   addDoc,
   query,
   where,
@@ -16,7 +17,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './config';
-import { toDate } from './utils';
+import { toDate, randomId } from './utils';
 import type {
   Group,
   GroupDefaults,
@@ -25,13 +26,6 @@ import type {
   GroupWatchlistItem,
   MediaType,
 } from '@/types';
-
-function randomToken(): string {
-  return (
-    Math.random().toString(36).slice(2, 10) +
-    Math.random().toString(36).slice(2, 10)
-  );
-}
 
 export async function createGroup(params: {
   ownerUid: string;
@@ -47,7 +41,7 @@ export async function createGroup(params: {
     ownerUid: params.ownerUid,
     memberUids: [params.ownerUid],
     defaults: params.defaults,
-    inviteToken: randomToken(),
+    inviteToken: randomId(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -58,7 +52,7 @@ export async function createGroup(params: {
     username: params.ownerUsername,
     photoURL: params.ownerPhotoURL,
     providers: params.ownerProviders,
-    role: 'owner' as GroupRole,
+    role: 'owner',
     notifications: true,
     joinedAt: serverTimestamp(),
   });
@@ -77,9 +71,14 @@ export async function updateGroup(
 }
 
 export async function rotateInviteToken(groupId: string): Promise<string> {
-  const token = randomToken();
+  const token = randomId();
   await updateGroup(groupId, { inviteToken: token });
   return token;
+}
+
+export async function hasInGroupWatchlist(groupId: string, tmdbId: number): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
+  return snap.exists();
 }
 
 export async function disableInviteToken(groupId: string): Promise<void> {
@@ -116,7 +115,7 @@ export async function joinGroupViaToken(params: {
     username: params.username,
     photoURL: params.photoURL,
     providers: params.providers,
-    role: 'member' as GroupRole,
+    role: 'member',
     notifications: true,
     joinedAt: serverTimestamp(),
   });
@@ -143,7 +142,7 @@ export async function addMemberByUid(params: {
     username: params.username,
     photoURL: params.photoURL,
     providers: params.providers,
-    role: 'member' as GroupRole,
+    role: 'member',
     notifications: true,
     joinedAt: serverTimestamp(),
   });
@@ -196,15 +195,9 @@ export async function setMemberRating(params: {
   rating: number | null;
 }): Promise<void> {
   const ref = doc(db, 'groups', params.groupId, 'watchlist', String(params.tmdbId));
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-  const existing = (snap.data().memberRatings as Record<string, number>) ?? {};
-  if (params.rating == null) {
-    delete existing[params.uid];
-  } else {
-    existing[params.uid] = params.rating;
-  }
-  await updateDoc(ref, { memberRatings: existing });
+  await updateDoc(ref, {
+    [`memberRatings.${params.uid}`]: params.rating == null ? deleteField() : params.rating,
+  });
 }
 
 export async function addToGroupWatchlist(params: {
@@ -251,9 +244,9 @@ export function groupDocToObject(id: string, data: Record<string, unknown>): Gro
   };
 }
 
-export function memberDocToObject(_id: string, data: Record<string, unknown>): GroupMember {
+export function memberDocToObject(id: string, data: Record<string, unknown>): GroupMember {
   return {
-    uid: (data.uid as string) ?? _id,
+    uid: (data.uid as string) ?? id,
     displayName: (data.displayName as string) ?? '',
     username: (data.username as string | null) ?? null,
     photoURL: (data.photoURL as string | null) ?? null,

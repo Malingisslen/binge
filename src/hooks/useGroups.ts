@@ -38,26 +38,17 @@ export function useGroup(groupId: string | null) {
     setLoading(true);
     setNotFound(false);
 
-    const unsubs: Array<() => void> = [];
-    let gotGroup = false;
+    const unsubs = [
+      subscribeToGroup(groupId, g => {
+        setGroup(g);
+        setNotFound(g == null);
+        setLoading(false);
+      }),
+      subscribeToGroupMembers(groupId, setMembers),
+      subscribeToGroupWatchlist(groupId, setWatchlist),
+    ];
 
-    unsubs.push(subscribeToGroup(groupId, g => {
-      gotGroup = true;
-      setGroup(g);
-      if (!g) setNotFound(true);
-      setLoading(false);
-    }));
-    unsubs.push(subscribeToGroupMembers(groupId, setMembers));
-    unsubs.push(subscribeToGroupWatchlist(groupId, setWatchlist));
-
-    const t = setTimeout(() => {
-      if (!gotGroup) { setLoading(false); setNotFound(true); }
-    }, 5000);
-
-    return () => {
-      unsubs.forEach(fn => fn());
-      clearTimeout(t);
-    };
+    return () => unsubs.forEach(fn => fn());
   }, [groupId]);
 
   return { group, members, watchlist, loading, notFound };

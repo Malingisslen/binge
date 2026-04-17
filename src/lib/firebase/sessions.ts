@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './config';
-import { toDate } from './utils';
+import { toDate, randomId } from './utils';
 import type {
   SessionConfig,
   SessionCandidate,
@@ -21,10 +21,6 @@ import type {
 } from '@/types';
 
 const SESSION_TTL_DAYS = 7;
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
-}
 
 export async function createSession(params: {
   hostUid: string | null;

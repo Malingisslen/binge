@@ -21,15 +21,15 @@ import {
   removeFromGroupWatchlist,
   setMemberRating,
 } from '@/lib/firebase/groups';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { lookupUserByHandle } from '@/lib/firebase/username';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
-import { generateCandidates } from '@/lib/together/candidates';
+import { computeSessionProviders, generateCandidates } from '@/lib/together/candidates';
 import { storeParticipantId } from '@/hooks/useSession';
 import { posterUrl } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import type {
   AggregationStrategy,
+  Group,
   GroupDefaults,
   GroupMember,
   GroupWatchlistItem,
@@ -130,7 +130,7 @@ function GroupView({
   groupId, group, members, watchlist, myUid, isOwner,
 }: {
   groupId: string;
-  group: { id: string; name: string; ownerUid: string; memberUids: string[]; defaults: GroupDefaults; inviteToken: string | null };
+  group: Group;
   members: GroupMember[];
   watchlist: GroupWatchlistItem[];
   myUid: string;
@@ -141,14 +141,14 @@ function GroupView({
   const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const intersectProviders = useMemo(() => {
-    const lists = members.map(m => m.providers).filter(l => l.length > 0);
-    if (lists.length === 0) return [];
-    return lists.reduce<number[]>((acc, list, idx) => {
-      const set = new Set(list);
-      return idx === 0 ? Array.from(set) : acc.filter(id => set.has(id));
-    }, []);
-  }, [members]);
+  const intersectProviders = useMemo(
+    () => computeSessionProviders(members, 'intersect'),
+    [members],
+  );
+  const unionProviders = useMemo(
+    () => computeSessionProviders(members, 'union'),
+    [members],
+  );
 
   const startSession = async () => {
     setError(null);
@@ -169,9 +169,7 @@ function GroupView({
         config,
       });
       storeParticipantId(sessionId, myUid);
-      const seedProviders = config.providerMode === 'intersect'
-        ? intersectProviders
-        : Array.from(new Set(members.flatMap(m => m.providers)));
+      const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
       const candidates = await generateCandidates({ config, providers: seedProviders });
       await setSessionCandidates(sessionId, candidates);
       router.push(`/tillsammans/${sessionId}`);
@@ -232,7 +230,7 @@ function GroupView({
             myUid={myUid}
             isOwner={isOwner}
           />
-          <ProviderOverlapPanel members={members} intersect={intersectProviders} />
+          <ProviderOverlapPanel intersect={intersectProviders} union={unionProviders} />
           {isOwner && <InvitePanel groupId={groupId} group={group} />}
           {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>
@@ -357,26 +355,20 @@ function AddByHandle({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    const h = handle.trim().toLowerCase().replace(/^@/, '');
-    if (!h) return;
+    if (!handle.trim()) return;
     setWorking(true);
     try {
-      const usernameSnap = await getDoc(doc(db, 'usernames', h));
-      if (!usernameSnap.exists()) { setErr('Hittade ingen användare med det @handle:t.'); setWorking(false); return; }
-      const targetUid = usernameSnap.data().uid as string;
-      if (existingUids.includes(targetUid)) { setErr('Användaren är redan medlem.'); setWorking(false); return; }
-
-      const profileSnap = await getDoc(doc(db, 'users', targetUid));
-      if (!profileSnap.exists()) { setErr('Profil hittades inte.'); setWorking(false); return; }
-      const p = profileSnap.data();
+      const target = await lookupUserByHandle(handle);
+      if (!target) { setErr('Hittade ingen användare med det @handle:t.'); return; }
+      if (existingUids.includes(target.uid)) { setErr('Användaren är redan medlem.'); return; }
 
       await addMemberByUid({
         groupId,
-        uid: targetUid,
-        displayName: (p.displayName as string) ?? h,
-        username: (p.username as string | null) ?? h,
-        photoURL: (p.photoURL as string | null) ?? null,
-        providers: (p.myProviders as number[]) ?? [],
+        uid: target.uid,
+        displayName: target.displayName,
+        username: target.username,
+        photoURL: target.photoURL,
+        providers: target.myProviders,
       });
       setHandle('');
       onDone();
@@ -411,12 +403,9 @@ function AddByHandle({
   );
 }
 
-function ProviderOverlapPanel({ members, intersect }: { members: GroupMember[]; intersect: number[] }) {
-  const allUnion = useMemo(() => {
-    const s = new Set<number>();
-    for (const m of members) m.providers.forEach(p => s.add(p));
-    return Array.from(s);
-  }, [members]);
+function ProviderOverlapPanel({ intersect, union }: { intersect: number[]; union: number[] }) {
+  const intersectSet = useMemo(() => new Set(intersect), [intersect]);
+  const onlySome = useMemo(() => union.filter(id => !intersectSet.has(id)), [union, intersectSet]);
 
   return (
     <div className="bg-surface border border-border-main rounded-sm">
@@ -429,8 +418,8 @@ function ProviderOverlapPanel({ members, intersect }: { members: GroupMember[]; 
           <ProviderPills ids={intersect} highlight />
         </div>
         <div>
-          <div className="text-xxs text-text-muted mb-1">Någon har ({allUnion.length})</div>
-          <ProviderPills ids={allUnion.filter(id => !intersect.includes(id))} />
+          <div className="text-xxs text-text-muted mb-1">Någon har ({union.length})</div>
+          <ProviderPills ids={onlySome} />
         </div>
       </div>
     </div>
