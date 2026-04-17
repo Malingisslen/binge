@@ -58,6 +58,7 @@ export interface UserProfile {
   hiddenCountries: string[];
   providerCosts: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;
+  calibrationGenres: Record<number, number> | null;
   createdAt: Date;
   updatedAt: Date;
   notificationSettings: {

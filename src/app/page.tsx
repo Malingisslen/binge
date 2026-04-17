@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import { Search, Sparkles } from 'lucide-react';
 import UpcomingCards from '@/components/dashboard/UpcomingCards';
 import WatchingTable from '@/components/dashboard/WatchingTable';
 import SubscriptionAdvisorWidget from '@/components/dashboard/SubscriptionAdvisorWidget';
@@ -92,6 +92,26 @@ function LandingPage() {
   );
 }
 
+function CalibrationCTA() {
+  return (
+    <div className="bg-surface border border-accent/30 rounded-sm mb-[14px] px-3 py-2 flex items-center gap-3">
+      <Sparkles size={16} className="text-accent shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-bold text-text-primary">Kalibrera din smak</div>
+        <div className="text-xxs text-text-muted">
+          Svep igenom 10 populära titlar så lär vi känna din stil — används för smak-match och rekommendationer.
+        </div>
+      </div>
+      <Link
+        href="/kalibrera/"
+        className="shrink-0 px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline"
+      >
+        Kalibrera
+      </Link>
+    </div>
+  );
+}
+
 function OnboardingCTA() {
   return (
     <div className="bg-surface border border-accent/30 rounded-sm mb-[14px] px-4 py-4 text-center">
@@ -138,10 +158,15 @@ export default function DashboardPage() {
   }
 
   const isEmpty = items.length === 0;
+  const hasAnyRating = items.some(i => i.rating != null);
+  const needsCalibration = !isEmpty
+    && !hasAnyRating
+    && !user.calibrationGenres;
 
   return (
     <>
       {isEmpty && <OnboardingCTA />}
+      {needsCalibration && <CalibrationCTA />}
       <UpcomingCards entries={calendarEntries} />
       <SubscriptionAdvisorWidget />
       <WatchingTable items={following} />

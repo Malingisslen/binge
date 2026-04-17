@@ -34,6 +34,7 @@ interface AuthState {
   updateIsPublic: (isPublic: boolean) => Promise<void>;
   updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
   updateHiddenCountries: (countries: string[]) => Promise<void>;
+  setCalibrationGenres: (genres: Record<number, number> | null) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -55,6 +56,7 @@ const AuthContext = createContext<AuthState>({
   updateIsPublic: async () => {},
   updateHideNonLatinTitles: async () => {},
   updateHiddenCountries: async () => {},
+  setCalibrationGenres: async () => {},
   deleteAccount: async () => {},
 });
 
@@ -77,6 +79,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
+      calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       notificationSettings: data.notificationSettings ?? {
@@ -99,6 +102,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     hiddenCountries: [],
     providerCosts: {},
     providerPauses: {},
+    calibrationGenres: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     notificationSettings: {
@@ -166,7 +170,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(prev => prev ? { ...prev, [field]: value } : null);
   }, [uid]);
 
-  const updateProviders = useCallback((providers: number[]) => updateUserField('myProviders', providers), [updateUserField]);
+  const updateProviders = useCallback(async (providers: number[]) => {
+    await updateUserField('myProviders', providers);
+    if (!uid) return;
+    // Provider-drift (Fas 2): propagera ändringen till gruppmedlemskap så
+    // gruppens intersect/union hålls aktuell utan att medlemmen behöver
+    // gå in i varje grupp och uppdatera.
+    const { updateMemberProviders } = await import('@/lib/firebase/groups');
+    const { collection: col, getDocs: get, query: q, where } = await import('firebase/firestore');
+    const snap = await get(q(col(db, 'groups'), where('memberUids', 'array-contains', uid)));
+    await Promise.all(
+      snap.docs.map(d => updateMemberProviders(d.id, uid, providers).catch(() => {})),
+    );
+  }, [updateUserField, uid]);
   const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
@@ -188,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
   const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
+  const setCalibrationGenres = useCallback((genres: Record<number, number> | null) => updateUserField('calibrationGenres', genres), [updateUserField]);
 
   const updateUsername = useCallback(async (username: string) => {
     if (!uid || !user) return;
@@ -216,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, pauseProvider, resumeProvider, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, pauseProvider, resumeProvider, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, setCalibrationGenres, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

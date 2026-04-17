@@ -9,6 +9,7 @@ import {
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
+import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import {
   joinGroupViaToken,
   rotateInviteToken,
@@ -585,6 +586,9 @@ function GroupWatchlistTable({
     [watchlist],
   );
 
+  const memberUids = useMemo(() => members.map(m => m.uid), [members]);
+  const memberProgress = useGroupMemberProgress(memberUids);
+
   return (
     <div className="bg-surface border border-border-main rounded-sm">
       <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
@@ -643,6 +647,13 @@ function GroupWatchlistTable({
                           {item.mediaType === 'movie' ? 'Film' : 'Serie'}
                           {item.releaseYear ? ` · ${item.releaseYear}` : ''}
                         </div>
+                        {item.mediaType === 'tv' && (
+                          <TvAsymmetryRow
+                            tmdbId={item.tmdbId}
+                            members={members}
+                            progressByUid={memberProgress}
+                          />
+                        )}
                       </div>
                     </div>
                   </td>
@@ -699,6 +710,43 @@ function abbrev(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
+}
+
+function TvAsymmetryRow({
+  tmdbId, members, progressByUid,
+}: {
+  tmdbId: number;
+  members: GroupMember[];
+  progressByUid: Map<string, Map<number, { lastWatchedSeason: number | null; lastWatchedEpisode: number | null }>>;
+}) {
+  const points = members
+    .map(m => {
+      const p = progressByUid.get(m.uid)?.get(tmdbId);
+      if (!p || p.lastWatchedSeason == null) return null;
+      return {
+        uid: m.uid,
+        initial: abbrev(m.displayName),
+        code: `S${p.lastWatchedSeason}${p.lastWatchedEpisode ? `E${p.lastWatchedEpisode}` : ''}`,
+        sortKey: (p.lastWatchedSeason ?? 0) * 1000 + (p.lastWatchedEpisode ?? 0),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  if (points.length < 2) return null;
+  const distinct = new Set(points.map(p => p.code));
+  if (distinct.size < 2) return null;
+
+  points.sort((a, b) => b.sortKey - a.sortKey);
+
+  return (
+    <div className="text-xxs text-text-muted mt-[2px] flex flex-wrap gap-[6px]">
+      {points.map(p => (
+        <span key={p.uid} title={`${p.initial} har sett t.o.m. ${p.code}`}>
+          <span className="font-semibold text-text-secondary">{p.initial}</span>:{p.code}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function RatingPicker({

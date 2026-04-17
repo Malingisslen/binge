@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
+import { backfillGenreIds, type BackfillProgress } from '@/lib/taste/backfill';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { COUNTRIES, COMMON_FILTER_COUNTRIES, getCountryName } from '@/lib/tmdb/countries';
 
@@ -136,6 +137,8 @@ function SettingsContent() {
         updateHiddenCountries={updateHiddenCountries}
         toast={toast}
       />
+
+      <TasteDataSection />
 
       <DeleteAccountSection />
 
@@ -328,6 +331,60 @@ function ContentFilterSection({
         {user.hiddenCountries.length > 0 && (
           <div className="mt-2 pt-2 border-t border-border-light text-xs text-text-muted">
             {user.hiddenCountries.length} {user.hiddenCountries.length === 1 ? 'land dolt' : 'länder dolda'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TasteDataSection() {
+  const { uid } = useAuth();
+  const { show: toast } = useToast();
+  const [progress, setProgress] = useState<BackfillProgress | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const run = async () => {
+    if (!uid || running) return;
+    setRunning(true);
+    setProgress({ total: 0, processed: 0, updated: 0, skipped: 0, failed: 0 });
+    try {
+      const final = await backfillGenreIds(uid, p => setProgress({ ...p }));
+      toast(`Klar — ${final.updated} titlar uppdaterade`);
+    } catch {
+      toast('Något gick fel. Försök igen.');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
+      <div className="px-3 py-[6px] border-b border-border-light">
+        <span className="text-sm font-bold text-text-secondary">Smakdata</span>
+      </div>
+      <div className="px-3 py-3">
+        <p className="text-xs text-text-secondary mb-2">
+          Fyll i genrer på äldre titlar i din watchlist så de bidrar till smak-match och rekommendationer. Körs en gång — nya titlar sparas automatiskt.
+        </p>
+        <button
+          onClick={run}
+          disabled={running}
+          className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+        >
+          <Sparkles size={11} />
+          {running ? 'Uppdaterar...' : 'Uppdatera smakdata'}
+        </button>
+        {progress && progress.total > 0 && (
+          <div className="mt-2 text-xxs text-text-muted">
+            {progress.processed}/{progress.total} — {progress.updated} uppdaterade
+            {progress.skipped > 0 ? `, ${progress.skipped} hoppade över` : ''}
+            {progress.failed > 0 ? `, ${progress.failed} misslyckade` : ''}
+          </div>
+        )}
+        {progress && progress.total === 0 && !running && (
+          <div className="mt-2 text-xxs text-text-muted">
+            Ingenting att uppdatera — alla titlar har redan genredata.
           </div>
         )}
       </div>
