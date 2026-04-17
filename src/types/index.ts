@@ -99,6 +99,16 @@ export interface Review {
   updatedAt: Date;
 }
 
+// Fas 5 — reviews-utbyggnad
+export interface ReviewComment {
+  id: string;
+  uid: string;
+  text: string;
+  displayName: string;
+  username: string | null;
+  createdAt: Date;
+}
+
 // "Tillsammans ikväll" — session-baserad gemensam rekommendation
 export type ProviderMode = 'intersect' | 'union';
 export type AggregationStrategy = 'least_misery' | 'average' | 'fair';

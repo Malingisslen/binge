@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Heart, MessageCircle, Send, X } from 'lucide-react';
 import { useReviewsForTitle, useReviewActions } from '@/hooks/useReviews';
+import { useReviewLikes, useReviewComments } from '@/hooks/useReviewSocial';
 import { useAuth } from '@/hooks/useAuth';
-import type { MediaType } from '@/types';
+import type { MediaType, Review } from '@/types';
 
 interface ReviewListProps {
   tmdbId: number;
   mediaType: MediaType;
+  title?: string;
+  posterPath?: string | null;
 }
 
-export default function ReviewList({ tmdbId, mediaType }: ReviewListProps) {
+export default function ReviewList({ tmdbId, mediaType, title, posterPath }: ReviewListProps) {
   const { data: reviews, isLoading } = useReviewsForTitle(tmdbId);
   const { submitReview, deleteReview } = useReviewActions();
   const { uid } = useAuth();
@@ -32,7 +36,8 @@ export default function ReviewList({ tmdbId, mediaType }: ReviewListProps) {
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
-    await submitReview(tmdbId, mediaType, text.trim(), spoiler, null, myReview?.id);
+    const titleMeta = title ? { title, posterPath: posterPath ?? null } : undefined;
+    await submitReview(tmdbId, mediaType, text.trim(), spoiler, null, myReview?.id, titleMeta);
     setText('');
     setSpoiler(false);
     setShowForm(false);
@@ -91,8 +96,12 @@ export default function ReviewList({ tmdbId, mediaType }: ReviewListProps) {
   );
 }
 
-function ReviewCard({ review, isOwn, onDelete }: { review: import('@/types').Review; isOwn?: boolean; onDelete?: () => void }) {
+function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boolean; onDelete?: () => void }) {
   const [revealed, setRevealed] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const { uid } = useAuth();
+  const { likeCount, iLike, toggle } = useReviewLikes(review.id);
+  const { comments } = useReviewComments(showComments ? review.id : null);
 
   return (
     <div className="bg-surface border border-border-main rounded-sm px-3 py-2 mb-[6px]">
@@ -120,6 +129,128 @@ function ReviewCard({ review, isOwn, onDelete }: { review: import('@/types').Rev
         </div>
       ) : (
         <p className="text-xs text-text-secondary leading-relaxed m-0">{review.text}</p>
+      )}
+
+      <div className="flex items-center gap-3 mt-[6px] pt-[5px] border-t border-border-light">
+        <button
+          onClick={toggle}
+          disabled={!uid}
+          className={`inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
+            iLike ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
+          } disabled:opacity-50 disabled:cursor-default`}
+          title={uid ? (iLike ? 'Ångra gillning' : 'Gilla') : 'Logga in för att gilla'}
+        >
+          <Heart size={11} fill={iLike ? 'currentColor' : 'none'} />
+          {likeCount > 0 && <span>{likeCount}</span>}
+        </button>
+        <button
+          onClick={() => setShowComments(v => !v)}
+          className="inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-text-muted hover:text-text-secondary"
+        >
+          <MessageCircle size={11} />
+          Kommentera
+        </button>
+      </div>
+
+      {showComments && (
+        <ReviewComments
+          reviewId={review.id}
+          reviewAuthorUid={review.uid}
+          comments={comments}
+          onClose={() => setShowComments(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReviewComments({
+  reviewId, reviewAuthorUid, comments, onClose,
+}: {
+  reviewId: string;
+  reviewAuthorUid: string;
+  comments: import('@/types').ReviewComment[];
+  onClose: () => void;
+}) {
+  const { uid } = useAuth();
+  const { addComment, deleteComment } = useReviewComments(reviewId);
+  const [text, setText] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    setPosting(true);
+    try {
+      await addComment(text);
+      setText('');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-border-light">
+      {comments.length === 0 ? (
+        <div className="text-xxs text-text-muted italic">Inga kommentarer än.</div>
+      ) : (
+        <ul className="space-y-[4px] mb-2">
+          {comments.map(c => {
+            const canDelete = !!uid && (c.uid === uid || reviewAuthorUid === uid);
+            return (
+              <li key={c.id} className="text-xxs flex items-start gap-2">
+                <div className="flex-1">
+                  {c.username ? (
+                    <Link href={`/user/${c.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">
+                      {c.displayName}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold text-text-primary">{c.displayName}</span>
+                  )}
+                  <span className="text-text-secondary ml-[4px]">{c.text}</span>
+                  <span className="text-text-muted ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
+                </div>
+                {canDelete && (
+                  <button
+                    onClick={() => deleteComment(c.id)}
+                    className="text-text-muted hover:text-red-600 bg-transparent border-none cursor-pointer p-0"
+                    title="Ta bort"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {uid ? (
+        <div className="flex gap-1">
+          <input
+            type="text"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
+            placeholder="Skriv en kommentar..."
+            maxLength={500}
+            className="flex-1 px-2 py-1 text-xxs border border-border-main rounded-sm bg-white"
+          />
+          <button
+            onClick={submit}
+            disabled={posting || !text.trim()}
+            className="px-2 py-1 bg-accent text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+          >
+            <Send size={10} />
+          </button>
+          <button
+            onClick={onClose}
+            className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer text-text-muted"
+          >
+            Stäng
+          </button>
+        </div>
+      ) : (
+        <div className="text-xxs text-text-muted">Logga in för att kommentera.</div>
       )}
     </div>
   );
