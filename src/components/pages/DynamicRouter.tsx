@@ -8,11 +8,15 @@ import PersonPageClient from './PersonPageClient';
 import ProviderPageClient from './ProviderPageClient';
 import UserProfilePageClient from './UserProfilePageClient';
 import ListPageClient from './ListPageClient';
+import TillsammansSessionPageClient from './TillsammansSessionPageClient';
 
 export default function DynamicRouter({ fallback }: { fallback: React.ReactNode }) {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
 
+  if (segments[0] === 'tillsammans' && segments[1] && segments[1] !== 'ny') {
+    return <TillsammansSessionPageClient key={segments[1]} id={segments[1]} />;
+  }
   if (segments[0] === 'user' && segments[1]) {
     return <UserProfilePageClient key={segments[1]} username={segments[1]} />;
   }

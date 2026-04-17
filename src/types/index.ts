@@ -86,6 +86,63 @@ export interface Review {
   updatedAt: Date;
 }
 
+// "Tillsammans ikväll" — session-baserad gemensam rekommendation
+export type ProviderMode = 'intersect' | 'union';
+export type AggregationStrategy = 'least_misery' | 'average' | 'fair';
+export type SessionMediaType = 'movie' | 'tv' | 'both';
+export type SessionStatus = 'active' | 'resolved' | 'expired';
+export type VoteKind = 'yes' | 'no' | 'veto';
+
+export interface SessionConfig {
+  providerMode: ProviderMode;
+  aggregation: AggregationStrategy;
+  mediaType: SessionMediaType;
+  maxRuntimeMin: number | null;
+  allowAsymmetry: boolean;
+}
+
+export interface SessionCandidate {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  posterPath: string | null;
+  year: number | null;
+  runtime: number | null;
+  genreIds: number[];
+  voteAverage: number;
+  overview: string;
+  providers: number[];
+}
+
+export interface TogetherSession {
+  id: string;
+  hostUid: string | null;
+  hostName: string;
+  config: SessionConfig;
+  status: SessionStatus;
+  candidates: SessionCandidate[];
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date;
+}
+
+export interface SessionParticipant {
+  id: string;
+  uid: string | null;
+  displayName: string;
+  providers: number[];
+  vetoRemaining: number;
+  isHost: boolean;
+  joinedAt: Date;
+  lastActiveAt: Date;
+}
+
+export interface SessionSwipe {
+  tmdbId: number;
+  votes: Record<string, VoteKind>;
+  updatedAt: Date;
+}
+
 // TMDB types
 export interface TMDBSearchResult {
   id: number;
