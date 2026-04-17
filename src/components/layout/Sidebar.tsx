@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Search, LayoutDashboard, Compass, Calendar, BarChart3,
-  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List,
+  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List, Users,
 } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label: 'Statistik', href: '/stats', icon: BarChart3 },
   { label: 'Streamingrådgivare', href: '/savings', icon: CreditCard },
   { label: 'Rekommendationer', href: '/recommendations', icon: Star },
+  { label: 'Tillsammans', href: '/tillsammans/ny', icon: Users },
   { label: 'Flöde', href: '/feed', icon: Rss },
 ];
 
