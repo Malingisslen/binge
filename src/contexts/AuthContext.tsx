@@ -27,6 +27,8 @@ interface AuthState {
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
+  pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
+  resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
   updateIsPublic: (isPublic: boolean) => Promise<void>;
@@ -46,6 +48,8 @@ const AuthContext = createContext<AuthState>({
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
+  pauseProvider: async () => {},
+  resumeProvider: async () => {},
   updateUsername: async () => {},
   updateBio: async () => {},
   updateIsPublic: async () => {},
@@ -72,6 +76,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
       hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
+      providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       notificationSettings: data.notificationSettings ?? {
@@ -93,6 +98,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     hideNonLatinTitles: false,
     hiddenCountries: [],
     providerCosts: {},
+    providerPauses: {},
     createdAt: new Date(),
     updatedAt: new Date(),
     notificationSettings: {
@@ -163,6 +169,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProviders = useCallback((providers: number[]) => updateUserField('myProviders', providers), [updateUserField]);
   const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
+  const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
+    const current = user?.providerPauses ?? {};
+    const existing = current[providerId];
+    if (existing && existing.resumeAt === resumeAt) return Promise.resolve();
+    const pausedAt = existing?.pausedAt ?? new Date().toISOString().slice(0, 10);
+    const next = { ...current, [providerId]: { pausedAt, resumeAt } };
+    return updateUserField('providerPauses', next);
+  }, [updateUserField, user?.providerPauses]);
+  const resumeProvider = useCallback((providerId: number) => {
+    const current = user?.providerPauses ?? {};
+    if (!current[providerId]) return Promise.resolve();
+    const next = { ...current };
+    delete next[providerId];
+    return updateUserField('providerPauses', next);
+  }, [updateUserField, user?.providerPauses]);
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
   const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
@@ -195,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, deleteAccount }}>
+    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, pauseProvider, resumeProvider, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

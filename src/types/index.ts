@@ -33,6 +33,11 @@ export interface EpisodeProgress {
   };
 }
 
+export interface ProviderPauseState {
+  pausedAt: string;
+  resumeAt: string | null;
+}
+
 export interface UserProfile {
   displayName: string;
   email: string;
@@ -45,6 +50,7 @@ export interface UserProfile {
   hideNonLatinTitles: boolean;
   hiddenCountries: string[];
   providerCosts: Record<number, number>;
+  providerPauses: Record<number, ProviderPauseState>;
   createdAt: Date;
   updatedAt: Date;
   notificationSettings: {
@@ -341,10 +347,29 @@ export interface SubscribeAdvisory extends ProviderBase {
   nearestAirDate: string | null;
 }
 
+export interface ActivePause {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  pausedAt: string;
+  resumeAt: string | null;
+  monthlyCost: number;
+  savingsSoFar: number;
+}
+
+export type PrimaryAction =
+  | { kind: 'pause'; providerId: number; providerName: string; shortName: string; color: string; monthlyCost: number; nextAirDate: string | null }
+  | { kind: 'catchup'; providerId: number; providerName: string; shortName: string; color: string; unfinishedCount: number; monthlyCost: number }
+  | { kind: 'subscribe'; providerId: number; providerName: string; shortName: string; color: string; showCount: number; nearestAirDate: string | null; monthlyCost: number }
+  | { kind: 'idle'; nextCheckDate: string | null };
+
 export interface AdvisorResult {
   providers: ProviderAdvisory[];
   subscribeAdvice: SubscribeAdvisory[];
   monthlySavings: number;
   totalMonthlyCost: number;
   isLoading: boolean;
+  primaryAction: PrimaryAction;
+  activePauses: ActivePause[];
 }
