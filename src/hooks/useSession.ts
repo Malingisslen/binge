@@ -47,6 +47,8 @@ export function useSession(sessionId: string | null) {
 }
 
 const STORAGE_PREFIX = 'binge-session-pid-';
+const MY_SESSIONS_KEY = 'binge-my-sessions';
+const MAX_TRACKED = 20;
 
 export function getStoredParticipantId(sessionId: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -56,9 +58,32 @@ export function getStoredParticipantId(sessionId: string): string | null {
 export function storeParticipantId(sessionId: string, pid: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_PREFIX + sessionId, pid);
+  const list = getTrackedSessions().filter(s => s.sessionId !== sessionId);
+  list.unshift({ sessionId, participantId: pid, joinedAt: Date.now() });
+  localStorage.setItem(MY_SESSIONS_KEY, JSON.stringify(list.slice(0, MAX_TRACKED)));
 }
 
 export function clearStoredParticipantId(sessionId: string): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_PREFIX + sessionId);
+  const list = getTrackedSessions().filter(s => s.sessionId !== sessionId);
+  localStorage.setItem(MY_SESSIONS_KEY, JSON.stringify(list));
+}
+
+export interface TrackedSession {
+  sessionId: string;
+  participantId: string;
+  joinedAt: number;
+}
+
+export function getTrackedSessions(): TrackedSession[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(MY_SESSIONS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TrackedSession[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
