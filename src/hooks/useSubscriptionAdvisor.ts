@@ -233,8 +233,11 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     const nonSubscribedProviders = new Map<number, AdvisedShow[]>();
 
     for (const show of followingAdvised) {
+      // If the show is available on any of the user's subscribed providers, skip —
+      // they already have access, no need to suggest other providers for it.
+      const hasOnMyProvider = show.providerIds.some(pid => myProviderSet.has(pid));
+      if (hasOnMyProvider) continue;
       for (const pid of show.providerIds) {
-        if (myProviderSet.has(pid)) continue;
         const provider = getProvider(pid);
         if (!provider || provider.type !== 'flatrate') continue;
         if (!isWithinDays(show.nextAirDate, lookAheadDays)) continue;

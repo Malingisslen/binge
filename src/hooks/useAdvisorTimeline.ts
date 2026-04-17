@@ -1,0 +1,189 @@
+'use client';
+
+import { useMemo } from 'react';
+import { useSubscriptionAdvisor } from './useSubscriptionAdvisor';
+import { useCalendarEntries, getWeekStart, getWeekNumber, type CalendarEntry } from './useCalendar';
+import { useAuth } from './useAuth';
+import { getProvider } from '@/lib/tmdb/providers';
+import { toIsoDate, todayIso } from '@/lib/utils';
+import type { AdvisedShow } from '@/types';
+
+export const TIMELINE_WEEKS = 26;
+const TIMELINE_DAYS = TIMELINE_WEEKS * 7;
+
+export interface TimelineWeek {
+  startIso: string;
+  endIso: string;
+  monthLabel: string | null;
+  weekOfYear: number;
+  rangeLabel: string;
+}
+
+export interface TimelineCellEntry {
+  tmdbId: number;
+  title: string;
+  episodeCode?: string;
+  airDate: string;
+}
+
+export interface TimelineCell {
+  weekIndex: number;
+  entries: TimelineCellEntry[];
+}
+
+export type LaneKind = 'active' | 'upcoming' | 'pause' | 'user-paused' | 'unsubscribed';
+
+export interface TimelineLane {
+  providerId: number;
+  shortName: string;
+  color: string;
+  kind: LaneKind;
+  monthlyCost: number | null;
+  followingShowCount: number;
+  cells: TimelineCell[];
+  cellByIndex: Map<number, TimelineCell>;
+  userPause?: { pausedAtWeekIndex: number; resumeAtWeekIndex: number | null };
+}
+
+export interface TimelineResult {
+  weeks: TimelineWeek[];
+  subscribedLanes: TimelineLane[];
+  unsubscribedLanes: TimelineLane[];
+  shouldRender: boolean;
+  todayWeekIndex: number;
+}
+
+function fmtDayMonth(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  const month = d.toLocaleDateString('sv-SE', { month: 'short' }).replace('.', '');
+  return `${d.getDate()} ${month}`;
+}
+
+export function useAdvisorTimeline(): TimelineResult {
+  const advisor = useSubscriptionAdvisor(TIMELINE_DAYS);
+  const calendarEntries = useCalendarEntries();
+  const { user } = useAuth();
+
+  return useMemo(() => {
+    const startMonday = getWeekStart(new Date());
+    const startMs = startMonday.getTime();
+    const weeks: TimelineWeek[] = [];
+    let lastMonth = -1;
+    for (let i = 0; i < TIMELINE_WEEKS; i++) {
+      const d = new Date(startMs + i * 7 * 86400000);
+      const end = new Date(startMs + (i * 7 + 6) * 86400000);
+      const month = d.getMonth();
+      const label = month !== lastMonth
+        ? d.toLocaleDateString('sv-SE', { month: 'short' }).replace('.', '')
+        : null;
+      lastMonth = month;
+      const startIso = toIsoDate(d);
+      const endIso = toIsoDate(end);
+      weeks.push({
+        startIso,
+        endIso,
+        monthLabel: label,
+        weekOfYear: getWeekNumber(d),
+        rangeLabel: `Vecka ${getWeekNumber(d)} · ${fmtDayMonth(startIso)}–${fmtDayMonth(endIso)}`,
+      });
+    }
+
+    function weekIndexFor(dateIso: string): number | null {
+      const d = new Date(dateIso + 'T00:00:00');
+      const days = Math.floor((d.getTime() - startMs) / 86400000);
+      const wi = Math.floor(days / 7);
+      if (wi < 0 || wi >= TIMELINE_WEEKS) return null;
+      return wi;
+    }
+
+    const pauses = user?.providerPauses ?? {};
+
+    const calendarByTmdb = new Map<number, CalendarEntry[]>();
+    for (const e of calendarEntries) {
+      const list = calendarByTmdb.get(e.tmdbId) ?? [];
+      list.push(e);
+      calendarByTmdb.set(e.tmdbId, list);
+    }
+
+    function buildCells(shows: AdvisedShow[]): TimelineCell[] {
+      const cellMap = new Map<number, TimelineCell>();
+      for (const show of shows) {
+        const entries = calendarByTmdb.get(show.tmdbId) ?? [];
+        const touched = new Set<number>();
+        for (const e of entries) {
+          const wi = weekIndexFor(e.airDate);
+          if (wi === null || touched.has(wi)) continue;
+          touched.add(wi);
+          let cell = cellMap.get(wi);
+          if (!cell) { cell = { weekIndex: wi, entries: [] }; cellMap.set(wi, cell); }
+          cell.entries.push({ tmdbId: show.tmdbId, title: show.title, episodeCode: e.episodeCode, airDate: e.airDate });
+        }
+        // Fallback: if calendar has no hit in horizon, use the show's next-air estimate.
+        // Calendar only fetches the latest already-aired season, so upcoming seasons need this fallback.
+        if (touched.size === 0 && show.nextAirDate) {
+          const wi = weekIndexFor(show.nextAirDate);
+          if (wi !== null) {
+            let cell = cellMap.get(wi);
+            if (!cell) { cell = { weekIndex: wi, entries: [] }; cellMap.set(wi, cell); }
+            cell.entries.push({
+              tmdbId: show.tmdbId,
+              title: show.title,
+              episodeCode: show.nextEpisodeCode ?? undefined,
+              airDate: show.nextAirDate,
+            });
+          }
+        }
+      }
+      return Array.from(cellMap.values()).sort((a, b) => a.weekIndex - b.weekIndex);
+    }
+
+    function makeLane(
+      base: Omit<TimelineLane, 'cells' | 'cellByIndex'>,
+      shows: AdvisedShow[],
+    ): TimelineLane {
+      const cells = buildCells(shows);
+      return { ...base, cells, cellByIndex: new Map(cells.map(c => [c.weekIndex, c])) };
+    }
+
+    const subscribedLanes: TimelineLane[] = advisor.providers.map(p => {
+      const userPause = pauses[p.providerId];
+      const kind: LaneKind = userPause
+        ? 'user-paused'
+        : p.status === 'pause' ? 'pause'
+        : p.status === 'upcoming' ? 'upcoming'
+        : 'active';
+      return makeLane({
+        providerId: p.providerId,
+        shortName: p.shortName,
+        color: p.color,
+        kind,
+        monthlyCost: p.monthlyCost,
+        followingShowCount: p.shows.length,
+        userPause: userPause ? {
+          pausedAtWeekIndex: weekIndexFor(userPause.pausedAt) ?? 0,
+          resumeAtWeekIndex: userPause.resumeAt ? weekIndexFor(userPause.resumeAt) : null,
+        } : undefined,
+      }, p.shows);
+    });
+
+    const unsubscribedLanes: TimelineLane[] = advisor.subscribeAdvice.map(sa => {
+      const provider = getProvider(sa.providerId);
+      return makeLane({
+        providerId: sa.providerId,
+        shortName: sa.shortName,
+        color: sa.color,
+        kind: 'unsubscribed',
+        monthlyCost: provider?.defaultMonthlyCost ?? null,
+        followingShowCount: sa.shows.length,
+      }, sa.shows);
+    });
+
+    const totalAirings = [...subscribedLanes, ...unsubscribedLanes]
+      .reduce((sum, lane) => sum + lane.cells.reduce((s, c) => s + c.entries.length, 0), 0);
+    const laneCount = subscribedLanes.length + unsubscribedLanes.length;
+    const shouldRender = laneCount >= 2 && totalAirings >= 1;
+    const todayWeekIndex = weekIndexFor(todayIso()) ?? 0;
+
+    return { weeks, subscribedLanes, unsubscribedLanes, shouldRender, todayWeekIndex };
+  }, [advisor, calendarEntries, user?.providerPauses]);
+}

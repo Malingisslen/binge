@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
+import AdvisorTimeline from '@/components/savings/AdvisorTimeline';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -270,6 +271,8 @@ function SavingsContent() {
           </div>
         </div>
       </div>
+
+      <AdvisorTimeline />
 
       {subscribeRows.length > 0 && (
         <details className="mb-3">

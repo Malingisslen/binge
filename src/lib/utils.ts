@@ -20,8 +20,12 @@ export function pluralSv(count: number, singular: string, plural: string): strin
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+export function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toIsoDate(new Date());
 }
 
 export function addDaysFromToday(days: number): string {
