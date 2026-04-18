@@ -21,7 +21,7 @@ export default function SubscriptionAdvisorWidget() {
       const savings = advisor.monthlySavings > 0 ? ` Sparar ${advisor.monthlySavings} kr/mån.` : '';
       return (
         <span>
-          Du kan pausa <b>{names}</b> — inga serier sänds just nu.{savings}
+          Du kan pausa <b>{names}</b> — inget från din lista ligger där.{savings}
         </span>
       );
     }

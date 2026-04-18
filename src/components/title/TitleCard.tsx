@@ -84,6 +84,8 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
             title={title}
             posterPath={item.poster_path}
             releaseYear={year}
+            providers={providers?.map(p => p.provider_id)}
+            genreIds={item.genre_ids}
           />
         </div>
       )}

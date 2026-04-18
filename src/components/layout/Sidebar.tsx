@@ -12,6 +12,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
+import { isEndedStatus } from '@/lib/airingState';
 import type { WatchStatus } from '@/types';
 import SearchDropdown from '@/components/search/SearchDropdown';
 
@@ -48,14 +49,18 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     p => p.type === 'flatrate' && myProviderIds.includes(p.id)
   );
 
-  const { statusCounts, providerCounts } = useMemo(() => {
+  const { statusCounts, followingOngoing, providerCounts } = useMemo(() => {
     const sc: Record<WatchStatus, number> = { 'följer': 0, 'vill_se': 0, 'sedd': 0 };
     const pc: Record<number, number> = {};
+    let ongoing = 0;
     for (const i of items) {
       if (i.status in sc) sc[i.status]++;
+      if (i.status === 'följer' && !i.dropped && !(i.mediaType === 'tv' && isEndedStatus(i.tmdbStatus))) {
+        ongoing++;
+      }
       for (const pid of i.providers ?? []) pc[pid] = (pc[pid] ?? 0) + 1;
     }
-    return { statusCounts: sc, providerCounts: pc };
+    return { statusCounts: sc, followingOngoing: ongoing, providerCounts: pc };
   }, [items]);
 
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -134,7 +139,11 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             <Icon size={14} className={active ? 'text-accent' : 'text-text-sidebar opacity-50'} />
             <span className="flex-1">{item.label}</span>
             {mounted && item.status && statusCounts[item.status] > 0 && (
-              <span className="text-xs text-accent">{statusCounts[item.status]}</span>
+              <span className="text-xs text-accent">
+                {item.status === 'följer' && followingOngoing !== statusCounts['följer']
+                  ? `${followingOngoing}/${statusCounts['följer']}`
+                  : statusCounts[item.status]}
+              </span>
             )}
           </Link>
         );

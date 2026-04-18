@@ -23,7 +23,7 @@ import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
   const { data: show, isLoading } = useTVShow(showId);
-  const { getItem, updateRating, updateNotes } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateTmdbStatus } = useWatchlist();
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
@@ -39,11 +39,22 @@ export default function TVShowPageClient({ id }: { id: string }) {
     return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
   }, [show]);
 
+  const watchlistItem = show ? getItem(show.id) : null;
+  const itemExists = !!watchlistItem;
+  const cachedTmdbStatus = watchlistItem?.tmdbStatus ?? null;
+  const showStatus = show?.status ?? null;
+  const showIdForEffect = show?.id ?? null;
+  useEffect(() => {
+    if (!itemExists || showIdForEffect == null || showStatus == null) return;
+    if (cachedTmdbStatus !== showStatus) {
+      updateTmdbStatus(showIdForEffect, showStatus);
+    }
+  }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
+
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
 
   const displayTitle = preferOriginalTitle(show.name, show.original_name);
-  const watchlistItem = getItem(show.id);
   const poster = posterUrl(show.poster_path, 'w500');
   const backdrop = backdropUrl(show.backdrop_path);
   const providers = show['watch/providers']?.results?.SE;
@@ -60,6 +71,17 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
     ?? show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
   const imdbId = show.external_ids?.imdb_id;
+  const statusButtonProps = {
+    tmdbId: show.id,
+    mediaType: 'tv' as const,
+    title: displayTitle,
+    posterPath: show.poster_path,
+    releaseYear: parseInt(yearStart, 10) || null,
+    totalSeasons: show.number_of_seasons,
+    providers: [...flatrate, ...rent, ...buy].map(p => p.provider_id),
+    genreIds: show.genres.map(g => g.id),
+    tmdbStatus: show.status,
+  };
 
   return (
     <div className="-mt-[14px] -mx-[18px]">
@@ -109,16 +131,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
         {/* CTA actions — prominent */}
         <div className="flex items-center gap-3 mb-4">
-          <StatusButton
-            tmdbId={show.id}
-            mediaType="tv"
-            title={displayTitle}
-            posterPath={show.poster_path}
-            releaseYear={parseInt(yearStart, 10) || null}
-            totalSeasons={show.number_of_seasons}
-            providers={[...flatrate, ...rent, ...buy].map(p => p.provider_id)}
-            genreIds={show.genres.map(g => g.id)}
-          />
+          <StatusButton {...statusButtonProps} />
           <div>
             {watchlistItem && (
               <div className="text-xxs text-text-muted mb-[2px]">Ditt betyg</div>
@@ -144,6 +157,15 @@ export default function TVShowPageClient({ id }: { id: string }) {
         {nextEp && (
           <div className="text-sm text-text-secondary mb-3 bg-surface border border-border-main rounded-sm px-3 py-2">
             Nästa avsnitt: <span className="font-semibold">S{nextEp.season_number}E{nextEp.episode_number}</span> — {nextEp.name} ({nextEp.air_date})
+          </div>
+        )}
+
+        {watchlistItem?.status === 'sedd' && nextEp && (
+          <div className="text-sm mb-3 bg-accent/[0.04] border border-accent/40 rounded-sm px-3 py-2 flex items-center justify-between gap-2">
+            <span className="text-text-secondary">
+              Du har markerat serien som sedd, men nya avsnitt är på väg.
+            </span>
+            <StatusButton {...statusButtonProps} />
           </div>
         )}
 

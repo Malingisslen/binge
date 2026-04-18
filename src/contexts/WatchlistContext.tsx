@@ -51,6 +51,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
     genreIds: (data.genreIds as number[]) ?? [],
+    tmdbStatus: (data.tmdbStatus as string) ?? null,
     addedAt: toDate(data.addedAt),
     updatedAt: toDate(data.updatedAt),
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
@@ -64,6 +65,7 @@ interface WatchlistState {
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
+  updateTmdbStatus: (tmdbId: number, tmdbStatus: string | null) => Promise<void>;
   removeItem: (tmdbId: number) => Promise<void>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
   getItem: (tmdbId: number) => WatchlistItem | null;
@@ -76,6 +78,7 @@ const WatchlistContext = createContext<WatchlistState>({
   updateRating: async () => {},
   updateNotes: async () => {},
   updateProgress: async () => {},
+  updateTmdbStatus: async () => {},
   removeItem: async () => {},
   getByStatus: () => [],
   getItem: () => null,
@@ -141,6 +144,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
   }, [uid]);
 
+  const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
+    if (!uid) return;
+    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    await setDoc(ref, { tmdbStatus, updatedAt: serverTimestamp() }, { merge: true });
+  }, [uid]);
+
   const removeItem = useCallback(async (tmdbId: number) => {
     if (!uid) return;
     await deleteDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)));
@@ -156,7 +165,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   return (
     <WatchlistContext.Provider value={{
-      items, addItem, updateStatus, updateRating, updateNotes, updateProgress, removeItem, getByStatus, getItem,
+      items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
     }}>
       {children}
     </WatchlistContext.Provider>

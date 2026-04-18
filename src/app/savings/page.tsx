@@ -5,11 +5,12 @@ import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
 import AdvisorTimeline from '@/components/savings/AdvisorTimeline';
+import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { formatSwedishDate, addDaysFromToday, todayIso } from '@/lib/utils';
-import type { PrimaryAction, ActivePause } from '@/types';
+import type { AdvisedShow, PrimaryAction, ActivePause } from '@/types';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -31,7 +32,7 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
             Pausa {action.providerName} — spar {action.monthlyCost} kr/mån
           </div>
           <div className="text-xs text-text-muted mt-[2px]">
-            Inga serier du följer sänder {until}.
+            Inget från din Följer eller Vill se ligger här {until}.
           </div>
         </div>
         {!pauseOpen && (
@@ -142,6 +143,17 @@ function PrimaryActionCard({ action, onPause }: { action: PrimaryAction; onPause
       </div>
     </div>
   );
+}
+
+function subscribeRowStatusText(show: AdvisedShow): string {
+  if (show.mediaType === 'movie') {
+    const year = show.releaseDate?.substring(0, 4);
+    if (year && Number(year) > new Date().getFullYear()) return `Släpps ${year}`;
+    return 'Streamar nu';
+  }
+  if (show.isEnded) return 'Avslutad';
+  if (show.nextAirDate) return `Nytt avsnitt ${formatSwedishDate(show.nextAirDate)}`;
+  return 'Okänt datum';
 }
 
 function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onResume: (id: number) => void }) {
@@ -274,37 +286,41 @@ function SavingsContent() {
 
       <AdvisorTimeline />
 
+      <WillSeePerProvider rows={advisor.willSeeByProvider} />
+
       {subscribeRows.length > 0 && (
         <details className="mb-3">
           <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted cursor-pointer select-none list-none">
-            Serier på tjänster du inte har ({subscribeRows.length}) ›
+            Titlar på tjänster du inte har ({subscribeRows.length}) ›
           </summary>
-          <p className="text-xxs text-text-muted mt-1 mb-2">Serier du följer som kräver en tjänst du inte har.</p>
+          <p className="text-xxs text-text-muted mt-1 mb-2">Titlar från din Följer och Vill se som ligger på en tjänst du inte har.</p>
           <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
             <table className="w-full border-collapse">
               <tbody>
-                {subscribeRows.map(({ show, provider }) => (
-                  <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
-                    <td className="px-3 py-[6px] text-xs font-semibold">
-                      <Link href={`/tv/${show.tmdbId}`} className="no-underline text-text-primary hover:text-accent">
-                        {show.title}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-[6px] whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1">
-                        <ProviderDot color={provider.color} size={7} />
-                        <span className="text-xs text-text-secondary">{provider.shortName}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-[6px] text-xxs text-text-muted text-right whitespace-nowrap">
-                      {show.isEnded
-                        ? 'Avslutad'
-                        : show.nextAirDate
-                          ? `Nytt avsnitt ${formatSwedishDate(show.nextAirDate)}`
-                          : 'Okänt datum'}
-                    </td>
-                  </tr>
-                ))}
+                {subscribeRows.map(({ show, provider }) => {
+                  const href = show.mediaType === 'movie' ? `/movie/${show.tmdbId}` : `/tv/${show.tmdbId}`;
+                  return (
+                    <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
+                      <td className="px-3 py-[6px] text-xs font-semibold">
+                        <Link href={href} className="no-underline text-text-primary hover:text-accent">
+                          {show.title}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-[6px] text-xxs text-text-muted whitespace-nowrap">
+                        {show.mediaType === 'movie' ? 'Film' : 'Serie'}
+                      </td>
+                      <td className="px-3 py-[6px] whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1">
+                          <ProviderDot color={provider.color} size={7} />
+                          <span className="text-xs text-text-secondary">{provider.shortName}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-[6px] text-xxs text-text-muted text-right whitespace-nowrap">
+                        {subscribeRowStatusText(show)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
