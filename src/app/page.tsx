@@ -6,6 +6,7 @@ import { Search, Sparkles } from 'lucide-react';
 import UpcomingCards from '@/components/dashboard/UpcomingCards';
 import WatchingTable from '@/components/dashboard/WatchingTable';
 import SubscriptionAdvisorWidget from '@/components/dashboard/SubscriptionAdvisorWidget';
+import RevivalNudge from '@/components/dashboard/RevivalNudge';
 import SearchDropdown from '@/components/search/SearchDropdown';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -168,6 +169,7 @@ export default function DashboardPage() {
       {isEmpty && <OnboardingCTA />}
       {needsCalibration && <CalibrationCTA />}
       <UpcomingCards entries={calendarEntries} />
+      <RevivalNudge />
       <SubscriptionAdvisorWidget />
       <WatchingTable items={following} />
     </>

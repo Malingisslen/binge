@@ -17,6 +17,7 @@ export interface WatchlistItem {
   rewatchCount: number;
   providers: number[];
   genreIds: number[];
+  tmdbStatus: string | null;
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;
@@ -57,6 +58,7 @@ export interface UserProfile {
   hideNonLatinTitles: boolean;
   hiddenCountries: string[];
   providerCosts: Record<number, number>;
+  providerTiers: Record<number, string>;
   providerPauses: Record<number, ProviderPauseState>;
   calibrationGenres: Record<number, number> | null;
   createdAt: Date;
@@ -381,12 +383,25 @@ export type AdvisorStatus = 'active' | 'upcoming' | 'pause';
 
 export interface AdvisedShow {
   tmdbId: number;
+  mediaType: MediaType;
   title: string;
   posterPath: string | null;
   nextAirDate: string | null;
   nextEpisodeCode: string | null;
   isEnded: boolean;
+  releaseDate: string | null;
   providerIds: number[];
+}
+
+export interface WillSeePerProviderRow {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  isSubscribed: boolean;
+  monthlyCost: number | null;
+  tvCount: number;
+  movieCount: number;
 }
 
 export interface ProviderBase {
@@ -427,6 +442,7 @@ export type PrimaryAction =
 export interface AdvisorResult {
   providers: ProviderAdvisory[];
   subscribeAdvice: SubscribeAdvisory[];
+  willSeeByProvider: WillSeePerProviderRow[];
   monthlySavings: number;
   totalMonthlyCost: number;
   isLoading: boolean;

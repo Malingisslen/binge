@@ -8,15 +8,11 @@ import { getTVShow } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import { formatEpisodeCode, daysBetween, todayIso } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { isEndedStatus } from '@/lib/airingState';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
-  ActivePause, PrimaryAction, WatchlistItem,
+  ActivePause, PrimaryAction, WatchlistItem, WillSeePerProviderRow,
 } from '@/types';
-
-function isEnded(status: string): boolean {
-  const s = status.toLowerCase();
-  return s === 'ended' || s === 'canceled';
-}
 
 function findTopPausable(
   providers: ProviderAdvisory[],
@@ -136,6 +132,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       return {
         providers: [],
         subscribeAdvice: [],
+        willSeeByProvider: [] as WillSeePerProviderRow[],
         monthlySavings: 0,
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
@@ -153,11 +150,13 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       const { date, code } = getNextAirInfo(show);
       return {
         tmdbId: show.id,
+        mediaType: 'tv',
         title: preferOriginalTitle(show.name, show.original_name),
         posterPath: show.poster_path,
         nextAirDate: date,
         nextEpisodeCode: code,
-        isEnded: isEnded(show.status),
+        isEnded: isEndedStatus(show.status),
+        releaseDate: show.first_air_date ?? null,
         providerIds: seProviders.map(p => p.provider_id),
       };
     });
@@ -165,28 +164,26 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     const followingAdvised = advisedShows.filter(s => followingIds.has(s.tmdbId));
     const willSeeAdvised = advisedShows.filter(s => willSeeIds.has(s.tmdbId));
 
-    // Map provider → every "reason to keep it" (följer TV + vill_se TV from TMDB, plus vill_se films from the watchlist item's stored providers since TMDB providers aren't fetched for films here).
+    const willSeeFilmAdvised: AdvisedShow[] = willSeeItems
+      .filter(i => i.mediaType === 'movie')
+      .map(film => ({
+        tmdbId: film.tmdbId,
+        mediaType: 'movie',
+        title: film.title,
+        posterPath: film.posterPath,
+        nextAirDate: null,
+        nextEpisodeCode: null,
+        isEnded: false,
+        releaseDate: film.releaseYear ? `${film.releaseYear}-01-01` : null,
+        providerIds: film.providers,
+      }));
+
+    const allAnchors = [...followingAdvised, ...willSeeAdvised, ...willSeeFilmAdvised];
     const anchorShowsByProvider = new Map<number, AdvisedShow[]>();
-    for (const show of [...followingAdvised, ...willSeeAdvised]) {
+    for (const show of allAnchors) {
       for (const pid of show.providerIds) {
         const list = anchorShowsByProvider.get(pid) ?? [];
         list.push(show);
-        anchorShowsByProvider.set(pid, list);
-      }
-    }
-
-    for (const film of willSeeItems.filter(i => i.mediaType === 'movie')) {
-      for (const pid of film.providers) {
-        const list = anchorShowsByProvider.get(pid) ?? [];
-        list.push({
-          tmdbId: film.tmdbId,
-          title: film.title,
-          posterPath: film.posterPath,
-          nextAirDate: null,
-          nextEpisodeCode: null,
-          isEnded: false,
-          providerIds: film.providers,
-        });
         anchorShowsByProvider.set(pid, list);
       }
     }
@@ -232,15 +229,15 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     const myProviderSet = new Set(myProviders);
     const nonSubscribedProviders = new Map<number, AdvisedShow[]>();
 
-    for (const show of followingAdvised) {
-      // If the show is available on any of the user's subscribed providers, skip —
-      // they already have access, no need to suggest other providers for it.
+    for (const show of allAnchors) {
       const hasOnMyProvider = show.providerIds.some(pid => myProviderSet.has(pid));
       if (hasOnMyProvider) continue;
+      const isFollowing = followingIds.has(show.tmdbId);
+      // Only apply the air-date window to Följer — vill_se titles are available now.
+      if (isFollowing && !isWithinDays(show.nextAirDate, lookAheadDays)) continue;
       for (const pid of show.providerIds) {
         const provider = getProvider(pid);
         if (!provider || provider.type !== 'flatrate') continue;
-        if (!isWithinDays(show.nextAirDate, lookAheadDays)) continue;
         const list = nonSubscribedProviders.get(pid) ?? [];
         list.push(show);
         nonSubscribedProviders.set(pid, list);
@@ -268,6 +265,38 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       if (a.nearestAirDate) return -1;
       return 1;
     });
+
+    const willSeeByProvider: WillSeePerProviderRow[] = (() => {
+      const counts = new Map<number, { tv: number; movie: number }>();
+      for (const show of [...willSeeAdvised, ...willSeeFilmAdvised]) {
+        for (const pid of show.providerIds) {
+          const entry = counts.get(pid) ?? { tv: 0, movie: 0 };
+          if (show.mediaType === 'movie') entry.movie++;
+          else entry.tv++;
+          counts.set(pid, entry);
+        }
+      }
+      const rows: WillSeePerProviderRow[] = [];
+      counts.forEach((c, pid) => {
+        const provider = getProvider(pid);
+        if (!provider || provider.type !== 'flatrate') return;
+        rows.push({
+          providerId: pid,
+          providerName: provider.name,
+          shortName: provider.shortName,
+          color: provider.color,
+          isSubscribed: myProviderSet.has(pid),
+          monthlyCost: providerCosts[pid] ?? provider.defaultMonthlyCost ?? null,
+          tvCount: c.tv,
+          movieCount: c.movie,
+        });
+      });
+      rows.sort((a, b) => {
+        if (a.isSubscribed !== b.isSubscribed) return a.isSubscribed ? -1 : 1;
+        return (b.tvCount + b.movieCount) - (a.tvCount + a.movieCount);
+      });
+      return rows;
+    })();
 
     // Active user-initiated pauses (state from profile)
     const activePauses: ActivePause[] = [];
@@ -347,6 +376,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     return {
       providers: providerAdvisories,
       subscribeAdvice,
+      willSeeByProvider,
       monthlySavings,
       totalMonthlyCost,
       primaryAction,

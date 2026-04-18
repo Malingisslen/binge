@@ -15,10 +15,12 @@ interface QuickAddButtonProps {
   title: string;
   posterPath: string | null;
   releaseYear: number | null;
+  providers?: number[];
+  genreIds?: number[];
 }
 
 export default function QuickAddButton({
-  tmdbId, mediaType, title, posterPath, releaseYear,
+  tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds,
 }: QuickAddButtonProps) {
   const { user, signIn } = useAuth();
   const { getItem, addItem, removeItem } = useWatchlist();
@@ -39,8 +41,9 @@ export default function QuickAddButton({
       totalSeasons: current?.totalSeasons ?? null,
       lastWatchedSeason: current?.lastWatchedSeason ?? null,
       lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
-      providers: current?.providers ?? [],
-      genreIds: current?.genreIds ?? [],
+      providers: providers ?? current?.providers ?? [],
+      genreIds: genreIds ?? current?.genreIds ?? [],
+      tmdbStatus: current?.tmdbStatus ?? null,
     });
     toast(`${title} — ${labelFor(status)}`);
     setOpen(false);
