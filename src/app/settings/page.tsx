@@ -14,7 +14,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateHideNonLatinTitles, updateHiddenCountries } = useAuth();
+  const { user, signOut, updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier, updateHideNonLatinTitles, updateHiddenCountries } = useAuth();
   const { show: toast } = useToast();
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
@@ -51,14 +51,17 @@ function SettingsContent() {
 
       <CollapsibleSection title="Mina streamingtjänster" defaultOpen={user.myProviders.length === 0}>
           <p className="text-xs text-text-muted mb-2">
-            Välj vilka tjänster du prenumererar på. Dessa markeras i hela appen.
+            Välj vilka tjänster du prenumererar på och vilken nivå. Dessa markeras i hela appen.
           </p>
           <div className="space-y-[2px]">
             {flatrateProviders.map(provider => {
               const isSelected = user.myProviders.includes(provider.id);
+              const selectedTierId = user.providerTiers?.[provider.id];
+              const hasTiers = (provider.tiers?.length ?? 0) > 0;
+              const isCustom = isSelected && hasTiers && !selectedTierId;
               return (
                 <div key={provider.id} className="flex items-center gap-2 py-[3px]">
-                  <label className="flex items-center gap-2 cursor-pointer text-base flex-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-base flex-1 min-w-0">
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -72,12 +75,30 @@ function SettingsContent() {
                       className="accent-accent w-[14px] h-[14px]"
                     />
                     <span
-                      className="w-[8px] h-[8px] rounded-full inline-block"
+                      className="w-[8px] h-[8px] rounded-full inline-block shrink-0"
                       style={{ background: provider.color }}
                     />
-                    {provider.name}
+                    <span className="truncate">{provider.name}</span>
                   </label>
-                  {isSelected && (
+                  {isSelected && hasTiers && (
+                    <select
+                      value={selectedTierId ?? ''}
+                      onChange={e => {
+                        const val = e.target.value;
+                        updateProviderTier(provider.id, val === '' ? null : val);
+                        toast('Prenumeration uppdaterad');
+                      }}
+                      className="px-1 py-[1px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none max-w-[160px]"
+                    >
+                      <option value="">Egen kostnad…</option>
+                      {provider.tiers!.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} — {t.cost} kr
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {isSelected && (!hasTiers || isCustom) && (
                     <input
                       type="number"
                       min="0"
@@ -93,6 +114,11 @@ function SettingsContent() {
                       }}
                       className="w-[70px] px-1 py-[1px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none text-right"
                     />
+                  )}
+                  {isSelected && hasTiers && !isCustom && (
+                    <span className="w-[70px] text-right text-xs text-text-muted tabular-nums">
+                      {user.providerCosts?.[provider.id] ?? 0} kr
+                    </span>
                   )}
                 </div>
               );
@@ -365,7 +391,7 @@ function TasteDataSection() {
       </div>
       <div className="px-3 py-3">
         <p className="text-xs text-text-secondary mb-2">
-          Fyll i genrer på äldre titlar i din watchlist så de bidrar till smak-match och rekommendationer. Körs en gång — nya titlar sparas automatiskt.
+          Fyll i genrer och streamingtjänster på äldre titlar i din watchlist så de syns i Följer/Vill se och bidrar till smak-match. Körs en gång — nya titlar sparas automatiskt.
         </p>
         <button
           onClick={run}
@@ -384,7 +410,7 @@ function TasteDataSection() {
         )}
         {progress && progress.total === 0 && !running && (
           <div className="mt-2 text-xxs text-text-muted">
-            Ingenting att uppdatera — alla titlar har redan genredata.
+            Ingenting att uppdatera — alla titlar har redan genrer och providers.
           </div>
         )}
       </div>

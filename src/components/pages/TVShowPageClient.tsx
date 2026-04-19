@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
@@ -59,6 +60,9 @@ export default function TVShowPageClient({ id }: { id: string }) {
   const backdrop = backdropUrl(show.backdrop_path);
   const providers = show['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
+  const free = providers?.free ?? [];
+  const ads = providers?.ads ?? [];
+  const subscription = [...flatrate, ...free, ...ads];
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -78,7 +82,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
     posterPath: show.poster_path,
     releaseYear: parseInt(yearStart, 10) || null,
     totalSeasons: show.number_of_seasons,
-    providers: [...flatrate, ...rent, ...buy].map(p => p.provider_id),
+    providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
     genreIds: show.genres.map(g => g.id),
     tmdbStatus: show.status,
   };
@@ -170,12 +174,12 @@ export default function TVShowPageClient({ id }: { id: string }) {
         )}
 
         {/* Providers — streaming prominent, rent/buy collapsed */}
-        {(flatrate.length > 0 || hasRentBuy) && (
+        {(subscription.length > 0 || hasRentBuy) && (
           <div className="mb-4 bg-surface border border-border-main rounded-sm p-3">
-            {flatrate.length > 0 && (
+            {subscription.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xxs text-text-muted uppercase tracking-[0.5px] font-semibold">Streama:</span>
-                {flatrate.map(p => {
+                {subscription.map(p => {
                   const logo = logoUrl(p.logo_path);
                   return logo ? (
                     <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" />
@@ -187,7 +191,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
             )}
             {hasRentBuy && (
               <>
-                {flatrate.length > 0 && <div className="border-t border-border-light my-2" />}
+                {subscription.length > 0 && <div className="border-t border-border-light my-2" />}
                 <button
                   onClick={() => setShowRentBuy(!showRentBuy)}
                   className="flex items-center gap-1 text-xs text-text-muted bg-transparent border-none cursor-pointer p-0 font-[inherit] hover:text-text-secondary"

@@ -5,7 +5,11 @@
       "WebFetch(domain:trakt.tv)",
       "WebFetch(domain:www.sidereel.com)",
       "WebFetch(domain:letterboxd.com)",
-      "WebFetch(domain:www.serializd.com)"
+      "WebFetch(domain:www.serializd.com)",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__read_console_messages"
     ]
   }
 }

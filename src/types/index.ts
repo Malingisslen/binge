@@ -360,6 +360,8 @@ export interface TMDBProvider {
 export interface TMDBProviderData {
   link: string;
   flatrate?: TMDBProvider[];
+  free?: TMDBProvider[];
+  ads?: TMDBProvider[];
   rent?: TMDBProvider[];
   buy?: TMDBProvider[];
 }
