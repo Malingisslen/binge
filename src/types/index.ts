@@ -381,7 +381,7 @@ export interface TMDBListResponse<T> {
 }
 
 // Subscription advisor types
-export type AdvisorStatus = 'active' | 'upcoming' | 'pause';
+export type AdvisorStatus = 'active' | 'upcoming' | 'pause' | 'free';
 
 export interface AdvisedShow {
   tmdbId: number;

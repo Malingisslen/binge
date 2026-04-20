@@ -228,7 +228,7 @@ function SavingsContent() {
     );
   }
 
-  const activeProviders = advisor.providers.filter(p => p.status === 'active' || p.status === 'upcoming');
+  const activeProviders = advisor.providers.filter(p => p.status !== 'pause');
   const pauseProviders = advisor.providers.filter(p => p.status === 'pause');
   const userPausedSet = new Set(advisor.activePauses.map(p => p.providerId));
   const suggestedPauseCount = pauseProviders.filter(p => !userPausedSet.has(p.providerId)).length;

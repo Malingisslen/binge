@@ -208,6 +208,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       if (hasActiveShow) status = 'active';
       else if (hasUpcomingShow) status = 'upcoming';
       else if (hasWillSeeAnchor) status = 'upcoming';
+      else if (provider.isFree) status = 'free';
       else status = 'pause';
 
       const dates = followingAnchors
@@ -227,7 +228,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       });
     }
 
-    const statusOrder = { active: 0, upcoming: 1, pause: 2 };
+    const statusOrder: Record<ProviderAdvisory['status'], number> = { active: 0, upcoming: 1, free: 2, pause: 3 };
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
     const subscribeAdvice: SubscribeAdvisory[] = [];

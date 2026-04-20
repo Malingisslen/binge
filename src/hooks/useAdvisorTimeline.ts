@@ -31,7 +31,7 @@ export interface TimelineCell {
   entries: TimelineCellEntry[];
 }
 
-export type LaneKind = 'active' | 'upcoming' | 'pause' | 'user-paused' | 'unsubscribed';
+export type LaneKind = 'active' | 'upcoming' | 'pause' | 'free' | 'user-paused' | 'unsubscribed';
 
 export interface TimelineLane {
   providerId: number;
@@ -150,6 +150,7 @@ export function useAdvisorTimeline(): TimelineResult {
       const kind: LaneKind = userPause
         ? 'user-paused'
         : p.status === 'pause' ? 'pause'
+        : p.status === 'free' ? 'free'
         : p.status === 'upcoming' ? 'upcoming'
         : 'active';
       return makeLane({

@@ -16,6 +16,9 @@ export interface SwedishProvider {
   // "flatrate"-post och en separat "ads"-post med olika id). Alla id:n här
   // mappas till samma SwedishProvider via getProvider().
   aliases?: number[];
+  // Public service / gratis-tjänster. Används för att undanta från
+  // pausa/avsluta-rekommendationer (alla i Sverige har redan SVT Play).
+  isFree?: boolean;
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
@@ -53,7 +56,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'total', name: 'Total (all sport)', cost: 699 },
     ],
   },
-  { id: 520, name: 'SVT Play', shortName: 'SVT', color: '#0F79AF', type: 'flatrate', defaultMonthlyCost: 0 },
+  { id: 520, name: 'SVT Play', shortName: 'SVT', color: '#0F79AF', type: 'flatrate', defaultMonthlyCost: 0, isFree: true },
   {
     id: 489, name: 'TV4 Play', shortName: 'TV4', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
     aliases: [1944],
