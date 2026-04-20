@@ -28,6 +28,7 @@ export function usePublicProfile(username: string) {
           myProviders: data.myProviders ?? [],
           defaultView: data.defaultView ?? 'table',
           providerCosts: {},
+          providerTiers: {},
           createdAt: toDate(data.createdAt),
           updatedAt: toDate(data.updatedAt),
           notificationSettings: { newEpisodes: false, availableOnMyServices: false },

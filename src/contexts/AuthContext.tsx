@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -27,6 +28,7 @@ interface AuthState {
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
+  updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
@@ -49,6 +51,7 @@ const AuthContext = createContext<AuthState>({
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
+  updateProviderTier: async () => {},
   pauseProvider: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
@@ -78,6 +81,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
       hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
+      providerTiers: (data.providerTiers as Record<number, string>) ?? {},
       providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
       calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
       createdAt: data.createdAt?.toDate() ?? new Date(),
@@ -101,6 +105,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     hideNonLatinTitles: false,
     hiddenCountries: [],
     providerCosts: {},
+    providerTiers: {},
     providerPauses: {},
     calibrationGenres: null,
     createdAt: new Date(),
@@ -121,6 +126,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -162,7 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await firebaseSignOut(auth);
-  }, []);
+    // Clear React Query cache so the next user (on shared device) or a
+    // re-signed-in user starts with empty server-state instead of the
+    // previous user's cached watchlist / reviews / notifications.
+    queryClient.clear();
+  }, [queryClient]);
 
   const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
     if (!uid) return;
@@ -185,6 +195,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [updateUserField, uid]);
   const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
+  const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
+    if (!uid || !user) return;
+    const { getProvider } = await import('@/lib/tmdb/providers');
+    const provider = getProvider(providerId);
+    const tier = tierId ? provider?.tiers?.find(t => t.id === tierId) : null;
+
+    const nextTiers = { ...(user.providerTiers ?? {}) };
+    const nextCosts = { ...(user.providerCosts ?? {}) };
+
+    if (tierId && tier) {
+      nextTiers[providerId] = tierId;
+      nextCosts[providerId] = tier.cost;
+    } else {
+      delete nextTiers[providerId];
+    }
+
+    await setDoc(doc(db, 'users', uid), {
+      providerTiers: nextTiers,
+      providerCosts: nextCosts,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    setUser(prev => prev ? { ...prev, providerTiers: nextTiers, providerCosts: nextCosts } : null);
+  }, [uid, user]);
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
     const current = user?.providerPauses ?? {};
     const existing = current[providerId];
@@ -230,10 +263,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user?.username) batch.delete(doc(db, 'usernames', user.username));
     await batch.commit();
     await deleteUser(currentUser);
-  }, []);
+    // NOTE: cascade is still incomplete per 02 G-3 / 11 LC-1 — reviews,
+    // comments, lists, follower records, and group memberships are not
+    // yet deleted. Tracked for Sprint 1 Day 8 (4.1).
+  }, [user?.username]);
+
+  const value = useMemo(
+    () => ({
+      user, uid, loading,
+      signIn, signInEmail, register, signOut,
+      updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
+      pauseProvider, resumeProvider,
+      updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      setCalibrationGenres, deleteAccount,
+    }),
+    [
+      user, uid, loading,
+      signIn, signInEmail, register, signOut,
+      updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
+      pauseProvider, resumeProvider,
+      updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      setCalibrationGenres, deleteAccount,
+    ]
+  );
 
   return (
-    <AuthContext.Provider value={{ user, uid, loading, signIn, signInEmail, register, signOut, updateProviders, updateDefaultView, updateProviderCosts, pauseProvider, resumeProvider, updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries, setCalibrationGenres, deleteAccount }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
