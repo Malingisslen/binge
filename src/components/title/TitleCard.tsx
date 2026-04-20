@@ -8,7 +8,7 @@ import type { TMDBSearchResult } from '@/types';
 import { getDisplayTitle, getReleaseYear } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import type { TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from './QuickAddButton';
 
@@ -53,7 +53,7 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
             <div className="absolute bottom-[2px] left-[2px] flex gap-[1px]">
               {visibleBadges.map(p => {
                 const mapped = getProvider(p.provider_id);
-                const isMine = myProviders.includes(p.provider_id);
+                const isMine = myProviders.includes(canonicalProviderId(p.provider_id));
                 return (
                   <span
                     key={p.provider_id}
@@ -84,7 +84,7 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
             title={title}
             posterPath={item.poster_path}
             releaseYear={year}
-            providers={providers?.map(p => p.provider_id)}
+            providers={providers?.map(p => canonicalProviderId(p.provider_id))}
             genreIds={item.genre_ids}
           />
         </div>

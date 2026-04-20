@@ -7,6 +7,7 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getWatchProviders } from '@/lib/tmdb/client';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 
 export interface AppNotification {
   id: string;
@@ -58,7 +59,7 @@ export function useNotifications() {
 
     const candidates = items.filter(i =>
       i.status === 'följer' && !i.dropped &&
-      !(i.providers ?? []).some(p => myProviders.includes(p))
+      !(i.providers ?? []).some(p => myProviders.includes(canonicalProviderId(p)))
     );
     if (candidates.length === 0) return;
 
@@ -69,9 +70,10 @@ export function useNotifications() {
         try {
           const data = await getWatchProviders(item.mediaType, item.tmdbId);
           const flatrate = data.results?.SE?.flatrate ?? [];
-          const match = flatrate.find(p => myProviders.includes(p.provider_id));
+          const match = flatrate.find(p => myProviders.includes(canonicalProviderId(p.provider_id)));
           if (match) {
-            const notifId = `${item.tmdbId}-${match.provider_id}`;
+            const canonicalId = canonicalProviderId(match.provider_id);
+            const notifId = `${item.tmdbId}-${canonicalId}`;
             const notifRef = doc(db, 'users', uid, 'notifications', notifId);
             const existing = await getDoc(notifRef);
             if (!existing.exists()) {
@@ -79,7 +81,7 @@ export function useNotifications() {
                 tmdbId: item.tmdbId,
                 mediaType: item.mediaType,
                 title: item.title,
-                providerId: match.provider_id,
+                providerId: canonicalId,
                 providerName: match.provider_name,
                 read: false,
                 createdAt: serverTimestamp(),

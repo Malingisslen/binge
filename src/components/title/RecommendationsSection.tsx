@@ -5,6 +5,7 @@ import TitleGrid from './TitleGrid';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 import type { TMDBSearchResult, TMDBProvider } from '@/types';
 
 interface RecommendationsSectionProps {
@@ -27,7 +28,7 @@ export default function RecommendationsSection({ recommendations, myProviders, l
     if (!onlyMyServices || myProviders.length === 0) return visibleRecs;
     return visibleRecs.filter(r => {
       const p = rawProviderMap[`${r.media_type}-${r.id}`];
-      return p?.flatrate?.some(f => myProviders.includes(f.provider_id));
+      return p?.flatrate?.some(f => myProviders.includes(canonicalProviderId(f.provider_id)));
     });
   }, [visibleRecs, onlyMyServices, myProviders, rawProviderMap]);
 

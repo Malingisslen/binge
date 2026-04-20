@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
 import {
   collection,
   doc,
@@ -163,10 +163,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return items.find(i => i.tmdbId === tmdbId) ?? null;
   }, [items]);
 
+  const value = useMemo(() => ({
+    items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
+  }), [items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem]);
+
   return (
-    <WatchlistContext.Provider value={{
-      items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
-    }}>
+    <WatchlistContext.Provider value={value}>
       {children}
     </WatchlistContext.Provider>
   );
