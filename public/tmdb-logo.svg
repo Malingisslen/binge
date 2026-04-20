@@ -1,0 +1,8 @@
+<!-- PLACEHOLDER: replace with official TMDB logo from
+     https://www.themoviedb.org/about/logos-attribution
+     Download "The Movie Database Short Logo" (full-color or white) SVG
+     and overwrite this file. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 80" width="50" height="20" aria-hidden="true">
+  <rect width="190" height="80" rx="8" fill="#01b4e4"/>
+  <text x="95" y="50" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#fff" text-anchor="middle">TMDB</text>
+</svg>
