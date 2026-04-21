@@ -2,7 +2,14 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
+
+// Version identifier for the Terms of Service + Privacy Policy a user
+// accepts at sign-up. Bump this (e.g. to '2026-07-01') when either legal
+// document changes materially; the user's recorded version lets us
+// prompt for re-acceptance on change.
+const TERMS_VERSION = '2026-04-20';
 
 export default function LoginPage() {
   const { user, signIn, signInEmail, register, loading } = useAuth();
@@ -11,6 +18,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,7 +42,9 @@ export default function LoginPage() {
     try {
       if (mode === 'register') {
         if (!name.trim()) { setError('Ange ditt namn.'); setSubmitting(false); return; }
-        await register(email, password, name);
+        if (!ageConfirmed) { setError('Du måste vara minst 13 år för att skapa konto.'); setSubmitting(false); return; }
+        if (!termsAccepted) { setError('Du måste godkänna villkoren för att skapa konto.'); setSubmitting(false); return; }
+        await register(email, password, name, TERMS_VERSION);
       } else {
         await signInEmail(email, password);
       }
@@ -51,6 +62,9 @@ export default function LoginPage() {
     }
     setSubmitting(false);
   }
+
+  const registerDisabled = submitting
+    || (mode === 'register' && (!ageConfirmed || !termsAccepted));
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -83,6 +97,7 @@ export default function LoginPage() {
             <input
               type="text"
               placeholder="Namn"
+              aria-label="Namn"
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
@@ -91,6 +106,7 @@ export default function LoginPage() {
           <input
             type="email"
             placeholder="E-post"
+            aria-label="E-post"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -99,16 +115,44 @@ export default function LoginPage() {
           <input
             type="password"
             placeholder="Lösenord"
+            aria-label="Lösenord"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
             minLength={6}
             className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
           />
+          {mode === 'register' && (
+            <div className="mt-3 mb-2 space-y-2 text-xs text-text-secondary">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ageConfirmed}
+                  onChange={e => setAgeConfirmed(e.target.checked)}
+                  className="mt-[2px] cursor-pointer"
+                />
+                <span>Jag är minst 13 år gammal.</span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={e => setTermsAccepted(e.target.checked)}
+                  className="mt-[2px] cursor-pointer"
+                />
+                <span>
+                  Jag godkänner Binges{' '}
+                  <Link href="/villkor" target="_blank" className="text-accent underline">användarvillkor</Link>
+                  {' '}och{' '}
+                  <Link href="/integritet" target="_blank" className="text-accent underline">integritetspolicy</Link>.
+                </span>
+              </label>
+            </div>
+          )}
           {error && <div className="text-xs text-red-600 mb-2">{error}</div>}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={registerDisabled}
             className="w-full px-4 py-[6px] bg-text-primary text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? '...' : mode === 'register' ? 'Skapa konto' : 'Logga in'}

@@ -63,6 +63,11 @@ export interface UserProfile {
   calibrationGenres: Record<number, number> | null;
   createdAt: Date;
   updatedAt: Date;
+  // Timestamp + version of the Terms/Privacy version the user accepted at
+  // sign-up. Optional because accounts created before the acceptance flow
+  // shipped won't have it set.
+  termsAcceptedAt?: Date;
+  termsVersion?: string;
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;

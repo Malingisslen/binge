@@ -23,7 +23,7 @@ interface AuthState {
   loading: boolean;
   signIn: () => Promise<void>;
   signInEmail: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, name: string, termsVersion: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
@@ -86,6 +86,8 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
+      termsAcceptedAt: data.termsAcceptedAt?.toDate(),
+      termsVersion: data.termsVersion as string | undefined,
       notificationSettings: data.notificationSettings ?? {
         newEpisodes: true,
         availableOnMyServices: true,
@@ -161,9 +163,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string) => {
+  const register = useCallback(async (email: string, password: string, name: string, termsVersion: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
+    // Create the user doc ourselves (instead of relying on onAuthStateChanged
+    // + ensureUserProfile) so we can atomically include terms-acceptance
+    // metadata. onAuthStateChanged will subsequently load the complete doc.
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      displayName: name,
+      email: cred.user.email ?? email,
+      photoURL: cred.user.photoURL,
+      username: null,
+      bio: '',
+      isPublic: false,
+      myProviders: [],
+      defaultView: 'table',
+      hideNonLatinTitles: false,
+      hiddenCountries: [],
+      providerCosts: {},
+      providerTiers: {},
+      providerPauses: {},
+      calibrationGenres: null,
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true },
+      termsAcceptedAt: serverTimestamp(),
+      termsVersion,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
   }, []);
 
   const signOut = useCallback(async () => {
