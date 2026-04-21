@@ -13,7 +13,20 @@ import {
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, getDocs, collection, writeBatch, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  getDocs,
+  collection,
+  collectionGroup,
+  documentId,
+  query,
+  where,
+  writeBatch,
+  serverTimestamp,
+  type DocumentReference,
+} from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/config';
 import type { UserProfile } from '@/types';
 
@@ -276,22 +289,121 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const id = currentUser.uid;
-    const batch = writeBatch(db);
-    const [watchlistSnap, progressSnap, notifSnap] = await Promise.all([
+    const username = user?.username ?? null;
+
+    // Collect everything owned by the user across all collections.
+    // Some queries (collectionGroup with documentId/where) rely on
+    // single-field collection-group indexes — added to firestore.indexes.json.
+    const [
+      watchlistSnap,
+      progressSnap,
+      notifSnap,
+      followingSnap,
+      myReviewsSnap,
+      myListsSnap,
+      mySessionsSnap,
+      myGroupsSnap,
+      myCommentsSnap,
+      myLikesSnap,
+    ] = await Promise.all([
       getDocs(collection(db, 'users', id, 'watchlist')),
       getDocs(collection(db, 'users', id, 'episodeProgress')),
       getDocs(collection(db, 'users', id, 'notifications')),
+      getDocs(collection(db, 'users', id, 'following')),
+      getDocs(query(collection(db, 'reviews'), where('uid', '==', id))),
+      getDocs(query(collection(db, 'lists'), where('uid', '==', id))),
+      getDocs(query(collection(db, 'sessions'), where('hostUid', '==', id))),
+      getDocs(query(collection(db, 'groups'), where('memberUids', 'array-contains', id))),
+      // My comments on OTHERS' reviews (own-review comments handled below).
+      getDocs(query(collectionGroup(db, 'comments'), where('uid', '==', id))),
+      // My likes on reviews — doc id is my uid.
+      getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', id))),
     ]);
-    watchlistSnap.docs.forEach(d => batch.delete(d.ref));
-    progressSnap.docs.forEach(d => batch.delete(d.ref));
-    notifSnap.docs.forEach(d => batch.delete(d.ref));
-    batch.delete(doc(db, 'users', id));
-    if (user?.username) batch.delete(doc(db, 'usernames', user.username));
-    await batch.commit();
+
+    const refs: DocumentReference[] = [];
+
+    // 1. Simple per-user subcollections.
+    watchlistSnap.docs.forEach(d => refs.push(d.ref));
+    progressSnap.docs.forEach(d => refs.push(d.ref));
+    notifSnap.docs.forEach(d => refs.push(d.ref));
+
+    // 2. Outbound follows: delete own "following" + mirror "followers" on target.
+    followingSnap.docs.forEach(d => {
+      refs.push(d.ref);
+      refs.push(doc(db, 'users', d.id, 'followers', id));
+    });
+
+    // 3. My reviews + all their subcollections (likes + comments on my reviews).
+    for (const reviewDoc of myReviewsSnap.docs) {
+      const [likesSnap, commentsSnap] = await Promise.all([
+        getDocs(collection(db, 'reviews', reviewDoc.id, 'likes')),
+        getDocs(collection(db, 'reviews', reviewDoc.id, 'comments')),
+      ]);
+      likesSnap.docs.forEach(d => refs.push(d.ref));
+      commentsSnap.docs.forEach(d => refs.push(d.ref));
+      refs.push(reviewDoc.ref);
+    }
+
+    // 4. My comments on OTHERS' reviews (collection-group).
+    myCommentsSnap.docs.forEach(d => refs.push(d.ref));
+
+    // 5. My likes on OTHERS' reviews (collection-group by documentId == uid).
+    myLikesSnap.docs.forEach(d => refs.push(d.ref));
+
+    // 6. My lists.
+    myListsSnap.docs.forEach(d => refs.push(d.ref));
+
+    // 7. Sessions I host (Tillsammans).
+    mySessionsSnap.docs.forEach(d => refs.push(d.ref));
+
+    // 8. Groups: if I'm owner, delete the whole group + subcollections.
+    //    If I'm a member, just remove myself from memberUids and delete my member doc.
+    //    Rules update-branch forces us to keep other fields unchanged when
+    //    only removing the leaving member.
+    const memberLeaveUpdates: { ref: DocumentReference; newMemberUids: string[] }[] = [];
+    for (const groupDoc of myGroupsSnap.docs) {
+      const data = groupDoc.data();
+      const ownerUid = data.ownerUid as string | undefined;
+      if (ownerUid === id) {
+        const [membersSnap, groupWatchlistSnap] = await Promise.all([
+          getDocs(collection(db, 'groups', groupDoc.id, 'members')),
+          getDocs(collection(db, 'groups', groupDoc.id, 'watchlist')),
+        ]);
+        membersSnap.docs.forEach(d => refs.push(d.ref));
+        groupWatchlistSnap.docs.forEach(d => refs.push(d.ref));
+        refs.push(groupDoc.ref);
+      } else {
+        const current = (data.memberUids as string[]) ?? [];
+        memberLeaveUpdates.push({
+          ref: groupDoc.ref,
+          newMemberUids: current.filter(u => u !== id),
+        });
+        refs.push(doc(db, 'groups', groupDoc.id, 'members', id));
+      }
+    }
+
+    // 9. User doc + username reservation.
+    refs.push(doc(db, 'users', id));
+    if (username) refs.push(doc(db, 'usernames', username));
+
+    // Commit in ≤ 450-op chunks (Firestore limit is 500; leave headroom).
+    const CHUNK = 450;
+    for (let i = 0; i < refs.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      refs.slice(i, i + CHUNK).forEach(r => batch.delete(r));
+      await batch.commit();
+    }
+    // Member-leave updates in their own chunks (separate from deletes for clarity).
+    for (let i = 0; i < memberLeaveUpdates.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      memberLeaveUpdates.slice(i, i + CHUNK).forEach(u => {
+        batch.update(u.ref, { memberUids: u.newMemberUids });
+      });
+      await batch.commit();
+    }
+
+    // Finally remove the Firebase Auth user.
     await deleteUser(currentUser);
-    // NOTE: cascade is still incomplete per 02 G-3 / 11 LC-1 — reviews,
-    // comments, lists, follower records, and group memberships are not
-    // yet deleted. Tracked for Sprint 1 Day 8 (4.1).
   }, [user?.username]);
 
   const value = useMemo(
