@@ -378,7 +378,7 @@ function TasteDataSection() {
       const final = await backfillGenreIds(uid, p => setProgress({ ...p }));
       toast(`Klar — ${final.updated} titlar uppdaterade`);
     } catch {
-      toast('Något gick fel. Försök igen.');
+      toast('Kunde inte uppdatera genre-data. Kontrollera internetuppkopplingen och försök igen.');
     } finally {
       setRunning(false);
     }
@@ -431,7 +431,7 @@ function DeleteAccountSection() {
     } catch (err: unknown) {
       const msg = err instanceof Error && err.message.includes('requires-recent-login')
         ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
-        : 'Något gick fel. Försök igen.';
+        : 'Kunde inte ta bort kontot. Kontrollera internetuppkopplingen och försök igen.';
       toast(msg);
       setDeleting(false);
       setConfirming(false);

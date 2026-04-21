@@ -298,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       watchlistSnap,
       progressSnap,
       notifSnap,
+      notInterestedSnap,
       followingSnap,
       myReviewsSnap,
       myListsSnap,
@@ -309,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getDocs(collection(db, 'users', id, 'watchlist')),
       getDocs(collection(db, 'users', id, 'episodeProgress')),
       getDocs(collection(db, 'users', id, 'notifications')),
+      getDocs(collection(db, 'users', id, 'notInterested')),
       getDocs(collection(db, 'users', id, 'following')),
       getDocs(query(collection(db, 'reviews'), where('uid', '==', id))),
       getDocs(query(collection(db, 'lists'), where('uid', '==', id))),
@@ -326,6 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     watchlistSnap.docs.forEach(d => refs.push(d.ref));
     progressSnap.docs.forEach(d => refs.push(d.ref));
     notifSnap.docs.forEach(d => refs.push(d.ref));
+    notInterestedSnap.docs.forEach(d => refs.push(d.ref));
 
     // 2. Outbound follows: delete own "following" + mirror "followers" on target.
     followingSnap.docs.forEach(d => {

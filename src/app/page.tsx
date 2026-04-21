@@ -26,7 +26,7 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-page">
-      <section className="bg-gradient-to-b from-[#1e2028] to-[#2a2a3a] text-white">
+      <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
           <h1 className="text-[32px] font-extrabold text-accent mb-2">
             binge<span className="font-normal text-white/60 text-[22px]">.nu</span>

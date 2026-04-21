@@ -11,15 +11,17 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import type { TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from './QuickAddButton';
+import NotInterestedButton from './NotInterestedButton';
 
 const MAX_BADGES = 3;
 
 interface TitleCardProps {
   item: TMDBSearchResult;
   providers?: TMDBProvider[];
+  showNotInterested?: boolean;
 }
 
-export default function TitleCard({ item, providers }: TitleCardProps) {
+export default function TitleCard({ item, providers, showNotInterested }: TitleCardProps) {
   const { user } = useAuth();
   const { getItem } = useWatchlist();
   const href = item.media_type === 'movie' ? `/movie/${item.id}/` : `/tv/${item.id}/`;
@@ -36,7 +38,7 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
   const extraCount = (providers?.length ?? 0) - MAX_BADGES;
 
   return (
-    <div className="group relative transition-transform duration-150 hover:-translate-y-[1px]">
+    <div className="group relative">
       <Link href={href} className="no-underline text-text-primary">
         <div className={`aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden ${
           isTracked ? 'ring-2 ring-accent' : ''
@@ -86,6 +88,16 @@ export default function TitleCard({ item, providers }: TitleCardProps) {
             releaseYear={year}
             providers={providers?.map(p => canonicalProviderId(p.provider_id))}
             genreIds={item.genre_ids}
+          />
+        </div>
+      )}
+      {isTrackable && showNotInterested && (
+        <div className="absolute top-[4px] left-[4px]">
+          <NotInterestedButton
+            tmdbId={item.id}
+            mediaType={item.media_type as MediaType}
+            title={title}
+            variant="icon"
           />
         </div>
       )}

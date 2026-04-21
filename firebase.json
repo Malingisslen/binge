@@ -9,7 +9,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://image.tmdb.org https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://api.themoviedb.org https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebase.com https://firebaseinstallations.googleapis.com https://firebaselogging-pa.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://*.firebaseapp.com https://plausible.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://image.tmdb.org https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://api.themoviedb.org https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebase.com https://firebaseinstallations.googleapis.com https://firebaselogging-pa.googleapis.com https://plausible.io; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
           },
           {
             "key": "Strict-Transport-Security",

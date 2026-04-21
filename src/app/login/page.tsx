@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { trackEvent } from '@/lib/analytics';
 
 // Version identifier for the Terms of Service + Privacy Policy a user
 // accepts at sign-up. Bump this (e.g. to '2026-07-01') when either legal
@@ -29,7 +30,10 @@ export default function LoginPage() {
 
   async function handleGoogle() {
     setError('');
-    try { await signIn(); } catch (err) {
+    try {
+      await signIn();
+      trackEvent('signed_in', { method: 'google' });
+    } catch (err) {
       console.error('Google sign-in failed:', err);
       setError('Inloggning misslyckades.');
     }
@@ -45,8 +49,10 @@ export default function LoginPage() {
         if (!ageConfirmed) { setError('Du måste vara minst 13 år för att skapa konto.'); setSubmitting(false); return; }
         if (!termsAccepted) { setError('Du måste godkänna villkoren för att skapa konto.'); setSubmitting(false); return; }
         await register(email, password, name, TERMS_VERSION);
+        trackEvent('signed_up');
       } else {
         await signInEmail(email, password);
+        trackEvent('signed_in', { method: 'email' });
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code ?? '';
@@ -56,8 +62,10 @@ export default function LoginPage() {
         setError('E-postadressen används redan.');
       } else if (code === 'auth/weak-password') {
         setError('Lösenordet måste vara minst 6 tecken.');
+      } else if (mode === 'register') {
+        setError('Kunde inte skapa kontot. Kontrollera internetuppkopplingen och försök igen.');
       } else {
-        setError('Något gick fel. Försök igen.');
+        setError('Inloggningen misslyckades. Kontrollera internetuppkopplingen och försök igen.');
       }
     }
     setSubmitting(false);
