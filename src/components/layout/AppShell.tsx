@@ -19,7 +19,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isLandingForGuest) {
     return (
       <>
-        {children}
+        <a href="#main" className="sr-only">Hoppa till innehåll</a>
+        <main id="main">{children}</main>
         <Footer />
       </>
     );
@@ -27,13 +28,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <a href="#main" className="sr-only">Hoppa till innehåll</a>
       <div className="hidden md:block">
         <Sidebar />
       </div>
       <MobileNav />
       <div className="flex-1 overflow-y-auto flex flex-col">
         <TopBar />
-        <main className="p-[14px_18px] flex-1">{children}</main>
+        <main id="main" className="p-[14px_18px] flex-1">{children}</main>
         <Footer />
       </div>
     </div>

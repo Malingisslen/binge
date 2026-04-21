@@ -30,6 +30,8 @@ export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemP
             watched ? 'bg-accent border-accent' : 'bg-transparent border-[#ccc]'
           }`}
           title={watched ? 'Markera osedd' : 'Markera sedd'}
+          aria-label={watched ? 'Markera osedd' : 'Markera sedd'}
+          aria-pressed={watched}
         />
         <Link href={`/tv/${entry.tmdbId}/`} className="no-underline min-w-0">
           <div className="text-text-primary font-semibold text-xs leading-tight">{entry.title}</div>

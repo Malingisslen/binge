@@ -139,8 +139,10 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
             iLike ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
           } disabled:opacity-50 disabled:cursor-default`}
           title={uid ? (iLike ? 'Ångra gillning' : 'Gilla') : 'Logga in för att gilla'}
+          aria-label={uid ? (iLike ? `Ångra gillning${likeCount > 0 ? ` (${likeCount} gillar)` : ''}` : `Gilla${likeCount > 0 ? ` (${likeCount} gillar)` : ''}`) : 'Logga in för att gilla'}
+          aria-pressed={iLike}
         >
-          <Heart size={11} fill={iLike ? 'currentColor' : 'none'} />
+          <Heart size={11} fill={iLike ? 'currentColor' : 'none'} aria-hidden="true" />
           {likeCount > 0 && <span>{likeCount}</span>}
         </button>
         <button

@@ -802,6 +802,13 @@ function SettingsModal({
   const [mediaType, setMediaType] = useState<SessionMediaType>(defaults.mediaType);
   const [saving, setSaving] = useState(false);
 
+  // Close on Escape (keyboard accessibility; onClick on backdrop covers mouse).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   const save = async () => {
     setSaving(true);
     try {
@@ -816,14 +823,27 @@ function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+      role="presentation"
+    >
       <div
         className="bg-surface border border-border-main rounded-sm max-w-[480px] w-full"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-settings-title"
       >
         <div className="px-3 py-2 border-b border-border-light flex items-center justify-between">
-          <h2 className="text-sm font-bold">Gruppinställningar</h2>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary cursor-pointer">
+          <h2 id="group-settings-title" className="text-sm font-bold">Gruppinställningar</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Stäng gruppinställningar"
+            className="text-text-muted hover:text-text-primary cursor-pointer"
+          >
             <X size={14} />
           </button>
         </div>

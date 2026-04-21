@@ -16,7 +16,10 @@ const config: Config = {
         accent: '#d97b35',
         'text-primary': '#222',
         'text-secondary': '#555',
-        'text-muted': '#999',
+        // Darkened from #999 → #6b6b6b to satisfy WCAG 2.1 AA (4.5:1)
+        // for small body text on the #eeece8 page background
+        // (computed ≈ 4.75:1; previous #999 was ≈ 2.8:1 — AA-fail).
+        'text-muted': '#6b6b6b',
         'text-sidebar': '#9a9aaa',
         'text-sidebar-active': '#eee',
         'sidebar-label': '#3e3e48',

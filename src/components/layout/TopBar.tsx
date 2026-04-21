@@ -33,11 +33,14 @@ export default function TopBar() {
         {mounted && mySessions.length > 0 && (
           <div className="relative" ref={sessionsRef}>
             <button
+              type="button"
               onClick={() => setSessionsOpen(!sessionsOpen)}
               className="relative bg-transparent border-none cursor-pointer p-0 text-text-muted hover:text-text-secondary"
               title={totalPending > 0 ? `${totalPending} väntande svepningar` : 'Mina sessioner'}
+              aria-label={totalPending > 0 ? `Mina sessioner, ${totalPending} väntande svepningar` : 'Mina sessioner'}
+              aria-expanded={sessionsOpen}
             >
-              <Users size={16} />
+              <Users size={16} aria-hidden="true" />
               {totalPending > 0 && (
                 <span className="absolute -top-[3px] -right-[3px] w-[14px] h-[14px] bg-accent text-white rounded-full text-[8px] flex items-center justify-center font-bold">
                   {totalPending > 9 ? '9+' : totalPending}
@@ -73,10 +76,13 @@ export default function TopBar() {
         {mounted && user && hasNotifications && (
           <div className="relative" ref={bellRef}>
             <button
+              type="button"
               onClick={() => setBellOpen(!bellOpen)}
               className="relative bg-transparent border-none cursor-pointer p-0 text-text-muted hover:text-text-secondary"
+              aria-label={unreadCount > 0 ? `Notiser, ${unreadCount} olästa` : 'Notiser'}
+              aria-expanded={bellOpen}
             >
-              <Bell size={16} />
+              <Bell size={16} aria-hidden="true" />
               {unreadCount > 0 && (
                 <span className="absolute -top-[3px] -right-[3px] w-[14px] h-[14px] bg-accent text-white rounded-full text-[8px] flex items-center justify-center font-bold">
                   {unreadCount > 9 ? '9+' : unreadCount}
