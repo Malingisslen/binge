@@ -453,6 +453,9 @@ export interface AdvisorResult {
   monthlySavings: number;
   totalMonthlyCost: number;
   isLoading: boolean;
+  // true om en eller flera TMDB-queries misslyckades. Widget ska rendera en
+  // specifik empty-state istället för att bara visa en blank panel.
+  hasError: boolean;
   primaryAction: PrimaryAction;
   activePauses: ActivePause[];
 }

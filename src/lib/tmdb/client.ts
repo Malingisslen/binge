@@ -187,7 +187,11 @@ export function discoverMovies(params: Record<string, string> = {}, opts?: TmdbF
 }
 
 export function discoverTV(params: Record<string, string> = {}, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch('/discover/tv', { watch_region: 'SE', ...params }, opts);
+  // region=SE filtrerar release-date-fönstret till svenska premiärdatum,
+  // watch_region=SE filtrerar providers till vad som är tillgängligt i SE.
+  // Båda behövs — annars får vi t.ex. globala premiärer som inte är svenska
+  // OCH vi får providers från andra länder som är irrelevanta här.
+  return tmdbFetch('/discover/tv', { region: 'SE', watch_region: 'SE', ...params }, opts);
 }
 
 // Watch providers (lightweight — no credits, recs, etc.)

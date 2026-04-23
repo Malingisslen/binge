@@ -68,6 +68,10 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   });
 
   const isLoading = showQueries.some(q => q.isLoading);
+  // hasError = minst en fetch misslyckades + det saknas cached data för den.
+  // Om en query tidigare lyckats och nu failar använder vi stale data, då
+  // betraktar vi inte det som fel mot användaren.
+  const hasError = showQueries.some(q => q.isError && !q.data);
   const shows = useMemo(
     () => showQueries.map(q => q.data).filter((d): d is TMDBTVShow => d != null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,19 +90,52 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         activePauses: [] as ActivePause[],
       };
     }
+    // Om alla TMDB-queries failar har vi ingen anchor-data att arbeta med.
+    // Returnera tomt så widget kan rendera error-state istället för fantomdata.
+    if (hasError && shows.length === 0) {
+      return {
+        providers: [],
+        subscribeAdvice: [],
+        willSeeByProvider: [] as WillSeePerProviderRow[],
+        monthlySavings: 0,
+        totalMonthlyCost: 0,
+        primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
+        activePauses: [] as ActivePause[],
+      };
+    }
 
     const followingIds = new Set(followingTV.map(i => i.tmdbId));
     const willSeeIds = new Set(willSeeItems.filter(i => i.mediaType === 'tv').map(i => i.tmdbId));
 
     const followingById = new Map<number, WatchlistItem>(followingTV.map(i => [i.tmdbId, i]));
 
+    // ads-bucket (AVOD, t.ex. Plex, Pluto, freevee) inkluderas bara om
+     // användaren faktiskt prenumererar på någon ads-tjänst — annars rankas
+    // icke-relevanta gratis-tjänster upp som "alternativ" vilket förvirrar.
+    // Free-bucket (SVT Play, YLE) är alltid relevant eftersom de är licens-
+    // finansierade och öppna för alla svenska användare.
+    const myProviderSet = new Set(myProviders);
+    const userHasAdsProvider = myProviders.some(pid => {
+      const p = getProvider(pid);
+      return p?.isAds === true;
+    });
+
     const advisedShows: AdvisedShow[] = shows.map(show => {
       const se = show['watch/providers']?.results?.SE;
       const seProviders = [
         ...(se?.flatrate ?? []),
         ...(se?.free ?? []),
-        ...(se?.ads ?? []),
+        ...(userHasAdsProvider ? (se?.ads ?? []) : []),
       ];
+      // Dessutom: om ads-providern råkar vara i användarens uppsättning
+      // (men userHasAdsProvider skulle missa det), behåll den anyway.
+      if (!userHasAdsProvider) {
+        for (const adsP of se?.ads ?? []) {
+          if (myProviderSet.has(canonicalProviderId(adsP.provider_id))) {
+            seProviders.push(adsP);
+          }
+        }
+      }
       const { date, code } = getNextAirInfo(show);
       return {
         tmdbId: show.id,
@@ -179,7 +216,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
     const subscribeAdvice: SubscribeAdvisory[] = [];
-    const myProviderSet = new Set(myProviders);
+    // myProviderSet deklareras vid ads-filtrering ovan — återanvänds här.
     const nonSubscribedProviders = new Map<number, AdvisedShow[]>();
 
     for (const show of allAnchors) {
@@ -335,7 +372,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       primaryAction,
       activePauses,
     };
-  }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays]);
+  }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 
-  return { ...computed, isLoading };
+  return { ...computed, isLoading, hasError };
 }

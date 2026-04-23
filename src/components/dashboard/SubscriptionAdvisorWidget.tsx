@@ -7,6 +7,22 @@ export default function SubscriptionAdvisorWidget() {
   const advisor = useSubscriptionAdvisor();
 
   if (advisor.isLoading && advisor.providers.length === 0) return null;
+
+  // Specifik error-state istället för en blank vy — signalerar att tipset
+  // inte kunde beräknas men att vi vet om det. Kort + icke-blockerande.
+  if (advisor.hasError && advisor.providers.length === 0) {
+    return (
+      <div className="bg-surface border border-border-main rounded-sm mb-[14px] px-3 py-[6px] flex items-center justify-between gap-2">
+        <span className="text-xs text-text-muted">
+          Kunde inte räkna ut ditt strömningstips just nu. Försök igen om en stund.
+        </span>
+        <Link href="/savings" className="text-xs text-accent no-underline shrink-0">
+          Mer →
+        </Link>
+      </div>
+    );
+  }
+
   if (advisor.providers.length === 0) return null;
 
   const pausable = advisor.providers.filter(p => p.status === 'pause');
