@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
+import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
@@ -155,6 +156,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
             posterPath={show.poster_path}
             releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
           />
+          <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
         </div>
 
         {/* Next episode */}

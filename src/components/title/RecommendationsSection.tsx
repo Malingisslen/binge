@@ -58,7 +58,7 @@ export default function RecommendationsSection({ recommendations, myProviders, l
         )}
       </div>
       <div className="bg-surface border border-border-main rounded-sm">
-        <TitleGrid items={filtered} providerMap={providerMap} />
+        <TitleGrid items={filtered} providerMap={providerMap} showNotInterested />
       </div>
     </div>
   );

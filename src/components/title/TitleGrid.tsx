@@ -7,6 +7,7 @@ interface TitleGridProps {
   items: TMDBSearchResult[];
   loading?: boolean;
   providerMap?: Record<string, TMDBProvider[]>;
+  showNotInterested?: boolean;
 }
 
 function SkeletonCard() {
@@ -19,7 +20,7 @@ function SkeletonCard() {
   );
 }
 
-export default function TitleGrid({ items, loading, providerMap }: TitleGridProps) {
+export default function TitleGrid({ items, loading, providerMap, showNotInterested }: TitleGridProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
@@ -37,6 +38,7 @@ export default function TitleGrid({ items, loading, providerMap }: TitleGridProp
           key={`${item.media_type ?? 'unknown'}-${item.id}`}
           item={item}
           providers={providerMap?.[`${item.media_type}-${item.id}`]}
+          showNotInterested={showNotInterested}
         />
       ))}
     </div>

@@ -52,6 +52,9 @@ service cloud.firestore {
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, write: if isOwner(uid);
     }
+    match /users/{uid}/notInterested/{itemId} {
+      allow read, write: if isOwner(uid);
+    }
 
     // Notifications — owner only
     match /users/{uid}/notifications/{notifId} {

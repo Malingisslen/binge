@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Search, LayoutDashboard, Compass, Calendar, BarChart3,
-  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List, Users, UsersRound,
+  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List, Users, UsersRound, CircleSlash,
 } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +33,7 @@ const COLLECTION_ITEMS = [
   { label: 'Följer', href: '/my/following', status: 'följer' as const, icon: Eye },
   { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se' as const, icon: BookmarkCheck },
   { label: 'Sedd', href: '/my/watched', status: 'sedd' as const, icon: Clock },
+  { label: 'Avbrutna', href: '/my/avbrutna', status: 'avbruten' as const, icon: CircleSlash },
   { label: 'Listor', href: '/my/lists', status: null, icon: List },
 ];
 
@@ -50,7 +51,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   );
 
   const { statusCounts, followingOngoing, providerCounts } = useMemo(() => {
-    const sc: Record<WatchStatus, number> = { 'följer': 0, 'vill_se': 0, 'sedd': 0 };
+    const sc: Record<WatchStatus, number> = { 'följer': 0, 'vill_se': 0, 'sedd': 0, 'avbruten': 0 };
     const pc: Record<number, number> = {};
     let ongoing = 0;
     for (const i of items) {

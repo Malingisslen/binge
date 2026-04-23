@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
+import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
@@ -145,6 +146,7 @@ export default function MoviePageClient({ id }: { id: string }) {
             posterPath={movie.poster_path}
             releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
           />
+          <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
         </div>
 
         {/* Providers — streaming prominent, rent/buy collapsed */}

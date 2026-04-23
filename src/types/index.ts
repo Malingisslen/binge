@@ -1,5 +1,5 @@
 export type MediaType = 'movie' | 'tv';
-export type WatchStatus = 'följer' | 'vill_se' | 'sedd';
+export type WatchStatus = 'följer' | 'vill_se' | 'sedd' | 'avbruten';
 
 export interface WatchlistItem {
   tmdbId: number;
