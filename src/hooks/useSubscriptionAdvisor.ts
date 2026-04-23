@@ -61,7 +61,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
       queryKey: ['tv', id],
-      queryFn: () => getTVShow(id),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
       staleTime: TMDB_STALE.TV_DETAIL,
       enabled: true,
     })),

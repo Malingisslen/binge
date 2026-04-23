@@ -33,7 +33,8 @@ export function useRevivalNudges(): { nudges: RevivalNudge[]; isLoading: boolean
   const queries = useQueries({
     queries: candidates.map(item => ({
       queryKey: ['tv', item.tmdbId],
-      queryFn: () => getTVShow(item.tmdbId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getTVShow(item.tmdbId, { signal }),
       // Delad staleTime med useTVShow + useSubscriptionAdvisor så att inga
       // två observers slåss om samma ['tv', id]-nyckel.
       staleTime: TMDB_STALE.TV_DETAIL,
