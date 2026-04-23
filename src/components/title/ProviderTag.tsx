@@ -1,5 +1,5 @@
 import type { TMDBProvider } from '@/types';
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProviderTagProps {
@@ -10,7 +10,7 @@ interface ProviderTagProps {
 export default function ProviderTag({ provider, size = 'sm' }: ProviderTagProps) {
   const { user } = useAuth();
   const mapped = getProvider(provider.provider_id);
-  const isMine = user?.myProviders.includes(provider.provider_id) ?? false;
+  const isMine = user?.myProviders.includes(canonicalProviderId(provider.provider_id)) ?? false;
   const label = mapped?.shortName ?? provider.provider_name;
 
   if (size === 'sm') {

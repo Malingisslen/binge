@@ -1,5 +1,5 @@
 export type MediaType = 'movie' | 'tv';
-export type WatchStatus = 'följer' | 'vill_se' | 'sedd';
+export type WatchStatus = 'följer' | 'vill_se' | 'sedd' | 'avbruten';
 
 export interface WatchlistItem {
   tmdbId: number;
@@ -63,6 +63,11 @@ export interface UserProfile {
   calibrationGenres: Record<number, number> | null;
   createdAt: Date;
   updatedAt: Date;
+  // Timestamp + version of the Terms/Privacy version the user accepted at
+  // sign-up. Optional because accounts created before the acceptance flow
+  // shipped won't have it set.
+  termsAcceptedAt?: Date;
+  termsVersion?: string;
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
@@ -360,6 +365,8 @@ export interface TMDBProvider {
 export interface TMDBProviderData {
   link: string;
   flatrate?: TMDBProvider[];
+  free?: TMDBProvider[];
+  ads?: TMDBProvider[];
   rent?: TMDBProvider[];
   buy?: TMDBProvider[];
 }
@@ -379,7 +386,7 @@ export interface TMDBListResponse<T> {
 }
 
 // Subscription advisor types
-export type AdvisorStatus = 'active' | 'upcoming' | 'pause';
+export type AdvisorStatus = 'active' | 'upcoming' | 'pause' | 'free';
 
 export interface AdvisedShow {
   tmdbId: number;

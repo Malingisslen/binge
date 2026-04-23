@@ -4,12 +4,14 @@ export const STATUS_LABELS: Record<WatchStatus, string> = {
   'följer': 'Följer',
   'vill_se': 'Vill se',
   'sedd': 'Sedd',
+  'avbruten': 'Avbröt',
 };
 
-// Movies don't use "Följer" — only "Vill se" and "Sedd"
+// Movies don't use "Följer" — only "Vill se", "Sedd" och "Avbröt"
 export const MOVIE_STATUS_LABELS: Partial<Record<WatchStatus, string>> = {
   'vill_se': 'Vill se',
   'sedd': 'Sedd',
+  'avbruten': 'Avbröt',
 };
 
 export function statusLabel(status: WatchStatus, mediaType?: 'movie' | 'tv'): string {

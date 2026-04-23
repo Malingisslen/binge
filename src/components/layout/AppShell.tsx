@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import MobileNav from '@/components/layout/MobileNav';
+import Footer from '@/components/layout/Footer';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -16,18 +17,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isLandingForGuest = mounted && !loading && !user && pathname === '/';
 
   if (isLandingForGuest) {
-    return <>{children}</>;
+    return (
+      <>
+        <a href="#main" className="sr-only">Hoppa till innehåll</a>
+        <main id="main">{children}</main>
+        <Footer />
+      </>
+    );
   }
 
   return (
     <div className="flex min-h-screen">
+      <a href="#main" className="sr-only">Hoppa till innehåll</a>
       <div className="hidden md:block">
         <Sidebar />
       </div>
       <MobileNav />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto flex flex-col">
         <TopBar />
-        <main className="p-[14px_18px]">{children}</main>
+        <main id="main" className="p-[14px_18px] flex-1">{children}</main>
+        <Footer />
       </div>
     </div>
   );

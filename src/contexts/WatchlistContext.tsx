@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
 import {
   collection,
   doc,
@@ -12,21 +12,28 @@ import {
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { trackEvent } from '@/lib/analytics';
 import type { WatchlistItem, WatchStatus, MediaType } from '@/types';
 
-function migrateStatus(raw: string): { status: WatchStatus; dropped: boolean } {
+function migrateStatus(raw: string, droppedFlag?: boolean): { status: WatchStatus; dropped: boolean } {
   switch (raw) {
     case 'watching':
-      return { status: 'följer', dropped: false };
+      return droppedFlag
+        ? { status: 'avbruten', dropped: false }
+        : { status: 'följer', dropped: false };
     case 'want_to_watch':
       return { status: 'vill_se', dropped: false };
     case 'watched':
       return { status: 'sedd', dropped: false };
     case 'dropped':
-      return { status: 'följer', dropped: true };
+      return { status: 'avbruten', dropped: false };
     case 'följer':
+      return droppedFlag
+        ? { status: 'avbruten', dropped: false }
+        : { status: 'följer', dropped: false };
     case 'vill_se':
     case 'sedd':
+    case 'avbruten':
       return { status: raw as WatchStatus, dropped: false };
     default:
       return { status: 'följer', dropped: false };
@@ -34,7 +41,7 @@ function migrateStatus(raw: string): { status: WatchStatus; dropped: boolean } {
 }
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
-  const { status, dropped } = migrateStatus(data.status as string);
+  const { status, dropped } = migrateStatus(data.status as string, data.dropped as boolean | undefined);
   return {
     tmdbId: data.tmdbId as number,
     mediaType: data.mediaType as MediaType,
@@ -47,7 +54,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     totalSeasons: (data.totalSeasons as number) ?? null,
     lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
     lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
-    dropped: (data.dropped as boolean) ?? dropped,
+    dropped,
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
     genreIds: (data.genreIds as number[]) ?? [],
@@ -100,6 +107,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
+    const isFirst = items.length === 0;
     await setDoc(ref, {
       ...item,
       dropped: false,
@@ -107,7 +115,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
     }, { merge: true });
-  }, [uid]);
+    trackEvent('title_added_watchlist', { mediaType: item.mediaType, status: item.status });
+    if (isFirst) {
+      trackEvent('first_title_added', { mediaType: item.mediaType });
+    }
+  }, [uid, items.length]);
 
   const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
     if (!uid) return;
@@ -163,10 +175,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return items.find(i => i.tmdbId === tmdbId) ?? null;
   }, [items]);
 
+  const value = useMemo(() => ({
+    items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
+  }), [items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem]);
+
   return (
-    <WatchlistContext.Provider value={{
-      items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
-    }}>
+    <WatchlistContext.Provider value={value}>
       {children}
     </WatchlistContext.Provider>
   );

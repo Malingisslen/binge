@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
 
 interface Toast {
   id: number;
@@ -25,10 +25,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 2500);
   }, []);
 
+  const value = useMemo(() => ({ show }), [show]);
+
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+      <div
+        className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+        role="region"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {toasts.map(t => (
           <div
             key={t.id}

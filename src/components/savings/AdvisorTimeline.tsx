@@ -214,6 +214,8 @@ function LaneFooter({ lane }: { lane: TimelineLane }) {
       return <span className="text-text-muted">Pausad</span>;
     case 'pause':
       return <span className="text-[#2e7d32]">Kan pausas</span>;
+    case 'free':
+      return <span className="text-text-muted">Gratis</span>;
     default:
       return lane.monthlyCost != null && lane.monthlyCost > 0
         ? <span className="text-text-muted">{lane.monthlyCost} kr/mån</span>

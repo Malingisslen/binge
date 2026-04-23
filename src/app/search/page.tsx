@@ -6,6 +6,7 @@ import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
+import { canonicalProviderId } from '@/lib/tmdb/providers';
 import type { TMDBSearchResult, TMDBProvider } from '@/types';
 
 type MediaFilter = 'all' | 'movie' | 'tv';
@@ -15,7 +16,7 @@ function SearchResults() {
   const query = searchParams.get('q') ?? '';
   const { data, isLoading } = useSearch(query);
   const { user } = useAuth();
-  const myProviders = user?.myProviders ?? [];
+  const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
 
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [onlyMyServices, setOnlyMyServices] = useState(false);
@@ -41,7 +42,7 @@ function SearchResults() {
       const providers = rawProviderMap[`${r.media_type}-${r.id}`];
       if (!providers) return false;
       const flatrate = providers.flatrate ?? [];
-      return flatrate.some(p => myProviders.includes(p.provider_id));
+      return flatrate.some(p => myProviders.includes(canonicalProviderId(p.provider_id)));
     });
   }, [filteredByType, onlyMyServices, myProviders, rawProviderMap]);
 

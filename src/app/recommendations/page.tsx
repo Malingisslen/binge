@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useNotInterested } from '@/hooks/useNotInterested';
 import { useAuth } from '@/hooks/useAuth';
 import { getRecommendations } from '@/lib/tmdb/client';
 import RecommendationsSection from '@/components/title/RecommendationsSection';
@@ -15,6 +16,7 @@ export default function RecommendationsPage() {
 
 function RecsContent() {
   const { items } = useWatchlist();
+  const { items: notInterestedItems } = useNotInterested();
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
 
@@ -27,7 +29,12 @@ function RecsContent() {
     [items]
   );
 
-  const watchedIds = useMemo(() => new Set(items.map(i => i.tmdbId)), [items]);
+  const excludedIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const i of items) s.add(i.tmdbId);
+    for (const n of notInterestedItems) s.add(n.tmdbId);
+    return s;
+  }, [items, notInterestedItems]);
 
   // Fetch recommendations for each seed
   const recQueries = useQueries({
@@ -50,14 +57,14 @@ function RecsContent() {
         const mt = item.media_type || seed.mediaType;
         if (mt !== 'movie' && mt !== 'tv') continue;
         const key = `${mt}-${item.id}`;
-        if (seen.has(key) || watchedIds.has(item.id)) continue;
+        if (seen.has(key) || excludedIds.has(item.id)) continue;
         seen.add(key);
         result.push({ ...item, media_type: mt });
       }
     });
 
     return result.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0)).slice(0, 20);
-  }, [seeds, recQueries, watchedIds]);
+  }, [seeds, recQueries, excludedIds]);
 
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const hiddenCountries = user?.hiddenCountries ?? [];

@@ -11,12 +11,13 @@ import { useWatchlist } from './useWatchlist';
  */
 export function useEpisodeProgressWithSync(tmdbId: number) {
   const episodeProgress = useEpisodeProgress(tmdbId);
+  const { markEpisodeWatched: markEpisode, markSeasonWatched: markSeason } = episodeProgress;
   const { updateProgress } = useWatchlist();
 
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean, episodeCount?: number) => {
     if (watched) {
       await Promise.all([
-        episodeProgress.markEpisodeWatched(season, episode, watched),
+        markEpisode(season, episode, watched),
         updateProgress(tmdbId, season, episode),
       ]);
       // Auto-advance: if this was the last episode of the season, point to next season
@@ -24,16 +25,16 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
         await updateProgress(tmdbId, season + 1, 0);
       }
     } else {
-      await episodeProgress.markEpisodeWatched(season, episode, watched);
+      await markEpisode(season, episode, watched);
     }
-  }, [episodeProgress.markEpisodeWatched, updateProgress, tmdbId]);
+  }, [markEpisode, updateProgress, tmdbId]);
 
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
     await Promise.all([
-      episodeProgress.markSeasonWatched(season, episodeCount),
+      markSeason(season, episodeCount),
       updateProgress(tmdbId, season, episodeCount),
     ]);
-  }, [episodeProgress.markSeasonWatched, updateProgress, tmdbId]);
+  }, [markSeason, updateProgress, tmdbId]);
 
   return {
     ...episodeProgress,

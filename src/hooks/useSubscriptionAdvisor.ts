@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShow } from '@/lib/tmdb/client';
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { formatEpisodeCode, daysBetween, todayIso } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -146,7 +146,12 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     const followingById = new Map<number, WatchlistItem>(followingTV.map(i => [i.tmdbId, i]));
 
     const advisedShows: AdvisedShow[] = shows.map(show => {
-      const seProviders = show['watch/providers']?.results?.SE?.flatrate ?? [];
+      const se = show['watch/providers']?.results?.SE;
+      const seProviders = [
+        ...(se?.flatrate ?? []),
+        ...(se?.free ?? []),
+        ...(se?.ads ?? []),
+      ];
       const { date, code } = getNextAirInfo(show);
       return {
         tmdbId: show.id,
@@ -157,7 +162,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         nextEpisodeCode: code,
         isEnded: isEndedStatus(show.status),
         releaseDate: show.first_air_date ?? null,
-        providerIds: seProviders.map(p => p.provider_id),
+        providerIds: Array.from(new Set(seProviders.map(p => canonicalProviderId(p.provider_id)))),
       };
     });
 
@@ -203,6 +208,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       if (hasActiveShow) status = 'active';
       else if (hasUpcomingShow) status = 'upcoming';
       else if (hasWillSeeAnchor) status = 'upcoming';
+      else if (provider.isFree) status = 'free';
       else status = 'pause';
 
       const dates = followingAnchors
@@ -222,7 +228,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       });
     }
 
-    const statusOrder = { active: 0, upcoming: 1, pause: 2 };
+    const statusOrder: Record<ProviderAdvisory['status'], number> = { active: 0, upcoming: 1, free: 2, pause: 3 };
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
     const subscribeAdvice: SubscribeAdvisory[] = [];
