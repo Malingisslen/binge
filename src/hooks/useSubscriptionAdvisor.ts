@@ -9,6 +9,7 @@ import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import {
   findTopPausable,
   findCatchupCandidate,
@@ -61,7 +62,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     queries: tmdbIds.map(id => ({
       queryKey: ['tv', id],
       queryFn: () => getTVShow(id),
-      staleTime: 10 * 60 * 1000,
+      staleTime: TMDB_STALE.TV_DETAIL,
       enabled: true,
     })),
   });

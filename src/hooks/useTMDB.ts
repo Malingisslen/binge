@@ -14,15 +14,14 @@ import {
   getPerson,
   getPersonCredits,
 } from '@/lib/tmdb/client';
-
-const STALE_TIME = 5 * 60 * 1000; // 5 minutes
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 
 export function useSearch(query: string, page = 1) {
   return useQuery({
     queryKey: ['search', query, page],
     queryFn: () => searchMulti(query, page),
     enabled: query.length >= 2,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.SEARCH,
   });
 }
 
@@ -31,7 +30,7 @@ export function useMovie(id: number | null) {
     queryKey: ['movie', id],
     queryFn: () => getMovie(id!),
     enabled: id !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.MOVIE_DETAIL,
   });
 }
 
@@ -40,7 +39,7 @@ export function useTVShow(id: number | null) {
     queryKey: ['tv', id],
     queryFn: () => getTVShow(id!),
     enabled: id !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.TV_DETAIL,
   });
 }
 
@@ -49,7 +48,7 @@ export function useTVSeason(seriesId: number | null, seasonNumber: number | null
     queryKey: ['tv-season', seriesId, seasonNumber],
     queryFn: () => getTVSeason(seriesId!, seasonNumber!),
     enabled: seriesId !== null && seasonNumber !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.SEASON,
   });
 }
 
@@ -57,7 +56,7 @@ export function useTrending(mediaType: 'all' | 'movie' | 'tv' = 'all', timeWindo
   return useQuery({
     queryKey: ['trending', mediaType, timeWindow],
     queryFn: () => getTrending(mediaType, timeWindow),
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.CATALOG,
   });
 }
 
@@ -65,7 +64,7 @@ export function usePopularMovies(page = 1) {
   return useQuery({
     queryKey: ['popular-movies', page],
     queryFn: () => getPopularMovies(page),
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.CATALOG,
   });
 }
 
@@ -73,7 +72,7 @@ export function usePopularTV(page = 1) {
   return useQuery({
     queryKey: ['popular-tv', page],
     queryFn: () => getPopularTV(page),
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.CATALOG,
   });
 }
 
@@ -82,7 +81,7 @@ export function useDiscoverMovies(params: Record<string, string> | null = {}) {
     queryKey: ['discover-movies', params],
     queryFn: () => discoverMovies(params!),
     enabled: params !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.CATALOG,
   });
 }
 
@@ -91,7 +90,7 @@ export function useDiscoverTV(params: Record<string, string> | null = {}) {
     queryKey: ['discover-tv', params],
     queryFn: () => discoverTV(params!),
     enabled: params !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.CATALOG,
   });
 }
 
@@ -100,7 +99,7 @@ export function usePerson(id: number | null) {
     queryKey: ['person', id],
     queryFn: () => getPerson(id!),
     enabled: id !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.PERSON,
   });
 }
 
@@ -109,6 +108,6 @@ export function usePersonCredits(id: number | null) {
     queryKey: ['person-credits', id],
     queryFn: () => getPersonCredits(id!),
     enabled: id !== null,
-    staleTime: STALE_TIME,
+    staleTime: TMDB_STALE.PERSON,
   });
 }
