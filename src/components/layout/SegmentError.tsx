@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { captureError } from '@/lib/sentry';
 
 /**
  * Reusable segment-level error boundary body for app-router `error.tsx`.
@@ -25,10 +26,15 @@ export function SegmentError({
   body?: string;
 }) {
   useEffect(() => {
-    // Always log to the console for now — DevTools + users-reporting-issues path.
-    // When Sentry ships we will also call Sentry.captureException(error, { tags: { scope } }).
+    // Lokal console.error — syns i DevTools + bugrapporter från användare.
     // eslint-disable-next-line no-console
     console.error(`[${scope}]`, error);
+    // Vidarebefordra till Sentry om DSN är satt. No-op annars.
+    captureError(error, {
+      scope,
+      kind: 'error-boundary',
+      extra: { digest: error.digest },
+    });
   }, [error, scope]);
 
   return (

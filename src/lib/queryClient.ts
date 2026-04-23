@@ -2,6 +2,7 @@
 
 import { QueryCache, MutationCache, QueryClient } from '@tanstack/react-query';
 import { trackEvent } from './analytics';
+import { captureError } from './sentry';
 
 /**
  * Central React Query-klient med global felhantering.
@@ -41,8 +42,11 @@ function reportError(
     // Aldrig låt analytik krascha vår error-rapportering.
   }
 
-  // TODO(Sprint 2 V2 8.1): forward to Sentry.captureException with
-  // tags: { scope, kind } when the integration ships.
+  try {
+    captureError(error, { scope, kind });
+  } catch {
+    // No-op — Sentry får aldrig krascha app-logik.
+  }
 }
 
 export function createQueryClient(): QueryClient {

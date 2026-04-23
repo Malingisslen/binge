@@ -6,10 +6,17 @@ import { WatchlistProvider } from '@/contexts/WatchlistContext';
 import { NotInterestedProvider } from '@/contexts/NotInterestedContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { createQueryClient } from '@/lib/queryClient';
-import { useState, type ReactNode } from 'react';
+import { initSentry } from '@/lib/sentry';
+import { useState, useEffect, type ReactNode } from 'react';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => createQueryClient());
+
+  // Initiera Sentry så tidigt som möjligt så att client-side errors fångas
+  // innan resten av trädet mountar. initSentry är no-op om DSN saknas.
+  useEffect(() => {
+    initSentry();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
