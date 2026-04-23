@@ -28,7 +28,10 @@ export type AnalyticsEvent =
   | { name: 'advisor_pause_taken'; props: { providerId: number } }
   | { name: 'revival_nudge_shown'; props: { count: number } }
   | { name: 'revival_nudge_acted_on'; props: { tmdbId: number } }
-  | { name: 'review_created'; props: { mediaType: 'movie' | 'tv'; hasSpoiler: boolean } };
+  | { name: 'review_created'; props: { mediaType: 'movie' | 'tv'; hasSpoiler: boolean } }
+  // Telemetri för React Query-fel — inga PII, bara kategori och första segment
+  // av queryKey så vi kan se vilken subsystem som hostar felen.
+  | { name: 'query_error'; props: { scope: string; kind: 'query' | 'mutation' } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(
   name: T,
