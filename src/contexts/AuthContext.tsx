@@ -273,7 +273,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return updateUserField('providerPauses', next);
   }, [updateUserField, user?.providerPauses]);
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
-  const updateIsPublic = useCallback((isPublic: boolean) => updateUserField('isPublic', isPublic), [updateUserField]);
+  const updateIsPublic = useCallback(async (isPublic: boolean) => {
+    if (!uid) return;
+    // Stega 1: uppdatera profil-flaggan.
+    await updateUserField('isPublic', isPublic);
+
+    // Stega 2: cascade till alla watchlist-items så att läsregeln kan matcha
+    // på resource.data.isPublic istället för att slå upp parent-user-doc per
+    // item. På 500 items sparar vi 500 ytterligare doc-reads per publikvy.
+    // Firestore batch-limit är 500 ops, vi chunkar på 450 för säkerhets skull.
+    try {
+      const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
+      const chunks: typeof snap.docs[] = [];
+      for (let i = 0; i < snap.docs.length; i += 450) {
+        chunks.push(snap.docs.slice(i, i + 450));
+      }
+      await Promise.all(chunks.map(chunk => {
+        const batch = writeBatch(db);
+        for (const d of chunk) batch.set(d.ref, { isPublic }, { merge: true });
+        return batch.commit();
+      }));
+    } catch (err) {
+      // Cascade-fel bryter inte profil-toggle — användaren kan alltid försöka
+      // igen. Loggas för att vi ska märka om det händer.
+      // eslint-disable-next-line no-console
+      console.error('[isPublic cascade]', err);
+    }
+  }, [uid, updateUserField]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
   const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
   const setCalibrationGenres = useCallback((genres: Record<number, number> | null) => updateUserField('calibrationGenres', genres), [updateUserField]);

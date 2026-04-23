@@ -92,7 +92,7 @@ const WatchlistContext = createContext<WatchlistState>({
 });
 
 export function WatchlistProvider({ children }: { children: ReactNode }) {
-  const { uid } = useAuth();
+  const { uid, user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
 
   useEffect(() => {
@@ -111,6 +111,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     await setDoc(ref, {
       ...item,
       dropped: false,
+      // Denormaliserad isPublic så läsregeln för publika profilvisningar
+      // slipper göra en get() mot parent-user-doc per item (se 9.3). Användare
+      // toggles isPublic i settings → AuthContext.updateIsPublic cascadar nya
+      // värdet till alla watchlist-items.
+      isPublic: user?.isPublic ?? false,
       addedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
@@ -119,7 +124,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (isFirst) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, items.length]);
+  }, [uid, items.length, user?.isPublic]);
 
   const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
     if (!uid) return;

@@ -47,7 +47,15 @@ service cloud.firestore {
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, write: if isOwner(uid);
-      allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+      // Snabb-regel: resource.data.isPublic är denormaliserad från parent-profil.
+      // WatchlistContext stämplar isPublic vid skrivning och AuthContext.update
+      // IsPublic cascadar när profilen toggles. Sparar en extra doc-read per
+      // item (500 items → 500 färre reads).
+      allow read: if resource.data.isPublic == true;
+      // Legacy-fallback för items som skrevs innan 9.3 landade. Kostar en get()
+      // per doc men håller bakåtkompat tills alla items cascade-stämplats.
+      allow read: if !('isPublic' in resource.data)
+        && get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, write: if isOwner(uid);
