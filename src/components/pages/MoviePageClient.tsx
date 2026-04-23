@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -32,15 +33,21 @@ export default function MoviePageClient({ id }: { id: string }) {
     [movie?.recommendations]
   );
 
-  useEffect(() => {
-    if (movie) document.title = `${preferOriginalTitle(movie.title, movie.original_title)} — Binge.nu`;
-    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
-  }, [movie]);
+  const displayTitle = movie ? preferOriginalTitle(movie.title, movie.original_title) : '';
+  const releaseYear = movie?.release_date ? movie.release_date.slice(0, 4) : '';
+  usePageMeta({
+    title: displayTitle
+      ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''} — var streamar jag?`
+      : 'Film',
+    description: movie
+      ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''}. ${movie.overview?.slice(0, 180) ?? 'Se var filmen finns att streama i Sverige.'}`
+      : undefined,
+    ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
+  });
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!movie) return <div className="text-sm text-text-muted py-4">Filmen hittades inte.</div>;
 
-  const displayTitle = preferOriginalTitle(movie.title, movie.original_title);
   const watchlistItem = getItem(movie.id);
   const poster = posterUrl(movie.poster_path, 'w500');
   const backdrop = backdropUrl(movie.backdrop_path);
