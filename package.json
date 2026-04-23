@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "emulators": "firebase emulators:start --only auth,firestore",
+    "emulators:export": "firebase emulators:export ./emulator-data",
+    "emulators:import": "firebase emulators:start --only auth,firestore --import=./emulator-data"
   },
   "dependencies": {
     "@sentry/react": "^10.50.0",
