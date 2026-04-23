@@ -11,6 +11,8 @@ import {
   addDoc,
   orderBy,
   query,
+  limit,
+  getCountFromServer,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
@@ -22,13 +24,29 @@ export function useReviewLikes(reviewId: string | null) {
   const [likeCount, setLikeCount] = useState(0);
   const [iLike, setILike] = useState(false);
 
+  // Likes skalar med review-popularitet — en viral recension kan få tusentals.
+  // Vi lyssnar bara på inloggad användares eget like-dokument för iLike-state,
+  // och hämtar antal via aggregate-count. Tidigare implementation läste hela
+  // likes-collectionen bara för att räkna (N reads för N likes).
   useEffect(() => {
-    if (!reviewId) return;
-    const unsub = onSnapshot(collection(db, 'reviews', reviewId, 'likes'), snap => {
-      setLikeCount(snap.size);
-      setILike(uid ? snap.docs.some(d => d.id === uid) : false);
+    if (!reviewId) { setLikeCount(0); setILike(false); return; }
+
+    // Hämta likeCount en gång vid mount — uppdateras vid toggle via optimism.
+    let cancelled = false;
+    getCountFromServer(collection(db, 'reviews', reviewId, 'likes'))
+      .then(snap => { if (!cancelled) setLikeCount(snap.data().count); })
+      .catch(() => { if (!cancelled) setLikeCount(0); });
+
+    if (!uid) { return () => { cancelled = true; }; }
+    // Lyssna bara på mitt eget like-dokument — 1 read istället för N.
+    const myLikeRef = doc(db, 'reviews', reviewId, 'likes', uid);
+    const unsub = onSnapshot(myLikeRef, snap => {
+      setILike(snap.exists());
     });
-    return () => unsub();
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [reviewId, uid]);
 
   const toggle = async () => {
@@ -36,8 +54,10 @@ export function useReviewLikes(reviewId: string | null) {
     const ref = doc(db, 'reviews', reviewId, 'likes', uid);
     if (iLike) {
       await deleteDoc(ref);
+      setLikeCount(c => Math.max(0, c - 1)); // optimistisk
     } else {
       await setDoc(ref, { createdAt: serverTimestamp() });
+      setLikeCount(c => c + 1);
     }
   };
 
@@ -50,9 +70,13 @@ export function useReviewComments(reviewId: string | null) {
 
   useEffect(() => {
     if (!reviewId) return;
+    // Begränsa antalet kommentarer vi prenumererar på. Populära recensioner
+    // kan få hundratals kommentarer — vi visar de senaste 100 och lägger
+    // till paginering när det blir aktuellt (TODO: useInfiniteQuery).
     const q = query(
       collection(db, 'reviews', reviewId, 'comments'),
       orderBy('createdAt', 'asc'),
+      limit(100),
     );
     const unsub = onSnapshot(q, snap => {
       setComments(snap.docs.map(d => {

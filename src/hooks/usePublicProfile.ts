@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import type { UserProfile, WatchlistItem, WatchStatus, MediaType } from '@/types';
@@ -39,11 +39,17 @@ export function usePublicProfile(username: string) {
   });
 }
 
+// Power-user med 2000+ titlar skulle annars kosta 2000 Firestore-reads per
+// profilvisning. 500 är taket för vad vi renderar på en offentlig profil —
+// behöver användaren se mer får det bli via filterar/sök senare.
+const PUBLIC_WATCHLIST_LIMIT = 500;
+
 export function usePublicWatchlist(uid: string | null) {
   return useQuery({
     queryKey: ['public-watchlist', uid],
     queryFn: async () => {
-      const snap = await getDocs(collection(db, 'users', uid!, 'watchlist'));
+      const q = query(collection(db, 'users', uid!, 'watchlist'), limit(PUBLIC_WATCHLIST_LIMIT));
+      const snap = await getDocs(q);
       return snap.docs.map(d => {
         const data = d.data();
         return {
