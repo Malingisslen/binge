@@ -25,8 +25,19 @@ function makeProvider(overrides: Partial<ProviderAdvisory>): ProviderAdvisory {
     monthlyCost: 149,
     status: 'active',
     nextAirDate: null,
-    nextEpisodeCode: null,
     shows: [],
+    ...overrides,
+  };
+}
+
+function makePause(overrides: Partial<ActivePause> & Pick<ActivePause, 'providerId' | 'pausedAt'>): ActivePause {
+  return {
+    providerName: `Provider ${overrides.providerId}`,
+    shortName: `P${overrides.providerId}`,
+    color: '#000000',
+    monthlyCost: 0,
+    savingsSoFar: 0,
+    resumeAt: null,
     ...overrides,
   };
 }
@@ -222,8 +233,8 @@ describe('findIdleNextCheckDate', () => {
   it('returns the earliest resumeAt from active pauses', () => {
     const providers: ProviderAdvisory[] = [];
     const pauses: ActivePause[] = [
-      { providerId: 8, resumeAt: '2026-09-01', pausedAt: '2026-04-01' },
-      { providerId: 119, resumeAt: '2026-06-15', pausedAt: '2026-04-01' },
+      makePause({ providerId: 8, resumeAt: '2026-09-01', pausedAt: '2026-04-01' }),
+      makePause({ providerId: 119, resumeAt: '2026-06-15', pausedAt: '2026-04-01' }),
     ];
     expect(findIdleNextCheckDate(providers, pauses)).toBe('2026-06-15');
   });
@@ -231,7 +242,7 @@ describe('findIdleNextCheckDate', () => {
   it('combines provider dates + pause resumeAt and picks earliest', () => {
     const providers = [makeProvider({ nextAirDate: '2026-07-01' })];
     const pauses: ActivePause[] = [
-      { providerId: 8, resumeAt: '2026-05-01', pausedAt: '2026-04-01' },
+      makePause({ providerId: 8, resumeAt: '2026-05-01', pausedAt: '2026-04-01' }),
     ];
     expect(findIdleNextCheckDate(providers, pauses)).toBe('2026-05-01');
   });
@@ -242,7 +253,7 @@ describe('findIdleNextCheckDate', () => {
 
   it('ignores null resumeAt values', () => {
     const pauses: ActivePause[] = [
-      { providerId: 8, resumeAt: null, pausedAt: '2026-04-01' },
+      makePause({ providerId: 8, resumeAt: null, pausedAt: '2026-04-01' }),
     ];
     expect(findIdleNextCheckDate([], pauses)).toBe(null);
   });
@@ -294,7 +305,7 @@ describe('getNextAirInfo', () => {
         overview: '',
         still_path: null,
         vote_average: 0,
-        vote_count: 0,
+        runtime: 45,
       },
     });
     const info = getNextAirInfo(show);
