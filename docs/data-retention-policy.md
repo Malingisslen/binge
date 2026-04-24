@@ -1,0 +1,114 @@
+# Dataretention + anonymisering-policy
+
+_Status: 2026-04-24. Gäller från sprint 4._
+
+## Policy-beslut
+
+När ett konto raderas (via `Settings → Ta bort konto`) hanterar vi publikt
+UGC enligt följande regler.
+
+### Privat data → Hård radering
+
+Allt som bara användaren själv ser tas bort helt:
+
+- `users/{uid}` (profil-doc)
+- `users/{uid}/watchlist/*`
+- `users/{uid}/episodeProgress/*`
+- `users/{uid}/notInterested/*`
+- `users/{uid}/notifications/*`
+- `users/{uid}/blocked/*`
+- `users/{uid}/following/*` (ensidig)
+- `users/{uid}/followers/*` (matchande följ-relationer på andra håll)
+
+Inga återhämtningsbara referenser till datan finns efter radering,
+förutom Firestore PITR inom 7 dagar (administrativt bara).
+
+### Publikt UGC → Hård radering (v1)
+
+Public-facing UGC tas bort helt, INTE anonymiseras, för följande
+anledningar:
+
+- **Juridiskt rentare.** GDPR Art. 17 ger absolut rätt till radering
+  när användaren begär det. "Vi tog bort ditt namn men behöll innehållet"
+  är en laglig gråzon som vi inte vill testa.
+- **Ingen threading-risk.** Binges reviews-kommentarer är grunda (inte
+  Reddit-style nested trees). Borttagning av en kommentar bryter inte
+  en konversation i oigenkännlig form.
+- **Enkelt att implementera.** `deleteAccount`-cascaden behöver ingen
+  speciell "anonymiseringsväg" — bara delete-ops.
+
+Så vid radering:
+
+- `reviews/{reviewId}` där `uid == me` → **delete**
+- `reviews/*/comments/{commentId}` där `uid == me` → **delete**
+- `reviews/*/likes/{uid}` där doc-id == me → **delete**
+- `lists/{listId}` där `uid == me` → **delete**
+- `sessions/{sessionId}` där `hostUid == me` → **delete**
+
+### Grupp-medlemskap → Självborttag
+
+När användaren raderas:
+
+- I `groups/{groupId}` där `memberUids` innehåller mig → **ta bort mig
+  ur array:en**
+- Om jag är owner (`ownerUid == me`) och det finns andra medlemmar →
+  transferera ownership till första andra medlemmen (kommande sprint —
+  TODO). För nuvarande: om owner raderar sig lämnas gruppen ägarlös och
+  kan inte modifieras (okej tillstånd eftersom owner ändå kan delete:a
+  gruppen först).
+
+### Användarnamn → Hård radering + release
+
+`usernames/{username}` doc tas bort → användarnamnet blir tillgängligt
+för framtida användare att claim:a.
+
+Detta är en avvikelse från många plattformar som "tombstonar" usernames
+för att förhindra imitation. Avvägning:
+- Imitations-risken är låg (Binge är inte en celebrity-plattform)
+- Låst-username-pool växer oändligt och är användarhostile
+
+Om imitations-rapporter ökar senare — revisit: behåll username-doc med
+`retired: true`-flagga, blockera claim.
+
+## Tekniska implikationer
+
+`AuthContext.deleteAccount` implementerar redan hård radering via
+`writeBatch` i 450-ops chunks. Ingen cascade-ändring krävs för Sprint 4,
+men:
+
+- `firestore.indexes.json` har redan single-field collection-group-index
+  på `comments.uid` + `likes` documentId — behövs för delete-queryn.
+- Firestore PITR ger 7-dagars recovery om användaren ångrar sig (men
+  bara via admin). Vi dokumenterar inte detta i UI eftersom "pseudo-
+  radering" skulle förvirra GDPR-kraven.
+
+## Retention-policy för icke-raderad data
+
+Ingen auto-retention idag (v1). Saker som kommer behövas vid tillväxt:
+
+- **Gamla Tillsammans-sessioner** — bör delete:as efter 30 dagar via
+  cron (kräver Cloud Functions, sprint 6 + 10)
+- **Gamla notifikationer** — bör delete:as efter 90 dagar (samma)
+- **Härvarande PITR** — Firebase cappar på 7 dagar, ingen ytterligare
+  konfiguration behövs
+
+Dessa är dokumenterade i FUTURE_ROADMAP.md sprint 6 (B34).
+
+## Re-visit triggers
+
+Policy ska omvärderas om:
+- Rapporter om imitation via frigjorda usernames ökar
+- Threading blir djupare (kommentarer på kommentarer) och breakage
+  blir användarfientligt
+- Cloud Functions finns — då kan vi göra "mjuk radering" med 30-dagars
+  ångra-fönster ovanpå hård radering
+
+## Kopplingar
+
+- **Integritetspolicy** (`src/app/integritet/page.tsx`) ska reflektera
+  denna policy för användare — uppdateras i sprint 4 dag 5.
+- **Terms of Service** (`src/app/villkor/page.tsx`) — ingen direkt
+  ändring men nämner att borttaget innehåll inte återställs.
+- **Moderation-runbook** (`docs/moderation.md`, pending sprint 5) —
+  samma delete-cascade används när admin tar bort en användare för
+  policy-brott.

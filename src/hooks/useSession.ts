@@ -6,7 +6,11 @@ import {
   subscribeToParticipants,
   subscribeToSwipes,
 } from '@/lib/firebase/sessions';
+import { isSessionExpired } from '@/lib/sessionTiming';
 import type { SessionParticipant, SessionSwipe, TogetherSession } from '@/types';
+
+// Re-export för existerande callers (useMySessions imports från useSession).
+export { isSessionExpired } from '@/lib/sessionTiming';
 
 export function useSession(sessionId: string | null) {
   const [session, setSession] = useState<TogetherSession | null>(null);
@@ -43,7 +47,9 @@ export function useSession(sessionId: string | null) {
     };
   }, [sessionId]);
 
-  return { session, participants, swipes, loading, notFound };
+  const expired = isSessionExpired(session);
+
+  return { session, participants, swipes, loading, notFound, expired };
 }
 
 const STORAGE_PREFIX = 'binge-session-pid-';

@@ -7,6 +7,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import MobileNav from '@/components/layout/MobileNav';
 import Footer from '@/components/layout/Footer';
+import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -35,6 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <MobileNav />
       <div className="flex-1 overflow-y-auto flex flex-col">
         <TopBar />
+        <EmailVerificationBanner />
         <main id="main" className="p-[14px_18px] flex-1">{children}</main>
         <Footer />
       </div>

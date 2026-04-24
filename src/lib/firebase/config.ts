@@ -1,6 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,6 +13,32 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+// App Check — bot-abuse-skydd. Körs bara i browser + när site-key satts.
+// Debug-token (APP_CHECK_DEBUG_TOKEN) skapas automatiskt av SDK:n när
+// globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN=true satts i dev-miljö.
+if (
+  typeof window !== 'undefined' &&
+  process.env.NEXT_PUBLIC_APP_CHECK_SITE_KEY &&
+  getApps().length === 1
+) {
+  try {
+    // Fail-closed: debug-token enablas bara om NEXT_PUBLIC_APP_ENV === 'development'.
+    // Om variabeln glöms eller missformatteras i prod-build → debug är AV (säkert).
+    if (process.env.NEXT_PUBLIC_APP_ENV === 'development') {
+      // Firebase SDK kräver att debug-flaggan sätts INNAN initializeAppCheck.
+      (globalThis as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    // HMR kan re-trigga — swallow det, annars skriv till DevTools.
+    // eslint-disable-next-line no-console
+    console.warn('[app-check] init skipped:', err);
+  }
+}
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);

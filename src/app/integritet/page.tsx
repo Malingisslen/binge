@@ -86,8 +86,17 @@ export default function IntegritetPage() {
         <ul>
           <li>Din profil och bevakningslista sparas så länge ditt konto är aktivt.</li>
           <li>Notifikationer sparas i upp till 180 dagar.</li>
+          <li>Tillsammans-sessioner utgår automatiskt 7 dagar efter skapandet.</li>
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
-          <li>Om du tar bort ditt konto raderar vi din profil, bevakningslista, avsnittsframsteg, notifikationer och användarnamns-reservation. Publika recensioner och listor kan behöva hanteras separat (se &quot;Dina rättigheter&quot;).</li>
+          <li>
+            <strong>Om du tar bort ditt konto</strong> raderar vi all din data
+            permanent: profil, bevakningslista, avsnittsframsteg, notifikationer,
+            blockeringar, följning-relationer, dina recensioner och kommentarer
+            (även publika), dina listor, Tillsammans-sessioner du är värd för,
+            och användarnamns-reservationen. Publikt innehåll anonymiseras inte —
+            det raderas helt. Återställning är inte möjlig efter 7 dagar
+            (Firestore Point-in-Time Recovery-fönstret).
+          </li>
         </ul>
       </section>
 
@@ -97,10 +106,10 @@ export default function IntegritetPage() {
           Du har rätt att:
         </p>
         <ul>
-          <li>Få tillgång till de personuppgifter vi har om dig (art. 15).</li>
-          <li>Få felaktiga uppgifter rättade (art. 16).</li>
-          <li>Få dina uppgifter raderade (art. 17) — du kan ta bort kontot själv i inställningarna, eller skriva till oss.</li>
-          <li>Få en kopia i maskinläsbart format (art. 20) — kontakta oss.</li>
+          <li>Få tillgång till de personuppgifter vi har om dig (art. 15) — ladda ner via <em>Inställningar → Exportera min data</em>, eller kontakta oss.</li>
+          <li>Få felaktiga uppgifter rättade (art. 16) — de flesta fält kan du ändra själv i inställningarna.</li>
+          <li>Få dina uppgifter raderade (art. 17) — <em>Inställningar → Ta bort konto</em> raderar allt omedelbart.</li>
+          <li>Få en kopia i maskinläsbart JSON-format (art. 20) — <em>Inställningar → Exportera min data</em>.</li>
           <li>Invända mot behandling som stöds av berättigat intresse (art. 21).</li>
           <li>Lämna klagomål till Integritetsskyddsmyndigheten (IMY, <a href="https://www.imy.se" target="_blank" rel="noopener noreferrer">imy.se</a>).</li>
         </ul>

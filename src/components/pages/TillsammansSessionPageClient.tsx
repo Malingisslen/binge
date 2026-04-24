@@ -14,7 +14,7 @@ import { computeSessionProviders } from '@/lib/together/candidates';
 import type { SessionCandidate, SessionParticipant, VoteKind } from '@/types';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
-  const { session, participants, swipes, loading, notFound } = useSession(id);
+  const { session, participants, swipes, loading, notFound, expired } = useSession(id);
   const { uid, user } = useAuth();
 
   const [participantId, setParticipantId] = useState<string | null>(null);
@@ -40,6 +40,20 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
       <div className="max-w-[560px]">
         <h1 className="text-[18px] font-bold mb-2">Session hittades inte</h1>
         <p className="text-xs text-text-muted mb-3">Länken kan ha gått ut eller vara felstavad.</p>
+        <Link href="/tillsammans/ny" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
+          Skapa en ny session
+        </Link>
+      </div>
+    );
+  }
+
+  if (expired) {
+    return (
+      <div className="max-w-[560px]">
+        <h1 className="text-[18px] font-bold mb-2">Sessionen har gått ut</h1>
+        <p className="text-xs text-text-muted mb-3">
+          Tillsammans-sessioner är aktiva i 7 dagar. Starta en ny för att fortsätta röstning.
+        </p>
         <Link href="/tillsammans/ny" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
           Skapa en ny session
         </Link>
