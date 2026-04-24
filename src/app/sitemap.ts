@@ -1,6 +1,11 @@
 import type { MetadataRoute } from 'next';
 import { getPopularMovies, getPopularTV } from '@/lib/tmdb/client';
 
+// Next 16 + output:'export' kräver explicit static/revalidate-deklaration
+// för Metadata-routes. Vi vill att sitemap:en genereras en gång vid build
+// och sedan är en statisk fil i out/.
+export const dynamic = 'force-static';
+
 /**
  * Dynamisk sitemap som genereras vid `next build`.
  *
@@ -92,7 +97,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return [...statics, ...titles, ...providerPageEntries()];
   } catch (err) {
     // Graceful degradation — TMDB nere vid build bryter inte deploy.
-    // eslint-disable-next-line no-console
     console.warn('[sitemap] TMDB-fetch misslyckades, returnerar bara statics:', err);
     return [...statics, ...providerPageEntries()];
   }

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import './globals.css';
 import Providers from '@/components/Providers';
@@ -7,6 +7,11 @@ import AppShell from '@/components/layout/AppShell';
 const SITE_URL = 'https://binge.nu';
 const OG_IMAGE = `${SITE_URL}/og-image.svg`;
 
+// Next 16: themeColor flyttades från metadata till viewport-export.
+export const viewport: Viewport = {
+  themeColor: '#1e2028',
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
@@ -14,7 +19,6 @@ export const metadata: Metadata = {
     template: '%s — Binge.nu',
   },
   description: 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.',
-  themeColor: '#1e2028',
   // Förhindra FOUC + dubbelindexering mellan www/apex — hanteras via
   // Cloudflare-regler; här sätter vi bara canonical på rot-URL:en.
   alternates: { canonical: '/' },
@@ -64,7 +68,7 @@ export default function RootLayout({
             den officiella Binge.nu-siten (underlättar knowledge panel). */}
         <script
           type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
+           
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               '@context': 'https://schema.org',

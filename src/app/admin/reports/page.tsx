@@ -61,7 +61,7 @@ function ReportsDashboard() {
       const data = await listReports({ status });
       setReports(data);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error('[admin/reports]', err);
       setError('Kunde inte ladda rapporter. Kontrollera att du har admin-rättigheter.');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import {
@@ -87,8 +87,12 @@ export function InvitePanel({
     return `${window.location.origin}/grupper/${groupId}?invite=${group.inviteToken}`;
   }, [group.inviteToken, groupId]);
 
-  const tokenAgeDays = group.inviteTokenRotatedAt
-    ? Math.floor((Date.now() - group.inviteTokenRotatedAt.getTime()) / (24 * 60 * 60 * 1000))
+  // React 19 strict-purity: Date.now() är en unpure call i render. Snapshot
+  // en gång vid mount via useEffect — token-ålder är inte nano-precision.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => { setNow(Date.now()); }, []);
+  const tokenAgeDays = now !== null && group.inviteTokenRotatedAt
+    ? Math.floor((now - group.inviteTokenRotatedAt.getTime()) / (24 * 60 * 60 * 1000))
     : null;
   const isStale = tokenAgeDays !== null && tokenAgeDays >= TOKEN_STALE_DAYS;
 

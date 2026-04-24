@@ -219,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await sendEmailVerification(cred.user);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[email-verification]', err);
     }
   }, []);
@@ -320,7 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       // Cascade-fel bryter inte profil-toggle — användaren kan alltid försöka
       // igen. Loggas för att vi ska märka om det händer.
-      // eslint-disable-next-line no-console
+       
       console.error('[isPublic cascade]', err);
     }
   }, [uid, updateUserField]);

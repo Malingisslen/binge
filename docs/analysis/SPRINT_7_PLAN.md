@@ -159,18 +159,19 @@ firebase deploy --only hosting
 # Cloudflare-purge
 ```
 
-### Fas 3 — Tailwind v4 (conditional, ~8 h eller skip)
+### Fas 3 — Tailwind v4 (SKIPPAD 2026-04-24)
 
-**Skippa om:** Tailwind v3 inte är EOL-aviserat vid tidpunkten.
+**Beslut:** skip. Tailwind v3.4.x får fortfarande patch-uppdateringar, och
+vi har inga specifika v4-features som efterfrågas. Migration kräver
+visuell regression-test av alla sidor + CSS-variabel-theming-migration.
+Ligger i backlog tills v3 får EOL-datum eller ett v4-behov uppstår.
 
-**Kör om:** v3 har fått EOL-datum eller nya Tailwind-features behövs.
-
-**Då:**
+**Vid eventuell framtid-körning:**
 ```bash
 npx @tailwindcss/upgrade@next
 ```
 
-**Breaking changes:**
+**Breaking changes att hantera då:**
 - CSS-variabel-baserad theming — våra custom tokens i `tailwind.config.ts`
   migreras till `@theme` i CSS
 - `@tailwind base/components/utilities` → `@import "tailwindcss"`

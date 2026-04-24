@@ -35,7 +35,7 @@ if (
     });
   } catch (err) {
     // HMR kan re-trigga — swallow det, annars skriv till DevTools.
-    // eslint-disable-next-line no-console
+     
     console.warn('[app-check] init skipped:', err);
   }
 }
@@ -54,11 +54,11 @@ if (
   try {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    // eslint-disable-next-line no-console
+     
     console.info('[firebase] emulator mode — auth:9099, firestore:8080');
   } catch (err) {
     // Dubbel-initialisering (HMR i dev) → redan kopplad. Okej att svälja.
-    // eslint-disable-next-line no-console
+     
     console.warn('[firebase] emulator connect skipped:', err);
   }
 }

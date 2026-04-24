@@ -33,7 +33,7 @@ function reportError(
   kind: 'query' | 'mutation',
   scope: string,
 ): void {
-  // eslint-disable-next-line no-console
+   
   console.error(`[rq:${kind}:${scope}]`, error);
 
   try {

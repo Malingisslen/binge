@@ -22,7 +22,7 @@ export function DataExportSection() {
       downloadExport(data);
       toast('Dataexport nedladdad.');
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error('[data-export]', err);
       toast('Kunde inte skapa exporten. Försök igen.');
     } finally {
