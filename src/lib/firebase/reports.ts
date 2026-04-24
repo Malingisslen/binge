@@ -1,25 +1,22 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type QueryConstraint,
+} from 'firebase/firestore';
 import { db } from './config';
+import { toDate } from './utils';
 
 /**
- * UGC-rapportering — skapar en report-doc i top-level `reports/{reportId}`
- * collection. Admin-flödet hanteras off-line via Firebase Console (se
- * docs/moderation.md för runbook när den skrivs).
- *
- * Rate-limiting är regel-side: firestore.rules har en rule att en användare
- * bara kan skapa X rapporter per tidsfönster (server-time-kontroll). Här
- * klient-side gör vi bara en enkel "minst 1 sekund mellan rapporter"-throttle
- * så brytbutonen inte kan spammas av misstag.
- *
- * Data-model: reports dokumentets fält
- * - reporterUid: string (request.auth.uid, enforced by rules)
- * - targetType: 'review' | 'comment' | 'user' | 'list'
- * - targetId: string (review doc id, comment path, uid, list id)
- * - targetOwnerUid: string (snapshot of uid that posted the content)
- * - reason: 'spam' | 'hate' | 'harassment' | 'illegal' | 'pii' | 'other'
- * - note?: string (max 500 chars)
- * - createdAt: Timestamp
- * - status: 'open' — admin kan sätta till 'reviewed' / 'actioned' / 'dismissed'
+ * UGC-rapportering + admin-moderation. Skriv till top-level `reports/`,
+ * admin läser via /admin/reports/ (firestore.rules gate:ar).
  */
 
 export type ReportReason =
@@ -32,6 +29,8 @@ export type ReportReason =
 
 export type ReportTargetType = 'review' | 'comment' | 'user' | 'list';
 
+export type ReportStatus = 'open' | 'reviewed' | 'actioned' | 'dismissed';
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: 'Spam / reklam',
   hate: 'Hatiskt innehåll / rasism',
@@ -40,6 +39,26 @@ export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   pii: 'Delar privat information (PII)',
   other: 'Annat',
 };
+
+export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
+  open: 'Öppen',
+  reviewed: 'Granskad',
+  actioned: 'Åtgärdad',
+  dismissed: 'Avfärdad',
+};
+
+export interface Report {
+  id: string;
+  reporterUid: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetOwnerUid: string;
+  reason: ReportReason;
+  note?: string;
+  status: ReportStatus;
+  createdAt: Date;
+  updatedAt?: Date;
+}
 
 let lastReportAt = 0;
 const REPORT_COOLDOWN_MS = 1000;
@@ -69,5 +88,48 @@ export async function createReport(params: {
     ...(trimmedNote ? { note: trimmedNote } : {}),
     status: 'open',
     createdAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Admin-läsning. Kräver att användaren har isAdmin: true i users/{uid}-doc
+ * (firestore.rules enforce:ar). Normal användare får permission-denied.
+ */
+export async function listReports(options: {
+  status?: ReportStatus;
+  maxRows?: number;
+} = {}): Promise<Report[]> {
+  const constraints: QueryConstraint[] = [];
+  if (options.status) {
+    constraints.push(where('status', '==', options.status));
+  }
+  constraints.push(orderBy('createdAt', 'desc'));
+  constraints.push(limit(options.maxRows ?? 100));
+
+  const snap = await getDocs(query(collection(db, 'reports'), ...constraints));
+  return snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      reporterUid: data.reporterUid as string,
+      targetType: data.targetType as ReportTargetType,
+      targetId: data.targetId as string,
+      targetOwnerUid: data.targetOwnerUid as string,
+      reason: data.reason as ReportReason,
+      note: data.note as string | undefined,
+      status: data.status as ReportStatus,
+      createdAt: toDate(data.createdAt),
+      updatedAt: data.updatedAt ? toDate(data.updatedAt) : undefined,
+    };
+  });
+}
+
+export async function updateReportStatus(
+  reportId: string,
+  status: ReportStatus,
+): Promise<void> {
+  await updateDoc(doc(db, 'reports', reportId), {
+    status,
+    updatedAt: serverTimestamp(),
   });
 }

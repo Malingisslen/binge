@@ -5,6 +5,14 @@ service cloud.firestore {
     // ---- helpers ----
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      // Admin-flaggan (users/{uid}.isAdmin) får bara settas manuellt via
+      // Firebase Console. users/{uid} write-regeln nedan förbjuder klienten
+      // att sätta fältet själv på create eller update — privilegiet kan
+      // alltså inte eskaleras från klient.
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
 
     // Usernames: 3-20 chars, lowercase a-z, 0-9, underscore and dash;
     // must start and end with alphanumeric. Matches client regex in
@@ -40,10 +48,23 @@ service cloud.firestore {
     }
 
     // ---- users ----
-    // User profile — owner only (public read handled by isPublic check in app)
+    // User profile — owner only (public read handled by isPublic check in app).
+    // VIKTIGT: write-regeln förbjuder owner att själv sätta isAdmin-flaggan.
+    // Den flaggan kan BARA settas manuellt via Firebase Console av en riktig
+    // admin — annars blir hela admin-systemet trivialt eskalerbart via
+    // klient-skrivning.
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
-      allow read: if resource.data.isPublic == true;
+      allow read: if isOwner(uid)
+        || resource.data.isPublic == true;
+      allow create: if isOwner(uid)
+        && !('isAdmin' in request.resource.data);
+      allow update: if isOwner(uid)
+        && (
+          // Får inte sätta/röra isAdmin via update
+          !('isAdmin' in request.resource.data)
+          || request.resource.data.isAdmin == resource.data.get('isAdmin', false)
+        );
+      allow delete: if isOwner(uid);
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, write: if isOwner(uid);
@@ -138,7 +159,10 @@ service cloud.firestore {
     // note-size via valideringsregel. En hårdare rate-limit (per user per
     // timme) lägger vi in när vi ser abuse-mönster.
     match /reports/{reportId} {
-      allow read: if false;
+      // Läsning: vanliga användare får aldrig läsa sina egna eller andras
+      // rapporter (sekretess mot reporterad target). Admins får läsa alla.
+      allow read: if isAdmin();
+
       allow create: if isSignedIn()
         && request.resource.data.reporterUid == request.auth.uid
         && request.resource.data.status == 'open'
@@ -147,7 +171,19 @@ service cloud.firestore {
         && request.resource.data.targetId is string
         && request.resource.data.targetOwnerUid is string
         && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
-      allow update, delete: if false;
+
+      // Admin får uppdatera status + lägga till actionedAt/dismissedAt m.m.
+      // men får INTE ändra core-fält som skulle manipulera historik.
+      allow update: if isAdmin()
+        && request.resource.data.status in ['open', 'reviewed', 'actioned', 'dismissed']
+        && request.resource.data.reporterUid == resource.data.reporterUid
+        && request.resource.data.targetType == resource.data.targetType
+        && request.resource.data.targetId == resource.data.targetId
+        && request.resource.data.targetOwnerUid == resource.data.targetOwnerUid
+        && request.resource.data.reason == resource.data.reason
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
     }
 
     // ---- lists ----

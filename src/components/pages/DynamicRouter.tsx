@@ -1,15 +1,28 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import MoviePageClient from './MoviePageClient';
-import TVShowPageClient from './TVShowPageClient';
-import SeasonPageClient from './SeasonPageClient';
-import PersonPageClient from './PersonPageClient';
-import ProviderPageClient from './ProviderPageClient';
-import UserProfilePageClient from './UserProfilePageClient';
-import ListPageClient from './ListPageClient';
-import TillsammansSessionPageClient from './TillsammansSessionPageClient';
-import GroupPageClient from './GroupPageClient';
+import dynamic from 'next/dynamic';
+
+/**
+ * Alla page-clients laddas via next/dynamic så varje route bara drar in
+ * sin egen komponent i bundle:n. Utan detta hamnade samtliga 9 clients i
+ * first-load JS för [...path]-catch-allen.
+ *
+ * ssr: false — vi är static export så SSR är ändå inaktiverat.
+ * loading: stöder en fallback-placeholder medan chunken laddas.
+ */
+
+const LOADING = <div className="text-sm text-text-muted py-4">Laddar...</div>;
+
+const MoviePageClient = dynamic(() => import('./MoviePageClient'), { ssr: false, loading: () => LOADING });
+const TVShowPageClient = dynamic(() => import('./TVShowPageClient'), { ssr: false, loading: () => LOADING });
+const SeasonPageClient = dynamic(() => import('./SeasonPageClient'), { ssr: false, loading: () => LOADING });
+const PersonPageClient = dynamic(() => import('./PersonPageClient'), { ssr: false, loading: () => LOADING });
+const ProviderPageClient = dynamic(() => import('./ProviderPageClient'), { ssr: false, loading: () => LOADING });
+const UserProfilePageClient = dynamic(() => import('./UserProfilePageClient'), { ssr: false, loading: () => LOADING });
+const ListPageClient = dynamic(() => import('./ListPageClient'), { ssr: false, loading: () => LOADING });
+const TillsammansSessionPageClient = dynamic(() => import('./TillsammansSessionPageClient'), { ssr: false, loading: () => LOADING });
+const GroupPageClient = dynamic(() => import('./GroupPageClient'), { ssr: false, loading: () => LOADING });
 
 export default function DynamicRouter({ fallback }: { fallback: React.ReactNode }) {
   const pathname = usePathname();
