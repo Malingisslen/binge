@@ -101,6 +101,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       termsAcceptedAt: data.termsAcceptedAt?.toDate(),
       termsVersion: data.termsVersion as string | undefined,
+      onboardingCompletedAt: data.onboardingCompletedAt?.toDate(),
       notificationSettings: data.notificationSettings ?? {
         newEpisodes: true,
         availableOnMyServices: true,
