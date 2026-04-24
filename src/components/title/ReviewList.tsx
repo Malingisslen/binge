@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { Heart, MessageCircle, Send, X } from 'lucide-react';
 import { useReviewsForTitle, useReviewActions } from '@/hooks/useReviews';
 import { useReviewLikes, useReviewComments } from '@/hooks/useReviewSocial';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
+import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
 import type { MediaType, Review } from '@/types';
 
 interface ReviewListProps {
@@ -19,6 +21,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
   const { data: reviews, isLoading } = useReviewsForTitle(tmdbId);
   const { submitReview, deleteReview } = useReviewActions();
   const { uid } = useAuth();
+  const { isBlocked } = useBlockedUsers();
   const [showForm, setShowForm] = useState(false);
   const [text, setText] = useState('');
   const [spoiler, setSpoiler] = useState(false);
@@ -32,7 +35,9 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
   );
 
   const myReview = reviews.find(r => r.uid === uid);
-  const otherReviews = reviews.filter(r => r.uid !== uid);
+  // Filtrera bort blockerade användare från andra recensioner — min egen
+  // recension visas alltid oavsett vad.
+  const otherReviews = reviews.filter(r => r.uid !== uid && !isBlocked(r.uid));
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
@@ -116,9 +121,19 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
           )}
           <span className="text-text-muted ml-2">{review.createdAt.toLocaleDateString('sv-SE')}</span>
         </div>
-        {isOwn && onDelete && (
-          <button onClick={onDelete} className="text-xxs text-red-500 bg-transparent border-none cursor-pointer font-[inherit]">Ta bort</button>
-        )}
+        <div className="flex items-center gap-1">
+          {isOwn && onDelete && (
+            <button onClick={onDelete} className="text-xxs text-red-500 bg-transparent border-none cursor-pointer font-[inherit]">Ta bort</button>
+          )}
+          {!isOwn && (
+            <UgcActionsMenu
+              targetType="review"
+              targetId={review.id}
+              targetOwnerUid={review.uid}
+              targetOwnerName={review.displayName}
+            />
+          )}
+        </div>
       </div>
       {review.spoiler && !revealed ? (
         <div>
@@ -176,8 +191,12 @@ function ReviewComments({
 }) {
   const { uid } = useAuth();
   const { addComment, deleteComment } = useReviewComments(reviewId);
+  const { isBlocked } = useBlockedUsers();
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
+
+  // Filtrera bort kommentarer från blockerade användare.
+  const visibleComments = comments.filter(c => !isBlocked(c.uid));
 
   const submit = async () => {
     if (!text.trim()) return;
@@ -192,11 +211,11 @@ function ReviewComments({
 
   return (
     <div className="mt-2 pt-2 border-t border-border-light">
-      {comments.length === 0 ? (
+      {visibleComments.length === 0 ? (
         <div className="text-xxs text-text-muted italic">Inga kommentarer än.</div>
       ) : (
         <ul className="space-y-[4px] mb-2">
-          {comments.map(c => {
+          {visibleComments.map(c => {
             const canDelete = !!uid && (c.uid === uid || reviewAuthorUid === uid);
             return (
               <li key={c.id} className="text-xxs flex items-start gap-2">
@@ -211,7 +230,7 @@ function ReviewComments({
                   <span className="text-text-secondary ml-[4px]">{c.text}</span>
                   <span className="text-text-muted ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
                 </div>
-                {canDelete && (
+                {canDelete ? (
                   <button
                     onClick={() => deleteComment(c.id)}
                     className="text-text-muted hover:text-red-600 bg-transparent border-none cursor-pointer p-0"
@@ -219,6 +238,13 @@ function ReviewComments({
                   >
                     <X size={10} />
                   </button>
+                ) : (
+                  <UgcActionsMenu
+                    targetType="comment"
+                    targetId={`reviews/${reviewId}/comments/${c.id}`}
+                    targetOwnerUid={c.uid}
+                    targetOwnerName={c.displayName}
+                  />
                 )}
               </li>
             );
