@@ -213,6 +213,8 @@ service cloud.firestore {
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
           && request.resource.data.inviteToken == resource.data.inviteToken
+          && (!('inviteTokenRotatedAt' in resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
         )
         || (
           // Token-join — lägger till sig själv, övriga fält oförändrade
@@ -223,6 +225,8 @@ service cloud.firestore {
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
+          && (!('inviteTokenRotatedAt' in resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
         )
       );
 

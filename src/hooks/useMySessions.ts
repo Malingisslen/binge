@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTrackedSessions, clearStoredParticipantId, type TrackedSession } from '@/hooks/useSession';
+import { getTrackedSessions, clearStoredParticipantId, isSessionExpired, type TrackedSession } from '@/hooks/useSession';
 import {
   subscribeToSession,
   subscribeToSwipes,
@@ -49,7 +49,7 @@ export function useMySessions(): MySessionSummary[] {
     .map(t => {
       const s = sessions[t.sessionId];
       if (!s || s.status !== 'active') return null;
-      if (s.expiresAt.getTime() < Date.now()) return null;
+      if (isSessionExpired(s)) return null;
 
       const mySwipes = swipes[t.sessionId] ?? [];
       const voted = new Set(

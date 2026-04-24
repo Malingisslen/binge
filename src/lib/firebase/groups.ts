@@ -42,6 +42,7 @@ export async function createGroup(params: {
     memberUids: [params.ownerUid],
     defaults: params.defaults,
     inviteToken: randomId(),
+    inviteTokenRotatedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -72,7 +73,13 @@ export async function updateGroup(
 
 export async function rotateInviteToken(groupId: string): Promise<string> {
   const token = randomId();
-  await updateGroup(groupId, { inviteToken: token });
+  // updateDoc direkt (bypass updateGroup) för att kunna skriva
+  // inviteTokenRotatedAt som ligger utanför Pick-typen på updateGroup.
+  await updateDoc(doc(db, 'groups', groupId), {
+    inviteToken: token,
+    inviteTokenRotatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
   return token;
 }
 
@@ -239,6 +246,7 @@ export function groupDocToObject(id: string, data: Record<string, unknown>): Gro
       mediaType: 'both',
     },
     inviteToken: (data.inviteToken as string | null) ?? null,
+    inviteTokenRotatedAt: data.inviteTokenRotatedAt ? toDate(data.inviteTokenRotatedAt) : null,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
   };

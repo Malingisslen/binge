@@ -194,6 +194,7 @@ export interface Group {
   memberUids: string[];
   defaults: GroupDefaults;
   inviteToken: string | null;
+  inviteTokenRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

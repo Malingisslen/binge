@@ -68,11 +68,16 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
   );
 }
 
+// Antal dagar innan vi nudge:ar om att rotera inbjudningslänken. Efter en
+// inbjudningslänk legat ute längre än så ökar sannolikheten att den läckt
+// till någon som inte längre hör hemma i gruppen.
+const TOKEN_STALE_DAYS = 180;
+
 export function InvitePanel({
   groupId, group,
 }: {
   groupId: string;
-  group: { inviteToken: string | null };
+  group: { inviteToken: string | null; inviteTokenRotatedAt?: Date | null };
 }) {
   const [copied, setCopied] = useState(false);
   const [working, setWorking] = useState(false);
@@ -81,6 +86,11 @@ export function InvitePanel({
     if (typeof window === 'undefined') return null;
     return `${window.location.origin}/grupper/${groupId}?invite=${group.inviteToken}`;
   }, [group.inviteToken, groupId]);
+
+  const tokenAgeDays = group.inviteTokenRotatedAt
+    ? Math.floor((Date.now() - group.inviteTokenRotatedAt.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+  const isStale = tokenAgeDays !== null && tokenAgeDays >= TOKEN_STALE_DAYS;
 
   const copy = async () => {
     if (!inviteUrl) return;
@@ -117,6 +127,11 @@ export function InvitePanel({
               </button>
             </div>
             {copied && <div className="text-xxs text-accent">Kopierad!</div>}
+            {isStale && (
+              <div className="text-xxs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1">
+                Länken är {tokenAgeDays} dagar gammal. Generera en ny om du misstänker att den läckt.
+              </div>
+            )}
             <div className="flex gap-1">
               <button
                 onClick={async () => {
