@@ -1,10 +1,3 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 export function formatSwedishDate(dateStr: string | null, fallback = 'Okänt datum'): string {
   if (!dateStr) return fallback;
   const today = new Date().toISOString().split('T')[0];
