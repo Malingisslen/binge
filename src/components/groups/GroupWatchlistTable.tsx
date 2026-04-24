@@ -79,6 +79,10 @@ export function GroupWatchlistTable({
                           src={posterUrl(item.posterPath, 'w92') ?? ''}
                           alt=""
                           className="w-[28px] h-[42px] object-cover rounded-sm shrink-0"
+                          loading="lazy"
+                          decoding="async"
+                          width={28}
+                          height={42}
                         />
                       )}
                       <div className="min-w-0">

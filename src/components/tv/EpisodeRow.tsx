@@ -22,7 +22,7 @@ export default function EpisodeRow({ episode, watched, onToggle, onMarkUpTo }: E
         className="shrink-0 accent-accent w-[14px] h-[14px] cursor-pointer"
       />
       {still ? (
-        <img src={still} alt="" className="w-[60px] h-[34px] rounded-sm object-cover shrink-0" />
+        <img src={still} alt="" className="w-[60px] h-[34px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={60} height={34} />
       ) : (
         <div className="w-[60px] h-[34px] rounded-sm bg-[#ddd8d0] shrink-0" />
       )}

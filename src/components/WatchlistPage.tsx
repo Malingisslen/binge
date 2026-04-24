@@ -291,7 +291,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                     <td className="px-2 py-[5px] border-b border-border-table">
                       <Link href={href}>
                         {poster ? (
-                          <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
+                          <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" loading="lazy" decoding="async" width={32} height={48} />
                         ) : (
                           <div className="w-[32px] h-[48px] rounded-sm bg-[#ddd8d0] flex items-center justify-center">
                             <Icon size={14} className="text-text-muted opacity-40" />
@@ -360,7 +360,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
                 <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
                   <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden">
                     {poster ? (
-                      <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+                      <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
                         <Icon size={20} className="text-text-muted opacity-40" />

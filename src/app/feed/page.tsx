@@ -188,7 +188,7 @@ function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
   const statusLabel = item.status === 'sedd' ? 'markerade som sedd' : item.status === 'följer' ? 'började följa' : item.status === 'vill_se' ? 'vill se' : 'uppdaterade';
   return (
     <div className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2 items-center">
-      {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" />}
+      {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={30} height={45} />}
       <div className="flex-1 min-w-0">
         <div className="text-xs">
           {item.username ? (

@@ -411,7 +411,7 @@ function SwipeCard({
     <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
       <div className="flex gap-3 p-3">
         {poster ? (
-          <img src={poster} alt="" className="w-[140px] h-[210px] object-cover rounded-sm shrink-0 bg-border-light" />
+          <img src={poster} alt="" className="w-[140px] h-[210px] object-cover rounded-sm shrink-0 bg-border-light" loading="eager" decoding="async" width={140} height={210} />
         ) : (
           <div className="w-[140px] h-[210px] bg-border-light rounded-sm shrink-0" />
         )}
@@ -559,7 +559,7 @@ function MatchList({ matches }: { matches: ReturnType<typeof pickMatches> }) {
               className="flex items-center gap-2 px-3 py-[5px] no-underline hover:bg-surface-hover text-text-primary"
             >
               {poster ? (
-                <img src={poster} alt="" className="w-[28px] h-[42px] object-cover rounded-sm" />
+                <img src={poster} alt="" className="w-[28px] h-[42px] object-cover rounded-sm" loading="lazy" decoding="async" width={28} height={42} />
               ) : (
                 <div className="w-[28px] h-[42px] bg-border-light rounded-sm" />
               )}

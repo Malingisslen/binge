@@ -107,7 +107,7 @@ function WatchingRow({ item, poster, href, isExpanded, onToggle, striped }: {
         <td className="px-3 py-[5px] border-b border-border-table w-[44px]">
           <Link href={href} onClick={e => e.stopPropagation()}>
             {poster ? (
-              <img src={poster} alt="" className="w-[28px] h-[42px] rounded-sm object-cover" />
+              <img src={poster} alt="" className="w-[28px] h-[42px] rounded-sm object-cover" loading="lazy" decoding="async" width={28} height={42} />
             ) : (
               <div className="w-[28px] h-[42px] rounded-sm bg-[#ddd8d0]" />
             )}

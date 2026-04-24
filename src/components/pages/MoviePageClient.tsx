@@ -85,12 +85,14 @@ export default function MoviePageClient({ id }: { id: string }) {
             src={backdrop}
             alt=""
             className="w-full h-full object-cover object-[center_20%] opacity-60"
+            loading="eager"
+            decoding="async"
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={movie ? preferOriginalTitle(movie.title, movie.original_title) : ''} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
+            <img src={poster} alt={movie ? preferOriginalTitle(movie.title, movie.original_title) : ''} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" loading="eager" decoding="async" width={140} height={210} />
           ) : (
             <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
               <Film size={32} className="text-text-muted" />
@@ -174,7 +176,7 @@ export default function MoviePageClient({ id }: { id: string }) {
                 {subscription.map(p => {
                   const logo = logoUrl(p.logo_path);
                   return logo ? (
-                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" />
+                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" loading="lazy" decoding="async" width={28} height={28} />
                   ) : (
                     <ProviderTag key={p.provider_id} provider={p} size="md" />
                   );
@@ -251,6 +253,9 @@ export default function MoviePageClient({ id }: { id: string }) {
                       alt={person.name}
                       className="w-[50px] h-[50px] object-cover rounded-full mb-[4px] mx-auto"
                       loading="lazy"
+                      decoding="async"
+                      width={50}
+                      height={50}
                     />
                   ) : (
                     <div className="w-[50px] h-[50px] rounded-full bg-[#ddd8d0] mb-[4px] mx-auto flex items-center justify-center text-xs text-text-muted font-semibold">

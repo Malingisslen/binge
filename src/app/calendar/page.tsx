@@ -112,7 +112,7 @@ function UnwatchedSection({ episodes }: { episodes: CalendarEntry[] }) {
             <div key={showId} className="flex items-center gap-[10px] py-[6px] border-b border-border-light last:border-b-0">
               {poster && (
                 <Link href={`/tv/${showId}/`} className="shrink-0">
-                  <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" />
+                  <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" loading="lazy" decoding="async" width={32} height={48} />
                 </Link>
               )}
               <div className="flex-1 min-w-0">

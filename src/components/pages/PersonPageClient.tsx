@@ -57,7 +57,7 @@ export default function PersonPageClient({ id }: { id: string }) {
       <div className="flex flex-col md:flex-row gap-4 mb-4">
         <div className="shrink-0">
           {photo ? (
-            <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" />
+            <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" decoding="async" width={180} height={270} />
           ) : (
             <div className="w-[180px] aspect-[2/3] bg-[#ddd8d0] rounded-sm" />
           )}

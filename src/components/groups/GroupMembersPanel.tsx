@@ -81,7 +81,7 @@ export function GroupMembersPanel({
 function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
   if (photoURL) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={photoURL} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />;
+    return <img src={photoURL} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" width={24} height={24} />;
   }
   const initial = (name?.[0] ?? '?').toUpperCase();
   return (

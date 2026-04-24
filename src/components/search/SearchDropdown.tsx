@@ -70,7 +70,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
             }`}
           >
             {poster ? (
-              <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover shrink-0" />
+              <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={26} height={39} />
             ) : (
               <div className="w-[26px] h-[39px] rounded-sm bg-white/10 shrink-0" />
             )}

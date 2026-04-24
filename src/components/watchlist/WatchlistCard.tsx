@@ -56,7 +56,7 @@ export function WatchlistCard({ item, nextAirDate }: { item: WatchlistItem; next
     <div className="bg-surface border border-border-main rounded-sm p-[10px] flex gap-[10px] hover:border-accent/40 transition-colors">
       <Link href={href} className="shrink-0">
         {poster ? (
-          <img src={poster} alt="" className="w-[50px] h-[75px] rounded-sm object-cover" loading="lazy" />
+          <img src={poster} alt="" className="w-[50px] h-[75px] rounded-sm object-cover" loading="lazy" decoding="async" width={50} height={75} />
         ) : (
           <div className="w-[50px] h-[75px] rounded-sm bg-[#ddd8d0] flex items-center justify-center">
             <Icon size={16} className="text-text-muted opacity-40" />

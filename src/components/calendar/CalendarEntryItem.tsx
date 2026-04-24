@@ -53,7 +53,7 @@ export default function CalendarEntryItem({ entry, compact }: CalendarEntryItemP
       />
       {poster && (
         <Link href={`/tv/${entry.tmdbId}/`} className="shrink-0">
-          <img src={poster} alt="" className="w-[22px] h-[33px] rounded-sm object-cover" />
+          <img src={poster} alt="" className="w-[22px] h-[33px] rounded-sm object-cover" loading="lazy" decoding="async" width={22} height={33} />
         </Link>
       )}
       <Link href={`/tv/${entry.tmdbId}/`} className="no-underline flex-1 min-w-0">

@@ -26,7 +26,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
             return (
               <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
                 <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
-                  {poster && <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" />}
+                  {poster && <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />}
                 </div>
                 <div className="text-xs font-semibold truncate">{item.title}</div>
               </Link>

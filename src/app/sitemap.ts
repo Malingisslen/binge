@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next';
 import { getPopularMovies, getPopularTV } from '@/lib/tmdb/client';
-import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 
 /**
  * Dynamisk sitemap som genereras vid `next build`.
