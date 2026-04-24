@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -97,6 +98,14 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
   return (
     <div className="-mt-[14px] -mx-[18px]">
+      {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
+      <JsonLd data={tvSchema(show)} />
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: 'Serier', url: 'https://binge.nu/series/' },
+        { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
+      ])} />
+
       {/* Hero backdrop */}
       <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (

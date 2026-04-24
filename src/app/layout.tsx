@@ -60,6 +60,23 @@ export default function RootLayout({
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="" />
       </head>
       <body suppressHydrationWarning>
+        {/* Schema.org Organization — signalerar till Google att detta är
+            den officiella Binge.nu-siten (underlättar knowledge panel). */}
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: 'Binge.nu',
+              url: SITE_URL,
+              logo: OG_IMAGE,
+              description: 'Svensk mediatracker för film och TV-serier.',
+            }),
+          }}
+        />
+
         {/* Plausible analytics: cookie-free + IP-anonymized by default,
             so no consent banner is required under LEK §6 kap 18§. Custom
             events fire via window.plausible(...) — see src/lib/analytics.ts. */}

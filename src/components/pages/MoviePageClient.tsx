@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -69,6 +70,14 @@ export default function MoviePageClient({ id }: { id: string }) {
 
   return (
     <div className="-mt-[14px] -mx-[18px]">
+      {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
+      <JsonLd data={movieSchema(movie)} />
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: 'Filmer', url: 'https://binge.nu/films/' },
+        { name: displayTitle, url: `https://binge.nu/movie/${movie.id}/` },
+      ])} />
+
       {/* Hero backdrop */}
       <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (
@@ -81,7 +90,7 @@ export default function MoviePageClient({ id }: { id: string }) {
         <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
+            <img src={poster} alt={movie ? preferOriginalTitle(movie.title, movie.original_title) : ''} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
           ) : (
             <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
               <Film size={32} className="text-text-muted" />
