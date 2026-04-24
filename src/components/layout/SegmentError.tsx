@@ -27,7 +27,7 @@ export function SegmentError({
 }) {
   useEffect(() => {
     // Lokal console.error — syns i DevTools + bugrapporter från användare.
-     
+
     console.error(`[${scope}]`, error);
     // Vidarebefordra till Sentry om DSN är satt. No-op annars.
     captureError(error, {

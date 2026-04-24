@@ -27,7 +27,7 @@ export function EmailVerificationBanner() {
       await resendEmailVerification();
       toast('Verifieringsmail skickat. Kolla din inkorg.');
     } catch (err) {
-       
+
       console.error('[resend-verification]', err);
       toast('Kunde inte skicka mailet. Försök igen om en stund.');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import {
@@ -8,6 +8,7 @@ import {
   leaveGroup,
   rotateInviteToken,
 } from '@/lib/firebase/groups';
+import { useMountTime } from '@/hooks/useMountTime';
 
 /**
  * Sidopaneler i grupp-layouten som tillsammans varit ~200 rader inline
@@ -87,10 +88,7 @@ export function InvitePanel({
     return `${window.location.origin}/grupper/${groupId}?invite=${group.inviteToken}`;
   }, [group.inviteToken, groupId]);
 
-  // React 19 strict-purity: Date.now() är en unpure call i render. Snapshot
-  // en gång vid mount via useEffect — token-ålder är inte nano-precision.
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => { setNow(Date.now()); }, []);
+  const now = useMountTime();
   const tokenAgeDays = now !== null && group.inviteTokenRotatedAt
     ? Math.floor((now - group.inviteTokenRotatedAt.getTime()) / (24 * 60 * 60 * 1000))
     : null;

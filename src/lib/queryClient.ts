@@ -33,7 +33,7 @@ function reportError(
   kind: 'query' | 'mutation',
   scope: string,
 ): void {
-   
+
   console.error(`[rq:${kind}:${scope}]`, error);
 
   try {

@@ -68,7 +68,7 @@ export default function RootLayout({
             den officiella Binge.nu-siten (underlättar knowledge panel). */}
         <script
           type="application/ld+json"
-           
+
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               '@context': 'https://schema.org',

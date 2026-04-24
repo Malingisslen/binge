@@ -15,24 +15,12 @@ export default [
   },
   {
     rules: {
-      // Next 16 aktiverade react-hooks-plugin-rules som är väldigt
-      // strikta mot mönster vi använder intentionellt:
-      //
-      // set-state-in-effect: vår SSR-mount-guard
-      //   `const [mounted, setM] = useState(false); useEffect(() => setM(true), [])`
-      //   är standard-React för static export. Rule:n flaggar även useEffect
-      //   som synkar data från sub-components (t.ex. pagination-listor).
-      //
-      // use-memo: vår `[showQueries.map(q => q.dataUpdatedAt).join(',')]`-
-      //   dependency är ett känt work-around för att minska re-renders när
-      //   en array av queries uppdateras individuellt. Vi har också eslint-
-      //   disable-comments på raderna ifråga. Rule:n kräver "simple
-      //   expressions" vilket är för strikt.
-      //
-      // Om vi vill flagga dessa en dag: aktivera dem i en dedikerad sprint
-      // med en plan för att migrera mönstren. Inte nu, mitt i Next 16-
-      // uppgraderingen.
+      // Off: flaggar vår SSR-mount-guard (`useEffect(() => setMounted(true), [])`)
+      // som är standard-React för static export.
       'react-hooks/set-state-in-effect': 'off',
+      // Off: flaggar vår `[arr.map().join(',')]`-dep-workaround i
+      // useSubscriptionAdvisor + useRevivalNudges. "Simple expressions"-
+      // kravet är för strikt för vårt usecase.
       'react-hooks/use-memo': 'off',
     },
   },
