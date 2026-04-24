@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, ChevronDown, ChevronUp, Sparkles, Target } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Sparkles, Target, Download } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
@@ -166,6 +166,8 @@ function SettingsContent() {
       />
 
       <TasteDataSection />
+
+      <DataExportSection />
 
       <DeleteAccountSection />
 
@@ -430,6 +432,51 @@ function TasteDataSection() {
             Kalibrera smak
           </Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DataExportSection() {
+  const { uid } = useAuth();
+  const { show: toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!uid) return;
+    setExporting(true);
+    try {
+      const { buildUserExport, downloadExport } = await import('@/lib/firebase/dataExport');
+      const data = await buildUserExport(uid);
+      downloadExport(data);
+      toast('Dataexport nedladdad.');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[data-export]', err);
+      toast('Kunde inte skapa exporten. Försök igen.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
+      <div className="px-3 py-[6px] border-b border-border-light">
+        <span className="text-sm font-bold text-text-secondary">Exportera min data</span>
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-xs text-text-muted mb-2">
+          Ladda ner all data vi har om dig som en JSON-fil (GDPR artikel 20). Innehåller profil,
+          watchlist, betyg, progress, recensioner, listor och sociala kopplingar.
+        </p>
+        <button
+          onClick={handleExport}
+          disabled={exporting || !uid}
+          className="inline-flex items-center gap-1 px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer hover:bg-surface-hover disabled:opacity-50"
+        >
+          <Download size={11} />
+          {exporting ? 'Förbereder...' : 'Ladda ner mina data'}
+        </button>
       </div>
     </div>
   );

@@ -19,8 +19,6 @@ import {
   setDoc,
   getDocs,
   collection,
-  collectionGroup,
-  documentId,
   query,
   where,
   writeBatch,
@@ -28,6 +26,7 @@ import {
   type DocumentReference,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/config';
+import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import type { UserProfile } from '@/types';
 
 interface AuthState {
@@ -318,53 +317,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const id = currentUser.uid;
     const username = user?.username ?? null;
 
-    // Collect everything owned by the user across all collections.
-    // Some queries (collectionGroup with documentId/where) rely on
-    // single-field collection-group indexes — added to firestore.indexes.json.
-    const [
-      watchlistSnap,
-      progressSnap,
-      notifSnap,
-      notInterestedSnap,
-      followingSnap,
-      myReviewsSnap,
-      myListsSnap,
-      mySessionsSnap,
-      myGroupsSnap,
-      myCommentsSnap,
-      myLikesSnap,
-    ] = await Promise.all([
-      getDocs(collection(db, 'users', id, 'watchlist')),
-      getDocs(collection(db, 'users', id, 'episodeProgress')),
-      getDocs(collection(db, 'users', id, 'notifications')),
-      getDocs(collection(db, 'users', id, 'notInterested')),
-      getDocs(collection(db, 'users', id, 'following')),
-      getDocs(query(collection(db, 'reviews'), where('uid', '==', id))),
-      getDocs(query(collection(db, 'lists'), where('uid', '==', id))),
-      getDocs(query(collection(db, 'sessions'), where('hostUid', '==', id))),
-      getDocs(query(collection(db, 'groups'), where('memberUids', 'array-contains', id))),
-      // My comments on OTHERS' reviews (own-review comments handled below).
-      getDocs(query(collectionGroup(db, 'comments'), where('uid', '==', id))),
-      // My likes on reviews — doc id is my uid.
-      getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', id))),
-    ]);
+    // Delad läsning med buildUserExport — om nya user-owned collections
+    // läggs till ska de uppdateras i collectUserDataSnapshots.
+    const snaps = await collectUserDataSnapshots(id);
 
     const refs: DocumentReference[] = [];
 
     // 1. Simple per-user subcollections.
-    watchlistSnap.docs.forEach(d => refs.push(d.ref));
-    progressSnap.docs.forEach(d => refs.push(d.ref));
-    notifSnap.docs.forEach(d => refs.push(d.ref));
-    notInterestedSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.episodeProgressSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.blockedSnap.docs.forEach(d => refs.push(d.ref));
 
     // 2. Outbound follows: delete own "following" + mirror "followers" on target.
-    followingSnap.docs.forEach(d => {
+    snaps.followingSnap.docs.forEach(d => {
       refs.push(d.ref);
       refs.push(doc(db, 'users', d.id, 'followers', id));
     });
 
     // 3. My reviews + all their subcollections (likes + comments on my reviews).
-    for (const reviewDoc of myReviewsSnap.docs) {
+    for (const reviewDoc of snaps.reviewsSnap.docs) {
       const [likesSnap, commentsSnap] = await Promise.all([
         getDocs(collection(db, 'reviews', reviewDoc.id, 'likes')),
         getDocs(collection(db, 'reviews', reviewDoc.id, 'comments')),
@@ -374,24 +347,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refs.push(reviewDoc.ref);
     }
 
-    // 4. My comments on OTHERS' reviews (collection-group).
-    myCommentsSnap.docs.forEach(d => refs.push(d.ref));
+    // 4. My comments + likes on OTHERS' reviews (collection-group).
+    snaps.reviewCommentsSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.reviewLikesSnap.docs.forEach(d => refs.push(d.ref));
 
-    // 5. My likes on OTHERS' reviews (collection-group by documentId == uid).
-    myLikesSnap.docs.forEach(d => refs.push(d.ref));
+    // 5. My lists + hosted Tillsammans-sessions.
+    snaps.listsSnap.docs.forEach(d => refs.push(d.ref));
+    snaps.sessionsSnap.docs.forEach(d => refs.push(d.ref));
 
-    // 6. My lists.
-    myListsSnap.docs.forEach(d => refs.push(d.ref));
-
-    // 7. Sessions I host (Tillsammans).
-    mySessionsSnap.docs.forEach(d => refs.push(d.ref));
-
-    // 8. Groups: if I'm owner, delete the whole group + subcollections.
+    // 6. Groups: if I'm owner, delete the whole group + subcollections.
     //    If I'm a member, just remove myself from memberUids and delete my member doc.
     //    Rules update-branch forces us to keep other fields unchanged when
     //    only removing the leaving member.
     const memberLeaveUpdates: { ref: DocumentReference; newMemberUids: string[] }[] = [];
-    for (const groupDoc of myGroupsSnap.docs) {
+    for (const groupDoc of snaps.groupsSnap.docs) {
       const data = groupDoc.data();
       const ownerUid = data.ownerUid as string | undefined;
       if (ownerUid === id) {
