@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { trackEvent } from '@/lib/analytics';
+import { scorePassword } from '@/lib/passwordStrength';
+import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 
 // Version identifier for the Terms of Service + Privacy Policy a user
 // accepts at sign-up. Bump this (e.g. to '2026-07-01') when either legal
@@ -45,6 +47,9 @@ export default function LoginPage() {
     }
   }
 
+  // Inline-anrop — scorePassword är O(length) med några regex, inget värt att memo:a.
+  const passwordStrength = mode === 'register' ? scorePassword(password) : null;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -54,6 +59,11 @@ export default function LoginPage() {
         if (!name.trim()) { setError('Ange ditt namn.'); setSubmitting(false); return; }
         if (!ageConfirmed) { setError('Du måste vara minst 13 år för att skapa konto.'); setSubmitting(false); return; }
         if (!termsAccepted) { setError('Du måste godkänna villkoren för att skapa konto.'); setSubmitting(false); return; }
+        if (passwordStrength && !passwordStrength.acceptable) {
+          setError(passwordStrength.feedback || 'Lösenordet är för svagt.');
+          setSubmitting(false);
+          return;
+        }
         await register(email, password, name, TERMS_VERSION);
         trackEvent('signed_up');
       } else {
@@ -133,9 +143,12 @@ export default function LoginPage() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={mode === 'register' ? 8 : 6}
             className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
           />
+          {mode === 'register' && passwordStrength && (
+            <PasswordStrengthMeter strength={passwordStrength} />
+          )}
           {mode === 'register' && (
             <div className="mt-3 mb-2 space-y-2 text-xs text-text-secondary">
               <label className="flex items-start gap-2 cursor-pointer">

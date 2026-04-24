@@ -7,6 +7,7 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   updateProfile,
   signOut as firebaseSignOut,
   deleteUser,
@@ -33,9 +34,13 @@ interface AuthState {
   user: UserProfile | null;
   uid: string | null;
   loading: boolean;
+  // Firebase Auth email-verification-state. Gör inte gating idag men UI:t
+  // kan visa en banner när emailVerified=false (och resend därifrån).
+  emailVerified: boolean;
   signIn: () => Promise<void>;
   signInEmail: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, termsVersion: string) => Promise<void>;
+  resendEmailVerification: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
@@ -56,9 +61,11 @@ const AuthContext = createContext<AuthState>({
   user: null,
   uid: null,
   loading: true,
+  emailVerified: false,
   signIn: async () => {},
   signInEmail: async () => {},
   register: async () => {},
+  resendEmailVerification: async () => {},
   signOut: async () => {},
   updateProviders: async () => {},
   updateDefaultView: async () => {},
@@ -144,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [uid, setUid] = useState<string | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -153,14 +161,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const profile = await ensureUserProfile(firebaseUser);
           setUser(profile);
           setUid(firebaseUser.uid);
+          setEmailVerified(firebaseUser.emailVerified);
         } catch (err) {
           console.error('Failed to load user profile:', err);
           setUser(null);
           setUid(null);
+          setEmailVerified(false);
         }
       } else {
         setUser(null);
         setUid(null);
+        setEmailVerified(false);
       }
       setLoading(false);
     });
@@ -203,6 +214,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }, { merge: true });
+    // Skicka verifieringsmail. Felar vi här blockerar vi inte registreringen
+    // — användaren kan resend:a från settings. Loggas bara så vi kan
+    // upptäcka om maildelivery går ner brett.
+    try {
+      await sendEmailVerification(cred.user);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[email-verification]', err);
+    }
+  }, []);
+
+  const resendEmailVerification = useCallback(async () => {
+    if (!auth.currentUser) return;
+    await sendEmailVerification(auth.currentUser);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -407,16 +432,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      user, uid, loading,
-      signIn, signInEmail, register, signOut,
+      user, uid, loading, emailVerified,
+      signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
-      user, uid, loading,
-      signIn, signInEmail, register, signOut,
+      user, uid, loading, emailVerified,
+      signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
