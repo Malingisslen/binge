@@ -32,6 +32,9 @@ export type AnalyticsEvent =
   // Onboarding — step_reached visar var användare droppar av. Hjälper
   // optimera flödet senare (om 50% skippar vid step 3, ändra step 3).
   | { name: 'onboarding_completed'; props: { step_reached: number } }
+  // Ko-fi / Swish-donate-klick i footer. Ingen payment här, bara spårning
+  // av intresse så vi kan utvärdera om det är värt att bygga mer runt.
+  | { name: 'donate_clicked'; props?: Record<string, never> }
   // Telemetri för React Query-fel — inga PII, bara kategori och första segment
   // av queryKey så vi kan se vilken subsystem som hostar felen.
   | { name: 'query_error'; props: { scope: string; kind: 'query' | 'mutation' } };

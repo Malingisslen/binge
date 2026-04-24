@@ -1,10 +1,92 @@
-# External Actions — Sprint 1, Day 1
+# External Actions
 
-These steps require access outside this repo (Firebase Console,
-gcloud CLI, Cloudflare, UptimeRobot, TMDB). They cannot be scripted
-from the codebase. Run each, then check off.
+Åtgärder som kräver access utanför repot (Firebase Console, gcloud,
+Cloudflare, UptimeRobot, TMDB).
 
-Total time: ~45 min.
+---
+
+## Status per 2026-04-24 (verifierat via Chrome-MCP-sweep)
+
+| Item | Status | Blockerare |
+|------|--------|-----------|
+| Firestore region `eur3` (EU multi-region) | ✅ Verifierat — GDPR-compliant | — |
+| Firestore PITR | ❌ Kräver **Blaze-plan** | Billing-beslut |
+| Schemalagda backups | ❌ Kräver **Blaze-plan** | Billing-beslut |
+| Firebase App Check (reCAPTCHA v3) | ⏸ Partiellt — webapp listad som "Unregistered" | Kräver reCAPTCHA-sitekey från Google |
+| Sentry DSN | ⏸ Inte provisionerat | Skapa projekt på sentry.io |
+| Branch protection på `main` | ⏸ Inte aktiverat | GitHub Settings → Branches |
+| Official TMDB logo | ⏸ Placeholder `public/tmdb-logo.svg` | Ladda ner från themoviedb.org |
+| UptimeRobot monitor | ⏸ Inte skapat | Gratis, 5 min |
+
+Billing-frågan är den enda verkliga blockeraren; alla andra är friktions-items.
+
+---
+
+## Blaze-upgrade eller inte?
+
+**Spark (gratis) räcker för:**
+- Nuvarande Firestore-användning (42K reads/701 writes per 7 dagar)
+- Hosting
+- Authentication
+- Vanlig drift
+
+**Blaze behövs för:**
+- PITR (~$0.18/GiB/mån, just nu troligen < 10 MB = ~$0.01/mån)
+- Schemalagda backups (~$0.03/GiB/mån)
+- Cloud Functions (krävs för Sprint 10 monetization)
+- Överstiga free tier (50K reads/20K writes per dag)
+
+**Rekommendation:** Sätt en Firebase budget på 100 SEK/mån FÖRST (fail-closed
+spärr), uppgradera sedan till Blaze. Kostnaden för en solo-app på den här
+trafiknivån är < 5 SEK/mån i praktiken. Se §1.7a nedan för budget-setup.
+
+---
+
+## 1.1 — Firebase App Check (reCAPTCHA v3)
+
+**Status:** Webappen är listad men `Unregistered`. Secret key saknas.
+Site key behövs också för `NEXT_PUBLIC_APP_CHECK_SITE_KEY` env-var.
+
+**Steg-för-steg:**
+
+1. **Skapa reCAPTCHA v3-site** (gratis):
+   - Gå till https://www.google.com/recaptcha/admin/create
+   - Label: "Binge.nu"
+   - reCAPTCHA type: **reCAPTCHA v3**
+   - Domains: `binge.nu`, `binge-nu.web.app`, och `localhost` (för dev)
+   - Acceptera villkoren → Submit
+   - Spara **Site key** (publik) och **Secret key** (privat) på säker plats
+
+2. **Registrera i Firebase App Check:**
+   - Öppna https://console.firebase.google.com/project/binge-nu/appcheck/apps
+   - Klicka `Register` bredvid `binge-nu-web`
+   - Välj **reCAPTCHA** (inte Enterprise)
+   - Paste in **Secret key** från steg 1
+   - Token time to live: 1 day (default ok)
+   - Save
+
+3. **Sätt env-var i produktion:**
+   - Hosting-env-var (Firebase gör det automatiskt via `firebase functions:config`
+     för Functions, men för static-hostade siter behöver vi bygga in den)
+   - Lägg in **Site key** i din CI-miljö som `NEXT_PUBLIC_APP_CHECK_SITE_KEY`
+   - För lokal dev: lägg i `.env.local` (redan dokumenterat i .env.local.example)
+
+4. **Enforce på Firestore + Auth:**
+   - Firebase Console → App Check → APIs-fliken
+   - Klicka Firestore, klicka "Enforce"
+   - Samma för Cloud Storage, Authentication, Realtime Database (om använda)
+   - Förslag: enforce på Firestore först, observera 1 vecka, sedan resten
+
+- [ ] 1. reCAPTCHA v3-site skapad
+- [ ] 2. App Check registrerad med secret key
+- [ ] 3. Site key satt som env-var + deployed
+- [ ] 4. Enforce på Firestore
+
+---
+
+## 1.2 — Firestore PITR (Point-in-Time Recovery)
+
+_**Blaze-plan required.**_
 
 ---
 
@@ -12,6 +94,9 @@ Total time: ~45 min.
 
 **Why:** 7-day recovery window at minute granularity. Fixes 03 DR1
 (CRITICAL data-loss risk). Cost: ~$0.18 / GiB / month.
+
+**Blaze required.** Upgrade sker via Firebase Console → "Upgrade billing plan"
+i vänsterspalten. Sätt budget-alert (§1.7a) FÖRST som skyddsnät.
 
 **How:**
 
@@ -39,34 +124,13 @@ Alternative via Firebase Console:
 
 ## 1.3 — Verify Firebase project region
 
-**Why:** EU user data should reside in EU for GDPR. Unverified
-currently. Cross-ref 02 G-5, 09 T-1, 11 FH-1.
+**Why:** EU user data should reside in EU for GDPR.
 
-**How:**
+**Verifierat 2026-04-24 via Firebase Console:** `eur3` (EU multi-region,
+Belgien + Nederländerna). GDPR-compliant. Ingen migration behövs.
 
-```bash
-gcloud firestore databases describe --database="(default)" \
-  --project=binge-nu --format="value(locationId)"
-```
-
-Or via Firebase Console → Firestore → Settings → Location.
-
-**Expected (EU-friendly):**
-- `europe-west1` (Belgium)
-- `europe-west3` (Frankfurt)
-- `europe-west4` (Netherlands)
-- `eur3` (multi-region EU)
-
-**If US region (`us-central1`, `nam5`, etc.):**
-- Data physically in US → SCC disclosure required in privacy policy
-- Document the region; migration is a multi-week project (Firestore
-  databases are immutable — requires creating a new project + data
-  export/import). Defer to Phase 3 unless compliance audit demands it.
-
-**Result to document in privacy policy (Sprint 1 Day 3-7):**
-
-- [ ] Region verified: ___________________
-- [ ] Migration needed? Yes / No
+- [x] Region verified: **eur3**
+- [x] Migration needed? **No**
 
 ---
 
@@ -208,10 +272,50 @@ No code changes required. Flag issues if any.
 
 ---
 
+## Sentry setup (Sprint 2 follow-up)
+
+**Varför:** Sprint 2 integrerade `@sentry/react` men initialiseringen är
+no-op tills `NEXT_PUBLIC_SENTRY_DSN` är satt.
+
+**Steg:**
+
+1. Skapa konto på https://sentry.io (free tier räcker — 5k events/mån)
+2. Create Project → Platform: **Browser → JavaScript → Next.js**
+3. Project name: `binge-nu`
+4. Kopiera DSN (format: `https://<hash>@o<id>.ingest.sentry.io/<project>`)
+5. Lägg in i GitHub Actions secrets som `NEXT_PUBLIC_SENTRY_DSN`
+6. Lägg in `NEXT_PUBLIC_GIT_SHA` = `${{ github.sha }}` i `.github/workflows/deploy.yml` build-env
+7. Trigger:a redeploy
+
+- [ ] Sentry-projekt skapat
+- [ ] DSN satt i GitHub secrets + CI miljö
+- [ ] En test-exception rapporterad från produktion
+
+---
+
+## Branch protection (Sprint 2 follow-up)
+
+**Varför:** CI-workflow finns men är inte enforcerande. En direct push till
+main som failar lint kan fortfarande deploya om vi inte blocker.
+
+**Steg:**
+
+1. https://github.com/Malingisslen/binge/settings/branches
+2. Add branch protection rule for `main`
+3. Required status checks: `quality` (från ci.yml) — check "Require status checks to pass before merging"
+4. Require pull request reviews: optional för solo
+5. Include administrators: **on** — annars kan du själv bypassa av misstag
+
+- [ ] Branch protection aktiverad på `main`
+- [ ] Verifierat: direct-push utan PR failar
+
+---
+
 ## Sign-off
 
 All items done? Update this file's status here:
 
+- [ ] 1.1 App Check registered + enforced
 - [ ] 1.2 PITR enabled
 - [ ] 1.3 Region verified (record: ___)
 - [ ] 1.6 Scheduled backups active
@@ -220,5 +324,7 @@ All items done? Update this file's status here:
 - [ ] 1.5b Official TMDB logo in place
 - [ ] Cloudflare settings sanity-checked
 - [ ] Deployed + `curl -I` confirms security headers live
+- [ ] Sentry DSN provisionerat + deployt
+- [ ] Branch protection aktiverad på main
 
 Date completed: ___________

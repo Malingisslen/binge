@@ -28,6 +28,10 @@ export interface CandidateResult {
 //
 // Om smakvektorer saknas för deltagare (t.ex. gäster) blir taste-bidraget 0
 // och vi faller tillbaka till klassisk vote-scoring (yes − no × 0.5).
+// Vi använder INTE assertNever här — AggregationStrategy persisteras i
+// Firestore (groups/{id}.defaults.aggregation + sessions/{id}.config.aggregation)
+// och en legacy- eller hand-editerad doc med okänd sträng skulle krasha
+// hela scoring:en. Graceful fallthrough till 'average' är säkrare.
 function aggregateTaste(
   scores: number[],
   strategy: AggregationStrategy,
