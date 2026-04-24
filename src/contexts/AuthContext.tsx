@@ -20,8 +20,6 @@ import {
   setDoc,
   getDocs,
   collection,
-  query,
-  where,
   writeBatch,
   serverTimestamp,
   type DocumentReference,
