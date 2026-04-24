@@ -49,7 +49,7 @@ export default function SeriesDetail({ show, onClose }: SeriesDetailProps) {
           </button>
         )}
         {poster ? (
-          <img src={poster} alt={show.name} className="w-[40px] h-[60px] rounded-sm object-cover shrink-0" />
+          <img src={poster} alt={show.name} className="w-[40px] h-[60px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={40} height={60} />
         ) : (
           <div className="w-[40px] h-[60px] rounded-sm bg-[#d5d0c5] shrink-0" />
         )}

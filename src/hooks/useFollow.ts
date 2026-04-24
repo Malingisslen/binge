@@ -1,10 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, onSnapshot, writeBatch, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, serverTimestamp, getCountFromServer, query, limit } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
 import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Högsta antal följda vi läser för att beräkna is-following-relationer klient-
+// sidan. Power users med 500+ följda får en paginerad view i framtiden (se 9.4
+// TODO). 500 räcker långt för normalanvändning och skyddar mot read-bombs.
+const FOLLOWING_LIMIT = 500;
 
 export function useFollowing() {
   const { uid } = useAuth();
@@ -12,7 +17,8 @@ export function useFollowing() {
 
   useEffect(() => {
     if (!uid) { setFollowingUids([]); return; }
-    const unsub = onSnapshot(collection(db, 'users', uid, 'following'), snap => {
+    const q = query(collection(db, 'users', uid, 'following'), limit(FOLLOWING_LIMIT));
+    const unsub = onSnapshot(q, snap => {
       setFollowingUids(snap.docs.map(d => d.id));
     });
     return () => unsub();
@@ -39,12 +45,15 @@ export function useFollowing() {
   return { followingUids, isFollowing, followUser, unfollowUser };
 }
 
+// Använder getCountFromServer() istället för att läsa hela subcollectionen bara
+// för att räkna — aggregate-queries kostar 1 read oavsett collection-storlek.
+// Tidigare implementation gjorde N reads för N följare (skalade dåligt).
 export function useFollowerCount(uid: string | null) {
   return useQuery({
     queryKey: ['follower-count', uid],
     queryFn: async () => {
-      const snap = await getDocs(collection(db, 'users', uid!, 'followers'));
-      return snap.size;
+      const snap = await getCountFromServer(collection(db, 'users', uid!, 'followers'));
+      return snap.data().count;
     },
     enabled: uid !== null,
     staleTime: 60_000,
@@ -55,8 +64,8 @@ export function useFollowingCount(uid: string | null) {
   return useQuery({
     queryKey: ['following-count', uid],
     queryFn: async () => {
-      const snap = await getDocs(collection(db, 'users', uid!, 'following'));
-      return snap.size;
+      const snap = await getCountFromServer(collection(db, 'users', uid!, 'following'));
+      return snap.data().count;
     },
     enabled: uid !== null,
     staleTime: 60_000,

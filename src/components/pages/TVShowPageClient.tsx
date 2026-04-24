@@ -4,6 +4,8 @@ import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
+import { usePageMeta } from '@/hooks/usePageMeta';
+import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
 import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
@@ -36,10 +38,17 @@ export default function TVShowPageClient({ id }: { id: string }) {
     [show?.recommendations]
   );
 
-  useEffect(() => {
-    if (show) document.title = `${preferOriginalTitle(show.name, show.original_name)} — Binge.nu`;
-    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
-  }, [show]);
+  const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
+  const firstYear = show?.first_air_date ? show.first_air_date.slice(0, 4) : '';
+  usePageMeta({
+    title: displayTitle
+      ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
+      : 'Serie',
+    description: show
+      ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''}. ${show.overview?.slice(0, 180) ?? 'Se var serien finns att streama i Sverige.'}`
+      : undefined,
+    ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
+  });
 
   const watchlistItem = show ? getItem(show.id) : null;
   const itemExists = !!watchlistItem;
@@ -56,7 +65,6 @@ export default function TVShowPageClient({ id }: { id: string }) {
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
 
-  const displayTitle = preferOriginalTitle(show.name, show.original_name);
   const poster = posterUrl(show.poster_path, 'w500');
   const backdrop = backdropUrl(show.backdrop_path);
   const providers = show['watch/providers']?.results?.SE;
@@ -90,6 +98,14 @@ export default function TVShowPageClient({ id }: { id: string }) {
 
   return (
     <div className="-mt-[14px] -mx-[18px]">
+      {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
+      <JsonLd data={tvSchema(show)} />
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: 'Serier', url: 'https://binge.nu/series/' },
+        { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
+      ])} />
+
       {/* Hero backdrop */}
       <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (
@@ -97,12 +113,14 @@ export default function TVShowPageClient({ id }: { id: string }) {
             src={backdrop}
             alt=""
             className="w-full h-full object-cover object-[center_20%] opacity-60"
+            loading="eager"
+            decoding="async"
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
           {poster ? (
-            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" />
+            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" loading="eager" decoding="async" width={140} height={210} />
           ) : (
             <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
               <Tv size={32} className="text-text-muted" />
@@ -184,7 +202,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
                 {subscription.map(p => {
                   const logo = logoUrl(p.logo_path);
                   return logo ? (
-                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" />
+                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" loading="lazy" decoding="async" width={28} height={28} />
                   ) : (
                     <ProviderTag key={p.provider_id} provider={p} size="md" />
                   );
@@ -276,6 +294,9 @@ export default function TVShowPageClient({ id }: { id: string }) {
                       alt={person.name}
                       className="w-[50px] h-[50px] object-cover rounded-full mb-[4px] mx-auto"
                       loading="lazy"
+                      decoding="async"
+                      width={50}
+                      height={50}
                     />
                   ) : (
                     <div className="w-[50px] h-[50px] rounded-full bg-[#ddd8d0] mb-[4px] mx-auto flex items-center justify-center text-xs text-text-muted font-semibold">

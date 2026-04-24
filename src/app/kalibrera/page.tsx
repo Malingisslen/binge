@@ -143,13 +143,13 @@ function CalibrationCard({
       <div className="relative h-[180px] bg-[#2a2a2a] overflow-hidden">
         {backdrop && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={backdrop} alt="" className="w-full h-full object-cover object-[center_20%] opacity-60" />
+          <img src={backdrop} alt="" className="w-full h-full object-cover object-[center_20%] opacity-60" loading="eager" decoding="async" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 flex gap-3 items-end">
           {poster && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={poster} alt={title} className="w-[70px] rounded-sm relative z-10" />
+            <img src={poster} alt={title} className="w-[70px] rounded-sm relative z-10" loading="eager" decoding="async" width={70} height={105} />
           )}
           <div className="relative z-10 pb-1 min-w-0">
             <div className="text-sm font-bold text-text-primary leading-tight truncate">{title}</div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, arrayUnion, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +30,15 @@ export function useMyLists() {
 
   useEffect(() => {
     if (!uid) { setLists([]); return; }
-    const q = query(collection(db, 'lists'), where('uid', '==', uid), orderBy('updatedAt', 'desc'));
+    // Säkerhet mot read-bomb om en användare råkar skapa hundratals listor.
+    // 100 räcker för normalbruk — paginering läggs till i UI innan vi bryr
+    // oss om fler.
+    const q = query(
+      collection(db, 'lists'),
+      where('uid', '==', uid),
+      orderBy('updatedAt', 'desc'),
+      limit(100),
+    );
     const unsub = onSnapshot(q, snap => {
       setLists(snap.docs.map(d => docToList(d.id, d.data())));
     });

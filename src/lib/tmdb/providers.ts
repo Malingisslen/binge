@@ -19,6 +19,11 @@ export interface SwedishProvider {
   // Public service / gratis-tjänster. Används för att undanta från
   // pausa/avsluta-rekommendationer (alla i Sverige har redan SVT Play).
   isFree?: boolean;
+  // Reklamfinansierad AVOD (Pluto TV, Plex, freevee etc). När en användare
+  // inte har någon ads-tjänst filtrerar advisor bort ads-providers från
+  // förslags-bucketen — annars rankas irrelevanta reklam-tjänster upp som
+  // "alternativ" trots att användaren inte använder dem.
+  isAds?: boolean;
 }
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [

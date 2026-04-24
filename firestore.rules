@@ -47,12 +47,26 @@ service cloud.firestore {
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, write: if isOwner(uid);
-      allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+      // Snabb-regel: resource.data.isPublic är denormaliserad från parent-profil.
+      // WatchlistContext stämplar isPublic vid skrivning och AuthContext.update
+      // IsPublic cascadar när profilen toggles. Sparar en extra doc-read per
+      // item (500 items → 500 färre reads).
+      allow read: if resource.data.isPublic == true;
+      // Legacy-fallback för items som skrevs innan 9.3 landade. Kostar en get()
+      // per doc men håller bakåtkompat tills alla items cascade-stämplats.
+      allow read: if !('isPublic' in resource.data)
+        && get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, write: if isOwner(uid);
     }
     match /users/{uid}/notInterested/{itemId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Blockerade användare — endast ägaren läser/skriver. Klient-filter i UI
+    // gömmer blockerad användares innehåll (hygien-nivå, inte säkerhetsgräns).
+    match /users/{uid}/blocked/{targetUid} {
       allow read, write: if isOwner(uid);
     }
 
@@ -112,6 +126,28 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/reviews/$(reviewId)).data.uid == request.auth.uid
         );
       }
+    }
+
+    // ---- reports (UGC-moderation) ----
+    // Inloggade användare kan skapa rapporter. Läsning sker off-line via
+    // Firebase Console av admins — inga klienter har read-access. Ingen
+    // klient kan heller uppdatera eller radera en rapport (admin sätter
+    // status via console).
+    //
+    // Rate-limit: vi litar på klient-cooldown (1 s) + vi begränsar
+    // note-size via valideringsregel. En hårdare rate-limit (per user per
+    // timme) lägger vi in när vi ser abuse-mönster.
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.reason in ['spam', 'hate', 'harassment', 'illegal', 'pii', 'other']
+        && request.resource.data.targetType in ['review', 'comment', 'user', 'list']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetOwnerUid is string
+        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
+      allow update, delete: if false;
     }
 
     // ---- lists ----

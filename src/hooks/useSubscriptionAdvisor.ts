@@ -6,84 +6,31 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShow } from '@/lib/tmdb/client';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
-import { formatEpisodeCode, daysBetween, todayIso } from '@/lib/utils';
+import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import {
+  findTopPausable,
+  findCatchupCandidate,
+  findIdleNextCheckDate,
+  getNextAirInfo,
+  isWithinDays,
+} from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
   ActivePause, PrimaryAction, WatchlistItem, WillSeePerProviderRow,
 } from '@/types';
 
-function findTopPausable(
-  providers: ProviderAdvisory[],
-  userPausedSet: Set<number>,
-): ProviderAdvisory | undefined {
-  return providers
-    .filter(p => p.status === 'pause' && !userPausedSet.has(p.providerId) && (p.monthlyCost ?? 0) > 0)
-    .sort((a, b) => (b.monthlyCost ?? 0) - (a.monthlyCost ?? 0))[0];
-}
-
-// Threshold 3 = "påbörjat flera serier" — undviker att tjata om enstaka påbörjade titlar.
-const CATCHUP_THRESHOLD = 3;
-
-function findCatchupCandidate(
-  providers: ProviderAdvisory[],
-  followingById: Map<number, WatchlistItem>,
-): { provider: ProviderAdvisory; unfinishedCount: number } | undefined {
-  return providers
-    .filter(p => p.status === 'active')
-    .map(p => ({
-      provider: p,
-      unfinishedCount: p.shows
-        .map(s => followingById.get(s.tmdbId))
-        .filter((wi): wi is WatchlistItem => !!wi && !!wi.lastWatchedSeason)
-        .length,
-    }))
-    .filter(x => x.unfinishedCount >= CATCHUP_THRESHOLD)
-    .sort((a, b) => b.unfinishedCount - a.unfinishedCount)[0];
-}
-
-function findIdleNextCheckDate(
-  providers: ProviderAdvisory[],
-  activePauses: ActivePause[],
-): string | null {
-  const candidates: string[] = [];
-  for (const p of providers) if (p.nextAirDate) candidates.push(p.nextAirDate);
-  for (const ap of activePauses) if (ap.resumeAt) candidates.push(ap.resumeAt);
-  candidates.sort();
-  return candidates[0] ?? null;
-}
-
-function getNextAirInfo(show: TMDBTVShow): { date: string | null; code: string | null } {
-  if (show.next_episode_to_air?.air_date) {
-    const ep = show.next_episode_to_air;
-    return {
-      date: ep.air_date,
-      code: formatEpisodeCode(ep.season_number, ep.episode_number),
-    };
-  }
-  const now = todayIso();
-  const futureSeason = show.seasons
-    ?.filter(s => s.air_date && s.air_date > now && s.season_number > 0)
-    .sort((a, b) => a.air_date.localeCompare(b.air_date))[0];
-  if (futureSeason?.air_date) {
-    return {
-      date: futureSeason.air_date,
-      code: formatEpisodeCode(futureSeason.season_number, 1),
-    };
-  }
-  return { date: null, code: null };
-}
-
-function isWithinDays(dateStr: string | null, days: number): boolean {
-  if (!dateStr) return false;
-  const target = new Date(dateStr + 'T00:00:00');
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const windowEnd = new Date(now);
-  windowEnd.setDate(windowEnd.getDate() + days);
-  return target >= now && target <= windowEnd;
-}
+// Re-export pure helpers so existing imports of these symbols keep working.
+export {
+  findTopPausable,
+  findCatchupCandidate,
+  findIdleNextCheckDate,
+  getNextAirInfo,
+  isWithinDays,
+  CATCHUP_THRESHOLD,
+} from './useSubscriptionAdvisor.helpers';
 
 export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   const { getByStatus } = useWatchlist();
@@ -114,13 +61,17 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
       queryKey: ['tv', id],
-      queryFn: () => getTVShow(id),
-      staleTime: 10 * 60 * 1000,
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
+      staleTime: TMDB_STALE.TV_DETAIL,
       enabled: true,
     })),
   });
 
   const isLoading = showQueries.some(q => q.isLoading);
+  // hasError = minst en fetch misslyckades + det saknas cached data för den.
+  // Om en query tidigare lyckats och nu failar använder vi stale data, då
+  // betraktar vi inte det som fel mot användaren.
+  const hasError = showQueries.some(q => q.isError && !q.data);
   const shows = useMemo(
     () => showQueries.map(q => q.data).filter((d): d is TMDBTVShow => d != null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,19 +90,52 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         activePauses: [] as ActivePause[],
       };
     }
+    // Om alla TMDB-queries failar har vi ingen anchor-data att arbeta med.
+    // Returnera tomt så widget kan rendera error-state istället för fantomdata.
+    if (hasError && shows.length === 0) {
+      return {
+        providers: [],
+        subscribeAdvice: [],
+        willSeeByProvider: [] as WillSeePerProviderRow[],
+        monthlySavings: 0,
+        totalMonthlyCost: 0,
+        primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
+        activePauses: [] as ActivePause[],
+      };
+    }
 
     const followingIds = new Set(followingTV.map(i => i.tmdbId));
     const willSeeIds = new Set(willSeeItems.filter(i => i.mediaType === 'tv').map(i => i.tmdbId));
 
     const followingById = new Map<number, WatchlistItem>(followingTV.map(i => [i.tmdbId, i]));
 
+    // ads-bucket (AVOD, t.ex. Plex, Pluto, freevee) inkluderas bara om
+     // användaren faktiskt prenumererar på någon ads-tjänst — annars rankas
+    // icke-relevanta gratis-tjänster upp som "alternativ" vilket förvirrar.
+    // Free-bucket (SVT Play, YLE) är alltid relevant eftersom de är licens-
+    // finansierade och öppna för alla svenska användare.
+    const myProviderSet = new Set(myProviders);
+    const userHasAdsProvider = myProviders.some(pid => {
+      const p = getProvider(pid);
+      return p?.isAds === true;
+    });
+
     const advisedShows: AdvisedShow[] = shows.map(show => {
       const se = show['watch/providers']?.results?.SE;
       const seProviders = [
         ...(se?.flatrate ?? []),
         ...(se?.free ?? []),
-        ...(se?.ads ?? []),
+        ...(userHasAdsProvider ? (se?.ads ?? []) : []),
       ];
+      // Dessutom: om ads-providern råkar vara i användarens uppsättning
+      // (men userHasAdsProvider skulle missa det), behåll den anyway.
+      if (!userHasAdsProvider) {
+        for (const adsP of se?.ads ?? []) {
+          if (myProviderSet.has(canonicalProviderId(adsP.provider_id))) {
+            seProviders.push(adsP);
+          }
+        }
+      }
       const { date, code } = getNextAirInfo(show);
       return {
         tmdbId: show.id,
@@ -232,7 +216,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     providerAdvisories.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
     const subscribeAdvice: SubscribeAdvisory[] = [];
-    const myProviderSet = new Set(myProviders);
+    // myProviderSet deklareras vid ads-filtrering ovan — återanvänds här.
     const nonSubscribedProviders = new Map<number, AdvisedShow[]>();
 
     for (const show of allAnchors) {
@@ -388,7 +372,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       primaryAction,
       activePauses,
     };
-  }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays]);
+  }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 
-  return { ...computed, isLoading };
+  return { ...computed, isLoading, hasError };
 }

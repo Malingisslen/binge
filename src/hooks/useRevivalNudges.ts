@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { isOngoing } from '@/lib/airingState';
 import type { TMDBTVShow, WatchlistItem } from '@/types';
 
@@ -32,8 +33,11 @@ export function useRevivalNudges(): { nudges: RevivalNudge[]; isLoading: boolean
   const queries = useQueries({
     queries: candidates.map(item => ({
       queryKey: ['tv', item.tmdbId],
-      queryFn: () => getTVShow(item.tmdbId),
-      staleTime: 24 * 60 * 60 * 1000,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getTVShow(item.tmdbId, { signal }),
+      // Delad staleTime med useTVShow + useSubscriptionAdvisor så att inga
+      // två observers slåss om samma ['tv', id]-nyckel.
+      staleTime: TMDB_STALE.TV_DETAIL,
     })),
   });
 

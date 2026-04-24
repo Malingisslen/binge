@@ -25,7 +25,13 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) router.push('/');
+    if (!user) return;
+    // Nya användare utan myProviders + utan onboardingCompletedAt ska igenom
+    // onboarding-flödet. Existerande användare (före featuren landade) har
+    // varken flagga men har providers — vi skickar bara in tomma profiler.
+    const needsOnboarding =
+      !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
+    router.push(needsOnboarding ? '/onboarding/' : '/');
   }, [user, router]);
 
   async function handleGoogle() {

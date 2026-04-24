@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { Search, ChevronDown, ChevronUp, Sparkles, Target } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
@@ -413,6 +414,22 @@ function TasteDataSection() {
             Ingenting att uppdatera — alla titlar har redan genrer och providers.
           </div>
         )}
+
+        {/* Länk till smakkalibreringen — fanns tidigare bara i onboarding-flödet.
+            Gör den synlig i settings så användare som hoppade över onboarding
+            eller vill köra om kalibreringen hittar den. */}
+        <div className="mt-3 pt-3 border-t border-border-light">
+          <p className="text-xs text-text-secondary mb-2">
+            Justera smakmatchningen genom att ranka genrer du gillar.
+          </p>
+          <Link
+            href="/kalibrera"
+            className="inline-flex items-center gap-1 px-3 py-[5px] border border-border-main rounded-sm text-xs text-text-secondary bg-surface hover:border-accent hover:text-accent no-underline"
+          >
+            <Target size={11} />
+            Kalibrera smak
+          </Link>
+        </div>
       </div>
     </div>
   );

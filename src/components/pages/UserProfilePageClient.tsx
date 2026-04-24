@@ -95,7 +95,7 @@ export default function UserProfilePageClient({ username }: { username: string }
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
                 <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
                   {posterUrl(item.posterPath, 'w342') && (
-                    <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />
                   )}
                 </div>
                 <div className="text-xs font-semibold truncate">{item.title}</div>
@@ -115,7 +115,7 @@ export default function UserProfilePageClient({ username }: { username: string }
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
                 <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
                   {posterUrl(item.posterPath, 'w342') && (
-                    <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />
                   )}
                 </div>
                 <div className="text-xs font-semibold truncate">{item.title}</div>

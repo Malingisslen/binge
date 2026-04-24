@@ -1,11 +1,17 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Review, MediaType } from '@/types';
+
+// Max antal recensioner vi visar per titel. Väl över "relevanta första
+// vyn"-tröskeln; populära filmer kan ha hundratals recensioner men ingen
+// läser längre ner än 50 utan paginering. När vi bygger paginering (TODO:
+// useInfiniteQuery + cursor på createdAt) höjer vi gränsen.
+const REVIEWS_PER_TITLE_LIMIT = 50;
 
 export function useReviewsForTitle(tmdbId: number) {
   return useQuery({
@@ -14,7 +20,8 @@ export function useReviewsForTitle(tmdbId: number) {
       const q = query(
         collection(db, 'reviews'),
         where('tmdbId', '==', tmdbId),
-        orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc'),
+        limit(REVIEWS_PER_TITLE_LIMIT),
       );
       const snap = await getDocs(q);
       return snap.docs.map(d => {

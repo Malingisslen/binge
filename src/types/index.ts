@@ -68,6 +68,10 @@ export interface UserProfile {
   // shipped won't have it set.
   termsAcceptedAt?: Date;
   termsVersion?: string;
+  // Onboarding-flödet satts när /onboarding/-sekvensen är klar. Undefined
+  // = användaren kom in före feature:n landade ELLER hoppat över onboarding.
+  // Vi gate:ar bara redirect-logiken på detta — ingen funktionalitet låses.
+  onboardingCompletedAt?: Date;
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
@@ -453,6 +457,9 @@ export interface AdvisorResult {
   monthlySavings: number;
   totalMonthlyCost: number;
   isLoading: boolean;
+  // true om en eller flera TMDB-queries misslyckades. Widget ska rendera en
+  // specifik empty-state istället för att bara visa en blank panel.
+  hasError: boolean;
   primaryAction: PrimaryAction;
   activePauses: ActivePause[];
 }

@@ -43,7 +43,7 @@ export default function UpcomingCards({ entries }: UpcomingCardsProps) {
             className="min-w-[220px] shrink-0 bg-surface border border-border-main rounded-sm px-3 py-[8px] flex gap-[10px] items-center no-underline text-text-primary hover:border-accent/40 transition-colors"
           >
             {poster ? (
-              <img src={poster} alt="" className="w-[44px] h-[66px] rounded-sm object-cover shrink-0" loading="lazy" />
+              <img src={poster} alt="" className="w-[44px] h-[66px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={44} height={66} />
             ) : (
               <div className="w-[44px] h-[66px] rounded-sm bg-[#ddd8d0] shrink-0" />
             )}

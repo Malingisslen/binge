@@ -28,7 +28,13 @@ export type AnalyticsEvent =
   | { name: 'advisor_pause_taken'; props: { providerId: number } }
   | { name: 'revival_nudge_shown'; props: { count: number } }
   | { name: 'revival_nudge_acted_on'; props: { tmdbId: number } }
-  | { name: 'review_created'; props: { mediaType: 'movie' | 'tv'; hasSpoiler: boolean } };
+  | { name: 'review_created'; props: { mediaType: 'movie' | 'tv'; hasSpoiler: boolean } }
+  // Onboarding — step_reached visar var användare droppar av. Hjälper
+  // optimera flödet senare (om 50% skippar vid step 3, ändra step 3).
+  | { name: 'onboarding_completed'; props: { step_reached: number } }
+  // Telemetri för React Query-fel — inga PII, bara kategori och första segment
+  // av queryKey så vi kan se vilken subsystem som hostar felen.
+  | { name: 'query_error'; props: { scope: string; kind: 'query' | 'mutation' } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(
   name: T,

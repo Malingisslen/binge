@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { profileUrl, getPersonEn } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
 
@@ -37,10 +38,13 @@ export default function PersonPageClient({ id }: { id: string }) {
       .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
   }, [credits]);
 
-  useEffect(() => {
-    if (person) document.title = `${person.name} — Binge.nu`;
-    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
-  }, [person]);
+  usePageMeta({
+    title: person ? person.name : 'Person',
+    description: person
+      ? `${person.name} — skådespelare och filmskapare. Se filmer och serier med ${person.name} och vad du kan streama i Sverige.`
+      : undefined,
+    ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
+  });
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!person) return <div className="text-sm text-text-muted py-4">Personen hittades inte.</div>;
@@ -53,7 +57,7 @@ export default function PersonPageClient({ id }: { id: string }) {
       <div className="flex flex-col md:flex-row gap-4 mb-4">
         <div className="shrink-0">
           {photo ? (
-            <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" />
+            <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" decoding="async" width={180} height={270} />
           ) : (
             <div className="w-[180px] aspect-[2/3] bg-[#ddd8d0] rounded-sm" />
           )}

@@ -1,0 +1,97 @@
+# Håller beroenden uppdaterade utan att dränka inkorgen.
+# Lite större grupperingar och månatlig kadens — detta är en solo-app,
+# inte en enterprise-produkt.
+
+version: 2
+updates:
+  # npm — alla TypeScript/React-beroenden
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Stockholm"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      # React + Next — uppdateras tillsammans eftersom de är tätt kopplade
+      react-next:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "next"
+          - "eslint-config-next"
+      # Tailwind-stack
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "postcss"
+          - "autoprefixer"
+          - "tailwind-merge"
+          - "clsx"
+      # Test-stack — vitest + testing-library ändras ofta tillsammans
+      testing:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@vitejs/plugin-react"
+          - "@testing-library/*"
+          - "jsdom"
+      # Firebase SDK — monorepo, vi vill inte mixa versioner
+      firebase:
+        patterns:
+          - "firebase"
+          - "firebase-admin"
+          - "firebase-functions"
+      # TanStack
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      # Alla övriga patch/minor → en samlad PR per vecka
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+        exclude-patterns:
+          - "react"
+          - "react-dom"
+          - "next"
+          - "firebase"
+          - "tailwindcss"
+          - "vitest"
+          - "@tanstack/*"
+    ignore:
+      # Major-bumps kräver eftertanke — granska manuellt istället för PR-flod
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions — håll CI-workflows färska
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      time: "06:00"
+      timezone: "Europe/Stockholm"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

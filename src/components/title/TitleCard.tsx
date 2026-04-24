@@ -44,7 +44,16 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           isTracked ? 'ring-2 ring-accent' : ''
         }`}>
           {poster && !imgError ? (
-            <img src={poster} alt={title} className="w-full h-full object-cover transition-opacity duration-300" loading="lazy" onError={() => setImgError(true)} />
+            <img
+              src={poster}
+              alt={title}
+              className="w-full h-full object-cover transition-opacity duration-300"
+              loading="lazy"
+              decoding="async"
+              width={342}
+              height={513}
+              onError={() => setImgError(true)}
+            />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
               <Icon size={20} className="text-text-muted opacity-40" />
