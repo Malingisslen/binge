@@ -75,6 +75,10 @@ export interface UserProfile {
   // = användaren kom in före feature:n landade ELLER hoppat över onboarding.
   // Vi gate:ar bara redirect-logiken på detta — ingen funktionalitet låses.
   onboardingCompletedAt?: Date;
+  // Admin-flagga för moderation-tools (/admin/reports/). Settas bara manuellt
+  // via Firebase Console — klienten kan inte sätta detta själv (firestore.rules
+  // enforce:ar). Undefined = vanlig användare.
+  isAdmin?: boolean;
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
