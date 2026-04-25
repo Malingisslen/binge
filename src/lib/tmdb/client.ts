@@ -141,6 +141,45 @@ export function getRecommendations(mediaType: 'movie' | 'tv', id: number, opts?:
   return tmdbFetch(`/${mediaType}/${id}/recommendations`, {}, opts);
 }
 
+// Similar (broader than recommendations — based on keywords + genres)
+export function getSimilar(
+  mediaType: 'movie' | 'tv',
+  id: number,
+  opts?: TmdbFetchOpts,
+): Promise<TMDBListResponse<TMDBSearchResult>> {
+  return tmdbFetch(`/${mediaType}/${id}/similar`, {}, opts);
+}
+
+// Keywords for a movie title
+export function getMovieKeywords(
+  id: number,
+  opts?: TmdbFetchOpts,
+): Promise<{ id: number; keywords: { id: number; name: string }[] }> {
+  return tmdbFetch(`/movie/${id}/keywords`, {}, opts);
+}
+
+// Keywords for a TV title (different response shape)
+export function getTVKeywords(
+  id: number,
+  opts?: TmdbFetchOpts,
+): Promise<{ id: number; results: { id: number; name: string }[] }> {
+  return tmdbFetch(`/tv/${id}/keywords`, {}, opts);
+}
+
+/** Convenience — normalizes movie + tv keyword response into a flat array. */
+export async function getKeywords(
+  mediaType: 'movie' | 'tv',
+  id: number,
+  opts?: TmdbFetchOpts,
+): Promise<{ id: number; name: string }[]> {
+  if (mediaType === 'movie') {
+    const r = await getMovieKeywords(id, opts);
+    return r.keywords ?? [];
+  }
+  const r = await getTVKeywords(id, opts);
+  return r.results ?? [];
+}
+
 // Person
 export function getPerson(id: number, opts?: TmdbFetchOpts): Promise<TMDBPerson> {
   return tmdbFetch(`/person/${id}`, {}, opts);
