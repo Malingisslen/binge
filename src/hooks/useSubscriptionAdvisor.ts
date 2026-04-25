@@ -88,6 +88,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         monthlySavings: 0,
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
+        secondaryAction: null as PrimaryAction | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
       };
@@ -102,6 +103,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         monthlySavings: 0,
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
+        secondaryAction: null as PrimaryAction | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
       };
@@ -322,49 +324,51 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       .filter(p => !userPausedSet.has(p.providerId))
       .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
 
-    const primaryAction: PrimaryAction = (() => {
-      const topPausable = findTopPausable(providerAdvisories, userPausedSet);
-      if (topPausable) {
-        return {
-          kind: 'pause',
-          providerId: topPausable.providerId,
-          providerName: topPausable.providerName,
-          shortName: topPausable.shortName,
-          color: topPausable.color,
-          monthlyCost: topPausable.monthlyCost ?? 0,
-          nextAirDate: topPausable.nextAirDate,
-        };
-      }
+    const topPausable = findTopPausable(providerAdvisories, userPausedSet);
+    const catchup = findCatchupCandidate(providerAdvisories, followingById);
+    const topSubscribe = subscribeAdvice[0];
 
-      const catchup = findCatchupCandidate(providerAdvisories, followingById);
-      if (catchup) {
-        return {
-          kind: 'catchup',
-          providerId: catchup.provider.providerId,
-          providerName: catchup.provider.providerName,
-          shortName: catchup.provider.shortName,
-          color: catchup.provider.color,
-          unfinishedCount: catchup.unfinishedCount,
-          monthlyCost: catchup.provider.monthlyCost ?? 0,
-        };
-      }
+    const pauseAction: PrimaryAction | null = topPausable ? {
+      kind: 'pause',
+      providerId: topPausable.providerId,
+      providerName: topPausable.providerName,
+      shortName: topPausable.shortName,
+      color: topPausable.color,
+      monthlyCost: topPausable.monthlyCost ?? 0,
+      nextAirDate: topPausable.nextAirDate,
+    } : null;
 
-      const topSubscribe = subscribeAdvice[0];
-      if (topSubscribe) {
-        return {
-          kind: 'subscribe',
-          providerId: topSubscribe.providerId,
-          providerName: topSubscribe.providerName,
-          shortName: topSubscribe.shortName,
-          color: topSubscribe.color,
-          showCount: topSubscribe.shows.length,
-          nearestAirDate: topSubscribe.nearestAirDate,
-          monthlyCost: getProvider(topSubscribe.providerId)?.defaultMonthlyCost ?? 0,
-        };
-      }
+    const catchupAction: PrimaryAction | null = catchup ? {
+      kind: 'catchup',
+      providerId: catchup.provider.providerId,
+      providerName: catchup.provider.providerName,
+      shortName: catchup.provider.shortName,
+      color: catchup.provider.color,
+      unfinishedCount: catchup.unfinishedCount,
+      monthlyCost: catchup.provider.monthlyCost ?? 0,
+    } : null;
 
-      return { kind: 'idle', nextCheckDate: findIdleNextCheckDate(providerAdvisories, activePauses) };
-    })();
+    const subscribeAction: PrimaryAction | null = topSubscribe ? {
+      kind: 'subscribe',
+      providerId: topSubscribe.providerId,
+      providerName: topSubscribe.providerName,
+      shortName: topSubscribe.shortName,
+      color: topSubscribe.color,
+      showCount: topSubscribe.shows.length,
+      nearestAirDate: topSubscribe.nearestAirDate,
+      monthlyCost: getProvider(topSubscribe.providerId)?.defaultMonthlyCost ?? 0,
+    } : null;
+
+    const primaryAction: PrimaryAction =
+      pauseAction
+      ?? catchupAction
+      ?? subscribeAction
+      ?? { kind: 'idle', nextCheckDate: findIdleNextCheckDate(providerAdvisories, activePauses) };
+
+    // När primary är pause, men det också finns en catchup-kandidat, visa
+    // catchup som sekundär — annars skuggas catchup-rådet av besparingen.
+    const secondaryAction: PrimaryAction | null =
+      primaryAction.kind === 'pause' ? catchupAction : null;
 
     // Räknas Följer och Vill se separat så kortet kan visa "X följer · Y vill se".
     const mostUsedProvider: MostUsedProvider | null = (() => {
@@ -403,6 +407,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       monthlySavings,
       totalMonthlyCost,
       primaryAction,
+      secondaryAction,
       activePauses,
       mostUsedProvider,
     };

@@ -83,6 +83,9 @@ export interface AdvisorResult {
   // specifik empty-state istället för att bara visa en blank panel.
   hasError: boolean;
   primaryAction: PrimaryAction;
+  // När primaryAction är pause kan vi också ha en catchup-kandidat — visas
+  // som mindre framträdande andra-kort så besparing alltid hamnar överst.
+  secondaryAction: PrimaryAction | null;
   activePauses: ActivePause[];
   // Provider med flest titlar i Följer + Vill se. null om användaren inte
   // har några anchor-titlar alls.

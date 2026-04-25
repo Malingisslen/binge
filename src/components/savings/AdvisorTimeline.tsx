@@ -38,8 +38,21 @@ const USER_PAUSED_CELL_STYLE: React.CSSProperties = {
 };
 
 export default function AdvisorTimeline() {
-  const { weeks, subscribedLanes, unsubscribedLanes, shouldRender, todayWeekIndex } = useAdvisorTimeline();
+  const { weeks, subscribedLanes, unsubscribedLanes, shouldRender, hasAirings, todayWeekIndex } = useAdvisorTimeline();
   if (!shouldRender) return null;
+
+  if (!hasAirings) {
+    return (
+      <div className="bg-surface border border-border-main rounded-sm mb-[14px] px-3 py-[10px]">
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kommande 6 månader</h2>
+        </div>
+        <p className="text-xs text-text-muted">
+          Inga avsnitt på 6 månader hos dina tjänster — bra läge att pausa något du inte använder.
+        </p>
+      </div>
+    );
+  }
 
   const totalCellsWidth = TIMELINE_WEEKS * CELL_WIDTH + (TIMELINE_WEEKS - 1) * CELL_GAP;
   const totalWidth = LABEL_WIDTH + totalCellsWidth + FOOTER_WIDTH;

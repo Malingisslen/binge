@@ -50,6 +50,7 @@ export interface TimelineResult {
   subscribedLanes: TimelineLane[];
   unsubscribedLanes: TimelineLane[];
   shouldRender: boolean;
+  hasAirings: boolean;
   todayWeekIndex: number;
 }
 
@@ -182,9 +183,10 @@ export function useAdvisorTimeline(): TimelineResult {
     const totalAirings = [...subscribedLanes, ...unsubscribedLanes]
       .reduce((sum, lane) => sum + lane.cells.reduce((s, c) => s + c.entries.length, 0), 0);
     const laneCount = subscribedLanes.length + unsubscribedLanes.length;
-    const shouldRender = laneCount >= 2 && totalAirings >= 1;
+    const shouldRender = laneCount >= 1;
+    const hasAirings = totalAirings >= 1;
     const todayWeekIndex = weekIndexFor(todayIso()) ?? 0;
 
-    return { weeks, subscribedLanes, unsubscribedLanes, shouldRender, todayWeekIndex };
+    return { weeks, subscribedLanes, unsubscribedLanes, shouldRender, hasAirings, todayWeekIndex };
   }, [advisor, calendarEntries, user?.providerPauses]);
 }

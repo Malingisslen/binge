@@ -20,9 +20,13 @@ export default function SavingsPage() {
 }
 
 function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, { kind: 'pause' }>; onPause: (id: number, resumeAt: string | null) => void }) {
+  const defaultResumeAt = action.nextAirDate ?? addDaysFromToday(30);
   const [pauseOpen, setPauseOpen] = useState(false);
-  const [resumeAt, setResumeAt] = useState<string>(action.nextAirDate ?? addDaysFromToday(30));
+  const [resumeAt, setResumeAt] = useState<string>(defaultResumeAt);
   const until = action.nextAirDate ? `tills ${formatSwedishDate(action.nextAirDate)}` : `i ${LOOK_AHEAD_DAYS} dagar framåt`;
+  const quickPauseLabel = action.nextAirDate
+    ? `Pausa till ${formatSwedishDate(action.nextAirDate)}`
+    : 'Pausa i 30 dagar';
 
   return (
     <div className="bg-surface border border-border-main border-l-[3px] border-l-[#2e7d32] rounded-sm p-4 mb-[14px]">
@@ -37,12 +41,20 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
           </div>
         </div>
         {!pauseOpen && (
-          <button
-            onClick={() => setPauseOpen(true)}
-            className="px-3 py-[6px] bg-[#2e7d32] text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
-          >
-            Logga som pausad
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => onPause(action.providerId, defaultResumeAt)}
+              className="px-3 py-[6px] bg-[#2e7d32] text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
+            >
+              {quickPauseLabel}
+            </button>
+            <button
+              onClick={() => setPauseOpen(true)}
+              className="text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
+            >
+              Annan period…
+            </button>
+          </div>
         )}
       </div>
       {pauseOpen && (
@@ -198,6 +210,52 @@ function subscribeRowStatusText(show: AdvisedShow): string {
   return 'Okänt datum';
 }
 
+function hasConcreteStatus(show: AdvisedShow): boolean {
+  if (show.mediaType === 'movie') return true;
+  if (show.isEnded) return false;
+  return show.nextAirDate != null;
+}
+
+interface SubscribeRow {
+  show: AdvisedShow;
+  provider: { providerId: number; shortName: string; color: string };
+}
+
+function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
+  return (
+    <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <table className="w-full border-collapse">
+        <tbody>
+          {rows.map(({ show, provider }) => {
+            const href = titleHref(show.mediaType, show.tmdbId);
+            return (
+              <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
+                <td className="px-3 py-[6px] text-xs font-semibold">
+                  <Link href={href} className="no-underline text-text-primary hover:text-accent">
+                    {show.title}
+                  </Link>
+                </td>
+                <td className="px-3 py-[6px] text-xxs text-text-muted whitespace-nowrap">
+                  {show.mediaType === 'movie' ? 'Film' : 'Serie'}
+                </td>
+                <td className="px-3 py-[6px] whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1">
+                    <ProviderDot color={provider.color} size={7} />
+                    <span className="text-xs text-text-secondary">{provider.shortName}</span>
+                  </span>
+                </td>
+                <td className="px-3 py-[6px] text-xxs text-text-muted text-right whitespace-nowrap">
+                  {subscribeRowStatusText(show)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onResume: (id: number) => void }) {
   if (pauses.length === 0) return null;
   const totalSaved = pauses.reduce((sum, p) => sum + p.savingsSoFar, 0);
@@ -282,13 +340,15 @@ function SavingsContent() {
   const userPausedSet = new Set(advisor.activePauses.map(p => p.providerId));
   const suggestedPauseCount = pauseProviders.filter(p => !userPausedSet.has(p.providerId)).length;
 
-  const subscribeRows = advisor.subscribeAdvice
+  const allSubscribeRows = advisor.subscribeAdvice
     .flatMap(sa => sa.shows.map(show => ({ show, provider: sa })))
     .sort((a, b) => {
       const ad = a.show.nextAirDate ?? '\uffff';
       const bd = b.show.nextAirDate ?? '\uffff';
       return ad.localeCompare(bd);
     });
+  const subscribeRows = allSubscribeRows.filter(r => hasConcreteStatus(r.show));
+  const datelessSubscribeRows = allSubscribeRows.filter(r => !hasConcreteStatus(r.show));
 
   return (
     <div>
@@ -302,6 +362,14 @@ function SavingsContent() {
         onPause={(id, resumeAt) => pauseProvider(id, resumeAt)}
         onShowSubscribeRows={handleShowSubscribeRows}
       />
+
+      {advisor.secondaryAction && (
+        <PrimaryActionCard
+          action={advisor.secondaryAction}
+          onPause={(id, resumeAt) => pauseProvider(id, resumeAt)}
+          onShowSubscribeRows={handleShowSubscribeRows}
+        />
+      )}
 
       <ActivePausesSection
         pauses={advisor.activePauses}
@@ -375,42 +443,23 @@ function SavingsContent() {
 
       <WillSeePerProvider rows={advisor.willSeeByProvider} />
 
-      {subscribeRows.length > 0 && (
+      {(subscribeRows.length > 0 || datelessSubscribeRows.length > 0) && (
         <details ref={subscribeDetailsRef} className="mb-3 scroll-mt-3">
           <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted cursor-pointer select-none list-none">
-            Titlar på tjänster du inte har ({subscribeRows.length}) ›
+            Titlar på tjänster du inte har ({subscribeRows.length + datelessSubscribeRows.length}) ›
           </summary>
           <p className="text-xxs text-text-muted mt-1 mb-2">Titlar från din Följer och Vill se som ligger på en tjänst du inte har.</p>
-          <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
-            <table className="w-full border-collapse">
-              <tbody>
-                {subscribeRows.map(({ show, provider }) => {
-                  const href = titleHref(show.mediaType, show.tmdbId);
-                  return (
-                    <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
-                      <td className="px-3 py-[6px] text-xs font-semibold">
-                        <Link href={href} className="no-underline text-text-primary hover:text-accent">
-                          {show.title}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-[6px] text-xxs text-text-muted whitespace-nowrap">
-                        {show.mediaType === 'movie' ? 'Film' : 'Serie'}
-                      </td>
-                      <td className="px-3 py-[6px] whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1">
-                          <ProviderDot color={provider.color} size={7} />
-                          <span className="text-xs text-text-secondary">{provider.shortName}</span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-[6px] text-xxs text-text-muted text-right whitespace-nowrap">
-                        {subscribeRowStatusText(show)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {subscribeRows.length > 0 && <SubscribeRowTable rows={subscribeRows} />}
+          {datelessSubscribeRows.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xxs text-text-muted cursor-pointer select-none list-none">
+                +{datelessSubscribeRows.length} utan spikat datum (avslutade / okänt) ›
+              </summary>
+              <div className="mt-1">
+                <SubscribeRowTable rows={datelessSubscribeRows} />
+              </div>
+            </details>
+          )}
         </details>
       )}
     </div>
