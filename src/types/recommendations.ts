@@ -1,40 +1,36 @@
 // src/types/recommendations.ts
-import type { MediaType, WatchlistItem } from './domain';
+import type { MediaType } from './domain';
 import type { TMDBSearchResult } from './tmdb';
 
-export type RowKind =
-  | 'similar'
-  | 'person'
-  | 'genre-canon'
-  | 'thematic'
-  | 'trending'
-  | 'latest-fav'
-  | 'upcoming';
+export type RowId =
+  | { kind: 'similar'; mediaType: MediaType; tmdbId: number }
+  | { kind: 'person'; personId: number }
+  | { kind: 'genre-canon'; genreId: number }
+  | { kind: 'thematic'; keywordId: number }
+  | { kind: 'trending' }
+  | { kind: 'latest-fav' }
+  | { kind: 'upcoming' };
 
-export interface RowId {
-  kind: RowKind;
-  // Disambiguators per kind:
-  mediaType?: MediaType;   // similar
-  tmdbId?: number;         // similar (the seed id)
-  personId?: number;       // person
-  genreId?: number;        // genre-canon
-  keywordId?: number;      // thematic
-}
-
-/** Stable string-key for React + URL query-param. Format examples:
+/** Stable string-key for React + URL query-param.
  *   similar:movie:603, person:140607, genre:18, keyword:9663,
  *   trending, latest-fav, upcoming
  */
 export function rowKey(id: RowId): string {
   switch (id.kind) {
-    case 'similar':    return `similar:${id.mediaType}:${id.tmdbId}`;
-    case 'person':     return `person:${id.personId}`;
+    case 'similar':     return `similar:${id.mediaType}:${id.tmdbId}`;
+    case 'person':      return `person:${id.personId}`;
     case 'genre-canon': return `genre:${id.genreId}`;
-    case 'thematic':   return `keyword:${id.keywordId}`;
-    case 'trending':   return 'trending';
-    case 'latest-fav': return 'latest-fav';
-    case 'upcoming':   return 'upcoming';
+    case 'thematic':    return `keyword:${id.keywordId}`;
+    case 'trending':    return 'trending';
+    case 'latest-fav':  return 'latest-fav';
+    case 'upcoming':    return 'upcoming';
   }
+}
+
+function parsePositiveInt(raw: string): number | null {
+  if (raw === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 export function parseRowKey(key: string): RowId | null {
@@ -42,23 +38,24 @@ export function parseRowKey(key: string): RowId | null {
   if (key === 'latest-fav') return { kind: 'latest-fav' };
   if (key === 'upcoming') return { kind: 'upcoming' };
   if (key.startsWith('similar:')) {
-    const [, mt, id] = key.split(':');
-    if ((mt === 'movie' || mt === 'tv') && id) {
-      return { kind: 'similar', mediaType: mt, tmdbId: Number(id) };
-    }
-    return null;
+    const parts = key.split(':');
+    if (parts.length !== 3) return null;
+    const [, mt, idRaw] = parts;
+    if (mt !== 'movie' && mt !== 'tv') return null;
+    const id = parsePositiveInt(idRaw);
+    return id === null ? null : { kind: 'similar', mediaType: mt, tmdbId: id };
   }
   if (key.startsWith('person:')) {
-    const id = Number(key.slice('person:'.length));
-    return Number.isFinite(id) ? { kind: 'person', personId: id } : null;
+    const id = parsePositiveInt(key.slice('person:'.length));
+    return id === null ? null : { kind: 'person', personId: id };
   }
   if (key.startsWith('genre:')) {
-    const id = Number(key.slice('genre:'.length));
-    return Number.isFinite(id) ? { kind: 'genre-canon', genreId: id } : null;
+    const id = parsePositiveInt(key.slice('genre:'.length));
+    return id === null ? null : { kind: 'genre-canon', genreId: id };
   }
   if (key.startsWith('keyword:')) {
-    const id = Number(key.slice('keyword:'.length));
-    return Number.isFinite(id) ? { kind: 'thematic', keywordId: id } : null;
+    const id = parsePositiveInt(key.slice('keyword:'.length));
+    return id === null ? null : { kind: 'thematic', keywordId: id };
   }
   return null;
 }
@@ -67,8 +64,7 @@ export interface Seed {
   tmdbId: number;
   mediaType: MediaType;
   rating: number;
-  weight: 'strong' | 'weak';
-  /** ISO date — used for recency-based scoring on row 9. */
+  /** Timestamp from WatchlistItem.updatedAt — used by row 9 recency scoring. */
   ratedAt: Date | null;
 }
 
@@ -117,7 +113,7 @@ export interface RowSpec {
   meta?: {
     seed?: Seed;
     person?: RecurringPerson;
-    genre?: { id: number; name?: string };
+    genre?: { id: number };
     keyword?: RecurringKeyword;
   };
 }
@@ -150,6 +146,3 @@ export interface RowResult {
   backingPool: RowTitle[];
   isLoading: boolean;
 }
-
-/** Convenience used by seedAnalysis. */
-export type RatedItem = WatchlistItem & { rating: number };
