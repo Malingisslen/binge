@@ -9,6 +9,7 @@ import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate, addDaysFromToday, todayIso } from '@/lib/utils';
 import type { AdvisedShow, PrimaryAction, ActivePause } from '@/types';
 
@@ -298,7 +299,7 @@ function SavingsContent() {
             <table className="w-full border-collapse">
               <tbody>
                 {subscribeRows.map(({ show, provider }) => {
-                  const href = show.mediaType === 'movie' ? `/movie/${show.tmdbId}` : `/tv/${show.tmdbId}`;
+                  const href = titleHref(show.mediaType, show.tmdbId);
                   return (
                     <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
                       <td className="px-3 py-[6px] text-xs font-semibold">

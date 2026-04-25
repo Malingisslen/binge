@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Search, Film, Tv } from 'lucide-react';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -271,7 +271,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
             <tbody>
               {filtered.map((item, idx) => {
                 const poster = posterUrl(item.posterPath, 'w92');
-                const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+                const href = titleHref(item.mediaType, item.tmdbId);
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
                 return (
                   <tr key={item.tmdbId} className={`cursor-pointer hover:[&>td]:bg-surface-hover ${idx % 2 === 1 ? 'bg-surface-hover/40' : ''}`}>
@@ -354,7 +354,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {filtered.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
-              const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+              const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
               return (
                 <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">

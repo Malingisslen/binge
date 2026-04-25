@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ThumbsUp, ThumbsDown, Sparkles, ChevronLeft } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
-import { getTrending, posterUrl, backdropUrl } from '@/lib/tmdb/client';
+import { getTrending, posterUrl, backdropUrl, isAddableMediaType } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
 
 const ROUND_SIZE = 10;
@@ -28,7 +28,7 @@ function KalibreraContent() {
 
   const pool = useMemo(() => {
     const list = (data?.results ?? []).filter(r =>
-      (r.media_type === 'movie' || r.media_type === 'tv')
+      isAddableMediaType(r)
       && r.poster_path
       && (r.genre_ids?.length ?? 0) > 0,
     );

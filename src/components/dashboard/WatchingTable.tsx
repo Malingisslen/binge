@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useTVShow } from '@/hooks/useTMDB';
 import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
@@ -54,7 +54,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
         <tbody>
           {visible.map((item, idx) => {
             const poster = posterUrl(item.posterPath, 'w92');
-            const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+            const href = titleHref(item.mediaType, item.tmdbId);
             const isExpanded = expandedId === item.tmdbId;
 
             return (

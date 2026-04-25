@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTrending } from '@/hooks/useTMDB';
-import { discoverMovies, discoverTV, getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
+import { discoverMovies, discoverTV, getMovieGenres, getTVGenres, isAddableMediaType } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
 import type { TMDBSearchResult } from '@/types';
@@ -93,7 +93,7 @@ export default function DiscoverPage() {
   const genreId = genre ? parseInt(genre, 10) : null;
   const items = tab === 'trending'
     ? (trending?.results ?? []).filter(r =>
-        (r.media_type === 'movie' || r.media_type === 'tv') &&
+        isAddableMediaType(r) &&
         (!hideNonLatin || !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name)) &&
         !isFromHiddenCountry(r.origin_country, hiddenCountries) &&
         (!genreId || r.genre_ids?.includes(genreId)))

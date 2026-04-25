@@ -15,12 +15,13 @@ import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrending } from '@/hooks/useTMDB';
 import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+import { isAddableMediaType } from '@/lib/tmdb/client';
 
 function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
   const items = (trending?.results ?? [])
-    .filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
+    .filter(r => isAddableMediaType(r) && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
     .slice(0, 10);
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 

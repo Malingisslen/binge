@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
@@ -68,7 +68,7 @@ export function GroupWatchlistTable({
               const present = ratings.filter((r): r is number => r != null);
               const avg = present.length > 0 ? (present.reduce((a, b) => a + b, 0) / present.length) : null;
               const canDelete = isOwner || item.addedBy === myUid;
-              const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+              const href = titleHref(item.mediaType, item.tmdbId);
               return (
                 <tr key={item.tmdbId} className="border-t border-border-light hover:bg-border-light/30">
                   <td className="px-3 py-[6px]">

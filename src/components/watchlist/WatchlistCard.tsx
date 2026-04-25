@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
@@ -26,7 +26,7 @@ export function WatchlistCard({ item, nextAirDate }: { item: WatchlistItem; next
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const poster = posterUrl(item.posterPath, 'w185');
-  const href = item.mediaType === 'movie' ? `/movie/${item.tmdbId}` : `/tv/${item.tmdbId}`;
+  const href = titleHref(item.mediaType, item.tmdbId);
   const Icon = item.mediaType === 'tv' ? Tv : Film;
 
   const progressPct = useMemo(() => {

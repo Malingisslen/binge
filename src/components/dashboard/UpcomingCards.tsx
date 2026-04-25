@@ -39,7 +39,7 @@ export default function UpcomingCards({ entries }: UpcomingCardsProps) {
         return (
           <Link
             key={`${e.tmdbId}-${e.episodeCode}`}
-            href={`/tv/${e.tmdbId}`}
+            href={`/tv/${e.tmdbId}/`}
             className="min-w-[220px] shrink-0 bg-surface border border-border-main rounded-sm px-3 py-[8px] flex gap-[10px] items-center no-underline text-text-primary hover:border-accent/40 transition-colors"
           >
             {poster ? (

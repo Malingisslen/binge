@@ -57,6 +57,17 @@ export function useMyLists() {
     await deleteDoc(doc(db, 'lists', listId));
   }, []);
 
+  const { addItemToList, removeItemFromList } = useListMutations();
+
+  return { lists, createList, deleteList, addItemToList, removeItemFromList };
+}
+
+/**
+ * Lättviktiga mutationer för enstaka listor — utan `onSnapshot`-abonnemang.
+ * Använd detta på listsidan där vi bara vill mutera den aktuella listan och
+ * inte ladda hela `users/{uid}`-listsamlingen.
+ */
+export function useListMutations() {
   const addItemToList = useCallback(async (listId: string, item: Omit<UserListItem, 'addedAt'>) => {
     await updateDoc(doc(db, 'lists', listId), {
       items: arrayUnion({ ...item, addedAt: new Date() }),
@@ -71,7 +82,7 @@ export function useMyLists() {
     await updateDoc(doc(db, 'lists', listId), { items, updatedAt: serverTimestamp() });
   }, []);
 
-  return { lists, createList, deleteList, addItemToList, removeItemFromList };
+  return { addItemToList, removeItemFromList };
 }
 
 export function usePublicList(listId: string) {

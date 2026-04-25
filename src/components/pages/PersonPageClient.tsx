@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
-import { profileUrl, getPersonEn } from '@/lib/tmdb/client';
+import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
 
 export default function PersonPageClient({ id }: { id: string }) {
@@ -33,7 +33,7 @@ export default function PersonPageClient({ id }: { id: string }) {
         const key = `${c.media_type}-${c.id}`;
         if (seen.has(key)) return false;
         seen.add(key);
-        return c.media_type === 'movie' || c.media_type === 'tv';
+        return isAddableMediaType(c);
       })
       .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
   }, [credits]);

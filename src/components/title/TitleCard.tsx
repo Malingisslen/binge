@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
-import { getDisplayTitle, getReleaseYear } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
@@ -24,12 +23,12 @@ interface TitleCardProps {
 export default function TitleCard({ item, providers, showNotInterested }: TitleCardProps) {
   const { user } = useAuth();
   const { getItem } = useWatchlist();
-  const href = item.media_type === 'movie' ? `/movie/${item.id}/` : `/tv/${item.id}/`;
+  const isTrackable = isAddableMediaType(item);
+  const href = isTrackable ? titleHref(item.media_type, item.id) : '#';
   const title = getDisplayTitle(item);
   const year = getReleaseYear(item);
   const poster = posterUrl(item.poster_path, 'w342');
   const myProviders = user?.myProviders ?? [];
-  const isTrackable = item.media_type === 'movie' || item.media_type === 'tv';
   const isTracked = isTrackable && !!getItem(item.id);
   const Icon = item.media_type === 'tv' ? Tv : Film;
   const [imgError, setImgError] = useState(false);

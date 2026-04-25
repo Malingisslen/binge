@@ -21,7 +21,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <Link href={`/tv/${seriesId}`} className="text-xs text-accent no-underline">
+          <Link href={`/tv/${seriesId}/`} className="text-xs text-accent no-underline">
             ← Tillbaka till serien
           </Link>
           <h1 className="text-[18px] font-bold text-text-primary mt-1">{season.name}</h1>

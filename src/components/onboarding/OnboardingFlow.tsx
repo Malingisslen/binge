@@ -7,11 +7,12 @@ import { ArrowRight, ArrowLeft, Check, Search, Target } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { trackEvent } from '@/lib/analytics';
-import { posterUrl, getDisplayTitle, getReleaseYear } from '@/lib/tmdb/client';
+import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
 
 /**
@@ -216,25 +217,13 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
 
 function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 250);
   const { data: searchData, isLoading } = useSearch(debouncedQuery);
   const { items, addItem } = useWatchlist();
 
-  // Debounce söktermen med en enkel effect-fri timer (spara ett useEffect
-  // genom att låta onChange pusha direkt + clearTimeout via state-hack).
-  const onQueryChange = (v: string) => {
-    setQuery(v);
-    // Mini-debounce: sätt setTimeout och skjut ut uppdatering ~250ms senare.
-    // Lite naive men räcker för onboarding där vi bara söker en gång.
-    setTimeout(() => {
-      setDebouncedQuery(v);
-    }, 250);
-  };
-
   const canContinue = items.length > 0;
 
-  const handleAdd = async (result: TMDBSearchResult, status: 'vill_se' | 'följer') => {
-    if (result.media_type !== 'movie' && result.media_type !== 'tv') return;
+  const handleAdd = async (result: TMDBSearchResult & { media_type: 'movie' | 'tv' }, status: 'vill_se' | 'följer') => {
     const title = getDisplayTitle(result);
     await addItem({
       tmdbId: result.id,
@@ -268,7 +257,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         <input
           type="search"
           value={query}
-          onChange={e => onQueryChange(e.target.value)}
+          onChange={e => setQuery(e.target.value)}
           placeholder="T.ex. Breaking Bad, Parasite, Succession…"
           className="flex-1 py-2 text-sm border-none outline-none font-[inherit] bg-transparent"
           autoFocus
@@ -282,7 +271,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       {searchData && searchData.results.length > 0 && (
         <ul className="space-y-1 mb-4 max-h-[280px] overflow-y-auto">
           {searchData.results
-            .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
+            .filter(isAddableMediaType)
             .slice(0, 6)
             .map(r => {
               const alreadyAdded = items.some(i => i.tmdbId === r.id);

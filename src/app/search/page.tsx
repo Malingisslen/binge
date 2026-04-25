@@ -7,7 +7,8 @@ import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
-import type { TMDBSearchResult, TMDBProvider } from '@/types';
+import { isAddableMediaType } from '@/lib/tmdb/client';
+import type { TMDBProvider } from '@/types';
 
 type MediaFilter = 'all' | 'movie' | 'tv';
 
@@ -22,10 +23,7 @@ function SearchResults() {
   const [onlyMyServices, setOnlyMyServices] = useState(false);
 
   const allResults = useMemo(() =>
-    (data?.results ?? []).filter(
-      (r): r is TMDBSearchResult & { media_type: 'movie' | 'tv' } =>
-        r.media_type === 'movie' || r.media_type === 'tv'
-    ),
+    (data?.results ?? []).filter(isAddableMediaType),
     [data]
   );
 

@@ -31,7 +31,7 @@ export default function RevivalNudge() {
               key={item.tmdbId}
               className="flex items-center gap-2 py-[3px]"
             >
-              <Link href={`/tv/${item.tmdbId}`} className="shrink-0">
+              <Link href={`/tv/${item.tmdbId}/`} className="shrink-0">
                 {poster ? (
                   <img src={poster} alt="" className="w-[28px] h-[42px] rounded-sm object-cover" loading="lazy" decoding="async" width={28} height={42} />
                 ) : (
@@ -40,7 +40,7 @@ export default function RevivalNudge() {
               </Link>
               <div className="flex-1 min-w-0">
                 <Link
-                  href={`/tv/${item.tmdbId}`}
+                  href={`/tv/${item.tmdbId}/`}
                   className="block text-xs font-semibold text-text-primary no-underline truncate hover:text-accent"
                 >
                   {item.title}

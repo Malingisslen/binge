@@ -222,3 +222,19 @@ export function getDisplayTitle(item: TMDBSearchResult): string {
 export function getReleaseYear(item: TMDBSearchResult): number | null {
   return extractYear(item.release_date || item.first_air_date);
 }
+
+// Type guard: filtrerar bort `person`-träffar och liknande från sökresultat
+// så att resten av koden får en TMDBSearchResult vars `media_type` är garanterat
+// `'movie' | 'tv'`. Användbart både som .filter()-predikat och som narrowing-guard.
+export function isAddableMediaType(
+  item: TMDBSearchResult,
+): item is TMDBSearchResult & { media_type: 'movie' | 'tv' } {
+  return item.media_type === 'movie' || item.media_type === 'tv';
+}
+
+// Konstruerar internal-link-href till en titelsida. Trailing slash följer
+// `next.config.mjs`-inställningen `trailingSlash: true` så vi undviker
+// 308-redirects på Firebase Hosting / Cloudflare.
+export function titleHref(mediaType: 'movie' | 'tv', id: number | string): string {
+  return `/${mediaType}/${id}/`;
+}

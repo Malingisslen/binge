@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSearch } from '@/hooks/useTMDB';
-import { posterUrl, getDisplayTitle, getReleaseYear } from '@/lib/tmdb/client';
+import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 
 interface SearchDropdownProps {
   query: string;
@@ -17,7 +17,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const results = (data?.results ?? [])
-    .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
+    .filter(isAddableMediaType)
     .slice(0, 8);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
@@ -33,8 +33,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
       } else if (e.key === 'Enter' && activeIndex >= 0 && results[activeIndex]) {
         e.preventDefault();
         const item = results[activeIndex];
-        const href = item.media_type === 'movie' ? `/movie/${item.id}/` : `/tv/${item.id}/`;
-        router.push(href);
+        router.push(titleHref(item.media_type, item.id));
         onSelect();
       } else if (e.key === 'Enter' && activeIndex === -1) {
         e.preventDefault();
@@ -55,7 +54,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
         <div className="px-3 py-2 text-sm text-text-sidebar">Inga resultat</div>
       )}
       {results.map((item, index) => {
-        const href = item.media_type === 'movie' ? `/movie/${item.id}/` : `/tv/${item.id}/`;
+        const href = titleHref(item.media_type, item.id);
         const title = getDisplayTitle(item);
         const year = getReleaseYear(item);
         const poster = posterUrl(item.poster_path, 'w92');

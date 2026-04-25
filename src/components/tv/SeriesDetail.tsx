@@ -84,7 +84,7 @@ export default function SeriesDetail({ show, onClose }: SeriesDetailProps) {
               </button>
             )}
             <Link
-              href={`/tv/${show.id}`}
+              href={`/tv/${show.id}/`}
               className="px-[10px] py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary no-underline hover:bg-surface-hover"
             >
               Detaljer
