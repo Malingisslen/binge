@@ -29,6 +29,15 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
       </div>
       <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">Prenumererar</th>
+              <th scope="col">Tjänst</th>
+              <th scope="col">Antal titlar</th>
+              <th scope="col">Månadskostnad</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
           <tbody>
             {rows.map(row => (
               <tr key={row.providerId} className="border-b border-border-light last:border-b-0">

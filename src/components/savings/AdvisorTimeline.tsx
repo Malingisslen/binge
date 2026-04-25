@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment } from 'react';
+import { useRouter } from 'next/navigation';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAdvisorTimeline, TIMELINE_WEEKS, type TimelineLane, type TimelineWeek } from '@/hooks/useAdvisorTimeline';
 
@@ -173,6 +174,7 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
 }
 
 function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
+  const router = useRouter();
   const isUnsubscribed = lane.kind === 'unsubscribed';
   const isUserPaused = lane.kind === 'user-paused';
   const cellColor = isUnsubscribed ? '#888' : lane.color;
@@ -188,7 +190,7 @@ function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
   return (
     <div className="flex items-center" style={{ height: CELL_HEIGHT }}>
       <div
-        className={`flex items-center gap-[5px] text-xxs truncate shrink-0 ${labelClasses}`}
+        className={`flex items-center gap-[5px] text-xxs truncate shrink-0 sticky left-0 z-10 bg-surface pr-1 ${labelClasses}`}
         style={{ width: LABEL_WIDTH, height: CELL_HEIGHT }}
       >
         <ProviderDot color={lane.color} size={6} />
@@ -198,13 +200,23 @@ function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
         {WEEK_INDICES.map(i => {
           const cell = lane.cellByIndex.get(i);
           const hasContent = !!cell && cell.entries.length > 0;
-          const title = hasContent
-            ? `${weeks[i].rangeLabel}\n\n${cell!.entries.map(e => `${e.title}${e.episodeCode ? ` ${e.episodeCode}` : ''}`).join('\n')}`
-            : weeks[i].rangeLabel;
-          const style = hasContent
-            ? { width: CELL_WIDTH, height: CELL_HEIGHT, borderRadius: 2, backgroundColor: cellColor, opacity: cellOpacity }
-            : emptyStyle;
-          return <div key={i} style={style} title={title} />;
+          if (hasContent) {
+            const entries = cell!.entries;
+            const titles = entries.map(e => `${e.title}${e.episodeCode ? ` ${e.episodeCode}` : ''}`).join('\n');
+            const title = `${weeks[i].rangeLabel}\n\n${titles}`;
+            const ariaLabel = `${lane.shortName} ${weeks[i].rangeLabel}: ${entries.map(e => e.title).join(', ')}`;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => router.push('/calendar')}
+                title={title}
+                aria-label={ariaLabel}
+                style={{ width: CELL_WIDTH, height: CELL_HEIGHT, borderRadius: 2, backgroundColor: cellColor, opacity: cellOpacity, border: 'none', padding: 0, cursor: 'pointer' }}
+              />
+            );
+          }
+          return <div key={i} style={emptyStyle} title={weeks[i].rangeLabel} aria-hidden />;
         })}
       </div>
       <div
