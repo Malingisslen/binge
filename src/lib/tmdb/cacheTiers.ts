@@ -34,4 +34,14 @@ export const TMDB_STALE = {
   GENRES: 60 * 60 * 1000,
   /** Watch providers-katalogen — ändras bara när TMDB lägger till en ny tjänst. */
   PROVIDERS: 60 * 60 * 1000,
+  /** TMDB /recommendations + /similar — 30 min. Multi-callsite shared. */
+  RECOMMENDATIONS: 30 * 60 * 1000,
+  /** /person/{id}/combined_credits — ändras sällan. */
+  PERSON_CREDITS: 4 * 60 * 60 * 1000,
+  /** /movie/{id}/keywords + /tv/{id}/keywords. */
+  KEYWORDS: 4 * 60 * 60 * 1000,
+  /** /trending/all/week — region SE-puls. */
+  TRENDING: 60 * 60 * 1000,
+  /** /discover — genre-canon, upcoming, thematic. */
+  DISCOVER: 2 * 60 * 60 * 1000,
 } as const;
