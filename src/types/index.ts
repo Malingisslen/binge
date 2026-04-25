@@ -6,3 +6,4 @@ export * from './domain';
 export * from './tmdb';
 export * from './social';
 export * from './advisor';
+export * from './recommendations';
