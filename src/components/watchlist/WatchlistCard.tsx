@@ -41,12 +41,16 @@ export function WatchlistCard({
 
   const progressPct = useMemo(() => {
     if (item.mediaType !== 'tv') return null;
+    // TV i 'mina' med sub-state ikapp/avslutad = användaren är ikapp på allt
+    // aireat → bar full. Aktiv = bakom, räkna ungefärligt baserat på säsong.
+    // (Legacy: TV med status 'sedd' kan finnas i ej-migrerade docs.)
+    if (subState === 'ikapp' || subState === 'avslutad') return 100;
     if (item.status === 'sedd') return 100;
     if (!item.totalSeasons || !item.lastWatchedSeason) return 0;
     const seasonPart = (item.lastWatchedSeason - 1) / item.totalSeasons;
     const episodePart = item.lastWatchedEpisode ? 1 / (item.totalSeasons * 20) : 0;
     return Math.min(100, Math.round((seasonPart + episodePart) * 100));
-  }, [item]);
+  }, [item, subState]);
 
   const upcomingWd = upcomingWeekday(nextAirDate);
   const progressLabel: { text: string; tone: 'done' | 'accent' | 'muted' } = (() => {
