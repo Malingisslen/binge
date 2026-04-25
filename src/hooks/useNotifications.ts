@@ -58,7 +58,7 @@ export function useNotifications() {
     if (myProviders.length === 0) return;
 
     const candidates = items.filter(i =>
-      i.status === 'följer' && !i.dropped &&
+      i.status === 'mina' && i.mediaType === 'tv' && !i.dropped &&
       !(i.providers ?? []).some(p => myProviders.includes(canonicalProviderId(p)))
     );
     if (candidates.length === 0) return;

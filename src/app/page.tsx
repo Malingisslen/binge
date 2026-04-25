@@ -142,7 +142,9 @@ function OnboardingCTA() {
 export default function DashboardPage() {
   const { user, loading } = useAuth();
   const { items, getByStatus } = useWatchlist();
-  const following = getByStatus('följer');
+  // 'mina' = TV-shows i samlingen (motsvarar gamla 'följer'). Filmer i 'sedd'
+  // räknas inte som "följer" på dashboard — de är ett finalt tillstånd.
+  const following = getByStatus('mina', 'tv');
   const calendarEntries = useCalendarEntries();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);

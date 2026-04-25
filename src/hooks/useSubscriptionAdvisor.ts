@@ -40,7 +40,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   const { user } = useAuth();
 
   const followingTV = useMemo(
-    () => getByStatus('följer', 'tv').filter(i => !i.dropped),
+    () => getByStatus('mina', 'tv').filter(i => !i.dropped),
     [getByStatus]
   );
   const willSeeItems = useMemo(

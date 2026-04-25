@@ -13,7 +13,7 @@ import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
-import type { TMDBSearchResult } from '@/types';
+import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 /**
  * Onboarding-flöde för nya användare. 4 steg:
@@ -223,8 +223,16 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   const canContinue = items.length > 0;
 
-  const handleAdd = async (result: TMDBSearchResult & { media_type: 'movie' | 'tv' }, status: 'vill_se' | 'följer') => {
+  // intent='plan' → vill_se. intent='engage' → mina (TV) eller sedd (film).
+  // Onboarding-knapparna heter "Vill se" och "Följer/Sett" beroende på mediaType.
+  const handleAdd = async (
+    result: TMDBSearchResult & { media_type: 'movie' | 'tv' },
+    intent: 'plan' | 'engage',
+  ) => {
     const title = getDisplayTitle(result);
+    const status: WatchStatus = intent === 'plan'
+      ? 'vill_se'
+      : (result.media_type === 'tv' ? 'mina' : 'sedd');
     await addItem({
       tmdbId: result.id,
       mediaType: result.media_type,
@@ -308,16 +316,16 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                   ) : (
                     <div className="flex gap-1">
                       <button
-                        onClick={() => handleAdd(r, 'vill_se')}
+                        onClick={() => handleAdd(r, 'plan')}
                         className="text-xxs px-2 py-[3px] border border-border-main rounded-sm bg-white cursor-pointer"
                       >
                         Vill se
                       </button>
                       <button
-                        onClick={() => handleAdd(r, 'följer')}
+                        onClick={() => handleAdd(r, 'engage')}
                         className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
                       >
-                        Följer
+                        {r.media_type === 'tv' ? 'Följer' : 'Sett'}
                       </button>
                     </div>
                   )}

@@ -2,7 +2,22 @@
 // TMDB-typer bor i tmdb.ts; social/together i social.ts; advisor i advisor.ts.
 
 export type MediaType = 'movie' | 'tv';
-export type WatchStatus = 'följer' | 'vill_se' | 'sedd' | 'avbruten';
+
+// Sparad status. För TV är 'sedd' inte ett giltigt slutläge — TV vaknar från
+// döden, får spinoffs, returnerar med nya säsonger. Istället bor TV-shows i
+// 'mina' med ett *deriverat* sub-state (aktiv/ikapp/avslutad) baserat på
+// progress + TMDB:s last_episode_to_air + tmdbStatus. Film stannar i 'sedd'
+// som terminal — film är klar när den är klar.
+//
+// 'följer' togs bort som status under preprod-refactor. Lazy migration i
+// WatchlistContext.docToItem normaliserar gamla Firestore-docs (TV 'följer'
+// → 'mina', film 'följer' → 'sedd', TV 'sedd' → 'mina'). Nya skrivningar
+// använder bara enum-värdena nedan.
+export type WatchStatus = 'vill_se' | 'mina' | 'sedd' | 'avbruten';
+
+// Härleds från progress + TMDB-data — aldrig sparad i Firestore. Används av
+// /my/series sub-tabs, advisor-räkningar, och badges i kort/tabeller.
+export type TvSubState = 'aktiv' | 'ikapp' | 'avslutad';
 
 export interface WatchlistItem {
   tmdbId: number;

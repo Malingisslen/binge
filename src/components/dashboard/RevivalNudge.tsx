@@ -53,7 +53,7 @@ export default function RevivalNudge() {
                 onClick={() => {
                   addItem({
                     ...item,
-                    status: 'följer',
+                    status: 'mina',
                     totalSeasons: show.number_of_seasons ?? item.totalSeasons,
                     tmdbStatus: show.status,
                   });

@@ -5,7 +5,7 @@ import type { WatchStatus, MediaType } from '@/types';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
-import { STATUS_LABELS, MOVIE_STATUS_LABELS } from '@/lib/watchStatus';
+import { statusLabel, statusOptionsFor } from '@/lib/watchStatus';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -35,8 +35,8 @@ export default function StatusButton({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
-  const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
-  const labelFor = (s: WatchStatus) => labels[s] ?? STATUS_LABELS[s];
+  const options = statusOptionsFor(mediaType);
+  const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -75,7 +75,7 @@ export default function StatusButton({
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-surface border border-border-main rounded-sm z-40 min-w-[130px]">
-          {(Object.keys(labels) as WatchStatus[]).map(status => (
+          {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}

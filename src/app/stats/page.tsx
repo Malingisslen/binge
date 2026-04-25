@@ -17,7 +17,9 @@ function StatsContent() {
   const { items } = useWatchlist();
 
   const stats = useMemo(() => {
-    const following = items.filter(i => i.status === 'följer' && !i.dropped);
+    // "Följer" på stats-sidan = TV-shows i 'mina' (samlingen), filmer i 'sedd'
+    // räknas separat under "watched".
+    const following = items.filter(i => i.status === 'mina' && !i.dropped);
     const watched = items.filter(i => i.status === 'sedd');
     const movies = items.filter(i => i.mediaType === 'movie');
     const tvShows = items.filter(i => i.mediaType === 'tv');

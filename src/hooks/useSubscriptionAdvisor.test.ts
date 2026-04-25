@@ -47,7 +47,7 @@ function makeWatchlistItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   return {
     tmdbId: 1,
     mediaType: 'tv',
-    status: 'följer',
+    status: 'mina',
     rating: null,
     notes: null,
     title: 'A show',

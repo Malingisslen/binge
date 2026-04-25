@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Search, LayoutDashboard, Compass, Calendar, BarChart3,
-  CreditCard, Star, Rss, Library, Eye, BookmarkCheck, Clock, List, Users, UsersRound, CircleSlash,
+  CreditCard, Star, Rss, Library, Tv, Film, BookmarkCheck, List, Users, UsersRound, CircleSlash,
 } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,12 +28,17 @@ const NAV_ITEMS = [
   { label: 'Flöde', href: '/feed', icon: Rss },
 ];
 
-const COLLECTION_ITEMS = [
+// 'mina' (TV) ersätter både gamla 'följer' och 'sedd' för serier — sub-state
+// (aktiv/ikapp/avslutad) deriveras från progress + TMDB. Film fortsätter
+// använda 'sedd' som terminal. Gamla rutter /my/following och /my/watched
+// finns kvar som redirects (firebase.json) för bakåtkompabilitet.
+type CollectionItem = { label: string; href: string; status: WatchStatus | null; icon: typeof Library; mediaType?: 'tv' | 'movie' };
+const COLLECTION_ITEMS: CollectionItem[] = [
   { label: 'Alla', href: '/my/all', status: null, icon: Library },
-  { label: 'Följer', href: '/my/following', status: 'följer' as const, icon: Eye },
-  { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se' as const, icon: BookmarkCheck },
-  { label: 'Sedd', href: '/my/watched', status: 'sedd' as const, icon: Clock },
-  { label: 'Avbrutna', href: '/my/avbrutna', status: 'avbruten' as const, icon: CircleSlash },
+  { label: 'Mina serier', href: '/my/series', status: 'mina', mediaType: 'tv', icon: Tv },
+  { label: 'Mina filmer', href: '/my/films', status: 'sedd', mediaType: 'movie', icon: Film },
+  { label: 'Vill se', href: '/my/want-to-watch', status: 'vill_se', icon: BookmarkCheck },
+  { label: 'Avbrutna', href: '/my/avbrutna', status: 'avbruten', icon: CircleSlash },
   { label: 'Listor', href: '/my/lists', status: null, icon: List },
 ];
 
@@ -50,19 +55,44 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     p => p.type === 'flatrate' && myProviderIds.includes(p.id)
   );
 
-  const { statusCounts, followingOngoing, providerCounts } = useMemo(() => {
-    const sc: Record<WatchStatus, number> = { 'följer': 0, 'vill_se': 0, 'sedd': 0, 'avbruten': 0 };
+  // statusCounts är typ-aware för "Mina serier" (TV i 'mina') och
+  // "Mina filmer" (film i 'sedd') — annars skulle counten räkna över alla
+  // mediatyper och bli vilseledande. minaSeriesActive = TV i 'mina' som
+  // INTE är avslutad (sub-state aktiv eller ikapp) — driver "12/45"-display.
+  const { tvCount, movieSeddCount, willSeeCount, avbrutenCount, minaSeriesActive, providerCounts } = useMemo(() => {
+    let tv = 0, mov = 0, ws = 0, av = 0, active = 0;
     const pc: Record<number, number> = {};
-    let ongoing = 0;
     for (const i of items) {
-      if (i.status in sc) sc[i.status]++;
-      if (i.status === 'följer' && !i.dropped && !(i.mediaType === 'tv' && isEndedStatus(i.tmdbStatus))) {
-        ongoing++;
+      if (i.dropped) continue;
+      if (i.status === 'mina' && i.mediaType === 'tv') {
+        tv++;
+        if (!isEndedStatus(i.tmdbStatus)) active++;
+      } else if (i.status === 'sedd' && i.mediaType === 'movie') {
+        mov++;
+      } else if (i.status === 'vill_se') {
+        ws++;
+      } else if (i.status === 'avbruten') {
+        av++;
       }
       for (const pid of i.providers ?? []) pc[pid] = (pc[pid] ?? 0) + 1;
     }
-    return { statusCounts: sc, followingOngoing: ongoing, providerCounts: pc };
+    return {
+      tvCount: tv,
+      movieSeddCount: mov,
+      willSeeCount: ws,
+      avbrutenCount: av,
+      minaSeriesActive: active,
+      providerCounts: pc,
+    };
   }, [items]);
+
+  function countFor(item: CollectionItem): number {
+    if (item.href === '/my/series') return tvCount;
+    if (item.href === '/my/films') return movieSeddCount;
+    if (item.href === '/my/want-to-watch') return willSeeCount;
+    if (item.href === '/my/avbrutna') return avbrutenCount;
+    return 0;
+  }
 
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
@@ -139,11 +169,11 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           >
             <Icon size={14} className={active ? 'text-accent' : 'text-text-sidebar opacity-50'} />
             <span className="flex-1">{item.label}</span>
-            {mounted && item.status && statusCounts[item.status] > 0 && (
+            {mounted && item.status && countFor(item) > 0 && (
               <span className="text-xs text-accent">
-                {item.status === 'följer' && followingOngoing !== statusCounts['följer']
-                  ? `${followingOngoing}/${statusCounts['följer']}`
-                  : statusCounts[item.status]}
+                {item.href === '/my/series' && minaSeriesActive !== tvCount
+                  ? `${minaSeriesActive}/${tvCount}`
+                  : countFor(item)}
               </span>
             )}
           </Link>

@@ -2,13 +2,14 @@ import type { TasteVector, WatchlistItem } from '@/types';
 
 // Viktning per WatchlistItem när vi bygger smakvektorn.
 // Baseline: items med rating räknas som 2×rating/10, items utan rating
-// räknas som en mild positiv signal om status är "sedd" eller "följer",
-// och neutralt för "vill_se" (planerat — inte bevisat).
+// räknas som en mild positiv signal om användaren har titeln i samlingen
+// ('sedd' film eller 'mina' TV) — antyder att hen valt att tracka den.
+// 'vill_se' är planerat (inte bevisat smakprofil) → neutral.
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return (item.rating / 10) * 2;
   if (item.dropped) return -0.5;
   if (item.status === 'sedd') return 1;
-  if (item.status === 'följer') return 0.75;
+  if (item.status === 'mina') return 0.75;
   return 0.25;
 }
 

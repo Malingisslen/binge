@@ -84,7 +84,7 @@ senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
 
 ```
 users/{uid}                               — profil, preferenser, termsAcceptedAt, onboardingCompletedAt
-users/{uid}/watchlist/{tmdbId}           — status (följer/vill_se/sedd/avbruten), rating, providers, isPublic (denormaliserad)
+users/{uid}/watchlist/{tmdbId}           — status (vill_se/mina/sedd/avbruten), rating, providers, isPublic (denormaliserad)
 users/{uid}/episodeProgress/{tmdbId}     — per-avsnitt watched-state
 users/{uid}/notInterested/{tmdbId}       — gömda titlar från rekommendationer
 users/{uid}/notifications/{notifId}      — inbox
@@ -116,17 +116,45 @@ reports/{reportId}                       — UGC-moderation, create-only från k
 user-owned subcollection: uppdatera den här helpern så båda flödena får med
 den.
 
-### WatchStatus (Swedish)
+### WatchStatus + TV sub-states (TV-aware schema)
 
 ```
-'följer'    — följer just nu (TV only, i praktiken)
-'vill_se'   — want to watch
-'sedd'      — watched
-'avbruten'  — dropped / quit
+'vill_se'   — vill se (både film + TV)
+'mina'      — TV ONLY: i samlingen (sub-state derive:as från progress + TMDB)
+'sedd'      — film ONLY: terminal (filmer går aldrig tillbaka)
+'avbruten'  — gav upp (både film + TV)
 ```
 
-Gammal status-sträng (`watching`/`want_to_watch`/`watched`/`dropped`) migreras
-klient-sidigt i `WatchlistContext.migrateStatus` för legacy-docs.
+**TV sub-state** (deriverat, aldrig sparat — beräknas via `tvSubState()` i
+`src/lib/watchStatus.ts`):
+- `aktiv`    — bakom på aireade avsnitt (har osedda S/E mot TMDB:s last_episode_to_air)
+- `ikapp`    — caught up + Returning Series → väntar på nytt
+- `avslutad` — caught up + Ended/Canceled → klar
+
+**Designval:** TV är aldrig "klar" på samma sätt som film — show vaknar från
+döden, får spinoffs, returnerar med nya säsonger. Därför har TV inget 'sedd'
+slutläge; istället bor allt aktivt under 'mina' och sub-state ändras
+automatiskt när TMDB:s last_episode_to_air rör sig. Endast film har 'sedd'
+som terminal — film är klar när den är klar.
+
+**Auto-promote:** `WatchlistContext.updateProgress` flyttar 'vill_se' → 'mina'
+(TV) eller 'sedd' (film) automatiskt när användaren markerar sitt första
+avsnitt sett. Tar bort manuellt status-byte.
+
+**Migration** (lazy, klient-sidigt i `migrateStatus`, `src/lib/watchStatus.migration.ts`):
+- 'följer' (TV) → 'mina'; 'följer' (film) → 'sedd' (rare)
+- 'sedd' (TV) → 'mina'; 'sedd' (film) → 'sedd' (oförändrat)
+- Engelska v1-schema (`watching`/`want_to_watch`/`watched`/`dropped`) hanteras samtidigt
+- Firestore-docs skrivs aldrig om bara för migration — bara när användaren
+  ändrar något på en titel skrivs den med nya schemat. Så Firestore kan
+  innehålla 'följer'-strängar i mångmånader; läsare normaliserar.
+
+**Routes:**
+- `/my/series` — TV i 'mina' (sub-tabbar för aktiv/ikapp/avslutad i UI:n)
+- `/my/films` — film i 'sedd'
+- `/my/vill-se`, `/my/avbrutna`, `/my/all` — mixed
+- Gamla `/my/following` → 301 → `/my/series` (firebase.json redirects)
+- Gamla `/my/watched` → 301 → `/my/films`
 
 ### TMDB API
 - Always use `language=sv-SE` och `watch_region=SE` för svenskt innehåll

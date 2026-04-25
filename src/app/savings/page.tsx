@@ -157,7 +157,7 @@ function PrimaryActionCard({
         title={`Titta klart på ${action.providerName}`}
         description={`Du ligger efter på ${action.unfinishedCount} ${action.unfinishedCount === 1 ? 'serie' : 'serier'} här. Avsluta dem innan nästa pausningsfönster för att slippa betala för ett abonnemang du inte utnyttjar.`}
         action={
-          <Link href={`/my/following?provider=${action.providerId}&status=behind`} className={ACTION_BUTTON_CLASS}>
+          <Link href={`/my/series?provider=${action.providerId}&status=behind`} className={ACTION_BUTTON_CLASS}>
             Visa {action.shortName}-serier ({action.unfinishedCount})
           </Link>
         }
@@ -309,7 +309,7 @@ function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
   const { pauseProvider, resumeProvider } = useAuth();
   const { getByStatus } = useWatchlist();
-  const followedTvCount = getByStatus('följer', 'tv').filter(i => !i.dropped).length;
+  const followedTvCount = getByStatus('mina', 'tv').filter(i => !i.dropped).length;
   const subscribeDetailsRef = useRef<HTMLDetailsElement | null>(null);
   const handleShowSubscribeRows = () => {
     const el = subscribeDetailsRef.current;

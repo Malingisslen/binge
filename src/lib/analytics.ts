@@ -23,7 +23,7 @@ declare global {
 export type AnalyticsEvent =
   | { name: 'signed_up'; props?: Record<string, never> }
   | { name: 'signed_in'; props: { method: 'google' | 'email' } }
-  | { name: 'title_added_watchlist'; props: { mediaType: 'movie' | 'tv'; status: 'följer' | 'vill_se' | 'sedd' | 'avbruten' } }
+  | { name: 'title_added_watchlist'; props: { mediaType: 'movie' | 'tv'; status: 'vill_se' | 'mina' | 'sedd' | 'avbruten' } }
   | { name: 'first_title_added'; props: { mediaType: 'movie' | 'tv' } }
   | { name: 'advisor_pause_taken'; props: { providerId: number } }
   | { name: 'revival_nudge_shown'; props: { count: number } }

@@ -32,7 +32,10 @@ export default function UserProfilePageClient({ username }: { username: string }
     );
   }
 
-  const following = (watchlist ?? []).filter(i => i.status === 'följer' && !i.dropped);
+  // "Följer" på publik profil = TV-shows i 'mina' (samlingen). Sedd = filmer
+  // i 'sedd' (TV i 'mina' med sub-state avslutad räknas inte med här —
+  // användaren ser sina serier under "Följer", inte separat).
+  const following = (watchlist ?? []).filter(i => i.status === 'mina' && !i.dropped);
   const watched = (watchlist ?? []).filter(i => i.status === 'sedd');
   const rated = (watchlist ?? []).filter(i => i.rating !== null);
   const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.rating ?? 0), 0) / rated.length : 0;

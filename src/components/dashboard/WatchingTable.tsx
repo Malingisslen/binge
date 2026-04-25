@@ -38,7 +38,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
         <span className="text-sm font-bold text-text-secondary">
           Följer <span className="text-text-muted font-normal">· {items.length} {items.length === 1 ? 'titel' : 'titlar'}</span>
         </span>
-        <Link href="/my/following" className="text-xs text-accent no-underline">
+        <Link href="/my/series" className="text-xs text-accent no-underline">
           Visa alla →
         </Link>
       </div>
@@ -80,7 +80,7 @@ export default function WatchingTable({ items }: WatchingTableProps) {
       </table>
       {hasMore && (
         <div className="px-3 py-[6px] text-center border-t border-border-light">
-          <Link href="/my/following" className="text-xs text-accent no-underline">
+          <Link href="/my/series" className="text-xs text-accent no-underline">
             Visa alla {items.length} →
           </Link>
         </div>

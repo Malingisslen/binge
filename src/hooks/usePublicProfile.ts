@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
-import type { UserProfile, WatchlistItem, WatchStatus, MediaType } from '@/types';
+import { migrateStatus } from '@/lib/watchStatus.migration';
+import type { UserProfile, WatchlistItem, MediaType } from '@/types';
 
 export function usePublicProfile(username: string) {
   return useQuery({
@@ -52,10 +53,19 @@ export function usePublicWatchlist(uid: string | null) {
       const snap = await getDocs(q);
       return snap.docs.map(d => {
         const data = d.data();
+        const mediaType = data.mediaType as MediaType;
+        // Använd shared migration så publik profil ser samma statusar som
+        // ägaren — annars skulle vänner se 'följer' badge medan ägaren ser
+        // 'mina' i sin egen vy.
+        const { status, dropped } = migrateStatus(
+          data.status as string,
+          mediaType,
+          data.dropped as boolean | undefined,
+        );
         return {
           tmdbId: data.tmdbId as number,
-          mediaType: data.mediaType as MediaType,
-          status: (data.status === 'watching' ? 'följer' : data.status === 'want_to_watch' ? 'vill_se' : data.status === 'watched' ? 'sedd' : data.status) as WatchStatus,
+          mediaType,
+          status,
           rating: (data.rating as number) ?? null,
           notes: null,
           title: data.title as string,
@@ -64,7 +74,7 @@ export function usePublicWatchlist(uid: string | null) {
           totalSeasons: (data.totalSeasons as number) ?? null,
           lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
           lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
-          dropped: (data.dropped as boolean) ?? false,
+          dropped,
           rewatchCount: (data.rewatchCount as number) ?? 0,
           providers: (data.providers as number[]) ?? [],
           genreIds: (data.genreIds as number[]) ?? [],

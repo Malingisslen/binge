@@ -20,7 +20,11 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
   const { user } = useAuth();
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
   const hiddenCountries = user?.hiddenCountries ?? [];
-  const following = getByStatus('följer', mediaType);
+  // För TV: items i 'mina'-samlingen. För film: vi tar 'sedd' (films har
+  // inget aktivt-följer-tillstånd — sedd är terminal).
+  const following = mediaType === 'tv'
+    ? getByStatus('mina', 'tv')
+    : getByStatus('sedd', 'movie');
   const [page, setPage] = useState(1);
   const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
 
@@ -50,7 +54,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
           <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
             <span className="text-sm font-bold text-text-secondary">Följer</span>
-            <Link href="/my/following/" className="text-xs text-accent no-underline">
+            <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-accent no-underline">
               Alla {following.length} →
             </Link>
           </div>

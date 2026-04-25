@@ -23,7 +23,7 @@ export interface CalendarEntry {
 
 export function useCalendarEntries() {
   const { getByStatus } = useWatchlist();
-  const followingTV = getByStatus('följer', 'tv');
+  const followingTV = getByStatus('mina', 'tv');
   const tmdbIds = useMemo(() => followingTV.map(i => i.tmdbId), [followingTV]);
 
   const showQueries = useQueries({

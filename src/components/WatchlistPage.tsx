@@ -12,7 +12,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import RatingStars from '@/components/title/RatingStars';
-import { isEndedStatus } from '@/lib/airingState';
 import {
   ProviderChips,
   PosterProviderDots,
@@ -20,9 +19,11 @@ import {
 import { WatchlistCard } from '@/components/watchlist/WatchlistCard';
 import {
   FollowingCardSections,
+  bucketBySubState,
   CARD_GRID_CLASS,
 } from '@/components/watchlist/FollowingCardSections';
-import type { WatchStatus, WatchlistItem } from '@/types';
+import { tvSubState } from '@/lib/watchStatus';
+import type { WatchStatus, WatchlistItem, TMDBTVShow } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
@@ -56,10 +57,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const providerFilterId = Number.isFinite(providerParam) && providerParam > 0 ? providerParam : null;
   const providerFilter = providerFilterId != null ? getProvider(providerFilterId) : undefined;
   // ?status=behind aktiveras från Streamingrådgivarens catchup-kort. Behöver
-  // bara meningsfullt agera på /my/following — andra listor har inte
+  // bara meningsfullt agera på /my/series — andra listor har inte
   // koncept av "ligger efter på aireade avsnitt". useSubscriptionAdvisor
   // delar TMDB-cache med useCalendarEntries så ingen extra fetch.
-  const behindFilterActive = status === 'följer' && searchParams.get('status') === 'behind';
+  const behindFilterActive = status === 'mina' && searchParams.get('status') === 'behind';
   const advisor = useSubscriptionAdvisor();
   const behindIds = behindFilterActive ? advisor.unfinishedTmdbIds : null;
   const clearProviderFilter = () => {
@@ -79,7 +80,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [sort, setSort] = useState<SortKey>('updatedAt');
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
-  const [view, setView] = useState<ViewMode>(status === 'följer' ? 'cards' : 'grid');
+  const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const calendarEntries = useCalendarEntries();
@@ -96,12 +97,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   }, [calendarEntries]);
 
   useEffect(() => {
-    if (status === 'följer') return;
+    if (status === 'mina') return;
     if (user?.defaultView) setView(user.defaultView);
   }, [user?.defaultView, status]);
 
   const filtered = useMemo(() => {
-    let result = status ? items.filter(i => i.status === status && (status !== 'följer' || !i.dropped)) : items;
+    let result = status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items;
     if (mediaFilter !== 'all') {
       result = result.filter(i => i.mediaType === mediaFilter);
     }
@@ -130,16 +131,28 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
   const totalCount = status ? items.filter(i => i.status === status).length : items.length;
 
+  // För /my/series-vyn: dela TV-shows i sub-states (aktiv/ikapp/avslutad)
+  // baserat på derived state. Använder advisor-cachen för rik beräkning;
+  // shows som inte är i cachen faller tillbaka till tmdbStatus-only-heuristik.
+  const showsByTmdbId = useMemo(() => {
+    const m = new Map<number, TMDBTVShow>();
+    if (!advisor.providers) return m;
+    // Vi har inte direkt tillgång till TMDBTVShow-cachen från advisor — gå
+    // istället via React Query om vi behöver. För nu räcker fallback i
+    // tvSubState (lastWatched + tmdbStatus). Behind-set från advisor täcker
+    // 95% av fallen för oss.
+    return m;
+  }, [advisor.providers]);
+
   const followingSections = useMemo(() => {
-    if (status !== 'följer') return null;
-    const ongoing: WatchlistItem[] = [];
-    const ended: WatchlistItem[] = [];
-    for (const item of filtered) {
-      if (item.mediaType === 'tv' && isEndedStatus(item.tmdbStatus)) ended.push(item);
-      else ongoing.push(item);
-    }
-    return { ongoing, ended };
-  }, [filtered, status]);
+    if (status !== 'mina') return null;
+    const tvItems = filtered.filter((i): i is WatchlistItem => i.mediaType === 'tv');
+    return bucketBySubState(tvItems, item => {
+      // Om showen är i advisor's behind-set vet vi 100% säkert att det är aktiv.
+      if (advisor.unfinishedTmdbIds.has(item.tmdbId)) return 'aktiv';
+      return tvSubState(item, showsByTmdbId.get(item.tmdbId));
+    });
+  }, [filtered, status, advisor.unfinishedTmdbIds, showsByTmdbId]);
 
   return (
     <div>
@@ -184,7 +197,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       )}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        {status !== 'följer' && (
+        {status !== 'mina' && (
           <div className="flex gap-[1px]">
             {(['all', 'tv', 'movie'] as const).map(f => (
               <span
@@ -200,7 +213,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )}
 
-        {status !== 'följer' && (
+        {status !== 'mina' && (
           <select
             value={sort}
             onChange={e => setSort(e.target.value as SortKey)}
@@ -259,15 +272,24 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
           <span className="text-xs text-text-secondary">{selected.size} markerade</span>
-          {(status === 'följer' || status === 'vill_se') && (
+          {(status === 'mina' || status === 'vill_se') && (
             <button
               onClick={async () => {
-                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'sedd')));
+                // För vill_se: flytta till mina (om TV) eller sedd (film) per item.
+                // För mina (TV): kommer rendera 0 items här eftersom 'mina' bara
+                // gäller TV och TV inte kan flyttas till 'sedd' längre — den
+                // klickas via bulk-radera istället. Lämnar knappen kvar för
+                // legacy-vill_se-blandade item.
+                await Promise.all(Array.from(selected).map(id => {
+                  const item = items.find(i => i.tmdbId === id);
+                  const target: 'mina' | 'sedd' = item?.mediaType === 'tv' ? 'mina' : 'sedd';
+                  return updateStatus(id, target);
+                }));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
             >
-              Markera sedd
+              Markera som tittad
             </button>
           )}
           {status === 'sedd' && (

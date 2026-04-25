@@ -13,38 +13,15 @@ import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
+import { migrateStatus } from '@/lib/watchStatus.migration';
 import type { WatchlistItem, WatchStatus, MediaType } from '@/types';
 
-function migrateStatus(raw: string, droppedFlag?: boolean): { status: WatchStatus; dropped: boolean } {
-  switch (raw) {
-    case 'watching':
-      return droppedFlag
-        ? { status: 'avbruten', dropped: false }
-        : { status: 'följer', dropped: false };
-    case 'want_to_watch':
-      return { status: 'vill_se', dropped: false };
-    case 'watched':
-      return { status: 'sedd', dropped: false };
-    case 'dropped':
-      return { status: 'avbruten', dropped: false };
-    case 'följer':
-      return droppedFlag
-        ? { status: 'avbruten', dropped: false }
-        : { status: 'följer', dropped: false };
-    case 'vill_se':
-    case 'sedd':
-    case 'avbruten':
-      return { status: raw as WatchStatus, dropped: false };
-    default:
-      return { status: 'följer', dropped: false };
-  }
-}
-
 function docToItem(data: Record<string, unknown>): WatchlistItem {
-  const { status, dropped } = migrateStatus(data.status as string, data.dropped as boolean | undefined);
+  const mediaType = data.mediaType as MediaType;
+  const { status, dropped } = migrateStatus(data.status as string, mediaType, data.dropped as boolean | undefined);
   return {
     tmdbId: data.tmdbId as number,
-    mediaType: data.mediaType as MediaType,
+    mediaType,
     status,
     rating: (data.rating as number) ?? null,
     notes: (data.notes as string) ?? null,
@@ -154,12 +131,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    // Auto-promote: om användaren markerar första avsnittet sett medan
+    // titeln ligger i 'vill_se' så flytta den automatiskt till 'mina' (TV)
+    // eller 'sedd' (film). Tar bort manuellt steg "ändra status först".
+    // Idempotent — körs bara på vill_se-items.
+    const current = items.find(i => i.tmdbId === tmdbId);
+    const promoteStatus: WatchStatus | null =
+      current?.status === 'vill_se' && season >= 1 && episode >= 1
+        ? (current.mediaType === 'tv' ? 'mina' : 'sedd')
+        : null;
     await setDoc(ref, {
       lastWatchedSeason: season,
       lastWatchedEpisode: episode,
       updatedAt: serverTimestamp(),
+      ...(promoteStatus ? { status: promoteStatus, watchedAt: promoteStatus === 'sedd' ? serverTimestamp() : null } : {}),
     }, { merge: true });
-  }, [uid]);
+  }, [uid, items]);
 
   const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
     if (!uid) return;

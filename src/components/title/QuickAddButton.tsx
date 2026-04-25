@@ -6,7 +6,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
-import { STATUS_LABELS, MOVIE_STATUS_LABELS } from '@/lib/watchStatus';
+import { statusLabel, statusOptionsFor } from '@/lib/watchStatus';
 import type { WatchStatus, MediaType } from '@/types';
 
 interface QuickAddButtonProps {
@@ -28,8 +28,8 @@ export default function QuickAddButton({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
-  const labels = mediaType === 'movie' ? MOVIE_STATUS_LABELS : STATUS_LABELS;
-  const labelFor = (s: WatchStatus) => labels[s] ?? STATUS_LABELS[s];
+  const options = statusOptionsFor(mediaType);
+  const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
@@ -74,7 +74,7 @@ export default function QuickAddButton({
       </button>
       {open && (
         <div className="absolute top-full right-0 mt-1 bg-surface border border-border-main rounded-sm z-50 min-w-[110px] shadow-lg">
-          {(Object.keys(labels) as WatchStatus[]).map(status => (
+          {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
