@@ -9,6 +9,7 @@ import { NotInterestedProvider } from '@/contexts/NotInterestedContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { createQueryClient } from '@/lib/queryClient';
 import { initSentry } from '@/lib/sentry';
+import { initAppCheck } from '@/lib/firebase/appCheck';
 import { useState, useEffect, type ReactNode } from 'react';
 
 /**
@@ -26,10 +27,15 @@ const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => createQueryClient());
 
-  // Initiera Sentry så tidigt som möjligt så att client-side errors fångas
-  // innan resten av trädet mountar. initSentry är no-op om DSN saknas.
+  // Initiera Sentry + App Check så tidigt som möjligt — men efter hydration.
+  // Sentry: no-op om DSN saknas. App Check: no-op om site key saknas; måste
+  // köras post-hydration eftersom ReCaptchaV3Provider:s placeholder-div
+  // klubbas av React 19 om det skapas på module-load (se appCheck.ts).
+  // Effekter firar parent → child, så App Check är redo innan AuthProvider
+  // hinner subscribe:a på onAuthStateChanged.
   useEffect(() => {
     initSentry();
+    initAppCheck();
   }, []);
 
   // Persister kan bara skapas i browsern (behöver localStorage). I build-

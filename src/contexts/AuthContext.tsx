@@ -25,6 +25,7 @@ import {
   type DocumentReference,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/config';
+import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import type { UserProfile } from '@/types';
 
@@ -154,6 +155,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // App Check MÅSTE initialiseras innan onAuthStateChanged subscribar.
+    // Auth attaches App Check tokens automatiskt till alla Identity Toolkit-
+    // calls (inkl. token-refresh på boot). Om App Check inte är initialiserad
+    // när Auth bootar hänger Auth för evigt och väntar på en token-provider
+    // som aldrig kommer. initAppCheck är idempotent — Providers kallar också,
+    // men barns useEffect firar före parents så vi behöver göra det här
+    // för att vinna race:t.
+    initAppCheck();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
