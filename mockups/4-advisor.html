@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 4: Streamingrådgivare (Problem 14-16)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; font-size: 13px; line-height: 1.5; }
+.tab-bar { position: sticky; top: 0; z-index: 100; background: #111; display: flex; gap: 0; border-bottom: 2px solid #d97b35; flex-wrap: wrap; }
+.tab-bar button { padding: 10px 16px; background: none; border: none; color: #999; cursor: pointer; font: inherit; font-size: 12px; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab-bar button.active { color: #d97b35; border-bottom-color: #d97b35; background: #222; }
+.tab-bar button:hover { color: #ccc; }
+.variant { display: none; }
+.variant.active { display: block; }
+.problem-list { background: #222; padding: 14px 20px; font-size: 12px; color: #888; border-bottom: 1px solid #333; }
+.problem-list strong { color: #d97b35; }
+.problem-list ul { margin: 6px 0 0 16px; }
+.problem-list li { margin-bottom: 3px; }
+.label { position: absolute; top: 10px; right: 10px; background: #d97b35; color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; z-index: 5; }
+.label.current { background: #555; }
+
+.page-bg { background: #eeece8; min-height: 650px; }
+.surface { background: #faf8f5; border: 1px solid #ddd; border-radius: 2px; margin-bottom: 14px; }
+.mock-content { padding: 14px 18px; }
+.page-title { font-size: 18px; font-weight: 700; color: #222; margin-bottom: 14px; }
+.stat-card { background: #faf8f5; border: 1px solid #ddd; border-radius: 2px; padding: 8px 12px; text-align: center; }
+.stat-value { font-size: 20px; font-weight: 700; color: #d97b35; }
+.stat-label { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
+.td-muted { color: #999; font-size: 10px; }
+.provider-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.poster-sm { width: 32px; height: 48px; background: #ddd8d0; border-radius: 2px; flex-shrink: 0; }
+.accent { color: #d97b35; }
+</style>
+</head>
+<body>
+
+<div class="problem-list">
+  <strong>Problem 14-16: Streamingrådgivare</strong>
+  <ul>
+    <li><strong>#14</strong> StatCards visar "—" utan förklaring när kostnader ej konfigurerats</li>
+    <li><strong>#15</strong> Rådgivaren rekommenderar att teckna 4 nya tjänster — "sparrådgivare" som kostar mer</li>
+    <li><strong>#16</strong> Tilde fore datum ("~16 apr.") — oklart vad det betyder</li>
+  </ul>
+</div>
+
+<div class="tab-bar">
+  <button class="active" onclick="show('current')">Nuvarande</button>
+  <button onclick="show('a')">A: CTA i stat-kort + begränsa teckna</button>
+  <button onclick="show('b')">B: Sammanfattning först</button>
+  <button onclick="show('c')">C: Spara-fokus, teckna nedtonat</button>
+  <button onclick="show('d')">D: Tidslinje-vy</button>
+</div>
+
+<!-- CURRENT -->
+<div id="current" class="variant active">
+  <span class="label current">Nuvarande</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h1 class="page-title" style="margin-bottom:0;">Streamingrådgivare</h1>
+        <div style="display:flex;gap:4px;">
+          <span style="font-size:10px;color:#999;padding:2px 8px;">30 dagar</span>
+          <span style="font-size:10px;color:#fff;background:#d97b35;padding:2px 8px;border-radius:2px;">60 dagar</span>
+          <span style="font-size:10px;color:#999;padding:2px 8px;">90 dagar</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+        <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Total kr/mån</div></div>
+        <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Besparing/mån</div></div>
+        <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Aktiva</div></div>
+        <div class="stat-card"><div class="stat-value">2</div><div class="stat-label">Pausa</div></div>
+      </div>
+      <h2 style="font-size:11px;font-weight:700;color:#555;margin-bottom:8px;">Dina tjänster</h2>
+      <div class="surface">
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span class="provider-dot" style="background:#e50914;"></span><b>Netflix</b></div>
+          <div style="font-size:10px;">Aktiv · 13 serier</div>
+        </div>
+      </div>
+      <div class="surface">
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span class="provider-dot" style="background:#e50914;"></span><b>TV4 Play</b></div>
+          <div style="font-size:10px;">Pausa · 0 serier</div>
+        </div>
+      </div>
+      <div class="surface">
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span class="provider-dot" style="background:#2196f3;"></span><b>SVT Play</b></div>
+          <div style="font-size:10px;">Pausa · 0 serier</div>
+        </div>
+      </div>
+      <h2 style="font-size:11px;font-weight:700;color:#555;margin:14px 0 8px;">Teckna</h2>
+      <div class="surface">
+        <div style="padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div><span class="provider-dot" style="background:#0033ff;"></span><b>Max</b></div>
+            <div style="font-size:10px;">2 serier</div>
+          </div>
+          <div style="padding:6px 0;">
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 0;"><div class="poster-sm"></div><div><span style="font-size:11px;font-weight:600;">The Pitt</span><span class="td-muted"> — S02E15 ~16 apr.</span></div></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 0;"><div class="poster-sm"></div><div><span style="font-size:11px;font-weight:600;">Outlander</span><span class="td-muted"> — S08E07 ~17 apr.</span></div></div>
+          </div>
+          <div class="td-muted">Teckna Max från ~16 apr.</div>
+        </div>
+      </div>
+      <div class="surface">
+        <div style="padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;"><div><span class="provider-dot" style="background:#333;"></span><b>Apple TV+</b></div><div style="font-size:10px;">1 serie</div></div>
+          <div style="padding:6px 0;"><div style="display:flex;align-items:center;gap:8px;padding:3px 0;"><div class="poster-sm"></div><div><span style="font-size:11px;font-weight:600;">For All Mankind</span><span class="td-muted"> — S05E04 ~16 apr.</span></div></div></div>
+          <div class="td-muted">Teckna Apple från ~16 apr.</div>
+        </div>
+      </div>
+      <div class="surface">
+        <div style="padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;"><div><span class="provider-dot" style="background:#f57c00;"></span><b>Viaplay</b></div><div style="font-size:10px;">1 serie</div></div>
+          <div style="padding:6px 0;"><div style="display:flex;align-items:center;gap:8px;padding:3px 0;"><div class="poster-sm"></div><div><span style="font-size:11px;font-weight:600;">Outlander</span><span class="td-muted"> — S08E07 ~17 apr.</span></div></div></div>
+          <div class="td-muted">Teckna Viaplay från ~17 apr.</div>
+        </div>
+      </div>
+      <div class="surface">
+        <div style="padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;"><div><span class="provider-dot" style="background:#0033ff;"></span><b>Disney+</b></div><div style="font-size:10px;">1 serie</div></div>
+          <div style="padding:6px 0;"><div style="display:flex;align-items:center;gap:8px;padding:3px 0;"><div class="poster-sm"></div><div><span style="font-size:11px;font-weight:600;">Grey's Anatomy</span><span class="td-muted"> — S22E17 ~30 apr.</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT A: CTA i stat-kort + begränsa teckna -->
+<div id="a" class="variant">
+  <span class="label">Variant A</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <h1 class="page-title">Streamingrådgivare</h1>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+        <div class="stat-card"><a href="#" style="font-size:16px;color:#d97b35;text-decoration:none;font-weight:600;">Ange kostnad →</a><div class="stat-label">Total kr/mån</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#999;">—</div><div class="stat-label">Besparing/mån</div><div style="font-size:8px;color:#bbb;">Kräver kostnad</div></div>
+        <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Aktiva</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#2e7d32;">2</div><div class="stat-label">Kan pausas</div></div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#2e7d32;margin-bottom:8px;">Pausa — spara pengar</h2>
+      <div class="surface" style="border-left:3px solid #2e7d32;">
+        <div style="padding:8px 12px;font-size:11px;color:#555;">
+          Du kan pausa <b>TV4 Play</b> och <b>SVT Play</b> — inga serier du följer sänds de närmaste 60 dagarna.
+        </div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#555;margin:14px 0 8px;">Aktiva</h2>
+      <div class="surface">
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span class="provider-dot" style="background:#e50914;"></span><b>Netflix</b></div>
+          <div style="font-size:10px;color:#555;">13 serier</div>
+        </div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#999;margin:14px 0 8px;">Kan vara värt att teckna</h2>
+      <div style="font-size:10px;color:#888;margin-bottom:8px;">Baserat på serier du följer som sänder nya avsnitt snart.</div>
+      <div class="surface" style="opacity:0.8;">
+        <div style="padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div><span class="provider-dot" style="background:#0033ff;"></span><b>Max</b> <span class="td-muted">— bäst valuta</span></div>
+            <div style="font-size:10px;">2 serier sänder snart</div>
+          </div>
+          <div class="td-muted" style="margin-top:4px;">The Pitt (16 apr.), Outlander (17 apr.)</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#aaa;padding:4px 0;">Ytterligare 3 tjänster har serier du följer. <a href="#" style="color:#d97b35;text-decoration:none;">Visa alla →</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT B: Sammanfattning först -->
+<div id="b" class="variant">
+  <span class="label">Variant B</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <h1 class="page-title">Streamingrådgivare</h1>
+
+      <!-- Summary box -->
+      <div class="surface" style="border-left:3px solid #d97b35;margin-bottom:14px;">
+        <div style="padding:10px 12px;">
+          <div style="font-size:12px;font-weight:600;color:#222;margin-bottom:6px;">Sammanfattning</div>
+          <div style="font-size:11px;color:#555;line-height:1.7;">
+            Du har <b>3 streamingtjänster</b>. Av dessa behöver du bara <b>Netflix</b> just nu.<br>
+            <span style="color:#2e7d32;font-weight:600;">Pausa TV4 Play och SVT Play</span> — inga serier du följer sänds där de närmaste 60 dagarna.<br>
+            Outlander (17 apr.) och For All Mankind (16 apr.) sänder snart — de finns på <b>Max</b> respektive <b>Apple TV+</b>.
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+        <div class="stat-card">
+          <a href="#" style="font-size:14px;color:#d97b35;text-decoration:none;font-weight:600;">Ange →</a>
+          <div class="stat-label">Total kr/mån</div>
+        </div>
+        <div class="stat-card"><div class="stat-value" style="color:#ccc;">?</div><div class="stat-label">Besparing/mån</div></div>
+        <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Behåll</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#2e7d32;">2</div><div class="stat-label">Pausa</div></div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#555;margin-bottom:8px;">Dina tjänster</h2>
+      <div class="surface">
+        <div style="padding:6px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;">
+          <div><span class="provider-dot" style="background:#e50914;"></span><b style="font-size:11px;">Netflix</b></div>
+          <div><span style="font-size:9px;padding:2px 6px;background:#e8f5e9;color:#2e7d32;border-radius:2px;">Behåll</span> <span class="td-muted">13 aktiva serier</span></div>
+        </div>
+        <div style="padding:6px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;">
+          <div><span class="provider-dot" style="background:#e50914;"></span><b style="font-size:11px;">TV4 Play</b></div>
+          <div><span style="font-size:9px;padding:2px 6px;background:#fff3e0;color:#e65100;border-radius:2px;">Pausa</span> <span class="td-muted">0 serier sänder</span></div>
+        </div>
+        <div style="padding:6px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span class="provider-dot" style="background:#2196f3;"></span><b style="font-size:11px;">SVT Play</b></div>
+          <div><span style="font-size:9px;padding:2px 6px;background:#fff3e0;color:#e65100;border-radius:2px;">Pausa</span> <span class="td-muted">0 serier sänder</span></div>
+        </div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#999;margin:14px 0 8px;">Annat värt att veta</h2>
+      <div class="surface" style="opacity:0.7;">
+        <div style="padding:8px 12px;font-size:10px;color:#888;">
+          <b>Max</b> har 2 serier du följer som sänder snart (The Pitt 16 apr., Outlander 17 apr.)<br>
+          <b>Apple TV+</b> har For All Mankind (16 apr.)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT C: Spara-fokus -->
+<div id="c" class="variant">
+  <span class="label">Variant C</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <h1 class="page-title">Streamingrådgivare</h1>
+      <p style="font-size:11px;color:#888;margin:-10px 0 14px;">Analys av dina 3 streamingtjänster baserat på serier du följer.</p>
+
+      <!-- Action cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="surface" style="margin-bottom:0;border-left:3px solid #2e7d32;">
+          <div style="padding:10px 12px;">
+            <div style="font-size:9px;text-transform:uppercase;color:#2e7d32;font-weight:600;letter-spacing:0.5px;margin-bottom:4px;">Kan pausas</div>
+            <div style="font-size:12px;font-weight:600;color:#222;">TV4 Play, SVT Play</div>
+            <div class="td-muted" style="margin-top:2px;">Inga serier du följer sänder de närmaste 60 dagarna.</div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;border-left:3px solid #d97b35;">
+          <div style="padding:10px 12px;">
+            <div style="font-size:9px;text-transform:uppercase;color:#d97b35;font-weight:600;letter-spacing:0.5px;margin-bottom:4px;">Behåll</div>
+            <div style="font-size:12px;font-weight:600;color:#222;">Netflix</div>
+            <div class="td-muted" style="margin-top:2px;">13 serier du följer. 5 med nya avsnitt inom 60 dagar.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+        <div class="stat-card"><a href="#" style="font-size:14px;color:#d97b35;text-decoration:none;font-weight:600;">Ange kostnad →</a><div class="stat-label">Kostnad/mån</div></div>
+        <div class="stat-card"><div class="stat-value" style="font-size:16px;color:#2e7d32;">2 tjänster</div><div class="stat-label">Kan pausas</div></div>
+        <div class="stat-card"><div class="stat-value" style="font-size:16px;">1 tjänst</div><div class="stat-label">Behåll</div></div>
+      </div>
+
+      <h2 style="font-size:11px;font-weight:700;color:#999;margin:14px 0 4px;">Serier som sänder på andra tjänster</h2>
+      <div style="font-size:10px;color:#aaa;margin-bottom:8px;">Serier du följer men som kräver en tjänst du inte har.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:6px 12px;font-size:11px;"><b>The Pitt</b></td>
+            <td style="padding:6px 12px;"><span class="provider-dot" style="background:#0033ff;"></span><span style="font-size:10px;">Max</span></td>
+            <td style="padding:6px 12px;font-size:10px;color:#555;">Nytt avsnitt 16 april</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:6px 12px;font-size:11px;"><b>For All Mankind</b></td>
+            <td style="padding:6px 12px;"><span class="provider-dot" style="background:#333;"></span><span style="font-size:10px;">Apple TV+</span></td>
+            <td style="padding:6px 12px;font-size:10px;color:#555;">Nytt avsnitt 16 april</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 12px;font-size:11px;"><b>Grey's Anatomy</b></td>
+            <td style="padding:6px 12px;"><span class="provider-dot" style="background:#0033ff;"></span><span style="font-size:10px;">Disney+</span></td>
+            <td style="padding:6px 12px;font-size:10px;color:#555;">Nytt avsnitt 30 april</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT D: Tidslinje -->
+<div id="d" class="variant">
+  <span class="label">Variant D</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <h1 class="page-title">Streamingrådgivare</h1>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+        <div class="stat-card"><a href="#" style="font-size:14px;color:#d97b35;text-decoration:none;font-weight:600;">Ange →</a><div class="stat-label">Kostnad/mån</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ccc;">?</div><div class="stat-label">Besparing/mån</div></div>
+        <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Behåll</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#2e7d32;">2</div><div class="stat-label">Pausa</div></div>
+      </div>
+
+      <!-- Timeline view -->
+      <h2 style="font-size:11px;font-weight:700;color:#555;margin-bottom:8px;">Tidslinje — nästa 60 dagar</h2>
+      <div class="surface">
+        <div style="padding:12px;">
+          <!-- Netflix row -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="width:70px;font-size:10px;font-weight:600;"><span class="provider-dot" style="background:#e50914;"></span>Netflix</div>
+            <div style="flex:1;height:20px;background:#f5f3ee;border-radius:2px;position:relative;">
+              <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:rgba(229,9,20,0.15);border-radius:2px;"></div>
+              <div style="position:absolute;left:5%;top:50%;transform:translateY(-50%);font-size:8px;color:#555;">13 serier aktiva</div>
+            </div>
+            <div style="width:50px;font-size:9px;color:#2e7d32;font-weight:600;text-align:right;">Behåll</div>
+          </div>
+          <!-- TV4 row -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="width:70px;font-size:10px;font-weight:600;"><span class="provider-dot" style="background:#e50914;"></span>TV4 Play</div>
+            <div style="flex:1;height:20px;background:#f5f3ee;border-radius:2px;position:relative;">
+              <div style="position:absolute;left:5%;top:50%;transform:translateY(-50%);font-size:8px;color:#aaa;">Inga serier sänder</div>
+            </div>
+            <div style="width:50px;font-size:9px;color:#e65100;font-weight:600;text-align:right;">Pausa</div>
+          </div>
+          <!-- SVT row -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="width:70px;font-size:10px;font-weight:600;"><span class="provider-dot" style="background:#2196f3;"></span>SVT Play</div>
+            <div style="flex:1;height:20px;background:#f5f3ee;border-radius:2px;position:relative;">
+              <div style="position:absolute;left:5%;top:50%;transform:translateY(-50%);font-size:8px;color:#aaa;">Inga serier sänder</div>
+            </div>
+            <div style="width:50px;font-size:9px;color:#e65100;font-weight:600;text-align:right;">Pausa</div>
+          </div>
+          <!-- Divider -->
+          <div style="border-top:1px dashed #ddd;margin:8px 0;padding-top:8px;">
+            <div style="font-size:9px;color:#aaa;margin-bottom:6px;">Tjänster du inte har, men som har serier du följer:</div>
+          </div>
+          <!-- Max row -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="width:70px;font-size:10px;color:#888;"><span class="provider-dot" style="background:#0033ff;"></span>Max</div>
+            <div style="flex:1;height:20px;background:#f5f3ee;border-radius:2px;position:relative;">
+              <div style="position:absolute;left:2%;top:0;height:100%;width:30%;background:rgba(0,51,255,0.1);border-radius:2px;"></div>
+              <div style="position:absolute;left:3%;top:50%;transform:translateY(-50%);font-size:8px;color:#555;">The Pitt, Outlander</div>
+            </div>
+            <div style="width:50px;font-size:9px;color:#888;text-align:right;">2 serier</div>
+          </div>
+          <!-- Apple row -->
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:70px;font-size:10px;color:#888;"><span class="provider-dot" style="background:#333;"></span>Apple</div>
+            <div style="flex:1;height:20px;background:#f5f3ee;border-radius:2px;position:relative;">
+              <div style="position:absolute;left:2%;top:0;height:100%;width:20%;background:rgba(0,0,0,0.05);border-radius:2px;"></div>
+              <div style="position:absolute;left:3%;top:50%;transform:translateY(-50%);font-size:8px;color:#555;">For All Mankind</div>
+            </div>
+            <div style="width:50px;font-size:9px;color:#888;text-align:right;">1 serie</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

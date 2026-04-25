@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
+import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import AdvisorTimeline from '@/components/savings/AdvisorTimeline';
 import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
@@ -225,14 +226,7 @@ function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
   return (
     <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
       <table className="w-full border-collapse">
-        <thead className="sr-only">
-          <tr>
-            <th scope="col">Titel</th>
-            <th scope="col">Typ</th>
-            <th scope="col">Tjänst</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
+        <SrOnlyTableHeader columns={['Titel', 'Typ', 'Tjänst', 'Status']} />
         <tbody>
           {rows.map(({ show, provider }) => {
             const href = titleHref(show.mediaType, show.tmdbId);
@@ -277,14 +271,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
       </div>
       <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
-          <thead className="sr-only">
-            <tr>
-              <th scope="col">Tjänst</th>
-              <th scope="col">Pausad sedan</th>
-              <th scope="col">Sparat</th>
-              <th scope="col">Åtgärd</th>
-            </tr>
-          </thead>
+          <SrOnlyTableHeader columns={['Tjänst', 'Pausad sedan', 'Sparat', 'Åtgärd']} />
           <tbody>
             {pauses.map(p => (
               <tr key={p.providerId} className="border-b border-border-light last:border-b-0">

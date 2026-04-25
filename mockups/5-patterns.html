@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 5: Generella mönster (Problem 17-20)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; font-size: 13px; line-height: 1.5; }
+.tab-bar { position: sticky; top: 0; z-index: 100; background: #111; display: flex; gap: 0; border-bottom: 2px solid #d97b35; flex-wrap: wrap; }
+.tab-bar button { padding: 10px 16px; background: none; border: none; color: #999; cursor: pointer; font: inherit; font-size: 12px; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab-bar button.active { color: #d97b35; border-bottom-color: #d97b35; background: #222; }
+.tab-bar button:hover { color: #ccc; }
+.variant { display: none; }
+.variant.active { display: block; }
+.problem-list { background: #222; padding: 14px 20px; font-size: 12px; color: #888; border-bottom: 1px solid #333; }
+.problem-list strong { color: #d97b35; }
+.problem-list ul { margin: 6px 0 0 16px; }
+.problem-list li { margin-bottom: 3px; }
+.label { position: absolute; top: 10px; right: 10px; background: #d97b35; color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; z-index: 5; }
+.label.current { background: #555; }
+
+.page-bg { background: #eeece8; min-height: 500px; }
+.surface { background: #faf8f5; border: 1px solid #ddd; border-radius: 2px; margin-bottom: 14px; }
+.mock-content { padding: 14px 18px; }
+.section-title { font-size: 14px; font-weight: 700; color: #222; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+.section-title:first-child { margin-top: 0; }
+.td { padding: 5px 8px; border-bottom: 1px solid #f0eee8; font-size: 12px; color: #222; vertical-align: middle; }
+.td-muted { color: #999; font-size: 10px; }
+.th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #aaa; font-weight: 600; text-align: left; padding: 6px 8px; background: #f5f3ee; border-bottom: 1px solid #eee; }
+.poster-sm { width: 32px; height: 48px; background: #ddd8d0; border-radius: 2px; flex-shrink: 0; }
+.accent { color: #d97b35; }
+.text-muted { color: #999; }
+.provider-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border: 1px solid #ddd; border-radius: 2px; color: #888; margin-right: 2px; }
+.provider-badge.mine { border-color: #d97b35; color: #d97b35; }
+.provider-badge.netflix { border-color: #e50914; color: #e50914; }
+.provider-badge.disney { border-color: #0033ff; color: #0033ff; }
+.provider-badge.apple { border-color: #333; color: #333; }
+.stars { color: #d97b35; font-size: 10px; letter-spacing: 1px; }
+.stars-empty { color: #ddd; font-size: 10px; letter-spacing: 1px; }
+.row-alt { background: rgba(250,245,239,0.6); }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.compare-box { border: 1px solid #ddd; border-radius: 2px; overflow: hidden; }
+.compare-label { background: #f5f3ee; padding: 6px 10px; font-size: 10px; font-weight: 600; color: #555; border-bottom: 1px solid #eee; }
+.compare-content { background: #faf8f5; padding: 10px; }
+</style>
+</head>
+<body>
+
+<div class="problem-list">
+  <strong>Problem 17-20: Generella mönster</strong>
+  <ul>
+    <li><strong>#17</strong> Inkonsekvent betygsvisning — dashboard visar siffror ("4.0"), listor visar stjärnor</li>
+    <li><strong>#18</strong> Engelska titlar i svensk UI — "The Lincoln Lawyer" istället for svenska titlar från TMDB</li>
+    <li><strong>#19</strong> Ingen sida svarar konsekvent på "var kan jag se detta?" — streaming-badges saknas överallt</li>
+    <li><strong>#20</strong> Flöde-sidan saknar kontext — "Följ vänner" utan förklaring av vad flödet visar</li>
+  </ul>
+</div>
+
+<div class="tab-bar">
+  <button class="active" onclick="show('current')">Nuvarande</button>
+  <button onclick="show('a')">A: Konsekvent betyg + badges överallt</button>
+  <button onclick="show('b')">B: Svenska titlar + kompakt badges</button>
+  <button onclick="show('c')">C: Inline streaming-text</button>
+  <button onclick="show('d')">D: Bättre flödes-sida + tomt-state</button>
+</div>
+
+<!-- CURRENT -->
+<div id="current" class="variant active">
+  <span class="label current">Nuvarande</span>
+  <div class="page-bg">
+    <div class="mock-content">
+
+      <div class="section-title">Problem #17: Betyg — tre olika visningsformat</div>
+      <div class="compare-grid">
+        <div class="compare-box">
+          <div class="compare-label">Dashboard (Följer-tabell)</div>
+          <div class="compare-content">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td class="td"><b>The Lincoln Lawyer</b></td><td class="td accent" style="text-align:right;">4.0</td></tr>
+              <tr><td class="td"><b>Ginny & Georgia</b></td><td class="td accent" style="text-align:right;">5.0</td></tr>
+              <tr><td class="td"><b>The Night Agent</b></td><td class="td text-muted" style="text-align:right;">—</td></tr>
+            </table>
+            <div style="font-size:9px;color:#aaa;padding:6px 0;">Siffror ("4.0") — ej interaktiva</div>
+          </div>
+        </div>
+        <div class="compare-box">
+          <div class="compare-label">Följer-listan (/my/following)</div>
+          <div class="compare-content">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td class="td"><b>Familjen Bridgerton</b></td><td class="td" style="text-align:right;"><span class="stars">★★★★★</span></td></tr>
+              <tr><td class="td"><b>Ginny & Georgia</b></td><td class="td" style="text-align:right;"><span class="stars">★★★★★</span></td></tr>
+              <tr><td class="td"><b>The Diplomat</b></td><td class="td" style="text-align:right;"><span class="stars">★★★★★</span></td></tr>
+            </table>
+            <div style="font-size:9px;color:#aaa;padding:6px 0;">Stjärnor — men 5/5 och "ej betygsatt" ser identiska ut</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Problem #18: Engelska titlar</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td class="td" style="font-weight:600;">The Lincoln Lawyer</td><td class="td td-muted">TMDB har: Advokatens val</td></tr>
+          <tr class="row-alt"><td class="td" style="font-weight:600;">Grey's Anatomy</td><td class="td td-muted">TMDB har: Grey's Anatomy (samma)</td></tr>
+          <tr><td class="td" style="font-weight:600;">Heartbreak High</td><td class="td td-muted">TMDB har: Heartbreak High (samma)</td></tr>
+          <tr class="row-alt"><td class="td" style="font-weight:600;">Familjen Bridgerton</td><td class="td td-muted" style="color:#2e7d32;">Redan svensk titel</td></tr>
+        </table>
+        <div style="font-size:9px;color:#aaa;padding:6px 8px;">De flesta titlar saknar svensk översättning i TMDB. Blandningen av svenska/engelska titlar ser inkonsekvent ut.</div>
+      </div>
+
+      <div class="section-title">Problem #19: Streaming-info saknas i listor</div>
+      <div class="compare-grid">
+        <div class="compare-box">
+          <div class="compare-label">Dashboard-tabellen</div>
+          <div class="compare-content">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td class="td"><b>The Lincoln Lawyer</b></td><td class="td accent" style="text-align:right;">4.0</td></tr>
+              <tr><td class="td"><b>Ginny & Georgia</b></td><td class="td accent" style="text-align:right;">5.0</td></tr>
+            </table>
+            <div style="font-size:9px;color:#e50914;padding:6px 0;">Ingen "VAR"-kolumn. Var streamas dessa?</div>
+          </div>
+        </div>
+        <div class="compare-box">
+          <div class="compare-label">Detaljsida (fungerar bra)</div>
+          <div class="compare-content" style="display:flex;gap:8px;align-items:center;">
+            <div style="font-size:10px;text-transform:uppercase;color:#aaa;letter-spacing:0.5px;">Streama:</div>
+            <div style="width:28px;height:28px;background:#e50914;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;">N</div>
+            <div style="font-size:9px;color:#2e7d32;padding:4px 0;">Detaljsidan visar streaming-info korrekt</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Problem #20: Flöde-sida utan kontext</div>
+      <div class="surface" style="text-align:center;padding:24px;">
+        <div style="font-size:24px;color:#ddd;margin-bottom:6px;">&#128101;</div>
+        <div style="font-size:11px;font-weight:600;color:#555;">Följ vänner</div>
+        <div style="font-size:10px;color:#999;margin-bottom:8px;">Se vad andra tittar på genom att följa deras profiler.</div>
+        <button style="padding:5px 12px;background:#d97b35;color:#fff;border:none;border-radius:2px;font:inherit;font-size:10px;cursor:pointer;">Sök användare</button>
+      </div>
+      <div style="font-size:9px;color:#aaa;">Vad ÄR flödet? Aktivitetsfeed? Reviews? Listor? Inget förklaras.</div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT A: Konsekvent betyg + badges överallt -->
+<div id="a" class="variant">
+  <span class="label">Variant A</span>
+  <div class="page-bg">
+    <div class="mock-content">
+
+      <div class="section-title">Betyg: Alltid stjärnor + siffra</div>
+      <div style="font-size:10px;color:#888;margin-bottom:10px;">Samma format överallt. Fyllda stjärnor for betygsatta, tomma konturer for ej betygsatta. Siffra bredvid.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td class="td" style="font-weight:600;">The Lincoln Lawyer</td>
+            <td class="td" style="text-align:right;"><span class="stars">★★★★</span><span class="stars-empty">☆</span> <span style="font-size:9px;color:#999;">4.0</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td" style="font-weight:600;">Ginny & Georgia</td>
+            <td class="td" style="text-align:right;"><span class="stars">★★★★★</span> <span style="font-size:9px;color:#999;">5.0</span></td>
+          </tr>
+          <tr>
+            <td class="td" style="font-weight:600;">The Night Agent</td>
+            <td class="td" style="text-align:right;"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+        </table>
+        <div style="font-size:9px;color:#2e7d32;padding:6px 8px;">Tydlig skillnad mellan "5/5" (fyllda) och "ej betygsatt" (tomma konturer)</div>
+      </div>
+
+      <div class="section-title">Streaming-badges: Alltid synliga</div>
+      <div style="font-size:10px;color:#888;margin-bottom:10px;">Varje gång en titel visas — dashboard, listor, kalender — ska streaming-badge synas.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <th class="th" style="width:44px;"></th>
+            <th class="th">Titel</th>
+            <th class="th" style="width:90px;">Streamas på</th>
+            <th class="th" style="width:90px;">Betyg</th>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">The Lincoln Lawyer</div><div class="td-muted">2022</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">☆</span> <span style="font-size:9px;color:#999;">4.0</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Grey's Anatomy</div><div class="td-muted">2005</div></td>
+            <td class="td"><span class="provider-badge disney">Disney+</span></td>
+            <td class="td"><span class="stars">★★★★★</span> <span style="font-size:9px;color:#999;">5.0</span></td>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">For All Mankind</div><div class="td-muted">2019</div></td>
+            <td class="td"><span class="provider-badge apple">Apple</span></td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Ginny & Georgia</div><div class="td-muted">2021</div></td>
+            <td class="td"><span class="td-muted" style="font-size:9px;">Okänt</span></td>
+            <td class="td"><span class="stars">★★★★★</span> <span style="font-size:9px;color:#999;">5.0</span></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT B: Svenska titlar + kompakt badges -->
+<div id="b" class="variant">
+  <span class="label">Variant B</span>
+  <div class="page-bg">
+    <div class="mock-content">
+
+      <div class="section-title">Svenska titlar med original som undertitel</div>
+      <div style="font-size:10px;color:#888;margin-bottom:10px;">Visa svensk titel om den finns i TMDB, med originaltitel i grått under. Om ingen svensk titel finns, visa originalet rakt av.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td class="td" style="width:44px;"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">Familjen Bridgerton</div>
+              <div class="td-muted">Bridgerton · 2020</div>
+            </td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">The Lincoln Lawyer</div>
+              <div class="td-muted">Ingen svensk titel · 2022</div>
+            </td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">☆</span></td>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">Grey's Anatomy</div>
+              <div class="td-muted">Ingen svensk titel · 2005</div>
+            </td>
+            <td class="td"><span class="provider-badge disney">Disney+</span></td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+        </table>
+        <div style="font-size:9px;color:#aaa;padding:6px 8px;">Notera: De flesta engelska titlar har ingen svensk översättning i TMDB. Frågan är om "Ingen svensk titel" ger mer eller mindre brus.</div>
+      </div>
+
+      <div class="section-title">Alternativ: Behåll engelska men visa alltid badge</div>
+      <div style="font-size:10px;color:#888;margin-bottom:10px;">Acceptera att de flesta titlar är engelska. Fokusera istället på att alltid visa streaming-badge inline med titeln.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td class="td" style="width:44px;"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">The Lincoln Lawyer</span>
+                <span class="provider-badge mine" style="font-size:8px;padding:0 4px;">Netflix</span>
+              </div>
+              <div class="td-muted">Serie · 2022 · 4 säsonger</div>
+            </td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">Grey's Anatomy</span>
+                <span class="provider-badge disney" style="font-size:8px;padding:0 4px;">Disney+</span>
+              </div>
+              <div class="td-muted">Serie · 2005 · 21 säsonger</div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">For All Mankind</span>
+                <span class="provider-badge apple" style="font-size:8px;padding:0 4px;">Apple</span>
+              </div>
+              <div class="td-muted">Serie · 2019 · 5 säsonger</div>
+            </td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT C: Inline streaming-text -->
+<div id="c" class="variant">
+  <span class="label">Variant C</span>
+  <div class="page-bg">
+    <div class="mock-content">
+
+      <div class="section-title">Streaming som text istället for badge</div>
+      <div style="font-size:10px;color:#888;margin-bottom:10px;">Istället for en separat kolumn, baka in streaming-info i undertexten med färgkodning efter tjänst.</div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td class="td" style="width:44px;"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">The Lincoln Lawyer</div>
+              <div class="td-muted">2022 · <span style="color:#e50914;">Netflix</span> · S04 väntas</div>
+            </td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">Grey's Anatomy</div>
+              <div class="td-muted">2005 · <span style="color:#0033ff;">Disney+</span> · Pågår S21</div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">For All Mankind</div>
+              <div class="td-muted">2019 · <span style="color:#333;">Apple TV+</span> · <span style="color:#d97b35;">Nytt fre 17</span></div>
+            </td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">Ginny & Georgia</div>
+              <div class="td-muted">2021 · <span style="color:#aaa;">Okänd tjänst</span></div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+          <tr>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="font-weight:600;">Outlander</div>
+              <div class="td-muted">2014 · <span style="color:#e50914;">Netflix</span> · <span style="color:#d97b35;">Nytt lör 18</span></div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+        </table>
+      </div>
+      <div style="font-size:9px;color:#aaa;">Fördelar: Sparar en kolumn. Streaming+status i samma rad. Nackdel: Svårare att skanna/filtrera.</div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT D: Bättre flödes-sida + tomt-state -->
+<div id="d" class="variant">
+  <span class="label">Variant D</span>
+  <div class="page-bg">
+    <div class="mock-content">
+
+      <div class="section-title">Problem #20: Flöde — bättre empty state</div>
+      <div class="compare-grid">
+        <div class="compare-box">
+          <div class="compare-label">Nuvarande: Vag uppmaning</div>
+          <div class="compare-content" style="text-align:center;padding:24px;">
+            <div style="font-size:24px;color:#ddd;margin-bottom:4px;">&#128101;</div>
+            <div style="font-size:11px;font-weight:600;color:#555;">Följ vänner</div>
+            <div style="font-size:10px;color:#999;margin-bottom:6px;">Se vad andra tittar på genom att följa deras profiler.</div>
+            <button style="padding:5px 12px;background:#d97b35;color:#fff;border:none;border-radius:2px;font:inherit;font-size:10px;">Sök användare</button>
+          </div>
+        </div>
+        <div class="compare-box">
+          <div class="compare-label" style="color:#d97b35;">Variant D: Förklara + preview</div>
+          <div class="compare-content" style="padding:16px;">
+            <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:4px;">Flöde</div>
+            <div style="font-size:11px;color:#666;margin-bottom:12px;line-height:1.5;">
+              Se vad dina vänner tittar på, betygsätter och lägger till. Följ andra användare för att se deras aktivitet här.
+            </div>
+            <div style="border:1px dashed #ddd;border-radius:2px;padding:10px;margin-bottom:10px;">
+              <div style="font-size:9px;text-transform:uppercase;color:#aaa;margin-bottom:6px;letter-spacing:0.5px;">Så här ser det ut</div>
+              <div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.5;">
+                <div style="width:20px;height:20px;border-radius:50%;background:#d97b35;flex-shrink:0;"></div>
+                <div>
+                  <div style="font-size:10px;"><b>Anna</b> <span style="color:#999;">betygsatte</span> <b>The Bear</b> <span class="stars" style="font-size:9px;">★★★★★</span></div>
+                  <div style="font-size:9px;color:#aaa;">2 timmar sedan</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;padding:4px 0;opacity:0.5;">
+                <div style="width:20px;height:20px;border-radius:50%;background:#6a7d5e;flex-shrink:0;"></div>
+                <div>
+                  <div style="font-size:10px;"><b>Erik</b> <span style="color:#999;">började följa</span> <b>Severance</b></div>
+                  <div style="font-size:9px;color:#aaa;">5 timmar sedan</div>
+                </div>
+              </div>
+            </div>
+            <div style="text-align:center;">
+              <button style="padding:5px 14px;background:#d97b35;color:#fff;border:none;border-radius:2px;font:inherit;font-size:10px;cursor:pointer;">Sök användare att följa</button>
+              <div style="font-size:9px;color:#aaa;margin-top:4px;">eller dela din profillänk: binge.nu/u/filmnerden</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Fyllt flöde — så det kan se ut</div>
+      <div class="surface">
+        <div style="padding:10px 12px;">
+          <div style="display:flex;gap:8px;align-items:start;padding:6px 0;border-bottom:1px solid #f0eee8;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#d97b35;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">A</div>
+            <div style="flex:1;">
+              <div style="font-size:11px;"><b>Anna</b> <span style="color:#999;">betygsatte</span> <b>The Bear</b> <span class="stars" style="font-size:9px;">★★★★★</span></div>
+              <div style="font-size:9px;color:#aaa;">2 timmar sedan · <span style="color:#e50914;">Netflix</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:start;padding:6px 0;border-bottom:1px solid #f0eee8;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#6a7d5e;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">E</div>
+            <div style="flex:1;">
+              <div style="font-size:11px;"><b>Erik</b> <span style="color:#999;">började följa</span> <b>Severance</b></div>
+              <div style="font-size:9px;color:#aaa;">5 timmar sedan · <span style="color:#333;">Apple TV+</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:start;padding:6px 0;border-bottom:1px solid #f0eee8;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#8b6e99;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">L</div>
+            <div style="flex:1;">
+              <div style="font-size:11px;"><b>Lisa</b> <span style="color:#999;">lade till</span> <b>The White Lotus</b> <span style="color:#999;">i "Vill se"</span></div>
+              <div style="font-size:9px;color:#aaa;">igår · <span style="color:#0033ff;">Max</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:start;padding:6px 0;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#d97b35;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;">A</div>
+            <div style="flex:1;">
+              <div style="font-size:11px;"><b>Anna</b> <span style="color:#999;">tittade klart på</span> <b>Fallout</b></div>
+              <div style="font-size:9px;color:#aaa;">igår · <span style="color:#0033ff;">Amazon</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

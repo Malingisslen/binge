@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 3: Följer-lista & tabeller (Problem 10-13)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; font-size: 13px; line-height: 1.5; }
+.tab-bar { position: sticky; top: 0; z-index: 100; background: #111; display: flex; gap: 0; border-bottom: 2px solid #d97b35; flex-wrap: wrap; }
+.tab-bar button { padding: 10px 16px; background: none; border: none; color: #999; cursor: pointer; font: inherit; font-size: 12px; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab-bar button.active { color: #d97b35; border-bottom-color: #d97b35; background: #222; }
+.tab-bar button:hover { color: #ccc; }
+.variant { display: none; }
+.variant.active { display: block; }
+.problem-list { background: #222; padding: 14px 20px; font-size: 12px; color: #888; border-bottom: 1px solid #333; }
+.problem-list strong { color: #d97b35; }
+.problem-list ul { margin: 6px 0 0 16px; }
+.problem-list li { margin-bottom: 3px; }
+.label { position: absolute; top: 10px; right: 10px; background: #d97b35; color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; z-index: 5; }
+.label.current { background: #555; }
+
+.page-bg { background: #eeece8; min-height: 650px; }
+.surface { background: #faf8f5; border: 1px solid #ddd; border-radius: 2px; margin-bottom: 14px; }
+.th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #aaa; font-weight: 600; text-align: left; padding: 6px 8px; background: #f5f3ee; border-bottom: 1px solid #eee; }
+.td { padding: 5px 8px; border-bottom: 1px solid #f0eee8; font-size: 12px; color: #222; vertical-align: middle; }
+.td-muted { color: #999; font-size: 10px; }
+.poster-sm { width: 32px; height: 48px; background: #ddd8d0; border-radius: 2px; flex-shrink: 0; }
+.accent { color: #d97b35; }
+.text-muted { color: #999; }
+.provider-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border: 1px solid #ddd; border-radius: 2px; color: #888; margin-right: 2px; }
+.provider-badge.mine { border-color: #d97b35; color: #d97b35; }
+.stars { color: #d97b35; font-size: 10px; letter-spacing: 1px; }
+.stars-empty { color: #ddd; font-size: 10px; letter-spacing: 1px; }
+.tab-filter { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; }
+.tab-filter .active-tab { background: #d97b35; color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 2px; border: none; font: inherit; cursor: pointer; }
+.tab-filter .inactive-tab { background: none; color: #999; font-size: 10px; padding: 2px 8px; border: none; font: inherit; cursor: pointer; }
+.mock-content { padding: 14px 18px; }
+.page-title { font-size: 18px; font-weight: 700; color: #222; margin-bottom: 4px; }
+.page-count { font-size: 10px; color: #999; float: right; }
+.cb { width: 13px; height: 13px; accent-color: #d97b35; cursor: pointer; }
+.row-alt { background: rgba(250,245,239,0.6); }
+.progress-bar { background: #eee; height: 3px; border-radius: 2px; width: 60px; }
+.progress-fill { height: 3px; border-radius: 2px; background: #d97b35; }
+.progress-fill.done { background: #2e7d32; }
+</style>
+</head>
+<body>
+
+<div class="problem-list">
+  <strong>Problem 10-13: Följer-lista & tabeller</strong>
+  <ul>
+    <li><strong>#10</strong> SEDD-kolumnen visar "—" for varenda rad i Följer-vyn — noll informationsvärde</li>
+    <li><strong>#11</strong> Stjärnbetyg: "Rated 5/5" och "not rated" ser nästan identiska ut visuellt</li>
+    <li><strong>#12</strong> Alla titlar har identiskt "Tillagd"-datum (14 apr. 2026) — ser ut som testdata</li>
+    <li><strong>#13</strong> Ingen "VAR"-kolumn — streaming-information saknas helt i listan</li>
+  </ul>
+</div>
+
+<div class="tab-bar">
+  <button class="active" onclick="show('current')">Nuvarande</button>
+  <button onclick="show('a')">A: VAR + renare kolumner</button>
+  <button onclick="show('b')">B: Kompakt med inline-badges</button>
+  <button onclick="show('c')">C: Progress-fokus</button>
+  <button onclick="show('d')">D: Kort med streaming-info</button>
+</div>
+
+<!-- CURRENT -->
+<div id="current" class="variant active">
+  <span class="label current">Nuvarande</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><h1 class="page-title">Följer</h1><span class="page-count">19 titlar</span></div>
+      <div class="tab-filter">
+        <button class="active-tab">Alla</button>
+        <button class="inactive-tab">Serier</button>
+        <select style="font:inherit;font-size:10px;padding:2px 4px;border:1px solid #ddd;border-radius:2px;margin-left:8px;"><option>Senast ändrad</option></select>
+        <input placeholder="Sök titel..." style="font:inherit;font-size:10px;padding:3px 8px;border:1px solid #ddd;border-radius:2px;margin-left:4px;background:#faf8f5;" />
+        <div style="margin-left:auto;display:flex;gap:2px;">
+          <button class="active-tab">Tabell</button>
+          <button class="inactive-tab">Rutnät</button>
+        </div>
+      </div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <th class="th" style="width:28px;"><input type="checkbox" class="cb" /></th>
+            <th class="th" style="width:44px;"></th>
+            <th class="th">Titel</th>
+            <th class="th">Typ</th>
+            <th class="th">År</th>
+            <th class="th">Tillagd</th>
+            <th class="th">Sedd</th>
+            <th class="th">Betyg</th>
+          </tr>
+          <tr><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">Familjen Bridgerton</td><td class="td td-muted">Serie</td><td class="td td-muted">2020</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr class="row-alt"><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">Ginny & Georgia</td><td class="td td-muted">Serie</td><td class="td td-muted">2021</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">The Diplomat</td><td class="td td-muted">Serie</td><td class="td td-muted">2023</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr class="row-alt"><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">For All Mankind</td><td class="td td-muted">Serie</td><td class="td td-muted">2019</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">Heartbreak High</td><td class="td td-muted">Serie</td><td class="td td-muted">2022</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr class="row-alt"><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">Emily in Paris</td><td class="td td-muted">Serie</td><td class="td td-muted">2020</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+          <tr><td class="td"><input type="checkbox" class="cb" /></td><td class="td"><div class="poster-sm"></div></td><td class="td" style="font-weight:600;">Virgin River</td><td class="td td-muted">Serie</td><td class="td td-muted">2019</td><td class="td td-muted">14 apr. 2026</td><td class="td td-muted">—</td><td class="td"><span class="stars">★★★★★</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT A: VAR + renare kolumner -->
+<div id="a" class="variant">
+  <span class="label">Variant A</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><h1 class="page-title">Följer</h1><span class="page-count">19 titlar</span></div>
+      <div class="tab-filter">
+        <button class="active-tab">Alla</button>
+        <button class="inactive-tab">Serier</button>
+        <select style="font:inherit;font-size:10px;padding:2px 4px;border:1px solid #ddd;border-radius:2px;margin-left:8px;"><option>Senast ändrad</option></select>
+        <input placeholder="Sök titel..." style="font:inherit;font-size:10px;padding:3px 8px;border:1px solid #ddd;border-radius:2px;margin-left:4px;background:#faf8f5;" />
+      </div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <th class="th" style="width:28px;"><input type="checkbox" class="cb" /></th>
+            <th class="th" style="width:44px;"></th>
+            <th class="th">Titel</th>
+            <th class="th" style="width:100px;">Streamas på</th>
+            <th class="th" style="width:80px;">Betyg</th>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Familjen Bridgerton</div><div class="td-muted">Serie · 2020</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">★</span> <span style="font-size:9px;color:#999;">4.5</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Ginny & Georgia</div><div class="td-muted">Serie · 2021</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars">★★★★★</span> <span style="font-size:9px;color:#999;">5.0</span></td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">The Diplomat</div><div class="td-muted">Serie · 2023</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">For All Mankind</div><div class="td-muted">Serie · 2019</div></td>
+            <td class="td"><span class="provider-badge">Apple</span></td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Grey's Anatomy</div><div class="td-muted">Serie · 2005</div></td>
+            <td class="td"><span class="provider-badge">Disney+</span></td>
+            <td class="td"><span class="stars">★★★★★</span> <span style="font-size:9px;color:#999;">5.0</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Heartbreak High</div><div class="td-muted">Serie · 2022</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Emily in Paris</div><div class="td-muted">Serie · 2020</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><span class="stars-empty">☆☆☆☆☆</span></td>
+          </tr>
+        </table>
+      </div>
+      <div style="font-size:10px;color:#888;padding:4px 0;">Borttagna kolumner: TYP (alltid "Serie" i denna vy), ÅR (visas inline), TILLAGD (samma datum), SEDD (irrelevant). Tillagd: VAR.</div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT B: Kompakt med inline-badges -->
+<div id="b" class="variant">
+  <span class="label">Variant B</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><h1 class="page-title">Följer</h1><span class="page-count">19 titlar</span></div>
+      <div class="tab-filter">
+        <button class="active-tab">Alla</button>
+        <button class="inactive-tab">Serier</button>
+        <input placeholder="Sök titel..." style="font:inherit;font-size:10px;padding:3px 8px;border:1px solid #ddd;border-radius:2px;margin-left:8px;background:#faf8f5;" />
+      </div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><th class="th" style="width:28px;"><input type="checkbox" class="cb" /></th><th class="th" style="width:44px;"></th><th class="th">Titel</th><th class="th" style="width:80px;">Betyg</th></tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">Familjen Bridgerton</span>
+                <span class="provider-badge mine" style="font-size:8px;padding:0 4px;">Netflix</span>
+              </div>
+              <div class="td-muted">Serie · 2020 · 3 säsonger</div>
+            </td>
+            <td class="td"><span class="stars">★★★★</span><span class="stars-empty">★</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">Ginny & Georgia</span>
+                <span class="provider-badge mine" style="font-size:8px;padding:0 4px;">Netflix</span>
+              </div>
+              <div class="td-muted">Serie · 2021 · 2 säsonger</div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">The Diplomat</span>
+                <span class="provider-badge mine" style="font-size:8px;padding:0 4px;">Netflix</span>
+              </div>
+              <div class="td-muted">Serie · 2023 · 3 säsonger</div>
+            </td>
+            <td class="td"><span style="font-size:10px;color:#ccc;">Ej betygsatt</span></td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">For All Mankind</span>
+                <span class="provider-badge" style="font-size:8px;padding:0 4px;">Apple</span>
+              </div>
+              <div class="td-muted">Serie · 2019 · 5 säsonger</div>
+            </td>
+            <td class="td"><span style="font-size:10px;color:#ccc;">Ej betygsatt</span></td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-weight:600;">Grey's Anatomy</span>
+                <span class="provider-badge" style="font-size:8px;padding:0 4px;">Disney+</span>
+              </div>
+              <div class="td-muted">Serie · 2005 · 21 säsonger</div>
+            </td>
+            <td class="td"><span class="stars">★★★★★</span></td>
+          </tr>
+        </table>
+      </div>
+      <div style="font-size:10px;color:#888;padding:4px 0;">Streaming-badge inline med titeln. "Ej betygsatt" istället for tomma stjärnor. Typ+År inline. TILLAGD+SEDD borttagna.</div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT C: Progress-fokus -->
+<div id="c" class="variant">
+  <span class="label">Variant C</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><h1 class="page-title">Följer</h1><span class="page-count">19 titlar</span></div>
+      <div class="tab-filter">
+        <button class="active-tab">Alla</button>
+        <button class="inactive-tab">Serier</button>
+        <button class="inactive-tab">Film</button>
+      </div>
+      <div class="surface">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <th class="th" style="width:28px;"><input type="checkbox" class="cb" /></th>
+            <th class="th" style="width:44px;"></th>
+            <th class="th">Titel</th>
+            <th class="th" style="width:90px;">Var</th>
+            <th class="th" style="width:130px;">Progress</th>
+            <th class="th" style="width:70px;">Betyg</th>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Familjen Bridgerton</div><div class="td-muted">2020</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill done" style="width:100%;"></div></div><span class="td-muted">3/3 ssg</span></div></td>
+            <td class="td accent">4.5</td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">The Lincoln Lawyer</div><div class="td-muted">2022</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill" style="width:50%;"></div></div><span class="td-muted">20/40</span></div></td>
+            <td class="td accent">4.0</td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">The Night Agent</div><div class="td-muted">2023</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill" style="width:0%;"></div></div><span class="td-muted">0/30</span></div></td>
+            <td class="td text-muted">—</td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">For All Mankind</div><div class="td-muted">2019</div></td>
+            <td class="td"><span class="provider-badge">Apple</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill" style="width:60%;"></div></div><span class="td-muted">S05E03</span></div></td>
+            <td class="td text-muted">—</td>
+          </tr>
+          <tr>
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Grey's Anatomy</div><div class="td-muted">2005</div></td>
+            <td class="td"><span class="provider-badge">Disney+</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill" style="width:10%;"></div></div><span class="td-muted">Pågår</span></div></td>
+            <td class="td accent">5.0</td>
+          </tr>
+          <tr class="row-alt">
+            <td class="td"><input type="checkbox" class="cb" /></td>
+            <td class="td"><div class="poster-sm"></div></td>
+            <td class="td"><div style="font-weight:600;">Outlander</div><div class="td-muted">2014</div></td>
+            <td class="td"><span class="provider-badge mine">Netflix</span></td>
+            <td class="td"><div style="display:flex;align-items:center;gap:6px;"><div class="progress-bar"><div class="progress-fill" style="width:85%;"></div></div><span class="td-muted">S08E06</span></div></td>
+            <td class="td accent">5.0</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIANT D: Kort med streaming-info -->
+<div id="d" class="variant">
+  <span class="label">Variant D</span>
+  <div class="page-bg">
+    <div class="mock-content">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><h1 class="page-title">Följer</h1><span class="page-count">19 titlar</span></div>
+      <div class="tab-filter">
+        <button class="active-tab">Alla</button>
+        <button class="inactive-tab">Serier</button>
+        <button class="inactive-tab">Film</button>
+        <input placeholder="Sök..." style="font:inherit;font-size:10px;padding:3px 8px;border:1px solid #ddd;border-radius:2px;margin-left:8px;background:#faf8f5;" />
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:10px;">
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#a7866d;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">Familjen Bridgerton</div>
+              <span class="stars" style="font-size:9px;">★★★★<span class="stars-empty">★</span></span>
+            </div>
+            <div class="td-muted">2020 · 3 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge mine">Netflix</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill done" style="width:100%;"></div></div>
+              <span style="font-size:9px;color:#2e7d32;">Klar</span>
+            </div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#8b6e99;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">The Lincoln Lawyer</div>
+              <span class="stars" style="font-size:9px;">★★★★<span class="stars-empty">★</span></span>
+            </div>
+            <div class="td-muted">2022 · 4 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge mine">Netflix</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:50%;"></div></div>
+              <span style="font-size:9px;color:#999;">20/40</span>
+            </div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#6a7d5e;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">For All Mankind</div>
+              <span style="font-size:9px;color:#ccc;">Ej betygsatt</span>
+            </div>
+            <div class="td-muted">2019 · 5 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge">Apple TV+</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:60%;"></div></div>
+              <span style="font-size:9px;color:#d97b35;">Nytt fre</span>
+            </div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#5d7a8c;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">The Night Agent</div>
+              <span style="font-size:9px;color:#ccc;">Ej betygsatt</span>
+            </div>
+            <div class="td-muted">2023 · 3 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge mine">Netflix</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:0%;"></div></div>
+              <span style="font-size:9px;color:#999;">0/30</span>
+            </div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#7a6255;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">Grey's Anatomy</div>
+              <span class="stars" style="font-size:9px;">★★★★★</span>
+            </div>
+            <div class="td-muted">2005 · 21 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge">Disney+</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:10%;"></div></div>
+              <span style="font-size:9px;color:#999;">Pågår S21</span>
+            </div>
+          </div>
+        </div>
+        <div class="surface" style="margin-bottom:0;padding:10px;display:flex;gap:10px;">
+          <div style="width:50px;height:75px;background:#8a6b5a;border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:start;">
+              <div style="font-size:12px;font-weight:600;">Outlander</div>
+              <span class="stars" style="font-size:9px;">★★★★★</span>
+            </div>
+            <div class="td-muted">2014 · 8 säsonger</div>
+            <div style="margin-top:4px;"><span class="provider-badge mine">Netflix</span></div>
+            <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+              <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:85%;"></div></div>
+              <span style="font-size:9px;color:#d97b35;">Nytt lör</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

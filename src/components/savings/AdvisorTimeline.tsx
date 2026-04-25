@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAdvisorTimeline, TIMELINE_WEEKS, type TimelineLane, type TimelineWeek } from '@/hooks/useAdvisorTimeline';
 
@@ -174,7 +174,6 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
 }
 
 function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
-  const router = useRouter();
   const isUnsubscribed = lane.kind === 'unsubscribed';
   const isUserPaused = lane.kind === 'user-paused';
   const cellColor = isUnsubscribed ? '#888' : lane.color;
@@ -202,21 +201,21 @@ function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
           const hasContent = !!cell && cell.entries.length > 0;
           if (hasContent) {
             const entries = cell!.entries;
-            const titles = entries.map(e => `${e.title}${e.episodeCode ? ` ${e.episodeCode}` : ''}`).join('\n');
-            const title = `${weeks[i].rangeLabel}\n\n${titles}`;
+            const tooltipLines = entries.map(e => `${e.title}${e.episodeCode ? ` ${e.episodeCode}` : ''}`);
+            const title = `${weeks[i].rangeLabel}\n\n${tooltipLines.join('\n')}`;
             const ariaLabel = `${lane.shortName} ${weeks[i].rangeLabel}: ${entries.map(e => e.title).join(', ')}`;
             return (
-              <button
+              <Link
                 key={i}
-                type="button"
-                onClick={() => router.push('/calendar')}
+                href="/calendar"
                 title={title}
                 aria-label={ariaLabel}
-                style={{ width: CELL_WIDTH, height: CELL_HEIGHT, borderRadius: 2, backgroundColor: cellColor, opacity: cellOpacity, border: 'none', padding: 0, cursor: 'pointer' }}
+                className="block rounded-sm"
+                style={{ width: CELL_WIDTH, height: CELL_HEIGHT, backgroundColor: cellColor, opacity: cellOpacity }}
               />
             );
           }
-          return <div key={i} style={emptyStyle} title={weeks[i].rangeLabel} aria-hidden />;
+          return <div key={i} style={emptyStyle} title={weeks[i].rangeLabel} />;
         })}
       </div>
       <div
