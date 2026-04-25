@@ -1,8 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart } from 'lucide-react';
-import { trackEvent } from '@/lib/analytics';
 
 export default function Footer() {
   return (
@@ -14,24 +12,15 @@ export default function Footer() {
             <li><Link href="/villkor" className="hover:text-text-primary">Villkor</Link></li>
             <li><Link href="/community-guidelines" className="hover:text-text-primary">Community-regler</Link></li>
             <li><a href="mailto:hej@binge.nu" className="hover:text-text-primary">Kontakt</a></li>
-            <li>
-              <a
-                href="https://ko-fi.com/binge"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent('donate_clicked')}
-                className="inline-flex items-center gap-1 hover:text-text-primary"
-              >
-                <Heart size={11} /> Stötta projektet
-              </a>
-            </li>
+            {/* "Stötta projektet"-länken är tillfälligt borttagen tills vi har
+                ett eget Ko-fi/Swish-konto. Återinför här när URL:en är klar. */}
           </ul>
         </nav>
         <div className="flex items-center gap-3 text-xxs">
           <img
             src="/tmdb-logo.svg"
             alt="The Movie Database"
-            width={50}
+            width={47}
             height={20}
             loading="lazy"
             decoding="async"
