@@ -16,10 +16,11 @@ import {
   findIdleNextCheckDate,
   getNextAirInfo,
   isWithinDays,
+  isUserBehindOnAired,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
-  ActivePause, PrimaryAction, WatchlistItem, WillSeePerProviderRow,
+  ActivePause, PrimaryAction, WillSeePerProviderRow,
   MostUsedProvider,
 } from '@/types';
 
@@ -30,6 +31,7 @@ export {
   findIdleNextCheckDate,
   getNextAirInfo,
   isWithinDays,
+  isUserBehindOnAired,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 
@@ -91,6 +93,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
+        unfinishedTmdbIds: new Set<number>(),
       };
     }
     // Om alla TMDB-queries failar har vi ingen anchor-data att arbeta med.
@@ -106,13 +109,12 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
+        unfinishedTmdbIds: new Set<number>(),
       };
     }
 
     const followingIds = new Set(followingTV.map(i => i.tmdbId));
     const willSeeIds = new Set(willSeeItems.filter(i => i.mediaType === 'tv').map(i => i.tmdbId));
-
-    const followingById = new Map<number, WatchlistItem>(followingTV.map(i => [i.tmdbId, i]));
 
     // ads-bucket (AVOD, t.ex. Plex, Pluto, freevee) inkluderas bara om
      // användaren faktiskt prenumererar på någon ads-tjänst — annars rankas
@@ -324,8 +326,21 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       .filter(p => !userPausedSet.has(p.providerId))
       .reduce((sum, p) => sum + (p.monthlyCost ?? 0), 0);
 
+    // tmdbIds där användaren har osedda aireade avsnitt (= "behind").
+    // Använder den råa TMDB-datan via showsByTmdbId — det här är vår enda
+    // pålitliga källa; WatchlistItem.lastWatchedSeason ensam kan inte avgöra
+    // om användaren är ikapp eller bakom showens senaste aireade avsnitt.
+    const showsByTmdbId = new Map<number, TMDBTVShow>(shows.map(s => [s.id, s]));
+    const unfinishedTmdbIds = new Set<number>();
+    for (const item of followingTV) {
+      const show = showsByTmdbId.get(item.tmdbId);
+      if (show && isUserBehindOnAired(item, show)) {
+        unfinishedTmdbIds.add(item.tmdbId);
+      }
+    }
+
     const topPausable = findTopPausable(providerAdvisories, userPausedSet);
-    const catchup = findCatchupCandidate(providerAdvisories, followingById);
+    const catchup = findCatchupCandidate(providerAdvisories, unfinishedTmdbIds);
     const topSubscribe = subscribeAdvice[0];
 
     const pauseAction: Extract<PrimaryAction, { kind: 'pause' }> | null = topPausable ? {
@@ -409,6 +424,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       secondaryAction,
       activePauses,
       mostUsedProvider,
+      unfinishedTmdbIds,
     };
   }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 

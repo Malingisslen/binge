@@ -90,4 +90,8 @@ export interface AdvisorResult {
   // Provider med flest titlar i Följer + Vill se. null om användaren inte
   // har några anchor-titlar alls.
   mostUsedProvider: MostUsedProvider | null;
+  // tmdbIds för Följer-serier där användaren börjat titta MEN har osedda
+  // aireade avsnitt. Används av WatchlistPage's ?status=behind-filter så
+  // catchup-länken matchar siffran på Streamingrådgivar-kortet.
+  unfinishedTmdbIds: Set<number>;
 }

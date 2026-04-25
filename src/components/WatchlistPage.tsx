@@ -10,6 +10,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
+import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import RatingStars from '@/components/title/RatingStars';
 import { isEndedStatus } from '@/lib/airingState';
 import {
@@ -54,9 +55,23 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const providerParam = Number(searchParams.get('provider'));
   const providerFilterId = Number.isFinite(providerParam) && providerParam > 0 ? providerParam : null;
   const providerFilter = providerFilterId != null ? getProvider(providerFilterId) : undefined;
+  // ?status=behind aktiveras från Streamingrådgivarens catchup-kort. Behöver
+  // bara meningsfullt agera på /my/following — andra listor har inte
+  // koncept av "ligger efter på aireade avsnitt". useSubscriptionAdvisor
+  // delar TMDB-cache med useCalendarEntries så ingen extra fetch.
+  const behindFilterActive = status === 'följer' && searchParams.get('status') === 'behind';
+  const advisor = useSubscriptionAdvisor();
+  const behindIds = behindFilterActive ? advisor.unfinishedTmdbIds : null;
   const clearProviderFilter = () => {
     const params = new URLSearchParams(searchParams);
     params.delete('provider');
+    params.delete('status');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  };
+  const clearBehindFilter = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('status');
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   };
@@ -93,6 +108,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     if (providerFilterId != null) {
       result = result.filter(i => i.providers.includes(providerFilterId));
     }
+    if (behindIds) {
+      result = result.filter(i => behindIds.has(i.tmdbId));
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(i => i.title.toLowerCase().includes(q));
@@ -108,7 +126,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId]);
+  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, behindIds]);
 
   const totalCount = status ? items.filter(i => i.status === status).length : items.length;
 
@@ -130,22 +148,38 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         <span className="text-xs text-text-muted">{filtered.length} {filtered.length === 1 ? 'titel' : 'titlar'}</span>
       </div>
 
-      {providerFilter && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/30 rounded-sm">
+      {(providerFilter || behindFilterActive) && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/30 rounded-sm flex-wrap">
           <span className="inline-flex items-center gap-[6px] text-xs text-text-secondary">
             Filtrerat på
-            <span className="inline-flex items-center gap-[5px] font-semibold text-text-primary">
-              <ProviderDot color={providerFilter.color} size={7} />
-              {providerFilter.shortName}
-            </span>
+            {providerFilter && (
+              <span className="inline-flex items-center gap-[5px] font-semibold text-text-primary">
+                <ProviderDot color={providerFilter.color} size={7} />
+                {providerFilter.shortName}
+              </span>
+            )}
+            {behindFilterActive && (
+              <span className="font-semibold text-text-primary">ligger efter</span>
+            )}
           </span>
-          <button
-            onClick={clearProviderFilter}
-            className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
-            aria-label="Rensa provider-filter"
-          >
-            <X size={11} /> Rensa
-          </button>
+          {behindFilterActive && !providerFilter && (
+            <button
+              onClick={clearBehindFilter}
+              className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
+              aria-label="Rensa filter"
+            >
+              <X size={11} /> Rensa
+            </button>
+          )}
+          {providerFilter && (
+            <button
+              onClick={clearProviderFilter}
+              className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
+              aria-label="Rensa filter"
+            >
+              <X size={11} /> Rensa
+            </button>
+          )}
         </div>
       )}
 

@@ -155,9 +155,9 @@ function PrimaryActionCard({
       <SecondaryActionCard
         label="Slutför"
         title={`Titta klart på ${action.providerName}`}
-        description={`Du har ${action.unfinishedCount} påbörjade serier här. Avsluta dem innan nästa pausningsfönster för att slippa betala för ett abonnemang du inte utnyttjar.`}
+        description={`Du ligger efter på ${action.unfinishedCount} ${action.unfinishedCount === 1 ? 'serie' : 'serier'} här. Avsluta dem innan nästa pausningsfönster för att slippa betala för ett abonnemang du inte utnyttjar.`}
         action={
-          <Link href={`/my/following?provider=${action.providerId}`} className={ACTION_BUTTON_CLASS}>
+          <Link href={`/my/following?provider=${action.providerId}&status=behind`} className={ACTION_BUTTON_CLASS}>
             Visa {action.shortName}-serier ({action.unfinishedCount})
           </Link>
         }

@@ -23,18 +23,31 @@ export function findTopPausable(
 // Threshold 3 = "påbörjat flera serier" — undviker att tjata om enstaka påbörjade titlar.
 export const CATCHUP_THRESHOLD = 3;
 
+// "Behind" = användaren har börjat titta MEN det finns aireade avsnitt
+// hen inte sett. Ej börjat → inte behind. Ikapp på allt aireat → inte behind
+// (även om showen är "Returning Series" och nya avsnitt är på väg).
+// Användaren ser tillbaka-felet i Streamingrådgivaren när vi räknar
+// "påbörjade" som "behind", så denna funktion är källan till sanning.
+export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): boolean {
+  if (!item.lastWatchedSeason) return false;
+  const last = show.last_episode_to_air;
+  if (!last) return false;
+  const userS = item.lastWatchedSeason ?? 0;
+  const userE = item.lastWatchedEpisode ?? 0;
+  if (userS < last.season_number) return true;
+  if (userS === last.season_number && userE < last.episode_number) return true;
+  return false;
+}
+
 export function findCatchupCandidate(
   providers: ProviderAdvisory[],
-  followingById: Map<number, WatchlistItem>,
+  unfinishedIds: Set<number>,
 ): { provider: ProviderAdvisory; unfinishedCount: number } | undefined {
   return providers
     .filter(p => p.status === 'active')
     .map(p => ({
       provider: p,
-      unfinishedCount: p.shows
-        .map(s => followingById.get(s.tmdbId))
-        .filter((wi): wi is WatchlistItem => !!wi && !!wi.lastWatchedSeason)
-        .length,
+      unfinishedCount: p.shows.filter(s => unfinishedIds.has(s.tmdbId)).length,
     }))
     .filter(x => x.unfinishedCount >= CATCHUP_THRESHOLD)
     .sort((a, b) => b.unfinishedCount - a.unfinishedCount)[0];

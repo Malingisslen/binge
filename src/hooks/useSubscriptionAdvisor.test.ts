@@ -5,6 +5,7 @@ import {
   findIdleNextCheckDate,
   getNextAirInfo,
   isWithinDays,
+  isUserBehindOnAired,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 import type {
@@ -126,38 +127,28 @@ describe('findCatchupCandidate', () => {
     };
   }
 
-  it('returns undefined when no provider has enough unfinished shows', () => {
+  it('returns undefined when no provider has enough behind shows', () => {
     const providers = [
       makeProvider({
         status: 'active',
         shows: [makeShow(1), makeShow(2)],
       }),
     ];
-    // Only 2 shows, CATCHUP_THRESHOLD = 3 — not enough.
-    const following = new Map<number, WatchlistItem>([
-      [1, makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 1 })],
-      [2, makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: 1 })],
-    ]);
-    expect(findCatchupCandidate(providers, following)).toBeUndefined();
+    expect(findCatchupCandidate(providers, new Set([1, 2]))).toBeUndefined();
   });
 
-  it('returns a provider with exactly CATCHUP_THRESHOLD unfinished shows', () => {
+  it('returns a provider with exactly CATCHUP_THRESHOLD behind shows', () => {
     const providers = [
       makeProvider({
         status: 'active',
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
-    const following = new Map<number, WatchlistItem>([
-      [1, makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 1 })],
-      [2, makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: 1 })],
-      [3, makeWatchlistItem({ tmdbId: 3, lastWatchedSeason: 2 })],
-    ]);
-    const result = findCatchupCandidate(providers, following);
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3]));
     expect(result?.unfinishedCount).toBe(3);
   });
 
-  it('picks the provider with the most unfinished shows when several qualify', () => {
+  it('picks the provider with the most behind shows when several qualify', () => {
     const providers = [
       makeProvider({
         providerId: 8,
@@ -170,35 +161,20 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(4), makeShow(5), makeShow(6), makeShow(7)],
       }),
     ];
-    const following = new Map<number, WatchlistItem>([
-      [1, makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 1 })],
-      [2, makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: 1 })],
-      [3, makeWatchlistItem({ tmdbId: 3, lastWatchedSeason: 1 })],
-      [4, makeWatchlistItem({ tmdbId: 4, lastWatchedSeason: 1 })],
-      [5, makeWatchlistItem({ tmdbId: 5, lastWatchedSeason: 1 })],
-      [6, makeWatchlistItem({ tmdbId: 6, lastWatchedSeason: 1 })],
-      [7, makeWatchlistItem({ tmdbId: 7, lastWatchedSeason: 1 })],
-    ]);
-    const result = findCatchupCandidate(providers, following);
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3, 4, 5, 6, 7]));
     expect(result?.provider.providerId).toBe(119);
     expect(result?.unfinishedCount).toBe(4);
   });
 
-  it('ignores shows the user has never started (no lastWatchedSeason)', () => {
+  it('only counts shows whose tmdbId is in the unfinished set', () => {
     const providers = [
       makeProvider({
         status: 'active',
         shows: [makeShow(1), makeShow(2), makeShow(3), makeShow(4)],
       }),
     ];
-    // Only 2 of 4 have been started → below threshold.
-    const following = new Map<number, WatchlistItem>([
-      [1, makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 1 })],
-      [2, makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: null })],
-      [3, makeWatchlistItem({ tmdbId: 3, lastWatchedSeason: null })],
-      [4, makeWatchlistItem({ tmdbId: 4, lastWatchedSeason: 2 })],
-    ]);
-    expect(findCatchupCandidate(providers, following)).toBeUndefined();
+    // Only 2 of 4 are behind — under threshold.
+    expect(findCatchupCandidate(providers, new Set([1, 4]))).toBeUndefined();
   });
 
   it('ignores non-active providers (pause candidates)', () => {
@@ -209,12 +185,73 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
-    const following = new Map<number, WatchlistItem>([
-      [1, makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 1 })],
-      [2, makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: 1 })],
-      [3, makeWatchlistItem({ tmdbId: 3, lastWatchedSeason: 1 })],
-    ]);
-    expect(findCatchupCandidate(providers, following)).toBeUndefined();
+    expect(findCatchupCandidate(providers, new Set([1, 2, 3]))).toBeUndefined();
+  });
+});
+
+// --- isUserBehindOnAired ---
+
+describe('isUserBehindOnAired', () => {
+  function makeShow(overrides: Partial<TMDBTVShow>): TMDBTVShow {
+    return {
+      id: 1,
+      name: 'Show',
+      original_name: 'Show',
+      overview: '',
+      poster_path: null,
+      backdrop_path: null,
+      first_air_date: '',
+      last_air_date: '',
+      vote_average: 0,
+      vote_count: 0,
+      genres: [],
+      number_of_seasons: 1,
+      number_of_episodes: 1,
+      status: 'Returning Series',
+      seasons: [],
+      next_episode_to_air: null,
+      last_episode_to_air: null,
+      ...overrides,
+    };
+  }
+  function makeEpisode(season: number, episode: number) {
+    return { id: 1, episode_number: episode, season_number: season, name: '', overview: '', air_date: '2024-01-01', still_path: null, vote_average: 0, runtime: 0 };
+  }
+
+  it('returns false when user has never started the show', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: null });
+    const show = makeShow({ last_episode_to_air: makeEpisode(2, 5) });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
+  });
+
+  it('returns false when no episodes have aired yet', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: null });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
+  });
+
+  it('returns true when user is behind on a previous season', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 1, lastWatchedEpisode: 8 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(2, 3) });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+
+  it('returns true when user is behind within the same season', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 2, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(2, 5) });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+
+  it('returns false when user has watched up to the latest aired episode', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 2, lastWatchedEpisode: 5 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(2, 5) });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
+  });
+
+  it('returns false when user is ahead of the latest aired (data anomaly, treat as caught up)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 3, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(2, 5) });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
   });
 });
 
