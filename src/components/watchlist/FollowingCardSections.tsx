@@ -67,6 +67,7 @@ export function FollowingCardSections({
                 key={item.tmdbId}
                 item={item}
                 nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                subState="aktiv"
               />
             ))}
           </div>
@@ -89,6 +90,7 @@ export function FollowingCardSections({
                 key={item.tmdbId}
                 item={item}
                 nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                subState="ikapp"
               />
             ))}
           </div>
@@ -118,6 +120,7 @@ export function FollowingCardSections({
                   key={item.tmdbId}
                   item={item}
                   nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                  subState="avslutad"
                 />
               ))}
             </div>

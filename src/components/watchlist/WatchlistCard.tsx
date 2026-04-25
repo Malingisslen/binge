@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
 import RatingStars from '@/components/title/RatingStars';
-import type { WatchlistItem } from '@/types';
+import type { WatchlistItem, TvSubState } from '@/types';
 
 function upcomingWeekday(isoDate: string | undefined): string | null {
   if (!isoDate) return null;
@@ -22,7 +22,17 @@ function upcomingWeekday(isoDate: string | undefined): string | null {
  * progressbar för TV-serier. "Nytt mån"-chippet highlightar avsnitt som
  * sänds inom 4 dagar (upcomingWeekday-tröskeln).
  */
-export function WatchlistCard({ item, nextAirDate }: { item: WatchlistItem; nextAirDate?: string }) {
+export function WatchlistCard({
+  item,
+  nextAirDate,
+  subState,
+}: {
+  item: WatchlistItem;
+  nextAirDate?: string;
+  // Aktiv/Ikapp/Avslutad — passas in från WatchlistPage som redan beräknat
+  // det via bucketBySubState. Skippas för film och för icke-/my/series-vyer.
+  subState?: TvSubState;
+}) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
   const poster = posterUrl(item.posterPath, 'w185');
@@ -43,7 +53,16 @@ export function WatchlistCard({ item, nextAirDate }: { item: WatchlistItem; next
     if (item.mediaType === 'movie') {
       return { text: item.status === 'sedd' ? 'Sedd' : '—', tone: item.status === 'sedd' ? 'done' : 'muted' };
     }
-    if (item.status === 'sedd') return { text: 'Klar', tone: 'done' };
+    // TV. Sub-state-driven labels när vi vet sub-state — annars fall tillbaka
+    // till legacy/heuristik så icke-/my/series-vyer (t.ex. /my/all) också får
+    // rimlig text.
+    if (subState === 'avslutad') return { text: 'Avslutad', tone: 'done' };
+    if (subState === 'aktiv' && item.lastWatchedSeason) {
+      return { text: `Bakom · S${item.lastWatchedSeason}`, tone: 'accent' };
+    }
+    if (subState === 'ikapp') {
+      return { text: upcomingWd ? `Nytt ${upcomingWd.toLowerCase()}` : 'Ikapp', tone: upcomingWd ? 'accent' : 'done' };
+    }
     if (upcomingWd) return { text: `Nytt ${upcomingWd.toLowerCase()}`, tone: 'accent' };
     if (!item.totalSeasons) return { text: '—', tone: 'muted' };
     if (item.lastWatchedSeason) return { text: `Pågår S${item.lastWatchedSeason}`, tone: 'muted' };
