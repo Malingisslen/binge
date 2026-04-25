@@ -85,7 +85,7 @@ export interface AdvisorResult {
   primaryAction: PrimaryAction;
   // När primaryAction är pause kan vi också ha en catchup-kandidat — visas
   // som mindre framträdande andra-kort så besparing alltid hamnar överst.
-  secondaryAction: PrimaryAction | null;
+  secondaryAction: Extract<PrimaryAction, { kind: 'catchup' }> | null;
   activePauses: ActivePause[];
   // Provider med flest titlar i Följer + Vill se. null om användaren inte
   // har några anchor-titlar alls.

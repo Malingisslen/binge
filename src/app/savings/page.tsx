@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate, addDaysFromToday, todayIso, pluralSv } from '@/lib/utils';
-import type { AdvisedShow, PrimaryAction, ActivePause } from '@/types';
+import type { AdvisedShow, PrimaryAction, ActivePause, SubscribeAdvisory } from '@/types';
 
 const LOOK_AHEAD_DAYS = 60;
 
@@ -218,7 +218,7 @@ function hasConcreteStatus(show: AdvisedShow): boolean {
 
 interface SubscribeRow {
   show: AdvisedShow;
-  provider: { providerId: number; shortName: string; color: string };
+  provider: SubscribeAdvisory;
 }
 
 function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {

@@ -88,7 +88,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         monthlySavings: 0,
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
-        secondaryAction: null as PrimaryAction | null,
+        secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
       };
@@ -103,7 +103,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         monthlySavings: 0,
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
-        secondaryAction: null as PrimaryAction | null,
+        secondaryAction: null as Extract<PrimaryAction, { kind: 'catchup' }> | null,
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
       };
@@ -328,7 +328,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     const catchup = findCatchupCandidate(providerAdvisories, followingById);
     const topSubscribe = subscribeAdvice[0];
 
-    const pauseAction: PrimaryAction | null = topPausable ? {
+    const pauseAction: Extract<PrimaryAction, { kind: 'pause' }> | null = topPausable ? {
       kind: 'pause',
       providerId: topPausable.providerId,
       providerName: topPausable.providerName,
@@ -338,7 +338,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       nextAirDate: topPausable.nextAirDate,
     } : null;
 
-    const catchupAction: PrimaryAction | null = catchup ? {
+    const catchupAction: Extract<PrimaryAction, { kind: 'catchup' }> | null = catchup ? {
       kind: 'catchup',
       providerId: catchup.provider.providerId,
       providerName: catchup.provider.providerName,
@@ -348,7 +348,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       monthlyCost: catchup.provider.monthlyCost ?? 0,
     } : null;
 
-    const subscribeAction: PrimaryAction | null = topSubscribe ? {
+    const subscribeAction: Extract<PrimaryAction, { kind: 'subscribe' }> | null = topSubscribe ? {
       kind: 'subscribe',
       providerId: topSubscribe.providerId,
       providerName: topSubscribe.providerName,
@@ -367,8 +367,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
 
     // När primary är pause, men det också finns en catchup-kandidat, visa
     // catchup som sekundär — annars skuggas catchup-rådet av besparingen.
-    const secondaryAction: PrimaryAction | null =
-      primaryAction.kind === 'pause' ? catchupAction : null;
+    const secondaryAction = primaryAction.kind === 'pause' ? catchupAction : null;
 
     // Räknas Följer och Vill se separat så kortet kan visa "X följer · Y vill se".
     const mostUsedProvider: MostUsedProvider | null = (() => {
