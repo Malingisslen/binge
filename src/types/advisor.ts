@@ -63,6 +63,15 @@ export type PrimaryAction =
   | { kind: 'subscribe'; providerId: number; providerName: string; shortName: string; color: string; showCount: number; nearestAirDate: string | null; monthlyCost: number }
   | { kind: 'idle'; nextCheckDate: string | null };
 
+export interface MostUsedProvider {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  followCount: number;
+  willSeeCount: number;
+}
+
 export interface AdvisorResult {
   providers: ProviderAdvisory[];
   subscribeAdvice: SubscribeAdvisory[];
@@ -75,4 +84,7 @@ export interface AdvisorResult {
   hasError: boolean;
   primaryAction: PrimaryAction;
   activePauses: ActivePause[];
+  // Provider med flest titlar i Följer + Vill se. null om användaren inte
+  // har några anchor-titlar alls.
+  mostUsedProvider: MostUsedProvider | null;
 }

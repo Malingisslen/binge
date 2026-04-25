@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, Film, Tv } from 'lucide-react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { Search, Film, Tv, X } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
+import { getProvider } from '@/lib/tmdb/providers';
+import ProviderDot from '@/components/ui/ProviderDot';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -34,9 +37,29 @@ interface WatchlistPageProps {
   title: string;
 }
 
-export default function WatchlistPage({ status, title }: WatchlistPageProps) {
+export default function WatchlistPage(props: WatchlistPageProps) {
+  return (
+    <Suspense fallback={null}>
+      <WatchlistPageInner {...props} />
+    </Suspense>
+  );
+}
+
+function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const { items, removeItem, updateStatus, updateRating } = useWatchlist();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const providerParam = Number(searchParams.get('provider'));
+  const providerFilterId = Number.isFinite(providerParam) && providerParam > 0 ? providerParam : null;
+  const providerFilter = providerFilterId != null ? getProvider(providerFilterId) : undefined;
+  const clearProviderFilter = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('provider');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  };
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [sort, setSort] = useState<SortKey>('updatedAt');
   const showAddedCol = status !== 'sedd';
@@ -67,6 +90,9 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
     if (mediaFilter !== 'all') {
       result = result.filter(i => i.mediaType === mediaFilter);
     }
+    if (providerFilterId != null) {
+      result = result.filter(i => i.providers.includes(providerFilterId));
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(i => i.title.toLowerCase().includes(q));
@@ -82,7 +108,7 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort, searchQuery]);
+  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId]);
 
   const totalCount = status ? items.filter(i => i.status === status).length : items.length;
 
@@ -103,6 +129,25 @@ export default function WatchlistPage({ status, title }: WatchlistPageProps) {
         <h1 className="text-[18px] font-bold text-text-primary">{title}</h1>
         <span className="text-xs text-text-muted">{filtered.length} {filtered.length === 1 ? 'titel' : 'titlar'}</span>
       </div>
+
+      {providerFilter && (
+        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/30 rounded-sm">
+          <span className="inline-flex items-center gap-[6px] text-xs text-text-secondary">
+            Filtrerat på
+            <span className="inline-flex items-center gap-[5px] font-semibold text-text-primary">
+              <ProviderDot color={providerFilter.color} size={7} />
+              {providerFilter.shortName}
+            </span>
+          </span>
+          <button
+            onClick={clearProviderFilter}
+            className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
+            aria-label="Rensa provider-filter"
+          >
+            <X size={11} /> Rensa
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {status !== 'följer' && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -10,7 +10,7 @@ import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { titleHref } from '@/lib/tmdb/client';
-import { formatSwedishDate, addDaysFromToday, todayIso } from '@/lib/utils';
+import { formatSwedishDate, addDaysFromToday, todayIso, pluralSv } from '@/lib/utils';
 import type { AdvisedShow, PrimaryAction, ActivePause } from '@/types';
 
 const LOOK_AHEAD_DAYS = 60;
@@ -26,7 +26,7 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
 
   return (
     <div className="bg-surface border border-border-main border-l-[3px] border-l-[#2e7d32] rounded-sm p-4 mb-[14px]">
-      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-[#2e7d32] mb-1">Förslag</div>
+      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-[#2e7d32] mb-1">Spar nu</div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-base font-bold text-text-primary">
@@ -41,7 +41,7 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
             onClick={() => setPauseOpen(true)}
             className="px-3 py-[6px] bg-[#2e7d32] text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
           >
-            Markera pausad
+            Logga som pausad
           </button>
         )}
       </div>
@@ -97,45 +97,86 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
   );
 }
 
-function PrimaryActionCard({ action, onPause }: { action: PrimaryAction; onPause: (id: number, resumeAt: string | null) => void }) {
+const ACTION_BUTTON_CLASS = 'px-3 py-[6px] bg-accent text-white no-underline rounded-sm text-xs font-semibold font-[inherit] cursor-pointer shrink-0';
+
+function SecondaryActionCard({
+  label,
+  title,
+  description,
+  action,
+}: {
+  label: string;
+  title: React.ReactNode;
+  description: React.ReactNode;
+  action: React.ReactNode;
+}) {
+  return (
+    <div className="bg-surface border border-border-main border-l-[3px] border-l-accent rounded-sm p-4 mb-[14px]">
+      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-accent mb-1">{label}</div>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-base font-bold text-text-primary">{title}</div>
+          <div className="text-xs text-text-muted mt-[2px]">{description}</div>
+        </div>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function PrimaryActionCard({
+  action,
+  onPause,
+  onShowSubscribeRows,
+}: {
+  action: PrimaryAction;
+  onPause: (id: number, resumeAt: string | null) => void;
+  onShowSubscribeRows: () => void;
+}) {
   if (action.kind === 'pause') {
     return <PauseActionCard action={action} onPause={onPause} />;
   }
 
   if (action.kind === 'catchup') {
     return (
-      <div className="bg-surface border border-border-main border-l-[3px] border-l-accent rounded-sm p-4 mb-[14px]">
-        <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-accent mb-1">Förslag</div>
-        <div className="text-base font-bold text-text-primary">
-          Titta klart på {action.providerName}
-        </div>
-        <div className="text-xs text-text-muted mt-[2px]">
-          Du har {action.unfinishedCount} påbörjade serier här. Avsluta dem innan nästa pausningsfönster för att slippa betala för ett abonnemang du inte utnyttjar.
-        </div>
-      </div>
+      <SecondaryActionCard
+        label="Slutför"
+        title={`Titta klart på ${action.providerName}`}
+        description={`Du har ${action.unfinishedCount} påbörjade serier här. Avsluta dem innan nästa pausningsfönster för att slippa betala för ett abonnemang du inte utnyttjar.`}
+        action={
+          <Link href={`/my/following?provider=${action.providerId}`} className={ACTION_BUTTON_CLASS}>
+            Visa {action.shortName}-serier ({action.unfinishedCount})
+          </Link>
+        }
+      />
     );
   }
 
   if (action.kind === 'subscribe') {
     return (
-      <div className="bg-surface border border-border-main border-l-[3px] border-l-accent rounded-sm p-4 mb-[14px]">
-        <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-accent mb-1">Förslag</div>
-        <div className="text-base font-bold text-text-primary">
-          Prenumerera på {action.providerName}
-        </div>
-        <div className="text-xs text-text-muted mt-[2px]">
-          {action.showCount} {action.showCount === 1 ? 'serie du följer' : 'serier du följer'} har nya avsnitt inom {LOOK_AHEAD_DAYS} dagar
-          {action.nearestAirDate ? `, nästa ${formatSwedishDate(action.nearestAirDate)}` : ''}
-          {action.monthlyCost > 0 ? ` · ${action.monthlyCost} kr/mån` : ''}.
-        </div>
-      </div>
+      <SecondaryActionCard
+        label="Lägg till"
+        title={`Prenumerera på ${action.providerName}`}
+        description={
+          <>
+            {pluralSv(action.showCount, 'serie du följer', 'serier du följer')} har nya avsnitt inom {LOOK_AHEAD_DAYS} dagar
+            {action.nearestAirDate ? `, nästa ${formatSwedishDate(action.nearestAirDate)}` : ''}
+            {action.monthlyCost > 0 ? ` · ${action.monthlyCost} kr/mån` : ''}.
+          </>
+        }
+        action={
+          <button onClick={onShowSubscribeRows} className={`${ACTION_BUTTON_CLASS} border-none`}>
+            Visa titlar ({action.showCount})
+          </button>
+        }
+      />
     );
   }
 
   // idle
   return (
     <div className="bg-surface border border-border-main rounded-sm p-4 mb-[14px]">
-      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted mb-1">Allt är i sin ordning</div>
+      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted mb-1">Allt är välbalanserat</div>
       <div className="text-base font-bold text-text-primary">Inget att agera på just nu</div>
       <div className="text-xs text-text-muted mt-[2px]">
         {action.nextCheckDate
@@ -208,6 +249,13 @@ function SavingsContent() {
   const { pauseProvider, resumeProvider } = useAuth();
   const { getByStatus } = useWatchlist();
   const followedTvCount = getByStatus('följer', 'tv').filter(i => !i.dropped).length;
+  const subscribeDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const handleShowSubscribeRows = () => {
+    const el = subscribeDetailsRef.current;
+    if (!el) return;
+    el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   if (advisor.isLoading && advisor.providers.length === 0) {
     return (
@@ -252,6 +300,7 @@ function SavingsContent() {
       <PrimaryActionCard
         action={advisor.primaryAction}
         onPause={(id, resumeAt) => pauseProvider(id, resumeAt)}
+        onShowSubscribeRows={handleShowSubscribeRows}
       />
 
       <ActivePausesSection
@@ -259,29 +308,66 @@ function SavingsContent() {
         onResume={(id) => resumeProvider(id)}
       />
 
-      <div className="grid grid-cols-3 gap-[10px] mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-[10px] mb-4">
         <div className="bg-surface border border-border-main rounded-sm px-3 py-[10px]">
           <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kostnad/mån</div>
           <div className="text-base font-bold text-text-primary mt-[2px]">
             {advisor.totalMonthlyCost > 0 ? `${advisor.totalMonthlyCost} kr` : <Link href="/settings" className="text-accent no-underline text-xs">Ange →</Link>}
           </div>
           {advisor.totalMonthlyCost > 0 && followedTvCount > 0 && (
-            <div className="text-xxs text-text-muted mt-[2px]">
-              ~{Math.round(advisor.totalMonthlyCost / followedTvCount)} kr per följd serie
+            <div
+              className="text-xxs text-text-muted mt-[2px]"
+              title="Genomsnitt: total månadskostnad delat med antal serier i din Följer-lista"
+            >
+              {Math.round(advisor.totalMonthlyCost / followedTvCount)} kr per följd serie
             </div>
           )}
         </div>
         <div className="bg-surface border border-border-main rounded-sm px-3 py-[10px]">
           <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kan pausas</div>
-          <div className="text-base font-bold text-[#2e7d32] mt-[2px]">
-            {suggestedPauseCount > 0 ? `${suggestedPauseCount} ${suggestedPauseCount === 1 ? 'tjänst' : 'tjänster'}` : '—'}
-          </div>
+          {suggestedPauseCount > 0 ? (
+            <>
+              <div className="text-base font-bold text-[#2e7d32] mt-[2px]">
+                {pluralSv(suggestedPauseCount, 'tjänst', 'tjänster')}
+              </div>
+              {advisor.monthlySavings > 0 && (
+                <div className="text-xxs text-[#2e7d32] mt-[2px]">
+                  Spar {advisor.monthlySavings} kr/mån
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-base font-bold text-text-primary mt-[2px]">Inget just nu</div>
+              <div className="text-xxs text-text-muted mt-[2px]">
+                {activeProviders.length > 0
+                  ? `Alla ${pluralSv(activeProviders.length, 'tjänst', 'tjänster')} används`
+                  : 'Inga aktiva tjänster'}
+              </div>
+            </>
+          )}
         </div>
         <div className="bg-surface border border-border-main rounded-sm px-3 py-[10px]">
-          <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Potentiell besparing/mån</div>
-          <div className="text-base font-bold text-[#2e7d32] mt-[2px]">
-            {advisor.monthlySavings > 0 ? `${advisor.monthlySavings} kr` : '—'}
-          </div>
+          <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Mest använd</div>
+          {advisor.mostUsedProvider ? (
+            <>
+              <div className="text-base font-bold text-text-primary mt-[2px] flex items-center gap-[6px]">
+                <ProviderDot color={advisor.mostUsedProvider.color} size={8} />
+                {advisor.mostUsedProvider.shortName}
+              </div>
+              <div className="text-xxs text-text-muted mt-[2px]">
+                {[
+                  advisor.mostUsedProvider.followCount > 0 && `${advisor.mostUsedProvider.followCount} följer`,
+                  advisor.mostUsedProvider.willSeeCount > 0 && `${advisor.mostUsedProvider.willSeeCount} vill se`,
+                ].filter(Boolean).join(' · ')}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-base font-bold text-text-primary mt-[2px]">—</div>
+              <div className="text-xxs text-text-muted mt-[2px]">Inga titlar i Följer eller Vill se</div>
+            </>
+          )}
         </div>
       </div>
 
@@ -290,7 +376,7 @@ function SavingsContent() {
       <WillSeePerProvider rows={advisor.willSeeByProvider} />
 
       {subscribeRows.length > 0 && (
-        <details className="mb-3">
+        <details ref={subscribeDetailsRef} className="mb-3 scroll-mt-3">
           <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted cursor-pointer select-none list-none">
             Titlar på tjänster du inte har ({subscribeRows.length}) ›
           </summary>

@@ -20,6 +20,7 @@ import {
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
   ActivePause, PrimaryAction, WatchlistItem, WillSeePerProviderRow,
+  MostUsedProvider,
 } from '@/types';
 
 // Re-export pure helpers so existing imports of these symbols keep working.
@@ -88,6 +89,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         activePauses: [] as ActivePause[],
+        mostUsedProvider: null as MostUsedProvider | null,
       };
     }
     // Om alla TMDB-queries failar har vi ingen anchor-data att arbeta med.
@@ -101,6 +103,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         totalMonthlyCost: 0,
         primaryAction: { kind: 'idle', nextCheckDate: null } satisfies PrimaryAction,
         activePauses: [] as ActivePause[],
+        mostUsedProvider: null as MostUsedProvider | null,
       };
     }
 
@@ -363,6 +366,36 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       return { kind: 'idle', nextCheckDate: findIdleNextCheckDate(providerAdvisories, activePauses) };
     })();
 
+    // Räknas Följer och Vill se separat så kortet kan visa "X följer · Y vill se".
+    const mostUsedProvider: MostUsedProvider | null = (() => {
+      const counts = new Map<number, { follow: number; willSee: number }>();
+      for (const show of allAnchors) {
+        const isFollow = followingIds.has(show.tmdbId);
+        for (const pid of show.providerIds) {
+          if (!myProviderSet.has(pid)) continue;
+          const e = counts.get(pid) ?? { follow: 0, willSee: 0 };
+          if (isFollow) e.follow++;
+          else e.willSee++;
+          counts.set(pid, e);
+        }
+      }
+      const ranked = Array.from(counts.entries())
+        .map(([pid, c]) => ({ pid, follow: c.follow, willSee: c.willSee, total: c.follow + c.willSee }))
+        .sort((a, b) => b.total - a.total);
+      const top = ranked[0];
+      if (!top) return null;
+      const provider = getProvider(top.pid);
+      if (!provider) return null;
+      return {
+        providerId: top.pid,
+        providerName: provider.name,
+        shortName: provider.shortName,
+        color: provider.color,
+        followCount: top.follow,
+        willSeeCount: top.willSee,
+      };
+    })();
+
     return {
       providers: providerAdvisories,
       subscribeAdvice,
@@ -371,6 +404,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       totalMonthlyCost,
       primaryAction,
       activePauses,
+      mostUsedProvider,
     };
   }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 
