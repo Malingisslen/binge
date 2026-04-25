@@ -45,3 +45,5 @@ next-env.d.ts
 
 # claude code agent-lokal state
 .claude/
+.superpowers/
+.worktrees/
