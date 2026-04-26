@@ -9,7 +9,30 @@ import { crossMediaGenreId } from '@/lib/tmdb/genreMapping';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
-const POOL_TARGET = 50;
+const POOL_TARGET = 100;
+
+function discoverParamsMovie(genreId: number | null, dateParams: Record<string, string>, voteParam: Record<string, string>, page: number): Record<string, string> {
+  const p: Record<string, string> = {
+    sort_by: 'vote_average.desc',
+    'vote_count.gte': '2000',
+    ...(genreId !== null ? { with_genres: String(genreId) } : {}),
+    ...dateParams,
+    ...voteParam,
+  };
+  if (page > 1) p.page = String(page);
+  return p;
+}
+function discoverParamsTV(genreId: number | null, decade: string, voteParam: Record<string, string>, page: number): Record<string, string> {
+  const p: Record<string, string> = {
+    sort_by: 'vote_average.desc',
+    'vote_count.gte': '500',
+    ...(genreId !== null ? { with_genres: String(genreId) } : {}),
+    ...(decade ? { 'first_air_date.gte': `${decade}-01-01`, 'first_air_date.lte': `${Number(decade) + 9}-12-31` } : {}),
+    ...voteParam,
+  };
+  if (page > 1) p.page = String(page);
+  return p;
+}
 
 /**
  * Genre-id på `RowSpec` kommer från användarens dominerande genre, beräknad på
@@ -55,49 +78,28 @@ export function useRowGenreCanon(
 
   const queries = useQueries({
     queries: [
-      {
-        queryKey: ['rec-genre-canon-movie', movieGenreId, filters.decade, filters.voteAverageMin],
-        queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies({
-          sort_by: 'vote_average.desc',
-          'vote_count.gte': '2000',
-          with_genres: String(movieGenreId),
-          ...dateParams,
-          ...voteParam,
-        }, { signal }),
-        staleTime: TMDB_STALE.DISCOVER,
-        enabled: movieGenreId !== null,
-      },
-      {
-        queryKey: ['rec-genre-canon-tv', tvGenreId, filters.decade, filters.voteAverageMin],
-        queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV({
-          sort_by: 'vote_average.desc',
-          'vote_count.gte': '500',
-          with_genres: String(tvGenreId),
-          ...(filters.decade ? {
-            'first_air_date.gte': `${filters.decade}-01-01`,
-            'first_air_date.lte': `${Number(filters.decade) + 9}-12-31`,
-          } : {}),
-          ...voteParam,
-        }, { signal }),
-        staleTime: TMDB_STALE.DISCOVER,
-        enabled: tvGenreId !== null,
-      },
+      { queryKey: ['rec-genre-canon-movie', movieGenreId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
+      { queryKey: ['rec-genre-canon-movie', movieGenreId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverMovies(discoverParamsMovie(movieGenreId, dateParams, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: movieGenreId !== null },
+      { queryKey: ['rec-genre-canon-tv', tvGenreId, filters.decade, filters.voteAverageMin, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, filters.decade, voteParam, 1), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
+      { queryKey: ['rec-genre-canon-tv', tvGenreId, filters.decade, filters.voteAverageMin, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => discoverTV(discoverParamsTV(tvGenreId, filters.decade, voteParam, 2), { signal }), staleTime: TMDB_STALE.DISCOVER, enabled: tvGenreId !== null },
     ],
   });
 
-  const movieData = queries[0]?.data?.results;
-  const tvData = queries[1]?.data?.results;
+  const movieP1 = queries[0]?.data?.results;
+  const movieP2 = queries[1]?.data?.results;
+  const tvP1 = queries[2]?.data?.results;
+  const tvP2 = queries[3]?.data?.results;
   const isLoading = queries.some(q => q.isLoading);
 
   return useMemo(() => {
     if (genreId === undefined) return { rowSpec, visible: [], backingPool: [], isLoading: false };
     const items: RowTitle[] = [];
-    if (movieData) items.push(...movieData.map(r => ({ ...r, media_type: 'movie' as const })));
-    if (tvData) items.push(...tvData.map(r => ({ ...r, media_type: 'tv' as const })));
+    [...(movieP1 ?? []), ...(movieP2 ?? [])].forEach(r => items.push({ ...r, media_type: 'movie' as const }));
+    [...(tvP1 ?? []), ...(tvP2 ?? [])].forEach(r => items.push({ ...r, media_type: 'tv' as const }));
     items.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
     const filtered = applyClientFilters(dedupeAndExclude(items, excludedIds), filters);
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);
     return { rowSpec, ...split, isLoading };
-  }, [movieData, tvData, isLoading, genreId, excludedIds, filters, rowSpec]);
+  }, [movieP1, movieP2, tvP1, tvP2, isLoading, genreId, excludedIds, filters, rowSpec]);
 }

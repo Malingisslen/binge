@@ -13,7 +13,7 @@ import {
 import type { RowResult, RowSpec, FilterState, RowTitle, MediaType } from '@/types';
 
 const VISIBLE_CAP = 20;
-const POOL_TARGET = 50;
+const POOL_TARGET = 100;
 
 export function useRowLatestFav(
   rowSpec: RowSpec,
@@ -23,32 +23,23 @@ export function useRowLatestFav(
 ): RowResult {
   const queries = useQueries({
     queries: [
-      {
-        queryKey: ['rec-recommendations', seed?.mediaType, seed?.tmdbId],
-        queryFn: ({ signal }: { signal?: AbortSignal }) =>
-          getRecommendations(seed!.mediaType, seed!.tmdbId, { signal }),
-        staleTime: TMDB_STALE.RECOMMENDATIONS,
-        enabled: !!seed,
-      },
-      {
-        queryKey: ['rec-similar', seed?.mediaType, seed?.tmdbId],
-        queryFn: ({ signal }: { signal?: AbortSignal }) =>
-          getSimilar(seed!.mediaType, seed!.tmdbId, { signal }),
-        staleTime: TMDB_STALE.RECOMMENDATIONS,
-        enabled: !!seed,
-      },
+      { queryKey: ['rec-recommendations', seed?.mediaType, seed?.tmdbId, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => getRecommendations(seed!.mediaType, seed!.tmdbId, { signal, page: 1 }), staleTime: TMDB_STALE.RECOMMENDATIONS, enabled: !!seed },
+      { queryKey: ['rec-recommendations', seed?.mediaType, seed?.tmdbId, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => getRecommendations(seed!.mediaType, seed!.tmdbId, { signal, page: 2 }), staleTime: TMDB_STALE.RECOMMENDATIONS, enabled: !!seed },
+      { queryKey: ['rec-similar', seed?.mediaType, seed?.tmdbId, 1], queryFn: ({ signal }: { signal?: AbortSignal }) => getSimilar(seed!.mediaType, seed!.tmdbId, { signal, page: 1 }), staleTime: TMDB_STALE.RECOMMENDATIONS, enabled: !!seed },
+      { queryKey: ['rec-similar', seed?.mediaType, seed?.tmdbId, 2], queryFn: ({ signal }: { signal?: AbortSignal }) => getSimilar(seed!.mediaType, seed!.tmdbId, { signal, page: 2 }), staleTime: TMDB_STALE.RECOMMENDATIONS, enabled: !!seed },
     ],
   });
 
-  // Derive stable keys from query state to avoid memo recreation on every query change
-  const recsData = queries[0]?.data?.results;
-  const simsData = queries[1]?.data?.results;
-  const isLoadingKey = (queries[0]?.isLoading || queries[1]?.isLoading) ? 1 : 0;
+  const recsP1 = queries[0]?.data?.results;
+  const recsP2 = queries[1]?.data?.results;
+  const simsP1 = queries[2]?.data?.results;
+  const simsP2 = queries[3]?.data?.results;
+  const isLoadingKey = queries.some(q => q.isLoading) ? 1 : 0;
 
   return useMemo(() => {
     if (!seed) return { rowSpec, visible: [], backingPool: [], isLoading: false };
-    const recs = (recsData ?? []) as RowTitle[];
-    const sims = (simsData ?? []) as RowTitle[];
+    const recs = [...(recsP1 ?? []), ...(recsP2 ?? [])] as RowTitle[];
+    const sims = [...(simsP1 ?? []), ...(simsP2 ?? [])] as RowTitle[];
     const scored: { t: RowTitle; s: number }[] = [];
     recs.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType }, s: scoreSimilarity(i, 'recommendations') }));
     sims.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType }, s: scoreSimilarity(i, 'similar') }));
@@ -58,5 +49,5 @@ export function useRowLatestFav(
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);
     return { rowSpec, ...split, isLoading: isLoadingKey === 1 };
-  }, [recsData, simsData, isLoadingKey, seed, excludedIds, filters, rowSpec]);
+  }, [recsP1, recsP2, simsP1, simsP2, isLoadingKey, seed, excludedIds, filters, rowSpec]);
 }
