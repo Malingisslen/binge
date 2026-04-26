@@ -17,7 +17,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './config';
-import { toDate, randomId } from './utils';
+import { toDate, generateSecureToken, sha256Hex } from './utils';
 import type {
   Group,
   GroupDefaults,
@@ -27,6 +27,10 @@ import type {
   MediaType,
 } from '@/types';
 
+// Skapar en grupp och returnerar både groupId och plaintext-tokenet. Tokenet
+// hashas (sha256) innan det persisteras — plaintext finns BARA hos klienten
+// och i URL:n som ägaren delar. Caller ansvarar för att cacha plaintext (t.ex.
+// localStorage) ifall ägaren vill se länken igen utan att rotera.
 export async function createGroup(params: {
   ownerUid: string;
   ownerDisplayName: string;
@@ -35,13 +39,16 @@ export async function createGroup(params: {
   ownerProviders: number[];
   name: string;
   defaults: GroupDefaults;
-}): Promise<string> {
+}): Promise<{ groupId: string; inviteToken: string }> {
+  const inviteToken = generateSecureToken();
+  const inviteTokenHash = await sha256Hex(inviteToken);
+
   const groupRef = await addDoc(collection(db, 'groups'), {
     name: params.name,
     ownerUid: params.ownerUid,
     memberUids: [params.ownerUid],
     defaults: params.defaults,
-    inviteToken: randomId(),
+    inviteTokenHash,
     inviteTokenRotatedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -58,12 +65,12 @@ export async function createGroup(params: {
     joinedAt: serverTimestamp(),
   });
 
-  return groupRef.id;
+  return { groupId: groupRef.id, inviteToken };
 }
 
 export async function updateGroup(
   groupId: string,
-  patch: Partial<Pick<Group, 'name' | 'defaults' | 'inviteToken'>>,
+  patch: Partial<Pick<Group, 'name' | 'defaults'>>,
 ): Promise<void> {
   await updateDoc(doc(db, 'groups', groupId), {
     ...patch,
@@ -71,16 +78,18 @@ export async function updateGroup(
   });
 }
 
+// Roterar inbjudningstoken: genererar ny plaintext, lagrar ny hash, returnerar
+// plaintext. Befintliga invitelänkar (med gamla plaintext-tokenet) slutar
+// fungera direkt eftersom ny hash inte matchar.
 export async function rotateInviteToken(groupId: string): Promise<string> {
-  const token = randomId();
-  // updateDoc direkt (bypass updateGroup) för att kunna skriva
-  // inviteTokenRotatedAt som ligger utanför Pick-typen på updateGroup.
+  const inviteToken = generateSecureToken();
+  const inviteTokenHash = await sha256Hex(inviteToken);
   await updateDoc(doc(db, 'groups', groupId), {
-    inviteToken: token,
+    inviteTokenHash,
     inviteTokenRotatedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return token;
+  return inviteToken;
 }
 
 export async function hasInGroupWatchlist(groupId: string, tmdbId: number): Promise<boolean> {
@@ -89,9 +98,24 @@ export async function hasInGroupWatchlist(groupId: string, tmdbId: number): Prom
 }
 
 export async function disableInviteToken(groupId: string): Promise<void> {
-  await updateGroup(groupId, { inviteToken: null });
+  await updateDoc(doc(db, 'groups', groupId), {
+    inviteTokenHash: null,
+    updatedAt: serverTimestamp(),
+  });
 }
 
+// Joina en grupp via plaintext-token. Två-stegs-flöde:
+//
+// 1. Skriv joinAttempts/{uid} med plaintext-tokenet. Firestore-regeln hashar
+//    plaintext server-side och jämför mot inviteTokenHash på grupp-doc:et.
+//    Om hash matchar accepteras dokumentet — annars permission-denied.
+// 2. Uppdatera grupp-doc:et: lägg till sig själv i memberUids + skapa
+//    members/{uid}-doc. Grupp-update-regeln verifierar bara att joinAttempts-
+//    doc:et existerar för request.auth.uid; den bevisar att hash-checken
+//    passerade.
+//
+// Om steg 1 redan finns från tidigare misslyckad join, ta bort och försök igen
+// (självborttag är tillåtet).
 export async function joinGroupViaToken(params: {
   groupId: string;
   token: string;
@@ -105,28 +129,57 @@ export async function joinGroupViaToken(params: {
   const snap = await getDoc(ref);
   if (!snap.exists()) return { ok: false, reason: 'not_found' };
   const data = snap.data();
-  if (!data.inviteToken || data.inviteToken !== params.token) {
-    return { ok: false, reason: 'invalid_token' };
-  }
   const memberUids: string[] = data.memberUids ?? [];
   if (memberUids.includes(params.uid)) return { ok: false, reason: 'already_member' };
+  if (!data.inviteTokenHash) return { ok: false, reason: 'invalid_token' };
 
-  const batch = writeBatch(db);
-  batch.update(ref, {
-    memberUids: arrayUnion(params.uid),
-    updatedAt: serverTimestamp(),
-  });
-  batch.set(doc(db, 'groups', params.groupId, 'members', params.uid), {
-    uid: params.uid,
-    displayName: params.displayName,
-    username: params.username,
-    photoURL: params.photoURL,
-    providers: params.providers,
-    role: 'member',
-    notifications: true,
-    joinedAt: serverTimestamp(),
-  });
-  await batch.commit();
+  // Steg 1 — skriv joinAttempt. Rule:n hashar params.token server-side och
+  // verifierar att den matchar lagrad inviteTokenHash. Vid invalid token får
+  // vi permission-denied här.
+  const attemptRef = doc(db, 'groups', params.groupId, 'joinAttempts', params.uid);
+  try {
+    // Best-effort cleanup om gammalt attempt-doc finns kvar (t.ex. efter
+    // tidigare misslyckad rotation). Reglerna tillåter självborttag.
+    await deleteDoc(attemptRef).catch(() => {});
+    await setDoc(attemptRef, {
+      token: params.token,
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Permission-denied = hash matchade inte
+    console.error('joinAttempt rejected', err);
+    return { ok: false, reason: 'invalid_token' };
+  }
+
+  // Steg 2 — uppdatera grupp + lägg till member-doc. Rule:n verifierar att
+  // joinAttempts/{auth.uid} existerar (vilket den nu gör efter steg 1).
+  try {
+    const batch = writeBatch(db);
+    batch.update(ref, {
+      memberUids: arrayUnion(params.uid),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, 'groups', params.groupId, 'members', params.uid), {
+      uid: params.uid,
+      displayName: params.displayName,
+      username: params.username,
+      photoURL: params.photoURL,
+      providers: params.providers,
+      role: 'member',
+      notifications: true,
+      joinedAt: serverTimestamp(),
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('group update rejected', err);
+    return { ok: false, reason: 'invalid_token' };
+  }
+
+  // Best-effort: städa upp joinAttempt-doc:et nu när vi är medlem. Inte
+  // säkerhetskritiskt — token är ändå "spent" (om den roteras blir hashen
+  // ny och plaintext här blir värdelös).
+  void deleteDoc(attemptRef).catch(() => {});
+
   return { ok: true };
 }
 
@@ -245,7 +298,7 @@ export function groupDocToObject(id: string, data: Record<string, unknown>): Gro
       aggregation: 'least_misery',
       mediaType: 'both',
     },
-    inviteToken: (data.inviteToken as string | null) ?? null,
+    inviteTokenHash: (data.inviteTokenHash as string | null) ?? null,
     inviteTokenRotatedAt: data.inviteTokenRotatedAt ? toDate(data.inviteTokenRotatedAt) : null,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),

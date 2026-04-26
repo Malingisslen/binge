@@ -72,7 +72,10 @@ export interface Group {
   ownerUid: string;
   memberUids: string[];
   defaults: GroupDefaults;
-  inviteToken: string | null;
+  // Endast hash av inbjudningstoken lagras — plaintext finns bara i URL:n
+  // som ägaren delar och cachas client-side i localStorage. Firestore-regeln
+  // verifierar besittning av token via en sealed joinAttempts-subkollektion.
+  inviteTokenHash: string | null;
   inviteTokenRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

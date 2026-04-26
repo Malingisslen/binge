@@ -7,6 +7,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
 import { useAuth } from '@/hooks/useAuth';
 import { createGroup } from '@/lib/firebase/groups';
+import { cacheInviteToken } from '@/lib/groupInviteCache';
 import type {
   AggregationStrategy,
   GroupDefaults,
@@ -40,7 +41,7 @@ function NyGruppContent() {
     setSubmitting(true);
     try {
       const defaults: GroupDefaults = { providerMode, aggregation, mediaType };
-      const groupId = await createGroup({
+      const { groupId, inviteToken } = await createGroup({
         ownerUid: uid,
         ownerDisplayName: user.displayName,
         ownerUsername: user.username,
@@ -49,6 +50,8 @@ function NyGruppContent() {
         name: trimmed,
         defaults,
       });
+      // Cacha plaintext direkt så ägaren ser invite-länken på grupp-sidan.
+      cacheInviteToken(groupId, inviteToken);
       router.push(`/grupper/${groupId}`);
     } catch (err) {
       console.error(err);

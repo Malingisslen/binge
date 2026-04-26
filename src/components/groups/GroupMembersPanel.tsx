@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { UserPlus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { addMemberByUid, removeMember } from '@/lib/firebase/groups';
-import { lookupUserByHandle } from '@/lib/firebase/username';
+import { useUserSearch } from '@/hooks/useUserSearch';
+import { useAuth } from '@/hooks/useAuth';
+import type { ResolvedUser } from '@/lib/firebase/username';
 import type { GroupMember } from '@/types';
 
 /**
@@ -37,7 +39,7 @@ export function GroupMembersPanel({
         )}
       </div>
       {adding && isOwner && (
-        <AddByHandle
+        <AddMemberSearch
           groupId={groupId}
           existingUids={members.map(m => m.uid)}
           onDone={() => setAdding(false)}
@@ -91,27 +93,33 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
   );
 }
 
-function AddByHandle({
+// Prefix-sökning för att lägga till medlem. Skriv minst två tecken — och en
+// dropdown med matchande publika användare visas. Klick lägger till direkt.
+// Listan filtrerar bort befintliga medlemmar och en själv så ägaren inte kan
+// råka klicka på fel rad.
+function AddMemberSearch({
   groupId, existingUids, onDone,
 }: {
   groupId: string;
   existingUids: string[];
   onDone: () => void;
 }) {
-  const [handle, setHandle] = useState('');
-  const [working, setWorking] = useState(false);
+  const { uid: myUid } = useAuth();
+  const [q, setQ] = useState('');
+  const [adding, setAdding] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const { data: results, isLoading } = useUserSearch(q);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const filtered = (results ?? []).filter(u => u.uid !== myUid);
+
+  const handleAdd = async (target: ResolvedUser) => {
+    if (existingUids.includes(target.uid)) {
+      setErr('Användaren är redan medlem.');
+      return;
+    }
     setErr(null);
-    if (!handle.trim()) return;
-    setWorking(true);
+    setAdding(target.uid);
     try {
-      const target = await lookupUserByHandle(handle);
-      if (!target) { setErr('Hittade ingen användare med det @handle:t.'); return; }
-      if (existingUids.includes(target.uid)) { setErr('Användaren är redan medlem.'); return; }
-
       await addMemberByUid({
         groupId,
         uid: target.uid,
@@ -120,35 +128,79 @@ function AddByHandle({
         photoURL: target.photoURL,
         providers: target.myProviders,
       });
-      setHandle('');
       onDone();
-    } catch (e2) {
-      console.error(e2);
-      setErr('Kunde inte lägga till. Användaren kanske inte har en publik profil.');
+    } catch (e) {
+      console.error(e);
+      setErr('Kunde inte lägga till.');
     } finally {
-      setWorking(false);
+      setAdding(null);
     }
   };
 
   return (
-    <form onSubmit={submit} className="px-3 py-2 border-b border-border-light bg-white/50 space-y-1">
-      <div className="flex gap-1">
-        <input
-          type="text"
-          value={handle}
-          onChange={e => setHandle(e.target.value)}
-          placeholder="@handle"
-          className="flex-1 px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
-        />
-        <button
-          type="submit"
-          disabled={working}
-          className="px-2 py-1 bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
-        >
-          <UserPlus size={11} />
-        </button>
-      </div>
+    <div className="px-3 py-2 border-b border-border-light bg-white/50 space-y-1">
+      <input
+        type="text"
+        value={q}
+        onChange={e => { setQ(e.target.value); setErr(null); }}
+        placeholder="Sök efter @användarnamn eller namn..."
+        className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white outline-none"
+        autoFocus
+      />
+      {q.trim().length >= 2 && isLoading && (
+        <div className="text-xxs text-text-muted">Söker...</div>
+      )}
+      {q.trim().length >= 2 && !isLoading && filtered.length === 0 && (
+        <div className="text-xxs text-text-muted">
+          Hittade ingen publik profil som matchar.
+        </div>
+      )}
+      {filtered.length > 0 && (
+        <ul className="bg-white border border-border-main rounded-sm divide-y divide-border-light">
+          {filtered.map(u => {
+            const already = existingUids.includes(u.uid);
+            const busy = adding === u.uid;
+            return (
+              <li key={u.uid} className="px-2 py-[5px] flex items-center gap-2">
+                <SmallAvatar name={u.displayName} photoURL={u.photoURL} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-text-primary truncate">{u.displayName}</div>
+                  <div className="text-xxs text-text-muted truncate">@{u.username}</div>
+                </div>
+                <button
+                  onClick={() => handleAdd(u)}
+                  disabled={already || busy}
+                  className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-accent text-white disabled:bg-border-main disabled:text-text-muted disabled:cursor-default"
+                >
+                  {already ? 'Medlem' : busy ? '...' : 'Lägg till'}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {err && <div className="text-xxs text-red-700">{err}</div>}
-    </form>
+    </div>
+  );
+}
+
+function SmallAvatar({ name, photoURL }: { name: string; photoURL: string | null }) {
+  if (photoURL) {
+    return (
+      <img
+        src={photoURL}
+        alt=""
+        className="w-5 h-5 rounded-full object-cover shrink-0"
+        loading="lazy"
+        decoding="async"
+        width={20}
+        height={20}
+      />
+    );
+  }
+  return (
+    <div className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xxs flex items-center justify-center font-semibold shrink-0">
+      {(name?.[0] ?? '?').toUpperCase()}
+    </div>
   );
 }

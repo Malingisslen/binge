@@ -230,6 +230,29 @@ service cloud.firestore {
     // ---- Permanenta grupper (Fas 2) ----
     // Group-doc: läsbar för inloggade (unlisted-link-modell — gruppe-ID är 20 tecken).
     // Subcollections är låsta till medlemmar.
+    //
+    // SÄKERHETSMODELL för invite-tokens:
+    //
+    // 1. Group-doc:et lagrar BARA hash:en av inbjudningstoken
+    //    (inviteTokenHash, sha256). Plaintext-tokenet finns aldrig i
+    //    Firestore — det lever bara i URL:en som ägaren delar och cachas
+    //    client-side i localStorage.
+    //
+    // 2. Token-join verifieras via en sealed joinAttempts-subkollektion:
+    //    a) Joiner skriver groups/{id}/joinAttempts/{auth.uid} med plaintext.
+    //       Rule:n nedan hashar plaintext server-side och jämför mot lagrad
+    //       hash — bara matching plaintext accepteras.
+    //    b) Joiner uppdaterar groups/{id} för att lägga till sig själv i
+    //       memberUids. Rule:n nedan kollar bara att joinAttempts/{uid}
+    //       existerar — vilket bevisar att hash-checken passerade.
+    //
+    // 3. JoinAttempts har read: false så plaintext aldrig läses tillbaka.
+    //    Bara joiner själv kan skriva eller radera sin egen attempt-doc.
+    //
+    // 4. Members + watchlist subcollections är låsta till faktiska medlemmar.
+    //    Group-doc:et självt (namn, memberUids, hash, defaults) är
+    //    fortfarande läsbart för alla inloggade — det är medvetet "unlisted
+    //    link"-modell för att invite-preview ska kunna visa gruppnamn.
     match /groups/{groupId} {
       allow read: if isSignedIn();
 
@@ -238,7 +261,8 @@ service cloud.firestore {
         && request.resource.data.memberUids.hasOnly([request.auth.uid])
         && request.auth.uid in request.resource.data.memberUids;
 
-      // Tillåt: ägaren (full write), medlem som lämnar (självborttag), gäst som joinar via giltig token
+      // Tillåt: ägaren (full write), medlem som lämnar (självborttag), gäst
+      // som joinar (verifierad via joinAttempts-subkollektionen)
       allow update: if isSignedIn() && (
         resource.data.ownerUid == request.auth.uid
         || (
@@ -248,19 +272,23 @@ service cloud.firestore {
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
-          && request.resource.data.inviteToken == resource.data.inviteToken
+          && (!('inviteTokenHash' in request.resource.data)
+            || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
           && (!('inviteTokenRotatedAt' in resource.data)
             || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
         )
         || (
-          // Token-join — lägger till sig själv, övriga fält oförändrade
-          resource.data.inviteToken != null
-          && request.resource.data.inviteToken == resource.data.inviteToken
+          // Token-join — bevisad genom att joinAttempts/{auth.uid} existerar
+          // (vilket i sin tur kräver att hash-checken på den subcollection-
+          // regeln nedan passerade).
+          exists(/databases/$(database)/documents/groups/$(groupId)/joinAttempts/$(request.auth.uid))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
+          && (!('inviteTokenHash' in request.resource.data)
+            || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
           && (!('inviteTokenRotatedAt' in resource.data)
             || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
         )
@@ -268,6 +296,27 @@ service cloud.firestore {
 
       allow delete: if isSignedIn()
         && resource.data.ownerUid == request.auth.uid;
+
+      // ---- joinAttempts ----
+      // Sealed-after-create. Plaintext-token i payload jämförs server-side
+      // mot hash:en på parent-doc:et. Aldrig läsbar — finns bara för
+      // existens-check från group-update-regeln.
+      match /joinAttempts/{uid} {
+        allow read: if false;
+        allow create: if isSignedIn()
+          && uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['token', 'createdAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 256
+          && get(/databases/$(database)/documents/groups/$(groupId)).data.inviteTokenHash != null
+          && hashing.sha256(request.resource.data.token).toHexString().lower()
+             == get(/databases/$(database)/documents/groups/$(groupId)).data.inviteTokenHash;
+        allow update: if false;
+        // Självborttag tillåten så joiner kan rensa upp efter lyckad join
+        // eller försöka igen med ny token efter rotation.
+        allow delete: if isSignedIn() && uid == request.auth.uid;
+      }
 
       match /members/{memberUid} {
         allow read: if isSignedIn()

@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Search, LayoutDashboard, Compass, Calendar, BarChart3,
-  CreditCard, Star, Rss, Library, Tv, Film, BookmarkCheck, List, Users, UsersRound, CircleSlash,
+  CreditCard, Star, Rss, Library, Tv, Film, BookmarkCheck, List, Users, UsersRound, UserCircle2, CircleSlash,
 } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { label: 'Rekommendationer', href: '/recommendations', icon: Star },
   { label: 'Tillsammans', href: '/tillsammans/ny', icon: Users },
   { label: 'Grupper', href: '/grupper', icon: UsersRound },
+  { label: 'Vänner', href: '/my/friends', icon: UserCircle2 },
   { label: 'Flöde', href: '/feed', icon: Rss },
 ];
 

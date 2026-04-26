@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import {
@@ -8,6 +8,11 @@ import {
   leaveGroup,
   rotateInviteToken,
 } from '@/lib/firebase/groups';
+import {
+  cacheInviteToken,
+  clearInviteToken,
+  readInviteToken,
+} from '@/lib/groupInviteCache';
 import { useMountTime } from '@/hooks/useMountTime';
 
 /**
@@ -74,19 +79,33 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
 // till någon som inte längre hör hemma i gruppen.
 const TOKEN_STALE_DAYS = 180;
 
+// Plaintext-tokenet finns inte längre på Firestore (bara hash). Vi cachar
+// plaintext i localStorage per groupId så ägaren kan återbesöka panel:n och
+// kopiera länken igen. På en ny enhet syns inte länken — då måste ägaren
+// rotera för att få en ny synlig plaintext.
 export function InvitePanel({
   groupId, group,
 }: {
   groupId: string;
-  group: { inviteToken: string | null; inviteTokenRotatedAt?: Date | null };
+  group: { inviteTokenHash: string | null; inviteTokenRotatedAt?: Date | null };
 }) {
   const [copied, setCopied] = useState(false);
   const [working, setWorking] = useState(false);
+  const [cachedPlaintext, setCachedPlaintext] = useState<string | null>(null);
+
+  // Läs cache lazy på client (undviker SSR-mismatch)
+  useEffect(() => {
+    setCachedPlaintext(readInviteToken(groupId));
+  }, [groupId]);
+
+  // Token är aktivt så länge hash finns på doc:et
+  const tokenIsActive = group.inviteTokenHash !== null;
+
   const inviteUrl = useMemo(() => {
-    if (!group.inviteToken) return null;
+    if (!tokenIsActive || !cachedPlaintext) return null;
     if (typeof window === 'undefined') return null;
-    return `${window.location.origin}/grupper/${groupId}?invite=${group.inviteToken}`;
-  }, [group.inviteToken, groupId]);
+    return `${window.location.origin}/grupper/${groupId}?invite=${cachedPlaintext}`;
+  }, [tokenIsActive, cachedPlaintext, groupId]);
 
   const now = useMountTime();
   const tokenAgeDays = now !== null && group.inviteTokenRotatedAt
@@ -102,6 +121,29 @@ export function InvitePanel({
       setTimeout(() => setCopied(false), 1500);
     } catch {
       /* ignore */
+    }
+  };
+
+  const handleRotate = async () => {
+    setWorking(true);
+    try {
+      const plaintext = await rotateInviteToken(groupId);
+      cacheInviteToken(groupId, plaintext);
+      setCachedPlaintext(plaintext);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    if (!confirm('Inaktivera inbjudningslänken? Befintliga länkar slutar fungera.')) return;
+    setWorking(true);
+    try {
+      await disableInviteToken(groupId);
+      clearInviteToken(groupId);
+      setCachedPlaintext(null);
+    } finally {
+      setWorking(false);
     }
   };
 
@@ -136,21 +178,38 @@ export function InvitePanel({
             )}
             <div className="flex gap-1">
               <button
-                onClick={async () => {
-                  setWorking(true);
-                  try { await rotateInviteToken(groupId); } finally { setWorking(false); }
-                }}
+                onClick={handleRotate}
                 disabled={working}
                 className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
-                onClick={async () => {
-                  if (!confirm('Inaktivera inbjudningslänken? Befintliga länkar slutar fungera.')) return;
-                  setWorking(true);
-                  try { await disableInviteToken(groupId); } finally { setWorking(false); }
-                }}
+                onClick={handleDisable}
+                disabled={working}
+                className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+              >
+                Inaktivera
+              </button>
+            </div>
+          </>
+        ) : tokenIsActive ? (
+          <>
+            <p className="text-xxs text-text-muted leading-relaxed">
+              En aktiv inbjudningslänk finns men plaintext-värdet är inte sparat på den
+              här enheten — av säkerhetsskäl lagras det bara client-side. Generera en ny
+              för att få en synlig länk att kopiera. Den gamla länken slutar då fungera.
+            </p>
+            <div className="flex gap-1">
+              <button
+                onClick={handleRotate}
+                disabled={working}
+                className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={10} /> Generera ny
+              </button>
+              <button
+                onClick={handleDisable}
                 disabled={working}
                 className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
@@ -162,10 +221,7 @@ export function InvitePanel({
           <>
             <p className="text-xxs text-text-muted">Ingen aktiv inbjudningslänk.</p>
             <button
-              onClick={async () => {
-                setWorking(true);
-                try { await rotateInviteToken(groupId); } finally { setWorking(false); }
-              }}
+              onClick={handleRotate}
               disabled={working}
               className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
             >
