@@ -73,8 +73,6 @@ export interface RecurringPerson {
   name: string;
   recurrence: number;        // distinct 4-5★ titles
   knownFor: 'cast' | 'director';
-  /** Highest vote_average among the user's titles featuring this person. */
-  topTitleRating: number;
 }
 
 export interface RecurringKeyword {

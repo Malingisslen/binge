@@ -46,7 +46,7 @@ export function detectLatestFiveStar(
   for (const it of items) {
     if (it.rating !== 5) continue;
     if (!STRONG_SEED_STATUSES.includes(it.status)) continue;
-    const ts = it.updatedAt?.getTime() ?? 0;
+    const ts = it.updatedAt.getTime();
     if (ts < cutoffMs) continue;
     if (!best || ts > best.ts) best = { item: it, ts };
   }
@@ -87,7 +87,6 @@ export function detectRecurringPeople(
       name: b.name,
       recurrence: b.titles.size,
       knownFor: b.everDirector ? 'director' : 'cast',
-      topTitleRating: 0,
     }))
     .sort((a, b) => {
       if (b.recurrence !== a.recurrence) return b.recurrence - a.recurrence;
