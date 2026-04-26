@@ -12,6 +12,7 @@ export interface TMDBSearchResult {
   backdrop_path: string | null;
   overview: string;
   vote_average: number;
+  vote_count?: number;
   release_date?: string;
   first_air_date?: string;
   genre_ids: number[];

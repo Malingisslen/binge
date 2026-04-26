@@ -43,8 +43,14 @@ export function useRowSimilar(
     const recs = (queries[0]?.data?.results ?? []) as RowTitle[];
     const sims = (queries[1]?.data?.results ?? []) as RowTitle[];
     const scored: { t: RowTitle; s: number }[] = [];
-    recs.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType }, s: scoreSimilarity(i, 'recommendations') }));
-    sims.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType }, s: scoreSimilarity(i, 'similar') }));
+    recs.forEach((t, i) => {
+      const tWithType = { ...t, media_type: seed.mediaType } as RowTitle;
+      scored.push({ t: tWithType, s: scoreSimilarity(i, 'recommendations') });
+    });
+    sims.forEach((t, i) => {
+      const tWithType = { ...t, media_type: seed.mediaType } as RowTitle;
+      scored.push({ t: tWithType, s: scoreSimilarity(i, 'similar') });
+    });
     scored.sort((a, b) => b.s - a.s);
     const ranked = scored.map(x => x.t);
     const filtered = applyClientFilters(dedupeAndExclude(ranked, excludedIds), filters);

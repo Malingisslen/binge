@@ -39,8 +39,8 @@ export function useRowThematic(
     if (!keywordId || !data) return { rowSpec, visible: [], backingPool: [], isLoading };
     const items = (data.results ?? []).map(r => ({ ...r, media_type: 'movie' as const })) as RowTitle[];
     items.sort((a, b) => {
-      const sa = (a.vote_average ?? 0) * Math.log((typeof (a as any).vote_count === 'number' ? (a as any).vote_count : 0) + 1);
-      const sb = (b.vote_average ?? 0) * Math.log((typeof (b as any).vote_count === 'number' ? (b as any).vote_count : 0) + 1);
+      const sa = (a.vote_average ?? 0) * Math.log((a.vote_count ?? 0) + 1);
+      const sb = (b.vote_average ?? 0) * Math.log((b.vote_count ?? 0) + 1);
       return sb - sa;
     });
     const filtered = applyClientFilters(dedupeAndExclude(items, excludedIds), filters);

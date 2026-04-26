@@ -7,6 +7,8 @@ import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters } from '@/lib/recommendations/rowComposition';
 import type { RowResult, RowSpec, FilterState, RowTitle, TMDBSearchResult } from '@/types';
 
+type CrewWithJob = TMDBSearchResult & { job?: string };
+
 const VISIBLE_CAP = 20;
 const POOL_TARGET = 60;
 
@@ -27,11 +29,14 @@ export function useRowPerson(
   return useMemo(() => {
     if (!personId || !data) return { rowSpec, visible: [], backingPool: [], isLoading };
     const cast = (data.cast ?? []) as RowTitle[];
-    const crew = (data.crew ?? []).filter((c: any) => c.job === 'Director' && (c.media_type === 'movie' || c.media_type === 'tv')) as RowTitle[];
+    const crew = (data.crew ?? [])
+      .filter((c: CrewWithJob): c is CrewWithJob & { media_type: 'movie' | 'tv' } =>
+        c.job === 'Director' && (c.media_type === 'movie' || c.media_type === 'tv')
+      ) as RowTitle[];
     const merged = [...cast, ...crew];
     merged.sort((a, b) => {
-      const sa = (a.vote_average ?? 0) * Math.log((typeof (a as any).vote_count === 'number' ? (a as any).vote_count : 0) + 1);
-      const sb = (b.vote_average ?? 0) * Math.log((typeof (b as any).vote_count === 'number' ? (b as any).vote_count : 0) + 1);
+      const sa = (a.vote_average ?? 0) * Math.log((a.vote_count ?? 0) + 1);
+      const sb = (b.vote_average ?? 0) * Math.log((b.vote_count ?? 0) + 1);
       return sb - sa;
     });
     const filtered = applyClientFilters(dedupeAndExclude(merged, excludedIds), filters);
