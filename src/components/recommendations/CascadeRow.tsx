@@ -22,7 +22,10 @@ export default function CascadeRow({ result }: Props) {
 
   const providerMap = useSearchProviders(items);
 
-  if (!isLoading && items.length < 4) return null;
+  // Göm raden bara om den är helt tom efter laddning. Tidigare tröskel <4
+  // gjorde att rader försvann när användaren dismissat några titlar — bättre
+  // att behålla en kort rad och låta "visa fler"-länken leda till expanded view.
+  if (!isLoading && items.length === 0) return null;
 
   return (
     <section className="mb-6">

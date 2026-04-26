@@ -39,7 +39,7 @@ function applySort(items: RowTitle[], sort: SortKey): RowTitle[] {
 
 function gridFromResult(result: RowResult, sort: SortKey) {
   const all = [...result.visible, ...result.backingPool];
-  return <TitleGrid items={applySort(all, sort)} loading={result.isLoading && all.length === 0} />;
+  return <TitleGrid items={applySort(all, sort)} loading={result.isLoading && all.length === 0} showNotInterested />;
 }
 
 export default function RecommendationsExpanded({ rowKeyParam }: Props) {

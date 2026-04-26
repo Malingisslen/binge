@@ -137,17 +137,19 @@ export function getTVShow(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow>
 }
 
 // Recommendations (standalone — lighter than full detail call)
-export function getRecommendations(mediaType: 'movie' | 'tv', id: number, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch(`/${mediaType}/${id}/recommendations`, {}, opts);
+export function getRecommendations(mediaType: 'movie' | 'tv', id: number, opts?: TmdbFetchOpts & { page?: number }): Promise<TMDBListResponse<TMDBSearchResult>> {
+  const params: Record<string, string> = opts?.page && opts.page !== 1 ? { page: String(opts.page) } : {};
+  return tmdbFetch(`/${mediaType}/${id}/recommendations`, params, opts);
 }
 
 // Similar (broader than recommendations — based on keywords + genres)
 export function getSimilar(
   mediaType: 'movie' | 'tv',
   id: number,
-  opts?: TmdbFetchOpts,
+  opts?: TmdbFetchOpts & { page?: number },
 ): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch(`/${mediaType}/${id}/similar`, {}, opts);
+  const params: Record<string, string> = opts?.page && opts.page !== 1 ? { page: String(opts.page) } : {};
+  return tmdbFetch(`/${mediaType}/${id}/similar`, params, opts);
 }
 
 // Keywords for a movie title
@@ -198,8 +200,9 @@ export function getTVSeason(seriesId: number, seasonNumber: number, opts?: TmdbF
 }
 
 // Trending
-export function getTrending(mediaType: 'all' | 'movie' | 'tv' = 'all', timeWindow: 'day' | 'week' = 'week', opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
-  return tmdbFetch(`/trending/${mediaType}/${timeWindow}`, {}, opts);
+export function getTrending(mediaType: 'all' | 'movie' | 'tv' = 'all', timeWindow: 'day' | 'week' = 'week', opts?: TmdbFetchOpts & { page?: number }): Promise<TMDBListResponse<TMDBSearchResult>> {
+  const params: Record<string, string> = opts?.page && opts.page !== 1 ? { page: String(opts.page) } : {};
+  return tmdbFetch(`/trending/${mediaType}/${timeWindow}`, params, opts);
 }
 
 // Popular
