@@ -23,9 +23,10 @@ describe('STATUS_LABELS', () => {
 });
 
 describe('statusOptionsFor', () => {
-  it('TV menu offers vill_se, mina, avbruten — never sedd (avslutad är derived)', () => {
-    expect(statusOptionsFor('tv')).toEqual(['vill_se', 'mina', 'avbruten']);
-    expect(TV_STATUS_OPTIONS).not.toContain('sedd');
+  it('TV menu offers vill_se, mina, sedd (genväg → mina+lastWatched), avbruten', () => {
+    expect(statusOptionsFor('tv')).toEqual(['vill_se', 'mina', 'sedd', 'avbruten']);
+    // 'sedd' i TV-menyn är en UI-genväg som översätts till status=mina + lastWatched
+    // av QuickAddButton; den lagras aldrig som 'sedd' på en TV-titel.
   });
 
   it('Movie menu offers vill_se, sedd, avbruten — never mina (mina är TV-only)', () => {

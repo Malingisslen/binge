@@ -56,7 +56,26 @@ describe('splitVisibleAndPool', () => {
 describe('applyClientFilters', () => {
   const base: FilterState = {
     mediaType: 'all', genre: '', country: '', myProvidersOnly: false, decade: '', voteAverageMin: 0, searchText: '',
+    hideNonLatinTitles: false, hiddenCountries: [],
   };
+
+  it('filters by hideNonLatinTitles when set', () => {
+    const items = [
+      mkTitle({ id: 1, title: 'Parasite', original_title: '기생충' }),
+      mkTitle({ id: 2, title: 'Memento', original_title: 'Memento' }),
+    ];
+    expect(applyClientFilters(items, { ...base, hideNonLatinTitles: true }).map(t => t.id)).toEqual([2]);
+  });
+
+  it('filters by hiddenCountries (origin_country fully matches)', () => {
+    const items = [
+      mkTitle({ id: 1, origin_country: ['IN'] }),
+      mkTitle({ id: 2, origin_country: ['SE', 'IN'] }),
+      mkTitle({ id: 3, origin_country: ['SE'] }),
+    ];
+    // hide IN: only id 1 is fully IN; id 2 has SE+IN so survives
+    expect(applyClientFilters(items, { ...base, hiddenCountries: ['IN'] }).map(t => t.id)).toEqual([2, 3]);
+  });
 
   it('filters by mediaType', () => {
     const items = [

@@ -13,8 +13,10 @@ export const STATUS_LABELS: Record<WatchStatus, string> = {
 };
 
 // Status-alternativ som visas i StatusButton-dropdown per mediaType.
-// Notera: 'mina' bara för TV, 'sedd' bara för film.
-export const TV_STATUS_OPTIONS: WatchStatus[] = ['vill_se', 'mina', 'avbruten'];
+// För TV är 'sedd' en *genväg* — det sparas som 'mina' med lastWatched satt
+// till sista aireade avsnittet (sub-state derives till 'ikapp'/'avslutad').
+// 'sedd' lagras aldrig på en TV-titel (lazy migration normaliserar gamla docs).
+export const TV_STATUS_OPTIONS: WatchStatus[] = ['vill_se', 'mina', 'sedd', 'avbruten'];
 export const MOVIE_STATUS_OPTIONS: WatchStatus[] = ['vill_se', 'sedd', 'avbruten'];
 
 export function statusOptionsFor(mediaType: MediaType): WatchStatus[] {
@@ -25,6 +27,7 @@ export function statusOptionsFor(mediaType: MediaType): WatchStatus[] {
 // label på den aktiva valbart-att-välja-knappen. 'mina' = "Lägg till i samling".
 export function statusLabel(status: WatchStatus, mediaType?: MediaType): string {
   if (mediaType === 'movie' && status === 'mina') return 'Sedd';
+  if (mediaType === 'tv' && status === 'sedd') return 'Sedd (alla avsnitt)';
   return STATUS_LABELS[status];
 }
 
