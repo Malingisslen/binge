@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getPersonCredits } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters } from '@/lib/recommendations/rowComposition';
+import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, scorePopularity } from '@/lib/recommendations/rowComposition';
 import type { RowResult, RowSpec, FilterState, RowTitle, TMDBSearchResult } from '@/types';
 
 type CrewWithJob = TMDBSearchResult & { job?: string };
@@ -34,11 +34,7 @@ export function useRowPerson(
         c.job === 'Director' && (c.media_type === 'movie' || c.media_type === 'tv')
       ) as RowTitle[];
     const merged = [...cast, ...crew];
-    merged.sort((a, b) => {
-      const sa = (a.vote_average ?? 0) * Math.log((a.vote_count ?? 0) + 1);
-      const sb = (b.vote_average ?? 0) * Math.log((b.vote_count ?? 0) + 1);
-      return sb - sa;
-    });
+    merged.sort((a, b) => scorePopularity(b) - scorePopularity(a));
     const filtered = applyClientFilters(dedupeAndExclude(merged, excludedIds), filters);
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);

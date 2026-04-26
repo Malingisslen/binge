@@ -70,8 +70,15 @@ export function useRecommendationsCascade(): CascadeOutput {
     }],
   });
 
+  // Derive stable keys from query arrays to avoid recreating memo on every query state change
+  const detailDataKey = detailQueries.map(q => q.data ? 'd' : '').join(',');
+  const detailLoadingKey = detailQueries.some(q => q.isLoading) ? 1 : 0;
+  const keywordDataKey = keywordQueries.map(q => q.data ? 'k' : '').join(',');
+  const keywordLoadingKey = keywordQueries.some(q => q.isLoading) ? 1 : 0;
+  const upcomingDataLength = upcomingProbeQuery[0]?.data?.results?.length ?? 0;
+
   return useMemo(() => {
-    const isLoadingDetection = detailQueries.some(q => q.isLoading) || keywordQueries.some(q => q.isLoading);
+    const isLoadingDetection = detailLoadingKey === 1 || keywordLoadingKey === 1;
 
     // Build SeedCredits map from detail queries
     const credits = new Map<number, SeedCredits>();
@@ -99,7 +106,6 @@ export function useRecommendationsCascade(): CascadeOutput {
     const recurringKeywords = detectRecurringKeywords(allSeeds, keywordsByTmdb, 3);
     const dominantGenres = detectDominantGenres(items, 5);
     const latestFiveStar = detectLatestFiveStar(items, new Date(), FIVE_STAR_WINDOW_DAYS);
-    const upcomingCount = upcomingProbeQuery[0]?.data?.results?.length ?? 0;
 
     const rows = prioritizeRows({
       latestFiveStar,
@@ -109,7 +115,7 @@ export function useRecommendationsCascade(): CascadeOutput {
       recurringKeywords,
       dominantGenres,
       hasMyProviders: myProviders.length > 0,
-      upcomingCount,
+      upcomingCount: upcomingDataLength,
     });
 
     return {
@@ -120,5 +126,10 @@ export function useRecommendationsCascade(): CascadeOutput {
       isLoadingDetection,
       latestFiveStar,
     };
-  }, [items, strong, weak, allSeeds, detailQueries, keywordQueries, upcomingProbeQuery, myProviders]);
+    // detailQueries / keywordQueries are intentionally NOT in deps — they're
+    // fresh arrays from useQueries each render, defeating memoization. The
+    // derived *DataKey / *LoadingKey above capture the semantic state change
+    // (which queries have data, which are loading) without unstable references.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, strong, weak, allSeeds, detailDataKey, detailLoadingKey, keywordDataKey, keywordLoadingKey, upcomingDataLength, myProviders]);
 }

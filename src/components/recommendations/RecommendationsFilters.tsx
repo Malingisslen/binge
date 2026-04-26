@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
@@ -19,13 +19,14 @@ interface Props {
 export default function RecommendationsFilters({ filters, onChange, hasMyProviders }: Props) {
   const [searchInput, setSearchInput] = useState(filters.searchText);
   const debouncedSearch = useDebouncedValue(searchInput, 200);
+  const prevSearchRef = useRef(filters.searchText);
 
   useEffect(() => {
-    if (debouncedSearch !== filters.searchText) {
+    if (debouncedSearch !== prevSearchRef.current) {
       onChange({ ...filters, searchText: debouncedSearch });
+      prevSearchRef.current = debouncedSearch;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch]);
+  }, [debouncedSearch, onChange, filters]);
 
   const { data: movieGenres } = useQuery({
     queryKey: ['genres-movie'],

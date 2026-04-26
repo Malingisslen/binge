@@ -7,6 +7,7 @@ import { useNotInterested } from '@/hooks/useNotInterested';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { posterUrl } from '@/lib/tmdb/client';
 import type { RowResult, RowTitle } from '@/types';
 
 interface Props {
@@ -81,9 +82,7 @@ interface CardProps {
 
 function RowCard({ title, myProviders, providerMap, onDismiss }: CardProps) {
   const href = title.media_type === 'movie' ? `/movie/${title.id}` : `/tv/${title.id}`;
-  const poster = title.poster_path
-    ? `https://image.tmdb.org/t/p/w185${title.poster_path}`
-    : null;
+  const poster = posterUrl(title.poster_path, 'w185');
   const tWithName = title as RowTitle & { name?: string };
   const displayName = title.title ?? tWithName.name ?? '';
   const provs = providerMap[`${title.media_type}-${title.id}`]?.flatrate ?? [];

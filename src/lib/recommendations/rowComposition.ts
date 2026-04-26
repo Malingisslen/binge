@@ -99,3 +99,8 @@ export function scoreSimilarity(
   const base = 1 / (index + 1);
   return source === 'recommendations' ? base * 1.5 : base;
 }
+
+/** Score a title by popularity: vote_average × log(vote_count + 1). */
+export function scorePopularity(item: { vote_average?: number; vote_count?: number }): number {
+  return (item.vote_average ?? 0) * Math.log((item.vote_count ?? 0) + 1);
+}

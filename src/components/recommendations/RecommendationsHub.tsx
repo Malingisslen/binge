@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useNotInterested } from '@/hooks/useNotInterested';
@@ -37,13 +37,22 @@ export default function RecommendationsHub() {
     return s;
   }, [items, ni]);
 
+  const scrollThrottleRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const onScroll = () => {
-      const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 800;
-      if (nearBottom) setVisibleRowCount(c => Math.min(c + 2, cascade.rows.length));
+      if (scrollThrottleRef.current) return;
+      scrollThrottleRef.current = setTimeout(() => {
+        const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 800;
+        if (nearBottom) setVisibleRowCount(c => Math.min(c + 2, cascade.rows.length));
+        scrollThrottleRef.current = null;
+      }, 150);
     };
     window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollThrottleRef.current) clearTimeout(scrollThrottleRef.current);
+    };
   }, [cascade.rows.length]);
 
   const visibleRows = cascade.rows.slice(0, visibleRowCount);

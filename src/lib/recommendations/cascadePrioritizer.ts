@@ -2,6 +2,7 @@ import type { CascadeInput, RowSpec, Seed, RowId } from '@/types';
 import { rowKey } from '@/types';
 
 const B_KINDS = new Set<RowId['kind']>(['similar', 'person', 'latest-fav', 'upcoming']);
+const JTBD_SORT_PRIORITY: Record<RowSpec['jtbd'], number> = { B: 0, C: 1 };
 
 function jtbdOf(kind: RowId['kind']): RowSpec['jtbd'] {
   return B_KINDS.has(kind) ? 'B' : 'C';
@@ -109,7 +110,7 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
   // Sort by score desc; B-job tie-breaks before C-job; then rowKey for determinism
   out.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    if (a.jtbd !== b.jtbd) return a.jtbd === 'B' ? -1 : 1;
+    if (a.jtbd !== b.jtbd) return JTBD_SORT_PRIORITY[a.jtbd] - JTBD_SORT_PRIORITY[b.jtbd];
     return a.rowKey.localeCompare(b.rowKey);
   });
 

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { discoverMovies } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters } from '@/lib/recommendations/rowComposition';
+import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, scorePopularity } from '@/lib/recommendations/rowComposition';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
@@ -38,11 +38,7 @@ export function useRowThematic(
   return useMemo(() => {
     if (!keywordId || !data) return { rowSpec, visible: [], backingPool: [], isLoading };
     const items = (data.results ?? []).map(r => ({ ...r, media_type: 'movie' as const })) as RowTitle[];
-    items.sort((a, b) => {
-      const sa = (a.vote_average ?? 0) * Math.log((a.vote_count ?? 0) + 1);
-      const sb = (b.vote_average ?? 0) * Math.log((b.vote_count ?? 0) + 1);
-      return sb - sa;
-    });
+    items.sort((a, b) => scorePopularity(b) - scorePopularity(a));
     const filtered = applyClientFilters(dedupeAndExclude(items, excludedIds), filters);
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);

@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { discoverMovies } from '@/lib/tmdb/client';
+import { discoverMovies, posterUrl } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { X } from 'lucide-react';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
+
+const MIN_QUICK_RATES = 5;
 
 interface Props {
   open: boolean;
@@ -79,7 +81,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
         ) : (
           <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {titles.map(t => {
-              const poster = t.poster_path ? `https://image.tmdb.org/t/p/w185${t.poster_path}` : null;
+              const poster = posterUrl(t.poster_path, 'w185');
               const isRated = rated.has(t.id);
               return (
                 <div key={t.id} className={`border border-border-main rounded-sm p-2 text-xs ${isRated ? 'opacity-50' : ''}`}>
@@ -97,8 +99,8 @@ export default function QuickRateModal({ open, onClose }: Props) {
           </div>
         )}
         <footer className="p-3 border-t border-border-main flex justify-end sticky bottom-0 bg-surface">
-          <button onClick={onClose} disabled={rated.size < 5} className="bg-accent text-white text-xs px-4 py-2 rounded-sm disabled:opacity-50">
-            Klar ({rated.size}/5)
+          <button onClick={onClose} disabled={rated.size < MIN_QUICK_RATES} className="bg-accent text-white text-xs px-4 py-2 rounded-sm disabled:opacity-50">
+            Klar ({rated.size}/{MIN_QUICK_RATES})
           </button>
         </footer>
       </div>
