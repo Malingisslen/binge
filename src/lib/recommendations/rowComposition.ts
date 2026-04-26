@@ -64,6 +64,7 @@ export function applyClientFilters(
 ): RowTitle[] {
   const genreId = filters.genre ? Number(filters.genre) : null;
   return items.filter(t => {
+    if (filters.mediaType !== 'all' && t.media_type !== filters.mediaType) return false;
     if (genreId !== null && !(t.genre_ids ?? []).includes(genreId)) return false;
     if (filters.country) {
       const oc = t.origin_country ?? [];

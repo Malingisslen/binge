@@ -116,7 +116,10 @@ export interface RowSpec {
   };
 }
 
+export type MediaTypeFilter = 'all' | 'movie' | 'tv';
+
 export interface FilterState {
+  mediaType: MediaTypeFilter;
   genre: string;          // genre id as string, or ''
   country: string;        // ISO-3166 country, or ''
   myProvidersOnly: boolean;
@@ -126,6 +129,7 @@ export interface FilterState {
 }
 
 export const DEFAULT_FILTERS: FilterState = {
+  mediaType: 'all',
   genre: '',
   country: '',
   myProvidersOnly: false,

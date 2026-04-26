@@ -17,9 +17,32 @@ import RecommendationsFilters from './RecommendationsFilters';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
 import { DEFAULT_FILTERS } from '@/types';
-import type { FilterState, RowSpec, RowResult } from '@/types';
+import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
 
 const INITIAL_VISIBLE_ROWS = 5;
+
+const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
+  { value: 'all', label: 'Alla' },
+  { value: 'movie', label: 'Filmer' },
+  { value: 'tv', label: 'Serier' },
+];
+
+/**
+ * Filtrera bort medie-låsta rader (similar, latest-fav) vars seed-medietyp
+ * inte matchar aktivt mediatyp-filter. Andra rad-typer hanterar sin egen
+ * mediatyp inifrån (genre-canon/thematic/upcoming gör parallel-fetch;
+ * trending/person filtrerar per titel klient-sidigt).
+ */
+function rowMatchesMediaFilter(
+  spec: RowSpec,
+  mediaType: MediaTypeFilter,
+  latestFiveStar: { mediaType: 'movie' | 'tv' } | null,
+): boolean {
+  if (mediaType === 'all') return true;
+  if (spec.id.kind === 'similar') return spec.id.mediaType === mediaType;
+  if (spec.id.kind === 'latest-fav') return latestFiveStar?.mediaType === mediaType;
+  return true;
+}
 
 export default function RecommendationsHub() {
   const cascade = useRecommendationsCascade();
@@ -55,7 +78,11 @@ export default function RecommendationsHub() {
     };
   }, [cascade.rows.length]);
 
-  const visibleRows = cascade.rows.slice(0, visibleRowCount);
+  const filteredRows = useMemo(
+    () => cascade.rows.filter(spec => rowMatchesMediaFilter(spec, filters.mediaType, cascade.latestFiveStar)),
+    [cascade.rows, filters.mediaType, cascade.latestFiveStar],
+  );
+  const visibleRows = filteredRows.slice(0, visibleRowCount);
   const hiddenCountries = user?.hiddenCountries ?? [];
   const myProviders = user?.myProviders ?? [];
 
@@ -64,6 +91,20 @@ export default function RecommendationsHub() {
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h1 className="text-[18px] font-bold text-text-primary">För dig</h1>
         <p className="text-xs text-text-muted">Baserat på dina ratings, exklusive det du redan följer.</p>
+      </div>
+
+      <div className="flex gap-[1px] mb-3">
+        {MEDIA_TABS.map(t => (
+          <span
+            key={t.value}
+            onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
+            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+              filters.mediaType === t.value ? 'bg-accent text-white' : 'text-text-muted'
+            }`}
+          >
+            {t.label}
+          </span>
+        ))}
       </div>
 
       <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
@@ -83,8 +124,11 @@ export default function RecommendationsHub() {
         />
       ))}
 
-      {visibleRowCount < cascade.rows.length && (
+      {visibleRowCount < filteredRows.length && (
         <button onClick={() => setVisibleRowCount(c => c + 2)} className="text-xs text-accent mt-2">Visa fler rader ›</button>
+      )}
+      {filteredRows.length === 0 && cascade.rows.length > 0 && (
+        <p className="text-sm text-text-muted py-4">Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} i nuvarande rekommendationer. Byt mediatyp eller justera filter.</p>
       )}
     </>
   );
