@@ -25,6 +25,7 @@ export interface CascadeOutput {
   topGenreIds: number[];
   hasMyProviders: boolean;
   isLoadingDetection: boolean;
+  latestFiveStar: { tmdbId: number; mediaType: 'movie' | 'tv'; daysSince: number } | null;
 }
 
 export function useRecommendationsCascade(): CascadeOutput {
@@ -117,6 +118,7 @@ export function useRecommendationsCascade(): CascadeOutput {
       topGenreIds: dominantGenres.slice(0, 3).map(g => g.id),
       hasMyProviders: myProviders.length > 0,
       isLoadingDetection,
+      latestFiveStar,
     };
   }, [items, strong, weak, allSeeds, detailQueries, keywordQueries, upcomingProbeQuery, myProviders]);
 }
