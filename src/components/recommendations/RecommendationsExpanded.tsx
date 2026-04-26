@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -49,6 +49,8 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   const { items } = useWatchlist();
   const { items: ni } = useNotInterested();
   const { user } = useAuth();
+  const router = useRouter();
+  const goBack = useCallback(() => router.push('/recommendations'), [router]);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortKey>('relevance');
 
@@ -72,7 +74,12 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   if (!id || !spec) {
     return (
       <div>
-        <Link href="/recommendations" className="text-xs text-accent flex items-center gap-1 mb-3"><ChevronLeft size={12} />Tillbaka</Link>
+        <button
+          onClick={goBack}
+          className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-border-main rounded-sm bg-surface text-text-secondary hover:bg-surface-hover cursor-pointer"
+        >
+          <ChevronLeft size={14} /> Tillbaka till rekommendationer
+        </button>
         <p className="text-sm text-text-muted">Raden hittades inte. Den kan ha försvunnit efter ratings ändrats.</p>
       </div>
     );
@@ -80,7 +87,12 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
   return (
     <>
-      <Link href="/recommendations" className="text-xs text-accent flex items-center gap-1 mb-3"><ChevronLeft size={12} />Tillbaka till Rekommendationer</Link>
+      <button
+        onClick={goBack}
+        className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-border-main rounded-sm bg-surface text-text-secondary hover:bg-surface-hover cursor-pointer"
+      >
+        <ChevronLeft size={14} /> Tillbaka till rekommendationer
+      </button>
       <h1 className="text-[18px] font-bold text-text-primary mb-1">{spec.label}</h1>
       <p className="text-xs text-text-muted mb-3">{spec.description ?? ''}</p>
 
