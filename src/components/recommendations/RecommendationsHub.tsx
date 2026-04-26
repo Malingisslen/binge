@@ -53,6 +53,17 @@ export default function RecommendationsHub() {
   const [quickRateOpen, setQuickRateOpen] = useState(false);
   const [visibleRowCount, setVisibleRowCount] = useState(INITIAL_VISIBLE_ROWS);
 
+  // Synka user-prefs (hideNonLatin, hiddenCountries) in i filter när profil läses.
+  const userHideNonLatin = user?.hideNonLatinTitles ?? false;
+  const userHiddenCountries = user?.hiddenCountries ?? [];
+  useEffect(() => {
+    setFilters(f => (
+      f.hideNonLatinTitles === userHideNonLatin && f.hiddenCountries === userHiddenCountries
+        ? f
+        : { ...f, hideNonLatinTitles: userHideNonLatin, hiddenCountries: userHiddenCountries }
+    ));
+  }, [userHideNonLatin, userHiddenCountries]);
+
   const excludedIds = useMemo(() => {
     const s = new Set<number>();
     for (const i of items) s.add(i.tmdbId);
@@ -157,8 +168,8 @@ function RowDispatch(props: DispatchProps) {
   }
 }
 
-function TrendingRow({ spec, excludedIds, filters, hiddenCountries }: DispatchProps) {
-  const r = useRowTrending(spec, excludedIds, filters, hiddenCountries);
+function TrendingRow({ spec, excludedIds, filters }: DispatchProps) {
+  const r = useRowTrending(spec, excludedIds, filters);
   return <CascadeRow result={r} />;
 }
 

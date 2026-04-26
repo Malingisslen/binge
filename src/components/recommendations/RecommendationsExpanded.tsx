@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -51,6 +51,16 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   const { user } = useAuth();
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortKey>('relevance');
+
+  const userHideNonLatin = user?.hideNonLatinTitles ?? false;
+  const userHiddenCountries = user?.hiddenCountries ?? [];
+  useEffect(() => {
+    setFilters(f => (
+      f.hideNonLatinTitles === userHideNonLatin && f.hiddenCountries === userHiddenCountries
+        ? f
+        : { ...f, hideNonLatinTitles: userHideNonLatin, hiddenCountries: userHiddenCountries }
+    ));
+  }, [userHideNonLatin, userHiddenCountries]);
 
   const excludedIds = useMemo(() => {
     const s = new Set<number>();
@@ -134,8 +144,8 @@ function ExpandedDispatch(props: DispatchProps) {
   }
 }
 
-function TrendingExpanded({ spec, excludedIds, filters, sort, hiddenCountries }: DispatchProps) {
-  const r = useRowTrending(spec, excludedIds, filters, hiddenCountries);
+function TrendingExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowTrending(spec, excludedIds, filters);
   return gridFromResult(r, sort);
 }
 

@@ -126,6 +126,10 @@ export interface FilterState {
   decade: string;         // '1960'..'2020' or ''
   voteAverageMin: number; // 0..9 in 0.5 steps
   searchText: string;
+  // Always-on filters härledda från user.profile (settings-sidan styr dem,
+  // INTE filter-baren). Page komponenten synkar dessa när profilen läses in.
+  hideNonLatinTitles: boolean;
+  hiddenCountries: readonly string[];
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -136,6 +140,8 @@ export const DEFAULT_FILTERS: FilterState = {
   decade: '',
   voteAverageMin: 0,
   searchText: '',
+  hideNonLatinTitles: false,
+  hiddenCountries: [],
 };
 
 /** A title in a row — TMDBSearchResult plus invariant media_type. */

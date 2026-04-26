@@ -14,7 +14,6 @@ export function useRowTrending(
   rowSpec: RowSpec,
   excludedIds: ReadonlySet<number>,
   filters: FilterState,
-  hiddenCountries: readonly string[],
 ): RowResult {
   const { data, isLoading } = useQuery({
     queryKey: ['rec-trending', 'all', 'week'],
@@ -26,11 +25,10 @@ export function useRowTrending(
     const raw = (data?.results ?? []) as RowTitle[];
     const typed = raw
       .filter(isAddableMediaType)
-      .filter(t => !hiddenCountries.some(c => (t.origin_country ?? []).includes(c)))
       .map(t => ({ ...t, media_type: (t.media_type ?? 'movie') as 'movie' | 'tv' }));
     const filtered = applyClientFilters(dedupeAndExclude(typed, excludedIds), filters);
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);
     return { rowSpec, ...split, isLoading };
-  }, [data, excludedIds, filters, hiddenCountries, rowSpec, isLoading]);
+  }, [data, excludedIds, filters, rowSpec, isLoading]);
 }

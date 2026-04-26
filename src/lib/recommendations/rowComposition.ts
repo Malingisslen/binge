@@ -1,3 +1,4 @@
+import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import type { RowTitle, FilterState } from '@/types';
 
 /** Drop duplicates and any title whose id is in `excludedIds`. */
@@ -65,6 +66,11 @@ export function applyClientFilters(
   const genreId = filters.genre ? Number(filters.genre) : null;
   return items.filter(t => {
     if (filters.mediaType !== 'all' && t.media_type !== filters.mediaType) return false;
+    if (filters.hideNonLatinTitles) {
+      const tn = t as RowTitle & { name?: string; original_name?: string };
+      if (hasNonLatinTitle(t.title ?? tn.name, t.original_title ?? tn.original_name)) return false;
+    }
+    if (filters.hiddenCountries.length && isFromHiddenCountry(t.origin_country, [...filters.hiddenCountries])) return false;
     if (genreId !== null && !(t.genre_ids ?? []).includes(genreId)) return false;
     if (filters.country) {
       const oc = t.origin_country ?? [];
