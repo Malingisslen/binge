@@ -1,0 +1,25 @@
+
+> binge-app@0.1.0 typecheck
+> tsc --noEmit
+
+src/hooks/rows/useRowPerson.ts(30,43): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }, index: number, array: (TMDBSearchResult & { job?: string | undefined; department?: string | undefined; })[]) => value is RowTitle, thisArg?: any): RowTitle[]', gave the following error.
+    Argument of type '(c: RowTitle & { job?: string; }) => boolean' is not assignable to parameter of type '(value: TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }, index: number, array: (TMDBSearchResult & { job?: string | undefined; department?: string | undefined; })[]) => value is RowTitle'.
+      Types of parameters 'c' and 'value' are incompatible.
+        Type 'TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }' is not assignable to type 'TMDBSearchResult & { media_type: MediaType; } & { job?: string | undefined; }'.
+          Type 'TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }' is not assignable to type '{ media_type: MediaType; }'.
+            Types of property 'media_type' are incompatible.
+              Type '"person" | "movie" | "tv"' is not assignable to type 'MediaType'.
+                Type '"person"' is not assignable to type 'MediaType'.
+  Overload 2 of 2, '(predicate: (value: TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }, index: number, array: (TMDBSearchResult & { job?: string | undefined; department?: string | undefined; })[]) => unknown, thisArg?: any): (TMDBSearchResult & { ...; })[]', gave the following error.
+    Argument of type '(c: RowTitle & { job?: string; }) => boolean' is not assignable to parameter of type '(value: TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }, index: number, array: (TMDBSearchResult & { job?: string | undefined; department?: string | undefined; })[]) => unknown'.
+      Types of parameters 'c' and 'value' are incompatible.
+        Type 'TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }' is not assignable to type 'TMDBSearchResult & { media_type: MediaType; } & { job?: string | undefined; }'.
+          Type 'TMDBSearchResult & { job?: string | undefined; department?: string | undefined; }' is not assignable to type '{ media_type: MediaType; }'.
+            Types of property 'media_type' are incompatible.
+              Type '"person" | "movie" | "tv"' is not assignable to type 'MediaType'.
+                Type '"person"' is not assignable to type 'MediaType'.
+src/hooks/rows/useRowPerson.ts(35,54): error TS2339: Property 'vote_count' does not exist on type '{ media_type: "movie" | "tv"; id: number; title?: string | undefined; name?: string | undefined; original_title?: string | undefined; original_name?: string | undefined; poster_path: string | null; ... 6 more ...; origin_country?: string[] | undefined; }'.
+src/hooks/rows/useRowPerson.ts(36,54): error TS2339: Property 'vote_count' does not exist on type '{ media_type: "movie" | "tv"; id: number; title?: string | undefined; name?: string | undefined; original_title?: string | undefined; original_name?: string | undefined; poster_path: string | null; ... 6 more ...; origin_country?: string[] | undefined; }'.
+src/hooks/rows/useRowThematic.ts(42,54): error TS2339: Property 'vote_count' does not exist on type 'RowTitle'.
+src/hooks/rows/useRowThematic.ts(43,54): error TS2339: Property 'vote_count' does not exist on type 'RowTitle'.
