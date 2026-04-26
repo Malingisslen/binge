@@ -1,0 +1,151 @@
+'use client';
+
+import Link from 'next/link';
+import { useState, useMemo } from 'react';
+import { ChevronLeft } from 'lucide-react';
+import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
+import { useWatchlist } from '@/hooks/useWatchlist';
+import { useNotInterested } from '@/hooks/useNotInterested';
+import { useAuth } from '@/hooks/useAuth';
+import { parseRowKey, DEFAULT_FILTERS } from '@/types';
+import type { FilterState, RowSpec, RowResult, RowTitle } from '@/types';
+import RecommendationsFilters from './RecommendationsFilters';
+import TitleGrid from '@/components/title/TitleGrid';
+import { useRowTrending } from '@/hooks/rows/useRowTrending';
+import { useRowLatestFav } from '@/hooks/rows/useRowLatestFav';
+import { useRowSimilar } from '@/hooks/rows/useRowSimilar';
+import { useRowPerson } from '@/hooks/rows/useRowPerson';
+import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
+import { useRowThematic } from '@/hooks/rows/useRowThematic';
+import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
+
+interface Props {
+  rowKeyParam: string;
+}
+
+type SortKey = 'relevance' | 'rating' | 'release';
+
+function applySort(items: RowTitle[], sort: SortKey): RowTitle[] {
+  if (sort === 'rating')   return [...items].sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+  if (sort === 'release')  return [...items].sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''));
+  return items;
+}
+
+function gridFromResult(result: RowResult, sort: SortKey) {
+  const all = [...result.visible, ...result.backingPool];
+  return <TitleGrid items={applySort(all, sort)} loading={result.isLoading && all.length === 0} />;
+}
+
+export default function RecommendationsExpanded({ rowKeyParam }: Props) {
+  const id = parseRowKey(rowKeyParam);
+  const cascade = useRecommendationsCascade();
+  const spec = cascade.rows.find(r => r.rowKey === rowKeyParam);
+  const { items } = useWatchlist();
+  const { items: ni } = useNotInterested();
+  const { user } = useAuth();
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<SortKey>('relevance');
+
+  const excludedIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const i of items) s.add(i.tmdbId);
+    for (const n of ni) s.add(n.tmdbId);
+    return s;
+  }, [items, ni]);
+
+  if (!id || !spec) {
+    return (
+      <div>
+        <Link href="/recommendations" className="text-xs text-accent flex items-center gap-1 mb-3"><ChevronLeft size={12} />Tillbaka</Link>
+        <p className="text-sm text-text-muted">Raden hittades inte. Den kan ha försvunnit efter ratings ändrats.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Link href="/recommendations" className="text-xs text-accent flex items-center gap-1 mb-3"><ChevronLeft size={12} />Tillbaka till Rekommendationer</Link>
+      <h1 className="text-[18px] font-bold text-text-primary mb-1">{spec.label}</h1>
+      <p className="text-xs text-text-muted mb-3">{spec.description ?? ''}</p>
+
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
+        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary">
+          <option value="relevance">Relevans</option>
+          <option value="rating">Betyg</option>
+          <option value="release">Release-datum</option>
+        </select>
+      </div>
+
+      <ExpandedDispatch
+        spec={spec}
+        excludedIds={excludedIds}
+        filters={filters}
+        sort={sort}
+        myProviders={user?.myProviders ?? []}
+        topGenreIds={cascade.topGenreIds}
+        hiddenCountries={user?.hiddenCountries ?? []}
+        latestFiveStar={cascade.latestFiveStar}
+      />
+    </>
+  );
+}
+
+interface DispatchProps {
+  spec: RowSpec;
+  excludedIds: ReadonlySet<number>;
+  filters: FilterState;
+  sort: SortKey;
+  myProviders: number[];
+  topGenreIds: number[];
+  hiddenCountries: string[];
+  latestFiveStar: { tmdbId: number; mediaType: 'movie' | 'tv'; daysSince: number } | null;
+}
+
+function ExpandedDispatch(props: DispatchProps) {
+  switch (props.spec.id.kind) {
+    case 'trending':    return <TrendingExpanded {...props} />;
+    case 'latest-fav':  return <LatestFavExpanded {...props} />;
+    case 'similar':     return <SimilarExpanded {...props} />;
+    case 'person':      return <PersonExpanded {...props} />;
+    case 'genre-canon': return <GenreExpanded {...props} />;
+    case 'thematic':    return <ThematicExpanded {...props} />;
+    case 'upcoming':    return <UpcomingExpanded {...props} />;
+  }
+}
+
+function TrendingExpanded({ spec, excludedIds, filters, sort, hiddenCountries }: DispatchProps) {
+  const r = useRowTrending(spec, excludedIds, filters, hiddenCountries);
+  return gridFromResult(r, sort);
+}
+
+function LatestFavExpanded({ spec, excludedIds, filters, sort, latestFiveStar }: DispatchProps) {
+  const seed = latestFiveStar ? { tmdbId: latestFiveStar.tmdbId, mediaType: latestFiveStar.mediaType } : null;
+  const r = useRowLatestFav(spec, seed, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function SimilarExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowSimilar(spec, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function PersonExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowPerson(spec, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function GenreExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowGenreCanon(spec, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function ThematicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowThematic(spec, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function UpcomingExpanded({ spec, excludedIds, filters, sort, myProviders, topGenreIds }: DispatchProps) {
+  const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
