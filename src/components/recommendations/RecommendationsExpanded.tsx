@@ -8,7 +8,13 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useNotInterested } from '@/hooks/useNotInterested';
 import { useAuth } from '@/hooks/useAuth';
 import { parseRowKey, DEFAULT_FILTERS } from '@/types';
-import type { FilterState, RowSpec, RowResult, RowTitle } from '@/types';
+import type { FilterState, RowSpec, RowResult, RowTitle, MediaTypeFilter } from '@/types';
+
+const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
+  { value: 'all', label: 'Alla' },
+  { value: 'movie', label: 'Filmer' },
+  { value: 'tv', label: 'Serier' },
+];
 import RecommendationsFilters from './RecommendationsFilters';
 import TitleGrid from '@/components/title/TitleGrid';
 import { useRowTrending } from '@/hooks/rows/useRowTrending';
@@ -67,6 +73,20 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
       <Link href="/recommendations" className="text-xs text-accent flex items-center gap-1 mb-3"><ChevronLeft size={12} />Tillbaka till Rekommendationer</Link>
       <h1 className="text-[18px] font-bold text-text-primary mb-1">{spec.label}</h1>
       <p className="text-xs text-text-muted mb-3">{spec.description ?? ''}</p>
+
+      <div className="flex gap-[1px] mb-3">
+        {MEDIA_TABS.map(t => (
+          <span
+            key={t.value}
+            onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
+            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+              filters.mediaType === t.value ? 'bg-accent text-white' : 'text-text-muted'
+            }`}
+          >
+            {t.label}
+          </span>
+        ))}
+      </div>
 
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />

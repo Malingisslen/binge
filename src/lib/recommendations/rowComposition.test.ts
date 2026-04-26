@@ -55,8 +55,18 @@ describe('splitVisibleAndPool', () => {
 
 describe('applyClientFilters', () => {
   const base: FilterState = {
-    genre: '', country: '', myProvidersOnly: false, decade: '', voteAverageMin: 0, searchText: '',
+    mediaType: 'all', genre: '', country: '', myProvidersOnly: false, decade: '', voteAverageMin: 0, searchText: '',
   };
+
+  it('filters by mediaType', () => {
+    const items = [
+      mkTitle({ id: 1, media_type: 'movie' }),
+      mkTitle({ id: 2, media_type: 'tv' }),
+    ];
+    expect(applyClientFilters(items, { ...base, mediaType: 'movie' }).map(t => t.id)).toEqual([1]);
+    expect(applyClientFilters(items, { ...base, mediaType: 'tv' }).map(t => t.id)).toEqual([2]);
+    expect(applyClientFilters(items, { ...base, mediaType: 'all' }).map(t => t.id)).toEqual([1, 2]);
+  });
 
   it('filters by decade', () => {
     const items = [
