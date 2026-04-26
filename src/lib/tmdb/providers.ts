@@ -143,3 +143,21 @@ export function canonicalProviderId(id: number): number {
 export function getProviderColor(id: number): string {
   return PROVIDER_MAP.get(id)?.color ?? '#888';
 }
+
+// Plockar ut SE-streamingproviders från en TMDB-detalj (movie eller TV).
+// Använder samma kategorier (flatrate + free + ads — inte rent/buy) och samma
+// canonical-mapping som vi sparar på watchlist-items. Returnerar en
+// dedupad lista av canonical provider_ids. Tom array betyder att TMDB inte
+// listar någon SE-streamingtjänst för titeln.
+export function extractSEProviders(detail: {
+  'watch/providers'?: { results: { SE?: { flatrate?: { provider_id: number }[]; free?: { provider_id: number }[]; ads?: { provider_id: number }[] } } };
+}): number[] {
+  const se = detail['watch/providers']?.results?.SE;
+  if (!se) return [];
+  const raw = [
+    ...(se.flatrate ?? []),
+    ...(se.free ?? []),
+    ...(se.ads ?? []),
+  ].map(p => canonicalProviderId(p.provider_id));
+  return Array.from(new Set(raw));
+}

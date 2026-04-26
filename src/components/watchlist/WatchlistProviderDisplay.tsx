@@ -12,9 +12,28 @@ import { getProvider } from '@/lib/tmdb/providers';
 
 const MAX_PROVIDERS_SHOWN = 3;
 
-export function ProviderChips({ providers, myProviders }: { providers: number[]; myProviders: number[] }) {
+export function ProviderChips({
+  providers,
+  myProviders,
+  providersCheckedAt,
+}: {
+  providers: number[];
+  myProviders: number[];
+  // När satt + providers tom = vi har frågat TMDB och titeln streamas inte
+  // i SE just nu. Visa dämpad indikator istället för tomt.
+  providersCheckedAt?: Date | null;
+}) {
   const items = providers.slice(0, MAX_PROVIDERS_SHOWN);
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    if (providersCheckedAt == null) return null;
+    return (
+      <div className="flex flex-wrap gap-[2px]">
+        <span className="text-xxs px-1 py-[1px] border border-border-light text-text-muted/70 rounded-sm inline-block">
+          Ej på SE
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-[2px]">
       {items.map(id => {

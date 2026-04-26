@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
 import StatCard from '@/components/ui/StatCard';
@@ -46,6 +47,11 @@ function StatsContent() {
       .filter(p => p.provider)
       .sort((a, b) => b.count - a.count);
 
+    // Antal items där vi faktiskt frågat TMDB om SE-providers. Skiljer sig
+    // från items.length när användaren har titlar som backfillen inte hunnit
+    // checka — toppen-tjänster-räkningen blir då tunnare än verkligheten.
+    const withProviderData = items.filter(i => i.providersCheckedAt != null).length;
+
     const totalRewatches = items.reduce((sum, i) => sum + (i.rewatchCount ?? 0), 0);
 
     const monthlyActivity: Record<string, number> = {};
@@ -59,7 +65,7 @@ function StatsContent() {
 
     const moviePct = items.length > 0 ? Math.round((movies.length / items.length) * 100) : 0;
 
-    return { following, watched, movies, tvShows, rated, avgRating, ratingDist, topProviders, totalRewatches, activityMonths, moviePct, total: items.length };
+    return { following, watched, movies, tvShows, rated, avgRating, ratingDist, topProviders, withProviderData, totalRewatches, activityMonths, moviePct, total: items.length };
   }, [items]);
 
   if (stats.total === 0) {
@@ -145,8 +151,19 @@ function StatsContent() {
       {/* Streamingtjänster — horizontal colored bars */}
       {stats.topProviders.length > 0 && (
         <div className="bg-surface border border-border-main rounded-sm mb-4">
-          <div className="px-3 py-[6px] border-b border-border-light">
+          <div className="px-3 py-[6px] border-b border-border-light flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-text-secondary">Streamingtjänster</span>
+            <span className="text-xxs text-text-muted">
+              Baserat på {stats.withProviderData} av {stats.total} titlar med streaming-data
+              {stats.withProviderData < stats.total - 5 && (
+                <>
+                  {' — '}
+                  <Link href="/settings" className="text-accent hover:underline">
+                    uppdatera smakdata
+                  </Link>
+                </>
+              )}
+            </span>
           </div>
           <div className="px-3 py-2">
             {stats.topProviders.slice(0, 8).map(p => (

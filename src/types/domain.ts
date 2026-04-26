@@ -34,6 +34,11 @@ export interface WatchlistItem {
   dropped: boolean;
   rewatchCount: number;
   providers: number[];
+  // Senast vi frågade TMDB om watch/providers.results.SE för denna titel.
+  // null = aldrig frågat (cold). Sätts av backfillen oavsett om TMDB
+  // returnerade providers eller tom lista — gör att vi kan särskilja
+  // "checked-empty" från "never-checked" och periodiskt re-checka stale data.
+  providersCheckedAt: Date | null;
   genreIds: number[];
   tmdbStatus: string | null;
   addedAt: Date;

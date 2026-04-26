@@ -59,6 +59,7 @@ function makeWatchlistItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     dropped: false,
     rewatchCount: 0,
     providers: [],
+    providersCheckedAt: null,
     genreIds: [],
     tmdbStatus: null,
     addedAt: new Date(),

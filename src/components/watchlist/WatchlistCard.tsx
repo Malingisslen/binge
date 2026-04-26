@@ -106,7 +106,7 @@ export function WatchlistCard({
           {item.releaseYear ?? '—'}
           {item.mediaType === 'tv' && item.totalSeasons ? ` · ${item.totalSeasons} säsong${item.totalSeasons === 1 ? '' : 'er'}` : ''}
         </div>
-        {providersToShow.length > 0 && (
+        {providersToShow.length > 0 ? (
           <div className="mt-[4px] flex flex-wrap gap-[2px]">
             {providersToShow.map(id => {
               const p = getProvider(id);
@@ -124,7 +124,13 @@ export function WatchlistCard({
               );
             })}
           </div>
-        )}
+        ) : item.providersCheckedAt != null ? (
+          <div className="mt-[4px] flex flex-wrap gap-[2px]">
+            <span className="text-xxs px-1 py-[1px] border border-border-light text-text-muted/70 rounded-sm inline-block">
+              Ej på SE
+            </span>
+          </div>
+        ) : null}
         {item.mediaType === 'tv' && (
           <div className="mt-[5px] flex items-center gap-[6px]">
             <div className="flex-1 h-[3px] bg-[#eee] rounded-sm overflow-hidden">

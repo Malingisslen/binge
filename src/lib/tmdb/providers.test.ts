@@ -5,6 +5,7 @@ import {
   getProvider,
   canonicalProviderId,
   getProviderColor,
+  extractSEProviders,
 } from './providers';
 
 describe('SWEDISH_PROVIDERS catalog', () => {
@@ -91,6 +92,59 @@ describe('getProviderColor', () => {
 
   it('returns a fallback grey for unknown ids', () => {
     expect(getProviderColor(99999)).toBe('#888');
+  });
+});
+
+describe('extractSEProviders', () => {
+  it('returns empty array when watch/providers is missing', () => {
+    expect(extractSEProviders({})).toEqual([]);
+  });
+
+  it('returns empty array when SE region is missing', () => {
+    expect(extractSEProviders({ 'watch/providers': { results: {} } })).toEqual([]);
+  });
+
+  it('returns empty array when SE has no flatrate/free/ads', () => {
+    expect(extractSEProviders({ 'watch/providers': { results: { SE: {} } } })).toEqual([]);
+  });
+
+  it('combines flatrate + free + ads', () => {
+    const result = extractSEProviders({
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 8 }],   // Netflix
+            free: [{ provider_id: 520 }],     // SVT Play
+            ads: [{ provider_id: 337 }],      // Disney+
+          },
+        },
+      },
+    });
+    expect(result).toEqual(expect.arrayContaining([8, 520, 337]));
+    expect(result).toHaveLength(3);
+  });
+
+  it('canonicalises alias ids (TV4 Play 1944 → 489)', () => {
+    const result = extractSEProviders({
+      'watch/providers': { results: { SE: { flatrate: [{ provider_id: 1944 }] } } },
+    });
+    expect(result).toEqual([489]);
+  });
+
+  it('dedupes when same canonical id appears across categories', () => {
+    // En tjänst kan listas både i flatrate och ads (canonical 489 = TV4 Play
+    // via både 489 och alias 1944).
+    const result = extractSEProviders({
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 489 }],
+            ads: [{ provider_id: 1944 }],
+          },
+        },
+      },
+    });
+    expect(result).toEqual([489]);
   });
 });
 

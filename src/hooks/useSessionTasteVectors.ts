@@ -39,6 +39,7 @@ export function useSessionTasteVectors(
             dropped: (data.dropped as boolean) ?? false,
             rewatchCount: 0,
             providers: [],
+            providersCheckedAt: null,
             genreIds: (data.genreIds as number[]) ?? [],
             tmdbStatus: null,
             addedAt: new Date(),

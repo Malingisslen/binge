@@ -34,6 +34,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     dropped,
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
+    providersCheckedAt: data.providersCheckedAt ? toDate(data.providersCheckedAt) : null,
     genreIds: (data.genreIds as number[]) ?? [],
     tmdbStatus: (data.tmdbStatus as string) ?? null,
     addedAt: toDate(data.addedAt),
@@ -44,7 +45,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
 
 interface WatchlistState {
   items: WatchlistItem[];
-  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'>) => Promise<void>;
+  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt'>) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
@@ -81,7 +82,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [uid]);
 
-  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'>) => {
+  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
     const isFirst = items.length === 0;

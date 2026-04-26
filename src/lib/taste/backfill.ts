@@ -1,39 +1,63 @@
-import { collection, doc, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { getMovie, getTVShow } from '@/lib/tmdb/client';
-import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { extractSEProviders } from '@/lib/tmdb/providers';
 
 export interface BackfillProgress {
   total: number;
   processed: number;
   updated: number;
+  refreshed: number;
   skipped: number;
   failed: number;
 }
 
-// Walkar användarens watchlist och fyller i genreIds + providers på items
-// som saknar något av dem. Körs som one-shot från settings — inte en
-// återkommande operation. TMDB-anropen körs i små batchar (5 parallella)
-// för att inte bränna rate-limit. `watch/providers` följer redan med i
-// getMovie/getTVShow via append_to_response, så ingen extra request per item.
+// Items där TMDB redan bekräftat samma SE-providers nyligare än så här
+// hoppas över i nästa backfill-körning. SE-katalogerna rör sig ofta nog att
+// 60 dagar är en bra balans mellan färskhet och TMDB-rate-limit-budget.
+const STALE_AFTER_MS = 60 * 24 * 60 * 60 * 1000;
+
+function timestampToMs(val: unknown): number | null {
+  if (val instanceof Timestamp) return val.toMillis();
+  if (val instanceof Date) return val.getTime();
+  return null;
+}
+
+function arraysEqualAsSets(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const setA = new Set(a);
+  for (const v of b) if (!setA.has(v)) return false;
+  return true;
+}
+
+// Walkar användarens watchlist och fyller i / uppdaterar genreIds + providers
+// på items. Sätter alltid `providersCheckedAt` när TMDB svarat — gör att vi
+// kan särskilja "checked-empty" från "never-checked" och skippa items som
+// redan re-checkades nyligen (60 dagar). TMDB-anropen körs i små batchar
+// (5 parallella) för att inte bränna rate-limit. `watch/providers` följer
+// redan med i getMovie/getTVShow via append_to_response.
 export async function backfillGenreIds(
   uid: string,
   onProgress?: (p: BackfillProgress) => void,
 ): Promise<BackfillProgress> {
   const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
+  const cutoffMs = Date.now() - STALE_AFTER_MS;
   const needs = snap.docs.filter(d => {
     const data = d.data();
     const g = data.genreIds;
     const p = data.providers;
     const missingGenres = !Array.isArray(g) || g.length === 0;
-    const missingProviders = !Array.isArray(p) || p.length === 0;
-    return missingGenres || missingProviders;
+    const missingProviders = !Array.isArray(p);
+    const checkedAtMs = timestampToMs(data.providersCheckedAt);
+    const isStale = checkedAtMs == null || checkedAtMs < cutoffMs;
+    return missingGenres || missingProviders || isStale;
   });
 
   const state: BackfillProgress = {
     total: needs.length,
     processed: 0,
     updated: 0,
+    refreshed: 0,
     skipped: 0,
     failed: 0,
   };
@@ -53,26 +77,32 @@ export async function backfillGenreIds(
       try {
         const detail = mediaType === 'movie' ? await getMovie(tmdbId) : await getTVShow(tmdbId);
         const genreIds = detail.genres?.map(g => g.id) ?? [];
-        const se = detail['watch/providers']?.results?.SE;
-        const rawProviders = [
-          ...(se?.flatrate ?? []),
-          ...(se?.free ?? []),
-          ...(se?.ads ?? []),
-        ].map(p => canonicalProviderId(p.provider_id));
-        const uniqueProviders = Array.from(new Set(rawProviders));
+        const uniqueProviders = extractSEProviders(detail);
 
-        const update: Record<string, unknown> = { updatedAt: serverTimestamp() };
-        const existingGenres = Array.isArray(data.genreIds) ? data.genreIds : [];
-        const existingProviders = Array.isArray(data.providers) ? data.providers : [];
-        if (existingGenres.length === 0 && genreIds.length > 0) update.genreIds = genreIds;
-        if (existingProviders.length === 0 && uniqueProviders.length > 0) update.providers = uniqueProviders;
+        const existingGenres = Array.isArray(data.genreIds) ? data.genreIds as number[] : [];
+        const existingProviders = Array.isArray(data.providers) ? data.providers as number[] : null;
 
-        if (Object.keys(update).length === 1) {
-          state.skipped += 1;
-          return;
+        const update: Record<string, unknown> = {
+          updatedAt: serverTimestamp(),
+          providersCheckedAt: serverTimestamp(),
+        };
+        let contentChanged = false;
+        if (existingGenres.length === 0 && genreIds.length > 0) {
+          update.genreIds = genreIds;
+          contentChanged = true;
         }
+        // Skriv providers när: fältet saknas helt, eller listan skiljer sig
+        // från TMDB:s nuvarande SE-utbud (TV4 lägger till/tar bort, Netflix
+        // tappar titlar etc). Behåll Array.isArray-distinctionen så vi
+        // skriver `providers: []` på en titel som aldrig haft fältet.
+        if (existingProviders === null || !arraysEqualAsSets(existingProviders, uniqueProviders)) {
+          update.providers = uniqueProviders;
+          contentChanged = true;
+        }
+
         await updateDoc(doc(db, 'users', uid, 'watchlist', d.id), update);
-        state.updated += 1;
+        if (contentChanged) state.updated += 1;
+        else state.refreshed += 1;
       } catch {
         state.failed += 1;
       }

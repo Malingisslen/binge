@@ -423,7 +423,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       {fmtDate(item.watchedAt)}
                     </td>}
                     <td className="hidden lg:table-cell px-2 py-[5px] border-b border-border-table">
-                      <ProviderChips providers={item.providers} myProviders={user?.myProviders ?? []} />
+                      <ProviderChips providers={item.providers} myProviders={user?.myProviders ?? []} providersCheckedAt={item.providersCheckedAt} />
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <span className="inline-flex items-center gap-[4px]">

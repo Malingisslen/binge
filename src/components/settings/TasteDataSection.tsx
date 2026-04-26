@@ -17,7 +17,7 @@ export function TasteDataSection() {
   const run = async () => {
     if (!uid || running) return;
     setRunning(true);
-    setProgress({ total: 0, processed: 0, updated: 0, skipped: 0, failed: 0 });
+    setProgress({ total: 0, processed: 0, updated: 0, refreshed: 0, skipped: 0, failed: 0 });
     try {
       const final = await backfillGenreIds(uid, p => setProgress({ ...p }));
       toast(`Klar — ${final.updated} titlar uppdaterade`);
@@ -44,6 +44,7 @@ export function TasteDataSection() {
       {progress && progress.total > 0 && (
         <div className="mt-2 text-xxs text-text-muted">
           {progress.processed}/{progress.total} — {progress.updated} uppdaterade
+          {progress.refreshed > 0 ? `, ${progress.refreshed} bekräftade på TMDB` : ''}
           {progress.skipped > 0 ? `, ${progress.skipped} hoppade över` : ''}
           {progress.failed > 0 ? `, ${progress.failed} misslyckade` : ''}
         </div>
