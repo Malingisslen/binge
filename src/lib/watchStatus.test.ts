@@ -23,10 +23,10 @@ describe('STATUS_LABELS', () => {
 });
 
 describe('statusOptionsFor', () => {
-  it('TV menu offers vill_se, mina, sedd (genväg → mina+lastWatched), avbruten', () => {
-    expect(statusOptionsFor('tv')).toEqual(['vill_se', 'mina', 'sedd', 'avbruten']);
-    // 'sedd' i TV-menyn är en UI-genväg som översätts till status=mina + lastWatched
-    // av QuickAddButton; den lagras aldrig som 'sedd' på en TV-titel.
+  it('TV menu offers vill_se, sedd (genväg → mina+lastWatched), avbruten', () => {
+    expect(statusOptionsFor('tv')).toEqual(['vill_se', 'sedd', 'avbruten']);
+    // 'mina' är inte ett menyval — det blir auto-set när första avsnittet markeras.
+    // 'sedd' är en UI-genväg som översätts till status=mina + lastWatched.
   });
 
   it('Movie menu offers vill_se, sedd, avbruten — never mina (mina är TV-only)', () => {
