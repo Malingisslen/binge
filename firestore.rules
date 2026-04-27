@@ -389,6 +389,26 @@ service cloud.firestore {
         );
       }
 
+      // Session-historik: avtryck av Tillsammans-sessioner som gruppen
+      // startat och valt en titel ifrån. Skrivs av session-deltagaren med
+      // 'Den här tar vi'-knappen i match-vyn. Läses av alla gruppmedlemmar
+      // som "Senaste filmkvällar" på grupp-sidan.
+      match /sessionHistory/{sessionId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+        // Vem som helst i gruppen som var med i sessionen kan logga pick:en.
+        // (Strikt: vi kan inte verifiera att de "var med" utan att läsa
+        // sessions/{sessionId}/participants — vilket skulle göra reglerna
+        // tunga. Begränsar i stället till gruppmedlemmar och vägrar bara
+        // om sessionen inte är groupId-bunden, men det görs i klienten.)
+        allow create, update: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          && request.resource.data.sessionId == sessionId;
+        // Bara ägare av gruppen kan radera historiken.
+        allow delete: if isSignedIn()
+          && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
+      }
+
       match /watchlist/{tmdbId} {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;

@@ -323,6 +323,63 @@ export async function setGroupMemberProgress(params: {
 // för att kolla om titeln finns. För 5 grupper ≈ 5 reads + M writes där
 // M är antal grupper som faktiskt har titeln. Acceptabelt — körs bara på
 // progress-uppdateringar, inte på rendering.
+// Loggar att gruppen valt en titel via en specifik Tillsammans-session.
+// Skrivs en gång per session+pick-tillfälle (det är OK att skriva flera om
+// gruppen ändrar sig — sessionId fungerar som idempotency-key).
+//
+// Path: groups/{groupId}/sessionHistory/{sessionId}
+export async function recordGroupSessionPick(params: {
+  groupId: string;
+  sessionId: string;
+  pickedTmdbId: number;
+  mediaType: 'movie' | 'tv';
+  mediaTitle: string;
+  posterPath: string | null;
+  participantUids: string[];
+}): Promise<void> {
+  await setDoc(
+    doc(db, 'groups', params.groupId, 'sessionHistory', params.sessionId),
+    {
+      sessionId: params.sessionId,
+      pickedTmdbId: params.pickedTmdbId,
+      mediaType: params.mediaType,
+      mediaTitle: params.mediaTitle,
+      posterPath: params.posterPath,
+      participantUids: params.participantUids,
+      pickedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+// Hämtar gruppens senaste filmkvällar — sorterade nyast först. Konsumeras
+// av "Senaste filmkvällar"-sektionen på grupp-sidan.
+export async function getGroupSessionHistory(groupId: string, limit = 10): Promise<{
+  sessionId: string;
+  pickedTmdbId: number;
+  mediaType: 'movie' | 'tv';
+  mediaTitle: string;
+  posterPath: string | null;
+  participantUids: string[];
+  pickedAt: Date;
+}[]> {
+  const snap = await getDocs(collection(db, 'groups', groupId, 'sessionHistory'));
+  const items = snap.docs.map(d => {
+    const data = d.data();
+    return {
+      sessionId: d.id,
+      pickedTmdbId: (data.pickedTmdbId as number) ?? 0,
+      mediaType: ((data.mediaType as string) === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv',
+      mediaTitle: (data.mediaTitle as string) ?? '',
+      posterPath: (data.posterPath as string | null) ?? null,
+      participantUids: (data.participantUids as string[]) ?? [],
+      pickedAt: data.pickedAt?.toDate?.() ?? new Date(),
+    };
+  });
+  items.sort((a, b) => b.pickedAt.getTime() - a.pickedAt.getTime());
+  return items.slice(0, limit);
+}
+
 export async function syncProgressToGroups(params: {
   uid: string;
   tmdbId: number;

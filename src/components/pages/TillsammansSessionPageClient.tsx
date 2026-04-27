@@ -11,7 +11,7 @@ import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress } from '@/lib/together/matching';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
-import type { SessionCandidate, SessionParticipant, VoteKind } from '@/types';
+import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
@@ -373,7 +373,7 @@ function SessionMain({
       </div>
 
       {matches.length > 0 && (
-        <MatchList matches={matches} />
+        <MatchList matches={matches} session={session} participants={participants} />
       )}
 
       {filteredCandidates.length === 0 ? (
@@ -556,7 +556,43 @@ function CandidateTable({
   );
 }
 
-function MatchList({ matches }: { matches: ReturnType<typeof pickMatches> }) {
+function MatchList({
+  matches,
+  session,
+  participants,
+}: {
+  matches: ReturnType<typeof pickMatches>;
+  session: TogetherSession;
+  participants: SessionParticipant[];
+}) {
+  const isGroupSession = !!session.groupId;
+  const [picking, setPicking] = useState<number | null>(null);
+  const [pickedTmdbId, setPickedTmdbId] = useState<number | null>(null);
+
+  // Logga till gruppens sessionHistory så filmkvällen syns på grupp-sidan
+  // som "Senaste filmkvällar". Bara meningsfullt för grupp-bundna sessioner.
+  const recordPick = async (m: ReturnType<typeof pickMatches>[number]) => {
+    if (!session.groupId) return;
+    setPicking(m.candidate.tmdbId);
+    try {
+      const { recordGroupSessionPick } = await import('@/lib/firebase/groups');
+      await recordGroupSessionPick({
+        groupId: session.groupId,
+        sessionId: session.id,
+        pickedTmdbId: m.candidate.tmdbId,
+        mediaType: m.candidate.mediaType,
+        mediaTitle: m.candidate.title,
+        posterPath: m.candidate.posterPath,
+        participantUids: participants.map(p => p.uid).filter((u): u is string => !!u),
+      });
+      setPickedTmdbId(m.candidate.tmdbId);
+    } catch (err) {
+      console.warn('[group-session-pick]', err);
+    } finally {
+      setPicking(null);
+    }
+  };
+
   return (
     <div className="bg-surface border border-accent rounded-sm mb-[8px]">
       <div className="px-3 py-[5px] border-b border-accent/30 bg-accent/[0.06] text-xxs uppercase tracking-[0.5px] text-accent font-semibold">
@@ -566,29 +602,45 @@ function MatchList({ matches }: { matches: ReturnType<typeof pickMatches> }) {
         {matches.map(m => {
           const href = `/${m.candidate.mediaType === 'movie' ? 'movie' : 'tv'}/${m.candidate.tmdbId}/`;
           const poster = posterUrl(m.candidate.posterPath, 'w92');
+          const isPicked = pickedTmdbId === m.candidate.tmdbId;
           return (
-            <Link
-              key={m.candidate.tmdbId}
-              href={href}
-              className="flex items-center gap-2 px-3 py-[5px] no-underline hover:bg-surface-hover text-text-primary"
-            >
-              {poster ? (
-                <img src={poster} alt="" className="w-[28px] h-[42px] object-cover rounded-sm" loading="lazy" decoding="async" width={28} height={42} />
-              ) : (
-                <div className="w-[28px] h-[42px] bg-border-light rounded-sm" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold truncate">{m.candidate.title}</div>
-                <div className="text-xxs text-text-muted">
-                  {m.candidate.year ?? '—'} · {m.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}
-                  {m.candidate.voteAverage > 0 && <> · <span className="text-accent">★ {m.candidate.voteAverage.toFixed(1)}</span></>}
+            <div key={m.candidate.tmdbId} className="flex items-center gap-2 px-3 py-[5px] hover:bg-surface-hover">
+              <Link
+                href={href}
+                className="flex items-center gap-2 flex-1 min-w-0 no-underline text-text-primary"
+              >
+                {poster ? (
+                  <img src={poster} alt="" className="w-[28px] h-[42px] object-cover rounded-sm" loading="lazy" decoding="async" width={28} height={42} />
+                ) : (
+                  <div className="w-[28px] h-[42px] bg-border-light rounded-sm" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">{m.candidate.title}</div>
+                  <div className="text-xxs text-text-muted">
+                    {m.candidate.year ?? '—'} · {m.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}
+                    {m.candidate.voteAverage > 0 && <> · <span className="text-accent">★ {m.candidate.voteAverage.toFixed(1)}</span></>}
+                  </div>
                 </div>
-              </div>
+              </Link>
               <div className="text-xxs text-text-muted text-right shrink-0">
                 {m.yesCount} ja / {m.noCount} nej
                 {!m.allVoted && <div className="text-accent">{m.missing.length} kvar</div>}
               </div>
-            </Link>
+              {isGroupSession && (
+                isPicked ? (
+                  <span className="text-xxs text-accent font-semibold">✓ Vald</span>
+                ) : (
+                  <button
+                    onClick={() => recordPick(m)}
+                    disabled={picking === m.candidate.tmdbId}
+                    className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
+                    title="Logga till gruppens filmkvällshistorik"
+                  >
+                    {picking === m.candidate.tmdbId ? '...' : 'Den här tar vi'}
+                  </button>
+                )
+              )}
+            </div>
           );
         })}
       </div>

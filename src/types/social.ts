@@ -32,12 +32,30 @@ export interface TogetherSession {
   id: string;
   hostUid: string | null;
   hostName: string;
+  // Om sessionen startades från en grupps "Starta filmkväll"-knapp så binder
+  // detta sessionen till gruppen. När en titel sedan väljs skrivs den till
+  // groups/{groupId}/sessionHistory så gruppen minns vad som valts.
+  // null = ad-hoc-session utan grupp-binding (vanlig Tillsammans-länk).
+  groupId: string | null;
   config: SessionConfig;
   status: SessionStatus;
   candidates: SessionCandidate[];
   createdAt: Date;
   updatedAt: Date;
   expiresAt: Date;
+}
+
+// Avtryck av en avslutad Tillsammans-session i den grupp som startade den.
+// Skrivs när host trycker "Den här tar vi" på en match. Listas under
+// "Senaste filmkvällar" på grupp-sidan.
+export interface GroupSessionHistoryEntry {
+  sessionId: string;
+  pickedTmdbId: number;
+  mediaType: 'movie' | 'tv';
+  pickedAt: Date;
+  participantUids: string[];
+  mediaTitle: string;
+  posterPath: string | null;
 }
 
 export interface SessionParticipant {

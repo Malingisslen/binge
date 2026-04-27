@@ -27,6 +27,9 @@ export async function createSession(params: {
   hostName: string;
   hostProviders: number[];
   config: SessionConfig;
+  // Optional grupp-binding. När satt skrivs picks från sessionen till
+  // groups/{groupId}/sessionHistory så gruppen minns vad som valts.
+  groupId?: string | null;
 }): Promise<string> {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
@@ -34,6 +37,7 @@ export async function createSession(params: {
   const sessionRef = await addDoc(collection(db, 'sessions'), {
     hostUid: params.hostUid,
     hostName: params.hostName,
+    groupId: params.groupId ?? null,
     config: params.config,
     status: 'active',
     candidates: [],
@@ -119,6 +123,7 @@ export function sessionDocToObject(id: string, data: Record<string, unknown>): T
     id,
     hostUid: (data.hostUid as string | null) ?? null,
     hostName: (data.hostName as string) ?? '',
+    groupId: (data.groupId as string | null) ?? null,
     config: data.config as SessionConfig,
     status: (data.status as TogetherSession['status']) ?? 'active',
     candidates: (data.candidates as SessionCandidate[]) ?? [],

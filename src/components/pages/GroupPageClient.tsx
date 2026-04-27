@@ -13,6 +13,7 @@ import { computeSessionProviders, generateCandidates } from '@/lib/together/cand
 import { storeParticipantId } from '@/hooks/useSession';
 import { GroupMembersPanel } from '@/components/groups/GroupMembersPanel';
 import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
+import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
 import { GroupSettingsModal } from '@/components/groups/GroupSettingsModal';
 import {
   InvitePanel,
@@ -155,6 +156,7 @@ function GroupView({
         hostName: group.name,
         hostProviders: me?.providers ?? [],
         config,
+        groupId: group.id,
       });
       storeParticipantId(sessionId, myUid);
       const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
@@ -223,7 +225,7 @@ function GroupView({
           {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>
 
-        <div>
+        <div className="space-y-3">
           <GroupWatchlistTable
             groupId={groupId}
             watchlist={watchlist}
@@ -231,6 +233,7 @@ function GroupView({
             myUid={myUid}
             isOwner={isOwner}
           />
+          <GroupSessionHistoryPanel groupId={groupId} members={members} />
         </div>
       </div>
 

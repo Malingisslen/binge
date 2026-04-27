@@ -473,11 +473,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = groupDoc.data();
       const ownerUid = data.ownerUid as string | undefined;
       if (ownerUid === id) {
-        const [membersSnap, groupWatchlistSnap] = await Promise.all([
+        const [membersSnap, groupWatchlistSnap, sessionHistorySnap] = await Promise.all([
           getDocs(collection(db, 'groups', groupDoc.id, 'members')),
           getDocs(collection(db, 'groups', groupDoc.id, 'watchlist')),
+          getDocs(collection(db, 'groups', groupDoc.id, 'sessionHistory')),
         ]);
         membersSnap.docs.forEach(d => refs.push(d.ref));
+        sessionHistorySnap.docs.forEach(d => refs.push(d.ref));
         // För varje watchlist-item: ta också med progress-subcollection.
         // Sub-cleanup måste ske INNAN parent watchlist-doc raderas, men
         // eftersom vi committar i 450-batch kommer queue-ordning räcka.

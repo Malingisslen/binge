@@ -7,6 +7,7 @@ function makeSession(expiresAt: Date): TogetherSession {
     id: 'test-session',
     hostUid: 'uid-1',
     hostName: 'Test',
+    groupId: null,
     config: {
       providerMode: 'intersect',
       aggregation: 'least_misery',
