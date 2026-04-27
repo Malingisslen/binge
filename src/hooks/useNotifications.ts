@@ -2,10 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { collection, doc, getDoc, onSnapshot, setDoc, writeBatch, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { useQuery } from '@tanstack/react-query';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useFriendRequests } from '@/hooks/useFriends';
+import { getRecentSessionPicksAcrossGroups } from '@/lib/firebase/groups';
 import { getWatchProviders } from '@/lib/tmdb/client';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 
@@ -20,12 +23,25 @@ export interface AppNotification {
   createdAt: Date;
 }
 
+export interface RecentGroupPick {
+  groupId: string;
+  groupName: string;
+  sessionId: string;
+  pickedTmdbId: number;
+  mediaType: 'movie' | 'tv';
+  mediaTitle: string;
+  posterPath: string | null;
+  pickedAt: Date;
+}
+
 export function useNotifications() {
   const { uid, user } = useAuth();
   const { items } = useWatchlist();
+  const { data: friendRequests = [] } = useFriendRequests();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const checkedRef = useRef(false);
 
+  // Subscribera på provider-availability-notifs (legacy).
   useEffect(() => {
     if (!uid) { setNotifications([]); return; }
     const q = query(
@@ -50,6 +66,19 @@ export function useNotifications() {
     });
     return () => unsub();
   }, [uid]);
+
+  // Recent group session picks — hämtas via getRecentSessionPicksAcrossGroups.
+  // "since" = lastNotificationsSeenAt (eller user.createdAt om legacy-konto).
+  // 30s staleTime — picks är sällsynta så vi behöver inte poll:a hårt.
+  const since = useMemo(() => {
+    return user?.lastNotificationsSeenAt ?? user?.createdAt ?? new Date(0);
+  }, [user?.lastNotificationsSeenAt, user?.createdAt]);
+  const { data: recentPicks = [] } = useQuery<RecentGroupPick[]>({
+    queryKey: ['recent-group-picks', uid, since.getTime()],
+    queryFn: () => uid ? getRecentSessionPicksAcrossGroups(uid, since, 10) : Promise.resolve([]),
+    enabled: !!uid,
+    staleTime: 30_000,
+  });
 
   // Check for new availability once per session
   useEffect(() => {
@@ -110,7 +139,23 @@ export function useNotifications() {
     await batch.commit();
   }, [uid, notifications]);
 
-  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+  // Sammansatt unread-räkning för bell-badge:n. Friend requests är action-
+  // required (måste accepteras/avböjas) → räknas alltid. Recent picks +
+  // provider-availability räknas tills användaren öppnar dropdown:n.
+  const friendRequestsCount = friendRequests.length;
+  const providerUnreadCount = notifications.filter(n => !n.read).length;
+  const recentPicksCount = recentPicks.length;
+  const unreadCount = friendRequestsCount + providerUnreadCount + recentPicksCount;
 
-  return { notifications, unreadCount, markRead, markAllRead };
+  return {
+    notifications,
+    friendRequests,
+    recentPicks,
+    unreadCount,
+    friendRequestsCount,
+    providerUnreadCount,
+    recentPicksCount,
+    markRead,
+    markAllRead,
+  };
 }

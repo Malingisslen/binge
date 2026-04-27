@@ -352,6 +352,61 @@ export async function recordGroupSessionPick(params: {
   );
 }
 
+// Hämtar de senaste filmkvällarna ACROSS alla grupper användaren är medlem
+// i (Fas 2c — bell-notifs). Filtrerar entries med pickedAt > since så vi
+// kan räkna "nya sedan jag senast öppnade bell:n". Sorterat nyast först.
+//
+// Kostnad: 1 query (mina grupper) + N parallella query mot deras
+// sessionHistory-subcollections. För 5 grupper ≈ 6 reads, vilket är OK
+// för en bell-dropdown som öppnas sällan.
+export async function getRecentSessionPicksAcrossGroups(
+  uid: string,
+  since: Date,
+  limit = 10,
+): Promise<Array<{
+  groupId: string;
+  groupName: string;
+  sessionId: string;
+  pickedTmdbId: number;
+  mediaType: 'movie' | 'tv';
+  mediaTitle: string;
+  posterPath: string | null;
+  pickedAt: Date;
+}>> {
+  const groupsSnap = await getDocs(
+    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+  );
+  if (groupsSnap.empty) return [];
+
+  const all = await Promise.all(groupsSnap.docs.map(async groupDoc => {
+    const groupName = (groupDoc.data().name as string) ?? '';
+    try {
+      const histSnap = await getDocs(
+        collection(db, 'groups', groupDoc.id, 'sessionHistory'),
+      );
+      return histSnap.docs.map(d => {
+        const data = d.data();
+        const pickedAt: Date = data.pickedAt?.toDate?.() ?? new Date(0);
+        return {
+          groupId: groupDoc.id,
+          groupName,
+          sessionId: d.id,
+          pickedTmdbId: (data.pickedTmdbId as number) ?? 0,
+          mediaType: ((data.mediaType as string) === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv',
+          mediaTitle: (data.mediaTitle as string) ?? '',
+          posterPath: (data.posterPath as string | null) ?? null,
+          pickedAt,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }));
+  const flat = all.flat().filter(e => e.pickedAt.getTime() > since.getTime());
+  flat.sort((a, b) => b.pickedAt.getTime() - a.pickedAt.getTime());
+  return flat.slice(0, limit);
+}
+
 // Hämtar gruppens senaste filmkvällar — sorterade nyast först. Konsumeras
 // av "Senaste filmkvällar"-sektionen på grupp-sidan.
 export async function getGroupSessionHistory(groupId: string, limit = 10): Promise<{

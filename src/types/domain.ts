@@ -112,6 +112,10 @@ export interface UserProfile {
   // = användaren kom in före feature:n landade ELLER hoppat över onboarding.
   // Vi gate:ar bara redirect-logiken på detta — ingen funktionalitet låses.
   onboardingCompletedAt?: Date;
+  // Senast användaren öppnade bell-dropdownen (Fas 2c). Tids-ankare för att
+  // räkna "nya" sessionHistory-entries i grupper jag är medlem i. Friend-
+  // requests räknas separat via egen pending-count (action-required).
+  lastNotificationsSeenAt?: Date;
   // Admin-flagga för moderation-tools (/admin/reports/). Settas bara manuellt
   // via Firebase Console — klienten kan inte sätta detta själv (firestore.rules
   // enforce:ar). Undefined = vanlig användare.

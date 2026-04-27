@@ -50,6 +50,7 @@ interface AuthState {
   updateUsername: (username: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
+  markNotificationsSeen: () => Promise<void>;
   /** @deprecated — använd updateDefaultVisibility. Kvar för UI som inte migrerats. */
   updateIsPublic: (isPublic: boolean) => Promise<void>;
   updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
@@ -77,6 +78,7 @@ const AuthContext = createContext<AuthState>({
   updateUsername: async () => {},
   updateBio: async () => {},
   updateDefaultVisibility: async () => {},
+  markNotificationsSeen: async () => {},
   updateIsPublic: async () => {},
   updateHideNonLatinTitles: async () => {},
   updateHiddenCountries: async () => {},
@@ -133,6 +135,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       termsAcceptedAt: data.termsAcceptedAt?.toDate(),
       termsVersion: data.termsVersion as string | undefined,
       onboardingCompletedAt: data.onboardingCompletedAt?.toDate(),
+      lastNotificationsSeenAt: data.lastNotificationsSeenAt?.toDate(),
       isAdmin: (data.isAdmin as boolean) ?? false,
       notificationSettings: data.notificationSettings ?? {
         newEpisodes: true,
@@ -392,6 +395,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateIsPublic = useCallback(async (isPublic: boolean) => {
     await updateDefaultVisibility(isPublic ? 'public' : 'private');
   }, [updateDefaultVisibility]);
+
+  // Sätter lastNotificationsSeenAt = serverTimestamp, vilket kollapsar
+  // "nya filmkvällar"-räkningen i bell-badge:n. Friend requests har sin
+  // egen action-required-räkning och påverkas inte.
+  const markNotificationsSeen = useCallback(async () => {
+    if (!uid) return;
+    const now = new Date();
+    await setDoc(doc(db, 'users', uid), {
+      lastNotificationsSeenAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    setUser(prev => prev ? { ...prev, lastNotificationsSeenAt: now } : null);
+  }, [uid]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
   const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
   const setCalibrationGenres = useCallback((genres: Record<number, number> | null) => updateUserField('calibrationGenres', genres), [updateUserField]);
@@ -539,7 +555,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -547,7 +563,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );
