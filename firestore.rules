@@ -57,11 +57,11 @@ service cloud.firestore {
       allow read: if isOwner(uid)
         || resource.data.get('defaultVisibility', '') == 'public'
         || resource.data.get('isPublic', false) == true;
-      // Vänner får läsa varandras profil-doc:et även om defaultVisibility
-      // är 'friends'. Implicit: vänskap kräver att båda kan se varandras
-      // profiler.
-      allow read: if resource.data.get('defaultVisibility', '') == 'friends'
-        && exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
+      // Bekräftade vänner får ALLTID läsa varandras profil-doc — oavsett
+      // defaultVisibility-tier. Det är vänskapens grundläggande mening:
+      // "vi har accepterat varandra → vi ser varandras existens".
+      // Tier-grenen styr bara watchlist-items-synlighet, inte profil-doc.
+      allow read: if exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
       allow create: if isOwner(uid)
         && !('isAdmin' in request.resource.data);
       allow update: if isOwner(uid)
