@@ -1,15 +1,29 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useTVSeason } from '@/hooks/useTMDB';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
+import { useGroup } from '@/hooks/useGroups';
+import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
+import { computeMaskBoundary, isEpisodeMasked } from '@/lib/groupProgress';
 import EpisodeRow from '@/components/tv/EpisodeRow';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
   const seasonNum = parseInt(num, 10);
+  const searchParams = useSearchParams();
+  const fromGroup = searchParams?.get('fromGroup') ?? null;
   const { data: season, isLoading } = useTVSeason(seriesId, seasonNum);
   const { isWatched, markEpisodeWatched, markSeasonWatched } = useEpisodeProgressWithSync(seriesId);
+  // Spoiler-skydd (Fas 2b): hämta gruppens member-progress om vi kommer från
+  // grupp-watchlist (`?fromGroup=`). Hooken kostar ingenting när fromGroup
+  // är null — useGroup/useGroupMemberProgress no-op:ar då.
+  const { members } = useGroup(fromGroup);
+  const progressMap = useGroupMemberProgress(fromGroup ?? '');
+  const maskBoundary = fromGroup
+    ? computeMaskBoundary(progressMap, seriesId, members.map(m => m.uid))
+    : null;
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!season) return <div className="text-sm text-text-muted py-4">Säsongen hittades inte.</div>;
@@ -55,6 +69,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
             key={ep.id}
             episode={ep}
             watched={isWatched(seasonNum, ep.episode_number)}
+            spoilerMasked={isEpisodeMasked(maskBoundary, seasonNum, ep.episode_number)}
             onToggle={w => markEpisodeWatched(seasonNum, ep.episode_number, w)}
           />
         ))}

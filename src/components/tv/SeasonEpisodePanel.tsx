@@ -2,6 +2,7 @@
 
 import { useTVSeason } from '@/hooks/useTMDB';
 import EpisodeRow from './EpisodeRow';
+import { isEpisodeMasked, type MaskBoundary } from '@/lib/groupProgress';
 
 interface SeasonEpisodePanelProps {
   tmdbId: number;
@@ -10,10 +11,11 @@ interface SeasonEpisodePanelProps {
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+  maskBoundary?: MaskBoundary | null;
 }
 
 export default function SeasonEpisodePanel({
-  tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched,
+  tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched, maskBoundary,
 }: SeasonEpisodePanelProps) {
   const { data: season, isLoading } = useTVSeason(tmdbId, seasonNumber);
 
@@ -69,6 +71,7 @@ export default function SeasonEpisodePanel({
             key={ep.id}
             episode={ep}
             watched={isWatched(seasonNumber, ep.episode_number)}
+            spoilerMasked={isEpisodeMasked(maskBoundary ?? null, seasonNumber, ep.episode_number)}
             onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched, episodes.length)}
             onMarkUpTo={async () => {
               // Mark all previous seasons as fully watched

@@ -67,7 +67,9 @@ export function GroupWatchlistTable({
               const present = ratings.filter((r): r is number => r != null);
               const avg = present.length > 0 ? (present.reduce((a, b) => a + b, 0) / present.length) : null;
               const canDelete = isOwner || item.addedBy === myUid;
-              const href = titleHref(item.mediaType, item.tmdbId);
+              // Skicka groupId i URL:en så title-page kan aktivera spoiler-skydd
+              // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.
+              const href = titleHref(item.mediaType, item.tmdbId, { fromGroup: groupId });
               return (
                 <tr key={item.tmdbId} className="border-t border-border-light hover:bg-border-light/30">
                   <td className="px-3 py-[6px]">

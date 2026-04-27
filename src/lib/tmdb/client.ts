@@ -277,6 +277,12 @@ export function isAddableMediaType(
 // Konstruerar internal-link-href till en titelsida. Trailing slash följer
 // `next.config.mjs`-inställningen `trailingSlash: true` så vi undviker
 // 308-redirects på Firebase Hosting / Cloudflare.
-export function titleHref(mediaType: 'movie' | 'tv', id: number | string): string {
-  return `/${mediaType}/${id}/`;
+export function titleHref(
+  mediaType: 'movie' | 'tv',
+  id: number | string,
+  opts?: { fromGroup?: string },
+): string {
+  const base = `/${mediaType}/${id}/`;
+  if (opts?.fromGroup) return `${base}?fromGroup=${encodeURIComponent(opts.fromGroup)}`;
+  return base;
 }

@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -26,6 +27,11 @@ import { canonicalProviderId } from '@/lib/tmdb/providers';
 
 export default function TVShowPageClient({ id }: { id: string }) {
   const showId = parseInt(id, 10);
+  const searchParams = useSearchParams();
+  // Spoiler-skydd-grupp (Fas 2b): GroupWatchlistTable skickar `?fromGroup={id}`
+  // när användaren klickar från en grupps watchlist. Vi propagerar det till
+  // SeasonList → EpisodeRow så avsnitt utöver gruppens minsta-position maskas.
+  const fromGroup = searchParams?.get('fromGroup') ?? null;
   const { data: show, isLoading } = useTVShow(showId);
   const { getItem, updateRating, updateNotes, updateTmdbStatus } = useWatchlist();
   const { user } = useAuth();
@@ -261,6 +267,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
               markEpisodeWatched={markEpisodeWatched}
               markSeasonWatched={markSeasonWatched}
               getSeasonProgress={getSeasonProgress}
+              fromGroup={fromGroup}
             />
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { ChevronRight } from 'lucide-react';
 import SeasonEpisodePanel from './SeasonEpisodePanel';
+import type { MaskBoundary } from '@/lib/groupProgress';
 
 interface SeasonRowProps {
   name: string;
@@ -15,11 +16,12 @@ interface SeasonRowProps {
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+  maskBoundary?: MaskBoundary | null;
 }
 
 export default function SeasonRow({
   name, episodeCount, watchedCount, expanded, tmdbId, seasonNumber, previousSeasons,
-  onToggle, isWatched, markEpisodeWatched, markSeasonWatched,
+  onToggle, isWatched, markEpisodeWatched, markSeasonWatched, maskBoundary,
 }: SeasonRowProps) {
   const pct = episodeCount > 0 ? (watchedCount / episodeCount) * 100 : 0;
   const isDone = watchedCount >= episodeCount && episodeCount > 0;
@@ -63,6 +65,7 @@ export default function SeasonRow({
           isWatched={isWatched}
           markEpisodeWatched={markEpisodeWatched}
           markSeasonWatched={markSeasonWatched}
+          maskBoundary={maskBoundary}
         />
       )}
     </div>
