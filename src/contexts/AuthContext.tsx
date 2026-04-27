@@ -144,6 +144,24 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     updatedAt: serverTimestamp(),
   });
 
+  // Auto-föreslå username från Google displayName / email-localpart för nya
+  // konton. Misslyckas tyst — användaren kan alltid välja själv i Settings.
+  // Triggar bara på doc-creation (existing-grenen ovan returnerar tidigare).
+  try {
+    const { suggestUsernameFromIdentity, findAvailableUsername, claimUsername } =
+      await import('@/lib/firebase/username');
+    const base = suggestUsernameFromIdentity(firebaseUser.displayName, firebaseUser.email);
+    if (base) {
+      const available = await findAvailableUsername(base);
+      if (available) {
+        await claimUsername(firebaseUser.uid, available, null);
+        profile.username = available;
+      }
+    }
+  } catch (err) {
+    console.warn('[username-auto-suggest]', err);
+  }
+
   return profile;
 }
 

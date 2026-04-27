@@ -11,9 +11,55 @@ export function validateUsername(s: string): string | null {
   return null;
 }
 
+// Slugify:ar en sträng till en kandidat som *kan* validera mot
+// USERNAME_REGEX. Tar bort accenter (Gisslén → Gisslen), lowercase:ar,
+// stripper icke-tillåtna tecken, trimmar bindestreck i kanterna och cap:ar
+// på 20 tecken. Returnerar tom sträng om inget alfanumeriskt finns kvar.
+export function slugifyUsername(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 20);
+}
+
+// Genererar en kandidat från Google/email-data. Försöker displayName först
+// (Malin Gisslén → "malingisslen"), sedan local-part av email
+// (malin.gisslen@x.se → "malingisslen"). Returnerar null om varken kandidat
+// validerar (t.ex. för korta efter slugify, eller bara icke-latinska tecken).
+export function suggestUsernameFromIdentity(
+  displayName: string | null,
+  email: string | null,
+): string | null {
+  const fromName = displayName ? slugifyUsername(displayName) : '';
+  if (validateUsername(fromName) === null) return fromName;
+  const fromEmail = email ? slugifyUsername(email.split('@')[0] ?? '') : '';
+  if (validateUsername(fromEmail) === null) return fromEmail;
+  return null;
+}
+
 export async function isUsernameAvailable(username: string): Promise<boolean> {
   const snap = await getDoc(doc(db, 'usernames', username));
   return !snap.exists();
+}
+
+// Hittar närmaste lediga variant av en kandidat. Försöker först bare bones,
+// sedan suffix 2-9, sedan ger upp. Sekvensiella reads — kan ta upp till 9
+// Firestore-roundtrips i värsta fall, men rätt path är 1 read för 99 % av
+// användare. Anropas bara från sign-in-flödet för helt nya konton.
+export async function findAvailableUsername(base: string): Promise<string | null> {
+  if (validateUsername(base) === null && await isUsernameAvailable(base)) return base;
+  for (let i = 2; i <= 9; i++) {
+    const trimmed = base.slice(0, 19);
+    const candidate = `${trimmed}${i}`;
+    if (validateUsername(candidate) === null && await isUsernameAvailable(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 export interface ResolvedUser {
