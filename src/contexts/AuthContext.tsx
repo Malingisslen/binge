@@ -81,13 +81,32 @@ const AuthContext = createContext<AuthState>({
   deleteAccount: async () => {},
 });
 
+// Försöker claima ett auto-genererat username från Google displayName /
+// email-localpart. Returnerar det claimade värdet vid lyckat utfall, annars
+// null. Misslyckas tyst — användaren kan alltid välja själv i Settings.
+async function tryAutoClaimUsername(firebaseUser: User): Promise<string | null> {
+  try {
+    const { suggestUsernameFromIdentity, findAvailableUsername, claimUsername } =
+      await import('@/lib/firebase/username');
+    const base = suggestUsernameFromIdentity(firebaseUser.displayName, firebaseUser.email);
+    if (!base) return null;
+    const available = await findAvailableUsername(base);
+    if (!available) return null;
+    await claimUsername(firebaseUser.uid, available, null);
+    return available;
+  } catch (err) {
+    console.warn('[username-auto-suggest]', err);
+    return null;
+  }
+}
+
 async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
     const data = snap.data();
-    return {
+    const existing: UserProfile = {
       displayName: data.displayName ?? firebaseUser.displayName ?? '',
       email: data.email ?? firebaseUser.email ?? '',
       photoURL: data.photoURL ?? firebaseUser.photoURL,
@@ -113,6 +132,16 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
         availableOnMyServices: true,
       },
     };
+
+    // Backfill för existing Google-konton som loggade in före auto-suggest:en
+    // landade. Försöket är idempotent — vid lyckad claim sätts username och
+    // nästa sign-in skippar grenen helt. Misslyckas tyst.
+    if (existing.username === null) {
+      const claimed = await tryAutoClaimUsername(firebaseUser);
+      if (claimed) existing.username = claimed;
+    }
+
+    return existing;
   }
 
   const profile: UserProfile = {
@@ -144,23 +173,10 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     updatedAt: serverTimestamp(),
   });
 
-  // Auto-föreslå username från Google displayName / email-localpart för nya
-  // konton. Misslyckas tyst — användaren kan alltid välja själv i Settings.
-  // Triggar bara på doc-creation (existing-grenen ovan returnerar tidigare).
-  try {
-    const { suggestUsernameFromIdentity, findAvailableUsername, claimUsername } =
-      await import('@/lib/firebase/username');
-    const base = suggestUsernameFromIdentity(firebaseUser.displayName, firebaseUser.email);
-    if (base) {
-      const available = await findAvailableUsername(base);
-      if (available) {
-        await claimUsername(firebaseUser.uid, available, null);
-        profile.username = available;
-      }
-    }
-  } catch (err) {
-    console.warn('[username-auto-suggest]', err);
-  }
+  // Auto-föreslå username från Google displayName / email-localpart. Triggar
+  // bara på doc-creation (existing-grenen kör samma helper inline).
+  const claimed = await tryAutoClaimUsername(firebaseUser);
+  if (claimed) profile.username = claimed;
 
   return profile;
 }
