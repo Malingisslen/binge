@@ -7,34 +7,62 @@ import { toDate } from '@/lib/firebase/utils';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import type { UserProfile, WatchlistItem, MediaType } from '@/types';
 
+// Tre möjliga resultat:
+// - null                                      → username-doc finns inte (verkligen ej användare)
+// - { uid, username, isPrivate: true }        → finns men profil ej läsbar (rules avvisar pga visibility-tier)
+// - { uid, profile }                          → publik/vän-läsbar profil
+//
+// usernames-collection är public-read så vi kan alltid skilja "okänd
+// användare" från "privat profil" — bättre UX-feedback.
+export type PublicProfileResult =
+  | null
+  | { uid: string; username: string; isPrivate: true }
+  | { uid: string; profile: UserProfile };
+
 export function usePublicProfile(username: string) {
-  return useQuery({
+  return useQuery<PublicProfileResult>({
     queryKey: ['public-profile', username],
     queryFn: async () => {
       const usernameSnap = await getDoc(doc(db, 'usernames', username));
       if (!usernameSnap.exists()) return null;
       const uid = usernameSnap.data().uid as string;
-      const profileSnap = await getDoc(doc(db, 'users', uid));
-      if (!profileSnap.exists()) return null;
-      const data = profileSnap.data();
-      return {
-        uid,
-        profile: {
-          displayName: data.displayName ?? '',
-          email: '',
-          photoURL: data.photoURL ?? null,
-          username: data.username ?? null,
-          bio: data.bio ?? '',
-          isPublic: data.isPublic ?? false,
-          myProviders: data.myProviders ?? [],
-          defaultView: data.defaultView ?? 'table',
-          providerCosts: {},
-          providerTiers: {},
-          createdAt: toDate(data.createdAt),
-          updatedAt: toDate(data.updatedAt),
-          notificationSettings: { newEpisodes: false, availableOnMyServices: false },
-        } as UserProfile,
-      };
+      try {
+        const profileSnap = await getDoc(doc(db, 'users', uid));
+        if (!profileSnap.exists()) {
+          // Edge: username-doc finns men user-doc raderad. Behandla som privat
+          // (kan inte läsa) snarare än "ej användare" (det skulle vara felaktigt).
+          return { uid, username, isPrivate: true };
+        }
+        const data = profileSnap.data();
+        return {
+          uid,
+          profile: {
+            displayName: data.displayName ?? '',
+            email: '',
+            photoURL: data.photoURL ?? null,
+            username: data.username ?? null,
+            bio: data.bio ?? '',
+            defaultVisibility: data.defaultVisibility ?? (data.isPublic ? 'public' : 'private'),
+            isPublic: data.isPublic ?? false,
+            myProviders: data.myProviders ?? [],
+            defaultView: data.defaultView ?? 'table',
+            hideNonLatinTitles: data.hideNonLatinTitles ?? false,
+            hiddenCountries: data.hiddenCountries ?? [],
+            providerCosts: {},
+            providerTiers: {},
+            providerPauses: {},
+            calibrationGenres: null,
+            createdAt: toDate(data.createdAt),
+            updatedAt: toDate(data.updatedAt),
+            notificationSettings: { newEpisodes: false, availableOnMyServices: false },
+          } as UserProfile,
+        };
+      } catch {
+        // Firestore-rules avvisade läsning — profil är private/friends och
+        // jag är inte tillåten. Visa "den här profilen är privat" istället
+        // för det vilseledande "användaren hittades inte".
+        return { uid, username, isPrivate: true };
+      }
     },
     staleTime: 60_000,
   });

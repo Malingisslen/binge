@@ -22,9 +22,24 @@ export default function UserProfilePageClient({ username }: { username: string }
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
   if (!data) return <div className="text-sm text-text-muted py-4">Användaren hittades inte.</div>;
 
+  // Tre-state från usePublicProfile: null (ej användare), { isPrivate }
+  // (finns men ej läsbar), { profile, uid } (full).
+  if ('isPrivate' in data) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-[18px] font-bold text-text-primary mb-1">@{username}</div>
+        <p className="text-sm text-text-muted">Den här profilen är privat.</p>
+      </div>
+    );
+  }
+
   const { profile, uid } = data;
 
-  if (!profile.isPublic && uid !== myUid) {
+  // Defensiv: om profile-doc:et råkat ha defaultVisibility='private' men
+  // ändå läses (t.ex. ägaren kollar sin egen) — visa privat-vy för
+  // främlingar. (Faktiskt täcker rules redan detta, men dubbel-check.)
+  const tier = profile.defaultVisibility ?? (profile.isPublic ? 'public' : 'private');
+  if (tier === 'private' && uid !== myUid) {
     return (
       <div className="text-center py-8">
         <div className="text-[18px] font-bold text-text-primary mb-1">@{username}</div>
