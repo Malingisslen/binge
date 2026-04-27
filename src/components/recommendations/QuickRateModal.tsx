@@ -15,7 +15,7 @@ interface Props {
   onClose: () => void;
 }
 
-function buildItemFromTmdb(t: TMDBSearchResult, status: WatchlistItem['status'], rating: number | null): Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt'> {
+function buildItemFromTmdb(t: TMDBSearchResult, status: WatchlistItem['status'], rating: number | null): Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'> {
   const releaseYear = t.release_date ? Number(t.release_date.slice(0, 4)) : null;
   return {
     tmdbId: t.id,

@@ -14,7 +14,7 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
-import type { WatchlistItem, WatchStatus, MediaType } from '@/types';
+import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
   const mediaType = data.mediaType as MediaType;
@@ -35,6 +35,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
     providersCheckedAt: data.providersCheckedAt ? toDate(data.providersCheckedAt) : null,
+    visibility: (data.visibility as ItemVisibility) ?? null,
     genreIds: (data.genreIds as number[]) ?? [],
     tmdbStatus: (data.tmdbStatus as string) ?? null,
     addedAt: toDate(data.addedAt),
@@ -45,7 +46,8 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
 
 interface WatchlistState {
   items: WatchlistItem[];
-  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt'>) => Promise<void>;
+  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
+  updateVisibility: (tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
@@ -64,6 +66,7 @@ const WatchlistContext = createContext<WatchlistState>({
   updateNotes: async () => {},
   updateProgress: async () => {},
   updateTmdbStatus: async () => {},
+  updateVisibility: async () => {},
   removeItem: async () => {},
   getByStatus: () => [],
   getItem: () => null,
@@ -82,18 +85,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [uid]);
 
-  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt'>) => {
+  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
     const isFirst = items.length === 0;
+    // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
+    // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
+    // ärver default; per-item-override sätts via updateVisibility senare.
+    const defaultVisibility = user?.defaultVisibility ?? 'private';
     await setDoc(ref, {
       ...item,
       dropped: false,
-      // Denormaliserad isPublic så läsregeln för publika profilvisningar
-      // slipper göra en get() mot parent-user-doc per item (se 9.3). Användare
-      // toggles isPublic i settings → AuthContext.updateIsPublic cascadar nya
-      // värdet till alla watchlist-items.
-      isPublic: user?.isPublic ?? false,
+      effectiveVisibility: defaultVisibility,
+      isPublic: defaultVisibility === 'public',
       addedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
@@ -102,7 +106,23 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (isFirst) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, items.length, user?.isPublic]);
+  }, [uid, items.length, user?.defaultVisibility]);
+
+  const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
+    if (!uid) return;
+    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    // visibility=null → ta bort override och fall tillbaka till profilens
+    // defaultVisibility. Vi skickar bara fältet (Firestore har ingen
+    // "delete field" från klienten utan deleteField; istället skriver vi
+    // null och låter docToItem normalisera vid läs).
+    const effective = visibility ?? user?.defaultVisibility ?? 'private';
+    await setDoc(ref, {
+      visibility,
+      effectiveVisibility: effective,
+      isPublic: effective === 'public',
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  }, [uid, user?.defaultVisibility]);
 
   const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
     if (!uid) return;
@@ -169,8 +189,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const value = useMemo(() => ({
-    items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem,
-  }), [items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, removeItem, getByStatus, getItem]);
+    items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem,
+  }), [items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

@@ -5,16 +5,26 @@ import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
+import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
+import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 
-type Tab = 'following' | 'followers';
+type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
 export default function FriendsPageClient() {
-  const { following, followers, isLoading } = useFollowList();
-  const [tab, setTab] = useState<Tab>('following');
+  const { following, followers, isLoading: followLoading } = useFollowList();
+  const { data: friends = [], isLoading: friendsLoading } = useFriends();
+  const { data: requests = [], isLoading: requestsLoading } = useFriendRequests();
+  const [tab, setTab] = useState<Tab>('friends');
 
-  const list = tab === 'following' ? following : followers;
-  const empty = !isLoading && list.length === 0;
+  const isLoading = followLoading || friendsLoading || requestsLoading;
+  const list = tab === 'following' ? following : tab === 'followers' ? followers : [];
+  const empty = !isLoading && (
+    (tab === 'friends' && friends.length === 0)
+    || (tab === 'requests' && requests.length === 0)
+    || (tab === 'following' && following.length === 0)
+    || (tab === 'followers' && followers.length === 0)
+  );
 
   return (
     <div>
@@ -26,6 +36,12 @@ export default function FriendsPageClient() {
       </div>
 
       <div className="flex border-b border-border-main mb-3">
+        <TabButton active={tab === 'friends'} onClick={() => setTab('friends')}>
+          Vänner ({friends.length})
+        </TabButton>
+        <TabButton active={tab === 'requests'} onClick={() => setTab('requests')}>
+          Förfrågningar ({requests.length})
+        </TabButton>
         <TabButton active={tab === 'following'} onClick={() => setTab('following')}>
           Följer ({following.length})
         </TabButton>
@@ -36,6 +52,18 @@ export default function FriendsPageClient() {
 
       {isLoading && <div className="text-sm text-text-muted py-4">Laddar...</div>}
 
+      {empty && tab === 'friends' && (
+        <EmptyState
+          headline="Inga vänner än"
+          body="Vänskap är mutuellt och ger åtkomst till varandras privata watchlist. Skicka förfrågan från en användares profil."
+        />
+      )}
+      {empty && tab === 'requests' && (
+        <EmptyState
+          headline="Inga väntande förfrågningar"
+          body="När någon skickar en vänskapsförfrågan dyker den upp här att acceptera eller avböja."
+        />
+      )}
       {empty && tab === 'following' && (
         <EmptyState
           headline="Du följer ingen än"
@@ -49,7 +77,19 @@ export default function FriendsPageClient() {
         />
       )}
 
-      {!empty && (
+      {!empty && tab === 'friends' && (
+        <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
+          {friends.map(f => <FriendRow key={f.uid} friend={f} />)}
+        </ul>
+      )}
+
+      {!empty && tab === 'requests' && (
+        <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
+          {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
+        </ul>
+      )}
+
+      {!empty && (tab === 'following' || tab === 'followers') && (
         <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
           {list.map(u => <Row key={u.uid} user={u} tab={tab} />)}
         </ul>
@@ -70,6 +110,70 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     >
       {children}
     </button>
+  );
+}
+
+function FriendRow({ friend }: { friend: FriendUser }) {
+  const { uid: myUid } = useAuth();
+  const { removeFriend } = useFriendActions();
+  const isMe = friend.uid === myUid;
+  const profileLink = friend.username ? `/user/${friend.username}/` : null;
+  return (
+    <li className="px-3 py-2 flex items-center gap-2">
+      <Avatar name={friend.displayName} photoURL={friend.photoURL} />
+      <div className="flex-1 min-w-0">
+        {profileLink ? (
+          <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
+            {friend.displayName}
+          </Link>
+        ) : (
+          <div className="text-xs font-semibold text-text-muted truncate">{friend.displayName}</div>
+        )}
+        {friend.username && <div className="text-xxs text-text-muted">@{friend.username}</div>}
+      </div>
+      {!isMe && (
+        <button
+          onClick={() => removeFriend(friend.uid)}
+          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
+        >
+          Ta bort
+        </button>
+      )}
+    </li>
+  );
+}
+
+function RequestRow({ request }: { request: FriendRequest }) {
+  const { acceptFriendRequest, declineFriendRequest } = useFriendActions();
+  const profileLink = request.fromUsername ? `/user/${request.fromUsername}/` : null;
+  return (
+    <li className="px-3 py-2 flex items-center gap-2">
+      <Avatar name={request.fromDisplayName} photoURL={request.fromPhotoURL} />
+      <div className="flex-1 min-w-0">
+        {profileLink ? (
+          <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
+            {request.fromDisplayName}
+          </Link>
+        ) : (
+          <div className="text-xs font-semibold text-text-muted truncate">{request.fromDisplayName}</div>
+        )}
+        {request.fromUsername && <div className="text-xxs text-text-muted">@{request.fromUsername}</div>}
+      </div>
+      <div className="flex gap-1">
+        <button
+          onClick={() => acceptFriendRequest(request.fromUid)}
+          className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit]"
+        >
+          Acceptera
+        </button>
+        <button
+          onClick={() => declineFriendRequest(request.fromUid)}
+          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
+        >
+          Avböj
+        </button>
+      </div>
+    </li>
   );
 }
 

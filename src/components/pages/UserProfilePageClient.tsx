@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFollowerCount, useFollowingCount } from '@/hooks/useFollow';
 import { useTasteMatch } from '@/hooks/useTasteVector';
 import FollowButton from '@/components/social/FollowButton';
+import FriendButton from '@/components/social/FriendButton';
 import ProfileStatsPanel from '@/components/social/ProfileStatsPanel';
 import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
@@ -50,6 +51,7 @@ export default function UserProfilePageClient({ username }: { username: string }
         {profile.bio && <p className="text-base text-text-secondary mt-1">{profile.bio}</p>}
         <div className="flex items-center gap-2 mt-1">
           {!isOwnProfile && <FollowButton targetUid={uid} />}
+          {!isOwnProfile && <FriendButton targetUid={uid} />}
           {isOwnProfile && (
             <Link href="/settings" className="text-xxs text-accent no-underline">Redigera profil</Link>
           )}

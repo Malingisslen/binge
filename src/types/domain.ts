@@ -19,6 +19,12 @@ export type WatchStatus = 'vill_se' | 'mina' | 'sedd' | 'avbruten';
 // /my/series sub-tabs, advisor-räkningar, och badges i kort/tabeller.
 export type TvSubState = 'aktiv' | 'ikapp' | 'avslutad';
 
+// Tre-state visibility för watchlist-items + user-profil.
+// 'private'  — bara ägaren ser
+// 'friends'  — ägare + bekräftade vänner ser (kräver mutuell vänskap)
+// 'public'   — alla inloggade användare ser
+export type ItemVisibility = 'private' | 'friends' | 'public';
+
 export interface WatchlistItem {
   tmdbId: number;
   mediaType: MediaType;
@@ -39,6 +45,11 @@ export interface WatchlistItem {
   // returnerade providers eller tom lista — gör att vi kan särskilja
   // "checked-empty" från "never-checked" och periodiskt re-checka stale data.
   providersCheckedAt: Date | null;
+  // Per-item visibility-override. När satt overrider den profilens
+  // defaultVisibility för just denna titel. Optional — most items har null
+  // och ärver default. Används t.ex. för att tracka guilty pleasures
+  // ('private') trots publik default-profil.
+  visibility: ItemVisibility | null;
   genreIds: number[];
   tmdbStatus: string | null;
   addedAt: Date;
@@ -75,6 +86,12 @@ export interface UserProfile {
   photoURL: string | null;
   username: string | null;
   bio: string;
+  // Default visibility för publik profilvisning + nya watchlist-items.
+  // Migration: legacy isPublic === true → 'public', annars → 'private'.
+  // isPublic-fältet finns kvar denormaliserat för bakåt-kompatibilitet i
+  // Firestore-regler under migrationsperioden men ska inte läsas i klienten.
+  defaultVisibility: ItemVisibility;
+  /** @deprecated — använd defaultVisibility. Bibehålls för rules-fallback. */
   isPublic: boolean;
   myProviders: number[];
   defaultView: 'table' | 'grid';

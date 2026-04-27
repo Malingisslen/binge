@@ -33,6 +33,9 @@ export interface UserDataSnapshots {
   notificationsSnap: QuerySnapshot;
   blockedSnap: QuerySnapshot;
   followingSnap: QuerySnapshot;
+  friendsSnap: QuerySnapshot;
+  friendRequestsSnap: QuerySnapshot;
+  friendRequestsSentSnap: QuerySnapshot;
   reviewsSnap: QuerySnapshot;
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
@@ -50,6 +53,9 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     notificationsSnap,
     blockedSnap,
     followingSnap,
+    friendsSnap,
+    friendRequestsSnap,
+    friendRequestsSentSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
@@ -64,6 +70,9 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'notifications')),
     getDocs(collection(db, 'users', uid, 'blocked')),
     getDocs(collection(db, 'users', uid, 'following')),
+    getDocs(collection(db, 'users', uid, 'friends')),
+    getDocs(collection(db, 'users', uid, 'friendRequests')),
+    getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // doc-id = mitt uid (single-field collection-group-index på documentId)
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
@@ -83,6 +92,9 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     notificationsSnap,
     blockedSnap,
     followingSnap,
+    friendsSnap,
+    friendRequestsSnap,
+    friendRequestsSentSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,

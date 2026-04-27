@@ -25,6 +25,7 @@ function mkItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     rewatchCount: 0,
     providers: [],
     providersCheckedAt: null,
+    visibility: null,
     genreIds: [18],
     tmdbStatus: null,
     addedAt: new Date('2024-01-01'),

@@ -9,6 +9,7 @@ import {
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useFriendRequests } from '@/hooks/useFriends';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -47,6 +48,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const { items } = useWatchlist();
+  const { data: friendRequests } = useFriendRequests();
+  const pendingRequestCount = friendRequests?.length ?? 0;
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -134,6 +137,9 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       {NAV_ITEMS.map(item => {
         const active = isActive(item.href);
         const Icon = item.icon;
+        // Pending friend requests-badge på Vänner-raden — bara klient-sidigt
+        // (mounted-guard) eftersom static export annars hydrerar med fel siffra.
+        const showBadge = mounted && item.href === '/my/friends' && pendingRequestCount > 0;
         return (
           <Link
             key={item.href}
@@ -146,7 +152,12 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             }`}
           >
             <Icon size={14} className={active ? 'text-accent' : 'text-text-sidebar opacity-50'} />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {showBadge && (
+              <span className="bg-accent text-white text-xxs font-semibold rounded-sm px-[5px] py-[1px] leading-none">
+                {pendingRequestCount}
+              </span>
+            )}
           </Link>
         );
       })}

@@ -40,6 +40,7 @@ export function useSessionTasteVectors(
             rewatchCount: 0,
             providers: [],
             providersCheckedAt: null,
+            visibility: null,
             genreIds: (data.genreIds as number[]) ?? [],
             tmdbStatus: null,
             addedAt: new Date(),

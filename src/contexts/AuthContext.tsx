@@ -27,7 +27,7 @@ import {
 import { auth, db } from '@/lib/firebase/config';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
-import type { UserProfile } from '@/types';
+import type { ItemVisibility, UserProfile } from '@/types';
 
 interface AuthState {
   user: UserProfile | null;
@@ -49,6 +49,8 @@ interface AuthState {
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
+  updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
+  /** @deprecated — använd updateDefaultVisibility. Kvar för UI som inte migrerats. */
   updateIsPublic: (isPublic: boolean) => Promise<void>;
   updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
   updateHiddenCountries: (countries: string[]) => Promise<void>;
@@ -74,6 +76,7 @@ const AuthContext = createContext<AuthState>({
   resumeProvider: async () => {},
   updateUsername: async () => {},
   updateBio: async () => {},
+  updateDefaultVisibility: async () => {},
   updateIsPublic: async () => {},
   updateHideNonLatinTitles: async () => {},
   updateHiddenCountries: async () => {},
@@ -106,13 +109,17 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
 
   if (snap.exists()) {
     const data = snap.data();
+    const isPublicLegacy = (data.isPublic as boolean) ?? false;
     const existing: UserProfile = {
       displayName: data.displayName ?? firebaseUser.displayName ?? '',
       email: data.email ?? firebaseUser.email ?? '',
       photoURL: data.photoURL ?? firebaseUser.photoURL,
       username: (data.username as string) ?? null,
       bio: (data.bio as string) ?? '',
-      isPublic: (data.isPublic as boolean) ?? false,
+      // Lazy migration: legacy isPublic-boolean → tre-state defaultVisibility.
+      // Skrivs aldrig tillbaka här — bara nästa gång användaren ändrar något.
+      defaultVisibility: (data.defaultVisibility as ItemVisibility) ?? (isPublicLegacy ? 'public' : 'private'),
+      isPublic: isPublicLegacy,
       myProviders: data.myProviders ?? [],
       defaultView: data.defaultView ?? 'table',
       hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
@@ -150,6 +157,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     photoURL: firebaseUser.photoURL,
     username: null,
     bio: '',
+    defaultVisibility: 'private',
     isPublic: false,
     myProviders: [],
     defaultView: 'table',
@@ -241,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       photoURL: cred.user.photoURL,
       username: null,
       bio: '',
+      defaultVisibility: 'private',
       isPublic: false,
       myProviders: [],
       defaultView: 'table',
@@ -340,33 +349,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return updateUserField('providerPauses', next);
   }, [updateUserField, user?.providerPauses]);
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
-  const updateIsPublic = useCallback(async (isPublic: boolean) => {
-    if (!uid) return;
-    // Stega 1: uppdatera profil-flaggan.
-    await updateUserField('isPublic', isPublic);
 
-    // Stega 2: cascade till alla watchlist-items så att läsregeln kan matcha
-    // på resource.data.isPublic istället för att slå upp parent-user-doc per
-    // item. På 500 items sparar vi 500 ytterligare doc-reads per publikvy.
-    // Firestore batch-limit är 500 ops, vi chunkar på 450 för säkerhets skull.
+  const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {
+    if (!uid) return;
+    // Stega 1: uppdatera profil-fältet (+ legacy isPublic-mirror för bakåt-
+    // kompatibilitet i rules under migrationsperioden).
+    const isPublicMirror = visibility === 'public';
+    await setDoc(doc(db, 'users', uid), {
+      defaultVisibility: visibility,
+      isPublic: isPublicMirror,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    setUser(prev => prev ? { ...prev, defaultVisibility: visibility, isPublic: isPublicMirror } : null);
+
+    // Stega 2: cascade till alla watchlist-items utan explicit per-item-
+    // override. Firestore-regler kan inte joina mot parent-user-doc per item,
+    // så vi denormaliserar 'effectiveVisibility' (+ legacy isPublic-mirror) på
+    // varje item-doc. Items som har egen 'visibility'-override lämnas orörda.
     try {
       const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
-      const chunks: typeof snap.docs[] = [];
-      for (let i = 0; i < snap.docs.length; i += 450) {
-        chunks.push(snap.docs.slice(i, i + 450));
+      const updatable = snap.docs.filter(d => d.data().visibility == null);
+      const chunks: typeof updatable[] = [];
+      for (let i = 0; i < updatable.length; i += 450) {
+        chunks.push(updatable.slice(i, i + 450));
       }
       await Promise.all(chunks.map(chunk => {
         const batch = writeBatch(db);
-        for (const d of chunk) batch.set(d.ref, { isPublic }, { merge: true });
+        for (const d of chunk) {
+          batch.set(d.ref, {
+            effectiveVisibility: visibility,
+            isPublic: isPublicMirror,
+          }, { merge: true });
+        }
         return batch.commit();
       }));
     } catch (err) {
-      // Cascade-fel bryter inte profil-toggle — användaren kan alltid försöka
-      // igen. Loggas för att vi ska märka om det händer.
-
-      console.error('[isPublic cascade]', err);
+      console.error('[defaultVisibility cascade]', err);
     }
-  }, [uid, updateUserField]);
+  }, [uid]);
+
+  // Deprecated forwarder — UI som inte migrerats till tre-state radio.
+  const updateIsPublic = useCallback(async (isPublic: boolean) => {
+    await updateDefaultVisibility(isPublic ? 'public' : 'private');
+  }, [updateDefaultVisibility]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
   const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
   const setCalibrationGenres = useCallback((genres: Record<number, number> | null) => updateUserField('calibrationGenres', genres), [updateUserField]);
@@ -401,6 +426,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     snaps.followingSnap.docs.forEach(d => {
       refs.push(d.ref);
       refs.push(doc(db, 'users', d.id, 'followers', id));
+    });
+
+    // 2b. Friends — radera båda hållen av relation. snaps.friendsSnap har
+    // mina friend-docs (id = vännens uid). Spegla raderingen på deras sida.
+    snaps.friendsSnap.docs.forEach(d => {
+      refs.push(d.ref);
+      refs.push(doc(db, 'users', d.id, 'friends', id));
+    });
+    // 2c. Pending requests (incoming + outgoing) — rensa båda hållen så
+    // ingen kan accepta/cancel:a en request mot ett raderat konto.
+    snaps.friendRequestsSnap.docs.forEach(d => {
+      refs.push(d.ref);
+      refs.push(doc(db, 'users', d.id, 'friendRequestsSent', id));
+    });
+    snaps.friendRequestsSentSnap.docs.forEach(d => {
+      refs.push(d.ref);
+      refs.push(doc(db, 'users', d.id, 'friendRequests', id));
     });
 
     // 3. My reviews + all their subcollections (likes + comments on my reviews).
@@ -478,7 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -486,7 +528,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

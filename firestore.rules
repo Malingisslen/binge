@@ -55,7 +55,13 @@ service cloud.firestore {
     // klient-skrivning.
     match /users/{uid} {
       allow read: if isOwner(uid)
-        || resource.data.isPublic == true;
+        || resource.data.get('defaultVisibility', '') == 'public'
+        || resource.data.get('isPublic', false) == true;
+      // Vänner får läsa varandras profil-doc:et även om defaultVisibility
+      // är 'friends'. Implicit: vänskap kräver att båda kan se varandras
+      // profiler.
+      allow read: if resource.data.get('defaultVisibility', '') == 'friends'
+        && exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
       allow create: if isOwner(uid)
         && !('isAdmin' in request.resource.data);
       allow update: if isOwner(uid)
@@ -68,15 +74,22 @@ service cloud.firestore {
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, write: if isOwner(uid);
-      // Snabb-regel: resource.data.isPublic är denormaliserad från parent-profil.
-      // WatchlistContext stämplar isPublic vid skrivning och AuthContext.update
-      // IsPublic cascadar när profilen toggles. Sparar en extra doc-read per
+      // Tre-state visibility — denormaliserad från parent-profil. WatchlistContext
+      // stämplar effectiveVisibility vid skrivning och AuthContext.updateDefault
+      // Visibility cascadar när profilen toggles. Sparar en extra doc-read per
       // item (500 items → 500 färre reads).
-      allow read: if resource.data.isPublic == true;
-      // Legacy-fallback för items som skrevs innan 9.3 landade. Kostar en get()
-      // per doc men håller bakåtkompat tills alla items cascade-stämplats.
-      allow read: if !('isPublic' in resource.data)
-        && get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+      allow read: if resource.data.get('effectiveVisibility', '') == 'public';
+      allow read: if resource.data.get('effectiveVisibility', '') == 'friends'
+        && exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
+      // Legacy-fallback: items från innan tre-state landade har bara isPublic.
+      allow read: if !('effectiveVisibility' in resource.data)
+        && resource.data.get('isPublic', false) == true;
+      // Bakåt-fallback för items utan vare sig isPublic eller effectiveVisibility:
+      // slå upp parent-profil. Kostar en get() per doc men håller migrationen
+      // tills cascade-stämplingen körts på alla items.
+      allow read: if !('effectiveVisibility' in resource.data)
+        && !('isPublic' in resource.data)
+        && get(/databases/$(database)/documents/users/$(uid)).data.get('isPublic', false) == true;
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, write: if isOwner(uid);
@@ -105,6 +118,53 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
       allow write: if isOwner(followerUid);
+    }
+
+    // ---- friends-system (mutuell relation, kompletterar ensidiga follow) ----
+    //
+    // Bekräftade vänner. Båda riktningar speglas vid accept (atomisk batch).
+    // - users/{A}/friends/{B} = vad B är för A
+    // - users/{B}/friends/{A} = vad A är för B
+    //
+    // Läsning: ägaren ser sin egen lista. Andra parten kan läsa sin egen
+    // doc på motsattens sida (för att verifiera att vänskapen finns kvar
+    // — annars skulle de inte kunna se sin egen visibility-tier-tillgång).
+    match /users/{uid}/friends/{targetUid} {
+      allow read: if isOwner(uid) || isOwner(targetUid);
+      // Skapa: ägaren skriver (vid accept) ELLER targetUid skriver
+      // (motparts-spegling). Atomisk batch sker i klient (acceptFriendRequest).
+      allow create: if isOwner(uid) || isOwner(targetUid);
+      // Update: aldrig (since-fältet är immutable). Använd delete + create
+      // om man vill resetta.
+      allow update: if false;
+      // Radering: båda parter kan unfriend (och spegelraderar andra hållet).
+      allow delete: if isOwner(uid) || isOwner(targetUid);
+    }
+
+    // Inkomna vänskapsförfrågningar. Doc-id = avsändarens uid så vi kan slå
+    // upp via existens-check och inte läcker pending requests publikt.
+    match /users/{uid}/friendRequests/{fromUid} {
+      // Bara mottagaren ser sina inkomna requests.
+      allow read: if isOwner(uid);
+      // Avsändaren skapar request på mottagarens väg. Validera doc-id ===
+      // request.auth.uid så ingen kan skapa request "från" någon annan.
+      allow create: if isSignedIn()
+        && fromUid == request.auth.uid
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.fromDisplayName is string;
+      allow update: if false;
+      // Mottagaren kan radera (decline / vid accept). Avsändaren kan
+      // också radera sin egen pending request (cancel).
+      allow delete: if isOwner(uid) || isOwner(fromUid);
+    }
+
+    // Speglad outgoing-tracking på avsändarens sida — så UI kan visa
+    // "Förfrågan skickad" utan att läsa annans privata data.
+    match /users/{uid}/friendRequestsSent/{toUid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if false;
+      allow delete: if isOwner(uid) || isOwner(toUid);
     }
 
     // ---- usernames ----

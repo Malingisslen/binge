@@ -4,9 +4,16 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsCard } from './SettingsCard';
+import type { ItemVisibility } from '@/types';
+
+const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
+  { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar och min profil.' },
+  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och watchlist. Andra ser inget.' },
+  { value: 'public', label: 'Publik', description: 'Alla med länken till min profil kan se watchlist och betyg.' },
+];
 
 export function UsernameSection() {
-  const { user, updateUsername, updateBio, updateIsPublic } = useAuth();
+  const { user, updateUsername, updateBio, updateDefaultVisibility } = useAuth();
   const { show: toast } = useToast();
   const [usernameInput, setUsernameInput] = useState(user?.username ?? '');
   const [bioInput, setBioInput] = useState(user?.bio ?? '');
@@ -66,15 +73,30 @@ export function UsernameSection() {
             className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] resize-none outline-none"
           />
         </div>
-        <label className="flex items-center gap-2 cursor-pointer text-base">
-          <input
-            type="checkbox"
-            checked={user.isPublic}
-            onChange={e => { updateIsPublic(e.target.checked); toast(e.target.checked ? 'Profil publik' : 'Profil privat'); }}
-            className="accent-accent w-[14px] h-[14px]"
-          />
-          Visa min profil publikt
-        </label>
+        <div>
+          <label className="text-xs text-text-muted block mb-[4px]">Standardsynlighet</label>
+          <div className="space-y-[6px]">
+            {VISIBILITY_OPTIONS.map(opt => (
+              <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="defaultVisibility"
+                  value={opt.value}
+                  checked={user.defaultVisibility === opt.value}
+                  onChange={() => {
+                    updateDefaultVisibility(opt.value);
+                    toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
+                  }}
+                  className="accent-accent mt-[2px] w-[13px] h-[13px] shrink-0"
+                />
+                <span className="leading-tight">
+                  <span className="text-xs text-text-primary block">{opt.label}</span>
+                  <span className="text-xxs text-text-muted">{opt.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
     </SettingsCard>
   );
