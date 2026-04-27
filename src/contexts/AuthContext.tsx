@@ -478,7 +478,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           getDocs(collection(db, 'groups', groupDoc.id, 'watchlist')),
         ]);
         membersSnap.docs.forEach(d => refs.push(d.ref));
-        groupWatchlistSnap.docs.forEach(d => refs.push(d.ref));
+        // För varje watchlist-item: ta också med progress-subcollection.
+        // Sub-cleanup måste ske INNAN parent watchlist-doc raderas, men
+        // eftersom vi committar i 450-batch kommer queue-ordning räcka.
+        for (const wDoc of groupWatchlistSnap.docs) {
+          const progSnap = await getDocs(
+            collection(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress'),
+          );
+          progSnap.docs.forEach(d => refs.push(d.ref));
+          refs.push(wDoc.ref);
+        }
         refs.push(groupDoc.ref);
       } else {
         const current = (data.memberUids as string[]) ?? [];
@@ -486,6 +495,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ref: groupDoc.ref,
           newMemberUids: current.filter(u => u !== id),
         });
+        // Ta också bort min progress på alla titlar i den här gruppen så
+        // jag inte lämnar zombie-progress för andra medlemmar att se.
+        const groupWatchlistSnap = await getDocs(
+          collection(db, 'groups', groupDoc.id, 'watchlist'),
+        );
+        for (const wDoc of groupWatchlistSnap.docs) {
+          refs.push(doc(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress', id));
+        }
         refs.push(doc(db, 'groups', groupDoc.id, 'members', id));
       }
     }

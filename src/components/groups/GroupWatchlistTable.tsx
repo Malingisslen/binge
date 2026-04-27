@@ -31,8 +31,7 @@ export function GroupWatchlistTable({
     [watchlist],
   );
 
-  const memberUids = useMemo(() => members.map(m => m.uid), [members]);
-  const memberProgress = useGroupMemberProgress(memberUids);
+  const memberProgress = useGroupMemberProgress(groupId);
 
   return (
     <div className="bg-surface border border-border-main rounded-sm">

@@ -285,6 +285,79 @@ export async function removeFromGroupWatchlist(groupId: string, tmdbId: number):
   await deleteDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
 }
 
+// Skriver min progress på en titel i en specifik grupp. Subcollection-path:
+// groups/{id}/watchlist/{tmdbId}/progress/{uid}
+//
+// Ersätter den gamla designen där useGroupMemberProgress läste medlemmarnas
+// personliga watchlist-items direkt — det funkar inte längre när medlemmar
+// satt defaultVisibility='friends'/'private'. Grupp-scoped progress läses
+// av alla medlemmar oavsett deras profil-visibility (åtkomstgränsen är
+// gruppmedlemskap, inte profil-publik-flagga).
+export async function setGroupMemberProgress(params: {
+  groupId: string;
+  tmdbId: number;
+  uid: string;
+  lastWatchedSeason: number | null;
+  lastWatchedEpisode: number | null;
+  status?: string | null;
+}): Promise<void> {
+  const ref = doc(
+    db, 'groups', params.groupId, 'watchlist', String(params.tmdbId),
+    'progress', params.uid,
+  );
+  await setDoc(ref, {
+    lastWatchedSeason: params.lastWatchedSeason,
+    lastWatchedEpisode: params.lastWatchedEpisode,
+    status: params.status ?? null,
+    syncedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+// Sync-trigger: körs från WatchlistContext.updateProgress. Hittar alla
+// grupper jag är medlem i där titeln finns på gruppens watchlist, skriver
+// min progress till deras progress-subcollection. Fire-and-forget — fel
+// per grupp slukas så vi aldrig blockerar updateProgress på en flaky
+// gruppwrite.
+//
+// Kostnad i Firestore-reads: 1 query (mina grupper) + N getDoc per grupp
+// för att kolla om titeln finns. För 5 grupper ≈ 5 reads + M writes där
+// M är antal grupper som faktiskt har titeln. Acceptabelt — körs bara på
+// progress-uppdateringar, inte på rendering.
+export async function syncProgressToGroups(params: {
+  uid: string;
+  tmdbId: number;
+  lastWatchedSeason: number | null;
+  lastWatchedEpisode: number | null;
+  status?: string | null;
+}): Promise<void> {
+  try {
+    const groupsSnap = await getDocs(
+      query(collection(db, 'groups'), where('memberUids', 'array-contains', params.uid)),
+    );
+    if (groupsSnap.empty) return;
+    await Promise.all(groupsSnap.docs.map(async groupDoc => {
+      try {
+        const itemRef = doc(db, 'groups', groupDoc.id, 'watchlist', String(params.tmdbId));
+        const itemSnap = await getDoc(itemRef);
+        if (!itemSnap.exists()) return;
+        await setGroupMemberProgress({
+          groupId: groupDoc.id,
+          tmdbId: params.tmdbId,
+          uid: params.uid,
+          lastWatchedSeason: params.lastWatchedSeason,
+          lastWatchedEpisode: params.lastWatchedEpisode,
+          status: params.status ?? null,
+        });
+      } catch (err) {
+        // Logga per grupp så en flaky grupp inte tystar de andra.
+        console.warn('[group-progress-sync]', groupDoc.id, err);
+      }
+    }));
+  } catch (err) {
+    console.warn('[group-progress-sync]', err);
+  }
+}
+
 // ---- Doc → object converters ----
 
 export function groupDocToObject(id: string, data: Record<string, unknown>): Group {

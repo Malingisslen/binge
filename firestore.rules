@@ -395,6 +395,17 @@ service cloud.firestore {
 
         allow create, update, delete: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+
+        // Per-medlem progress på en titel i gruppen. Möjliggör spoiler-skydd
+        // och "var ligger ni"-vy oavsett medlemmens privata visibility.
+        // Läsåtkomst: alla gruppmedlemmar (gruppmedlemskap är access-line:n,
+        // inte profil-publik-flaggan). Skrivåtkomst: bara progress-doc-ägaren.
+        match /progress/{progressUid} {
+          allow read: if isSignedIn()
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+          allow create, update, delete: if isOwner(progressUid)
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+        }
       }
     }
   }

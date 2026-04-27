@@ -161,12 +161,25 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       current?.status === 'vill_se' && season >= 1 && episode >= 1
         ? (current.mediaType === 'tv' ? 'mina' : 'sedd')
         : null;
+    const newStatus = promoteStatus ?? current?.status ?? null;
     await setDoc(ref, {
       lastWatchedSeason: season,
       lastWatchedEpisode: episode,
       updatedAt: serverTimestamp(),
       ...(promoteStatus ? { status: promoteStatus, watchedAt: promoteStatus === 'sedd' ? serverTimestamp() : null } : {}),
     }, { merge: true });
+    // Fire-and-forget: sync progress till alla grupper jag är medlem i där
+    // titeln finns. Block:ar inte UI:n om en grupp är flaky — fel slukas i
+    // syncProgressToGroups.
+    void import('@/lib/firebase/groups').then(({ syncProgressToGroups }) =>
+      syncProgressToGroups({
+        uid,
+        tmdbId,
+        lastWatchedSeason: season,
+        lastWatchedEpisode: episode,
+        status: newStatus,
+      }),
+    );
   }, [uid, items]);
 
   const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
