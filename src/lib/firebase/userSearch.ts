@@ -27,7 +27,10 @@ const MAX_RESULTS = 5;
 // en prefix-sökning.
 const PREFIX_END_SUFFIX = '';
 
-export async function searchUsersByPrefix(prefix: string): Promise<ResolvedUser[]> {
+export async function searchUsersByPrefix(
+  prefix: string,
+  myUid: string | null = null,
+): Promise<ResolvedUser[]> {
   const q = prefix.trim().toLowerCase().replace(/^@/, '');
   if (q.length < 2) return [];
 
@@ -49,7 +52,24 @@ export async function searchUsersByPrefix(prefix: string): Promise<ResolvedUser[
         const profileSnap = await getDoc(doc(db, 'users', m.uid));
         if (!profileSnap.exists()) return null;
         const p = profileSnap.data();
-        if (p.isPublic !== true) return null;
+        // Tre-state visibility (Fas 1) + befintlig relation. Visa:
+        // - Public-konton (sökbara av alla)
+        // - Konton jag redan är vän med (oavsett tier — vänskap = explicit
+        //   relation som motiverar att de syns i mitt sök)
+        // Lazy-migration: legacy isPublic=true → public, annars private.
+        const tier = (p.defaultVisibility as string | undefined)
+          ?? (p.isPublic === true ? 'public' : 'private');
+        if (tier !== 'public') {
+          if (!myUid || m.uid === myUid) return null;
+          // Är denna user redan min vän? Då släpp igenom oavsett tier.
+          // Kostar 1 extra getDoc per icke-public match (max 5 per sök).
+          try {
+            const friendDoc = await getDoc(doc(db, 'users', m.uid, 'friends', myUid));
+            if (!friendDoc.exists()) return null;
+          } catch {
+            return null;
+          }
+        }
         return {
           uid: m.uid,
           displayName: (p.displayName as string) ?? m.username,
