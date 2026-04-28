@@ -28,12 +28,12 @@ importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-messaging-com
 
 // === KONFIGURERA: ersätt nedan med värden från `firebase apps:sdkconfig` ===
 firebase.initializeApp({
-  apiKey: 'REPLACE_FIREBASE_API_KEY',
+  apiKey: 'AIzaSyBdEFOnai3-jfg_r_62bYFBzmKKpgZ_qsk',
   authDomain: 'binge-nu.firebaseapp.com',
   projectId: 'binge-nu',
   storageBucket: 'binge-nu.firebasestorage.app',
-  messagingSenderId: 'REPLACE_MESSAGING_SENDER_ID',
-  appId: 'REPLACE_FIREBASE_APP_ID',
+  messagingSenderId: '879931819959',
+  appId: '1:879931819959:web:61d5a48329ac329f128a32',
 });
 
 const messaging = firebase.messaging();
