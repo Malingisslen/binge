@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useFcmForeground } from '@/hooks/useFcmToken';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import MobileNav from '@/components/layout/MobileNav';
@@ -14,6 +15,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // Subscribe på FCM foreground-messages så push:ar visas som in-app-toasts
+  // istället för OS-notifs när användaren har appen öppen (mer subtil UX).
+  // Hookens egen guard gör inget när pushEnabled=false eller utan FCM-stöd.
+  useFcmForeground();
 
   const isLandingForGuest = mounted && !loading && !user && pathname === '/';
 

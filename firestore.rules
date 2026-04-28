@@ -109,6 +109,15 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
+    // FCM web-push tokens. Doc-id = autoId, fältet 'token' lagrar registrering-
+    // tokenet från getToken({ vapidKey }). Cloud Functions läser dessa för att
+    // skicka push vid friend-request och sessionHistory-create. När send returnerar
+    // 'messaging/registration-token-not-registered' raderar functions doc:et —
+    // men det är admin-SDK-skrivning, inte klient-skrivning.
+    match /users/{uid}/fcmTokens/{tokenId} {
+      allow read, write: if isOwner(uid);
+    }
+
     // Follow system
     match /users/{uid}/following/{targetUid} {
       allow read, write: if isOwner(uid);

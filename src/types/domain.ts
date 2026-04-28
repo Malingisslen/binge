@@ -123,6 +123,11 @@ export interface UserProfile {
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
+    // Fas 4 — push-notifs via FCM. Default false; sätts true när användaren
+    // toggles ON i settings + grant:ar browser-permission. Toggling OFF
+    // raderar token-doc:et på den här enheten (andra enheter behåller sina
+    // tokens om de toggle:as separat).
+    pushEnabled: boolean;
   };
 }
 

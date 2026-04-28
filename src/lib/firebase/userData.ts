@@ -36,6 +36,10 @@ export interface UserDataSnapshots {
   friendsSnap: QuerySnapshot;
   friendRequestsSnap: QuerySnapshot;
   friendRequestsSentSnap: QuerySnapshot;
+  // FCM web-push tokens (Fas 4). Inkluderas i delete-cascade. För export
+  // behöver vi inte exponera tokens (de är device-specifika och meningslösa
+  // utanför Firebase) — buildUserExport kan hoppa över detta fält.
+  fcmTokensSnap: QuerySnapshot;
   reviewsSnap: QuerySnapshot;
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
@@ -56,6 +60,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendsSnap,
     friendRequestsSnap,
     friendRequestsSentSnap,
+    fcmTokensSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
@@ -73,6 +78,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'friends')),
     getDocs(collection(db, 'users', uid, 'friendRequests')),
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
+    getDocs(collection(db, 'users', uid, 'fcmTokens')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // doc-id = mitt uid (single-field collection-group-index på documentId)
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
@@ -95,6 +101,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendsSnap,
     friendRequestsSnap,
     friendRequestsSentSnap,
+    fcmTokensSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,

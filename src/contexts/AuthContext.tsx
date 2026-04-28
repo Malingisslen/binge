@@ -51,6 +51,7 @@ interface AuthState {
   updateBio: (bio: string) => Promise<void>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
   markNotificationsSeen: () => Promise<void>;
+  updateNotificationSettings: (patch: Partial<UserProfile['notificationSettings']>) => Promise<void>;
   /** @deprecated — använd updateDefaultVisibility. Kvar för UI som inte migrerats. */
   updateIsPublic: (isPublic: boolean) => Promise<void>;
   updateHideNonLatinTitles: (hide: boolean) => Promise<void>;
@@ -79,6 +80,7 @@ const AuthContext = createContext<AuthState>({
   updateBio: async () => {},
   updateDefaultVisibility: async () => {},
   markNotificationsSeen: async () => {},
+  updateNotificationSettings: async () => {},
   updateIsPublic: async () => {},
   updateHideNonLatinTitles: async () => {},
   updateHiddenCountries: async () => {},
@@ -137,9 +139,10 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       onboardingCompletedAt: data.onboardingCompletedAt?.toDate(),
       lastNotificationsSeenAt: data.lastNotificationsSeenAt?.toDate(),
       isAdmin: (data.isAdmin as boolean) ?? false,
-      notificationSettings: data.notificationSettings ?? {
-        newEpisodes: true,
-        availableOnMyServices: true,
+      notificationSettings: {
+        newEpisodes: data.notificationSettings?.newEpisodes ?? true,
+        availableOnMyServices: data.notificationSettings?.availableOnMyServices ?? true,
+        pushEnabled: data.notificationSettings?.pushEnabled ?? false,
       },
     };
 
@@ -175,6 +178,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     notificationSettings: {
       newEpisodes: true,
       availableOnMyServices: true,
+      pushEnabled: false,
     },
   };
 
@@ -262,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerTiers: {},
       providerPauses: {},
       calibrationGenres: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
       createdAt: serverTimestamp(),
@@ -408,6 +412,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
     setUser(prev => prev ? { ...prev, lastNotificationsSeenAt: now } : null);
   }, [uid]);
+
+  // Patch-update av notification-settings. Tar Partial för att UI:n bara ska
+  // skicka det fält som ändrats — Firestore mergar resten. Cloud Functions
+  // läser detta fält som hårt på/av-villkor innan FCM-skick.
+  const updateNotificationSettings = useCallback(async (
+    patch: Partial<UserProfile['notificationSettings']>,
+  ) => {
+    if (!uid || !user) return;
+    const merged = { ...user.notificationSettings, ...patch };
+    await setDoc(doc(db, 'users', uid), {
+      notificationSettings: merged,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    setUser(prev => prev ? { ...prev, notificationSettings: merged } : null);
+  }, [uid, user]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
   const updateHiddenCountries = useCallback((countries: string[]) => updateUserField('hiddenCountries', countries), [updateUserField]);
   const setCalibrationGenres = useCallback((genres: Record<number, number> | null) => updateUserField('calibrationGenres', genres), [updateUserField]);
@@ -437,6 +456,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
     snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
     snaps.blockedSnap.docs.forEach(d => refs.push(d.ref));
+    // FCM-tokens raderas så Cloud Functions inte fortsätter försöka skicka
+    // push till en raderad användare. Server-side cleanup tar dem bort
+    // till slut via 'registration-token-not-registered'-felet, men explicit
+    // rensning här är säkrare och snabbare.
+    snaps.fcmTokensSnap.docs.forEach(d => refs.push(d.ref));
 
     // 2. Outbound follows: delete own "following" + mirror "followers" on target.
     snaps.followingSnap.docs.forEach(d => {
@@ -555,7 +579,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -563,7 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

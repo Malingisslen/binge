@@ -11,6 +11,10 @@ export default [
       'node_modules/**',
       'emulator-data/**',
       'mockups/**',
+      // Cloud Functions har sitt eget tsconfig + CommonJS-output. Root-lint
+      // ska inte tracka compileratet eller dess deps.
+      'functions/lib/**',
+      'functions/node_modules/**',
     ],
   },
   {

@@ -7,6 +7,7 @@ import { UsernameSection } from '@/components/settings/UsernameSection';
 import { ProvidersSection } from '@/components/settings/ProvidersSection';
 import { DisplaySection } from '@/components/settings/DisplaySection';
 import { ContentFilterSection } from '@/components/settings/ContentFilterSection';
+import { NotificationsSection } from '@/components/settings/NotificationsSection';
 import { TasteDataSection } from '@/components/settings/TasteDataSection';
 import { DataExportSection } from '@/components/settings/DataExportSection';
 import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection';
@@ -28,6 +29,7 @@ function SettingsContent() {
       <ProvidersSection />
       <DisplaySection />
       <ContentFilterSection />
+      <NotificationsSection />
       <TasteDataSection />
       <DataExportSection />
       <DeleteAccountSection />
