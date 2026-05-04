@@ -19,9 +19,6 @@ export const metadata: Metadata = {
     template: '%s — Binge.nu',
   },
   description: 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.',
-  // Förhindra FOUC + dubbelindexering mellan www/apex — hanteras via
-  // Cloudflare-regler; här sätter vi bara canonical på rot-URL:en.
-  alternates: { canonical: '/' },
   openGraph: {
     title: 'Binge.nu',
     description: 'Håll koll på vad du tittar på — se var film och serier finns att streama i Sverige.',

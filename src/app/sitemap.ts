@@ -35,8 +35,6 @@ function staticEntries(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/discover/`, lastModified, changeFrequency: 'daily', priority: 0.9 },
     { url: `${SITE_URL}/films/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/series/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
-    { url: `${SITE_URL}/calendar/`, lastModified, changeFrequency: 'daily', priority: 0.7 },
-    { url: `${SITE_URL}/recommendations/`, lastModified, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${SITE_URL}/savings/`, lastModified, changeFrequency: 'weekly', priority: 0.5 },
     { url: `${SITE_URL}/integritet/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${SITE_URL}/villkor/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },

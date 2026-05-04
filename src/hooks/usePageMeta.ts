@@ -40,6 +40,22 @@ function setMeta(attr: 'name' | 'property', key: string, value: string): void {
   el.setAttribute('content', value);
 }
 
+function setCanonical(href: string): void {
+  if (typeof document === 'undefined') return;
+  let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!el) {
+    el = document.createElement('link');
+    el.setAttribute('rel', 'canonical');
+    document.head.appendChild(el);
+  }
+  el.setAttribute('href', href);
+}
+
+function removeCanonical(): void {
+  if (typeof document === 'undefined') return;
+  document.head.querySelector('link[rel="canonical"]')?.remove();
+}
+
 export function usePageMeta({
   title,
   description,
@@ -53,6 +69,7 @@ export function usePageMeta({
     const fullTitle = `${title} — Binge.nu`;
     document.title = fullTitle;
     setMeta('property', 'og:title', fullTitle);
+    setCanonical(window.location.href.split('?')[0]);
 
     if (description) {
       setMeta('name', 'description', description);
@@ -67,6 +84,7 @@ export function usePageMeta({
       setMeta('name', 'description', DEFAULT_DESCRIPTION);
       setMeta('property', 'og:title', 'Binge.nu');
       setMeta('property', 'og:description', DEFAULT_DESCRIPTION);
+      removeCanonical();
     };
   }, [title, description, ogImage]);
 }
