@@ -17,6 +17,61 @@ import { useTrending } from '@/hooks/useTMDB';
 import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 
+const FAQ_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'Vad är Binge.nu och hur fungerar det?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Binge.nu är en gratis svensk mediatracker för film och TV-serier. Du loggar in med Google, lägger till titlar du tittar på eller vill se, och sajten visar automatiskt var varje titel går att streama i Sverige — Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play med flera.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Var kan jag streama en specifik film eller serie i Sverige?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'På Binge.nu kan du söka efter en film eller serie och direkt se vilka svenska streamingtjänster som har den tillgänglig just nu. Data uppdateras löpande via TMDB.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Är Binge.nu gratis?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Ja, Binge.nu är helt gratis att använda. Du skapar ett konto via Google-inloggning, utan kostnad.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Kan Binge.nu hjälpa mig spara pengar på streaming?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Ja. Streamingrådgivaren på Binge.nu analyserar vilka av dina abonnemang som faktiskt används av titlarna på din bevakningslista. Den visar vilka tjänster du kan pausa utan att missa något — och hur mycket du sparar per månad.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Vilka streamingtjänster täcker Binge.nu?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Binge.nu täcker svenska streamingtjänster inklusive Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play, C More, SkyShowtime och fler. Tjänsten är begränsad till tillgänglighet i Sverige.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Hur håller jag koll på kommande avsnitt av mina serier?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'När du lägger till en TV-serie i din lista på Binge.nu visas kommande avsnitt automatiskt i din kalender, med datum och avsnittsinformation i svensk tidszon.',
+      },
+    },
+  ],
+};
+
 function LandingPage() {
   const { signIn } = useAuth();
   const { data: trending } = useTrending('all', 'week');
@@ -27,6 +82,12 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-page">
+      {/* FAQ JSON-LD for LLM/AI search discoverability */}
+      <script
+        type="application/ld+json"
+        // Content is a hardcoded constant — no XSS risk
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+      />
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
           <h1 className="text-[32px] font-extrabold text-accent mb-2">

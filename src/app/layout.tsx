@@ -74,6 +74,15 @@ export default function RootLayout({
               url: SITE_URL,
               logo: OG_IMAGE,
               description: 'Svensk mediatracker för film och TV-serier.',
+              areaServed: { '@type': 'Country', name: 'Sweden', sameAs: 'https://www.wikidata.org/wiki/Q34' },
+              serviceType: ['Media Tracker', 'Streaming Aggregator', 'Watchlist Manager'],
+              knowsAbout: [
+                'Swedish streaming services', 'Netflix Sweden', 'Viaplay',
+                'HBO Max Sweden', 'Disney Plus Sweden', 'SVT Play', 'TV4 Play',
+                'C More', 'SkyShowtime', 'movie tracking', 'TV show tracking',
+                'streaming subscription management', 'watchlist',
+                'film och TV-serier i Sverige', 'var streamar jag',
+              ],
             }),
           }}
         />
