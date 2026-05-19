@@ -13,12 +13,15 @@ export interface CalendarEntry {
   tmdbId: number;
   title: string;
   posterPath: string | null;
+  backdropPath: string | null;
   season: number;
   episode: number;
   episodeCode: string;
   episodeName?: string;
+  episodeOverview?: string;
   airDate: string;
   provider?: string;
+  runtime?: number;
 }
 
 export function useCalendarEntries() {
@@ -86,12 +89,15 @@ export function useCalendarEntries() {
           tmdbId: item.showId,
           title: preferOriginalTitle(item.show.name, item.show.original_name),
           posterPath: item.show.poster_path,
+          backdropPath: ep.still_path ?? item.show.backdrop_path ?? null,
           season: ep.season_number,
           episode: ep.episode_number,
           episodeCode: formatEpisodeCode(ep.season_number, ep.episode_number),
           episodeName: ep.name,
+          episodeOverview: ep.overview ?? undefined,
           airDate: ep.air_date,
           provider: providerName,
+          runtime: ep.runtime ?? undefined,
         });
       }
     }

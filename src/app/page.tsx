@@ -1,12 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, Sparkles } from 'lucide-react';
-import UpcomingCards from '@/components/dashboard/UpcomingCards';
-import WatchingTable from '@/components/dashboard/WatchingTable';
-import SubscriptionAdvisorWidget from '@/components/dashboard/SubscriptionAdvisorWidget';
-import RevivalNudge from '@/components/dashboard/RevivalNudge';
+import { Search } from 'lucide-react';
 import SearchDropdown from '@/components/search/SearchDropdown';
 import { useSearchBox } from '@/hooks/useSearchBox';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -16,6 +12,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTrending } from '@/hooks/useTMDB';
 import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
 import { isAddableMediaType } from '@/lib/tmdb/client';
+import HemHero from '@/components/home/HemHero';
+import HemFocal from '@/components/home/HemFocal';
+import LaterThisWeek from '@/components/home/LaterThisWeek';
+import SparandeTile from '@/components/home/SparandeTile';
+import VannerTile from '@/components/home/VannerTile';
+import GrupperTile from '@/components/home/GrupperTile';
+import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 
 const FAQ_JSON_LD = {
   '@context': 'https://schema.org',
@@ -155,46 +158,18 @@ function LandingPage() {
   );
 }
 
-function CalibrationCTA() {
+function EmptyLibrary() {
   return (
-    <div className="bg-surface border border-accent/30 rounded-sm mb-[14px] px-3 py-2 flex items-center gap-3">
-      <Sparkles size={16} className="text-accent shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-bold text-text-primary">Kalibrera din smak</div>
-        <div className="text-xxs text-text-muted">
-          Svep igenom 10 populära titlar så lär vi känna din stil — används för smak-match och rekommendationer.
-        </div>
-      </div>
-      <Link
-        href="/kalibrera/"
-        className="shrink-0 px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline"
-      >
-        Kalibrera
-      </Link>
-    </div>
-  );
-}
-
-function OnboardingCTA() {
-  return (
-    <div className="bg-surface border border-accent/30 rounded-sm mb-[14px] px-4 py-4 text-center">
-      <h2 className="text-sm font-bold text-text-primary mb-1">Välkommen till Binge!</h2>
-      <p className="text-xs text-text-muted mb-3">
-        Börja genom att lägga till serier och filmer du tittar på.
+    <div className="hem-empty">
+      <h2>Välkommen till Binge.</h2>
+      <p>
+        Lägg till några serier eller filmer du tittar på så börjar veckan ovan
+        fyllas med dina avsnitt — och tjänster du inte använder dyker upp
+        som möjliga pauser i högerkolumnen.
       </p>
-      <div className="flex justify-center gap-2">
-        <Link
-          href="/series/"
-          className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline"
-        >
-          Utforska serier
-        </Link>
-        <Link
-          href="/films/"
-          className="px-3 py-[5px] bg-surface text-text-secondary border border-border-main rounded-sm text-xs font-semibold no-underline"
-        >
-          Utforska filmer
-        </Link>
+      <div className="actions">
+        <Link href="/series/" className="btn">Utforska serier</Link>
+        <Link href="/films/" className="btn btn-ghost">Utforska filmer</Link>
       </div>
     </div>
   );
@@ -202,18 +177,29 @@ function OnboardingCTA() {
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
-  const { items, getByStatus } = useWatchlist();
-  // 'mina' = TV-shows i samlingen (motsvarar gamla 'följer'). Filmer i 'sedd'
-  // räknas inte som "följer" på dashboard — de är ett finalt tillstånd.
-  const following = getByStatus('mina', 'tv');
+  const { items } = useWatchlist();
   const calendarEntries = useCalendarEntries();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Compute focal + week-summary once per render. Pure function, cheap.
+  const { focal, totalThisWeek } = useMemo(() => {
+    const focal = pickFocalEntry(calendarEntries);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekAhead = new Date(today);
+    weekAhead.setDate(today.getDate() + 7);
+    const totalThisWeek = calendarEntries.filter(e => {
+      const d = new Date(e.airDate + 'T00:00:00');
+      return d >= today && d < weekAhead;
+    }).length;
+    return { focal, totalThisWeek };
+  }, [calendarEntries]);
+
   if (!mounted || loading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
-        <div className="text-sm text-text-muted">Laddar...</div>
+        <div className="text-sm text-ink-3">Laddar...</div>
       </div>
     );
   }
@@ -222,20 +208,28 @@ export default function DashboardPage() {
     return <LandingPage />;
   }
 
-  const isEmpty = items.length === 0;
-  const hasAnyRating = items.some(i => i.rating != null);
-  const needsCalibration = !isEmpty
-    && !hasAnyRating
-    && !user.calibrationGenres;
+  const hasLibrary = items.length > 0;
+  const focalKey = focal ? focalEntryKey(focal) : undefined;
 
   return (
     <>
-      {isEmpty && <OnboardingCTA />}
-      {needsCalibration && <CalibrationCTA />}
-      <UpcomingCards entries={calendarEntries} />
-      <RevivalNudge />
-      <SubscriptionAdvisorWidget />
-      <WatchingTable items={following} />
+      <HemHero focal={focal} totalThisWeek={totalThisWeek} hasLibrary={hasLibrary} />
+
+      {!hasLibrary ? (
+        <EmptyLibrary />
+      ) : (
+        <div className="hem-grid">
+          <div>
+            {focal && <HemFocal entry={focal} />}
+            <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+          </div>
+          <aside className="rail" aria-label="Sidostatistik">
+            <SparandeTile />
+            <VannerTile />
+            <GrupperTile />
+          </aside>
+        </div>
+      )}
     </>
   );
 }

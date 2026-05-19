@@ -694,6 +694,441 @@ button { font: inherit; cursor: pointer; }
   }
 }
 
+/* ─── Hem (front room) ───────────────────────────────────────────────────
+   Two-column layout: main column (focal block + filmstrip) + right rail
+   (sparande / vänner / grupper tiles). The grid collapses on narrow screens
+   so the rail stacks below the main column. */
+.hem-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 36px;
+  margin-top: 32px;
+}
+@media (max-width: 1100px) {
+  .hem-grid { grid-template-columns: 1fr; gap: 24px; }
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── Section header (h3 + meta) used inside Hem main column ─── */
+.sect-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 44px 0 14px;
+  gap: 14px;
+}
+.sect-h h3 {
+  margin: 0;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+.sect-h .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ─── Focal block ────────────────────────────────────────────────────────
+   The home page's hero card: tonight's episode rendered as a 21:9 duotone
+   still with a 2:3 poster overlapping the bottom-left corner. */
+.focal {
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  position: relative;
+}
+.focal .still {
+  aspect-ratio: 21/9;
+  background: oklch(0.16 0 0);
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--ink);
+}
+.focal .still img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.focal .badge-stack {
+  position: absolute;
+  left: 18px; top: 18px;
+  display: flex; gap: 6px; align-items: center;
+}
+.focal .badge-stack .b {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: oklch(0 0 0 / 0.62);
+  color: oklch(1 0 0 / 0.96);
+  padding: 5px 9px;
+  border-radius: 2px;
+  backdrop-filter: blur(3px);
+}
+.focal .badge-stack .b.live {
+  background: var(--acc-deep);
+  color: white;
+}
+.focal .body {
+  padding: 20px 24px 22px;
+  display: grid;
+  grid-template-columns: 92px 1fr auto;
+  gap: 20px;
+  align-items: flex-start;
+}
+.focal .body .px {
+  width: 92px;
+  aspect-ratio: 2/3;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: oklch(0.16 0 0);
+  position: relative;
+  margin-top: -56px;
+}
+.focal .body .px img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.focal .body .meta-col { min-width: 0; }
+.focal .body .ch-line {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.focal .body .ch-line .live { color: var(--acc-deep); font-weight: 500; }
+.focal .body h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 32px;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.focal .body .syn {
+  margin-top: 8px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 52ch;
+}
+.focal .body .stats {
+  display: flex; gap: 22px; margin-top: 14px; flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  font-feature-settings: "tnum" 1;
+}
+.focal .body .stats .k { color: var(--ink-3); margin-right: 5px; }
+.focal .body .stats strong { color: var(--ink); font-weight: 500; }
+.focal .body .cta {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  min-width: 200px;
+}
+
+/* ─── Catch-up progress strip ─── */
+.focal .catch {
+  border-top: 1px solid var(--rule);
+  background: var(--bg-2);
+  padding: 12px 24px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+.focal .catch .progress {
+  height: 6px;
+  background: var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.focal .catch .progress .bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--ink);
+}
+.focal .catch .progress .bar::after {
+  content: "";
+  position: absolute; right: 0; top: -2px; bottom: -2px;
+  width: 2px;
+  background: var(--acc-deep);
+}
+.focal .catch .ticks {
+  margin-top: 4px;
+  display: flex; gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.focal .catch .ticks span {
+  flex: 1; text-align: center; padding: 1px 0;
+  border-top: 1px solid var(--rule-2);
+}
+.focal .catch .ticks span.seen { color: var(--ink-2); }
+.focal .catch .ticks span.now {
+  color: var(--acc-deep);
+  font-weight: 600;
+  border-top-color: var(--acc-deep);
+}
+.focal .catch .ttx {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.focal .catch .ttx strong { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 760px) {
+  .focal .body {
+    grid-template-columns: 80px 1fr;
+    gap: 14px;
+  }
+  .focal .body .px { width: 80px; margin-top: -40px; }
+  .focal .body .cta { grid-column: 1 / 3; flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .focal .body h2 { font-size: 24px; }
+  .focal .catch { grid-template-columns: 1fr; }
+}
+
+/* ─── "Senare i veckan" filmstrip ───────────────────────────────────────── */
+.filmstrip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px;
+}
+@media (max-width: 980px) { .filmstrip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px) { .filmstrip { grid-template-columns: repeat(2, 1fr); } }
+
+.film-card {
+  display: flex; flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.film-card .poster {
+  transition: border-color 140ms, transform 140ms;
+}
+.film-card:hover .poster {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+}
+.film-card .ttl {
+  margin-top: 10px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.film-card .meta {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.film-card .meta .day {
+  color: var(--ink-2);
+  text-transform: uppercase;
+}
+
+/* ─── Right rail tiles ──────────────────────────────────────────────────── */
+.tile {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 18px 20px;
+}
+.tile .h {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tile .h .more {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.tile .h .more:hover { color: var(--ink); }
+
+/* Sparande tile */
+.tile.sparande .val {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-feature-settings: "tnum" 1;
+  color: var(--ink);
+}
+.tile.sparande .val .unit {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-left: 6px;
+  letter-spacing: -0.01em;
+}
+.tile.sparande .note {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.tile.sparande .note strong { color: var(--ink); font-weight: 500; }
+.tile.sparande .pause {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg);
+}
+.tile.sparande .pause strong { color: var(--ink); font-weight: 500; }
+.tile.sparande .pause .svc {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+/* Vänner / Grupper tile shared list */
+.tile-list { margin: 0; padding: 0; list-style: none; }
+.tile-list li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule-2);
+  align-items: flex-start;
+}
+.tile-list li:last-child { border-bottom: 0; }
+.tile-list .av {
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: white;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.tile-list .av.is-cal { background: var(--cal-deep); }
+.tile-list .txt {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.tile-list .txt strong { font-weight: 500; }
+.tile-list .txt .when {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+.tile-list .txt a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+.tile-list .txt a:hover { border-bottom-color: var(--ink); }
+
+/* Grupper rows */
+.tile.grupp .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+}
+.tile.grupp .row:last-child { border-bottom: 0; }
+.tile.grupp .row:hover .nm { color: var(--ink); }
+.tile.grupp .nm {
+  flex: 1;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.tile.grupp .dot {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.tile.grupp .dot.on {
+  background: var(--acc-deep);
+  animation: pulse-acc 1.6s ease-in-out infinite;
+}
+.tile.grupp .ct {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.tile.grupp .empty {
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 6px 0;
+  line-height: 1.4;
+}
+.tile.grupp .empty a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* ─── Empty Hem state (no library yet / no upcoming) ─── */
+.hem-empty {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 32px 28px;
+  margin-top: 24px;
+  text-align: left;
+  max-width: 640px;
+}
+.hem-empty h2 {
+  margin: 0 0 6px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+.hem-empty p {
+  margin: 0 0 16px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  font-size: 14px;
+}
+.hem-empty .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ─── Legacy token bridge ────────────────────────────────────────────────
    Existing pages use tailwind color tokens (bg-page, bg-surface, text-ink,
    border-rule, etc.) — these resolve to the new oklch values via the
