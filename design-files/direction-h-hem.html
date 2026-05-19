@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Binge — Hem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="direction-h.css">
+<style>
+  /* ─── Hem-specific layout ─── */
+  .hem-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 40px;
+    margin-top: 36px;
+  }
+  @media (max-width: 1100px) { .hem-grid { grid-template-columns: 1fr; } }
+
+  /* focal block — tonight's episode */
+  .focal {
+    border: 1px solid var(--ink);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+    position: relative;
+  }
+  .focal .still {
+    aspect-ratio: 21/9;
+    background: oklch(0.16 0 0);
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--ink);
+  }
+  .focal .still img {
+    width: 100%; height: 100%; object-fit: cover;
+    filter: url(#duo-terra);
+    transition: filter 220ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  .focal .still:hover img { filter: none; }
+  .focal .still::after {
+    content: ""; position: absolute; inset: auto 8px 8px auto;
+    width: 7px; height: 7px; border-radius: 1px;
+    background: oklch(1 0 0 / 0.9);
+    box-shadow: 0 0 0 1px oklch(0 0 0 / 0.25);
+    opacity: 0; transition: opacity 180ms;
+  }
+  .focal .still:hover::after { opacity: 1; }
+  .focal .badge-stack {
+    position: absolute; left: 18px; top: 18px;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .focal .badge-stack .b {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    background: oklch(0 0 0 / 0.62); color: oklch(1 0 0 / 0.96);
+    padding: 5px 9px; border-radius: 2px;
+    backdrop-filter: blur(3px);
+  }
+  .focal .badge-stack .b.live {
+    background: var(--acc-deep); color: white;
+  }
+  .focal .body {
+    padding: 20px 24px 22px;
+    display: grid;
+    grid-template-columns: 92px 1fr auto;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .focal .body .px {
+    width: 92px; aspect-ratio: 2/3;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    background: oklch(0.16 0 0);
+    position: relative;
+    margin-top: -56px;
+    box-shadow: 0 4px 18px oklch(0 0 0 / 0.18);
+  }
+  .focal .body .px img {
+    width: 100%; height: 100%; object-fit: cover;
+    filter: url(#duo-terra);
+    transition: filter 220ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  .focal .body .px:hover img { filter: none; }
+  .focal .body .meta-col {
+    min-width: 0;
+  }
+  .focal .body .ch-line {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .focal .body .ch-line .live {
+    color: var(--acc-deep); font-weight: 500;
+  }
+  .focal .body .ch-line .live::before {
+    content: ""; display: inline-block;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--acc-deep); margin-right: 6px;
+    vertical-align: middle;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .focal .body h2 {
+    margin: 0;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 32px; line-height: 1.02;
+    letter-spacing: -0.03em;
+  }
+  .focal .body .syn {
+    margin-top: 8px;
+    font-size: 14.5px; line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 52ch;
+  }
+  .focal .body .stats {
+    display: flex; gap: 22px; margin-top: 14px;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-2);
+  }
+  .focal .body .stats .k { color: var(--ink-3); margin-right: 5px; }
+  .focal .body .stats strong { color: var(--ink); font-weight: 500; }
+  .focal .body .cta {
+    display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+    min-width: 200px;
+  }
+
+  /* "ikapp"-progress: visual indicator that you're 1 episode behind */
+  .focal .catch {
+    border-top: 1px solid var(--rule);
+    background: var(--bg-2);
+    padding: 12px 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: center;
+  }
+  .focal .catch .progress {
+    height: 6px; background: var(--rule);
+    border-radius: 999px; overflow: hidden;
+    position: relative;
+  }
+  .focal .catch .progress .bar {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 62.5%;
+    background: var(--ink);
+  }
+  .focal .catch .progress .bar::after {
+    content: ""; position: absolute; right: 0; top: -2px; bottom: -2px;
+    width: 2px; background: var(--acc-deep);
+  }
+  .focal .catch .ticks {
+    margin-top: 4px;
+    display: flex; gap: 4px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3); letter-spacing: 0.04em;
+  }
+  .focal .catch .ticks span { flex: 1; text-align: center; padding: 1px 0; border-top: 1px solid var(--rule-2); }
+  .focal .catch .ticks span.seen { color: var(--ink-2); }
+  .focal .catch .ticks span.now { color: var(--acc-deep); font-weight: 600; border-top-color: var(--acc-deep); }
+  .focal .catch .ttx { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+  .focal .catch .ttx strong { color: var(--ink); font-weight: 500; }
+
+  /* "Senare i veckan" filmstrip */
+  .sect-h {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 48px 0 14px;
+  }
+  .sect-h h3 {
+    margin: 0; font-family: var(--sans); font-weight: 600;
+    font-size: 24px; letter-spacing: -0.025em;
+  }
+  .sect-h .meta {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .filmstrip {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px;
+  }
+  .film-card {
+    text-align: left;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+  }
+  .film-card .poster {
+    aspect-ratio: 2/3;
+    border-radius: 3px;
+    overflow: hidden;
+    background: oklch(0.16 0 0);
+    border: 1px solid var(--rule);
+    position: relative;
+    transition: border-color 140ms, transform 140ms;
+  }
+  .film-card:hover .poster { border-color: var(--ink); transform: translateY(-2px); }
+  .film-card .poster img { width: 100%; height: 100%; object-fit: cover; }
+  .film-card .ttl {
+    margin-top: 10px;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 14px; line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+  .film-card .meta {
+    margin-top: 3px;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-3); letter-spacing: 0.02em;
+  }
+  .film-card .meta .day { color: var(--ink-2); text-transform: uppercase; }
+
+  /* ─── Right rail ─── */
+  .rail { display: flex; flex-direction: column; gap: 18px; }
+
+  .tile {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 18px 20px;
+  }
+  .tile .h {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tile .h .more { color: var(--ink-2); }
+  .tile .h .more:hover { color: var(--ink); }
+
+  /* sparande tile */
+  .tile.sparande .val {
+    font-family: var(--sans); font-weight: 600;
+    font-size: 44px; line-height: 1;
+    letter-spacing: -0.035em; font-feature-settings: "tnum" 1;
+  }
+  .tile.sparande .val .unit { font-size: 16px; font-weight: 500; color: var(--ink-2); margin-left: 6px; letter-spacing: -0.01em; }
+  .tile.sparande .note { margin-top: 8px; font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
+  .tile.sparande .note strong { color: var(--ink); font-weight: 500; }
+  .tile.sparande .bars {
+    margin-top: 14px;
+    display: flex; align-items: flex-end; gap: 4px;
+    height: 36px;
+  }
+  .tile.sparande .bars .b {
+    flex: 1; background: var(--rule-2);
+    border-radius: 1px;
+    min-width: 0;
+  }
+  .tile.sparande .bars .b.on { background: var(--ink); }
+  .tile.sparande .bars .b.cur { background: var(--acc-deep); }
+  .tile.sparande .scale {
+    margin-top: 4px;
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 9.5px;
+    color: var(--ink-3); letter-spacing: 0.06em;
+  }
+  .tile.sparande .pause {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border: 1px dashed var(--rule);
+    border-radius: 4px;
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 10px; align-items: center;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-2);
+    background: var(--bg);
+  }
+  .tile.sparande .pause strong { color: var(--ink); font-weight: 500; }
+  .tile.sparande .pause .svc { font-family: var(--sans); font-weight: 500; color: var(--ink); font-size: 12.5px; }
+
+  /* vänner tile */
+  .tile.vanner ul { margin: 0; padding: 0; list-style: none; }
+  .tile.vanner li {
+    display: grid; grid-template-columns: 28px 1fr;
+    gap: 11px; padding: 10px 0;
+    border-bottom: 1px solid var(--rule-2);
+    align-items: flex-start;
+  }
+  .tile.vanner li:last-child { border-bottom: 0; }
+  .tile.vanner .av {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    background: var(--ink); color: white;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 11.5px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tile.vanner .av.is-acc { background: var(--cal-deep); }
+  .tile.vanner .txt {
+    font-size: 13.5px; line-height: 1.4;
+    color: var(--ink);
+  }
+  .tile.vanner .txt strong { font-weight: 500; }
+  .tile.vanner .txt .when {
+    color: var(--ink-3); font-family: var(--mono);
+    font-size: 10.5px; margin-left: 4px;
+    letter-spacing: 0.02em;
+  }
+  .tile.vanner .txt .rate {
+    font-family: var(--mono); color: var(--ink);
+    background: var(--bg-2); padding: 0 4px;
+    border-radius: 2px; font-size: 11.5px;
+  }
+
+  /* grupp-pulse tile */
+  .tile.grupp .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule-2);
+    font-size: 13px;
+  }
+  .tile.grupp .row:last-child { border-bottom: 0; }
+  .tile.grupp .nm { flex: 1; font-weight: 500; }
+  .tile.grupp .dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: var(--ink-3);
+  }
+  .tile.grupp .dot.on { background: var(--acc-deep); animation: pulse 1.6s ease-in-out infinite; }
+  .tile.grupp .ct {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-3); letter-spacing: 0.04em;
+  }
+
+  /* page-h1 size adjustment on Hem (shorter) */
+  .canvas .page-h1 { max-width: 22ch; }
+</style>
+</head>
+<body>
+
+<!-- SVG duotone filters -->
+<svg width="0" height="0" style="position:absolute;left:-9999px;" aria-hidden="true">
+  <defs>
+    <filter id="duo-terra" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.13 0.94"/><feFuncG type="table" tableValues="0.09 0.84"/><feFuncB type="table" tableValues="0.08 0.78"/></feComponentTransfer></filter>
+    <filter id="duo-slate" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.08 0.82"/><feFuncG type="table" tableValues="0.11 0.88"/><feFuncB type="table" tableValues="0.18 0.95"/></feComponentTransfer></filter>
+    <filter id="duo-moss" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.09 0.84"/><feFuncG type="table" tableValues="0.15 0.92"/><feFuncB type="table" tableValues="0.10 0.82"/></feComponentTransfer></filter>
+    <filter id="duo-clay" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.17 0.96"/><feFuncG type="table" tableValues="0.13 0.88"/><feFuncB type="table" tableValues="0.07 0.76"/></feComponentTransfer></filter>
+    <filter id="duo-plum" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.16 0.86"/><feFuncG type="table" tableValues="0.10 0.78"/><feFuncB type="table" tableValues="0.20 0.90"/></feComponentTransfer></filter>
+    <filter id="duo-steel" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.06 0.78"/><feFuncG type="table" tableValues="0.12 0.90"/><feFuncB type="table" tableValues="0.14 0.92"/></feComponentTransfer></filter>
+    <filter id="duo-olive" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.13 0.86"/><feFuncG type="table" tableValues="0.15 0.90"/><feFuncB type="table" tableValues="0.08 0.78"/></feComponentTransfer></filter>
+    <filter id="duo-oxblood" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/><feComponentTransfer><feFuncR type="table" tableValues="0.20 0.88"/><feFuncG type="table" tableValues="0.07 0.78"/><feFuncB type="table" tableValues="0.06 0.74"/></feComponentTransfer></filter>
+  </defs>
+</svg>
+
+<header class="doc-top">
+  <div class="inner">
+    <strong>BINGE</strong>
+    <span>·</span>
+    <span>Hem · the front room</span>
+    <span style="margin-left:auto;">screen 01 / 06</span>
+  </div>
+</header>
+
+<div class="intro">
+  <h1>Read the <span class="acc">week</span>, then read the page.</h1>
+  <p>Hem är där Schemat först visar sig. Veckostrippen uppe — ditt skikt av tid. Sedan en stor fokus-block på vad som faktiskt händer ikväll, en filmstrip för helgen, och en högerräcke med Sparande, Vänner och Grupper. <strong>Ingen "for you"-kanal, ingen oändlig scroll</strong> — bara veckan, en sak åt gången.</p>
+</div>
+
+<div class="section">
+  <div class="sect-head">
+    <div class="num">H · Hem</div>
+    <h2>Tonight's episode is the page's first sentence.</h2>
+  </div>
+
+  <div class="mock">
+
+    <!-- ─── TOPBAR ─── -->
+    <header class="topbar">
+      <div class="brand"><span class="mark-sq"></span>binge.nu</div>
+      <div class="week">
+        <div class="vnum"><div class="v">v12</div><div class="yr">2026</div></div>
+        <div class="day"><div class="lab">mån</div><div class="num">16</div><div class="count"><strong>1</strong> avsnitt</div></div>
+        <div class="day"><div class="lab">tis</div><div class="num">17</div><div class="count">—</div></div>
+        <div class="day"><div class="lab">ons</div><div class="num">18</div><div class="count"><strong>1</strong> avsnitt</div></div>
+        <div class="day today has-now"><div class="lab">tor</div><div class="num">19</div><div class="count"><strong>Den nya tjänsten</strong></div></div>
+        <div class="day"><div class="lab">fre</div><div class="num">20</div><div class="count">—</div></div>
+        <div class="day"><div class="lab">lör</div><div class="num">21</div><div class="count"><strong>1</strong> avsnitt</div></div>
+        <div class="day"><div class="lab">sön</div><div class="num">22</div><div class="count"><strong>2</strong> avsnitt</div></div>
+      </div>
+      <div class="rhs">
+        <div class="search">söker en titel, person, vän… <span class="k">⌘K</span></div>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <!-- ─── SUBNAV ─── -->
+    <nav class="subnav">
+      <a class="is-on">Hem</a>
+      <a>Bibliotek</a>
+      <a href="direction-h-kalender.html">Kalender</a>
+      <a href="direction-h-recs.html">Rekommendationer</a>
+      <a>Sparande</a>
+      <a>Vänner</a>
+      <a>Grupper</a>
+      <div class="right"><span>tor 19 mar · 14:22</span></div>
+    </nav>
+
+    <!-- ─── CANVAS ─── -->
+    <main class="canvas">
+      <div class="crumb">Hem · ikväll kl 21:00</div>
+      <h1 class="page-h1">Ett nytt avsnitt av Den nya tjänsten.</h1>
+      <div class="stand">Du ligger ett avsnitt efter. Förra tar 52 minuter — det går att hinna ifatt om du startar nu.</div>
+
+      <div class="actions">
+        <button class="btn acc">Spela S2E05 — förra avsnittet</button>
+        <button class="btn ghost">Påminn mig 20:45</button>
+        <button class="btn ghost">Spara till sen</button>
+      </div>
+
+      <div class="hem-grid">
+
+        <!-- ═════════ MAIN COLUMN ═════════ -->
+        <div>
+
+          <!-- focal block -->
+          <div class="focal">
+            <div class="still">
+              <img src="https://picsum.photos/seed/binge-nya-hero/1680/720" alt=""/>
+              <div class="badge-stack">
+                <span class="b live">ikväll · 21:00</span>
+                <span class="b">SVT Play</span>
+              </div>
+            </div>
+            <div class="body">
+              <div class="px">
+                <img src="https://picsum.photos/seed/binge-nya-poster/400/600" alt=""/>
+              </div>
+              <div class="meta-col">
+                <div class="ch-line">
+                  <span class="live">aktiv · 1 efter</span>
+                  <span>SVT · 2024–</span>
+                  <span>drama · thriller</span>
+                </div>
+                <h2>Den nya tjänsten</h2>
+                <p class="syn">Säsong 2 — sex av åtta avsnitt sända. En lågmäld svensk thriller om en mellanstor stad som vägrar minnas vad som hände sommaren -98.</p>
+                <div class="stats">
+                  <span><span class="k">avsnitt</span><strong>S2E05 / 8</strong></span>
+                  <span><span class="k">betyg</span><strong>4,5</strong></span>
+                  <span><span class="k">tid</span><strong>52 min</strong></span>
+                  <span><span class="k">tillgång</span><strong>SVT Play</strong></span>
+                </div>
+              </div>
+              <div class="cta">
+                <button class="btn">Öppna serien</button>
+                <button class="btn ghost sm">Betygsätt</button>
+                <button class="btn ghost sm">Anteckna avsnittet</button>
+              </div>
+            </div>
+            <div class="catch">
+              <div>
+                <div class="progress"><div class="bar"></div></div>
+                <div class="ticks">
+                  <span class="seen">E01</span><span class="seen">E02</span><span class="seen">E03</span><span class="seen">E04</span><span class="seen">E05</span><span class="now">E06 · ikväll</span><span>E07</span><span>E08</span>
+                </div>
+              </div>
+              <div class="ttx"><strong>1 avsnitt efter.</strong> 52 min för att hinna ifatt innan 21:00.</div>
+            </div>
+          </div>
+
+          <!-- senare i veckan filmstrip -->
+          <div class="sect-h">
+            <h3>Senare i veckan</h3>
+            <span class="meta">fre 20 — sön 22 · 4 avsnitt + 1 film</span>
+          </div>
+          <div class="filmstrip">
+            <button class="film-card">
+              <div class="poster duo-moss">
+                <img src="https://picsum.photos/seed/binge-morker-p/400/600" alt=""/>
+              </div>
+              <div class="ttl">Mörker</div>
+              <div class="meta"><span class="day">ons</span> · S3E01 · premiär</div>
+            </button>
+            <button class="film-card">
+              <div class="poster duo-slate">
+                <img src="https://picsum.photos/seed/binge-bron-p/400/600" alt=""/>
+              </div>
+              <div class="ttl">Bron</div>
+              <div class="meta"><span class="day">mån</span> · S4E03 · Viaplay</div>
+            </button>
+            <button class="film-card">
+              <div class="poster duo-clay">
+                <img src="https://picsum.photos/seed/binge-tunna-p/400/600" alt=""/>
+              </div>
+              <div class="ttl">Tunna blå linjen</div>
+              <div class="meta"><span class="day">lör</span> · S1E04 · SVT</div>
+            </button>
+            <button class="film-card">
+              <div class="poster duo-plum">
+                <img src="https://picsum.photos/seed/binge-norra-p/400/600" alt=""/>
+              </div>
+              <div class="ttl">Norra havet</div>
+              <div class="meta"><span class="day">sön</span> · S1E08 · final</div>
+            </button>
+            <button class="film-card">
+              <div class="poster duo-steel">
+                <img src="https://picsum.photos/seed/binge-brev-p/400/600" alt=""/>
+              </div>
+              <div class="ttl">Brevet</div>
+              <div class="meta"><span class="day">sön</span> · 21:00 · HBO Max</div>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ═════════ RIGHT RAIL ═════════ -->
+        <aside class="rail">
+
+          <!-- sparande tile -->
+          <div class="tile sparande">
+            <div class="h">
+              <span>Sparande · mars 2026</span>
+              <a href="#" class="more">öppna →</a>
+            </div>
+            <div class="val">458<span class="unit">kr</span></div>
+            <div class="note">HBO &amp; Viaplay pausade till v33. <strong>Ungefär en helg i Berlin</strong> om du håller ut till sommaren.</div>
+            <div class="bars">
+              <div class="b on" style="height:30%;"></div>
+              <div class="b on" style="height:55%;"></div>
+              <div class="b on" style="height:42%;"></div>
+              <div class="b on" style="height:60%;"></div>
+              <div class="b on" style="height:48%;"></div>
+              <div class="b on" style="height:72%;"></div>
+              <div class="b on" style="height:65%;"></div>
+              <div class="b on" style="height:80%;"></div>
+              <div class="b on" style="height:54%;"></div>
+              <div class="b on" style="height:90%;"></div>
+              <div class="b on" style="height:78%;"></div>
+              <div class="b cur" style="height:100%;"></div>
+            </div>
+            <div class="scale"><span>apr 25</span><span>mar 26</span></div>
+            <div class="pause">
+              <div>
+                <div class="svc">HBO Max</div>
+                <div>pausad t.o.m. v33 · <strong>189 kr/mån</strong></div>
+              </div>
+              <button class="btn ghost sm">återuppta</button>
+            </div>
+          </div>
+
+          <!-- vänner tile -->
+          <div class="tile vanner">
+            <div class="h">
+              <span>Vänner senast</span>
+              <a href="#" class="more">alla →</a>
+            </div>
+            <ul>
+              <li>
+                <div class="av">J</div>
+                <div class="txt">Johan släppte <strong>Mörker</strong> efter S1E03. <span class="when">igår 22:14</span></div>
+              </li>
+              <li>
+                <div class="av is-acc">S</div>
+                <div class="txt">Sara gav <strong>Bron</strong> betyget <span class="rate">4,5</span> · "S4 håller upp." <span class="when">2 t</span></div>
+              </li>
+              <li>
+                <div class="av">M</div>
+                <div class="txt">Maja la till <strong>Brevet</strong> i Familjen Lund. <span class="when">3 t</span></div>
+              </li>
+              <li>
+                <div class="av">E</div>
+                <div class="txt">Erik började på <strong>Norra havet</strong>. <span class="when">igår</span></div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- grupper tile -->
+          <div class="tile grupp">
+            <div class="h">
+              <span>Grupper</span>
+              <a href="direction-h-tillsammans.html" class="more">öppna →</a>
+            </div>
+            <div class="row">
+              <span class="dot on"></span>
+              <span class="nm">Familjen Lund</span>
+              <span class="ct">4 i rummet · röstar nu</span>
+            </div>
+            <div class="row">
+              <span class="dot"></span>
+              <span class="nm">Krim-klubben</span>
+              <span class="ct">3 medl · senast tis</span>
+            </div>
+            <div class="row">
+              <span class="dot"></span>
+              <span class="nm">Hbo-delarna</span>
+              <span class="ct">2 medl · vilande</span>
+            </div>
+          </div>
+
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="mock-cap">
+    <strong>Read the page top-down:</strong> the week strip up top — seven days as columns, today (tor 19) wears the plum picker wash, the tonight episode title sits inline in the strip cell. Below: the focal block. A 21:9 episode still in duotone-terracotta (the show's tone), the 2:3 poster sits half-overlapping the still — identification (duotone) on top, preview (raw) beneath when hovered. The "ikapp"-progress strip shows you exactly where you are.
+    <br/><br/>
+    <strong>The right rail is three tiles, all about other people and money:</strong> Sparande (this month's pause math, with a 12-month bar chart and an active pause card you can resume inline), Vänner (the last 4 events as sentences), Grupper (live presence indicator on the Tillsammans session). <em>Nothing scrolls infinitely. The week is finite. The rail is finite.</em>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Binge — Direction H · index</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="direction-h.css">
+<style>
+  /* index-specific */
+  .hero { max-width: 1320px; margin: 0 auto; padding: 96px 40px 32px; }
+  .hero .kicker {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 16px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .hero .kicker .sq {
+    display: inline-block; width: 10px; height: 10px;
+    background: var(--acc); border-radius: 1px;
+  }
+  .hero h1 {
+    margin: 0 0 18px;
+    font-family: var(--sans); font-weight: 600;
+    font-size: clamp(56px, 7vw, 88px);
+    line-height: 0.95; letter-spacing: -0.04em;
+    max-width: 22ch;
+  }
+  .hero h1 .acc { color: var(--acc-deep); }
+  .hero .lead {
+    max-width: 60ch; font-size: 18px; line-height: 1.55;
+    color: var(--ink-2);
+  }
+  .hero .lead strong { color: var(--ink); font-weight: 500; }
+  .hero .lead em { color: var(--acc-deep); font-style: normal; font-weight: 500; }
+
+  .principles {
+    max-width: 1320px; margin: 32px auto 0; padding: 0 40px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .principle {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 18px 20px;
+  }
+  .principle .num {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.16em; color: var(--ink-3);
+  }
+  .principle h3 {
+    margin: 4px 0 6px;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 17px; letter-spacing: -0.02em;
+  }
+  .principle p {
+    margin: 0;
+    font-size: 13.5px; line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .principle p strong { color: var(--ink); font-weight: 500; }
+
+  /* foundation summary strip */
+  .summary {
+    max-width: 1320px;
+    margin: 56px auto 0;
+    padding: 0 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+  .summary .card {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 22px 24px;
+  }
+  .summary .card .h {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 14px;
+  }
+  .summary .row {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule-2);
+    align-items: baseline;
+  }
+  .summary .row:last-child { border-bottom: 0; }
+  .summary .row .k {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.04em;
+  }
+  .summary .row .v {
+    font-family: var(--sans); font-size: 14px;
+    color: var(--ink);
+  }
+  .summary .row .v .ix { color: var(--ink-3); }
+
+  .palette-row {
+    display: flex; gap: 6px; align-items: center;
+    padding: 8px 0;
+  }
+  .palette-row .sw {
+    width: 28px; height: 18px; border-radius: 3px;
+  }
+  .palette-row .mn {
+    margin-left: 8px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  /* screen grid */
+  .screens-h {
+    max-width: 1320px; margin: 72px auto 0; padding: 0 40px;
+  }
+  .screens-h .head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .screens-h .head h2 { margin: 0; font-family: var(--sans); font-weight: 600; font-size: 32px; letter-spacing: -0.025em; }
+  .screens-h .head .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+
+  .screens-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+  .screen-card {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 100ms, transform 100ms;
+    position: relative;
+    display: block;
+  }
+  .screen-card:hover { border-color: var(--ink); }
+  .screen-card .preview {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--bg-2);
+    position: relative;
+    border-bottom: 1px solid var(--rule);
+  }
+  .screen-card .preview .frame {
+    transform: scale(0.52);
+    transform-origin: top left;
+    width: 192.3%;
+    pointer-events: none;
+  }
+
+  .screen-card .body {
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: baseline;
+  }
+  .screen-card .body h3 {
+    margin: 0;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 19px; letter-spacing: -0.02em;
+  }
+  .screen-card .body .meta {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .screen-card .body .desc {
+    grid-column: 1 / 3;
+    font-size: 13.5px; line-height: 1.5;
+    color: var(--ink-2);
+    margin-top: 2px;
+  }
+  .screen-card .body .desc strong { color: var(--ink); font-weight: 500; }
+  .screen-card .arrow {
+    position: absolute;
+    bottom: 16px; right: 20px;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-3);
+  }
+  .screen-card:hover .arrow { color: var(--ink); }
+
+  /* tiny mock previews */
+  .mini-mock { background: var(--surface); }
+  .mini-mock .strip {
+    background: var(--surface);
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 80px 1fr 80px;
+    height: 30px; align-items: center;
+    padding: 0 12px;
+    font-family: var(--mono); font-size: 9px;
+    color: var(--ink-3);
+  }
+  .mini-mock .strip .sq { display: inline-block; width: 6px; height: 6px; background: var(--acc); border-radius: 1px; margin-right: 4px; }
+  .mini-mock .week {
+    display: grid; grid-template-columns: 36px repeat(7, 1fr);
+    border-bottom: 1px solid var(--rule);
+    height: 30px;
+    font-family: var(--mono); font-size: 8px;
+    color: var(--ink-3);
+  }
+  .mini-mock .week > div {
+    border-right: 1px solid var(--rule-2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mini-mock .week .today { background: oklch(0.945 0.045 300); color: oklch(0.48 0.11 300); font-weight: 600; }
+  .mini-mock .filmstrip .p.is-pick { border-color: oklch(0.48 0.11 300) !important; box-shadow: inset 0 0 0 1px oklch(0.48 0.11 300); }
+  .mini-mock .body {
+    padding: 16px; min-height: 200px;
+  }
+  .mini-mock h4 {
+    margin: 0 0 6px;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 18px; letter-spacing: -0.025em; line-height: 1.05;
+  }
+  .mini-mock .sub { font-family: var(--mono); font-size: 9px; color: var(--ink-3); margin-bottom: 12px; }
+  .mini-mock .filmstrip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .mini-mock .filmstrip .p { aspect-ratio: 2/3; border-radius: 2px; border: 1px solid var(--rule); }
+
+  /* status badge — done vs todo */
+  .status {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .status.done {
+    background: var(--surface); color: var(--ink-2); border: 1px solid var(--rule);
+  }
+  .status.next {
+    background: var(--acc-soft); color: var(--acc-deep); border: 1px solid oklch(0.86 0.08 75);
+  }
+  .status.later {
+    background: transparent; color: var(--ink-3); border: 1px dashed oklch(0.78 0.008 80);
+  }
+
+  .roadmap {
+    max-width: 1320px; margin: 80px auto 120px; padding: 0 40px;
+  }
+  .roadmap .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .roadmap .head h2 { margin: 0; font-family: var(--sans); font-weight: 600; font-size: 28px; letter-spacing: -0.025em; }
+  .roadmap-list {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .roadmap-list .r-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 130px;
+    gap: 14px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--rule-2);
+    align-items: center;
+  }
+  .roadmap-list .r-row:last-child { border-bottom: 0; }
+  .roadmap-list .r-row .nm { font-family: var(--sans); font-weight: 500; font-size: 14.5px; }
+  .roadmap-list .r-row .desc { font-size: 13.5px; color: var(--ink-2); }
+
+  @media (max-width: 900px) {
+    .principles { grid-template-columns: 1fr; }
+    .summary { grid-template-columns: 1fr; }
+    .screens-grid { grid-template-columns: 1fr; }
+    .roadmap-list .r-row { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-top">
+  <div class="inner">
+    <strong>BINGE</strong>
+    <span>·</span>
+    <span>Direction H — Schemat · the committed system</span>
+    <span style="margin-left:auto;">five screens · light · single accent · duotone posters</span>
+  </div>
+</header>
+
+<!-- ─────────── HERO ─────────── -->
+<div class="hero">
+  <div class="kicker"><span class="sq"></span> Direction H — Schemat · final</div>
+  <h1>A Swedish media tracker, organised around <span class="acc">the week.</span></h1>
+  <p class="lead">Single sans (Albert), single mono (JetBrains), <strong>single saffron accent</strong>, off-white paper, hairline rules, big tabular numbers. The week strip lives at the top of every page. Real TMDB posters arrive but pass through a <em>per-title duotone treatment</em> so the palette stays calm. Real content (episode stills, trailer thumbs, cast portraits, gallery) is shown raw, because <em>those are previews, not navigation.</em></p>
+</div>
+
+<!-- ─────────── 3 PRINCIPLES ─────────── -->
+<div class="principles">
+  <div class="principle">
+    <div class="num">01</div>
+    <h3>The week is the spine.</h3>
+    <p>A persistent 7-day strip at the top of every page. Today wears a saffron wash; tonight wears a 2px saffron rule. Swedish viewers live by ISO weeks <strong>(v12)</strong>; the system honors that as the navigation unit.</p>
+  </div>
+  <div class="principle">
+    <div class="num">02</div>
+    <h3>One accent does one job.</h3>
+    <p>Saffron means <strong>now / live / decisive</strong>. It marks today, tonight's episode, the advisor's verdict, and the veto. <em>Nothing else.</em> The chrome and the palette are kept architecturally apart.</p>
+  </div>
+  <div class="principle">
+    <div class="num">03</div>
+    <h3>Posters bend to the palette.</h3>
+    <p>Eight muted duotone tones — terracotta, slate, moss, clay, plum, steel, olive, oxblood — applied per title via SVG filter. Real TMDB bitmaps remain recognisable. The library looks like a curated collection.</p>
+  </div>
+</div>
+
+<!-- ─────────── FOUNDATION SUMMARY ─────────── -->
+<div class="summary">
+  <div class="card">
+    <div class="h">Foundation — Type, accent, structure</div>
+    <div class="row"><div class="k">type</div><div class="v">Albert Sans 400/500/600/700 <span class="ix">+ JetBrains Mono</span></div></div>
+    <div class="row"><div class="k">paper</div><div class="v">oklch(0.985 0.003 90) <span class="ix">· warm off-white</span></div></div>
+    <div class="row"><div class="k">ink</div><div class="v">oklch(0.18 0.006 80) <span class="ix">· near-black</span></div></div>
+    <div class="row"><div class="k">accent</div><div class="v">oklch(0.72 0.14 75) saffron <span class="ix">· one role only</span></div></div>
+    <div class="row"><div class="k">radii</div><div class="v">3px posters · 6–8px cards · 999px chips</div></div>
+    <div class="row"><div class="k">elevation</div><div class="v"><span class="ix">none.</span> hairline rules only</div></div>
+    <div class="row"><div class="k">brand mark</div><div class="v">10×10 saffron square · 1px radius</div></div>
+  </div>
+
+  <div class="card">
+    <div class="h">Duotone palette — 8 tones</div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.62 0.08 30);"></span><div class="v">Terracotta</div><div class="mn">drama, family, period</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.42 0.06 240);"></span><div class="v">Slate</div><div class="mn">krim, noir, thriller</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.50 0.06 150);"></span><div class="v">Moss</div><div class="mn">nature, biografi, dokumentär</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.62 0.07 80);"></span><div class="v">Clay</div><div class="mn">komedi, ungdom, lättsam</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.40 0.07 300);"></span><div class="v">Plum</div><div class="mn">mystik, fantasy, övernaturligt</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.45 0.05 200);"></span><div class="v">Steel</div><div class="mn">sci-fi, teknik, framtid</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.55 0.06 120);"></span><div class="v">Olive</div><div class="mn">reality, sport, livsstil</div></div>
+    <div class="palette-row"><span class="sw" style="background:oklch(0.38 0.05 20);"></span><div class="v">Oxblood</div><div class="mn">skräck, action, intensiv</div></div>
+  </div>
+</div>
+
+
+<!-- ─────────── SCREENS GRID ─────────── -->
+<div class="screens-h">
+  <div class="head">
+    <h2>Screens — done so far</h2>
+    <span class="num">5 of ~10</span>
+  </div>
+  <div class="screens-grid">
+
+    <a class="screen-card" href="direction-h-hem.html">
+      <div class="preview">
+        <div class="mini-mock frame">
+          <div class="strip"><div><span class="sq"></span>binge.nu</div><div></div><div>⌘K</div></div>
+          <div class="week">
+            <div>v12</div><div>16</div><div>17</div><div>18</div><div class="today">19</div><div>20</div><div>21</div><div>22</div>
+          </div>
+          <div class="body">
+            <h4>Ett nytt avsnitt av<br/>Den nya tjänsten.</h4>
+            <div class="sub">hem · ikväll kl 21:00</div>
+            <div class="filmstrip">
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+              <div class="p" style="background:oklch(0.50 0.06 150);"></div>
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+              <div class="p" style="background:oklch(0.62 0.07 80);"></div>
+              <div class="p" style="background:oklch(0.40 0.07 300);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>Hem &amp; foundation</h3>
+        <div class="meta">screen 01 · v5</div>
+        <div class="desc">The home page that introduces the system — tonight's focal block, weekly filmstrip, sparande tile in the rail, friends activity. <strong>Where Schemat first reveals itself.</strong></div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+
+    <a class="screen-card kal-card" href="direction-h-kalender.html">
+      <div class="preview">
+        <div class="mini-mock frame">
+          <div class="strip"><div><span class="sq"></span>binge.nu</div><div></div><div>⌘K</div></div>
+          <div class="week">
+            <div>v12</div><div>16</div><div>17</div><div>18</div><div class="today">19</div><div>20</div><div>21</div><div>22</div>
+          </div>
+          <div class="body">
+            <h4>Denna vecka — sex avsnitt<br/>och en premiär.</h4>
+            <div class="sub">kalender · v12 · 16–22 mars</div>
+            <div class="filmstrip" style="grid-template-columns:repeat(7,1fr);">
+              <div class="p" style="background:oklch(0.42 0.06 240);aspect-ratio:1;"></div>
+              <div class="p" style="background:transparent;border-style:dashed;aspect-ratio:1;"></div>
+              <div class="p" style="background:oklch(0.50 0.06 150);aspect-ratio:1;"></div>
+              <div class="p is-pick" style="background:oklch(0.62 0.08 30);aspect-ratio:1;"></div>
+              <div class="p" style="background:transparent;border-style:dashed;aspect-ratio:1;"></div>
+              <div class="p" style="background:oklch(0.62 0.07 80);aspect-ratio:1;"></div>
+              <div class="p" style="background:oklch(0.40 0.07 300);aspect-ratio:1;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>Kalender</h3>
+        <div class="meta">screen 02 · v6c</div>
+        <div class="desc">The week strip <strong>opens up</strong> into a full board — seven columns, each tracked episode a card. Below: a five-week month context with episode pills color-coded by genre tone. The page that proves the principle.</div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+
+    <a class="screen-card" href="direction-h-recs.html">
+      <div class="preview">
+        <div class="mini-mock frame">
+          <div class="strip"><div><span class="sq"></span>binge.nu</div><div></div><div>⌘K</div></div>
+          <div class="week">
+            <div>v12</div><div>16</div><div>17</div><div>18</div><div class="today">19</div><div>20</div><div>21</div><div>22</div>
+          </div>
+          <div class="body">
+            <h4>Vad du kan se — <br/>och varför.</h4>
+            <div class="sub">rekommendationer · 7 kategorier</div>
+            <div class="filmstrip">
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+              <div class="p" style="background:oklch(0.42 0.06 240);"></div>
+            </div>
+            <div class="filmstrip" style="margin-top:6px;">
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+              <div class="p" style="background:oklch(0.62 0.08 30);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>Rekommendationer</h3>
+        <div class="meta">screen 03 · v6c</div>
+        <div class="desc">Seven labelled cascade rows — <em>"because you liked Bron"</em>, <em>"trending denna vecka"</em>, <em>"med Lena Endre"</em>. Every row carries a one-line rationale in mono. <strong>Mystery rows are forbidden.</strong> Quick-rate inline.</div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+
+    <a class="screen-card" href="direction-h-detail.html">
+      <div class="preview">
+        <div class="mini-mock frame">
+          <div class="strip"><div><span class="sq"></span>binge.nu</div><div></div><div>⌘K</div></div>
+          <div class="week">
+            <div>v12</div><div>16</div><div>17</div><div>18</div><div class="today">19</div><div>20</div><div>21</div><div>22</div>
+          </div>
+          <div class="body" style="display:grid;grid-template-columns:60px 1fr;gap:14px;align-items:flex-start;">
+            <div class="p" style="background:oklch(0.62 0.08 30);aspect-ratio:2/3;border-radius:2px;border:1px solid var(--rule);"></div>
+            <div>
+              <h4 style="font-size:15px;">Den nya tjänsten</h4>
+              <div class="sub">serie · SVT · 2024–</div>
+              <div style="font-size:9.5px;color:var(--ink-2);line-height:1.4;">En lågmäld svensk thriller. Säsong 2 sänds tisdagar 21:00.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>TV-detalj &amp; the duotone/raw boundary</h3>
+        <div class="meta">screen 04 · v6c</div>
+        <div class="desc">The detail page. Hero poster <strong>duotone</strong> (identification); trailer, episode stills, gallery, cast headshots all <strong>raw</strong> (preview). At the bottom — Liknande serier — back to duotone. <em>One page, two modes, sharp boundary.</em></div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+
+    <a class="screen-card" href="direction-h-tillsammans.html">
+      <div class="preview">
+        <div class="mini-mock frame">
+          <div class="strip"><div><span class="sq"></span>binge.nu</div><div></div><div>⌘K</div></div>
+          <div class="week">
+            <div>v12</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div class="today">22</div>
+          </div>
+          <div class="body">
+            <h4>Vad ska vi se ikväll?</h4>
+            <div class="sub">familjen lund · session pågående</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-family:var(--mono);font-size:9px;color:var(--ink-3);">
+              <span style="width:14px;height:14px;border-radius:999px;background:var(--acc-deep);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:8px;">S</span>
+              <span style="width:14px;height:14px;border-radius:999px;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:8px;">A</span>
+              <span style="width:14px;height:14px;border-radius:999px;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:8px;">J</span>
+              <span style="width:14px;height:14px;border-radius:999px;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:8px;">M</span>
+              4 i rummet
+            </div>
+            <div style="display:flex;gap:4px;margin-bottom:6px;">
+              <span style="width:8px;height:8px;background:var(--ink);border-radius:1px;"></span>
+              <span style="width:8px;height:8px;background:var(--ink);border-radius:1px;"></span>
+              <span style="width:8px;height:8px;background:var(--ink);border-radius:1px;"></span>
+              <span style="width:8px;height:8px;background:var(--ink);border-radius:1px;"></span>
+              <span style="margin-left:4px;font-family:var(--mono);font-size:8px;color:var(--acc-deep);font-weight:600;">4/4 ja</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>Tillsammans</h3>
+        <div class="meta">screen 05 · v6c</div>
+        <div class="desc">The live ballot. Presence pills, vote dots that fill in real time, vetoed titles kept visible with the vetoer's name in saffron. <strong>Resolved bar appears only for the host</strong> when a candidate has unanimous yes.</div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+
+    <a class="screen-card" href="direction-h-mobile.html">
+      <div class="preview">
+        <div class="mini-mock frame" style="display:flex;justify-content:center;padding:14px 0;background:var(--bg-2);">
+          <div style="width:90px;height:170px;background:oklch(0.16 0.005 80);border-radius:14px;padding:4px;">
+            <div style="background:var(--bg);border-radius:11px;height:100%;overflow:hidden;">
+              <div style="height:18px;background:var(--surface);border-bottom:1px solid var(--rule);"></div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);height:14px;background:var(--surface);border-bottom:1px solid var(--rule);">
+                <div></div><div></div><div></div><div style="background:var(--acc-soft);"></div><div></div><div></div><div></div>
+              </div>
+              <div style="padding:6px;">
+                <div style="width:30px;height:46px;background:oklch(0.62 0.08 30);border-radius:1px;margin-bottom:4px;border:1px solid var(--rule);"></div>
+                <div style="height:3px;background:var(--ink-2);width:80%;margin-bottom:2px;"></div>
+                <div style="height:3px;background:var(--ink-2);width:60%;"></div>
+              </div>
+              <div style="position:absolute;bottom:0;left:0;right:0;height:14px;background:var(--surface);border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(5,1fr);">
+                <div></div><div></div>
+                <div style="background:var(--ink);margin:1px 3px;border-radius:2px;"></div>
+                <div></div><div></div>
+              </div>
+            </div>
+          </div>
+          <div style="width:90px;height:170px;background:oklch(0.16 0.005 80);border-radius:14px;padding:4px;margin-left:8px;">
+            <div style="background:var(--bg);border-radius:11px;height:100%;overflow:hidden;position:relative;">
+              <div style="height:18px;background:var(--surface);border-bottom:1px solid var(--rule);"></div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);height:14px;background:var(--surface);border-bottom:1px solid var(--rule);">
+                <div></div><div></div><div></div><div style="background:var(--acc-soft);"></div><div></div><div></div><div></div>
+              </div>
+              <div style="padding:6px;">
+                <div style="display:flex;gap:3px;margin-bottom:4px;">
+                  <div style="width:14px;height:20px;background:oklch(0.62 0.08 30);border-radius:1px;border:1px solid var(--rule);"></div>
+                  <div style="flex:1;">
+                    <div style="height:2px;background:var(--ink-2);width:90%;margin-bottom:2px;"></div>
+                    <div style="height:2px;background:var(--ink-2);width:60%;"></div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:3px;margin-bottom:4px;">
+                  <div style="width:14px;height:20px;background:oklch(0.50 0.06 150);border-radius:1px;border:1px solid var(--rule);"></div>
+                  <div style="flex:1;">
+                    <div style="height:2px;background:var(--ink-2);width:80%;margin-bottom:2px;"></div>
+                    <div style="height:2px;background:var(--ink-2);width:50%;"></div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:3px;">
+                  <div style="width:14px;height:20px;background:oklch(0.42 0.06 240);border-radius:1px;border:1px solid var(--rule);"></div>
+                  <div style="flex:1;">
+                    <div style="height:2px;background:var(--ink-2);width:75%;margin-bottom:2px;"></div>
+                    <div style="height:2px;background:var(--ink-2);width:55%;"></div>
+                  </div>
+                </div>
+              </div>
+              <div style="position:absolute;bottom:0;left:0;right:0;height:14px;background:var(--surface);border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(5,1fr);">
+                <div></div><div></div>
+                <div style="background:var(--ink);margin:1px 3px;border-radius:2px;"></div>
+                <div></div><div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <h3>Mobile shell</h3>
+        <div class="meta">screen 06 · v6c</div>
+        <div class="desc">Three phone screens: Hem, Bibliotek, Tillsammans. Same week strip, compressed; the bottom nav puts <strong>Sök at the center</strong> in the thumb zone. The one deliberate platform inversion.</div>
+        <span class="arrow">open →</span>
+      </div>
+    </a>
+  </div>
+</div>
+
+
+<!-- ─────────── ROADMAP ─────────── -->
+<div class="roadmap">
+  <div class="head">
+    <h2>Still to design</h2>
+    <span class="num" style="font-family:var(--mono);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-3);">~5 surfaces remaining</span>
+  </div>
+  <div class="roadmap-list">
+    <div class="r-row">
+      <span class="status next">next</span>
+      <div>
+        <div class="nm">Onboarding · the 4-step flow</div>
+        <div class="desc">Sign-up → välj tjänster → kalibrera smak → seed titlar → klar. The first impression of the system at work.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">4 screens</div>
+    </div>
+    <div class="r-row">
+      <span class="status later">later</span>
+      <div>
+        <div class="nm">Sparande detail · pause timeline</div>
+        <div class="desc">The advisor's audit trail — drag-the-pause-end timeline, week-by-week premieres justifying the resume date.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">1 screen</div>
+    </div>
+    <div class="r-row">
+      <span class="status later">later</span>
+      <div>
+        <div class="nm">Vänner · feed &amp; profile</div>
+        <div class="desc">Activity feed as serif-free sentences (per the system), public profile with stats and recent reviews.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">2 screens</div>
+    </div>
+    <div class="r-row">
+      <span class="status later">later</span>
+      <div>
+        <div class="nm">Group page &amp; group settings</div>
+        <div class="desc">The shared library, per-member ratings, invite-link panel, role enum.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">1 screen</div>
+    </div>
+    <div class="r-row">
+      <span class="status later">later</span>
+      <div>
+        <div class="nm">Search · results page</div>
+        <div class="desc">⌘K command bar expanded into full-page search results — facets, results list, "i ditt bibliotek" badges.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">1 screen</div>
+    </div>
+    <div class="r-row">
+      <span class="status later">later</span>
+      <div>
+        <div class="nm">Settings &amp; account</div>
+        <div class="desc">Profile, providers + costs, content filter, taste data, notifications, data export, delete account.</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;">1 screen</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

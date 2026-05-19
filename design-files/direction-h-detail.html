@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Binge — TV detail · Den nya tjänsten</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="direction-h.css">
+<style>
+  :root {
+    /* plum tone for "today" picker — same as kalender/hem */
+    --cal-soft: oklch(0.945 0.045 300);
+    --cal-deep: oklch(0.48 0.11 300);
+  }
+  :root {
+    --bg:        oklch(0.985 0.003 90);
+    --bg-2:      oklch(0.968 0.004 90);
+    --surface:   oklch(1 0 0);
+    --ink:       oklch(0.18 0.006 80);
+    --ink-2:     oklch(0.42 0.008 80);
+    --ink-3:     oklch(0.60 0.010 80);
+    --rule:      oklch(0.88 0.006 80);
+    --rule-2:    oklch(0.94 0.005 80);
+
+    --acc:       oklch(0.72 0.14 75);
+    --acc-deep:  oklch(0.55 0.13 70);
+    --acc-soft:  oklch(0.955 0.04 75);
+
+    --duo-terra: oklch(0.62 0.08 30);
+    --duo-slate: oklch(0.42 0.06 240);
+    --duo-moss:  oklch(0.50 0.06 150);
+
+    --sans: "Albert Sans", system-ui, sans-serif;
+    --mono: "JetBrains Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; }
+  img { display: block; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ────── DOC INTRO ────── */
+  .doc-top { border-bottom: 1px solid var(--ink); background: var(--bg); }
+  .doc-top .inner {
+    max-width: 1320px; margin: 0 auto;
+    padding: 18px 40px;
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .doc-top .inner strong { color: var(--ink); font-weight: 500; }
+
+  .intro { max-width: 1320px; margin: 0 auto; padding: 56px 40px 16px; }
+  .intro h1 {
+    margin: 0 0 14px;
+    font-family: var(--sans); font-weight: 600;
+    font-size: clamp(40px, 5vw, 56px);
+    line-height: 0.98; letter-spacing: -0.035em;
+    max-width: 24ch;
+  }
+  .intro h1 .acc { color: var(--acc-deep); }
+  .intro .thesis { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; max-width: 1040px; margin-top: 22px; }
+  .intro .thesis p { margin: 0 0 12px; font-size: 15.5px; line-height: 1.55; color: var(--ink-2); }
+  .intro .thesis p strong { color: var(--ink); font-weight: 500; }
+
+  .rules {
+    margin: 28px auto 0;
+    max-width: 1320px;
+    padding: 0 40px;
+  }
+  .rules-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .rule-card {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 18px 20px;
+  }
+  .rule-card .h {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 6px;
+  }
+  .rule-card .title {
+    font-family: var(--sans); font-weight: 600; font-size: 17px;
+    letter-spacing: -0.015em; margin-bottom: 6px;
+  }
+  .rule-card .body {
+    font-size: 13.5px; line-height: 1.5; color: var(--ink-2);
+  }
+  .rule-card.duo .h { color: var(--duo-terra); }
+  .rule-card.duo .title { color: var(--duo-terra); }
+  .rule-card.raw .h { color: var(--ink); }
+
+  /* ────── MOCK CHROME (same as v5/v6) ────── */
+  .section { max-width: 1320px; margin: 0 auto; padding: 0 40px; }
+  .sect-head { margin: 80px auto 16px; }
+  .sect-head .num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+  .sect-head h2 { margin: 0; font-family: var(--sans); font-weight: 600; font-size: 30px; letter-spacing: -0.025em; }
+
+  .mock-tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+  .mock-tag .num { opacity: 0.6; }
+  .mock { border-radius: 8px; overflow: hidden; border: 1px solid var(--ink); background: var(--surface); margin-bottom: 18px; }
+  .mock-cap { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); margin: 14px 4px 80px; max-width: 78ch; }
+  .mock-cap strong { color: var(--ink); font-weight: 500; }
+  .mock-cap em { color: var(--acc-deep); font-style: normal; font-weight: 500; }
+
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--ink);
+    display: grid;
+    grid-template-columns: 200px 1fr 240px;
+    align-items: stretch;
+  }
+  .topbar .brand {
+    display: flex; align-items: center;
+    padding: 0 18px;
+    font-family: var(--sans); font-weight: 700; font-size: 19px;
+    letter-spacing: -0.04em;
+    border-right: 1px solid var(--rule);
+  }
+  .topbar .brand .mark-sq {
+    display: inline-block; width: 10px; height: 10px;
+    background: var(--acc); margin-right: 8px; border-radius: 1px;
+  }
+  .topbar .week {
+    display: grid; grid-template-columns: 60px repeat(7, 1fr);
+    border-left: 1px solid var(--rule);
+  }
+  .topbar .week .vnum {
+    padding: 8px 10px; border-right: 1px solid var(--rule);
+    background: var(--bg);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .topbar .week .vnum .v { font-family: var(--sans); font-weight: 700; font-size: 18px; letter-spacing: -0.03em; line-height: 1; color: var(--cal-deep); }
+  .topbar .week .vnum .yr { font-family: var(--mono); font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+  .topbar .week .day {
+    padding: 8px 10px 9px; border-right: 1px solid var(--rule);
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 64px; position: relative;
+  }
+  .topbar .week .day:last-child { border-right: 0; }
+  .topbar .week .day .lab { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+  .topbar .week .day .num { font-family: var(--sans); font-weight: 600; font-size: 17px; line-height: 1; letter-spacing: -0.03em; }
+  .topbar .week .day .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: auto; }
+  .topbar .week .day .count strong { color: var(--ink); font-weight: 500; }
+  .topbar .week .day.today { background: var(--cal-soft); }
+  .topbar .week .day.today .lab,
+  .topbar .week .day.today .num,
+  .topbar .week .day.today .count strong { color: var(--cal-deep); }
+  .topbar .week .day.today::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--cal-deep); }
+  .topbar .week .day.has-now .lab::after { content: " · 21:00"; color: var(--cal-deep); }
+
+  .topbar .rhs { border-left: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .topbar .rhs .search { flex: 1; background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); display: flex; gap: 8px; align-items: center; }
+  .topbar .rhs .search .k { margin-left: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px; font-size: 10px; color: var(--ink-2); }
+  .topbar .rhs .avatar { width: 30px; height: 30px; background: var(--ink); color: var(--bg); font-family: var(--sans); font-weight: 600; font-size: 12.5px; display: flex; align-items: center; justify-content: center; border-radius: 999px; }
+
+  .subnav { display: flex; align-items: stretch; border-bottom: 1px solid var(--rule); background: var(--surface); padding: 0 20px; }
+  .subnav a { padding: 12px 18px; font-family: var(--sans); font-weight: 500; font-size: 13.5px; color: var(--ink-2); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .subnav a.is-on { color: var(--ink); border-bottom-color: var(--ink); }
+  .subnav .right { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); padding-right: 4px; }
+
+  .canvas { padding: 36px 40px 44px; }
+  .canvas .crumb { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+
+  .btn { padding: 7px 14px; border-radius: 6px; font-family: var(--sans); font-size: 13.5px; font-weight: 500; background: var(--ink); color: var(--bg); border: 1px solid var(--ink); line-height: 1.2; }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+  .btn.acc { background: var(--acc-deep); border-color: var(--acc-deep); color: white; }
+  .btn.sm { padding: 5px 10px; font-size: 12.5px; }
+
+  .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 3px; font-family: var(--sans); font-size: 11.5px; font-weight: 500; border: 1px solid var(--rule); background: var(--surface); color: var(--ink-2); line-height: 1.4; }
+  .chip.acc { background: var(--acc-soft); color: var(--acc-deep); border-color: oklch(0.86 0.08 75); }
+  .chip.is-on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .chip .dot { width: 6px; height: 6px; background: currentColor; margin-right: 6px; border-radius: 1px; }
+
+  /* ────── POSTER (duotone) ────── */
+  .poster {
+    aspect-ratio: 2/3;
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--rule);
+    background: oklch(0.16 0 0);
+    display: block;
+  }
+  .poster img { width: 100%; height: 100%; object-fit: cover; }
+  .duo-terra img { filter: url(#duo-terra); }
+  .duo-slate img { filter: url(#duo-slate); }
+  .duo-moss img  { filter: url(#duo-moss); }
+  .duo-clay img  { filter: url(#duo-clay); }
+  .duo-plum img  { filter: url(#duo-plum); }
+  .duo-steel img { filter: url(#duo-steel); }
+  .duo-olive img { filter: url(#duo-olive); }
+  .duo-oxblood img { filter: url(#duo-oxblood); }
+
+  /* ────── RAW IMAGERY ────── */
+  .raw {
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    background: oklch(0.18 0 0);
+    border: 1px solid var(--rule);
+  }
+  .raw img { width: 100%; height: 100%; object-fit: cover; }
+  .raw.ratio-16-9 { aspect-ratio: 16/9; }
+  .raw.ratio-4-3  { aspect-ratio: 4/3; }
+  .raw.ratio-1-1  { aspect-ratio: 1/1; }
+  .raw.ratio-3-4  { aspect-ratio: 3/4; }
+
+  .raw-tag {
+    position: absolute;
+    bottom: 6px; left: 6px;
+    padding: 3px 6px;
+    background: oklch(0 0 0 / 0.55);
+    color: white;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1;
+    border-radius: 2px;
+  }
+
+  /* trailer overlay */
+  .trailer { position: relative; cursor: pointer; }
+  .trailer::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: oklch(0 0 0 / 0.20);
+  }
+  .trailer .play {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 64px; height: 64px;
+    border-radius: 999px;
+    background: oklch(1 0 0 / 0.95);
+    border: 2px solid white;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2;
+  }
+  .trailer .play::before {
+    content: "";
+    border-left: 18px solid var(--ink);
+    border-top: 11px solid transparent;
+    border-bottom: 11px solid transparent;
+    margin-left: 4px;
+  }
+  .trailer .runtime {
+    position: absolute;
+    bottom: 10px; right: 10px;
+    padding: 3px 7px;
+    background: oklch(0 0 0 / 0.7);
+    color: white;
+    font-family: var(--mono); font-size: 11px;
+    border-radius: 2px;
+    z-index: 2;
+  }
+
+  /* cast headshots — small, circular, raw */
+  .cast {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+  }
+  .cast .person { text-align: center; }
+  .cast .face {
+    width: 100%;
+    aspect-ratio: 1/1;
+    border-radius: 999px;
+    overflow: hidden;
+    background: oklch(0.85 0.02 80);
+    margin-bottom: 8px;
+  }
+  .cast .face img { width: 100%; height: 100%; object-fit: cover; }
+  .cast .actor {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+  .cast .role {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-3); margin-top: 2px;
+    line-height: 1.2;
+  }
+
+  /* episode list rows with raw stills */
+  .eps {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .ep {
+    display: grid;
+    grid-template-columns: 120px 56px 1fr 70px 30px;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--rule-2);
+    align-items: center;
+  }
+  .ep:last-child { border-bottom: 0; }
+  .ep .still {
+    border-radius: 3px;
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    background: oklch(0.18 0 0);
+    border: 1px solid var(--rule);
+  }
+  .ep .still img { width: 100%; height: 100%; object-fit: cover; }
+  .ep .code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); letter-spacing: -0.005em; }
+  .ep .ttl { font-size: 14.5px; font-weight: 500; line-height: 1.25; }
+  .ep .syn { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; max-width: 56ch; }
+  .ep .runt { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .ep .check { font-family: var(--mono); color: oklch(0.55 0.13 145); font-size: 16px; }
+  .ep.tonight { background: var(--cal-soft); }
+  .ep.tonight .code { color: var(--cal-deep); }
+  .ep.tonight .ttl { color: var(--cal-deep); }
+  .ep.unaired .ttl, .ep.unaired .code, .ep.unaired .runt { color: var(--ink-3); }
+  .ep.unaired .still { background: var(--bg-2); border-color: var(--rule-2); }
+  .ep.unaired .still::before {
+    content: "";
+    position: absolute;
+  }
+
+  /* gallery */
+  .gallery {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 10px;
+    height: 320px;
+  }
+  .gallery .g-1 { grid-column: 1; grid-row: 1 / 3; }
+  .gallery .g-2 { grid-column: 2; grid-row: 1; }
+  .gallery .g-3 { grid-column: 3; grid-row: 1; }
+  .gallery .g-4 { grid-column: 2; grid-row: 2; }
+  .gallery .g-5 { grid-column: 3; grid-row: 2; position: relative; cursor: pointer; }
+  .gallery .raw { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 4px; }
+  .gallery .more {
+    position: absolute;
+    inset: 0;
+    background: oklch(0 0 0 / 0.55);
+    color: white;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 28px; letter-spacing: -0.02em;
+    z-index: 2;
+  }
+  .gallery .more .label {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 400; margin-top: 6px;
+    opacity: 0.85;
+  }
+
+  .similar-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
+  }
+
+  /* Reviews block */
+  .rev-block { display: grid; grid-template-columns: 80px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule-2); }
+  .rev-block:last-child { border-bottom: 0; }
+  .rev-block .meta {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: -0.005em;
+    text-align: right;
+  }
+  .rev-block .meta .score {
+    font-family: var(--sans); font-weight: 600;
+    font-size: 18px; color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+  .rev-block .body p {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .rev-block .by {
+    margin-top: 6px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  /* annotations on the mock — these are the "look-here" callouts overlaid */
+  .annot {
+    position: relative;
+    margin: 8px 0 0;
+  }
+  .annot::before {
+    content: attr(data-annot);
+    display: inline-block;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 3px 8px;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  .annot.duo::before { color: var(--duo-terra); border-color: oklch(0.86 0.06 30); background: oklch(0.96 0.025 30); }
+  .annot.raw-tag::before { color: var(--ink); background: var(--bg); }
+
+  @media (max-width: 980px) {
+    .intro .thesis { grid-template-columns: 1fr; }
+    .topbar { grid-template-columns: 1fr; }
+    .topbar .brand { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .topbar .week { grid-template-columns: 50px repeat(7, 1fr); border-left: 0; }
+    .topbar .rhs { border-left: 0; border-top: 1px solid var(--rule); }
+    .rules-grid { grid-template-columns: 1fr; }
+    .cast { grid-template-columns: repeat(3, 1fr); }
+    .ep { grid-template-columns: 100px 1fr; }
+    .ep .code, .ep .runt, .ep .check { display: none; }
+    .similar-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG duotone filters -->
+<svg width="0" height="0" style="position:absolute;left:-9999px;" aria-hidden="true">
+  <defs>
+    <filter id="duo-terra" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.13 0.94"/><feFuncG type="table" tableValues="0.09 0.84"/><feFuncB type="table" tableValues="0.08 0.78"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-slate" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.08 0.82"/><feFuncG type="table" tableValues="0.11 0.88"/><feFuncB type="table" tableValues="0.18 0.95"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-moss" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.09 0.84"/><feFuncG type="table" tableValues="0.15 0.92"/><feFuncB type="table" tableValues="0.10 0.82"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-clay" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.17 0.96"/><feFuncG type="table" tableValues="0.13 0.88"/><feFuncB type="table" tableValues="0.07 0.76"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-plum" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.16 0.86"/><feFuncG type="table" tableValues="0.10 0.78"/><feFuncB type="table" tableValues="0.20 0.90"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-steel" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.06 0.78"/><feFuncG type="table" tableValues="0.12 0.90"/><feFuncB type="table" tableValues="0.14 0.92"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-olive" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.13 0.86"/><feFuncG type="table" tableValues="0.15 0.90"/><feFuncB type="table" tableValues="0.08 0.78"/></feComponentTransfer>
+    </filter>
+    <filter id="duo-oxblood" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="table" tableValues="0.20 0.88"/><feFuncG type="table" tableValues="0.07 0.78"/><feFuncB type="table" tableValues="0.06 0.74"/></feComponentTransfer>
+    </filter>
+  </defs>
+</svg>
+
+
+<header class="doc-top">
+  <div class="inner">
+    <strong>BINGE</strong>
+    <span>·</span>
+    <span>TV-detalj &amp; the duotone / raw boundary</span>
+    <span style="margin-left:auto;">v6c · detail page</span>
+  </div>
+</header>
+
+
+<div class="intro">
+  <h1>Inside a title, the rules <span class="acc">change.</span></h1>
+  <div class="thesis">
+    <div>
+      <p>Outside the title you are <strong>navigating</strong> — scanning the library, the calendar, the recommendations. Chrome's job there is to make every poster legible at speed and visually unified. <em>Duotone, every time.</em></p>
+      <p>Inside the title you are <strong>previewing</strong> — looking at the show itself. Chrome's job there is to get out of the way of the actual material. Episode stills should look like the episode. Trailers should play in full color. Cast portraits should be photographs of actors. <em>Raw, every time.</em></p>
+    </div>
+    <div>
+      <p>So the boundary is sharp: <strong>duotone for identification surfaces, raw for preview content.</strong> The detail page is the one place both rules coexist — the hero poster (top-left) is duotone because it identifies; everything else (trailer, episode stills, gallery, cast) is raw because it previews. At the bottom of the page we return to duotone for "Similar series" — because that's navigation again.</p>
+      <p>This isn't a compromise. It's the system being honest about which job each image is doing.</p>
+    </div>
+  </div>
+
+  <div class="rules">
+    <div class="rules-grid">
+      <div class="rule-card duo">
+        <div class="h">Use duotone for</div>
+        <div class="title">Identification surfaces</div>
+        <div class="body">Posters in lists, tables, library grids, search results, recommendations, similar-shows, watchlists, the calendar, friend feed, hero blocks. Anything where the user is scanning <em>among</em> titles to choose one.</div>
+      </div>
+      <div class="rule-card raw">
+        <div class="h">Use raw for</div>
+        <div class="title">Preview content</div>
+        <div class="body">Episode stills, trailer video and its poster frame, behind-the-scenes gallery, cast headshots, character art, festival prizes. Anything that's <em>about</em> this one title and that the user is looking at, not navigating among.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div class="section">
+  <div class="sect-head">
+    <div class="num">H · TV detail — Den nya tjänsten</div>
+    <h2>The detail page, with all the imagery a real show carries.</h2>
+  </div>
+
+  <div class="mock">
+    <header class="topbar">
+      <div class="brand"><span class="mark-sq"></span>binge.nu</div>
+      <div class="week">
+        <div class="vnum"><div class="v">v12</div><div class="yr">2026</div></div>
+        <div class="day"><div class="lab">mån</div><div class="num">16</div><div class="count"><strong>1</strong> avsnitt</div></div>
+        <div class="day"><div class="lab">tis</div><div class="num">17</div><div class="count">—</div></div>
+        <div class="day"><div class="lab">ons</div><div class="num">18</div><div class="count"><strong>1</strong> avsnitt</div></div>
+        <div class="day today has-now"><div class="lab">tor</div><div class="num">19</div><div class="count"><strong>Den nya tjänsten</strong></div></div>
+        <div class="day"><div class="lab">fre</div><div class="num">20</div><div class="count">—</div></div>
+        <div class="day"><div class="lab">lör</div><div class="num">21</div><div class="count"><strong>1</strong></div></div>
+        <div class="day"><div class="lab">sön</div><div class="num">22</div><div class="count"><strong>2</strong></div></div>
+      </div>
+      <div class="rhs">
+        <div class="search">söker en titel, person, vän… <span class="k">⌘K</span></div>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <nav class="subnav">
+      <a>Hem</a>
+      <a class="is-on">Bibliotek</a>
+      <a>Kalender</a>
+      <a>Rekommendationer</a>
+      <a>Sparande</a>
+      <a>Vänner</a>
+      <a>Grupper</a>
+      <div class="right"><span>tor 19 mar · 14:22</span></div>
+    </nav>
+
+    <main class="canvas">
+      <div class="crumb">Bibliotek · serier · Den nya tjänsten</div>
+
+      <!-- ────────── HERO ────────── -->
+      <div style="display:grid;grid-template-columns:240px 1fr;gap:40px;margin-top:18px;">
+
+        <!-- Duotone poster (identification) -->
+        <div>
+          <div class="poster duo-terra">
+            <img src="https://picsum.photos/seed/dnt-poster/600/900" alt=""/>
+          </div>
+          <div class="annot duo" data-annot="duotone · terracotta"></div>
+        </div>
+
+        <!-- Title block -->
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span class="chip acc"><span class="dot"></span>aktiv · 1 efter</span>
+            <span style="font-family:var(--mono);font-size:12px;color:var(--ink-3);">SERIE · SVT · 2024 – pågående</span>
+          </div>
+          <h1 style="margin:0;font-family:var(--sans);font-weight:600;font-size:56px;line-height:1;letter-spacing:-0.035em;">Den nya tjänsten</h1>
+          <div style="font-size:17px;line-height:1.5;color:var(--ink-2);margin-top:14px;max-width:54ch;">
+            En lågmäld svensk thriller om en stad som vägrar minnas. Säsong 2 sänds tisdagar 21:00. Du ligger ett avsnitt efter — det går att hinna ifatt på 52 minuter.
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:16px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);">
+            <span><span style="color:var(--ink-3);">avsnitt </span>S2E05 av 8</span>
+            <span><span style="color:var(--ink-3);">tid </span>52 min</span>
+            <span><span style="color:var(--ink-3);">genre </span>drama · thriller</span>
+            <span><span style="color:var(--ink-3);">betyg </span>4,5 av 5</span>
+            <span><span style="color:var(--ink-3);">community </span>4,2 / 1 247 betyg</span>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:22px;flex-wrap:wrap;">
+            <button class="btn acc">Spela S2E05 — förra avsnittet</button>
+            <button class="btn">Markera S2E06 ikväll som väntar</button>
+            <button class="btn ghost">Betygsätt</button>
+            <button class="btn ghost">Anteckna</button>
+            <button class="btn ghost">Skicka till grupp</button>
+          </div>
+
+          <div style="display:flex;gap:6px;margin-top:14px;align-items:center;">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:0.12em;text-transform:uppercase;">finns på</span>
+            <span class="chip">SVT Play <span style="color:var(--acc-deep);margin-left:4px;font-weight:600;">·  ingår</span></span>
+            <span class="chip">Viaplay <span style="color:var(--ink-3);margin-left:4px;">· köp 39 kr</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ────────── TRAILER ────────── -->
+      <div style="margin-top:48px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Trailer · säsong 2</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:0.12em;text-transform:uppercase;">2 minuter · SVT</span>
+        </div>
+        <div class="raw ratio-16-9 trailer">
+          <img src="https://picsum.photos/seed/dnt-trailer/1600/900" alt=""/>
+          <span class="raw-tag">trailer · säsong 2</span>
+          <div class="play"></div>
+          <span class="runtime">2:14</span>
+        </div>
+        <div class="annot raw-tag" data-annot="raw · preview content"></div>
+      </div>
+
+      <!-- ────────── EPISODES ────────── -->
+      <div style="margin-top:48px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Avsnitt</h2>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px;">Säsong 2 · 5 av 8 sedda</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <span class="chip is-on">Säsong 2</span>
+            <span class="chip">Säsong 1</span>
+            <span class="chip">Alla</span>
+          </div>
+        </div>
+
+        <div class="eps">
+          <div class="ep">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e1/640/360" alt=""/></div>
+            <div class="code">S2E01</div>
+            <div>
+              <div class="ttl">Tystnaden vid sjön</div>
+              <div class="syn">Karin återvänder hem efter tio år. Stadens nya borgmästare har inga planer på att förklara vad som hänt — eller hur länge det pågått.</div>
+            </div>
+            <div class="runt">52 min</div>
+            <div class="check">✓</div>
+          </div>
+          <div class="ep">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e2/640/360" alt=""/></div>
+            <div class="code">S2E02</div>
+            <div>
+              <div class="ttl">Brevet</div>
+              <div class="syn">Tre brev anländer till tre olika hus. Bara ett av dem hittas öppnat dagen efter.</div>
+            </div>
+            <div class="runt">48 min</div>
+            <div class="check">✓</div>
+          </div>
+          <div class="ep">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e3/640/360" alt=""/></div>
+            <div class="code">S2E03</div>
+            <div>
+              <div class="ttl">Februarihalka</div>
+              <div class="syn">En olycka som inte var en olycka. Den unge polisen Anders ifrågasätter sin egen rapport.</div>
+            </div>
+            <div class="runt">54 min</div>
+            <div class="check">✓</div>
+          </div>
+          <div class="ep">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e4/640/360" alt=""/></div>
+            <div class="code">S2E04</div>
+            <div>
+              <div class="ttl">Bara grannar</div>
+              <div class="syn">Vad visste familjen Lindgren och varför valde de att inte vittna?</div>
+            </div>
+            <div class="runt">50 min</div>
+            <div class="check">✓</div>
+          </div>
+          <div class="ep">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e5/640/360" alt=""/></div>
+            <div class="code">S2E05</div>
+            <div>
+              <div class="ttl">Skuggor på vägen</div>
+              <div class="syn">Karin reser till Stockholm. Det är vad hon inte gör som blir tydligast.</div>
+            </div>
+            <div class="runt">52 min</div>
+            <div class="check">✓</div>
+          </div>
+          <div class="ep tonight">
+            <div class="raw still"><img src="https://picsum.photos/seed/dnt-s2e6/640/360" alt=""/></div>
+            <div class="code">S2E06</div>
+            <div>
+              <div class="ttl">— sänds ikväll 21:00 —</div>
+              <div class="syn">Premiäravsnitt. Spoilerfritt nedan tills du markerar det som sett.</div>
+            </div>
+            <div class="runt">52 min</div>
+            <div><span class="chip acc">nu</span></div>
+          </div>
+          <div class="ep unaired">
+            <div class="raw still" style="opacity:0.45;"><img src="https://picsum.photos/seed/dnt-s2e7/640/360" alt=""/></div>
+            <div class="code">S2E07</div>
+            <div>
+              <div class="ttl">— ej sänt —</div>
+              <div class="syn">Sänds tisdag 24 mars.</div>
+            </div>
+            <div class="runt">tis 24/3</div>
+            <div></div>
+          </div>
+          <div class="ep unaired">
+            <div class="raw still" style="opacity:0.45;"><img src="https://picsum.photos/seed/dnt-s2e8/640/360" alt=""/></div>
+            <div class="code">S2E08</div>
+            <div>
+              <div class="ttl">— ej sänt —</div>
+              <div class="syn">Säsongsavslutning. Sänds tisdag 31 mars.</div>
+            </div>
+            <div class="runt">tis 31/3</div>
+            <div></div>
+          </div>
+        </div>
+        <div class="annot raw-tag" data-annot="episode stills · raw · 16:9"></div>
+      </div>
+
+
+      <!-- ────────── GALLERY ────────── -->
+      <div style="margin-top:48px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Stillbilder</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:0.12em;text-transform:uppercase;">28 bilder</span>
+        </div>
+        <div class="gallery">
+          <div class="raw g-1"><img src="https://picsum.photos/seed/dnt-g1/1200/900" alt=""/></div>
+          <div class="raw g-2"><img src="https://picsum.photos/seed/dnt-g2/800/600" alt=""/></div>
+          <div class="raw g-3"><img src="https://picsum.photos/seed/dnt-g3/800/600" alt=""/></div>
+          <div class="raw g-4"><img src="https://picsum.photos/seed/dnt-g4/800/600" alt=""/></div>
+          <div class="raw g-5">
+            <img src="https://picsum.photos/seed/dnt-g5/800/600" alt=""/>
+            <div class="more">+23<div class="label">visa alla</div></div>
+          </div>
+        </div>
+        <div class="annot raw-tag" data-annot="behind-the-scenes · raw · varied ratios"></div>
+      </div>
+
+
+      <!-- ────────── CAST ────────── -->
+      <div style="margin-top:48px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Skådespelare</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:0.12em;text-transform:uppercase;">huvudroller · 6 av 24</span>
+        </div>
+        <div class="cast">
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-1/300/300" alt=""/></div>
+            <div class="actor">Lena Endre</div>
+            <div class="role">Karin Vass</div>
+          </div>
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-2/300/300" alt=""/></div>
+            <div class="actor">Sverrir Gudnason</div>
+            <div class="role">Anders Bohman</div>
+          </div>
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-3/300/300" alt=""/></div>
+            <div class="actor">Pernilla August</div>
+            <div class="role">Ingrid Storm</div>
+          </div>
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-4/300/300" alt=""/></div>
+            <div class="actor">Mikael Persbrandt</div>
+            <div class="role">Borgmästaren</div>
+          </div>
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-5/300/300" alt=""/></div>
+            <div class="actor">Alexandra Rapaport</div>
+            <div class="role">Eva Lindgren</div>
+          </div>
+          <div class="person">
+            <div class="face"><img src="https://picsum.photos/seed/cast-6/300/300" alt=""/></div>
+            <div class="actor">Adam Pålsson</div>
+            <div class="role">Tobias</div>
+          </div>
+        </div>
+        <div class="annot raw-tag" data-annot="cast portraits · raw · 1:1 circular"></div>
+      </div>
+
+
+      <!-- ────────── REVIEWS ────────── -->
+      <div style="margin-top:48px;display:grid;grid-template-columns:1fr 280px;gap:36px;">
+        <div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+            <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Recensioner från dina vänner</h2>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:0.12em;text-transform:uppercase;">3 av 7</span>
+          </div>
+          <div style="border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:6px 18px;">
+            <div class="rev-block">
+              <div class="body">
+                <p>Andra säsongen tappar något i mitten, men slutet räddar mycket. Anteckna det innan ni börjar streaming-maraton: avsnitt 5 är förvirrande utan paus efter avsnitt 4.</p>
+                <div class="by">Johan Eklund · @johan · v11</div>
+              </div>
+              <div class="meta"><div class="score">4,0</div><div>av 5</div></div>
+            </div>
+            <div class="rev-block">
+              <div class="body">
+                <p>Helt klart årets bästa svenska drama hittills. Karin är en av de bästa rollerna Lena Endre någonsin gjort. Tittade tre avsnitt direkt — och blev sen kvar.</p>
+                <div class="by">Sara Mård · @sara · v10</div>
+              </div>
+              <div class="meta"><div class="score">5,0</div><div>av 5</div></div>
+            </div>
+            <div class="rev-block">
+              <div class="body">
+                <p>Säsong 1 var bättre. Mer återhållsam, mer mystik. Här försöker de förklara för mycket. Men jag fortsätter.</p>
+                <div class="by">Maja Lund · @maja · v09</div>
+              </div>
+              <div class="meta"><div class="score">3,5</div><div>av 5</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <aside>
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">Din anteckning</div>
+          <div style="border-left:2px solid var(--acc-deep);padding:6px 0 6px 14px;font-size:15px;line-height:1.5;color:var(--ink);">
+            Tittade med Johan på en söndag. Andra säsongen tappar något i mitten men slutet räddar mycket. Skuggor på vägen är säsongens bästa.
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:6px;text-align:right;">— 218 tecken kvar</div>
+        </aside>
+      </div>
+
+
+      <!-- ────────── SIMILAR — back to duotone ────────── -->
+      <div style="margin-top:60px;border-top:1px solid var(--rule);padding-top:28px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <h2 style="margin:0;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-0.02em;">Liknande serier</h2>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px;">Svensk drama med långsam upplösning.</div>
+          </div>
+          <button class="btn ghost sm">Visa alla 14</button>
+        </div>
+        <div class="similar-grid">
+          <div>
+            <div class="poster duo-moss"><img src="https://picsum.photos/seed/sim-1/400/600" alt=""/></div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:8px;line-height:1.2;">Mörker</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:2px;">Netflix · 3 säsonger</div>
+          </div>
+          <div>
+            <div class="poster duo-slate"><img src="https://picsum.photos/seed/sim-2/400/600" alt=""/></div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:8px;line-height:1.2;">Bron</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:2px;">Viaplay · 4 säsonger</div>
+          </div>
+          <div>
+            <div class="poster duo-plum"><img src="https://picsum.photos/seed/sim-3/400/600" alt=""/></div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:8px;line-height:1.2;">Norra havet</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:2px;">SVT · 1 säsong</div>
+          </div>
+          <div>
+            <div class="poster duo-oxblood"><img src="https://picsum.photos/seed/sim-4/400/600" alt=""/></div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:8px;line-height:1.2;">Hemvändaren</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:2px;">SVT · 1 säsong</div>
+          </div>
+          <div>
+            <div class="poster duo-steel"><img src="https://picsum.photos/seed/sim-5/400/600" alt=""/></div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:8px;line-height:1.2;">Brevet</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:2px;">HBO · film</div>
+          </div>
+        </div>
+        <div class="annot duo" data-annot="duotone · back to navigation"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <div class="mock-cap">
+    <strong>Read the page as zones:</strong>
+    the hero poster up top is in the title's house tone — <em>terracotta</em> — because it identifies. The trailer, episode stills, behind-the-scenes gallery, and cast headshots are all <em>raw</em> because they're previews of this one show. Then "Liknande serier" at the bottom is back in duotone because the user has shifted from <em>previewing this</em> to <em>navigating to another</em>. One page, two modes, sharp boundary.
+    <br/><br/>
+    <strong>Bonus rule:</strong> trailer video plays in full color. The duotone applies to image bitmaps only, never to motion video.
+  </div>
+
+</div>
+
+</body>
+</html>
