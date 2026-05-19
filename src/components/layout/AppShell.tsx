@@ -4,20 +4,25 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useFcmForeground } from '@/hooks/useFcmToken';
-import Sidebar from '@/components/layout/Sidebar';
-import TopBar from '@/components/layout/TopBar';
-import MobileNav from '@/components/layout/MobileNav';
+import AppTopbar from '@/components/layout/AppTopbar';
+import Subnav from '@/components/layout/Subnav';
+import MobileTabBar from '@/components/layout/MobileTabBar';
 import Footer from '@/components/layout/Footer';
+import DuotoneFilters from '@/components/ui/DuotoneFilters';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
+
+// Direction H "Schemat" chrome:
+//   Topbar (brand · week strip · search · avatar) sits above every page.
+//   Subnav below it (Hem · Bibliotek · Kalender · …).
+//   MobileTabBar at the bottom on small screens — Sök is the center tab.
+//   DuotoneFilters mounted once at the root so any <img> with
+//   `filter: url(#duo-…)` picks up the SVG defs.
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  // Subscribe på FCM foreground-messages så push:ar visas som in-app-toasts
-  // istället för OS-notifs när användaren har appen öppen (mer subtil UX).
-  // Hookens egen guard gör inget när pushEnabled=false eller utan FCM-stöd.
   useFcmForeground();
 
   const isLandingForGuest = mounted && !loading && !user && pathname === '/';
@@ -25,6 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isLandingForGuest) {
     return (
       <>
+        <DuotoneFilters />
         <a href="#main" className="sr-only">Hoppa till innehåll</a>
         <main id="main">{children}</main>
         <Footer />
@@ -33,18 +39,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <>
+      <DuotoneFilters />
       <a href="#main" className="sr-only">Hoppa till innehåll</a>
-      <div className="hidden md:block">
-        <Sidebar />
-      </div>
-      <MobileNav />
-      <div className="flex-1 overflow-y-auto flex flex-col">
-        <TopBar />
+      <div className="app-shell">
+        <AppTopbar />
+        <Subnav />
         <EmailVerificationBanner />
-        <main id="main" className="p-[14px_18px] flex-1">{children}</main>
+        <main id="main" className="canvas">{children}</main>
         <Footer />
       </div>
-    </div>
+      <MobileTabBar />
+    </>
   );
 }
