@@ -154,61 +154,54 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     });
   }, [filtered, status, advisor.unfinishedTmdbIds, showsByTmdbId]);
 
+  const standfirst = buildStandfirst(filtered.length, totalCount, status, mediaFilter);
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-[18px] font-bold text-text-primary">{title}</h1>
-        <span className="text-xs text-text-muted">{filtered.length} {filtered.length === 1 ? 'titel' : 'titlar'}</span>
-      </div>
+    <>
+      <header>
+        <div className="crumb">
+          Bibliotek · {labelForStatus(status)}{providerFilter ? ` · ${providerFilter.shortName}` : ''}{behindFilterActive ? ' · efter' : ''}
+        </div>
+        <h1 className="page-h1">{title}</h1>
+        <p className="stand">{standfirst}</p>
+      </header>
 
       {(providerFilter || behindFilterActive) && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/30 rounded-sm flex-wrap">
-          <span className="inline-flex items-center gap-[6px] text-xs text-text-secondary">
-            Filtrerat på
-            {providerFilter && (
-              <span className="inline-flex items-center gap-[5px] font-semibold text-text-primary">
-                <ProviderDot color={providerFilter.color} size={7} />
-                {providerFilter.shortName}
-              </span>
-            )}
-            {behindFilterActive && (
-              <span className="font-semibold text-text-primary">ligger efter</span>
-            )}
+        <div className="chip acc" style={{ marginTop: 18, padding: '6px 12px', display: 'inline-flex', gap: 8 }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+            filter:
           </span>
-          {behindFilterActive && !providerFilter && (
-            <button
-              onClick={clearBehindFilter}
-              className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
-              aria-label="Rensa filter"
-            >
-              <X size={11} /> Rensa
-            </button>
-          )}
           {providerFilter && (
-            <button
-              onClick={clearProviderFilter}
-              className="ml-auto inline-flex items-center gap-[3px] px-2 py-[2px] text-xxs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] hover:text-text-primary"
-              aria-label="Rensa filter"
-            >
-              <X size={11} /> Rensa
-            </button>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <ProviderDot color={providerFilter.color} size={7} />
+              {providerFilter.shortName}
+            </span>
           )}
+          {behindFilterActive && <span>ligger efter</span>}
+          <button
+            type="button"
+            onClick={behindFilterActive && !providerFilter ? clearBehindFilter : clearProviderFilter}
+            className="topbar-icon-btn"
+            style={{ marginLeft: 4, color: 'var(--acc-deep)' }}
+            aria-label="Rensa filter"
+          >
+            <X size={12} />
+          </button>
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
         {status !== 'mina' && (
-          <div className="flex gap-[1px]">
+          <div style={{ display: 'flex', gap: 6 }}>
             {(['all', 'tv', 'movie'] as const).map(f => (
-              <span
+              <button
                 key={f}
+                type="button"
                 onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
-                className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                  mediaFilter === f ? 'bg-accent text-white' : 'text-text-muted'
-                }`}
+                className={`chip${mediaFilter === f ? ' is-on' : ''}`}
               >
                 {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -217,7 +210,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <select
             value={sort}
             onChange={e => setSort(e.target.value as SortKey)}
-            className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
+            style={{
+              fontFamily: 'var(--mono)', fontSize: 12,
+              border: '1px solid var(--rule)', borderRadius: 6,
+              padding: '5px 10px',
+              background: 'var(--surface)', color: 'var(--ink-2)',
+              outline: 'none', cursor: 'pointer',
+              letterSpacing: 0.04,
+            }}
           >
             <option value="updatedAt">Senast ändrad</option>
             <option value="title">Titel A-Ö</option>
@@ -229,43 +229,39 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         )}
 
         {totalCount > 10 && (
-          <div className="flex items-center gap-[5px] px-2 py-[2px] bg-surface border border-border-main rounded-sm">
-            <Search size={11} className="text-text-muted shrink-0" />
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--rule)',
+            borderRadius: 6,
+          }}>
+            <Search size={12} style={{ color: 'var(--ink-3)' }} />
             <input
               type="text"
-              placeholder="Sök titel..."
+              placeholder="sök titel…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none text-xs text-text-primary font-[inherit] outline-none w-[100px] placeholder:text-text-muted"
+              style={{
+                background: 'transparent', border: 0,
+                fontFamily: 'var(--mono)', fontSize: 11.5,
+                color: 'var(--ink)', outline: 'none', width: 140,
+              }}
             />
           </div>
         )}
 
-        <div className="flex gap-[1px] ml-auto">
-          <span
-            onClick={() => setView('table')}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              view === 'table' ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
-          >
-            Tabell
-          </span>
-          <span
-            onClick={() => setView('cards')}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              view === 'cards' ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
-          >
-            Kort
-          </span>
-          <span
-            onClick={() => setView('grid')}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              view === 'grid' ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
-          >
-            Rutnät
-          </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {(['table', 'cards', 'grid'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`chip${view === v ? ' is-on' : ''}`}
+            >
+              {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -480,6 +476,38 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
+}
+
+// Helpers — pure functions for the new header pattern. Pulled out so the
+// component body stays focused on view/filter state.
+
+function labelForStatus(status?: WatchStatus): string {
+  switch (status) {
+    case 'mina':     return 'mina serier';
+    case 'sedd':     return 'mina filmer';
+    case 'vill_se':  return 'vill se';
+    case 'avbruten': return 'avbrutna';
+    default:         return 'allt';
+  }
+}
+
+function buildStandfirst(
+  visible: number,
+  total: number,
+  status: WatchStatus | undefined,
+  mediaFilter: 'all' | 'tv' | 'movie',
+): string {
+  const noun = mediaFilter === 'tv' ? 'serier' : mediaFilter === 'movie' ? 'filmer' : 'titlar';
+  if (total === 0) {
+    return 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.';
+  }
+  if (visible === 0) {
+    return `Inga ${noun} matchar dina filter. Justera ovan eller rensa.`;
+  }
+  if (visible === total) {
+    return `${visible} ${noun} i ${status ? 'denna lista' : 'biblioteket'}. Vi räknade åt dig.`;
+  }
+  return `${visible} av ${total} ${noun} visas. Filtrera mer eller justera vyn.`;
 }
