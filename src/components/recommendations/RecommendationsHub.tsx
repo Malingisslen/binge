@@ -12,7 +12,7 @@ import { useRowPerson } from '@/hooks/rows/useRowPerson';
 import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
-import CascadeRow from './CascadeRow';
+import RecRow from './RecRow';
 import RecommendationsFilters from './RecommendationsFilters';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
@@ -99,22 +99,26 @@ export default function RecommendationsHub() {
 
   return (
     <>
-      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <h1 className="text-[18px] font-bold text-text-primary">För dig</h1>
-        <p className="text-xs text-text-muted">Baserat på dina ratings, exklusive det du redan följer.</p>
-      </div>
+      <header>
+        <div className="crumb">Rekommendationer · {filteredRows.length} rader</div>
+        <h1 className="page-h1">Vad du kan se — och varför.</h1>
+        <p className="stand">
+          Sju kategorier sorterade efter vad du har tittat på senast. Varje rad
+          säger varför den finns där; klicka <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>visa fler</strong> för
+          en utvidgad vy. Inga mystery-rader.
+        </p>
+      </header>
 
-      <div className="flex gap-[1px] mb-3">
+      <div className="rec-filters">
         {MEDIA_TABS.map(t => (
-          <span
+          <button
             key={t.value}
+            type="button"
             onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              filters.mediaType === t.value ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
+            className={`chip${filters.mediaType === t.value ? ' is-on' : ''}`}
           >
             {t.label}
-          </span>
+          </button>
         ))}
       </div>
 
@@ -122,10 +126,11 @@ export default function RecommendationsHub() {
       <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
       <QuickRateModal open={quickRateOpen} onClose={() => setQuickRateOpen(false)} />
 
-      {visibleRows.map(spec => (
+      {visibleRows.map((spec, idx) => (
         <RowDispatch
           key={spec.rowKey}
           spec={spec}
+          index={idx}
           excludedIds={excludedIds}
           filters={filters}
           myProviders={myProviders}
@@ -136,10 +141,19 @@ export default function RecommendationsHub() {
       ))}
 
       {visibleRowCount < filteredRows.length && (
-        <button onClick={() => setVisibleRowCount(c => c + 2)} className="text-xs text-accent mt-2">Visa fler rader ›</button>
+        <button
+          onClick={() => setVisibleRowCount(c => c + 2)}
+          className="btn btn-ghost btn-sm"
+          style={{ marginTop: 24 }}
+        >
+          Visa fler rader ›
+        </button>
       )}
       {filteredRows.length === 0 && cascade.rows.length > 0 && (
-        <p className="text-sm text-text-muted py-4">Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} i nuvarande rekommendationer. Byt mediatyp eller justera filter.</p>
+        <p className="stand" style={{ marginTop: 24 }}>
+          Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} i nuvarande rekommendationer.
+          Byt mediatyp eller justera filter.
+        </p>
       )}
     </>
   );
@@ -147,6 +161,7 @@ export default function RecommendationsHub() {
 
 interface DispatchProps {
   spec: RowSpec;
+  index: number;
   excludedIds: ReadonlySet<number>;
   filters: FilterState;
   myProviders: number[];
@@ -168,38 +183,38 @@ function RowDispatch(props: DispatchProps) {
   }
 }
 
-function TrendingRow({ spec, excludedIds, filters }: DispatchProps) {
+function TrendingRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowTrending(spec, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function LatestFavRow({ spec, excludedIds, filters, latestFiveStar }: DispatchProps) {
+function LatestFavRow({ spec, index, excludedIds, filters, latestFiveStar }: DispatchProps) {
   const seed = latestFiveStar ? { tmdbId: latestFiveStar.tmdbId, mediaType: latestFiveStar.mediaType } : null;
   const r = useRowLatestFav(spec, seed, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function SimilarRow({ spec, excludedIds, filters }: DispatchProps) {
+function SimilarRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowSimilar(spec, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function PersonRow({ spec, excludedIds, filters }: DispatchProps) {
+function PersonRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowPerson(spec, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function GenreCanonRow({ spec, excludedIds, filters }: DispatchProps) {
+function GenreCanonRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowGenreCanon(spec, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function ThematicRow({ spec, excludedIds, filters }: DispatchProps) {
+function ThematicRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowThematic(spec, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
 
-function UpcomingRow({ spec, excludedIds, filters, myProviders, topGenreIds }: DispatchProps) {
+function UpcomingRow({ spec, index, excludedIds, filters, myProviders, topGenreIds }: DispatchProps) {
   const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
-  return <CascadeRow result={r} />;
+  return <RecRow result={r} index={index} />;
 }
