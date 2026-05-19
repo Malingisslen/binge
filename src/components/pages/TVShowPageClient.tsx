@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
 import { useTVShow } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
@@ -16,8 +16,9 @@ import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import SeasonList from '@/components/tv/SeasonList';
 import NotesBlock from '@/components/title/NotesBlock';
-import RecommendationsSection from '@/components/title/RecommendationsSection';
+import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
+import { toneForGenreIds } from '@/lib/duotone';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
@@ -68,11 +69,11 @@ export default function TVShowPageClient({ id }: { id: string }) {
     }
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
-  if (!show) return <div className="text-sm text-text-muted py-4">Serien hittades inte.</div>;
+  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar...</div>;
+  if (!show) return <div className="text-sm text-ink-3 py-4">Serien hittades inte.</div>;
 
   const poster = posterUrl(show.poster_path, 'w500');
-  const backdrop = backdropUrl(show.backdrop_path);
+  const tone = toneForGenreIds(show.genres.map(g => g.id));
   const providers = show['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
   const free = providers?.free ?? [];
@@ -103,7 +104,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
   };
 
   return (
-    <div className="-mt-[14px] -mx-[18px]">
+    <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
       <JsonLd data={tvSchema(show)} />
       <JsonLd data={breadcrumbSchema([
@@ -112,220 +113,276 @@ export default function TVShowPageClient({ id }: { id: string }) {
         { name: displayTitle, url: `https://binge.nu/tv/${show.id}/` },
       ])} />
 
-      {/* Hero backdrop */}
-      <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
-        {backdrop && (
-          <img
-            src={backdrop}
-            alt=""
-            className="w-full h-full object-cover object-[center_20%] opacity-60"
-            loading="eager"
-            decoding="async"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
-          {poster ? (
-            <img src={poster} alt={displayTitle} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" loading="eager" decoding="async" width={140} height={210} />
-          ) : (
-            <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
-              <Tv size={32} className="text-text-muted" />
+      <div className="crumb">Bibliotek · serier · {displayTitle}</div>
+
+      <div className="detail-hero">
+        <div className="poster-wrap">
+          <div className={`poster duo-${tone}`}>
+            {poster ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={poster} alt={displayTitle} loading="eager" decoding="async" width={342} height={513} />
+            ) : (
+              <div style={{
+                width: '100%', height: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'oklch(0.85 0.02 80)',
+              }}>
+                <Tv size={48} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="meta-col">
+          <div className="chips-line">
+            {watchlistItem && (
+              <span className="chip acc">
+                <span className="dot" />{tvShowStatusLabel(show.status).toLowerCase()}
+              </span>
+            )}
+            <span className="kind">
+              SERIE · {yearStart}{yearEnd ? `–${yearEnd}` : '–'}
+            </span>
+            {genres && <span className="kind">{genres}</span>}
+          </div>
+          <h1>{displayTitle}</h1>
+          {creators.length > 0 && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+              {creators.length === 1 ? 'skapare' : 'skapare'}:{' '}
+              {creators.map((c, i) => (
+                <span key={c.id}>
+                  {i > 0 && ', '}
+                  <Link href={`/person/${c.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
+                    {c.name}
+                  </Link>
+                </span>
+              ))}
             </div>
           )}
-          <div className="relative z-10 pb-1">
-            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{displayTitle}</h1>
-            <div className="text-sm text-text-secondary">
-              {yearStart}{yearEnd ? `–${yearEnd}` : '-'} · {show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''} · {genres}
-            </div>
+          {show.overview && <p className="syn">{show.overview}</p>}
+          <div className="stats">
+            <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
+            {show.number_of_episodes && (
+              <span><span className="k">avsnitt</span><strong>{show.number_of_episodes}</strong></span>
+            )}
+            <span><span className="k">tmdb</span><strong>{show.vote_average.toFixed(1)} / 10</strong></span>
+            {imdbId && (
+              <span>
+                <span className="k">imdb</span>
+                <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
+                  öppna →
+                </a>
+              </span>
+            )}
           </div>
+
+          <div className="actions-row">
+            <StatusButton {...statusButtonProps} />
+            <div>
+              {watchlistItem && (
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  Ditt betyg
+                </div>
+              )}
+              <RatingStars
+                rating={watchlistItem?.rating ?? null}
+                onChange={r => watchlistItem && updateRating(show.id, r)}
+                readonly={!watchlistItem}
+                size="lg"
+              />
+            </div>
+            <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
+            <AddToGroupButton
+              tmdbId={show.id}
+              mediaType="tv"
+              title={displayTitle}
+              posterPath={show.poster_path}
+              releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
+            />
+            <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
+          </div>
+
+          {subscription.length > 0 && (
+            <div className="providers-row">
+              <span className="lab">finns på</span>
+              {subscription.map(p => {
+                const logo = logoUrl(p.logo_path);
+                return logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)' }} loading="lazy" decoding="async" width={28} height={28} />
+                ) : (
+                  <ProviderTag key={p.provider_id} provider={p} size="md" />
+                );
+              })}
+              {hasRentBuy && (
+                <button
+                  onClick={() => setShowRentBuy(!showRentBuy)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginLeft: 4 }}
+                >
+                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              )}
+            </div>
+          )}
+
+          {showRentBuy && hasRentBuy && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+              {rent.length > 0 && (
+                <div>
+                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                </div>
+              )}
+              {buy.length > 0 && (
+                <div>
+                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-[18px] pt-4">
-        {/* Creator + status */}
-        {creators.length > 0 && (
-          <div className="text-xs text-text-muted mb-1">
-            Skapare: {creators.map((c, i) => (
-              <span key={c.id}>{i > 0 && ', '}<Link href={`/person/${c.id}/`} className="text-text-secondary no-underline hover:text-accent">{c.name}</Link></span>
-            ))}
-          </div>
-        )}
-        <div className="text-xs text-text-muted mb-3">
-          Status: {tvShowStatusLabel(show.status)} · TMDB: {show.vote_average.toFixed(1)}/10
-          {imdbId && (
-            <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" className="text-text-muted ml-2 no-underline hover:text-accent">IMDb</a>
-          )}
-        </div>
-
-        {/* CTA actions — prominent */}
-        <div className="flex items-center gap-3 mb-4">
-          <StatusButton {...statusButtonProps} />
-          <div>
-            {watchlistItem && (
-              <div className="text-xxs text-text-muted mb-[2px]">Ditt betyg</div>
-            )}
-            <RatingStars
-              rating={watchlistItem?.rating ?? null}
-              onChange={r => watchlistItem && updateRating(show.id, r)}
-              readonly={!watchlistItem}
-              size="lg"
-            />
-          </div>
-          <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
-          <AddToGroupButton
-            tmdbId={show.id}
-            mediaType="tv"
-            title={displayTitle}
-            posterPath={show.poster_path}
-            releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
-          />
-          <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
-        </div>
-
-        {/* Next episode */}
+      <div style={{ marginTop: 18 }}>
         {nextEp && (
-          <div className="text-sm text-text-secondary mb-3 bg-surface border border-border-main rounded-sm px-3 py-2">
-            Nästa avsnitt: <span className="font-semibold">S{nextEp.season_number}E{nextEp.episode_number}</span> — {nextEp.name} ({nextEp.air_date})
+          <div className="chip acc" style={{ padding: '6px 12px' }}>
+            Nästa avsnitt: S{nextEp.season_number}E{nextEp.episode_number} — {nextEp.name} ({nextEp.air_date})
           </div>
         )}
-
         {watchlistItem?.status === 'sedd' && nextEp && (
-          <div className="text-sm mb-3 bg-accent/[0.04] border border-accent/40 rounded-sm px-3 py-2 flex items-center justify-between gap-2">
-            <span className="text-text-secondary">
-              Du har markerat serien som sedd, men nya avsnitt är på väg.
-            </span>
+          <div style={{
+            marginTop: 8,
+            padding: '8px 14px',
+            background: 'var(--acc-soft)',
+            border: '1px solid oklch(0.86 0.08 75)',
+            borderRadius: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            fontSize: 13.5, color: 'var(--ink-2)',
+          }}>
+            <span>Du har markerat serien som sedd, men nya avsnitt är på väg.</span>
             <StatusButton {...statusButtonProps} />
           </div>
         )}
+      </div>
+      {/* Säsonger — episode list + progress (preview surface, raw) */}
+      <section className="detail-section">
+        <div className="head">
+          <h2>Säsonger</h2>
+          <span className="meta">{show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''}</span>
+        </div>
+        <div style={{ border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--surface)' }}>
+          <SeasonList
+            tmdbId={show.id}
+            seasons={show.seasons}
+            isWatched={isWatched}
+            markEpisodeWatched={markEpisodeWatched}
+            markSeasonWatched={markSeasonWatched}
+            getSeasonProgress={getSeasonProgress}
+            fromGroup={fromGroup}
+          />
+        </div>
+      </section>
 
-        {/* Providers — streaming prominent, rent/buy collapsed */}
-        {(subscription.length > 0 || hasRentBuy) && (
-          <div className="mb-4 bg-surface border border-border-main rounded-sm p-3">
-            {subscription.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xxs text-text-muted uppercase tracking-[0.5px] font-semibold">Streama:</span>
-                {subscription.map(p => {
-                  const logo = logoUrl(p.logo_path);
-                  return logo ? (
-                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" loading="lazy" decoding="async" width={28} height={28} />
-                  ) : (
-                    <ProviderTag key={p.provider_id} provider={p} size="md" />
-                  );
-                })}
-              </div>
-            )}
-            {hasRentBuy && (
-              <>
-                {subscription.length > 0 && <div className="border-t border-border-light my-2" />}
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="flex items-center gap-1 text-xs text-text-muted bg-transparent border-none cursor-pointer p-0 font-[inherit] hover:text-text-secondary"
-                >
-                  Hyr & köp
-                  {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-                {showRentBuy && (
-                  <div className="mt-2 space-y-1">
-                    {rent.length > 0 && (
-                      <div>
-                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Hyr:</span>
-                        {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                      </div>
-                    )}
-                    {buy.length > 0 && (
-                      <div>
-                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Köp:</span>
-                        {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+      {/* Trailer — raw 16:9 video (preview surface) */}
+      {trailer && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Trailer</h2>
+            <span className="meta">YouTube · {trailer.type}</span>
           </div>
-        )}
-
-        {/* Synopsis */}
-        {show.overview && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Handling</h2>
-            <p className="text-sm text-text-secondary leading-relaxed">{show.overview}</p>
-          </div>
-        )}
-
-        {watchlistItem && <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />}
-
-        {/* Seasons */}
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Säsonger</h2>
-          <div className="bg-surface border border-border-main rounded-sm">
-            <SeasonList
-              tmdbId={show.id}
-              seasons={show.seasons}
-              isWatched={isWatched}
-              markEpisodeWatched={markEpisodeWatched}
-              markSeasonWatched={markSeasonWatched}
-              getSeasonProgress={getSeasonProgress}
-              fromGroup={fromGroup}
+          <div className="raw ratio-16-9" style={{ maxWidth: 720 }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${trailer.key}`}
+              title={trailer.name}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ width: '100%', height: '100%', border: 0 }}
             />
           </div>
-        </div>
+        </section>
+      )}
 
-        {/* Trailer */}
-        {trailer && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Trailer</h2>
-            <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
-              <iframe
-                src={`https://www.youtube.com/embed/${trailer.key}`}
-                title={trailer.name}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-none"
-              />
-            </div>
+      {/* Cast — raw 1:1 circular portraits (preview surface) */}
+      {cast.length > 0 && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Skådespelare</h2>
+            <span className="meta">huvudroller · {cast.length} av {show.credits?.cast?.length ?? cast.length}</span>
           </div>
-        )}
-
-        {/* Cast with round images */}
-        {cast.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Skådespelare</h2>
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              {cast.map(person => (
-                <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
+          <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
+            {cast.map(person => (
+              <Link
+                key={person.id}
+                href={`/person/${person.id}/`}
+                style={{ flexShrink: 0, width: 92, textDecoration: 'none', color: 'inherit', textAlign: 'center' }}
+              >
+                <div className="raw ratio-1-1" style={{ width: 72, height: 72, margin: '0 auto 8px', borderRadius: 999 }}>
                   {profileUrl(person.profile_path) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
                       alt={person.name}
-                      className="w-[50px] h-[50px] object-cover rounded-full mb-[4px] mx-auto"
                       loading="lazy"
                       decoding="async"
-                      width={50}
-                      height={50}
+                      width={72}
+                      height={72}
                     />
                   ) : (
-                    <div className="w-[50px] h-[50px] rounded-full bg-[#ddd8d0] mb-[4px] mx-auto flex items-center justify-center text-xs text-text-muted font-semibold">
+                    <div style={{
+                      width: '100%', height: '100%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'oklch(0.85 0.02 80)',
+                      color: 'var(--ink-3)',
+                      fontWeight: 600, fontSize: 14,
+                    }}>
                       {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                     </div>
                   )}
-                  <div className="text-xs font-semibold truncate text-center">{person.name}</div>
-                  <div className="text-xxs text-text-muted truncate text-center">{person.character}</div>
-                </Link>
-              ))}
-            </div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                  {person.character}
+                </div>
+              </Link>
+            ))}
           </div>
-        )}
+        </section>
+      )}
 
+      {/* Notes — left-rule quote */}
+      {watchlistItem && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Din anteckning</h2>
+          </div>
+          <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />
+        </section>
+      )}
+
+      {/* Reviews from friends */}
+      <section className="detail-section">
         <ReviewList tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
+      </section>
 
-        <RecommendationsSection
-          recommendations={mappedRecs}
-          myProviders={myProviders}
-          label="Liknande serier"
-        />
-      </div>
-    </div>
+      {/* Similar series — back to duotone (navigation surface) */}
+      {mappedRecs.length > 0 && (
+        <section className="detail-section" style={{ borderTop: '1px solid var(--rule)', paddingTop: 28 }}>
+          <div className="head">
+            <div>
+              <h2>Liknande serier</h2>
+              <div className="sub">{genres}</div>
+            </div>
+            <span className="meta">{mappedRecs.length} förslag</span>
+          </div>
+          <div className="similar-grid">
+            {mappedRecs.slice(0, 5).map(rec => (
+              <RecCard key={`${rec.media_type}-${rec.id}`} item={rec} />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
-import { posterUrl, profileUrl, backdropUrl, logoUrl } from '@/lib/tmdb/client';
+import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
@@ -14,19 +14,24 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import NotesBlock from '@/components/title/NotesBlock';
-import RecommendationsSection from '@/components/title/RecommendationsSection';
+import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { toneForGenreIds } from '@/lib/duotone';
+
+// Direction H movie-detail page. Same duotone/raw boundary as TV detail:
+//   - Hero poster → duotone (identification)
+//   - Trailer + cast portraits → raw (preview)
+//   - Recommendations at bottom → duotone (back to navigation)
 
 export default function MoviePageClient({ id }: { id: string }) {
   const movieId = parseInt(id, 10);
   const { data: movie, isLoading } = useMovie(movieId);
   const { getItem, updateRating, updateNotes } = useWatchlist();
-  const { user } = useAuth();
-  const myProviders = user?.myProviders ?? [];
+  useAuth();
   const [showRentBuy, setShowRentBuy] = useState(false);
 
   const mappedRecs = useMemo(
@@ -46,12 +51,12 @@ export default function MoviePageClient({ id }: { id: string }) {
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
   });
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
-  if (!movie) return <div className="text-sm text-text-muted py-4">Filmen hittades inte.</div>;
+  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar...</div>;
+  if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
 
   const watchlistItem = getItem(movie.id);
   const poster = posterUrl(movie.poster_path, 'w500');
-  const backdrop = backdropUrl(movie.backdrop_path);
+  const tone = toneForGenreIds(movie.genres.map(g => g.id));
   const providers = movie['watch/providers']?.results?.SE;
   const flatrate = providers?.flatrate ?? [];
   const free = providers?.free ?? [];
@@ -69,7 +74,7 @@ export default function MoviePageClient({ id }: { id: string }) {
     ?? movie.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
 
   return (
-    <div className="-mt-[14px] -mx-[18px]">
+    <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
       <JsonLd data={movieSchema(movie)} />
       <JsonLd data={breadcrumbSchema([
@@ -78,206 +83,262 @@ export default function MoviePageClient({ id }: { id: string }) {
         { name: displayTitle, url: `https://binge.nu/movie/${movie.id}/` },
       ])} />
 
-      {/* Hero backdrop */}
-      <div className="relative w-full h-[180px] md:h-[280px] bg-[#2a2a2a] overflow-hidden">
-        {backdrop && (
-          <img
-            src={backdrop}
-            alt=""
-            className="w-full h-full object-cover object-[center_20%] opacity-60"
-            loading="eager"
-            decoding="async"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-page via-page/40 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 px-[18px] pb-4 flex gap-4 items-end">
-          {poster ? (
-            <img src={poster} alt={movie ? preferOriginalTitle(movie.title, movie.original_title) : ''} className="w-[100px] md:w-[140px] rounded-sm shadow-lg shrink-0 relative z-10" loading="eager" decoding="async" width={140} height={210} />
-          ) : (
-            <div className="w-[100px] md:w-[140px] aspect-[2/3] bg-[#ddd8d0] rounded-sm shrink-0 flex items-center justify-center">
-              <Film size={32} className="text-text-muted" />
+      <div className="crumb">Bibliotek · filmer · {displayTitle}</div>
+
+      <div className="detail-hero">
+        <div className="poster-wrap">
+          <div className={`poster duo-${tone}`}>
+            {poster ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={poster} alt={displayTitle} loading="eager" decoding="async" width={342} height={513} />
+            ) : (
+              <div style={{
+                width: '100%', height: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'oklch(0.85 0.02 80)',
+              }}>
+                <Film size={48} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="meta-col">
+          <div className="chips-line">
+            {watchlistItem && (
+              <span className="chip acc">
+                <span className="dot" />i biblioteket
+              </span>
+            )}
+            <span className="kind">
+              FILM · {year} · {movie.runtime} min
+            </span>
+            {genres && <span className="kind">{genres}</span>}
+          </div>
+          <h1>{displayTitle}</h1>
+          {(directors.length > 0 || writers.length > 0) && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+              {directors.length > 0 && (
+                <>
+                  regi:{' '}
+                  {directors.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && ', '}
+                      <Link href={`/person/${d.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
+                        {d.name}
+                      </Link>
+                    </span>
+                  ))}
+                </>
+              )}
+              {directors.length > 0 && writers.length > 0 && '  ·  '}
+              {writers.length > 0 && (
+                <>
+                  manus:{' '}
+                  {writers.map((w, i) => (
+                    <span key={w.id}>
+                      {i > 0 && ', '}
+                      <Link href={`/person/${w.id}/`} style={{ color: 'var(--ink-2)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
+                        {w.name}
+                      </Link>
+                    </span>
+                  ))}
+                </>
+              )}
             </div>
           )}
-          <div className="relative z-10 pb-1">
-            <h1 className="text-[22px] md:text-[28px] font-bold text-text-primary leading-tight mb-1">{displayTitle}</h1>
-            <div className="text-sm text-text-secondary">
-              {year} · {movie.runtime} min · {genres}
-            </div>
+          {movie.overview && <p className="syn">{movie.overview}</p>}
+          <div className="stats">
+            <span><span className="k">år</span><strong>{year}</strong></span>
+            {movie.runtime ? (
+              <span><span className="k">längd</span><strong>{movie.runtime} min</strong></span>
+            ) : null}
+            <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
+            {movie.imdb_id && (
+              <span>
+                <span className="k">imdb</span>
+                <a href={`https://www.imdb.com/title/${movie.imdb_id}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
+                  öppna →
+                </a>
+              </span>
+            )}
           </div>
+
+          <div className="actions-row">
+            <StatusButton
+              tmdbId={movie.id}
+              mediaType="movie"
+              title={displayTitle}
+              posterPath={movie.poster_path}
+              releaseYear={parseInt(year, 10) || null}
+              providers={Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))))}
+              genreIds={movie.genres.map(g => g.id)}
+            />
+            <div>
+              {watchlistItem && (
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  Ditt betyg
+                </div>
+              )}
+              <RatingStars
+                rating={watchlistItem?.rating ?? null}
+                onChange={r => watchlistItem && updateRating(movie.id, r)}
+                readonly={!watchlistItem}
+                size="lg"
+              />
+            </div>
+            <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
+            <AddToGroupButton
+              tmdbId={movie.id}
+              mediaType="movie"
+              title={displayTitle}
+              posterPath={movie.poster_path}
+              releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
+            />
+            <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
+          </div>
+
+          {subscription.length > 0 && (
+            <div className="providers-row">
+              <span className="lab">finns på</span>
+              {subscription.map(p => {
+                const logo = logoUrl(p.logo_path);
+                return logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)' }} loading="lazy" decoding="async" width={28} height={28} />
+                ) : (
+                  <ProviderTag key={p.provider_id} provider={p} size="md" />
+                );
+              })}
+              {hasRentBuy && (
+                <button
+                  onClick={() => setShowRentBuy(!showRentBuy)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginLeft: 4 }}
+                >
+                  Hyr & köp {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              )}
+            </div>
+          )}
+
+          {showRentBuy && hasRentBuy && (
+            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+              {rent.length > 0 && (
+                <div>
+                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                </div>
+              )}
+              {buy.length > 0 && (
+                <div>
+                  <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="px-[18px] pt-4">
-        {/* Credits */}
-        {(directors.length > 0 || writers.length > 0) && (
-          <div className="text-xs text-text-muted mb-3">
-            {directors.length > 0 && (
-              <>Regi: {directors.map((d, i) => (
-                <span key={d.id}>{i > 0 && ', '}<Link href={`/person/${d.id}/`} className="text-text-secondary no-underline hover:text-accent">{d.name}</Link></span>
-              ))}</>
-            )}
-            {directors.length > 0 && writers.length > 0 && ' · '}
-            {writers.length > 0 && (
-              <>Manus: {writers.map((w, i) => (
-                <span key={w.id}>{i > 0 && ', '}<Link href={`/person/${w.id}/`} className="text-text-secondary no-underline hover:text-accent">{w.name}</Link></span>
-              ))}</>
-            )}
+      {/* Trailer — raw 16:9 (preview surface) */}
+      {trailer && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Trailer</h2>
+            <span className="meta">YouTube · {trailer.type}</span>
           </div>
-        )}
-
-        {/* TMDB rating + IMDb link */}
-        <div className="text-xs text-text-muted mb-3">
-          TMDB: {movie.vote_average.toFixed(1)}/10
-          {movie.imdb_id && (
-            <a href={`https://www.imdb.com/title/${movie.imdb_id}`} target="_blank" rel="noopener noreferrer" className="text-text-muted ml-2 no-underline hover:text-accent">IMDb</a>
-          )}
-        </div>
-
-        {/* CTA actions — prominent */}
-        <div className="flex items-center gap-3 mb-4">
-          <StatusButton
-            tmdbId={movie.id}
-            mediaType="movie"
-            title={displayTitle}
-            posterPath={movie.poster_path}
-            releaseYear={parseInt(year, 10) || null}
-            providers={Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))))}
-            genreIds={movie.genres.map(g => g.id)}
-          />
-          <div>
-            {watchlistItem && (
-              <div className="text-xxs text-text-muted mb-[2px]">Ditt betyg</div>
-            )}
-            <RatingStars
-              rating={watchlistItem?.rating ?? null}
-              onChange={r => watchlistItem && updateRating(movie.id, r)}
-              readonly={!watchlistItem}
-              size="lg"
+          <div className="raw ratio-16-9" style={{ maxWidth: 720 }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${trailer.key}`}
+              title={trailer.name}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ width: '100%', height: '100%', border: 0 }}
             />
           </div>
-          <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
-          <AddToGroupButton
-            tmdbId={movie.id}
-            mediaType="movie"
-            title={displayTitle}
-            posterPath={movie.poster_path}
-            releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
-          />
-          <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
-        </div>
+        </section>
+      )}
 
-        {/* Providers — streaming prominent, rent/buy collapsed */}
-        {(subscription.length > 0 || hasRentBuy) && (
-          <div className="mb-4 bg-surface border border-border-main rounded-sm p-3">
-            {subscription.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xxs text-text-muted uppercase tracking-[0.5px] font-semibold">Streama:</span>
-                {subscription.map(p => {
-                  const logo = logoUrl(p.logo_path);
-                  return logo ? (
-                    <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} className="w-[28px] h-[28px] rounded-sm" loading="lazy" decoding="async" width={28} height={28} />
-                  ) : (
-                    <ProviderTag key={p.provider_id} provider={p} size="md" />
-                  );
-                })}
-              </div>
-            )}
-            {hasRentBuy && (
-              <>
-                {subscription.length > 0 && <div className="border-t border-border-light my-2" />}
-                <button
-                  onClick={() => setShowRentBuy(!showRentBuy)}
-                  className="flex items-center gap-1 text-xs text-text-muted bg-transparent border-none cursor-pointer p-0 font-[inherit] hover:text-text-secondary"
-                >
-                  Hyr & köp
-                  {showRentBuy ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-                {showRentBuy && (
-                  <div className="mt-2 space-y-1">
-                    {rent.length > 0 && (
-                      <div>
-                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Hyr:</span>
-                        {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                      </div>
-                    )}
-                    {buy.length > 0 && (
-                      <div>
-                        <span className="text-xxs text-text-muted uppercase tracking-[0.5px] mr-1">Köp:</span>
-                        {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+      {/* Cast — raw 1:1 circular portraits (preview surface) */}
+      {cast.length > 0 && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Skådespelare</h2>
+            <span className="meta">huvudroller · {cast.length} av {movie.credits?.cast?.length ?? cast.length}</span>
           </div>
-        )}
-
-        {/* Synopsis */}
-        {movie.overview && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Handling</h2>
-            <p className="text-sm text-text-secondary leading-relaxed">{movie.overview}</p>
-          </div>
-        )}
-
-        {watchlistItem && <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />}
-
-        {/* Trailer */}
-        {trailer && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Trailer</h2>
-            <div className="aspect-video max-w-[560px] bg-black rounded-sm overflow-hidden">
-              <iframe
-                src={`https://www.youtube.com/embed/${trailer.key}`}
-                title={trailer.name}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-none"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Cast with images */}
-        {cast.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-sm font-bold text-text-secondary pb-1 border-b border-border-main mb-2">Skådespelare</h2>
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              {cast.map(person => (
-                <Link key={person.id} href={`/person/${person.id}/`} className="shrink-0 w-[70px] no-underline text-text-primary">
+          <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
+            {cast.map(person => (
+              <Link
+                key={person.id}
+                href={`/person/${person.id}/`}
+                style={{ flexShrink: 0, width: 92, textDecoration: 'none', color: 'inherit', textAlign: 'center' }}
+              >
+                <div className="raw ratio-1-1" style={{ width: 72, height: 72, margin: '0 auto 8px', borderRadius: 999 }}>
                   {profileUrl(person.profile_path) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profileUrl(person.profile_path)!}
                       alt={person.name}
-                      className="w-[50px] h-[50px] object-cover rounded-full mb-[4px] mx-auto"
                       loading="lazy"
                       decoding="async"
-                      width={50}
-                      height={50}
+                      width={72}
+                      height={72}
                     />
                   ) : (
-                    <div className="w-[50px] h-[50px] rounded-full bg-[#ddd8d0] mb-[4px] mx-auto flex items-center justify-center text-xs text-text-muted font-semibold">
+                    <div style={{
+                      width: '100%', height: '100%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'oklch(0.85 0.02 80)',
+                      color: 'var(--ink-3)',
+                      fontWeight: 600, fontSize: 14,
+                    }}>
                       {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                     </div>
                   )}
-                  <div className="text-xs font-semibold truncate text-center">{person.name}</div>
-                  <div className="text-xxs text-text-muted truncate text-center">{person.character}</div>
-                </Link>
-              ))}
-            </div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                  {person.character}
+                </div>
+              </Link>
+            ))}
           </div>
-        )}
+        </section>
+      )}
 
+      {/* Notes — left-rule quote */}
+      {watchlistItem && (
+        <section className="detail-section">
+          <div className="head">
+            <h2>Din anteckning</h2>
+          </div>
+          <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />
+        </section>
+      )}
+
+      {/* Reviews from friends */}
+      <section className="detail-section">
         <ReviewList tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
+      </section>
 
-        <RecommendationsSection
-          recommendations={mappedRecs}
-          myProviders={myProviders}
-          label="Rekommendationer"
-        />
-      </div>
-    </div>
+      {/* Similar films — back to duotone (navigation surface) */}
+      {mappedRecs.length > 0 && (
+        <section className="detail-section" style={{ borderTop: '1px solid var(--rule)', paddingTop: 28 }}>
+          <div className="head">
+            <div>
+              <h2>Liknande filmer</h2>
+              <div className="sub">{genres}</div>
+            </div>
+            <span className="meta">{mappedRecs.length} förslag</span>
+          </div>
+          <div className="similar-grid">
+            {mappedRecs.slice(0, 5).map(rec => (
+              <RecCard key={`${rec.media_type}-${rec.id}`} item={rec} />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
   );
 }
