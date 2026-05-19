@@ -32,32 +32,36 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
   );
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-4">Laddar session...</div>;
+    return <div className="text-sm text-ink-3 py-4">Laddar session...</div>;
   }
 
   if (notFound || !session) {
     return (
-      <div className="max-w-[560px]">
-        <h1 className="text-[18px] font-bold mb-2">Session hittades inte</h1>
-        <p className="text-xs text-text-muted mb-3">Länken kan ha gått ut eller vara felstavad.</p>
-        <Link href="/tillsammans/ny" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
-          Skapa en ny session
-        </Link>
-      </div>
+      <>
+        <header>
+          <div className="crumb">Tillsammans · session hittades inte</div>
+          <h1 className="page-h1">Den här länken funkar inte.</h1>
+          <p className="stand">Sessionen kan ha gått ut eller vara felstavad. Tillsammans-sessioner lever i 7 dagar.</p>
+          <div className="actions">
+            <Link href="/tillsammans/ny" className="btn">Skapa en ny session</Link>
+          </div>
+        </header>
+      </>
     );
   }
 
   if (expired) {
     return (
-      <div className="max-w-[560px]">
-        <h1 className="text-[18px] font-bold mb-2">Sessionen har gått ut</h1>
-        <p className="text-xs text-text-muted mb-3">
-          Tillsammans-sessioner är aktiva i 7 dagar. Starta en ny för att fortsätta röstning.
-        </p>
-        <Link href="/tillsammans/ny" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
-          Skapa en ny session
-        </Link>
-      </div>
+      <>
+        <header>
+          <div className="crumb">Tillsammans · utgången</div>
+          <h1 className="page-h1">Den här sessionen har gått ut.</h1>
+          <p className="stand">Tillsammans-sessioner är aktiva i 7 dagar. Starta en ny för att fortsätta röstning.</p>
+          <div className="actions">
+            <Link href="/tillsammans/ny" className="btn">Skapa en ny session</Link>
+          </div>
+        </header>
+      </>
     );
   }
 
@@ -299,22 +303,35 @@ function SessionMain({
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-[6px]">
-        <Link href="/tillsammans/ny" className="text-text-muted no-underline hover:text-accent">
-          <ChevronLeft size={14} />
-        </Link>
-        <Users size={14} className="text-accent" />
-        <h1 className="text-[16px] font-bold">Tillsammans ikväll</h1>
-        <span className="text-xxs text-text-muted">({sessionId.slice(0, 6)})</span>
-      </div>
-
-      {isFullyLive && (
-        <div className="flex items-center gap-2 px-3 py-[5px] mb-[6px] bg-[#2e7d32]/[0.08] border border-[#2e7d32]/30 rounded-sm text-xs">
-          <Radio size={11} className="text-[#2e7d32] animate-pulse" />
-          <span className="text-[#2e7d32] font-semibold">Live — alla deltagare är aktiva just nu</span>
+    <>
+      <header>
+        <div className="crumb">
+          Grupper · Tillsammans · session #{sessionId.slice(0, 6)}
         </div>
-      )}
+        <h1 className="page-h1">Vad ska vi se ikväll?</h1>
+        <p className="stand">
+          {participants.length === 1
+            ? 'Du är ensam i rummet. Dela länken nedan så kan andra gå med.'
+            : `${participants.length} i rummet. ${session.config.providerMode === 'intersect' ? 'Alla' : 'Någon'} har — gemensamma tjänster: ${effectiveProviders.length}.`}
+        </p>
+        <div className="actions">
+          <Link href="/tillsammans/ny" className="btn btn-ghost btn-sm">
+            <ChevronLeft size={12} /> Ny session
+          </Link>
+          {isFullyLive && (
+            <span className="chip acc">
+              <span className="live-dot" aria-hidden="true" /> alla aktiva nu
+            </span>
+          )}
+          <span style={{
+            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)',
+            letterSpacing: 0.12, textTransform: 'uppercase',
+            marginLeft: 'auto',
+          }}>
+            veto kvar: {me.vetoRemaining}
+          </span>
+        </div>
+      </header>
 
       <div className="bg-surface border border-border-main rounded-sm mb-[8px]">
         <div className="flex items-center gap-2 px-3 py-[6px] border-b border-border-light text-xs">
@@ -406,7 +423,7 @@ function SessionMain({
           onVote={onVote}
         />
       )}
-    </div>
+    </>
   );
 }
 
