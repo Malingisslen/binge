@@ -1129,6 +1129,413 @@ button { font: inherit; cursor: pointer; }
 }
 .hem-empty .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ─── Kalender (week board + month strip) ───────────────────────────────
+   The week strip in the topbar opens up here into a full-height board.
+   Today's column wears the plum picker wash + 2px plum rule. Tonight's
+   episode card wears a 3px inset plum left rule. */
+
+.kal-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.nav-week {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.nav-week button {
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--ink-2);
+  border: 0;
+  border-right: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.nav-week button:last-child { border-right: 0; }
+.nav-week button:hover { color: var(--ink); background: var(--bg-2); }
+.nav-week button.is-on {
+  background: var(--ink);
+  color: var(--bg);
+}
+.nav-week button.is-on:hover { background: var(--ink); }
+
+.view-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.view-toggle .lab {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ─── Week board ─── */
+.week-board {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.week-board .col {
+  border-right: 1px solid var(--rule);
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+}
+.week-board .col:last-child { border-right: 0; }
+.week-board .col.today { background: oklch(0.965 0.03 300 / 0.55); }
+.week-board .col.today .col-h .lab,
+.week-board .col.today .col-h .date { color: var(--cal-deep); }
+.week-board .col.today .col-h::after { background: var(--cal-deep); }
+.week-board .col-h {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+.week-board .col-h::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: transparent;
+}
+.week-board .col-h .lab {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.week-board .col-h .date {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-top: 2px;
+  color: var(--ink);
+}
+.week-board .col-h .meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+.week-board .col-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.week-board .col-body .empty {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 12px 4px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0.45;
+}
+
+/* Vertical event card inside the week board */
+.ev {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 140ms, transform 140ms, box-shadow 140ms;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.ev:hover {
+  border-color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px oklch(0 0 0 / 0.06);
+}
+.ev .px {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: oklch(0.16 0 0);
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--rule);
+}
+.ev .px img { width: 100%; height: 100%; object-fit: cover; }
+.ev .px .badge {
+  position: absolute;
+  left: 8px; top: 8px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: oklch(0 0 0 / 0.55);
+  color: oklch(1 0 0 / 0.95);
+  padding: 3px 6px;
+  border-radius: 2px;
+  backdrop-filter: blur(2px);
+}
+.ev .body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.ev .body .ttl {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ev .body .meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+.ev .body .meta .ch { color: var(--ink-2); }
+.ev .body .syn {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ev.is-tonight {
+  border-color: var(--cal-deep);
+  box-shadow: inset 3px 0 0 var(--cal-deep);
+}
+.ev.is-tonight .meta .ch {
+  color: var(--cal-deep);
+  font-weight: 500;
+}
+.ev.is-watched {
+  background: var(--bg-2);
+  border-color: var(--rule-2);
+}
+.ev.is-watched .ttl { color: var(--ink-3); }
+.ev.is-watched .px img {
+  opacity: 0.55;
+}
+
+.ev-toggle {
+  flex-shrink: 0;
+  width: 14px; height: 14px;
+  border-radius: 2px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  cursor: pointer;
+  padding: 0;
+  margin-right: 6px;
+  position: relative;
+}
+.ev-toggle.is-on {
+  background: oklch(0.55 0.13 145);
+  border-color: oklch(0.55 0.13 145);
+}
+.ev-toggle.is-on::after {
+  content: "";
+  position: absolute;
+  left: 3px; top: 1px;
+  width: 4px; height: 7px;
+  border-right: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(45deg);
+}
+
+/* ─── Month strip ─── */
+.month-strip {
+  margin-top: 36px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.month-strip .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--rule);
+  gap: 14px;
+}
+.month-strip .head h3 {
+  margin: 0;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+.month-strip .head .sub {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+.month-strip .head .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: 50px repeat(7, 1fr);
+  font-family: var(--mono);
+}
+.month-grid .h-cell {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--rule);
+  border-right: 1px solid var(--rule-2);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: center;
+  background: var(--bg);
+}
+.month-grid .h-cell.spacer { background: var(--bg); }
+.month-grid .vcell {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule);
+  text-align: center;
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cal-deep);
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  text-decoration: none;
+}
+.month-grid .vcell:hover { background: var(--bg-2); }
+.month-grid .vcell.is-now {
+  background: var(--cal-soft);
+  color: var(--cal-deep);
+  font-weight: 600;
+}
+.month-grid .dcell {
+  padding: 8px 8px 10px;
+  border-bottom: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+}
+.month-grid .dcell:hover { background: var(--bg-2); }
+.month-grid .dcell .d {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.month-grid .dcell.muted { background: var(--bg-2); }
+.month-grid .dcell.muted .d { color: var(--ink-3); }
+.month-grid .dcell.today { background: var(--cal-soft); }
+.month-grid .dcell.today .d {
+  color: var(--cal-deep);
+  font-weight: 600;
+}
+.month-grid .dcell.today::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: var(--cal-deep);
+}
+.month-grid .dcell .pills {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+.month-grid .dcell .pill {
+  height: 4px;
+  width: 14px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.month-grid .dcell .pill.duo-terra   { background: var(--duo-terra); }
+.month-grid .dcell .pill.duo-slate   { background: var(--duo-slate); }
+.month-grid .dcell .pill.duo-moss    { background: var(--duo-moss); }
+.month-grid .dcell .pill.duo-clay    { background: var(--duo-clay); }
+.month-grid .dcell .pill.duo-plum    { background: var(--duo-plum); }
+.month-grid .dcell .pill.duo-steel   { background: var(--duo-steel); }
+.month-grid .dcell .pill.duo-olive   { background: var(--duo-olive); }
+.month-grid .dcell .pill.duo-oxblood { background: var(--duo-oxblood); }
+.month-grid .dcell .ct {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+.legend {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 12px 22px;
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  letter-spacing: -0.005em;
+  border-top: 1px solid var(--rule);
+  flex-wrap: wrap;
+}
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 12px; height: 4px; border-radius: 2px; }
+
+@media (max-width: 1100px) {
+  .week-board { grid-template-columns: repeat(4, 1fr); }
+  .month-grid { grid-template-columns: 40px repeat(7, 1fr); }
+}
+@media (max-width: 720px) {
+  .week-board { grid-template-columns: 1fr; }
+  .week-board .col { border-right: 0; border-bottom: 1px solid var(--rule); min-height: 0; }
+  .week-board .col:last-child { border-bottom: 0; }
+  .month-grid { grid-template-columns: 32px repeat(7, 1fr); font-size: 11px; }
+  .month-grid .dcell { min-height: 52px; padding: 6px 4px 8px; }
+  .view-toggle { margin-left: 0; width: 100%; }
+}
+
 /* ─── Legacy token bridge ────────────────────────────────────────────────
    Existing pages use tailwind color tokens (bg-page, bg-surface, text-ink,
    border-rule, etc.) — these resolve to the new oklch values via the

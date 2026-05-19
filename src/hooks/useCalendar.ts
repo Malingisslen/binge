@@ -22,6 +22,9 @@ export interface CalendarEntry {
   airDate: string;
   provider?: string;
   runtime?: number;
+  isPremiere?: boolean;
+  isFinale?: boolean;
+  genreIds?: number[];
 }
 
 export function useCalendarEntries() {
@@ -83,6 +86,13 @@ export function useCalendarEntries() {
         ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name)
         : undefined;
 
+      // Pre-compute finale episode number for the current season so each
+      // CalendarEntry can carry `isFinale` without re-deriving downstream.
+      const finaleEp = item.season.episodes.length > 0
+        ? Math.max(...item.season.episodes.map(e => e.episode_number))
+        : 0;
+      const showGenreIds = item.show.genres?.map(g => g.id) ?? [];
+
       for (const ep of item.season.episodes) {
         if (!ep.air_date) continue;
         result.push({
@@ -98,6 +108,12 @@ export function useCalendarEntries() {
           airDate: ep.air_date,
           provider: providerName,
           runtime: ep.runtime ?? undefined,
+          // S1E1 = series premiere when the show only has one season,
+          // otherwise "ny säsong"-flag. We collapse both into `isPremiere`
+          // so the badge in the calendar week board says "premiär" for either.
+          isPremiere: ep.episode_number === 1,
+          isFinale: finaleEp > 0 && ep.episode_number === finaleEp,
+          genreIds: showGenreIds,
         });
       }
     }

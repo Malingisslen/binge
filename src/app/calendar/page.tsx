@@ -1,14 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
-import WeeklyCalendar from '@/components/calendar/WeeklyCalendar';
-import MonthlyCalendar from '@/components/calendar/MonthlyCalendar';
-import CalendarEntryItem from '@/components/calendar/CalendarEntryItem';
-import { useCalendarEntries, getWeekStart, type CalendarEntry } from '@/hooks/useCalendar';
-
-type CalendarView = 'week' | 'month';
+import WeekBoard from '@/components/calendar/WeekBoard';
+import MonthStrip from '@/components/calendar/MonthStrip';
+import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
 
 export default function CalendarPage() {
   return <AuthGuard><CalendarContent /></AuthGuard>;
@@ -16,120 +12,135 @@ export default function CalendarPage() {
 
 function CalendarContent() {
   const entries = useCalendarEntries();
-  const [view, setView] = useState<CalendarView>('week');
-  const [weekStart] = useState(() => getWeekStart(new Date()));
-  const today = new Date().toISOString().split('T')[0];
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const weekNum = getWeekNumber(weekStart);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const todayWeekStart = useMemo(() => getWeekStart(today), [today]);
+  const isCurrentWeek = weekStart.getTime() === todayWeekStart.getTime();
 
-  const newThisWeek = useMemo(() => {
-    const start = weekStart.toISOString().split('T')[0];
+  // Standfirst: count this week's episodes for an honest "denna vecka — N
+  // avsnitt" line. Direction H header pattern: crumb → h1 → standfirst.
+  const weekEntries = useMemo(() => {
     const end = new Date(weekStart);
-    end.setDate(end.getDate() + 6);
-    const endStr = end.toISOString().split('T')[0];
-    return entries.filter(e => e.airDate >= start && e.airDate <= endStr);
+    end.setDate(end.getDate() + 7);
+    const startKey = isoKey(weekStart);
+    const endKey = isoKey(end);
+    return entries.filter(e => e.airDate >= startKey && e.airDate < endKey);
   }, [entries, weekStart]);
 
-  const airedEpisodes = useMemo(() => {
-    return entries.filter(e => e.airDate <= today);
-  }, [entries, today]);
+  const premiereCount = weekEntries.filter(e => e.isPremiere).length;
+  const finaleCount = weekEntries.filter(e => e.isFinale).length;
+
+  const prevWeek = () => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() - 7);
+    setWeekStart(d);
+  };
+  const nextWeek = () => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + 7);
+    setWeekStart(d);
+  };
+  const goToday = () => setWeekStart(todayWeekStart);
+
+  // Standfirst copy varies on whether this is the current week and what's
+  // notable in it (premiärer, finaler, eller bara avsnitt).
+  const standfirst = buildStandfirst(weekEntries.length, premiereCount, finaleCount, isCurrentWeek);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-[18px] font-bold text-text-primary">Kalender</h1>
-        <div className="flex gap-[1px]">
-          {(['week', 'month'] as const).map(v => (
-            <span
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                view === v ? 'bg-accent text-white' : 'text-text-muted'
-              }`}
-            >
-              {v === 'week' ? 'Vecka' : 'Månad'}
-            </span>
-          ))}
+    <>
+      <header>
+        <div className="crumb">
+          Kalender · v{weekNum} · {formatRange(weekStart)}
         </div>
+        <h1 className="page-h1">
+          {weekEntries.length === 0
+            ? 'En lugn vecka.'
+            : `Denna vecka — ${weekEntries.length} ${weekEntries.length === 1 ? 'avsnitt' : 'avsnitt'}${premiereCount > 0 ? ` och ${premiereCount} premiär${premiereCount === 1 ? '' : 'er'}` : ''}.`}
+        </h1>
+        <p className="stand">{standfirst}</p>
+      </header>
+
+      <div className="kal-actions">
+        <div className="nav-week">
+          <button onClick={prevWeek} aria-label={`Föregående vecka, v${weekNum - 1}`}>
+            ← v{weekNum - 1}
+          </button>
+          <button
+            onClick={goToday}
+            className={isCurrentWeek ? 'is-on' : undefined}
+            aria-current={isCurrentWeek ? 'date' : undefined}
+          >
+            v{weekNum}{isCurrentWeek ? ' · idag' : ''}
+          </button>
+          <button onClick={nextWeek} aria-label={`Nästa vecka, v${weekNum + 1}`}>
+            v{weekNum + 1} →
+          </button>
+        </div>
+        {!isCurrentWeek && (
+          <button onClick={goToday} className="btn btn-ghost btn-sm">
+            Hoppa till idag
+          </button>
+        )}
       </div>
 
-      {view === 'week' ? (
-        <WeeklyCalendar entries={entries} />
-      ) : (
-        <MonthlyCalendar entries={entries} />
-      )}
+      <WeekBoard weekStart={weekStart} entries={weekEntries} />
 
-      {newThisWeek.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Nytt denna vecka</span>
-          </div>
-          <div className="px-3 py-2">
-            {newThisWeek.map((entry, i) => (
-              <div
-                key={`${entry.tmdbId}-${entry.episodeCode}-${i}`}
-                className="flex items-center justify-between py-[4px] border-b border-border-light last:border-b-0"
-              >
-                <CalendarEntryItem entry={entry} />
-                <div className="flex items-center gap-2 shrink-0 ml-2">
-                  {entry.episodeName && (
-                    <span className="text-xs text-text-muted">— {entry.episodeName}</span>
-                  )}
-                  <span className="text-xxs text-text-muted">{entry.airDate}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {airedEpisodes.length > 0 && (
-        <UnwatchedSection episodes={airedEpisodes} />
+      {entries.length > 0 && (
+        <MonthStrip anchor={weekStart} entries={entries} onJumpToWeek={setWeekStart} />
       )}
 
       {entries.length === 0 && (
-        <p className="text-xs text-text-muted mt-2">
-          Visar avsnitt för serier du tittar på. Lägg till serier i din lista för att se dem här.
+        <p className="stand" style={{ marginTop: 24 }}>
+          Visar avsnitt för serier du tittar på. Lägg till några serier i din lista för att se dem här.
         </p>
       )}
-    </div>
+    </>
   );
 }
 
-function UnwatchedSection({ episodes }: { episodes: CalendarEntry[] }) {
-  const showIds = Array.from(new Set(episodes.map(e => e.tmdbId)));
+function buildStandfirst(
+  total: number,
+  premieres: number,
+  finales: number,
+  isCurrent: boolean,
+): string {
+  if (total === 0) {
+    return isCurrent
+      ? 'Inget på schemat denna vecka. Bra läge för att hitta något nytt.'
+      : 'Inget på schemat den här veckan.';
+  }
+  const parts: string[] = [];
+  if (premieres > 0) parts.push(`${premieres} premiär${premieres === 1 ? '' : 'er'}`);
+  if (finales > 0) parts.push(`${finales} säsongsfinal${finales === 1 ? '' : 'er'}`);
+  if (parts.length === 0) {
+    return isCurrent
+      ? 'Allt på schemat ligger nedanför. Markera avsnitten du har sett när du är klar.'
+      : 'Veckans avsnitt nedan.';
+  }
+  return `Inräknat ${parts.join(' och ')}. Markera avsnitten du har sett när du är klar.`;
+}
 
-  return (
-    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-      <div className="px-3 py-[6px] border-b border-border-light">
-        <span className="text-sm font-bold text-text-secondary">Osedda avsnitt</span>
-      </div>
-      <div className="px-3 py-2">
-        {showIds.map(showId => {
-          const showEps = episodes.filter(e => e.tmdbId === showId);
-          const title = showEps[0]?.title;
-          const posterPath = showEps[0]?.posterPath;
-          const poster = posterPath ? `https://image.tmdb.org/t/p/w92${posterPath}` : null;
-          return (
-            <div key={showId} className="flex items-center gap-[10px] py-[6px] border-b border-border-light last:border-b-0">
-              {poster && (
-                <Link href={`/tv/${showId}/`} className="shrink-0">
-                  <img src={poster} alt="" className="w-[32px] h-[48px] rounded-sm object-cover" loading="lazy" decoding="async" width={32} height={48} />
-                </Link>
-              )}
-              <div className="flex-1 min-w-0">
-                <Link href={`/tv/${showId}/`} className="text-base font-semibold text-text-primary no-underline hover:text-accent">
-                  {title}
-                </Link>
-                <div className="text-xs text-text-muted">
-                  {showEps.length} avsnitt — {showEps[0]?.episodeCode} till {showEps[showEps.length - 1]?.episodeCode}
-                  {showEps[0]?.provider && (
-                    <span className="text-accent ml-1">{showEps[0].provider}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+function formatRange(weekStart: Date): string {
+  const end = new Date(weekStart);
+  end.setDate(end.getDate() + 6);
+  const startDay = weekStart.getDate();
+  const endDay = end.getDate();
+  const monthFmt = new Intl.DateTimeFormat('sv-SE', { month: 'long' });
+  const startMonth = monthFmt.format(weekStart);
+  const endMonth = monthFmt.format(end);
+  if (startMonth === endMonth) {
+    return `${startDay}–${endDay} ${startMonth}`;
+  }
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
+}
+
+function isoKey(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
