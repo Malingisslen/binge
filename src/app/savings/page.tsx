@@ -320,21 +320,28 @@ function SavingsContent() {
 
   if (advisor.isLoading && advisor.providers.length === 0) {
     return (
-      <div>
-        <h1 className="text-[18px] font-bold text-text-primary mb-3">Streamingrådgivare</h1>
-        <p className="text-sm text-text-muted">Laddar...</p>
-      </div>
+      <>
+        <header>
+          <div className="crumb">Sparande</div>
+          <h1 className="page-h1">Streamingrådgivare</h1>
+          <p className="stand">Laddar din analys…</p>
+        </header>
+      </>
     );
   }
 
   if (advisor.providers.length === 0) {
     return (
-      <div>
-        <h1 className="text-[18px] font-bold text-text-primary mb-3">Streamingrådgivare</h1>
-        <p className="text-sm text-text-muted">
-          <Link href="/settings" className="text-accent no-underline">Lägg till tjänster i inställningar</Link> för att se rådgivning.
-        </p>
-      </div>
+      <>
+        <header>
+          <div className="crumb">Sparande</div>
+          <h1 className="page-h1">Streamingrådgivare</h1>
+          <p className="stand">
+            Lägg till tjänster i <Link href="/settings/" style={{ color: 'var(--ink)', borderBottom: '1px solid var(--rule)' }}>inställningar</Link> för
+            att få rådgivning om vad du kan pausa och spara på.
+          </p>
+        </header>
+      </>
     );
   }
 
@@ -354,11 +361,17 @@ function SavingsContent() {
   const datelessSubscribeRows = allSubscribeRows.filter(r => !hasConcreteStatus(r.show));
 
   return (
-    <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-1">Streamingrådgivare</h1>
-      <p className="text-xs text-text-muted mb-3">
-        Analys av {activeProviders.length + pauseProviders.length} streamingtjänster baserat på följ-listan och &quot;Vill se&quot;.
-      </p>
+    <>
+      <header>
+        <div className="crumb">Sparande · {activeProviders.length + pauseProviders.length} tjänster</div>
+        <h1 className="page-h1">Streamingrådgivare</h1>
+        <p className="stand">
+          {suggestedPauseCount > 0
+            ? `${suggestedPauseCount} ${suggestedPauseCount === 1 ? 'tjänst kan pausas' : 'tjänster kan pausas'} just nu — du tittar inget aktivt på dem.`
+            : 'Alla dina tjänster används aktivt. Inget att pausa just nu.'}
+        </p>
+      </header>
+      <div style={{ marginTop: 28 }}>
 
       <PrimaryActionCard
         action={advisor.primaryAction}
@@ -465,6 +478,7 @@ function SavingsContent() {
           )}
         </details>
       )}
-    </div>
+      </div>
+    </>
   );
 }

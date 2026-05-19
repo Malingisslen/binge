@@ -101,10 +101,16 @@ export default function DiscoverPage() {
   const hasMore = tab !== 'trending' && discoverData && page < discoverData.total_pages;
 
   return (
-    <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">Utforska</h1>
+    <>
+      <header>
+        <div className="crumb">Utforska</div>
+        <h1 className="page-h1">Utforska</h1>
+        <p className="stand">
+          Trendande just nu, populära filmer och serier, eller filtrera per genre.
+        </p>
+      </header>
 
-      <div className="flex gap-[1px] mb-3">
+      <div style={{ display: 'flex', gap: 6, marginTop: 22, flexWrap: 'wrap' }}>
         {([
           ['trending', 'Trendande'],
           ['movies', 'Filmer'],
@@ -176,6 +182,6 @@ export default function DiscoverPage() {
           {discoverLoading ? 'Laddar...' : 'Visa fler'}
         </button>
       )}
-    </div>
+    </>
   );
 }

@@ -15,25 +15,21 @@ function GrupperList() {
   const { groups, loading } = useMyGroups(uid);
 
   return (
-    <div className="max-w-[820px]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Users size={18} className="text-accent" />
-          <h1 className="text-[18px] font-bold text-text-primary">Mina grupper</h1>
+    <div style={{ maxWidth: 820 }}>
+      <header>
+        <div className="crumb">Grupper · {groups.length} {groups.length === 1 ? 'grupp' : 'grupper'}</div>
+        <h1 className="page-h1">Mina grupper</h1>
+        <p className="stand">
+          Permanenta konstellationer — slipp bjuda in varje kväll. Bygg en delad
+          watchlist, jämför betyg och starta en ny session med ett klick.
+        </p>
+        <div className="actions">
+          <Link href="/grupper/ny" className="btn">
+            <Plus size={12} /> Ny grupp
+          </Link>
         </div>
-        <Link
-          href="/grupper/ny"
-          className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline"
-        >
-          <Plus size={11} />
-          Ny grupp
-        </Link>
-      </div>
-
-      <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Permanenta konstellationer — slipp bjuda in varje kväll. Bygg en delad
-        watchlist, jämför betyg och starta en ny session med ett klick.
-      </p>
+      </header>
+      <div style={{ marginTop: 28 }} />
 
       {loading && <div className="text-sm text-text-muted py-4">Laddar grupper...</div>}
 

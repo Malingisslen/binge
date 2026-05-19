@@ -21,10 +21,17 @@ function SettingsContent() {
   if (!user) return null;
 
   return (
-    <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">Inställningar</h1>
+    <>
+      <header>
+        <div className="crumb">Inställningar</div>
+        <h1 className="page-h1">Inställningar</h1>
+        <p className="stand">
+          Profil, tjänster, smak-data, notiser, export och radering — allt på ett ställe.
+        </p>
+      </header>
 
-      <ProfileSection />
+      <div style={{ marginTop: 28 }}>
+        <ProfileSection />
       <UsernameSection />
       <ProvidersSection />
       <DisplaySection />
@@ -34,9 +41,10 @@ function SettingsContent() {
       <DataExportSection />
       <DeleteAccountSection />
 
-      <div className="text-xxs text-text-muted mt-4">
-        This product uses the TMDB API but is not endorsed or certified by TMDB.
+        <div className="text-xxs text-text-muted mt-4">
+          This product uses the TMDB API but is not endorsed or certified by TMDB.
+        </div>
       </div>
-    </div>
+    </>
   );
 }

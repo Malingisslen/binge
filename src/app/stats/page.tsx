@@ -70,18 +70,28 @@ function StatsContent() {
 
   if (stats.total === 0) {
     return (
-      <div>
-        <h1 className="text-[18px] font-bold text-text-primary mb-3">Statistik</h1>
-        <p className="text-sm text-text-muted">Lägg till titlar i din lista för att se statistik.</p>
-      </div>
+      <>
+        <header>
+          <div className="crumb">Statistik</div>
+          <h1 className="page-h1">Statistik</h1>
+          <p className="stand">Lägg till titlar i din lista för att se statistik.</p>
+        </header>
+      </>
     );
   }
 
   const maxProviderCount = stats.topProviders.length > 0 ? stats.topProviders[0].count : 1;
 
   return (
-    <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">Statistik</h1>
+    <>
+      <header>
+        <div className="crumb">Statistik · {stats.total} titlar totalt</div>
+        <h1 className="page-h1">Statistik</h1>
+        <p className="stand">
+          {stats.watched.length} sedda · {stats.rated.length} betygsatta · snittbetyg {stats.avgRating.toFixed(1)}.
+        </p>
+      </header>
+      <div style={{ marginTop: 28 }}>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] mb-4">
         <StatCard label="Totalt" value={stats.total} />
@@ -215,6 +225,7 @@ function StatsContent() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

@@ -54,38 +54,37 @@ function SearchResults() {
 
   return (
     <>
-      <div className="mb-3">
-        <h1 className="text-[18px] font-bold text-text-primary">
-          Sökresultat för &quot;{query}&quot;
-        </h1>
-        {data && (
-          <span className="text-xs text-text-muted">{results.length} resultat</span>
-        )}
-      </div>
+      <header>
+        <div className="crumb">Sök · {results.length} resultat</div>
+        <h1 className="page-h1">Sökresultat för &ldquo;{query}&rdquo;</h1>
+        <p className="stand">
+          {results.length === 0
+            ? 'Inga träffar. Försök med ett annat namn eller stavning.'
+            : `${results.length} ${results.length === 1 ? 'titel matchar' : 'titlar matchar'} din sökning.`}
+        </p>
+      </header>
 
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="flex gap-[1px]">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {(['all', 'tv', 'movie'] as const).map(f => (
-            <span
+            <button
               key={f}
+              type="button"
               onClick={() => setMediaFilter(f)}
-              className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                mediaFilter === f ? 'bg-accent text-white' : 'text-text-muted'
-              }`}
+              className={`chip${mediaFilter === f ? ' is-on' : ''}`}
             >
               {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
-            </span>
+            </button>
           ))}
         </div>
         {myProviders.length > 0 && (
-          <span
+          <button
+            type="button"
             onClick={() => setOnlyMyServices(prev => !prev)}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              onlyMyServices ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
+            className={`chip${onlyMyServices ? ' is-on' : ''}`}
           >
             Mina tjänster
-          </span>
+          </button>
         )}
       </div>
 

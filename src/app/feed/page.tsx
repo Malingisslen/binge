@@ -127,10 +127,17 @@ function FeedContent() {
   });
 
   return (
-    <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">Flöde</h1>
+    <>
+      <header>
+        <div className="crumb">Vänner · Flöde</div>
+        <h1 className="page-h1">Flöde</h1>
+        <p className="stand">
+          Aktiva från dina vänner — senaste reviews, betyg och uppdateringar.
+        </p>
+      </header>
+      <div style={{ marginTop: 28 }}>
 
-      {isLoading && <div className="text-sm text-text-muted py-4">Laddar...</div>}
+      {isLoading && <div className="text-sm text-ink-3 py-4">Laddar...</div>}
 
       {!isLoading && followingUids.length === 0 && (
         <div className="bg-surface border border-border-main rounded-sm px-4 py-4">
@@ -180,7 +187,8 @@ function FeedContent() {
           return <FeedWatchlistCard key={key} item={item} />;
         })}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
