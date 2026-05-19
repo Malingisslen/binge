@@ -8,6 +8,7 @@ import type { TMDBSearchResult } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
+import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from './QuickAddButton';
 import NotInterestedButton from './NotInterestedButton';
@@ -35,18 +36,28 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
 
   const visibleBadges = providers?.slice(0, MAX_BADGES) ?? [];
   const extraCount = (providers?.length ?? 0) - MAX_BADGES;
+  // Direction H rule: TitleCard is an identification surface (lists,
+  // grids, search results) → duotone. Genre-mapped when we have ids,
+  // otherwise a deterministic fallback so the same title always gets
+  // the same tone.
+  const tone = item.genre_ids && item.genre_ids.length > 0
+    ? toneForGenreIds(item.genre_ids)
+    : toneForId(item.id);
 
   return (
     <div className="group relative">
-      <Link href={href} className="no-underline text-text-primary">
-        <div className={`aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] relative overflow-hidden ${
-          isTracked ? 'ring-2 ring-accent' : ''
-        }`}>
+      <Link href={href} className="no-underline" style={{ color: 'var(--ink)' }}>
+        <div
+          className={`poster duo-${tone}`}
+          style={{
+            marginBottom: 3,
+            boxShadow: isTracked ? '0 0 0 2px var(--acc-deep)' : undefined,
+          }}
+        >
           {poster && !imgError ? (
             <img
               src={poster}
               alt={title}
-              className="w-full h-full object-cover transition-opacity duration-300"
               loading="lazy"
               decoding="async"
               width={342}
@@ -54,31 +65,56 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
-              <Icon size={20} className="text-text-muted opacity-40" />
-              <span className="text-[10px] text-text-muted text-center line-clamp-3 leading-tight">{title}</span>
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              padding: 8, gap: 4,
+              background: 'var(--bg-2)',
+            }}>
+              <Icon size={20} style={{ color: 'var(--ink-3)', opacity: 0.4 }} />
+              <span style={{
+                fontSize: 10, color: 'var(--ink-3)', textAlign: 'center',
+                lineHeight: 1.2, overflow: 'hidden',
+                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+              }}>{title}</span>
             </div>
           )}
           {visibleBadges.length > 0 && (
-            <div className="absolute bottom-[2px] left-[2px] flex gap-[1px]">
+            <div style={{
+              position: 'absolute', bottom: 2, left: 2,
+              display: 'flex', gap: 1,
+              zIndex: 1,
+            }}>
               {visibleBadges.map(p => {
                 const mapped = getProvider(p.provider_id);
                 const isMine = myProviders.includes(canonicalProviderId(p.provider_id));
                 return (
                   <span
                     key={p.provider_id}
-                    className={`text-[7px] px-[3px] py-[1px] rounded-[1px] ${
-                      isMine
-                        ? 'bg-accent text-white'
-                        : 'bg-black/65 text-[#ddd]'
-                    }`}
+                    style={{
+                      fontFamily: 'var(--mono)',
+                      fontSize: 8,
+                      padding: '1px 4px',
+                      borderRadius: 1,
+                      letterSpacing: 0.04,
+                      background: isMine ? 'var(--acc-deep)' : 'oklch(0 0 0 / 0.65)',
+                      color: isMine ? 'white' : 'oklch(0.85 0 0)',
+                    }}
                   >
                     {mapped?.shortName ?? p.provider_name}
                   </span>
                 );
               })}
               {extraCount > 0 && (
-                <span className="text-[7px] px-[3px] py-[1px] rounded-[1px] bg-black/65 text-[#ddd]">
+                <span style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 8,
+                  padding: '1px 4px',
+                  borderRadius: 1,
+                  background: 'oklch(0 0 0 / 0.65)',
+                  color: 'oklch(0.85 0 0)',
+                }}>
                   +{extraCount}
                 </span>
               )}
@@ -109,11 +145,26 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           />
         </div>
       )}
-      <Link href={href} className="no-underline text-text-primary">
-        <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
+      <Link href={href} className="no-underline" style={{ color: 'var(--ink)' }}>
+        <div style={{
+          fontFamily: 'var(--sans)',
+          fontSize: 13.5,
+          fontWeight: 600,
+          letterSpacing: -0.015,
+          marginTop: 6,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
           {title}
         </div>
-        <div className="text-xxs text-text-muted">
+        <div style={{
+          fontFamily: 'var(--mono)',
+          fontSize: 11,
+          color: 'var(--ink-3)',
+          marginTop: 2,
+          letterSpacing: 0.02,
+        }}>
           {year ?? '—'} · {item.vote_average.toFixed(1)}
         </div>
       </Link>
