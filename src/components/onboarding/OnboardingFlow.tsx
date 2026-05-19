@@ -103,7 +103,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 function StepWelcome({ onNext }: { onNext: () => void }) {
   return (
     <div>
-      <h1 className="text-[22px] font-bold text-text-primary mb-2">
+      <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
         Välkommen till Binge.nu
       </h1>
       <p className="text-sm text-text-secondary mb-4">
@@ -162,7 +162,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
 
   return (
     <div>
-      <h1 className="text-[22px] font-bold text-text-primary mb-2">
+      <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
         Vilka tjänster har du?
       </h1>
       <p className="text-sm text-text-secondary mb-4">
@@ -253,7 +253,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   return (
     <div>
-      <h1 className="text-[22px] font-bold text-text-primary mb-2">
+      <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
         Lägg till något du vill tracka
       </h1>
       <p className="text-sm text-text-secondary mb-4">
@@ -382,7 +382,7 @@ function StepDone({
 }) {
   return (
     <div>
-      <h1 className="text-[22px] font-bold text-text-primary mb-2">
+      <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
         Du är igång!
       </h1>
       <p className="text-sm text-text-secondary mb-4">
