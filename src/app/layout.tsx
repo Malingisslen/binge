@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
+import { Albert_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import Providers from '@/components/Providers';
 import AppShell from '@/components/layout/AppShell';
@@ -7,9 +8,27 @@ import AppShell from '@/components/layout/AppShell';
 const SITE_URL = 'https://binge.nu';
 const OG_IMAGE = `${SITE_URL}/og-image.svg`;
 
-// Next 16: themeColor flyttades från metadata till viewport-export.
+// Direction H specifies two type families and nothing else: Albert Sans for
+// the sans system (400/500/600/700) and JetBrains Mono for meta/labels
+// (400/500/600). Both are exposed as CSS variables so the design tokens in
+// globals.css (--sans / --mono) can reference them.
+const albertSans = Albert_Sans({
+  subsets: ['latin', 'latin-ext'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin', 'latin-ext'],
+  weight: ['400', '500', '600'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
+// Next 16: themeColor lives in viewport, not metadata. Matches the new
+// off-white page background.
 export const viewport: Viewport = {
-  themeColor: '#1e2028',
+  themeColor: '#f9f7f1',
 };
 
 export const metadata: Metadata = {
@@ -55,17 +74,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="sv" suppressHydrationWarning>
+    <html lang="sv" suppressHydrationWarning className={`${albertSans.variable} ${jetbrainsMono.variable}`}>
       <head>
         <link rel="preconnect" href="https://api.themoviedb.org" crossOrigin="" />
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="" />
       </head>
       <body suppressHydrationWarning>
-        {/* Schema.org Organization — signalerar till Google att detta är
-            den officiella Binge.nu-siten (underlättar knowledge panel). */}
         <script
           type="application/ld+json"
-
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               '@context': 'https://schema.org',
@@ -87,9 +103,6 @@ export default function RootLayout({
           }}
         />
 
-        {/* Plausible analytics: cookie-free + IP-anonymized by default,
-            so no consent banner is required under LEK §6 kap 18§. Custom
-            events fire via window.plausible(...) — see src/lib/analytics.ts. */}
         <Script
           defer
           strategy="afterInteractive"
