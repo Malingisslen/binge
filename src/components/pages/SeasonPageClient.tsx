@@ -68,6 +68,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
           <EpisodeRow
             key={ep.id}
             episode={ep}
+            seasonNumber={seasonNum}
             watched={isWatched(seasonNum, ep.episode_number)}
             spoilerMasked={isEpisodeMasked(maskBoundary, seasonNum, ep.episode_number)}
             onToggle={w => markEpisodeWatched(seasonNum, ep.episode_number, w)}

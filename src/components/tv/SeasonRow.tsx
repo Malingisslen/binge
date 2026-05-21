@@ -27,7 +27,7 @@ export default function SeasonRow({
   const isDone = watchedCount >= episodeCount && episodeCount > 0;
 
   return (
-    <div className="border-b border-[#e8e4dc] last:border-b-0">
+    <div className="border-b border-rule-2 last:border-b-0">
       <div className="flex items-center justify-between py-[5px] text-sm">
         <div
           className="flex items-center gap-1 cursor-pointer flex-1 min-w-0"
@@ -35,21 +35,21 @@ export default function SeasonRow({
         >
           <ChevronRight
             size={12}
-            className={`shrink-0 text-text-muted transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+            className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
           />
-          <span className="font-semibold text-text-secondary">
-            {name} <span className="font-normal text-text-muted text-xs">({episodeCount} avs)</span>
+          <span className="font-semibold text-ink-2">
+            {name} <span className="font-normal text-ink-3 text-xs">({episodeCount} avs)</span>
           </span>
         </div>
         {episodeCount > 0 ? (
           <div className="flex items-center gap-[5px] flex-1 max-w-[180px] mx-4">
-            <div className="flex-1 h-[3px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
-              <div className="h-full bg-accent rounded-[1px]" style={{ width: `${pct}%` }} />
+            <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
+              <div className="h-full bg-ink rounded-full" style={{ width: `${pct}%` }} />
             </div>
-            <span className="text-xxs text-[#bbb]">{watchedCount}/{episodeCount}</span>
+            <span className="text-xxs text-ink-3">{watchedCount}/{episodeCount}</span>
           </div>
         ) : (
-          <span className="text-xxs text-text-muted mx-4">Kommande</span>
+          <span className="text-xxs text-ink-3 mx-4">Kommande</span>
         )}
         {isDone && (
           <span className="px-[10px] py-[2px] rounded-sm text-xxs font-semibold bg-season-done text-white">

@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { Lock } from 'lucide-react';
 import type { TMDBEpisode } from '@/types';
 import { stillUrl } from '@/lib/tmdb/client';
+import { todayIso, shortSwedishWeekday } from '@/lib/utils';
 
 interface EpisodeRowProps {
   episode: TMDBEpisode;
+  seasonNumber: number;
   watched: boolean;
   onToggle: (watched: boolean) => void;
   onMarkUpTo?: () => void;
@@ -17,76 +19,97 @@ interface EpisodeRowProps {
   spoilerMasked?: boolean;
 }
 
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function formatUnairedRunt(iso: string): string {
+  const wd = shortSwedishWeekday(iso);
+  const d = new Date(iso + 'T00:00:00');
+  return `${wd.toLowerCase()} ${d.getDate()}/${d.getMonth() + 1}`;
+}
+
 export default function EpisodeRow({
-  episode, watched, onToggle, onMarkUpTo, spoilerMasked,
+  episode, seasonNumber, watched, onToggle, onMarkUpTo, spoilerMasked,
 }: EpisodeRowProps) {
   const [revealed, setRevealed] = useState(false);
   const still = stillUrl(episode.still_path, 'w185');
-  // Effektiv mask = explicit flagga AND inte avslöjad lokalt.
   const masked = !!spoilerMasked && !revealed;
+
+  const today = todayIso();
+  const airDate = episode.air_date ?? null;
+  const isToday = !!airDate && airDate === today;
+  const isUnaired = !!airDate && airDate > today;
+
+  const code = `S${seasonNumber}E${pad2(episode.episode_number)}`;
+  const runt = isUnaired && airDate
+    ? formatUnairedRunt(airDate)
+    : episode.runtime
+      ? `${episode.runtime} min`
+      : '';
 
   if (masked) {
     return (
       <div
-        className="flex items-center gap-2 py-[5px] border-b border-border-table last:border-b-0 cursor-pointer hover:bg-[#ede9e0]"
+        className="ep masked"
         onClick={() => setRevealed(true)}
         title="Klicka för att avslöja — gruppen har inte sett detta avsnitt än"
       >
-        <input
-          type="checkbox"
-          checked={watched}
-          onChange={e => { e.stopPropagation(); onToggle(e.target.checked); }}
-          onClick={e => e.stopPropagation()}
-          className="shrink-0 accent-accent w-[14px] h-[14px] cursor-pointer"
-        />
-        <div className="w-[60px] h-[34px] rounded-sm bg-[#ddd8d0] shrink-0 flex items-center justify-center">
-          <Lock size={11} className="text-text-muted opacity-40" />
+        <div className="still">
+          <Lock size={14} className="text-ink-3 opacity-40" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-base font-semibold text-text-muted">
-            {episode.episode_number}. <span className="italic">Avsnitt {episode.episode_number}</span>
-          </div>
-          <div className="text-xs text-text-muted/70">
-            Dolt — gruppen har inte sett detta avsnitt än. <span className="text-accent">Visa ändå</span>
+        <div className="code">{code}</div>
+        <div>
+          <div className="ttl">Avsnitt {episode.episode_number}</div>
+          <div className="syn">
+            Dolt — gruppen har inte sett detta avsnitt än. <span className="text-acc-deep">Visa ändå</span>
           </div>
         </div>
+        <div className="runt"></div>
+        <div></div>
       </div>
     );
   }
 
+  const stateClass = isToday ? ' tonight' : isUnaired ? ' unaired' : '';
+
   return (
-    <div className="flex items-center gap-2 py-[5px] border-b border-border-table last:border-b-0">
-      <input
-        type="checkbox"
-        checked={watched}
-        onChange={e => onToggle(e.target.checked)}
-        className="shrink-0 accent-accent w-[14px] h-[14px] cursor-pointer"
-      />
-      {still ? (
-        <img src={still} alt="" className="w-[60px] h-[34px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={60} height={34} />
-      ) : (
-        <div className="w-[60px] h-[34px] rounded-sm bg-[#ddd8d0] shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="text-base font-semibold truncate">
-          {episode.episode_number}. {episode.name}
-        </div>
-        <div className="text-xs text-text-muted">
-          {episode.air_date ?? '—'}
-          {episode.runtime ? ` · ${episode.runtime} min` : ''}
-          {onMarkUpTo && !watched && (
-            <button
-              onClick={e => { e.stopPropagation(); onMarkUpTo(); }}
-              className="text-xxs text-accent cursor-pointer bg-transparent border-none p-0 ml-1 hover:underline font-[inherit]"
-            >
-              Markera hit
-            </button>
-          )}
-        </div>
-        {episode.overview && (
-          <div className="text-xs text-text-muted mt-[2px] line-clamp-2">{episode.overview}</div>
+    <div className={`ep${stateClass}`}>
+      <div className="still">
+        {still ? (
+          <img src={still} alt="" loading="lazy" decoding="async" width={120} height={68} />
+        ) : null}
+      </div>
+      <div className="code">{code}</div>
+      <div>
+        <div className="ttl">{episode.name}</div>
+        {episode.overview && <div className="syn">{episode.overview}</div>}
+        {onMarkUpTo && !watched && !isUnaired && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onMarkUpTo(); }}
+            className="mark-up-to"
+          >
+            Markera hit
+          </button>
         )}
       </div>
+      <div className="runt">{runt}</div>
+      {isToday ? (
+        <div>
+          <span className="chip acc">nu</span>
+        </div>
+      ) : (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={watched}
+            onChange={e => onToggle(e.target.checked)}
+            aria-label={watched ? 'Markera som osedd' : 'Markera som sedd'}
+          />
+          {watched ? '✓' : ''}
+        </label>
+      )}
     </div>
   );
 }

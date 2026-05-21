@@ -7,6 +7,7 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
+import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import RatingStars from '@/components/title/RatingStars';
 import type { WatchlistItem, TvSubState } from '@/types';
 
@@ -38,6 +39,12 @@ export function WatchlistCard({
   const poster = posterUrl(item.posterPath, 'w185');
   const href = titleHref(item.mediaType, item.tmdbId);
   const Icon = item.mediaType === 'tv' ? Tv : Film;
+  // Identification surface (library list) → duotone. Genre-mapped when we
+  // have ids, otherwise a deterministic id-derived tone so the same title
+  // always gets the same look across sessions.
+  const tone = item.genreIds.length > 0
+    ? toneForGenreIds(item.genreIds)
+    : toneForId(item.tmdbId);
 
   const progressPct = useMemo(() => {
     if (item.mediaType !== 'tv') return null;
@@ -76,15 +83,17 @@ export function WatchlistCard({
   const providersToShow = item.providers.slice(0, 3);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm p-[10px] flex gap-[10px] hover:border-accent/40 transition-colors">
+    <div className="bg-surface border border-rule rounded-sm p-[10px] flex gap-[10px] hover:border-rule-2 transition-colors">
       <Link href={href} className="shrink-0">
-        {poster ? (
-          <img src={poster} alt="" className="w-[50px] h-[75px] rounded-sm object-cover" loading="lazy" decoding="async" width={50} height={75} />
-        ) : (
-          <div className="w-[50px] h-[75px] rounded-sm bg-[#ddd8d0] flex items-center justify-center">
-            <Icon size={16} className="text-text-muted opacity-40" />
-          </div>
-        )}
+        <div className={`poster duo-${tone} w-[50px] h-[75px]`} style={{ aspectRatio: '2 / 3' }}>
+          {poster ? (
+            <img src={poster} alt="" loading="lazy" decoding="async" width={50} height={75} />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-bg-2">
+              <Icon size={16} className="text-ink-3 opacity-40" />
+            </div>
+          )}
+        </div>
       </Link>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
@@ -133,16 +142,22 @@ export function WatchlistCard({
         ) : null}
         {item.mediaType === 'tv' && (
           <div className="mt-[5px] flex items-center gap-[6px]">
-            <div className="flex-1 h-[3px] bg-[#eee] rounded-sm overflow-hidden">
+            <div className="flex-1 h-[4px] bg-rule rounded-full overflow-hidden relative">
               <div
-                className={`h-full ${progressLabel.tone === 'done' ? 'bg-[#2e7d32]' : 'bg-accent'}`}
+                className={`h-full ${progressLabel.tone === 'done' ? 'bg-season-done' : 'bg-ink'}`}
                 style={{ width: `${progressPct ?? 0}%` }}
               />
+              {progressLabel.tone === 'accent' && (progressPct ?? 0) > 0 && (progressPct ?? 0) < 100 && (
+                <div
+                  className="absolute top-0 bottom-0 w-[2px] bg-acc-deep"
+                  style={{ left: `${progressPct}%`, transform: 'translateX(-2px)' }}
+                />
+              )}
             </div>
             <span className={`text-xxs ${
-              progressLabel.tone === 'done' ? 'text-[#2e7d32]'
-              : progressLabel.tone === 'accent' ? 'text-accent font-semibold'
-              : 'text-text-muted'
+              progressLabel.tone === 'done' ? 'text-ink-2'
+              : progressLabel.tone === 'accent' ? 'text-acc-deep font-semibold'
+              : 'text-ink-3'
             }`}>
               {progressLabel.text}
             </span>

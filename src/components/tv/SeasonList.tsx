@@ -126,16 +126,16 @@ function SpoilerProtectionBanner({
 
   return (
     <>
-      <div className="px-3 py-2 bg-accent/[0.08] border-b border-accent/30 flex items-start gap-2">
-        <ShieldAlert size={13} className="text-accent shrink-0 mt-[2px]" />
+      <div className="px-3 py-2 bg-acc-soft border-b border-acc-deep/30 flex items-start gap-2">
+        <ShieldAlert size={13} className="text-acc-deep shrink-0 mt-[2px]" />
         <div className="text-xxs leading-relaxed flex-1">
-          <span className="font-semibold text-accent">Spoiler-skydd aktivt</span>
-          <span className="text-text-secondary">
+          <span className="font-semibold text-acc-deep">Spoiler-skydd aktivt</span>
+          <span className="text-ink-2">
             {' — '}
             {trailingLabel} har {positionLabel}. Avsnitt utöver dessa är dolda.
           </span>
           {' '}
-          <Link href={titleHref('tv', tmdbId)} className="text-accent underline">
+          <Link href={titleHref('tv', tmdbId)} className="text-acc-deep underline">
             Stäng av
           </Link>
         </div>
