@@ -46,6 +46,13 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
 
 interface WatchlistState {
   items: WatchlistItem[];
+  /**
+   * True medan vi väntar på den första Firestore-snapshoten efter uid blivit
+   * tillgängligt. Konsumenter måste skilja "watchlist är tom" från
+   * "watchlist laddar fortfarande" för att inte rendera "Välkommen, lägg
+   * till titlar"-state mot en användare som faktiskt har 100 serier.
+   */
+  loading: boolean;
   addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
   updateVisibility: (tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
@@ -60,6 +67,7 @@ interface WatchlistState {
 
 const WatchlistContext = createContext<WatchlistState>({
   items: [],
+  loading: true,
   addItem: async () => {},
   updateStatus: async () => {},
   updateRating: async () => {},
@@ -75,12 +83,17 @@ const WatchlistContext = createContext<WatchlistState>({
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { uid, user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!uid) { setItems([]); return; }
+    if (!uid) { setItems([]); setLoading(false); return; }
+    // uid bytte (sign-in eller account-switch) → tillbaka till loading
+    // tills första snapshoten kommer.
+    setLoading(true);
     const ref = collection(db, 'users', uid, 'watchlist');
     const unsub = onSnapshot(ref, (snap) => {
       setItems(snap.docs.map(d => docToItem(d.data())));
+      setLoading(false);
     });
     return () => unsub();
   }, [uid]);
@@ -202,8 +215,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const value = useMemo(() => ({
-    items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem,
-  }), [items, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem]);
+    items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem,
+  }), [items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

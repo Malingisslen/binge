@@ -172,13 +172,27 @@ function EmptyLibrary() {
 function DashboardSkeleton() {
   // Visas för inloggade återvändande användare medan Firebase Auth resolveras.
   // Aldrig prerendrad — `wasLoggedIn` är alltid `false` på servern (ingen
-  // localStorage). Crawlers ser därför LandingPage istället. Skelettet är
-  // medvetet tomt så CLS hålls låg.
-  return <div className="min-h-[40vh]" aria-hidden="true" />;
+  // localStorage). Crawlers ser därför LandingPage istället.
+  //
+  // Renderar HemHero i loading-läge så användaren ser samma "Hämtar din
+  // vecka…"-copy direkt — visuell kontinuitet hela vägen från auth-loading
+  // genom watchlist-loading till calendar-loading till focal block. Annars
+  // skulle vi blinka ett tomt fält först.
+  return (
+    <>
+      <HemHero focal={null} totalThisWeek={0} hasLibrary={true} isLoading={true} />
+      <div className="hem-grid">
+        <div>
+          <div className="hem-focal-skeleton" aria-hidden="true" />
+        </div>
+        <aside className="rail" aria-label="Sidostatistik" aria-hidden="true" />
+      </div>
+    </>
+  );
 }
 
 function Dashboard() {
-  const { items } = useWatchlist();
+  const { items, loading: watchlistLoading } = useWatchlist();
   const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
 
   const { focal, totalThisWeek } = useMemo(() => {
@@ -195,6 +209,14 @@ function Dashboard() {
   }, [calendarEntries]);
 
   const hasLibrary = items.length > 0;
+  // EmptyLibrary får bara renderas när vi *vet* att biblioteket är tomt —
+  // alltså efter att Firestore-snapshoten kommit (watchlistLoading=false)
+  // och items är tomt. Annars skulle vi blinka "Välkommen, lägg till
+  // titlar" mot en användare som faktiskt har 100 serier på laddning.
+  const showEmptyLibrary = !watchlistLoading && !hasLibrary;
+  // Loading-state till hero: täcker hela vattenfallet (watchlist → calendar).
+  // Hero visar "Hämtar din vecka…" så fort något av stegen är pågående.
+  const isLoading = watchlistLoading || calendarLoading;
   const focalKey = focal ? focalEntryKey(focal) : undefined;
 
   return (
@@ -202,19 +224,19 @@ function Dashboard() {
       <HemHero
         focal={focal}
         totalThisWeek={totalThisWeek}
-        hasLibrary={hasLibrary}
-        isLoading={calendarLoading}
+        hasLibrary={hasLibrary || watchlistLoading}
+        isLoading={isLoading}
       />
 
-      {!hasLibrary ? (
+      {showEmptyLibrary ? (
         <EmptyLibrary />
       ) : (
         <div className="hem-grid">
           <div>
-            {calendarLoading ? (
-              // Reservera vertikalt utrymme medan TMDB resolverar — matchar
-              // ungefär höjden på HemFocal (21:9 backdrop + meta-rad) så
-              // layouten inte hoppar när focal/LaterThisWeek tonar in.
+            {isLoading ? (
+              // Reservera vertikalt utrymme medan watchlist + TMDB resolverar
+              // — matchar ungefär höjden på HemFocal (21:9 backdrop + meta-
+              // rad) så layouten inte hoppar när focal/LaterThisWeek tonar in.
               <div className="hem-focal-skeleton" aria-hidden="true" />
             ) : (
               <>
