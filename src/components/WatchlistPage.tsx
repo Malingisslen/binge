@@ -84,7 +84,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const calendarEntries = useCalendarEntries();
+  const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
     const m = new Map<number, string>();
     const today = new Date();

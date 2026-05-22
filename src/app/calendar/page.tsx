@@ -11,7 +11,7 @@ export default function CalendarPage() {
 }
 
 function CalendarContent() {
-  const entries = useCalendarEntries();
+  const { entries } = useCalendarEntries();
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const weekNum = getWeekNumber(weekStart);
   const today = useMemo(() => {

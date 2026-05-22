@@ -13,14 +13,25 @@ interface Props {
   focal: CalendarEntry | null;
   totalThisWeek: number;
   hasLibrary: boolean;
+  isLoading?: boolean;
 }
 
-function buildCopy(entry: CalendarEntry | null, totalThisWeek: number): {
+function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading: boolean): {
   crumb: string;
   h1: string;
   stand: string;
 } {
   if (!entry) {
+    if (isLoading) {
+      // Under loading visar vi *inte* "En lugn vecka" — det är fel signal när
+      // kalendern ännu inte har resolverat. En neutral crumb + diskret stand
+      // håller utrymmet utan att lova något om innehållet.
+      return {
+        crumb: 'Hem · denna vecka',
+        h1: 'Hämtar din vecka…',
+        stand: 'Tittar igenom dina serier för att hitta nästa avsnitt.',
+      };
+    }
     return {
       crumb: 'Hem · denna vecka',
       h1: totalThisWeek > 0
@@ -60,8 +71,8 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number): {
   };
 }
 
-export default function HemHero({ focal, totalThisWeek, hasLibrary }: Props) {
-  const copy = buildCopy(focal, totalThisWeek);
+export default function HemHero({ focal, totalThisWeek, hasLibrary, isLoading = false }: Props) {
+  const copy = buildCopy(focal, totalThisWeek, isLoading);
 
   return (
     <header>
@@ -69,7 +80,11 @@ export default function HemHero({ focal, totalThisWeek, hasLibrary }: Props) {
       <h1 className="page-h1">{copy.h1}</h1>
       <p className="stand">{copy.stand}</p>
       <div className="actions">
-        {focal ? (
+        {isLoading && !focal ? (
+          // Inga CTA:er under loading — vi vet inte om kalendern är tom eller
+          // full än, så vi ska inte föreslå "rekommendationer" eller liknande.
+          null
+        ) : focal ? (
           <>
             <Link href={`/tv/${focal.tmdbId}/`} className="btn btn-acc">
               Öppna {focal.title}

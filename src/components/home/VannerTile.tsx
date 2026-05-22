@@ -10,8 +10,14 @@ import { useFriends } from '@/hooks/useFriends';
 // each row to their profile. Replace with real activity items in a later
 // pass when the feed-event hook exists.
 
-function formatSince(date: Date): string {
-  const diff = Date.now() - date.getTime();
+function formatSince(date: Date | unknown): string {
+  // Defensive: friend.since SHOULD always be a Date (set i listFriends), men
+  // edge cases finns — Firestore-cache som ger Timestamp-objekt utan
+  // klass-identitet, eller serialiserade objekt utan .getTime. Hellre tom
+  // sträng än att krascha hela hem-sidan.
+  const d = toDate(date);
+  if (!d) return '';
+  const diff = Date.now() - d.getTime();
   const days = Math.round(diff / (1000 * 60 * 60 * 24));
   if (days < 1) return 'i dag';
   if (days < 7) return `${days} d sen`;
@@ -19,7 +25,23 @@ function formatSince(date: Date): string {
     const weeks = Math.round(days / 7);
     return `${weeks} v sen`;
   }
-  return date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+}
+
+// Normalisera till Date. Hanterar: Date, Timestamp-like (har .toDate),
+// nummer (epoch ms), sträng (ISO). Returnerar null om ogiltigt så caller
+// kan bestämma fallback.
+function toDate(val: unknown): Date | null {
+  if (val instanceof Date) return val;
+  if (val && typeof val === 'object' && 'toDate' in val && typeof (val as { toDate: unknown }).toDate === 'function') {
+    try { return (val as { toDate: () => Date }).toDate(); } catch { return null; }
+  }
+  if (typeof val === 'number') return new Date(val);
+  if (typeof val === 'string') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
 }
 
 export default function VannerTile() {

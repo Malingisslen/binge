@@ -179,7 +179,7 @@ function DashboardSkeleton() {
 
 function Dashboard() {
   const { items } = useWatchlist();
-  const calendarEntries = useCalendarEntries();
+  const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
 
   const { focal, totalThisWeek } = useMemo(() => {
     const focal = pickFocalEntry(calendarEntries);
@@ -199,15 +199,29 @@ function Dashboard() {
 
   return (
     <>
-      <HemHero focal={focal} totalThisWeek={totalThisWeek} hasLibrary={hasLibrary} />
+      <HemHero
+        focal={focal}
+        totalThisWeek={totalThisWeek}
+        hasLibrary={hasLibrary}
+        isLoading={calendarLoading}
+      />
 
       {!hasLibrary ? (
         <EmptyLibrary />
       ) : (
         <div className="hem-grid">
           <div>
-            {focal && <HemFocal entry={focal} />}
-            <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+            {calendarLoading ? (
+              // Reservera vertikalt utrymme medan TMDB resolverar — matchar
+              // ungefär höjden på HemFocal (21:9 backdrop + meta-rad) så
+              // layouten inte hoppar när focal/LaterThisWeek tonar in.
+              <div className="hem-focal-skeleton" aria-hidden="true" />
+            ) : (
+              <>
+                {focal && <HemFocal entry={focal} />}
+                <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+              </>
+            )}
           </div>
           <aside className="rail" aria-label="Sidostatistik">
             <SparandeTile />

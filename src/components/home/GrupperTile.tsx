@@ -9,14 +9,30 @@ import { useMySessions } from '@/hooks/useMySessions';
 // active Tillsammans session right now, that row gets the pulsing saffran
 // dot. Otherwise just an inert dot. Empty state links to /grupper/ny/.
 
-function formatRelative(date: Date): string {
-  const diff = Date.now() - date.getTime();
+function formatRelative(date: Date | unknown): string {
+  // Defensive coercion — se kommentar i VannerTile.formatSince.
+  const d = toDate(date);
+  if (!d) return '';
+  const diff = Date.now() - d.getTime();
   const hours = Math.round(diff / (1000 * 60 * 60));
   if (hours < 1) return 'precis nu';
   if (hours < 24) return `${hours} t sen`;
   const days = Math.round(hours / 24);
   if (days < 7) return `${days} d sen`;
-  return date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+}
+
+function toDate(val: unknown): Date | null {
+  if (val instanceof Date) return val;
+  if (val && typeof val === 'object' && 'toDate' in val && typeof (val as { toDate: unknown }).toDate === 'function') {
+    try { return (val as { toDate: () => Date }).toDate(); } catch { return null; }
+  }
+  if (typeof val === 'number') return new Date(val);
+  if (typeof val === 'string') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
 }
 
 export default function GrupperTile() {

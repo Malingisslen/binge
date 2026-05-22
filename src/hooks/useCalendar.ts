@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
@@ -27,7 +27,17 @@ export interface CalendarEntry {
   genreIds?: number[];
 }
 
-export function useCalendarEntries() {
+export interface UseCalendarResult {
+  entries: CalendarEntry[];
+  /**
+   * True så länge någon del av kalender-vattenfallet (tv-show eller season)
+   * fortfarande väntar på TMDB. Skiljer "tom kalender" från "kalendern laddar"
+   * så konsumenter inte renderar tom-state innan datat har landat.
+   */
+  isLoading: boolean;
+}
+
+export function useCalendarEntries(): UseCalendarResult {
   const { getByStatus } = useWatchlist();
   const followingTV = getByStatus('mina', 'tv');
   const tmdbIds = useMemo(() => followingTV.map(i => i.tmdbId), [followingTV]);
@@ -46,7 +56,16 @@ export function useCalendarEntries() {
     [showQueries.map(q => q.dataUpdatedAt).join(',')]
   );
 
-  const seasonQueries = useMemo(() => {
+  // Loading-detektion baserad på data-närvaro snarare än react-querys
+  // isLoading-flagga: en query räknas som "klar" så snart status inte är
+  // 'pending' (success ELLER error — vi vill inte fastna i loading om en
+  // TMDB-fetch misslyckats). Kolla också att vi har minst en show innan
+  // vi förklarar oss klara — annars stannar vi i "tom"-state innan
+  // queries hunnit registreras.
+  const showsPending = tmdbIds.length > 0 && showQueries.some(q => q.isPending);
+  const showsNotStartedYet = tmdbIds.length > 0 && showQueries.length === 0;
+
+  const seasonSpecs = useMemo(() => {
     return shows.map(show => ({
       showId: show.id,
       seasonNum: show.number_of_seasons,
@@ -54,27 +73,40 @@ export function useCalendarEntries() {
     }));
   }, [shows]);
 
-  const { data: seasonData } = useQuery({
-    queryKey: ['calendar-seasons', seasonQueries.map(q => `${q.showId}-${q.seasonNum}`).join(',')],
-    queryFn: async () => {
-      const results = await Promise.all(
-        seasonQueries.map(async q => {
-          try {
-            const season = await getTVSeason(q.showId, q.seasonNum);
-            return { ...q, season };
-          } catch {
-            return { ...q, season: null };
-          }
-        })
-      );
-      return results;
-    },
-    enabled: seasonQueries.length > 0,
-    staleTime: 30 * 60 * 1000,
+  // KRITISKT: individuella useQueries per (show, season) istället för en
+  // batchad query med joined queryKey. Den gamla varianten hade en queryKey
+  // som inkluderade *hela* shows-listan — varje gång en ny show resolverade
+  // växte listan, queryKey:n bytte, react-query betraktade det som en ny
+  // query och re-fetchade ALLA säsonger. Med N shows blev det
+  // 1+2+...+N = O(N²/2) requests (t.ex. 7260 fetches för 120 shows istället
+  // för 120). Per-show useQueries cacheas individuellt → exakt N requests,
+  // återanvänds även mellan sessioner via staleTime.
+  const seasonQueries = useQueries({
+    queries: seasonSpecs.map(spec => ({
+      queryKey: ['tv-season', spec.showId, spec.seasonNum] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getTVSeason(spec.showId, spec.seasonNum, { signal }),
+      staleTime: 30 * 60 * 1000,
+    })),
   });
 
+  // Slå ihop spec + season-data per index. Filtrera bort failade fetches
+  // genom att behålla undefined-season men hoppa över i entries-byggare.
+  const seasonData = useMemo(
+    () =>
+      seasonSpecs.map((spec, i) => ({
+        ...spec,
+        season: seasonQueries[i]?.data ?? null,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [seasonSpecs, seasonQueries.map(q => q.dataUpdatedAt).join(',')]
+  );
+
+  const seasonsPending =
+    seasonSpecs.length > 0 && seasonQueries.some(q => q.isPending);
+
   const entries: CalendarEntry[] = useMemo(() => {
-    if (!seasonData) return [];
+    if (seasonData.length === 0) return [];
     const result: CalendarEntry[] = [];
 
     for (const item of seasonData) {
@@ -121,7 +153,14 @@ export function useCalendarEntries() {
     return result;
   }, [seasonData]);
 
-  return entries;
+  // Kalendern är "loading" om något steg i vattenfallet fortfarande väntar:
+  // (1) shows-queries har inte registrerats än, (2) någon show-detail är
+  // pending, eller (3) någon säsong är pending. Med per-säsong queries
+  // räcker `isPending`-kollen — det finns inget "disabled" fall längre.
+  const isLoading =
+    tmdbIds.length > 0 && (showsNotStartedYet || showsPending || seasonsPending);
+
+  return { entries, isLoading };
 }
 
 export function getWeekStart(date: Date): Date {

@@ -62,7 +62,7 @@ function fmtDayMonth(iso: string): string {
 
 export function useAdvisorTimeline(): TimelineResult {
   const advisor = useSubscriptionAdvisor(TIMELINE_DAYS);
-  const calendarEntries = useCalendarEntries();
+  const { entries: calendarEntries } = useCalendarEntries();
   const { user } = useAuth();
 
   return useMemo(() => {
