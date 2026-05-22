@@ -223,17 +223,17 @@ function Dashboard() {
 export default function DashboardPage() {
   const { user, loading } = useAuth();
 
-  // Lazy initializer körs en gång vid mount (klient-sidigt). På servern är
-  // typeof window === 'undefined' → wasLoggedIn = false → LandingPage
-  // rendreras i prerendrad HTML, vilket är vad Googlebot och LLM-crawlers ska
-  // se. Inloggade återvändande användare får true på klienten och hoppar
-  // direkt till skeletten istället för en LandingPage-flicker. AuthContext
-  // skriver/rensar flaggan i onAuthStateChanged.
-  const [wasLoggedIn] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try { return window.localStorage.getItem('binge:wasLoggedIn') === '1'; }
-    catch { return false; }
-  });
+  // Server + första klient-render måste ge IDENTISK HTML annars hydration
+  // mismatch (React #418). Därför starta `wasLoggedIn=false` (vad servern
+  // alltid ger), och läs localStorage i useEffect EFTER hydration. Återvänd-
+  // ande inloggade får då en kort LandingPage-tick innan vi visar skelettet,
+  // men det är acceptabelt jämfört med en crash. AuthContext skriver/rensar
+  // flaggan i onAuthStateChanged.
+  const [wasLoggedIn, setWasLoggedIn] = useState(false);
+  useEffect(() => {
+    try { setWasLoggedIn(window.localStorage.getItem('binge:wasLoggedIn') === '1'); }
+    catch { /* localStorage kan blockas av tracking-prevention */ }
+  }, []);
 
   // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
   const faqLd = (
