@@ -78,6 +78,23 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://api.themoviedb.org" crossOrigin="" />
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="" />
+        {/*
+          Pre-hydration login-detect: sätter .returning-user på <html> innan
+          body parsas, så CSS kan dölja LandingPage-flashen för återvändande
+          inloggade användare. Klassiskt dark-mode-flash-prevention-mönster
+          (Theme-UI, next-themes m.fl.) anpassat till login-state.
+
+          Defensiv: try/catch runt localStorage eftersom tracking-prevention
+          i Safari/Brave kan kasta. Misslyckad detection = anonym fallback,
+          vilket är säkert (LandingPage syns som idag).
+
+          AuthContext skriver/rensar binge:wasLoggedIn i onAuthStateChanged.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('binge:wasLoggedIn')==='1')document.documentElement.classList.add('returning-user')}catch(_){}`,
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         <script

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
 import SearchDropdown from '@/components/search/SearchDropdown';
@@ -75,12 +75,13 @@ const FAQ_JSON_LD = {
   ],
 };
 
-function LandingPage() {
+// LandingPage renderas i två lägen: (a) fullt — med trending-sektion — för
+// faktiskt anonyma användare som vi vet är inloggade ut; (b) lättviktigt
+// utan trending-fetch när vi pre-renderar bredvid skelettet under auth-
+// loading. Detta sparar en TMDB-request mot återvändande inloggade
+// användare som aldrig kommer att se trending-sektionen.
+function LandingPage({ withTrending = true }: { withTrending?: boolean }) {
   const { signIn } = useAuth();
-  const { data: trending } = useTrending('all', 'week');
-  const items = (trending?.results ?? [])
-    .filter(r => isAddableMediaType(r) && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
-    .slice(0, 10);
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (
@@ -138,17 +139,32 @@ function LandingPage() {
         </div>
       </section>
 
-      {items.length > 0 && (
-        <section className="max-w-[1000px] mx-auto px-4 py-8">
-          <div className="bg-surface border border-border-main rounded-sm">
-            <div className="px-3 py-[6px] border-b border-border-light">
-              <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
-            </div>
-            <TitleGrid items={items} />
-          </div>
-        </section>
-      )}
+      {withTrending && <LandingPageTrending />}
     </div>
+  );
+}
+
+// Sub-komponent som äger trending-fetchen så att hooken bara fyrar när
+// LandingPage faktiskt renderas mot en användare som är anonym (auth
+// resolverad). Pre-rendering bredvid skelettet skickar withTrending={false}
+// så vi slipper bortkastad TMDB-request mot returnerande inloggade.
+function LandingPageTrending() {
+  const { data: trending } = useTrending('all', 'week');
+  const items = (trending?.results ?? [])
+    .filter(r => isAddableMediaType(r) && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
+    .slice(0, 10);
+
+  if (items.length === 0) return null;
+
+  return (
+    <section className="max-w-[1000px] mx-auto px-4 py-8">
+      <div className="bg-surface border border-border-main rounded-sm">
+        <div className="px-3 py-[6px] border-b border-border-light">
+          <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
+        </div>
+        <TitleGrid items={items} />
+      </div>
+    </section>
   );
 }
 
@@ -259,18 +275,6 @@ function Dashboard() {
 export default function DashboardPage() {
   const { user, loading } = useAuth();
 
-  // Server + första klient-render måste ge IDENTISK HTML annars hydration
-  // mismatch (React #418). Därför starta `wasLoggedIn=false` (vad servern
-  // alltid ger), och läs localStorage i useEffect EFTER hydration. Återvänd-
-  // ande inloggade får då en kort LandingPage-tick innan vi visar skelettet,
-  // men det är acceptabelt jämfört med en crash. AuthContext skriver/rensar
-  // flaggan i onAuthStateChanged.
-  const [wasLoggedIn, setWasLoggedIn] = useState(false);
-  useEffect(() => {
-    try { setWasLoggedIn(window.localStorage.getItem('binge:wasLoggedIn') === '1'); }
-    catch { /* localStorage kan blockas av tracking-prevention */ }
-  }, []);
-
   // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
   const faqLd = (
     <script
@@ -280,18 +284,30 @@ export default function DashboardPage() {
     />
   );
 
-  // Inloggad återvändande: visa skelett tills auth resolveras.
-  if (loading && wasLoggedIn) {
+  // Pre-hydration / auth-loading: rendera BÅDA staterna sida-vid-sida.
+  // CSS i globals.css döljer den ena baserat på .returning-user-klassen som
+  // ett inline-script i <head> sätter innan body parsas. Resultat:
+  // - Crawlers + anonyma användare ser LandingPage i HTML:en (SEO-vänligt)
+  // - Återvändande inloggade ser skelettet direkt utan LandingPage-flash
+  //
+  // withTrending={false} på LandingPage så vi inte fyrar TMDB-requesten mot
+  // användare som ändå inte kommer att se trending-sektionen.
+  if (loading) {
     return (
       <>
         {faqLd}
-        <DashboardSkeleton />
+        <div data-pre-state="landing">
+          <LandingPage withTrending={false} />
+        </div>
+        <div data-pre-state="returning-skeleton" aria-hidden="true">
+          <DashboardSkeleton />
+        </div>
       </>
     );
   }
 
-  // Anonym, prerender, eller utloggad: rendera LandingPage. Detta är vad
-  // crawlers ser i out/index.html.
+  // Auth resolverat utan user: anonym besökare. Visa LandingPage med
+  // trending-sektionen.
   if (!user) {
     return (
       <>
@@ -301,6 +317,7 @@ export default function DashboardPage() {
     );
   }
 
+  // Auth resolverat med user: dashboard.
   return (
     <>
       {faqLd}

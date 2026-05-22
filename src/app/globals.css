@@ -933,6 +933,18 @@ button { font: inherit; cursor: pointer; }
   .hem-focal-skeleton { animation: none; }
 }
 
+/* ─── Pre-hydration login-state-toggle ──────────────────────────────────────
+   Inline-script i <head> (se layout.tsx) sätter .returning-user på <html>
+   innan body parsas om localStorage har 'binge:wasLoggedIn'=1. Vi renderar
+   båda staterna (LandingPage + skeleton) i HTML:en så browsern kan måla
+   den rätta direkt utan att vänta på React-hydration.
+
+   Default: skeleton dolt, LandingPage synligt (matchar crawlers + anonyma).
+   Returning user: tvärtom — skeleton syns, LandingPage döljs. */
+[data-pre-state="returning-skeleton"] { display: none; }
+.returning-user [data-pre-state="landing"] { display: none; }
+.returning-user [data-pre-state="returning-skeleton"] { display: block; }
+
 /* ─── "Senare i veckan" filmstrip ───────────────────────────────────────── */
 .filmstrip {
   display: grid;
