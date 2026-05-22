@@ -41,6 +41,11 @@ const config: Config = {
         'cal-deep': 'var(--cal-deep)',
         'cal-soft': 'var(--cal-soft)',
 
+        // Warn — yellow advisory (legal disclaimers, soft warnings)
+        'warn-soft': 'var(--warn-soft)',
+        'warn-deep': 'var(--warn-deep)',
+        'warn-ink': 'var(--warn-ink)',
+
         // Duotone — for use in legends, swatches, pill bars (the duotone
         // image filters themselves are SVG <filter>s, see DuotoneFilters).
         'duo-terra': 'var(--duo-terra)',

@@ -72,17 +72,17 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
   const hasAny = userResults.length > 0 || titleResults.length > 0;
 
   return (
-    <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1b23] border border-white/10 rounded-sm shadow-lg z-50 max-h-[400px] overflow-y-auto">
+    <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-rule rounded-sm shadow-pop z-50 max-h-[400px] overflow-y-auto">
       {isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-text-sidebar">Söker...</div>
+        <div className="px-3 py-2 text-sm text-ink-3">Söker...</div>
       )}
       {!isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-text-sidebar">Inga resultat</div>
+        <div className="px-3 py-2 text-sm text-ink-3">Inga resultat</div>
       )}
 
       {userResults.length > 0 && (
         <>
-          <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-[#666] font-semibold">
+          <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold">
             Användare
           </div>
           {userResults.map((user, i) => {
@@ -92,14 +92,14 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
                 key={`user-${user.uid}`}
                 href={`/user/${user.username}/`}
                 onClick={onSelect}
-                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-text-sidebar ${
-                  rowIndex === activeIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'
+                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
+                  rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
               >
                 <UserAvatar name={user.displayName} photoURL={user.photoURL} />
                 <div className="min-w-0">
-                  <div className="text-sm text-[#ddd] font-semibold truncate">{user.displayName}</div>
-                  <div className="text-xs text-text-sidebar truncate">@{user.username}</div>
+                  <div className="text-sm text-ink font-semibold truncate">{user.displayName}</div>
+                  <div className="text-xs text-ink-3 truncate">@{user.username}</div>
                 </div>
               </Link>
             );
@@ -110,7 +110,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
       {titleResults.length > 0 && (
         <>
           {userResults.length > 0 && (
-            <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-[#666] font-semibold border-t border-white/[0.06]">
+            <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold border-t border-rule-2">
               Titlar
             </div>
           )}
@@ -126,18 +126,18 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
                 key={`${item.media_type}-${item.id}`}
                 href={href}
                 onClick={onSelect}
-                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-text-sidebar ${
-                  rowIndex === activeIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'
+                className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
+                  rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
               >
                 {poster ? (
                   <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={26} height={39} />
                 ) : (
-                  <div className="w-[26px] h-[39px] rounded-sm bg-white/10 shrink-0" />
+                  <div className="w-[26px] h-[39px] rounded-sm bg-rule-2 shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <div className="text-sm text-[#ddd] font-semibold truncate">{title}</div>
-                  <div className="text-xs text-text-sidebar">
+                  <div className="text-sm text-ink font-semibold truncate">{title}</div>
+                  <div className="text-xs text-ink-3">
                     {year ?? '—'} · {item.media_type === 'movie' ? 'Film' : 'Serie'}
                   </div>
                 </div>
@@ -151,8 +151,8 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
         <Link
           href={`/search/?q=${encodeURIComponent(query)}`}
           onClick={onSelect}
-          className={`block px-3 py-2 text-xs text-accent no-underline border-t border-white/[0.06] ${
-            activeIndex === -1 ? '' : 'hover:bg-white/[0.04]'
+          className={`block px-3 py-2 text-xs text-acc-deep no-underline border-t border-rule-2 ${
+            activeIndex === -1 ? '' : 'hover:bg-rule-2'
           }`}
         >
           Visa alla resultat →

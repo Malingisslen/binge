@@ -24,7 +24,7 @@ export default function LegalPageShell({
           <span>Version: {version}</span>
         </div>
         {draft && (
-          <div className="mt-3 p-3 bg-[#fdf6de] border border-[#d9c95e] rounded-sm text-xs text-[#7a6200]">
+          <div className="mt-3 p-3 bg-warn-soft border border-warn-deep rounded-sm text-xs text-warn-ink">
             <strong>Utkast.</strong> Detta dokument är ett arbetsutkast.
             Det speglar Binges faktiska hantering men har ännu inte
             genomgått formell juridisk granskning.

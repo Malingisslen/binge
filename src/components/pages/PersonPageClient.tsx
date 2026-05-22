@@ -6,10 +6,11 @@ import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
+import type { TMDBPerson } from '@/types';
 
-export default function PersonPageClient({ id }: { id: string }) {
+export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
   const personId = parseInt(id, 10);
-  const { data: person, isLoading } = usePerson(personId);
+  const { data: person, isLoading } = usePerson(personId, initialData);
   const { data: credits } = usePersonCredits(personId);
 
   // Fallback to English bio if Swedish is empty
@@ -59,7 +60,7 @@ export default function PersonPageClient({ id }: { id: string }) {
           {photo ? (
             <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" decoding="async" width={180} height={270} />
           ) : (
-            <div className="w-[180px] aspect-[2/3] bg-[#ddd8d0] rounded-sm" />
+            <div className="w-[180px] aspect-[2/3] bg-rule-2 rounded-sm" />
           )}
         </div>
         <div className="flex-1">

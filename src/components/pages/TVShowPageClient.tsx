@@ -25,20 +25,25 @@ import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
+import ClientOnly from '@/components/utils/ClientOnly';
+import type { TMDBTVShow } from '@/types';
 
-export default function TVShowPageClient({ id }: { id: string }) {
+export default function TVShowPageClient({ id, initialData }: { id: string; initialData?: TMDBTVShow }) {
   const showId = parseInt(id, 10);
   const searchParams = useSearchParams();
   // Spoiler-skydd-grupp (Fas 2b): GroupWatchlistTable skickar `?fromGroup={id}`
   // när användaren klickar från en grupps watchlist. Vi propagerar det till
   // SeasonList → EpisodeRow så avsnitt utöver gruppens minsta-position maskas.
   const fromGroup = searchParams?.get('fromGroup') ?? null;
-  const { data: show, isLoading } = useTVShow(showId);
+  const { data: show, isLoading } = useTVShow(showId, initialData);
   const { getItem, updateRating, updateNotes, updateTmdbStatus } = useWatchlist();
-  const { user } = useAuth();
-  const myProviders = user?.myProviders ?? [];
+  useAuth();
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
   const [showRentBuy, setShowRentBuy] = useState(false);
+  // mounted-flag förhindrar hydration mismatch — server och initial-render
+  // visar inget auth-state, sedan byter via vanlig state-update efter mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const mappedRecs = useMemo(
     () => (show?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
@@ -57,7 +62,7 @@ export default function TVShowPageClient({ id }: { id: string }) {
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
   });
 
-  const watchlistItem = show ? getItem(show.id) : null;
+  const watchlistItem = mounted && show ? getItem(show.id) : null;
   const itemExists = !!watchlistItem;
   const cachedTmdbStatus = watchlistItem?.tmdbStatus ?? null;
   const showStatus = show?.status ?? null;
@@ -176,31 +181,33 @@ export default function TVShowPageClient({ id }: { id: string }) {
             )}
           </div>
 
-          <div className="actions-row">
-            <StatusButton {...statusButtonProps} />
-            <div>
-              {watchlistItem && (
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
-                  Ditt betyg
-                </div>
-              )}
-              <RatingStars
-                rating={watchlistItem?.rating ?? null}
-                onChange={r => watchlistItem && updateRating(show.id, r)}
-                readonly={!watchlistItem}
-                size="lg"
+          <ClientOnly>
+            <div className="actions-row">
+              <StatusButton {...statusButtonProps} />
+              <div>
+                {watchlistItem && (
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                    Ditt betyg
+                  </div>
+                )}
+                <RatingStars
+                  rating={watchlistItem?.rating ?? null}
+                  onChange={r => watchlistItem && updateRating(show.id, r)}
+                  readonly={!watchlistItem}
+                  size="lg"
+                />
+              </div>
+              <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
+              <AddToGroupButton
+                tmdbId={show.id}
+                mediaType="tv"
+                title={displayTitle}
+                posterPath={show.poster_path}
+                releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
               />
+              <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
             </div>
-            <AddToListButton tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
-            <AddToGroupButton
-              tmdbId={show.id}
-              mediaType="tv"
-              title={displayTitle}
-              posterPath={show.poster_path}
-              releaseYear={show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null}
-            />
-            <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
-          </div>
+          </ClientOnly>
 
           {subscription.length > 0 && (
             <div className="providers-row">
@@ -251,39 +258,45 @@ export default function TVShowPageClient({ id }: { id: string }) {
             Nästa avsnitt: S{nextEp.season_number}E{nextEp.episode_number} — {nextEp.name} ({nextEp.air_date})
           </div>
         )}
-        {watchlistItem?.status === 'sedd' && nextEp && (
-          <div style={{
-            marginTop: 8,
-            padding: '8px 14px',
-            background: 'var(--acc-soft)',
-            border: '1px solid oklch(0.86 0.08 75)',
-            borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-            fontSize: 13.5, color: 'var(--ink-2)',
-          }}>
-            <span>Du har markerat serien som sedd, men nya avsnitt är på väg.</span>
-            <StatusButton {...statusButtonProps} />
-          </div>
-        )}
+        <ClientOnly>
+          {watchlistItem?.status === 'sedd' && nextEp && (
+            <div style={{
+              marginTop: 8,
+              padding: '8px 14px',
+              background: 'var(--acc-soft)',
+              border: '1px solid oklch(0.86 0.08 75)',
+              borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              fontSize: 13.5, color: 'var(--ink-2)',
+            }}>
+              <span>Du har markerat serien som sedd, men nya avsnitt är på väg.</span>
+              <StatusButton {...statusButtonProps} />
+            </div>
+          )}
+        </ClientOnly>
       </div>
-      {/* Säsonger — episode list + progress (preview surface, raw) */}
-      <section className="detail-section">
-        <div className="head">
-          <h2>Säsonger</h2>
-          <span className="meta">{show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''}</span>
-        </div>
-        <div style={{ border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--surface)' }}>
-          <SeasonList
-            tmdbId={show.id}
-            seasons={show.seasons}
-            isWatched={isWatched}
-            markEpisodeWatched={markEpisodeWatched}
-            markSeasonWatched={markSeasonWatched}
-            getSeasonProgress={getSeasonProgress}
-            fromGroup={fromGroup}
-          />
-        </div>
-      </section>
+      {/* Säsonger — episode list + progress (preview surface, raw).
+          Säsongs-progress är watchlist-beroende (Firestore) så vi ClientOnly-
+          gatear hela sektionen för att inte mismatcha vid hydrering. */}
+      <ClientOnly>
+        <section className="detail-section">
+          <div className="head">
+            <h2>Säsonger</h2>
+            <span className="meta">{show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''}</span>
+          </div>
+          <div style={{ border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--surface)' }}>
+            <SeasonList
+              tmdbId={show.id}
+              seasons={show.seasons}
+              isWatched={isWatched}
+              markEpisodeWatched={markEpisodeWatched}
+              markSeasonWatched={markSeasonWatched}
+              getSeasonProgress={getSeasonProgress}
+              fromGroup={fromGroup}
+            />
+          </div>
+        </section>
+      </ClientOnly>
 
       {/* Trailer — raw 16:9 video (preview surface) */}
       {trailer && (
@@ -351,20 +364,20 @@ export default function TVShowPageClient({ id }: { id: string }) {
         </section>
       )}
 
-      {/* Notes — left-rule quote */}
-      {watchlistItem && (
+      {/* Notes + Reviews — auth-beroende, ClientOnly för hydration + SEO. */}
+      <ClientOnly>
+        {watchlistItem && (
+          <section className="detail-section">
+            <div className="head">
+              <h2>Din anteckning</h2>
+            </div>
+            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />
+          </section>
+        )}
         <section className="detail-section">
-          <div className="head">
-            <h2>Din anteckning</h2>
-          </div>
-          <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />
+          <ReviewList tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
         </section>
-      )}
-
-      {/* Reviews from friends */}
-      <section className="detail-section">
-        <ReviewList tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
-      </section>
+      </ClientOnly>
 
       {/* Similar series — back to duotone (navigation surface) */}
       {mappedRecs.length > 0 && (

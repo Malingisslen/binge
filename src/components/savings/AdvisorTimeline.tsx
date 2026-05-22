@@ -19,16 +19,16 @@ const WEEK_LABEL_TOP = 32;
 const WEEK_INDICES: number[] = Array.from({ length: TIMELINE_WEEKS }, (_, i) => i);
 
 const USER_PAUSED_BG: React.CSSProperties = {
-  backgroundImage: 'repeating-linear-gradient(45deg, rgba(153,153,153,0.25) 0 2px, transparent 2px 6px)',
-  backgroundColor: '#e5e2dc',
+  backgroundImage: 'repeating-linear-gradient(45deg, oklch(0.60 0.010 80 / 0.25) 0 2px, transparent 2px 6px)',
+  backgroundColor: 'var(--rule)',
 };
 
 const EMPTY_CELL_STYLE: React.CSSProperties = {
   width: CELL_WIDTH,
   height: CELL_HEIGHT,
   borderRadius: 2,
-  backgroundColor: '#f5f3ee',
-  border: '1px solid #e8e4dc',
+  backgroundColor: 'var(--bg-2)',
+  border: '1px solid var(--rule-2)',
 };
 
 const USER_PAUSED_CELL_STYLE: React.CSSProperties = {
@@ -99,11 +99,11 @@ function Legend() {
   return (
     <div className="flex items-center gap-3 flex-wrap text-xxs text-text-muted mb-2">
       <span className="inline-flex items-center gap-1">
-        <span className="inline-block w-[10px] h-[10px] rounded-[1px]" style={{ background: '#d97b35', opacity: 0.65 }} />
+        <span className="inline-block w-[10px] h-[10px] rounded-[1px]" style={{ background: 'var(--acc-deep)', opacity: 0.65 }} />
         Vecka med avsnitt
       </span>
       <span className="inline-flex items-center gap-1">
-        <span className="inline-block w-[10px] h-[10px] rounded-[1px] border border-border-main bg-[#f5f3ee]" />
+        <span className="inline-block w-[10px] h-[10px] rounded-[1px] border border-border-main bg-bg-2" />
         Tom vecka
       </span>
       <span className="inline-flex items-center gap-1">
@@ -176,7 +176,7 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
 function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
   const isUnsubscribed = lane.kind === 'unsubscribed';
   const isUserPaused = lane.kind === 'user-paused';
-  const cellColor = isUnsubscribed ? '#888' : lane.color;
+  const cellColor = isUnsubscribed ? 'var(--ink-3)' : lane.color;
   const cellOpacity = isUnsubscribed ? 0.4 : (isUserPaused ? 0.3 : 0.7);
   const emptyStyle = isUserPaused ? USER_PAUSED_CELL_STYLE : EMPTY_CELL_STYLE;
 
@@ -237,7 +237,7 @@ function LaneFooter({ lane }: { lane: TimelineLane }) {
     case 'user-paused':
       return <span className="text-text-muted">Pausad</span>;
     case 'pause':
-      return <span className="text-[#2e7d32]">Kan pausas</span>;
+      return <span className="text-season-done">Kan pausas</span>;
     case 'free':
       return <span className="text-text-muted">Gratis</span>;
     default:

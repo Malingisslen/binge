@@ -30,8 +30,8 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
     : 'Pausa i 30 dagar';
 
   return (
-    <div className="bg-surface border border-border-main border-l-[3px] border-l-[#2e7d32] rounded-sm p-4 mb-[14px]">
-      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-[#2e7d32] mb-1">Spar nu</div>
+    <div className="bg-surface border border-border-main border-l-[3px] border-l-season-done rounded-sm p-4 mb-[14px]">
+      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-season-done mb-1">Spar nu</div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-base font-bold text-text-primary">
@@ -45,7 +45,7 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => onPause(action.providerId, defaultResumeAt)}
-              className="px-3 py-[6px] bg-[#2e7d32] text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
+              className="px-3 py-[6px] bg-season-done text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
             >
               {quickPauseLabel}
             </button>
@@ -99,7 +99,7 @@ function PauseActionCard({ action, onPause }: { action: Extract<PrimaryAction, {
             </button>
             <button
               onClick={() => { setPauseOpen(false); onPause(action.providerId, resumeAt); }}
-              className="px-3 py-[5px] bg-[#2e7d32] text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
+              className="px-3 py-[5px] bg-season-done text-white border-none rounded-sm text-xs font-semibold font-[inherit] cursor-pointer"
             >
               Bekräfta paus
             </button>
@@ -266,7 +266,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
       <div className="flex items-baseline justify-between mb-[6px]">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Dina pausade tjänster</h2>
         {totalSaved > 0 && (
-          <span className="text-xxs text-[#2e7d32] font-semibold">Sparat hittills: {totalSaved} kr</span>
+          <span className="text-xxs text-season-done font-semibold">Sparat hittills: {totalSaved} kr</span>
         )}
       </div>
       <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
@@ -285,7 +285,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-[#2e7d32] font-semibold text-right whitespace-nowrap">
+                <td className="px-3 py-[6px] text-xxs text-season-done font-semibold text-right whitespace-nowrap">
                   +{p.savingsSoFar} kr
                 </td>
                 <td className="px-3 py-[6px] text-right">
@@ -411,11 +411,11 @@ function SavingsContent() {
           <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kan pausas</div>
           {suggestedPauseCount > 0 ? (
             <>
-              <div className="text-base font-bold text-[#2e7d32] mt-[2px]">
+              <div className="text-base font-bold text-season-done mt-[2px]">
                 {pluralSv(suggestedPauseCount, 'tjänst', 'tjänster')}
               </div>
               {advisor.monthlySavings > 0 && (
-                <div className="text-xxs text-[#2e7d32] mt-[2px]">
+                <div className="text-xxs text-season-done mt-[2px]">
                   Spar {advisor.monthlySavings} kr/mån
                 </div>
               )}

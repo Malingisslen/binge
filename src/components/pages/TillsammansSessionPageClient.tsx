@@ -360,7 +360,7 @@ function SessionMain({
                 }`}
                 title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
               >
-                {isLive && <span className="w-[5px] h-[5px] rounded-full bg-[#2e7d32]" />}
+                {isLive && <span className="w-[5px] h-[5px] rounded-full bg-season-done" />}
                 {p.displayName}{p.isHost ? ' ★' : ''} <span className="text-text-muted">({prog.done}/{prog.total})</span>
               </span>
             );

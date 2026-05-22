@@ -26,6 +26,12 @@ const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => createQueryClient());
+  // Persister måste skapas i ett useEffect för att inte ge hydration-mismatch:
+  // typeof window-checken gör server-tree QCP-only och klient-tree PQCP-only,
+  // vilket React #418 fångar. Genom att starta som null på BÅDA sidor och
+  // sedan sätta efter mount blir initial-hydration matchande och vi byter
+  // till PQCP via vanlig state-uppdatering.
+  const [persister, setPersister] = useState<ReturnType<typeof createSyncStoragePersister> | null>(null);
 
   // Initiera Sentry + App Check så tidigt som möjligt — men efter hydration.
   // Sentry: no-op om DSN saknas. App Check: no-op om site key saknas; måste
@@ -36,18 +42,12 @@ export default function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     initSentry();
     initAppCheck();
+    setPersister(createSyncStoragePersister({
+      storage: window.localStorage,
+      key: 'binge-rq-cache',
+      throttleTime: 1000,
+    }));
   }, []);
-
-  // Persister kan bara skapas i browsern (behöver localStorage). I build-
-  // miljön faller vi tillbaka till QueryClientProvider utan persist så att
-  // static export fungerar.
-  const persister = typeof window !== 'undefined'
-    ? createSyncStoragePersister({
-        storage: window.localStorage,
-        key: 'binge-rq-cache',
-        throttleTime: 1000,
-      })
-    : null;
 
   const tree = (
     <AuthProvider>

@@ -55,13 +55,13 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
 
       <div className="bg-surface border border-border-main rounded-sm px-3 py-1">
         <div className="flex items-center gap-2 py-2 border-b border-border-light">
-          <div className="flex-1 h-[3px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
+          <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
             <div
-              className="h-full bg-accent rounded-[1px] transition-all"
+              className="h-full bg-ink rounded-full transition-all"
               style={{ width: `${episodes.length > 0 ? (watchedCount / episodes.length) * 100 : 0}%` }}
             />
           </div>
-          <span className="text-xxs text-text-muted">{watchedCount}/{episodes.length}</span>
+          <span className="text-xxs text-ink-3">{watchedCount}/{episodes.length}</span>
         </div>
 
         {episodes.map(ep => (

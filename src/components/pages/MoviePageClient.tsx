@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, Film } from 'lucide-react';
 import { useMovie } from '@/hooks/useTMDB';
@@ -21,18 +21,26 @@ import { useAuth } from '@/hooks/useAuth';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
+import ClientOnly from '@/components/utils/ClientOnly';
+import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
 //   - Hero poster → duotone (identification)
 //   - Trailer + cast portraits → raw (preview)
 //   - Recommendations at bottom → duotone (back to navigation)
 
-export default function MoviePageClient({ id }: { id: string }) {
+export default function MoviePageClient({ id, initialData }: { id: string; initialData?: TMDBMovie }) {
   const movieId = parseInt(id, 10);
-  const { data: movie, isLoading } = useMovie(movieId);
+  const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { getItem, updateRating, updateNotes } = useWatchlist();
   useAuth();
   const [showRentBuy, setShowRentBuy] = useState(false);
+  // mounted-flag förhindrar hydration mismatch: SSR/initial-render visar inget
+  // watchlist-state (eftersom Firebase/localStorage inte finns på server), och
+  // efter mount byter den till riktiga värdet. Det matchar också SEO-intentet:
+  // Googlebot ska inte se "i biblioteket"-chip eller stjärnbetyg i HTML.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const mappedRecs = useMemo(
     () => (movie?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'movie' as const })),
@@ -54,7 +62,7 @@ export default function MoviePageClient({ id }: { id: string }) {
   if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar...</div>;
   if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
 
-  const watchlistItem = getItem(movie.id);
+  const watchlistItem = mounted ? getItem(movie.id) : undefined;
   const poster = posterUrl(movie.poster_path, 'w500');
   const tone = toneForGenreIds(movie.genres.map(g => g.id));
   const providers = movie['watch/providers']?.results?.SE;
@@ -164,39 +172,41 @@ export default function MoviePageClient({ id }: { id: string }) {
             )}
           </div>
 
-          <div className="actions-row">
-            <StatusButton
-              tmdbId={movie.id}
-              mediaType="movie"
-              title={displayTitle}
-              posterPath={movie.poster_path}
-              releaseYear={parseInt(year, 10) || null}
-              providers={Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))))}
-              genreIds={movie.genres.map(g => g.id)}
-            />
-            <div>
-              {watchlistItem && (
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
-                  Ditt betyg
-                </div>
-              )}
-              <RatingStars
-                rating={watchlistItem?.rating ?? null}
-                onChange={r => watchlistItem && updateRating(movie.id, r)}
-                readonly={!watchlistItem}
-                size="lg"
+          <ClientOnly>
+            <div className="actions-row">
+              <StatusButton
+                tmdbId={movie.id}
+                mediaType="movie"
+                title={displayTitle}
+                posterPath={movie.poster_path}
+                releaseYear={parseInt(year, 10) || null}
+                providers={Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))))}
+                genreIds={movie.genres.map(g => g.id)}
               />
+              <div>
+                {watchlistItem && (
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                    Ditt betyg
+                  </div>
+                )}
+                <RatingStars
+                  rating={watchlistItem?.rating ?? null}
+                  onChange={r => watchlistItem && updateRating(movie.id, r)}
+                  readonly={!watchlistItem}
+                  size="lg"
+                />
+              </div>
+              <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
+              <AddToGroupButton
+                tmdbId={movie.id}
+                mediaType="movie"
+                title={displayTitle}
+                posterPath={movie.poster_path}
+                releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
+              />
+              <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
             </div>
-            <AddToListButton tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
-            <AddToGroupButton
-              tmdbId={movie.id}
-              mediaType="movie"
-              title={displayTitle}
-              posterPath={movie.poster_path}
-              releaseYear={movie.release_date ? parseInt(movie.release_date.substring(0, 4), 10) : null}
-            />
-            <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
-          </div>
+          </ClientOnly>
 
           {subscription.length > 0 && (
             <div className="providers-row">
@@ -307,20 +317,21 @@ export default function MoviePageClient({ id }: { id: string }) {
         </section>
       )}
 
-      {/* Notes — left-rule quote */}
-      {watchlistItem && (
+      {/* Notes + Reviews — auth-beroende, klient-only för att inte skapa
+          hydration mismatch och inte exponeras för Googlebot (PII-risk) */}
+      <ClientOnly>
+        {watchlistItem && (
+          <section className="detail-section">
+            <div className="head">
+              <h2>Din anteckning</h2>
+            </div>
+            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />
+          </section>
+        )}
         <section className="detail-section">
-          <div className="head">
-            <h2>Din anteckning</h2>
-          </div>
-          <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />
+          <ReviewList tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
         </section>
-      )}
-
-      {/* Reviews from friends */}
-      <section className="detail-section">
-        <ReviewList tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
-      </section>
+      </ClientOnly>
 
       {/* Similar films — back to duotone (navigation surface) */}
       {mappedRecs.length > 0 && (

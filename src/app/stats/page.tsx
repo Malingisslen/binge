@@ -147,8 +147,8 @@ function StatsContent() {
               return (
                 <div key={n} className="flex items-center gap-2 mb-[2px]">
                   <span className="text-xs text-text-muted w-[16px]">{n}</span>
-                  <div className="flex-1 h-[6px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
-                    <div className="h-full bg-accent rounded-[1px]" style={{ width: `${(count / maxCount) * 100}%` }} />
+                  <div className="flex-1 h-[6px] bg-rule rounded-full overflow-hidden">
+                    <div className="h-full bg-ink rounded-full" style={{ width: `${(count / maxCount) * 100}%` }} />
                   </div>
                   <span className="text-xxs text-text-muted w-[20px] text-right">{count}</span>
                 </div>
@@ -179,15 +179,15 @@ function StatsContent() {
             {stats.topProviders.slice(0, 8).map(p => (
               <div key={p.id} className="flex items-center gap-2 py-[4px]">
                 <span className="flex items-center gap-[6px] text-xs w-[90px] shrink-0 truncate">
-                  <ProviderDot color={p.provider?.color ?? '#888'} />
+                  <ProviderDot color={p.provider?.color ?? 'var(--ink-3)'} />
                   {p.provider?.name}
                 </span>
-                <div className="flex-1 h-[8px] bg-[#e5e0d8] rounded-[1px] overflow-hidden">
+                <div className="flex-1 h-[8px] bg-rule rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-[1px]"
+                    className="h-full rounded-full"
                     style={{
                       width: `${(p.count / maxProviderCount) * 100}%`,
-                      backgroundColor: p.provider?.color ?? '#888',
+                      backgroundColor: p.provider?.color ?? 'var(--ink-3)',
                     }}
                   />
                 </div>

@@ -13,9 +13,9 @@ interface TitleGridProps {
 function SkeletonCard() {
   return (
     <div>
-      <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] animate-pulse" />
-      <div className="h-[12px] bg-[#ddd8d0] rounded-sm mb-[3px] w-3/4 animate-pulse" />
-      <div className="h-[10px] bg-[#e5e0d8] rounded-sm w-1/2 animate-pulse" />
+      <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] animate-pulse" />
+      <div className="h-[12px] bg-rule-2 rounded-sm mb-[3px] w-3/4 animate-pulse" />
+      <div className="h-[10px] bg-rule rounded-sm w-1/2 animate-pulse" />
     </div>
   );
 }

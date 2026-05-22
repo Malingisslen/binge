@@ -33,6 +33,13 @@
   --cal-deep:  oklch(0.48 0.11 300);
   --cal-soft:  oklch(0.945 0.045 300);
 
+  /* warn — yellow advisory (used in legal disclaimers, fallback warnings).
+     Not part of the two-accent rule; reserved for genuinely informational
+     "be careful"-states that aren't decisive (acc) or time-bound (cal). */
+  --warn-soft: oklch(0.965 0.06 95);
+  --warn-deep: oklch(0.72 0.13 80);
+  --warn-ink:  oklch(0.42 0.10 80);
+
   /* duotone palette — one per genre/category */
   --duo-terra:   oklch(0.62 0.08 30);
   --duo-slate:   oklch(0.42 0.06 240);

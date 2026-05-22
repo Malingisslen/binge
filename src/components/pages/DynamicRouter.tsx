@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
@@ -14,6 +15,9 @@ import dynamic from 'next/dynamic';
 
 const LOADING = <div className="text-sm text-text-muted py-4">Laddar...</div>;
 
+// MoviePageClient används som client-side fallback för movie-ids utanför
+// topp-N — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,
+// resten faller hit via firebase rewrite ** → /_/index.html.
 const MoviePageClient = dynamic(() => import('./MoviePageClient'), { ssr: false, loading: () => LOADING });
 const TVShowPageClient = dynamic(() => import('./TVShowPageClient'), { ssr: false, loading: () => LOADING });
 const SeasonPageClient = dynamic(() => import('./SeasonPageClient'), { ssr: false, loading: () => LOADING });
@@ -26,6 +30,15 @@ const GroupPageClient = dynamic(() => import('./GroupPageClient'), { ssr: false,
 
 export default function DynamicRouter({ fallback }: { fallback: React.ReactNode }) {
   const pathname = usePathname();
+  // Server-renderar catch-all-routen för path `/_` (vår platshållare i
+  // generateStaticParams). Vid runtime ser klienten den verkliga URL:en.
+  // Skillnaden orsakar React #418 hydration mismatch. Vi gatear all
+  // dispatch på mounted så server och initial-hydration alltid renderar
+  // fallback, sedan dispatchar vi efter mount via vanlig state-update.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <>{fallback}</>;
+
   const segments = pathname.split('/').filter(Boolean);
 
   if (segments[0] === 'tillsammans' && segments[1] && segments[1] !== 'ny') {

@@ -15,6 +15,7 @@ import {
   getPersonCredits,
 } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import type { TMDBMovie, TMDBTVShow, TMDBPerson } from '@/types';
 
 export function useSearch(query: string, page = 1) {
   return useQuery({
@@ -25,21 +26,23 @@ export function useSearch(query: string, page = 1) {
   });
 }
 
-export function useMovie(id: number | null) {
+export function useMovie(id: number | null, initialData?: TMDBMovie) {
   return useQuery({
     queryKey: ['movie', id],
     queryFn: ({ signal }) => getMovie(id!, { signal }),
     enabled: id !== null,
     staleTime: TMDB_STALE.MOVIE_DETAIL,
+    initialData,
   });
 }
 
-export function useTVShow(id: number | null) {
+export function useTVShow(id: number | null, initialData?: TMDBTVShow) {
   return useQuery({
     queryKey: ['tv', id],
     queryFn: ({ signal }) => getTVShow(id!, { signal }),
     enabled: id !== null,
     staleTime: TMDB_STALE.TV_DETAIL,
+    initialData,
   });
 }
 
@@ -94,12 +97,13 @@ export function useDiscoverTV(params: Record<string, string> | null = {}) {
   });
 }
 
-export function usePerson(id: number | null) {
+export function usePerson(id: number | null, initialData?: TMDBPerson) {
   return useQuery({
     queryKey: ['person', id],
     queryFn: ({ signal }) => getPerson(id!, { signal }),
     enabled: id !== null,
     staleTime: TMDB_STALE.PERSON,
+    initialData,
   });
 }
 

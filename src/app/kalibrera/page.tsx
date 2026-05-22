@@ -140,7 +140,7 @@ function CalibrationCard({
       <div className="text-xxs text-text-muted px-3 py-[4px] border-b border-border-light">
         {progress.current}/{progress.total}
       </div>
-      <div className="relative h-[180px] bg-[#2a2a2a] overflow-hidden">
+      <div className="relative h-[180px] bg-ink overflow-hidden">
         {backdrop && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={backdrop} alt="" className="w-full h-full object-cover object-[center_20%] opacity-60" loading="eager" decoding="async" />

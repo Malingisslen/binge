@@ -113,7 +113,7 @@ export default function UserProfilePageClient({ username }: { username: string }
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
             {following.slice(0, 10).map(item => (
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
-                <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
+                <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] overflow-hidden">
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />
                   )}
@@ -133,7 +133,7 @@ export default function UserProfilePageClient({ username }: { username: string }
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
             {recentlyWatched.map(item => (
               <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
-                <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
+                <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] overflow-hidden">
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />
                   )}

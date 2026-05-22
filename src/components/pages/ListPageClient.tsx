@@ -89,7 +89,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
             return (
               <div key={item.tmdbId} className="relative">
                 <Link href={href} className="no-underline text-text-primary block">
-                  <div className="aspect-[2/3] bg-[#ddd8d0] rounded-sm mb-[3px] overflow-hidden">
+                  <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] overflow-hidden">
                     {poster && <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold truncate">{item.title}</div>
@@ -184,7 +184,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                       className="rounded-sm object-cover shrink-0"
                     />
                   ) : (
-                    <div className="w-[24px] h-[36px] bg-[#ddd8d0] rounded-sm shrink-0" />
+                    <div className="w-[24px] h-[36px] bg-rule-2 rounded-sm shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-text-primary truncate">

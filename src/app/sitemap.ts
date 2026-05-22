@@ -1,5 +1,10 @@
 import type { MetadataRoute } from 'next';
-import { getPopularMovies, getPopularTV } from '@/lib/tmdb/client';
+import {
+  getPopularMovies,
+  getPopularTV,
+  getTopRatedMovies,
+  getTopRatedTV,
+} from '@/lib/tmdb/client';
 
 // Next 16 + output:'export' kräver explicit static/revalidate-deklaration
 // för Metadata-routes. Vi vill att sitemap:en genereras en gång vid build
@@ -10,11 +15,12 @@ export const dynamic = 'force-static';
  * Dynamisk sitemap som genereras vid `next build`.
  *
  * Inkluderar:
- * - Statiska offentliga routes (start, discover, films, series, calendar,
- *   recommendations, search, integritet, villkor, community-guidelines)
- * - Topp-N populära filmer + serier från TMDB (SE-region) — ger long-tail
- *   SEO för "var streamar jag X"-queries när användare söker specifika
- *   titlar
+ * - Statiska offentliga routes (start, discover, films, series, savings,
+ *   integritet, villkor, community-guidelines)
+ * - Topp-N populära + topp-rankade filmer/serier från TMDB
+ *
+ * Mål: ge Google en bred "kanonisk lista" av sidor vi anser viktiga, så att
+ * indexerings-prioriteten inte tilldelas slumpvis via on-page crawl-discovery.
  *
  * Privata routes (/my, /settings, /stats, /grupper, /feed, /login,
  * /kalibrera) exkluderas eftersom de kräver auth. De har även
@@ -22,15 +28,18 @@ export const dynamic = 'force-static';
  *
  * Körs bara vid build — TMDB-calls här räknas mot byggtid inte runtime.
  * Om TMDB-calls failar (nätverk/rate-limit) faller sitemap tillbaka till
- * bara statiska routes istället för att brytna hela build:en.
+ * bara statiska routes istället för att bryta hela build:en.
  */
 
 const SITE_URL = 'https://binge.nu';
-const TOP_TITLES_PER_TYPE = 50; // Sitemap-limits: 50k URL:er; vi stannar under.
+
+// TMDB returnerar 20 titlar/page. För 2000 titlar/källa: 100 pages.
+const POPULAR_PAGES = 100;
+const TOP_RATED_PAGES = 100;
 
 function staticEntries(): MetadataRoute.Sitemap {
   const lastModified = new Date();
-  const entries: MetadataRoute.Sitemap = [
+  return [
     { url: `${SITE_URL}/`, lastModified, changeFrequency: 'daily', priority: 1.0 },
     { url: `${SITE_URL}/discover/`, lastModified, changeFrequency: 'daily', priority: 0.9 },
     { url: `${SITE_URL}/films/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
@@ -40,62 +49,68 @@ function staticEntries(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/villkor/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${SITE_URL}/community-guidelines/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
   ];
-  return entries;
 }
 
-async function popularTitleEntries(): Promise<MetadataRoute.Sitemap> {
-  // Hämta parallellt — om en failar behåller vi den andra.
-  const [moviesRes, tvRes] = await Promise.allSettled([
-    getPopularMovies(1),
-    getPopularTV(1),
+type Fetcher = (page: number) => Promise<{ results: { id: number }[] }>;
+
+async function collectIds(fetcher: Fetcher, pageCount: number): Promise<Set<number>> {
+  const ids = new Set<number>();
+  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
+  // 8-concurrent semaphoren i client.ts skyddar mot 429 även om vi fire:ar
+  // alla pages samtidigt.
+  const results = await Promise.allSettled(pages.map(p => fetcher(p)));
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      for (const item of r.value.results) {
+        if (item.id) ids.add(item.id);
+      }
+    }
+  }
+  return ids;
+}
+
+async function titleEntries(): Promise<MetadataRoute.Sitemap> {
+  const lastModified = new Date();
+  const entries: MetadataRoute.Sitemap = [];
+
+  const [popularMovies, topMovies, popularTV, topTV] = await Promise.all([
+    collectIds(getPopularMovies, POPULAR_PAGES),
+    collectIds(getTopRatedMovies, TOP_RATED_PAGES),
+    collectIds(getPopularTV, POPULAR_PAGES),
+    collectIds(getTopRatedTV, TOP_RATED_PAGES),
   ]);
 
-  const entries: MetadataRoute.Sitemap = [];
-  const lastModified = new Date();
+  const movieIds = new Set<number>([...popularMovies, ...topMovies]);
+  const tvIds = new Set<number>([...popularTV, ...topTV]);
 
-  if (moviesRes.status === 'fulfilled') {
-    const results = moviesRes.value.results.slice(0, TOP_TITLES_PER_TYPE);
-    for (const m of results) {
-      entries.push({
-        url: `${SITE_URL}/movie/${m.id}/`,
-        lastModified,
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      });
-    }
+  for (const id of movieIds) {
+    entries.push({
+      url: `${SITE_URL}/movie/${id}/`,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    });
   }
-
-  if (tvRes.status === 'fulfilled') {
-    const results = tvRes.value.results.slice(0, TOP_TITLES_PER_TYPE);
-    for (const t of results) {
-      entries.push({
-        url: `${SITE_URL}/tv/${t.id}/`,
-        lastModified,
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      });
-    }
+  for (const id of tvIds) {
+    entries.push({
+      url: `${SITE_URL}/tv/${id}/`,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    });
   }
 
   return entries;
-}
-
-function providerPageEntries(): MetadataRoute.Sitemap {
-  // Provider-specifika long-tail-pages finns inte idag, men blir naturligt
-  // nästa steg (t.ex. /streaming/netflix/). Så länge vi inte har routen
-  // returnerar vi inga entries här. Markören lämnas så vi minns att koppla
-  // in den när /streaming/[provider]-pages byggs.
-  return [];
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statics = staticEntries();
   try {
-    const titles = await popularTitleEntries();
-    return [...statics, ...titles, ...providerPageEntries()];
+    const titles = await titleEntries();
+    return [...statics, ...titles];
   } catch (err) {
     // Graceful degradation — TMDB nere vid build bryter inte deploy.
     console.warn('[sitemap] TMDB-fetch misslyckades, returnerar bara statics:', err);
-    return [...statics, ...providerPageEntries()];
+    return statics;
   }
 }

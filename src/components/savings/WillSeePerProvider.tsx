@@ -36,7 +36,7 @@ export default function WillSeePerProvider({ rows }: { rows: WillSeePerProviderR
               <tr key={row.providerId} className="border-b border-border-light last:border-b-0">
                 <td className="px-3 py-[6px] whitespace-nowrap w-[24px]">
                   {row.isSubscribed ? (
-                    <Check size={12} className="text-[#2e7d32]" />
+                    <Check size={12} className="text-season-done" />
                   ) : null}
                 </td>
                 <td className="px-2 py-[6px] whitespace-nowrap">

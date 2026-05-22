@@ -214,6 +214,14 @@ export function getPopularTV(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListRe
   return tmdbFetch('/tv/popular', { region: 'SE', page: String(page) }, opts);
 }
 
+export function getTopRatedMovies(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
+  return tmdbFetch('/movie/top_rated', { page: String(page) }, opts);
+}
+
+export function getTopRatedTV(page = 1, opts?: TmdbFetchOpts): Promise<TMDBListResponse<TMDBSearchResult>> {
+  return tmdbFetch('/tv/top_rated', { page: String(page) }, opts);
+}
+
 // Genres
 export function getMovieGenres(opts?: TmdbFetchOpts): Promise<{ genres: { id: number; name: string }[] }> {
   return tmdbFetch('/genre/movie/list', {}, opts);

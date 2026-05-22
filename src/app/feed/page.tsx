@@ -154,7 +154,7 @@ function FeedContent() {
               </div>
             </div>
             <div className="flex gap-2 items-center py-[3px] opacity-50">
-              <div className="w-[20px] h-[20px] rounded-full bg-[#6a7d5e] shrink-0" />
+              <div className="w-[20px] h-[20px] rounded-full bg-duo-moss shrink-0" />
               <div>
                 <div className="text-xxs"><b>Erik</b> <span className="text-text-muted">började följa</span> <b>Severance</b></div>
                 <div className="text-xxs text-text-muted">5 timmar sedan</div>
