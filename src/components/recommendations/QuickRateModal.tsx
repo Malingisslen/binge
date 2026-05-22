@@ -6,6 +6,7 @@ import { discoverMovies, posterUrl } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { X } from 'lucide-react';
+import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
 
 const MIN_QUICK_RATES = 5;
@@ -83,9 +84,14 @@ export default function QuickRateModal({ open, onClose }: Props) {
             {titles.map(t => {
               const poster = posterUrl(t.poster_path, 'w185');
               const isRated = rated.has(t.id);
+              const tone = t.genre_ids?.length ? toneForGenreIds(t.genre_ids) : toneForId(t.id);
               return (
                 <div key={t.id} className={`border border-border-main rounded-sm p-2 text-xs ${isRated ? 'opacity-50' : ''}`}>
-                  {poster && <img src={poster} alt={t.title ?? ''} width={120} height={180} className="w-full aspect-[2/3] object-cover rounded-sm mb-2" loading="lazy" decoding="async" />}
+                  {poster && (
+                    <div className={`poster duo-${tone} mb-2`}>
+                      <img src={poster} alt={t.title ?? ''} width={120} height={180} loading="lazy" decoding="async" />
+                    </div>
+                  )}
                   <div className="font-semibold mb-1 line-clamp-2">{t.title}</div>
                   <div className="grid grid-cols-2 gap-1">
                     <button onClick={() => markRated(t, 5)} className="bg-accent/10 text-accent text-[10px] py-1 rounded-sm">Sett 5★</button>

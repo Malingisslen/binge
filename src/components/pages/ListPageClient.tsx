@@ -9,6 +9,7 @@ import { usePublicList, useListMutations } from '@/hooks/useLists';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
+import { toneForId } from '@/lib/duotone';
 import type { TMDBSearchResult, UserList, UserListItem } from '@/types';
 
 export default function ListPageClient({ listId }: { listId: string }) {
@@ -89,8 +90,8 @@ export default function ListPageClient({ listId }: { listId: string }) {
             return (
               <div key={item.tmdbId} className="relative">
                 <Link href={href} className="no-underline text-text-primary block">
-                  <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] overflow-hidden">
-                    {poster && <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />}
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                    {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold truncate">{item.title}</div>
                 </Link>
@@ -174,15 +175,16 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                   className="w-full flex items-center gap-2 px-1 py-[3px] bg-transparent border-none cursor-pointer text-left hover:bg-surface-hover rounded-sm disabled:cursor-default disabled:opacity-60"
                 >
                   {poster ? (
-                    <img
-                      src={poster}
-                      alt=""
-                      width={24}
-                      height={36}
-                      loading="lazy"
-                      decoding="async"
-                      className="rounded-sm object-cover shrink-0"
-                    />
+                    <div className={`poster duo-${toneForId(r.id)} w-[24px] h-[36px] shrink-0`}>
+                      <img
+                        src={poster}
+                        alt=""
+                        width={24}
+                        height={36}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
                   ) : (
                     <div className="w-[24px] h-[36px] bg-rule-2 rounded-sm shrink-0" />
                   )}

@@ -13,6 +13,7 @@ import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
+import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 /**
@@ -290,15 +291,16 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                   className="flex items-center gap-2 px-2 py-[5px] bg-white border border-border-main rounded-sm"
                 >
                   {poster && (
-                    <img
-                      src={poster}
-                      alt=""
-                      className="w-[28px] h-[42px] rounded-sm object-cover shrink-0"
-                      loading="lazy"
-                      decoding="async"
-                      width={28}
-                      height={42}
-                    />
+                    <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
+                      <img
+                        src={poster}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        width={28}
+                        height={42}
+                      />
+                    </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-text-primary truncate">

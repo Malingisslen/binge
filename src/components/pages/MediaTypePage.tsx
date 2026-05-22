@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePopularTV, usePopularMovies } from '@/hooks/useTMDB';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import TitleGrid from '@/components/title/TitleGrid';
+import { toneForId } from '@/lib/duotone';
 import type { MediaType, TMDBSearchResult } from '@/types';
 
 const CONFIG = {
@@ -63,8 +64,8 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
                 <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-text-primary">
-                  <div className="aspect-[2/3] bg-rule-2 rounded-sm mb-[3px] overflow-hidden">
-                    {poster && <img src={poster} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" width={342} height={513} />}
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                    {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</div>
                 </Link>

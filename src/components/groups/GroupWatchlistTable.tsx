@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
+import { toneForId } from '@/lib/duotone';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 
 /**
@@ -75,16 +76,17 @@ export function GroupWatchlistTable({
                   <td className="px-3 py-[6px]">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={posterUrl(item.posterPath, 'w92') ?? ''}
-                          alt=""
-                          className="w-[28px] h-[42px] object-cover rounded-sm shrink-0"
-                          loading="lazy"
-                          decoding="async"
-                          width={28}
-                          height={42}
-                        />
+                        <div className={`poster duo-${toneForId(item.tmdbId)} w-[28px] h-[42px] shrink-0`}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={posterUrl(item.posterPath, 'w92') ?? ''}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            width={28}
+                            height={42}
+                          />
+                        </div>
                       )}
                       <div className="min-w-0">
                         <Link

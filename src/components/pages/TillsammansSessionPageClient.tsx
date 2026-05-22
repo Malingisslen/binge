@@ -11,6 +11,7 @@ import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress } from '@/lib/together/matching';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
+import { toneForId } from '@/lib/duotone';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
@@ -442,7 +443,9 @@ function SwipeCard({
     <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
       <div className="flex gap-3 p-3">
         {poster ? (
-          <img src={poster} alt="" className="w-[140px] h-[210px] object-cover rounded-sm shrink-0 bg-border-light" loading="eager" decoding="async" width={140} height={210} />
+          <div className={`poster duo-${toneForId(cand.tmdbId)} w-[140px] h-[210px] shrink-0`}>
+            <img src={poster} alt="" loading="eager" decoding="async" width={140} height={210} />
+          </div>
         ) : (
           <div className="w-[140px] h-[210px] bg-border-light rounded-sm shrink-0" />
         )}
@@ -627,7 +630,9 @@ function MatchList({
                 className="flex items-center gap-2 flex-1 min-w-0 no-underline text-text-primary"
               >
                 {poster ? (
-                  <img src={poster} alt="" className="w-[28px] h-[42px] object-cover rounded-sm" loading="lazy" decoding="async" width={28} height={42} />
+                  <div className={`poster duo-${toneForId(m.candidate.tmdbId)} w-[28px] h-[42px]`}>
+                    <img src={poster} alt="" loading="lazy" decoding="async" width={28} height={42} />
+                  </div>
                 ) : (
                   <div className="w-[28px] h-[42px] bg-border-light rounded-sm" />
                 )}

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSearch } from '@/hooks/useTMDB';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
+import { toneForId } from '@/lib/duotone';
 import type { ResolvedUser } from '@/lib/firebase/username';
 
 interface SearchDropdownProps {
@@ -131,7 +132,9 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
                 }`}
               >
                 {poster ? (
-                  <img src={poster} alt="" className="w-[26px] h-[39px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={26} height={39} />
+                  <div className={`poster duo-${toneForId(item.id)} w-[26px] h-[39px] shrink-0`}>
+                    <img src={poster} alt="" loading="lazy" decoding="async" width={26} height={39} />
+                  </div>
                 ) : (
                   <div className="w-[26px] h-[39px] rounded-sm bg-rule-2 shrink-0" />
                 )}
