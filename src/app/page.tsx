@@ -85,12 +85,6 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-page">
-      {/* FAQ JSON-LD for LLM/AI search discoverability */}
-      <script
-        type="application/ld+json"
-        // Content is a hardcoded constant — no XSS risk
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
-      />
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
           <h1 className="text-[32px] font-extrabold text-accent mb-2">
@@ -175,14 +169,18 @@ function EmptyLibrary() {
   );
 }
 
-export default function DashboardPage() {
-  const { user, loading } = useAuth();
+function DashboardSkeleton() {
+  // Visas för inloggade återvändande användare medan Firebase Auth resolveras.
+  // Aldrig prerendrad — `wasLoggedIn` är alltid `false` på servern (ingen
+  // localStorage). Crawlers ser därför LandingPage istället. Skelettet är
+  // medvetet tomt så CLS hålls låg.
+  return <div className="min-h-[40vh]" aria-hidden="true" />;
+}
+
+function Dashboard() {
   const { items } = useWatchlist();
   const calendarEntries = useCalendarEntries();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
-  // Compute focal + week-summary once per render. Pure function, cheap.
   const { focal, totalThisWeek } = useMemo(() => {
     const focal = pickFocalEntry(calendarEntries);
     const today = new Date();
@@ -195,18 +193,6 @@ export default function DashboardPage() {
     }).length;
     return { focal, totalThisWeek };
   }, [calendarEntries]);
-
-  if (!mounted || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <div className="text-sm text-ink-3">Laddar...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LandingPage />;
-  }
 
   const hasLibrary = items.length > 0;
   const focalKey = focal ? focalEntryKey(focal) : undefined;
@@ -230,6 +216,59 @@ export default function DashboardPage() {
           </aside>
         </div>
       )}
+    </>
+  );
+}
+
+export default function DashboardPage() {
+  const { user, loading } = useAuth();
+
+  // Lazy initializer körs en gång vid mount (klient-sidigt). På servern är
+  // typeof window === 'undefined' → wasLoggedIn = false → LandingPage
+  // rendreras i prerendrad HTML, vilket är vad Googlebot och LLM-crawlers ska
+  // se. Inloggade återvändande användare får true på klienten och hoppar
+  // direkt till skeletten istället för en LandingPage-flicker. AuthContext
+  // skriver/rensar flaggan i onAuthStateChanged.
+  const [wasLoggedIn] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return window.localStorage.getItem('binge:wasLoggedIn') === '1'; }
+    catch { return false; }
+  });
+
+  // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
+  const faqLd = (
+    <script
+      type="application/ld+json"
+      // Hardcoded konstant — ingen XSS-risk.
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+    />
+  );
+
+  // Inloggad återvändande: visa skelett tills auth resolveras.
+  if (loading && wasLoggedIn) {
+    return (
+      <>
+        {faqLd}
+        <DashboardSkeleton />
+      </>
+    );
+  }
+
+  // Anonym, prerender, eller utloggad: rendera LandingPage. Detta är vad
+  // crawlers ser i out/index.html.
+  if (!user) {
+    return (
+      <>
+        {faqLd}
+        <LandingPage />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {faqLd}
+      <Dashboard />
     </>
   );
 }

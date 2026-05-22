@@ -219,16 +219,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(profile);
           setUid(firebaseUser.uid);
           setEmailVerified(firebaseUser.emailVerified);
+          // SSR-flagga för startsidan: prerendrad HTML är alltid LandingPage
+          // (för Googlebot + LLM-crawlers). Inloggade återvändande användare
+          // hoppar direkt till dashboard-skeletten istället för att se en
+          // LandingPage-flicker — page.tsx läser den här flaggan synkront
+          // i en lazy useState-init innan hydration.
+          try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
         } catch (err) {
           console.error('Failed to load user profile:', err);
           setUser(null);
           setUid(null);
           setEmailVerified(false);
+          try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
         }
       } else {
         setUser(null);
         setUid(null);
         setEmailVerified(false);
+        try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
       }
       setLoading(false);
     });

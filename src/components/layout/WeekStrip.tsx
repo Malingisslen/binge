@@ -41,9 +41,10 @@ export default function WeekStrip({
 
   return (
     <div className="topbar-week" role="navigation" aria-label="Veckonavigering">
-      <Link href="/calendar/" className="vnum" aria-label={`Vecka ${week.weekNumber}`}>
+      <Link href="/calendar/" className="vnum">
         <span className="v">v{week.weekNumber}</span>
         <span className="yr">{week.year}</span>
+        <span className="sr-only">, vecka {week.weekNumber}</span>
       </Link>
       {week.days.map((d, i) => {
         const isToday = sameDay(d, today);
@@ -54,12 +55,18 @@ export default function WeekStrip({
             key={key}
             href={`/calendar/?day=${key}`}
             className={`day${isToday ? ' today' : ''}`}
-            aria-label={`${DAY_LABELS[i]} ${d.getDate()}${count > 0 ? `, ${count} avsnitt` : ''}`}
           >
             <span className="lab">{DAY_LABELS[i]}</span>
             <span className="num">{d.getDate()}</span>
             <span className="count">
-              {count > 0 ? <strong>{count}</strong> : '—'}
+              {count > 0 ? (
+                <>
+                  <strong>{count}</strong>
+                  <span className="sr-only"> avsnitt</span>
+                </>
+              ) : (
+                <span aria-hidden="true">—</span>
+              )}
             </span>
           </Link>
         );
