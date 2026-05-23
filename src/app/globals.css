@@ -221,16 +221,41 @@ button { font: inherit; cursor: pointer; }
 }
 .topbar-week .day .count {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--ink-3);
   margin-top: auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  overflow: hidden;
 }
-.topbar-week .day .count strong { color: var(--ink); font-weight: 500; }
+.topbar-week .day .count strong {
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.topbar-week .day .count .ep-x {
+  color: var(--ink-3);
+  flex: 0 0 auto;
+}
+.topbar-week .day .more {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
 .topbar-week .day.today { background: var(--cal-soft); }
 .topbar-week .day.today:hover { background: var(--cal-soft); filter: brightness(0.98); }
 .topbar-week .day.today .lab,
 .topbar-week .day.today .num,
 .topbar-week .day.today .count strong { color: var(--cal-deep); }
+.topbar-week .day.today .more { color: var(--cal-deep); opacity: 0.7; }
 .topbar-week .day.today::before {
   content: "";
   position: absolute;

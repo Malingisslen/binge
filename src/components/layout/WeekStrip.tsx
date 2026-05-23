@@ -2,32 +2,76 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { getWeekStart, getWeekNumber, useCalendarEntries } from '@/hooks/useCalendar';
+import { getWeekStart, getWeekNumber, useCalendarEntries, type CalendarEntry } from '@/hooks/useCalendar';
+import { useWatchlist } from '@/hooks/useWatchlist';
 
 // The persistent 7-day strip that sits at the top of every page. Today wears
 // the plum picker wash + 2px plum rule (semantic = "where in time the user
 // currently is"). Saffran is reserved for "now / live / decisive" (CTA,
 // tonight's airing episode), not for today.
 //
-// Counts per day deriveras direkt från `useCalendarEntries()`. Den delar
-// react-query-cache med hem- och kalendersidorna (queryKeys `['tv', id]` +
-// `['tv-season', id, num]`) — så på sidor som redan har datan är detta gratis.
-// På övriga sidor är det en engångskostnad per session (staleTime 10–30 min).
+// Per dag visar vi den högst rankade serien + ev. avsnittsantal (×N) och en
+// "+M till"-hint om fler serier släpper samma dag. Klick på cellen går till
+// /calendar/?day=YYYY-MM-DD där allt listas. Aggregeringen kör mot
+// `useCalendarEntries()`-cachen — gratis på sidor som redan har datan.
 
 const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
+
+interface DaySeries {
+  tmdbId: number;
+  title: string;
+  episodes: number;
+  rating: number | null;
+}
+
+function aggregateByDay(
+  entries: CalendarEntry[],
+  ratingFor: (tmdbId: number) => number | null,
+): Record<string, DaySeries[]> {
+  const byDay = new Map<string, Map<number, DaySeries>>();
+  for (const e of entries) {
+    let day = byDay.get(e.airDate);
+    if (!day) {
+      day = new Map();
+      byDay.set(e.airDate, day);
+    }
+    const existing = day.get(e.tmdbId);
+    if (existing) {
+      existing.episodes += 1;
+    } else {
+      day.set(e.tmdbId, {
+        tmdbId: e.tmdbId,
+        title: e.title,
+        episodes: 1,
+        rating: ratingFor(e.tmdbId),
+      });
+    }
+  }
+  const result: Record<string, DaySeries[]> = {};
+  for (const [day, map] of byDay) {
+    const series = Array.from(map.values());
+    // Rating desc (null sist), tie-break på titel för stabil ordning över renders.
+    series.sort((a, b) => {
+      const ra = a.rating ?? -1;
+      const rb = b.rating ?? -1;
+      if (ra !== rb) return rb - ra;
+      return a.title.localeCompare(b.title, 'sv');
+    });
+    result[day] = series;
+  }
+  return result;
+}
 
 export default function WeekStrip() {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
 
   const { entries } = useCalendarEntries();
-  const countsByDay = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const e of entries) {
-      m[e.airDate] = (m[e.airDate] ?? 0) + 1;
-    }
-    return m;
-  }, [entries]);
+  const { getItem } = useWatchlist();
+  const seriesByDay = useMemo(
+    () => aggregateByDay(entries, (id) => getItem(id)?.rating ?? null),
+    [entries, getItem],
+  );
 
   const week = useMemo(() => {
     if (!today) return null;
@@ -73,25 +117,42 @@ export default function WeekStrip() {
       {week.days.map((d, i) => {
         const isToday = sameDay(d, today);
         const key = isoDateKey(d);
-        const count = countsByDay[key] ?? 0;
+        const series = seriesByDay[key] ?? [];
+        const top = series[0];
+        const rest = series.length - 1;
+        const tooltip = series
+          .map(s => (s.episodes > 1 ? `${s.title} × ${s.episodes}` : s.title))
+          .join('\n');
         return (
           <Link
             key={key}
             href={`/calendar/?day=${key}`}
             className={`day${isToday ? ' today' : ''}`}
+            title={tooltip || undefined}
           >
             <span className="lab">{DAY_LABELS[i]}</span>
             <span className="num">{d.getDate()}</span>
             <span className="count">
-              {count > 0 ? (
+              {top ? (
                 <>
-                  <strong>{count}</strong>
-                  <span className="sr-only"> avsnitt</span>
+                  <strong>{top.title}</strong>
+                  {top.episodes > 1 && (
+                    <>
+                      <span className="ep-x" aria-hidden="true"> × {top.episodes}</span>
+                      <span className="sr-only">, {top.episodes} avsnitt</span>
+                    </>
+                  )}
                 </>
               ) : (
                 <span aria-hidden="true">—</span>
               )}
             </span>
+            {rest > 0 && (
+              <span className="more">
+                +{rest} till
+                <span className="sr-only">{rest === 1 ? ' serie' : ' serier'}</span>
+              </span>
+            )}
           </Link>
         );
       })}
