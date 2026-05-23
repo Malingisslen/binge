@@ -26,7 +26,7 @@ function pad2(n: number): string {
 function formatUnairedRunt(iso: string): string {
   const wd = shortSwedishWeekday(iso);
   const d = new Date(iso + 'T00:00:00');
-  return `${wd.toLowerCase()} ${d.getDate()}/${d.getMonth() + 1}`;
+  return `${wd} ${d.getDate()}/${d.getMonth() + 1}`;
 }
 
 export default function EpisodeRow({

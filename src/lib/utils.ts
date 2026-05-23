@@ -35,6 +35,5 @@ export function daysBetween(fromIso: string, to: Date = new Date()): number {
 }
 
 export function shortSwedishWeekday(iso: string): string {
-  const wd = new Date(iso + 'T00:00:00').toLocaleDateString('sv-SE', { weekday: 'short' }).slice(0, 3);
-  return wd.charAt(0).toUpperCase() + wd.slice(1);
+  return new Date(iso + 'T00:00:00').toLocaleDateString('sv-SE', { weekday: 'short' }).slice(0, 3);
 }

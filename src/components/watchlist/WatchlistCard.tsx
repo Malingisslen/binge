@@ -72,9 +72,9 @@ export function WatchlistCard({
       return { text: `Ligger efter · S${item.lastWatchedSeason}`, tone: 'accent' };
     }
     if (subState === 'ikapp') {
-      return { text: upcomingWd ? `Nytt ${upcomingWd.toLowerCase()}` : 'Ikapp', tone: upcomingWd ? 'accent' : 'done' };
+      return { text: upcomingWd ? `Nytt ${upcomingWd}` : 'Ikapp', tone: upcomingWd ? 'accent' : 'done' };
     }
-    if (upcomingWd) return { text: `Nytt ${upcomingWd.toLowerCase()}`, tone: 'accent' };
+    if (upcomingWd) return { text: `Nytt ${upcomingWd}`, tone: 'accent' };
     if (!item.totalSeasons) return { text: '—', tone: 'muted' };
     if (item.lastWatchedSeason) return { text: `Pågår S${item.lastWatchedSeason}`, tone: 'muted' };
     return { text: 'Ej påbörjad', tone: 'muted' };
