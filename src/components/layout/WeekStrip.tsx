@@ -37,21 +37,22 @@ export default function WeekStrip({
 
   if (!week || !today) {
     // Pre-mount: rendera STRUKTUR med statiska dagsetiketter men placeholder
-    // för dynamiska värden (vecknummer, datum). Server-side rendering ger då
-    // ett komplett visuellt ramverk istället för en tom 64px-balk; bara
-    // numren tonar in efter useEffect. Eliminerar content-pop-flickern.
+    // för dynamiska värden (vecknummer, datum). Använder Link-element istället
+    // för span så att DOM-typen inte byts vid hydration — React kan
+    // uppdatera href/text in-place utan att replace:a <a>-elementen. Eliminerar
+    // både content-pop OCH element-type-flickern.
     return (
       <div className="topbar-week" role="navigation" aria-label="Veckonavigering" aria-hidden="true">
-        <span className="vnum">
+        <Link href="/calendar/" prefetch={false} className="vnum">
           <span className="v">&nbsp;</span>
           <span className="yr">&nbsp;</span>
-        </span>
+        </Link>
         {DAY_LABELS.map(label => (
-          <span key={label} className="day">
+          <Link key={label} href="/calendar/" prefetch={false} className="day">
             <span className="lab">{label}</span>
             <span className="num">&nbsp;</span>
             <span className="count" aria-hidden="true">&nbsp;</span>
-          </span>
+          </Link>
         ))}
       </div>
     );

@@ -33,14 +33,8 @@ export default function TopbarActions() {
   useClickOutside(bellRef, closeBell);
   useClickOutside(sessionsRef, closeSessions);
   const [mounted, setMounted] = useState(false);
-  // Återvändande inloggad → vi vet att auth *kommer* att resolveras till en
-  // user, så vi kan rendera ett avatar-skelett direkt istället för tom yta.
-  // Samma localStorage-flagga som inline-script i layout.tsx läser av.
-  const [returningUser, setReturningUser] = useState(false);
   useEffect(() => {
     setMounted(true);
-    try { setReturningUser(window.localStorage.getItem('binge:wasLoggedIn') === '1'); }
-    catch { /* localStorage kan blockas av tracking-prevention */ }
   }, []);
 
   const toggleBell = () => {
@@ -193,23 +187,32 @@ export default function TopbarActions() {
           )}
         </div>
       )}
-      {mounted && user ? (
+      {user ? (
         <Link href="/settings/" className="topbar-avatar-link" aria-label={`Inställningar (${user.displayName})`}>
           <div className="avatar">{user.displayName.charAt(0).toUpperCase()}</div>
         </Link>
-      ) : mounted && authLoading && returningUser ? (
-        // Återvändande inloggad, auth fortfarande loading → rendera avatar-
-        // skelett. När auth resolveras ersätts den med riktig avatar med
-        // initial. Smooth content-transition istället för tom → avatar.
-        <div className="topbar-avatar-link" aria-hidden="true">
-          <div className="avatar" />
-        </div>
-      ) : mounted && !authLoading ? (
-        // Anonym + auth resolverad → visa "Logga in"-knappen.
-        <button onClick={signIn} className="topbar-signin-btn">
-          Logga in
-        </button>
-      ) : null}
+      ) : (
+        <>
+          {/*
+            Avatar-skelett som *alltid* renderas server-side när !user. CSS
+            i globals.css döljer den för anonyma users men visar den för
+            returning users (.returning-user-klassen sätts av inline-script
+            i <head>). Eliminerar empty → skelett → avatar-flickern: så
+            fort first paint sker har returning users redan avatar-formen.
+            När auth resolveras byts hela `!user`-grenen mot Link-grenen ovan.
+          */}
+          <div className="topbar-avatar-link topbar-avatar-skeleton" aria-hidden="true">
+            <div className="avatar" />
+          </div>
+          {mounted && !authLoading && (
+            // Anonym + auth resolverad → "Logga in". CSS gör att denna och
+            // skelettet inte krockar (skeleton hidden för anonyma).
+            <button onClick={signIn} className="topbar-signin-btn">
+              Logga in
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }

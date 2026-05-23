@@ -945,6 +945,13 @@ button { font: inherit; cursor: pointer; }
 .returning-user [data-pre-state="landing"] { display: none; }
 .returning-user [data-pre-state="returning-skeleton"] { display: block; }
 
+/* Avatar-skelett i topbar — renderas alltid server-side när !user, men dölj
+   för anonyma users via CSS (de ska se "Logga in"-knappen istället). För
+   returning users syns skelettet från first paint tills React swappar in
+   riktig avatar med användarens initial. */
+.topbar-avatar-skeleton { display: none; }
+.returning-user .topbar-avatar-skeleton { display: flex; }
+
 /* ─── "Senare i veckan" filmstrip ───────────────────────────────────────── */
 .filmstrip {
   display: grid;
