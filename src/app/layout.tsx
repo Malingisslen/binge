@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
-import { Albert_Sans, JetBrains_Mono } from 'next/font/google';
+import { Albert_Sans } from 'next/font/google';
 import './globals.css';
 import Providers from '@/components/Providers';
 import AppShell from '@/components/layout/AppShell';
@@ -8,20 +8,12 @@ import AppShell from '@/components/layout/AppShell';
 const SITE_URL = 'https://binge.nu';
 const OG_IMAGE = `${SITE_URL}/og-image.svg`;
 
-// Direction H specifies two type families and nothing else: Albert Sans for
-// the sans system (400/500/600/700) and JetBrains Mono for meta/labels
-// (400/500/600). Both are exposed as CSS variables so the design tokens in
-// globals.css (--sans / --mono) can reference them.
+// Albert Sans är den enda typografin i designen. --mono-tokenen finns kvar i
+// globals.css som alias mot --sans tills alla callsites är städade.
 const albertSans = Albert_Sans({
   subsets: ['latin', 'latin-ext'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
-  display: 'swap',
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '500', '600'],
-  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -74,7 +66,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="sv" suppressHydrationWarning className={`${albertSans.variable} ${jetbrainsMono.variable}`}>
+    <html lang="sv" suppressHydrationWarning className={albertSans.variable}>
       <head>
         <link rel="preconnect" href="https://api.themoviedb.org" crossOrigin="" />
         <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="" />

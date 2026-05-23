@@ -51,7 +51,10 @@
   --duo-oxblood: oklch(0.38 0.05 20);
 
   --sans: var(--font-sans, 'Albert Sans'), system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono: var(--font-mono, 'JetBrains Mono'), ui-monospace, SFMono-Regular, monospace;
+  /* --mono är medvetet aliasat till sans-stacken. Designen ska inte längre
+     använda en monospace-typsnitt; alla `font-family: var(--mono)`-deklarationer
+     i kodbasen renderas som sans tills de städas bort mekaniskt. */
+  --mono: var(--sans);
 }
 
 * { box-sizing: border-box; }

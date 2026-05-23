@@ -50,7 +50,7 @@ export function SegmentError({
         {body ?? 'Kunde inte ladda den här delen. Försök igen om en stund.'}
       </p>
       {error.digest && (
-        <p className="text-[11px] text-text-muted mb-4 font-mono">ref: {error.digest}</p>
+        <p className="text-[11px] text-text-muted mb-4">ref: {error.digest}</p>
       )}
       <button
         onClick={reset}

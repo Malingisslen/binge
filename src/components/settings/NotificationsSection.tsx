@@ -38,11 +38,11 @@ export function NotificationsSection() {
         // token att skicka till.
         await enablePushForUser(uid!);
         await updateNotificationSettings({ pushEnabled: true });
-        toast('Push-notifs aktiverade');
+        toast('Push-notiser på');
       } else {
         await disablePushForUser(uid!);
         await updateNotificationSettings({ pushEnabled: false });
-        toast('Push-notifs avaktiverade');
+        toast('Push-notiser av');
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');

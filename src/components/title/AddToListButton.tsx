@@ -36,7 +36,7 @@ export default function AddToListButton({ tmdbId, mediaType, title, posterPath }
       {open && (
         <div className="absolute left-0 top-full mt-1 w-[200px] bg-surface border border-border-main rounded-sm z-50 max-h-[200px] overflow-y-auto">
           {lists.length === 0 ? (
-            <div className="px-2 py-2 text-xs text-text-muted">Inga listor. Skapa en i Listor-sidan.</div>
+            <div className="px-2 py-2 text-xs text-text-muted">Inga listor. Skapa en i Listor.</div>
           ) : (
             lists.map(list => {
               const isInList = list.items.some(i => i.tmdbId === tmdbId);

@@ -166,7 +166,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     ? 'Inga titlar matchar dina filter. Justera ovan eller rensa.'
     : totalCount === 0
       ? 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.'
-      : 'Inga titlar att visa.';
+      : 'Inga titlar i den här vyn. Pröva ett annat filter eller status ovan.';
 
   return (
     <>

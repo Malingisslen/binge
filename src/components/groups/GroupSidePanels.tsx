@@ -159,7 +159,7 @@ export function InvitePanel({
               <input
                 readOnly
                 value={inviteUrl}
-                className="flex-1 px-2 py-1 text-xxs font-mono border border-border-main rounded-sm bg-white truncate"
+                className="flex-1 px-2 py-1 text-xxs border border-border-main rounded-sm bg-white truncate"
                 onFocus={e => e.currentTarget.select()}
               />
               <button

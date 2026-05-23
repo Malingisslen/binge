@@ -9,7 +9,7 @@ Binge (binge.nu) is a Swedish media tracker for movies and TV shows. Users track
 ## Tech Stack
 
 - **Frontend:** Next.js 14 (App Router), TypeScript, Tailwind CSS, React Query (TanStack Query v5)
-- **Auth/DB:** Firebase (Authentication + Cloud Firestore). Cloud Functions är inte aktiverade — Spark-plan.
+- **Auth/DB:** Firebase (Authentication + Cloud Firestore + Cloud Functions). Blaze-plan (pay-as-you-go, 25 SEK/mån cap med 50/90/100% alerts). Functions-koden bor i `functions/src/index.ts` och kompileras till `functions/lib/`. Används bl.a. för FCM push-notifs.
 - **External API:** TMDB API v3 — all movie/TV metadata, Swedish watch providers
 - **Hosting:** Firebase Hosting (static export `output: 'export'`) behind Cloudflare CDN
 - **Observability:** Sentry (opt-in via `NEXT_PUBLIC_SENTRY_DSN`), Plausible (cookie-free)

@@ -89,7 +89,7 @@ export default function QuickAddButton({
       <button
         onClick={async () => {
           if (!user) {
-            try { await signIn(); } catch { toast('Inloggning misslyckades'); }
+            try { await signIn(); } catch { toast('Inloggning misslyckades. Försök igen om en stund.'); }
             return;
           }
           setOpen(!open);
