@@ -250,10 +250,14 @@ function Dashboard() {
         <div className="hem-grid">
           <div>
             {isLoading ? (
-              // Reservera vertikalt utrymme medan watchlist + TMDB resolverar
-              // — matchar ungefär höjden på HemFocal (21:9 backdrop + meta-
-              // rad) så layouten inte hoppar när focal/LaterThisWeek tonar in.
-              <div className="hem-focal-skeleton" aria-hidden="true" />
+              // Reservera utrymme för BÅDA focal + filmstrip så hela
+              // main-column-höjden är stabil under loading. Annars växer
+              // sektion plötsligt med ~370px när entries resolveras
+              // (focal-skeleton 530 → focal + 44px gap + filmstrip 330).
+              <>
+                <div className="hem-focal-skeleton" aria-hidden="true" />
+                <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+              </>
             ) : (
               <>
                 {focal && <HemFocal entry={focal} />}

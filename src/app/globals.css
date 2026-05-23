@@ -908,11 +908,51 @@ button { font: inherit; cursor: pointer; }
   .focal .catch { grid-template-columns: 1fr; }
 }
 
-/* Skeleton som reserverar utrymme medan kalender-vattenfallet (tv-shows →
-   season-episoder) resolverar. Matchar ungefär focal-blockets vertikala
-   fotavtryck så CLS hålls låg och så att hero-copy:n inte kortvarigt
-   åtföljs av en tom yta. Subtil shimmer för att signalera liv. */
+/* Skeleton för focal-blocket — matchar real .focal:s struktur exakt så
+   ingen höjdhopp sker vid swap. Real .focal har:
+   - .still med aspect-ratio 21/9 (backdrop)
+   - .body med ~160px höjd (poster + titel + meta + CTA)
+   Mätningar på 864px-bred container ger ~530px total: 370 backdrop + 160 body.
+   Skeleton replikerar det via ::before för backdrop + padding-bottom för body. */
 .hem-focal-skeleton {
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  overflow: hidden;
+  padding-bottom: 160px;
+  background: linear-gradient(
+    90deg,
+    var(--surface) 0%,
+    oklch(0.96 0.005 80) 50%,
+    var(--surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: hem-focal-shimmer 1.6s ease-in-out infinite;
+}
+.hem-focal-skeleton::before {
+  content: '';
+  display: block;
+  aspect-ratio: 21 / 9;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+}
+@media (max-width: 760px) {
+  /* På smal viewport krymper både body och poster — 120px räcker. */
+  .hem-focal-skeleton { padding-bottom: 120px; }
+}
+@keyframes hem-focal-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hem-focal-skeleton { animation: none; }
+}
+
+/* Filmstrip-skeleton — matchar .filmstrip-sektionens fotavtryck:
+   sect-h-rad (~30px) + 18px-gap + filmstrip (grid med 5 cards, ~283px).
+   Reserverar 330px så main-column inte växer plötsligt när
+   LaterThisWeek populeras. Marginal-top matchar avstånd från focal. */
+.hem-filmstrip-skeleton {
+  margin-top: 44px;
+  height: 330px;
   border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
   border-radius: 8px;
   background: linear-gradient(
@@ -922,15 +962,10 @@ button { font: inherit; cursor: pointer; }
     var(--surface) 100%
   );
   background-size: 200% 100%;
-  aspect-ratio: 16 / 9;
   animation: hem-focal-shimmer 1.6s ease-in-out infinite;
 }
-@keyframes hem-focal-shimmer {
-  0%   { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .hem-focal-skeleton { animation: none; }
+  .hem-filmstrip-skeleton { animation: none; }
 }
 
 /* ─── Pre-hydration login-state-toggle ──────────────────────────────────────
