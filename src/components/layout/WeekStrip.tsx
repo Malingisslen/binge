@@ -2,27 +2,32 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
+import { getWeekStart, getWeekNumber, useCalendarEntries } from '@/hooks/useCalendar';
 
 // The persistent 7-day strip that sits at the top of every page. Today wears
 // the plum picker wash + 2px plum rule (semantic = "where in time the user
 // currently is"). Saffran is reserved for "now / live / decisive" (CTA,
 // tonight's airing episode), not for today.
 //
-// `countsByDay` is optional and keyed by `YYYY-MM-DD` (local) — pages that
-// already render the calendar entries can pass them in; pages that don't
-// leave them out and the strip shows a "—" placeholder rather than firing
-// a TMDB fetch from the chrome.
+// Counts per day deriveras direkt från `useCalendarEntries()`. Den delar
+// react-query-cache med hem- och kalendersidorna (queryKeys `['tv', id]` +
+// `['tv-season', id, num]`) — så på sidor som redan har datan är detta gratis.
+// På övriga sidor är det en engångskostnad per session (staleTime 10–30 min).
 
 const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
 
-export default function WeekStrip({
-  countsByDay,
-}: {
-  countsByDay?: Record<string, number>;
-}) {
+export default function WeekStrip() {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
+
+  const { entries } = useCalendarEntries();
+  const countsByDay = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const e of entries) {
+      m[e.airDate] = (m[e.airDate] ?? 0) + 1;
+    }
+    return m;
+  }, [entries]);
 
   const week = useMemo(() => {
     if (!today) return null;
@@ -68,7 +73,7 @@ export default function WeekStrip({
       {week.days.map((d, i) => {
         const isToday = sameDay(d, today);
         const key = isoDateKey(d);
-        const count = countsByDay?.[key] ?? 0;
+        const count = countsByDay[key] ?? 0;
         return (
           <Link
             key={key}
