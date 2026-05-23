@@ -16,7 +16,7 @@ import { getProvider } from '@/lib/tmdb/providers';
 // chrome around it changes — keeps Sentry-shaped logic untouched in Phase 1.
 
 export default function TopbarActions() {
-  const { user, signIn, markNotificationsSeen } = useAuth();
+  const { user, loading: authLoading, signIn, markNotificationsSeen } = useAuth();
   const {
     notifications, friendRequests, recentPicks,
     unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
@@ -33,7 +33,15 @@ export default function TopbarActions() {
   useClickOutside(bellRef, closeBell);
   useClickOutside(sessionsRef, closeSessions);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // Återvändande inloggad → vi vet att auth *kommer* att resolveras till en
+  // user, så vi kan rendera ett avatar-skelett direkt istället för tom yta.
+  // Samma localStorage-flagga som inline-script i layout.tsx läser av.
+  const [returningUser, setReturningUser] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    try { setReturningUser(window.localStorage.getItem('binge:wasLoggedIn') === '1'); }
+    catch { /* localStorage kan blockas av tracking-prevention */ }
+  }, []);
 
   const toggleBell = () => {
     const next = !bellOpen;
@@ -189,7 +197,15 @@ export default function TopbarActions() {
         <Link href="/settings/" className="topbar-avatar-link" aria-label={`Inställningar (${user.displayName})`}>
           <div className="avatar">{user.displayName.charAt(0).toUpperCase()}</div>
         </Link>
-      ) : mounted ? (
+      ) : mounted && authLoading && returningUser ? (
+        // Återvändande inloggad, auth fortfarande loading → rendera avatar-
+        // skelett. När auth resolveras ersätts den med riktig avatar med
+        // initial. Smooth content-transition istället för tom → avatar.
+        <div className="topbar-avatar-link" aria-hidden="true">
+          <div className="avatar" />
+        </div>
+      ) : mounted && !authLoading ? (
+        // Anonym + auth resolverad → visa "Logga in"-knappen.
         <button onClick={signIn} className="topbar-signin-btn">
           Logga in
         </button>

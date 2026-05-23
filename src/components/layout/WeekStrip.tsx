@@ -36,7 +36,25 @@ export default function WeekStrip({
   }, [today]);
 
   if (!week || !today) {
-    return <div className="topbar-week h-[64px]" aria-hidden="true" />;
+    // Pre-mount: rendera STRUKTUR med statiska dagsetiketter men placeholder
+    // för dynamiska värden (vecknummer, datum). Server-side rendering ger då
+    // ett komplett visuellt ramverk istället för en tom 64px-balk; bara
+    // numren tonar in efter useEffect. Eliminerar content-pop-flickern.
+    return (
+      <div className="topbar-week" role="navigation" aria-label="Veckonavigering" aria-hidden="true">
+        <span className="vnum">
+          <span className="v">&nbsp;</span>
+          <span className="yr">&nbsp;</span>
+        </span>
+        {DAY_LABELS.map(label => (
+          <span key={label} className="day">
+            <span className="lab">{label}</span>
+            <span className="num">&nbsp;</span>
+            <span className="count" aria-hidden="true">&nbsp;</span>
+          </span>
+        ))}
+      </div>
+    );
   }
 
   return (
