@@ -120,15 +120,11 @@ export default function WeekStrip() {
         const series = seriesByDay[key] ?? [];
         const top = series[0];
         const rest = series.length - 1;
-        const tooltip = series
-          .map(s => (s.episodes > 1 ? `${s.title} × ${s.episodes}` : s.title))
-          .join('\n');
         return (
           <Link
             key={key}
             href={`/calendar/?day=${key}`}
             className={`day${isToday ? ' today' : ''}`}
-            title={tooltip || undefined}
           >
             <span className="lab">{DAY_LABELS[i]}</span>
             <span className="num">{d.getDate()}</span>
@@ -138,8 +134,14 @@ export default function WeekStrip() {
                   <strong>{top.title}</strong>
                   {top.episodes > 1 && (
                     <>
-                      <span className="ep-x" aria-hidden="true"> × {top.episodes}</span>
+                      <span className="ep-x" aria-hidden="true"> ×{top.episodes}</span>
                       <span className="sr-only">, {top.episodes} avsnitt</span>
+                    </>
+                  )}
+                  {rest > 0 && (
+                    <>
+                      <span className="more" aria-hidden="true"> +{rest}</span>
+                      <span className="sr-only">, plus {rest} {rest === 1 ? 'serie till' : 'serier till'}</span>
                     </>
                   )}
                 </>
@@ -147,11 +149,17 @@ export default function WeekStrip() {
                 <span aria-hidden="true">—</span>
               )}
             </span>
-            {rest > 0 && (
-              <span className="more">
-                +{rest} till
-                <span className="sr-only">{rest === 1 ? ' serie' : ' serier'}</span>
-              </span>
+            {series.length > 0 && (
+              <div className="day-pop" role="presentation">
+                <ul>
+                  {series.map(s => (
+                    <li key={s.tmdbId}>
+                      <span className="pop-title">{s.title}</span>
+                      {s.episodes > 1 && <span className="pop-x"> ×{s.episodes}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </Link>
         );

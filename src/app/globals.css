@@ -225,37 +225,73 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink-3);
   margin-top: auto;
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .topbar-week .day .count strong {
   color: var(--ink);
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
 }
-.topbar-week .day .count .ep-x {
+.topbar-week .day .count .ep-x,
+.topbar-week .day .count .more {
   color: var(--ink-3);
-  flex: 0 0 auto;
-}
-.topbar-week .day .more {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
-  margin-top: 2px;
 }
 .topbar-week .day.today { background: var(--cal-soft); }
 .topbar-week .day.today:hover { background: var(--cal-soft); filter: brightness(0.98); }
 .topbar-week .day.today .lab,
 .topbar-week .day.today .num,
 .topbar-week .day.today .count strong { color: var(--cal-deep); }
-.topbar-week .day.today .more { color: var(--cal-deep); opacity: 0.7; }
+
+/* Popover med full lista — visas på hover/focus av cellen. CSS-only,
+   matchar binge-densiteten (mono, ingen radius, inga skuggor, 1px rule). */
+.topbar-week .day .day-pop {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  z-index: 50;
+  min-width: 180px;
+  max-width: 280px;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  padding: 8px 10px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 80ms ease-out;
+}
+.topbar-week .day:hover .day-pop,
+.topbar-week .day:focus-visible .day-pop {
+  opacity: 1;
+  visibility: visible;
+}
+/* För de tre högra cellerna: ankra till höger så popovern inte
+   hänger utanför viewporten. */
+.topbar-week .day:nth-last-child(-n+3) .day-pop {
+  left: auto;
+  right: -1px;
+}
+.topbar-week .day .day-pop ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.topbar-week .day .day-pop li {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-week .day .day-pop .pop-x {
+  color: var(--ink-3);
+  margin-left: 2px;
+}
 .topbar-week .day.today::before {
   content: "";
   position: absolute;
