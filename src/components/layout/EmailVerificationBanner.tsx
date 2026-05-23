@@ -41,7 +41,7 @@ export function EmailVerificationBanner() {
       className="bg-accent/[0.08] border-b border-accent/30 px-3 py-[5px] text-xs text-text-secondary flex items-center gap-3 flex-wrap"
     >
       <span>
-        Bekräfta din e-postadress för att slutföra registreringen.
+        Bekräfta din e-postadress.
       </span>
       <button
         onClick={resend}

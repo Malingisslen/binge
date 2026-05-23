@@ -122,7 +122,7 @@ function buildStandfirst(
       ? 'Allt på schemat ligger nedanför. Markera avsnitten du har sett när du är klar.'
       : 'Veckans avsnitt nedan.';
   }
-  return `Inräknat ${parts.join(' och ')}. Markera avsnitten du har sett när du är klar.`;
+  return `Inklusive ${parts.join(' och ')}. Markera avsnitten du har sett när du är klar.`;
 }
 
 function formatRange(weekStart: Date): string {

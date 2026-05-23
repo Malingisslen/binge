@@ -81,7 +81,7 @@ function NyContent() {
         <h1 className="text-[18px] font-bold text-text-primary">Tillsammans ikväll</h1>
       </div>
       <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Skapa en delad swipe-session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto.
+        Skapa en delad session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto.
       </p>
 
       <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
@@ -97,7 +97,7 @@ function NyContent() {
         </FormSection>
 
         <FormSection title="Dina streamingtjänster">
-          <p className="text-xs text-text-muted mb-2">Bara titlar på de här tjänsterna (plus övriga deltagares, beroende på läge nedan) kommer fram.</p>
+          <p className="text-xs text-text-muted mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
@@ -135,7 +135,7 @@ function NyContent() {
           />
         </FormSection>
 
-        <FormSection title="Provider-läge">
+        <FormSection title="Tjänst-läge">
           <FormRadioGroup
             name="providerMode"
             value={providerMode}

@@ -413,7 +413,7 @@ function SessionMain({
           />
         ) : (
           <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-center">
-            <div className="text-sm font-semibold mb-1">Du har sveppat igenom alla.</div>
+            <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
             <div className="text-xxs text-text-muted">Vänta på övriga så sammanställs matcherna automatiskt.</div>
           </div>
         )
@@ -650,7 +650,7 @@ function MatchList({
               </div>
               {isGroupSession && (
                 isPicked ? (
-                  <span className="text-xxs text-accent font-semibold">✓ Vald</span>
+                  <span className="text-xxs text-accent font-semibold inline-flex items-center gap-1"><Check size={11} /> Vald</span>
                 ) : (
                   <button
                     onClick={() => recordPick(m)}
@@ -658,7 +658,7 @@ function MatchList({
                     className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
-                    {picking === m.candidate.tmdbId ? '...' : 'Den här tar vi'}
+                    {picking === m.candidate.tmdbId ? 'Sparar…' : 'Den här tar vi'}
                   </button>
                 )
               )}

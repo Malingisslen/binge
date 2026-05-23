@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { UsersRound } from 'lucide-react';
+import { UsersRound, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups } from '@/hooks/useGroups';
 import { useClickOutside } from '@/hooks/useClickOutside';
@@ -85,8 +85,8 @@ export default function AddToGroupButton({
                 }}
                 className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-surface-hover flex items-center gap-2 disabled:opacity-50"
               >
-                <span className={`w-[14px] text-center ${isIn ? 'text-accent' : 'text-text-muted'}`}>
-                  {isIn ? '✓' : ''}
+                <span className={`w-[14px] inline-flex items-center justify-center ${isIn ? 'text-accent' : 'text-text-muted'}`}>
+                  {isIn ? <Check size={11} /> : null}
                 </span>
                 <span className="truncate text-text-primary">{g.name}</span>
               </button>

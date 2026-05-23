@@ -80,7 +80,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
         >
           <ChevronLeft size={14} /> Tillbaka till rekommendationer
         </button>
-        <p className="text-sm text-text-muted">Raden hittades inte. Den kan ha försvunnit efter ratings ändrats.</p>
+        <p className="text-sm text-text-muted">Raden hittades inte. Den kan ha försvunnit när dina betyg ändrades.</p>
       </div>
     );
   }
@@ -115,7 +115,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
         <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary">
           <option value="relevance">Relevans</option>
           <option value="rating">Betyg</option>
-          <option value="release">Release-datum</option>
+          <option value="release">Premiärdatum</option>
         </select>
       </div>
 

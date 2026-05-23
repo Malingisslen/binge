@@ -61,7 +61,7 @@ export function NotificationsSection() {
 
       {!supported ? (
         <div className="text-xs text-text-muted py-2">
-          Push-notifs stöds inte i den här webbläsaren.
+          Push-notiser stöds inte i den här webbläsaren.
         </div>
       ) : (
         <label className="flex items-center gap-2 cursor-pointer text-base">
@@ -72,7 +72,7 @@ export function NotificationsSection() {
             onChange={(e) => { void handleToggle(e.target.checked); }}
             className="accent-accent w-[14px] h-[14px]"
           />
-          Skicka push-notifs till den här enheten
+          Skicka push-notiser till den här enheten
         </label>
       )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, Check } from 'lucide-react';
 import type { TMDBEpisode } from '@/types';
 import { stillUrl } from '@/lib/tmdb/client';
 import { todayIso, shortSwedishWeekday } from '@/lib/utils';
@@ -107,7 +107,7 @@ export default function EpisodeRow({
             onChange={e => onToggle(e.target.checked)}
             aria-label={watched ? 'Markera som osedd' : 'Markera som sedd'}
           />
-          {watched ? '✓' : ''}
+          {watched ? <Check size={11} /> : null}
         </label>
       )}
     </div>

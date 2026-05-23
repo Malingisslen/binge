@@ -132,7 +132,7 @@ function FeedContent() {
         <div className="crumb">Vänner · Flöde</div>
         <h1 className="page-h1">Flöde</h1>
         <p className="stand">
-          Aktiva från dina vänner — senaste reviews, betyg och uppdateringar.
+          Senaste från dina vänner — recensioner, betyg och uppdateringar.
         </p>
       </header>
       <div style={{ marginTop: 28 }}>
@@ -198,7 +198,7 @@ function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
   // 'mina' (TV) översätts till "började följa" för socialt språk; film 'sedd'
   // → "markerade som sedd"; vill_se → "vill se".
   const statusLabel =
-    item.status === 'mina' ? 'lade till i samlingen'
+    item.status === 'mina' ? 'lade till i biblioteket'
     : item.status === 'sedd' ? 'markerade som sedd'
     : item.status === 'vill_se' ? 'vill se'
     : 'uppdaterade';

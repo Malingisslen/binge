@@ -8,8 +8,8 @@ import type { ItemVisibility } from '@/types';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
   { value: 'private', label: 'Privat', description: 'Bara jag ser mina titlar och min profil.' },
-  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och watchlist. Andra ser inget.' },
-  { value: 'public', label: 'Publik', description: 'Alla med länken till min profil kan se watchlist och betyg.' },
+  { value: 'friends', label: 'Endast vänner', description: 'Bekräftade vänner ser min profil och mitt bibliotek. Andra ser inget.' },
+  { value: 'public', label: 'Publik', description: 'Alla med länken till min profil kan se biblioteket och betyg.' },
 ];
 
 export function UsernameSection() {

@@ -91,7 +91,7 @@ export function GroupSettingsModal({
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Default vad?</label>
+            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Standardinnehåll</label>
             <select
               value={mediaType}
               onChange={e => setMediaType(e.target.value as SessionMediaType)}
@@ -104,19 +104,19 @@ export function GroupSettingsModal({
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Default provider-läge</label>
+            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Standardläge för tjänster</label>
             <select
               value={providerMode}
               onChange={e => setProviderMode(e.target.value as ProviderMode)}
               className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
             >
-              <option value="intersect">Alla har (intersect)</option>
-              <option value="union">Någon har (union)</option>
+              <option value="intersect">Alla har</option>
+              <option value="union">Någon har</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Default aggregering</label>
+            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Standardurval</label>
             <select
               value={aggregation}
               onChange={e => setAggregation(e.target.value as AggregationStrategy)}

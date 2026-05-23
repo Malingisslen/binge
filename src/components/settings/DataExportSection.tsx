@@ -33,8 +33,8 @@ export function DataExportSection() {
   return (
     <SettingsCard title="Exportera min data">
       <p className="text-xs text-text-muted mb-2">
-        Ladda ner all data vi har om dig som en JSON-fil (GDPR artikel 20). Innehåller profil,
-        watchlist, betyg, progress, recensioner, listor och sociala kopplingar.
+        Ladda ner all data om dig som en JSON-fil (GDPR artikel 20). Innehåller profil,
+        bibliotek, betyg, progress, recensioner, listor och sociala kopplingar.
       </p>
       <button
         onClick={handleExport}

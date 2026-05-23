@@ -31,7 +31,7 @@ export function TasteDataSection() {
   return (
     <SettingsCard title="Smakdata">
       <p className="text-xs text-text-secondary mb-2">
-        Fyll i genrer och streamingtjänster på äldre titlar i din watchlist så de syns i Följer/Vill se och bidrar till smak-match. Körs en gång — nya titlar sparas automatiskt.
+        Fyll i genrer och streamingtjänster på äldre titlar i ditt bibliotek så de syns i Följer/Vill se och bidrar till smak-match. Körs en gång — nya titlar sparas automatiskt.
       </p>
       <button
         onClick={run}

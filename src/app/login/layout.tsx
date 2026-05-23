@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Logga in',
-  description: 'Logga in på Binge.nu för att tracka vad du tittar på och se var titlarna finns att streama.',
+  description: 'Logga in på Binge.nu för att hålla koll på vad du tittar på och se var titlarna finns att streama.',
   robots: { index: false, follow: true },
 };
 

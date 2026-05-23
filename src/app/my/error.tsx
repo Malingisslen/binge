@@ -15,7 +15,7 @@ export default function MyError({
       reset={reset}
       scope="app:my"
       heading="Kunde inte ladda din lista"
-      body="Ett fel uppstod när vi hämtade dina titlar från databasen. Detta beror oftast på tillfälliga nätverksproblem."
+      body="Försök igen om en stund. Om det upprepas — kontrollera anslutningen."
     />
   );
 }

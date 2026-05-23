@@ -170,7 +170,7 @@ export function InvitePanel({
                 <Copy size={11} />
               </button>
             </div>
-            {copied && <div className="text-xxs text-accent">Kopierad!</div>}
+            {copied && <div className="text-xxs text-accent">Kopierad.</div>}
             {isStale && (
               <div className="text-xxs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1">
                 Länken är {tokenAgeDays} dagar gammal. Generera en ny om du misstänker att den läckt.

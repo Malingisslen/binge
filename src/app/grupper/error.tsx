@@ -15,7 +15,7 @@ export default function GruppError({
       reset={reset}
       scope="app:grupper"
       heading="Kunde inte ladda gruppen"
-      body="Ett fel uppstod när vi läste gruppdatan. Om det upprepas — kontrollera att du fortfarande är medlem."
+      body="Kunde inte ladda gruppen. Försök igen, eller kontrollera att du fortfarande är medlem."
     />
   );
 }

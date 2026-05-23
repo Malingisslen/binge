@@ -31,7 +31,7 @@ export function DeleteAccountSection() {
   return (
     <SettingsCard title="Ta bort konto" tone="danger">
       <p className="text-xs text-text-muted mb-2">
-        All data raderas permanent — watchlist, betyg, avsnittsprogress och inställningar.
+        All data raderas permanent — bibliotek, betyg, avsnittsprogress och inställningar.
       </p>
       {!confirming ? (
         <button

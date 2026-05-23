@@ -55,7 +55,7 @@ export default function FriendsPageClient() {
       {empty && tab === 'friends' && (
         <EmptyState
           headline="Inga vänner än"
-          body="Vänskap är mutuellt och ger åtkomst till varandras privata watchlist. Skicka förfrågan från en användares profil."
+          body="Vänner ser varandras privata bibliotek. Skicka förfrågan från en användares profil."
         />
       )}
       {empty && tab === 'requests' && (

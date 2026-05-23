@@ -33,7 +33,7 @@ export default function AppTopbar() {
             <Search size={12} className="search-icon" aria-hidden="true" />
             <input
               type="text"
-              placeholder="söker en titel, person, vän…"
+              placeholder="Sök titel, person eller vän…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}

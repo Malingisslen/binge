@@ -77,7 +77,7 @@ export function OnboardingFlow() {
           disabled={saving}
           className="text-xxs text-text-muted hover:text-text-secondary bg-transparent border-none cursor-pointer disabled:opacity-50"
         >
-          Hoppa över onboarding
+          Hoppa över
         </button>
       </div>
     </div>
@@ -108,8 +108,8 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         Välkommen till Binge.nu
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Håll koll på vad du tittar på och se var filmer och serier finns att
-        streama i Sverige. Tre korta steg, ungefär 60 sekunder.
+        Håll koll på vad du tittar på och se var filmer och serier streamas i
+        Sverige. Tre steg.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-text-secondary">
         <li className="flex items-start gap-2">
@@ -129,7 +129,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         onClick={onNext}
         className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer"
       >
-        Kom igång <ArrowRight size={14} />
+        Börja <ArrowRight size={14} />
       </button>
     </div>
   );
@@ -257,8 +257,8 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         Lägg till din första titel
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Sök efter en film eller serie och välj om du vill se den eller redan
-        följer den. Du kan lägga till hur många du vill senare.
+        Sök efter en film eller serie och välj om du vill se den eller följer
+        den.
       </p>
       <div className="flex items-center gap-2 mb-3 border border-border-main rounded-sm bg-white px-2">
         <Search size={13} className="text-text-muted" />
@@ -362,7 +362,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
             onClick={onNext}
             className="text-xxs text-text-muted hover:text-text-secondary bg-transparent border-none cursor-pointer ml-auto"
           >
-            Hoppa över detta steg
+            Hoppa över
           </button>
         )}
       </div>
@@ -387,8 +387,8 @@ function StepDone({
         Klar.
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Lägg till fler titlar, utforska trending eller se var dina serier
-        streamas — när du vill.
+        Lägg till fler titlar, utforska rekommendationer eller se var dina
+        serier streamas.
       </p>
 
       <div className="bg-accent/[0.06] border border-accent/30 rounded-sm p-3 mb-4">
@@ -396,12 +396,11 @@ function StepDone({
           <Target size={14} className="text-accent mt-[2px] shrink-0" />
           <div className="flex-1">
             <div className="text-sm font-bold text-text-primary">
-              Vill du kalibrera smaken?
+              Kalibrera smaken
             </div>
             <p className="text-xxs text-text-muted mt-1">
               Ranka 10 genrer du gillar så blir rekommendationerna skarpare.
-              Tar ~2 minuter — kan hoppas över och köras senare från
-              inställningarna.
+              Cirka 2 minuter — kan göras senare från inställningarna.
             </p>
           </div>
         </div>
@@ -435,7 +434,7 @@ function StepDone({
           disabled={saving}
           className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
-          {saving ? 'Sparar…' : 'Till startsidan'} <ArrowRight size={14} />
+          {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
         </button>
       </div>
     </div>

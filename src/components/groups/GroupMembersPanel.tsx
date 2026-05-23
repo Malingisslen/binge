@@ -172,7 +172,7 @@ function AddMemberSearch({
                   disabled={already || busy}
                   className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-accent text-white disabled:bg-border-main disabled:text-text-muted disabled:cursor-default"
                 >
-                  {already ? 'Medlem' : busy ? '...' : 'Lägg till'}
+                  {already ? 'Medlem' : busy ? 'Lägger till…' : 'Lägg till'}
                 </button>
               </li>
             );

@@ -189,12 +189,12 @@ function PrimaryActionCard({
   // idle
   return (
     <div className="bg-surface border border-border-main rounded-sm p-4 mb-[14px]">
-      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted mb-1">Allt är välbalanserat</div>
+      <div className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted mb-1">Lugnt läge</div>
       <div className="text-base font-bold text-text-primary">Inget att agera på just nu</div>
       <div className="text-xs text-text-muted mt-[2px]">
         {action.nextCheckDate
           ? `Nästa översyn kring ${formatSwedishDate(action.nextCheckDate)} när något förändras.`
-          : 'Vi hör av oss när något förändras i din följ-lista.'}
+          : 'Översynen uppdateras när något ändras i ditt bibliotek.'}
       </div>
     </div>
   );
@@ -324,7 +324,7 @@ function SavingsContent() {
         <header>
           <div className="crumb">Sparande</div>
           <h1 className="page-h1">Sparande</h1>
-          <p className="stand">Laddar din analys…</p>
+          <p className="stand">Räknar…</p>
         </header>
       </>
     );
@@ -364,7 +364,7 @@ function SavingsContent() {
     <>
       <header>
         <div className="crumb">Sparande · {activeProviders.length + pauseProviders.length} tjänster</div>
-        <h1 className="page-h1">Streamingrådgivare</h1>
+        <h1 className="page-h1">Sparande</h1>
         <p className="stand">
           {suggestedPauseCount > 0
             ? `${suggestedPauseCount} ${suggestedPauseCount === 1 ? 'tjänst kan pausas' : 'tjänster kan pausas'} just nu — du tittar inget aktivt på dem.`

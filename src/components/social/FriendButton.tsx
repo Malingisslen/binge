@@ -1,5 +1,6 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFriendStatus, useFriendActions } from '@/hooks/useFriends';
 
@@ -25,10 +26,10 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
     return (
       <button
         onClick={() => removeFriend(targetUid)}
-        className={`${baseClass} bg-surface text-text-secondary border-border-main hover:bg-surface-hover`}
+        className={`${baseClass} bg-surface text-text-secondary border-border-main hover:bg-surface-hover inline-flex items-center gap-1`}
         title="Ta bort vänskap"
       >
-        ✓ Vän
+        <Check size={11} /> Vän
       </button>
     );
   }

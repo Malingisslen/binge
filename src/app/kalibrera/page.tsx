@@ -96,7 +96,7 @@ function KalibreraContent() {
         <h1 className="text-[18px] font-bold text-text-primary">Kalibrera din smak</h1>
       </div>
       <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Snabb-svep igenom 10 populära titlar. Tumme upp om du diggar vibben, tumme ner om det inte är din grej. Vi använder det för att färga dina rekommendationer och smak-match.
+        Svara på 10 populära titlar. Tumme upp om du är intresserad, ner om inte. Påverkar dina rekommendationer och smak-match.
       </p>
 
       {!done && current && (
@@ -105,7 +105,7 @@ function KalibreraContent() {
 
       {done && (
         <div className="bg-surface border border-border-main rounded-sm p-4">
-          <div className="text-sm font-semibold mb-1">Klar!</div>
+          <div className="text-sm font-semibold mb-1">Klar.</div>
           <div className="text-xs text-text-muted mb-3">
             {Object.keys(votes).length} av {pool.length} svar — resten räknades som &quot;vet inte&quot;.
           </div>
@@ -180,7 +180,7 @@ function CalibrationCard({
           onClick={() => onVote('up')}
           className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-accent rounded-sm text-xs font-semibold bg-accent text-white cursor-pointer hover:bg-accent/90"
         >
-          <ThumbsUp size={12} /> Diggar
+          <ThumbsUp size={12} /> Gillar
         </button>
       </div>
     </div>

@@ -97,7 +97,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
                     <button onClick={() => markRated(t, 5)} className="bg-accent/10 text-accent text-[10px] py-1 rounded-sm">Sett 5★</button>
                     <button onClick={() => markRated(t, 4)} className="bg-accent/10 text-accent text-[10px] py-1 rounded-sm">Sett 4★</button>
                     <button onClick={() => markRated(t, 3)} className="bg-surface border border-border-main text-[10px] py-1 rounded-sm">Sett 3★</button>
-                    <button onClick={() => skip(t.id)} className="bg-surface border border-border-main text-[10px] py-1 rounded-sm">Skippa</button>
+                    <button onClick={() => skip(t.id)} className="bg-surface border border-border-main text-[10px] py-1 rounded-sm">Hoppa över</button>
                   </div>
                 </div>
               );

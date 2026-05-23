@@ -43,7 +43,7 @@ export default function LoginPage() {
       trackEvent('signed_in', { method: 'google' });
     } catch (err) {
       console.error('Google sign-in failed:', err);
-      setError('Inloggning misslyckades.');
+      setError('Inloggningen misslyckades. Försök igen om en stund.');
     }
   }
 
@@ -182,7 +182,7 @@ export default function LoginPage() {
             disabled={registerDisabled}
             className="w-full px-4 py-[6px] bg-text-primary text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? '...' : mode === 'register' ? 'Skapa konto' : 'Logga in'}
+            {submitting ? (mode === 'register' ? 'Skapar…' : 'Loggar in…') : mode === 'register' ? 'Skapa konto' : 'Logga in'}
           </button>
         </form>
 

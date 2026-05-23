@@ -37,7 +37,7 @@ export function GroupWatchlistTable({
   return (
     <div className="bg-surface border border-border-main rounded-sm">
       <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
-        Gemensam watchlist ({watchlist.length})
+        Gemensamt bibliotek ({watchlist.length})
       </div>
 
       {sorted.length === 0 ? (

@@ -159,7 +159,8 @@ function ReportDialog({
       toast('Rapporten skickad. Den granskas av en moderator.');
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunde inte skicka rapporten.');
+      console.error('[ugc-report]', err);
+      setError('Kunde inte skicka rapporten. Försök igen om en stund.');
     } finally {
       setSubmitting(false);
     }

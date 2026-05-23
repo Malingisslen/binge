@@ -74,7 +74,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
 
   const isLoading = moviesLoading || tvLoading;
   const hasMore = tab !== 'new' && page < 5 && ((tab === 'movies' ? movies : tv)?.total_pages ?? 0) > page;
-  const providerName = provider?.name ?? SWEDISH_PROVIDERS.find(p => p.id === providerId)?.name ?? `Tjänst ${providerId}`;
+  const providerName = provider?.name ?? SWEDISH_PROVIDERS.find(p => p.id === providerId)?.name ?? 'Okänd tjänst';
 
   useEffect(() => {
     document.title = `${providerName} — Binge.nu`;

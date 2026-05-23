@@ -104,7 +104,7 @@ export default function RecommendationsHub() {
         <h1 className="page-h1">Vad du kan se — och varför.</h1>
         <p className="stand">
           Sju kategorier sorterade efter vad du har tittat på senast. Varje rad
-          säger varför den finns där; klicka <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>visa fler</strong> för
+          säger varför den finns där; tryck <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>visa fler</strong> för
           en utvidgad vy. Inga mystery-rader.
         </p>
       </header>
@@ -151,8 +151,7 @@ export default function RecommendationsHub() {
       )}
       {filteredRows.length === 0 && cascade.rows.length > 0 && (
         <p className="stand" style={{ marginTop: 24 }}>
-          Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} i nuvarande rekommendationer.
-          Byt mediatyp eller justera filter.
+          Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} matchar dina filter. Justera ovan eller rensa.
         </p>
       )}
     </>

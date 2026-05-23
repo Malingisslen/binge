@@ -29,7 +29,7 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
       return {
         crumb: 'Hem · denna vecka',
         h1: 'Hämtar din vecka…',
-        stand: 'Tittar igenom dina serier för att hitta nästa avsnitt.',
+        stand: 'Letar efter nästa avsnitt.',
       };
     }
     return {
@@ -38,7 +38,7 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
         ? `${totalThisWeek} avsnitt denna vecka.`
         : 'En lugn vecka.',
       stand: totalThisWeek > 0
-        ? 'Inget i kväll — men ditt schema är inte tomt. Kolla veckan nedan.'
+        ? 'Inget i kväll. Senare i veckan finns avsnitt nedan.'
         : 'Inget på schemat. Utforska Rekommendationer för att hitta något.',
     };
   }
