@@ -117,7 +117,7 @@ export default async function TVPage({ params }: { params: Promise<PageParams> }
   }
 
   return (
-    <Suspense fallback={<div className="text-sm text-ink-3 py-4">Laddar...</div>}>
+    <Suspense fallback={<div className="text-sm text-ink-3 py-4">Laddar…</div>}>
       <TVShowPageClient id={id} initialData={initialData} />
     </Suspense>
   );

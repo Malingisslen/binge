@@ -323,7 +323,7 @@ function SavingsContent() {
       <>
         <header>
           <div className="crumb">Sparande</div>
-          <h1 className="page-h1">Streamingrådgivare</h1>
+          <h1 className="page-h1">Sparande</h1>
           <p className="stand">Laddar din analys…</p>
         </header>
       </>
@@ -335,7 +335,7 @@ function SavingsContent() {
       <>
         <header>
           <div className="crumb">Sparande</div>
-          <h1 className="page-h1">Streamingrådgivare</h1>
+          <h1 className="page-h1">Sparande</h1>
           <p className="stand">
             Lägg till tjänster i <Link href="/settings/" style={{ color: 'var(--ink)', borderBottom: '1px solid var(--rule)' }}>inställningar</Link> för
             att få rådgivning om vad du kan pausa och spara på.

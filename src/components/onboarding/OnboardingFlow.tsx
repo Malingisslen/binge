@@ -109,7 +109,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </h1>
       <p className="text-sm text-text-secondary mb-4">
         Håll koll på vad du tittar på och se var filmer och serier finns att
-        streama i Sverige. Låt oss sätta upp ditt konto på 60 sekunder.
+        streama i Sverige. Tre korta steg, ungefär 60 sekunder.
       </p>
       <ul className="space-y-2 mb-6 text-sm text-text-secondary">
         <li className="flex items-start gap-2">
@@ -167,9 +167,8 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
         Vilka tjänster har du?
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Vi använder det här för att visa var titlar du trackar kan streamas —
-        och för att räkna ut om du kan pausa någon tjänst. Kryssa alla du
-        prenumererar på.
+        Används för att visa var dina titlar kan streamas — och för att räkna
+        ut om du kan pausa någon tjänst. Kryssa alla du prenumererar på.
       </p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
         {flatrateProviders.map(p => {
@@ -255,7 +254,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   return (
     <div>
       <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
-        Lägg till något du vill tracka
+        Lägg till din första titel
       </h1>
       <p className="text-sm text-text-secondary mb-4">
         Sök efter en film eller serie och välj om du vill se den eller redan
@@ -327,7 +326,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                         onClick={() => handleAdd(r, 'engage')}
                         className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
                       >
-                        {r.media_type === 'tv' ? 'Följer' : 'Sett'}
+                        {r.media_type === 'tv' ? 'Följer' : 'Sedd'}
                       </button>
                     </div>
                   )}
@@ -385,11 +384,11 @@ function StepDone({
   return (
     <div>
       <h1 className="page-h1" style={{ fontSize: 36, marginBottom: 12 }}>
-        Du är igång!
+        Klar.
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Du kan lägga till fler titlar, utforska trending och se där de
-        streamas när du vill.
+        Lägg till fler titlar, utforska trending eller se var dina serier
+        streamas — när du vill.
       </p>
 
       <div className="bg-accent/[0.06] border border-accent/30 rounded-sm p-3 mb-4">
@@ -436,7 +435,7 @@ function StepDone({
           disabled={saving}
           className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
-          {saving ? 'Sparar…' : 'Till dashboarden'} <ArrowRight size={14} />
+          {saving ? 'Sparar…' : 'Till startsidan'} <ArrowRight size={14} />
         </button>
       </div>
     </div>

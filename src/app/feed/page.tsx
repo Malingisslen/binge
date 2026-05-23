@@ -137,7 +137,7 @@ function FeedContent() {
       </header>
       <div style={{ marginTop: 28 }}>
 
-      {isLoading && <div className="text-sm text-ink-3 py-4">Laddar...</div>}
+      {isLoading && <div className="text-sm text-ink-3 py-4">Laddar…</div>}
 
       {!isLoading && followingUids.length === 0 && (
         <div className="bg-surface border border-border-main rounded-sm px-4 py-4">

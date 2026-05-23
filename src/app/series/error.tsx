@@ -15,7 +15,7 @@ export default function SeriesError({
       reset={reset}
       scope="app:series"
       heading="Kunde inte ladda serien"
-      body="TMDB svarade inte som förväntat. Försök igen om en stund."
+      body="Kunde inte hämta seriedata. Försök igen om en stund."
     />
   );
 }

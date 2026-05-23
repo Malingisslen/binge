@@ -48,7 +48,7 @@ export function EmailVerificationBanner() {
         disabled={sending}
         className="text-xs text-accent bg-transparent border-none cursor-pointer font-semibold disabled:opacity-50 underline"
       >
-        {sending ? 'Skickar...' : 'Skicka igen'}
+        {sending ? 'Skickar…' : 'Skicka igen'}
       </button>
       <button
         onClick={() => setDismissed(true)}

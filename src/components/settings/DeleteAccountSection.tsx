@@ -21,7 +21,7 @@ export function DeleteAccountSection() {
       // actions.
       const msg = err instanceof Error && err.message.includes('requires-recent-login')
         ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
-        : 'Kunde inte ta bort kontot. Kontrollera internetuppkopplingen och försök igen.';
+        : 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
       toast(msg);
       setDeleting(false);
       setConfirming(false);
@@ -47,7 +47,7 @@ export function DeleteAccountSection() {
             disabled={deleting}
             className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-red-600 text-white disabled:opacity-50"
           >
-            {deleting ? 'Raderar...' : 'Ja, ta bort permanent'}
+            {deleting ? 'Raderar…' : 'Ja, ta bort permanent'}
           </button>
           <button
             onClick={() => setConfirming(false)}

@@ -78,7 +78,7 @@ export function ContentFilterSection() {
             <Search size={12} className="text-text-muted shrink-0" />
             <input
               type="text"
-              placeholder="Sök land..."
+              placeholder="Sök land…"
               value={countrySearch}
               onChange={e => setCountrySearch(e.target.value)}
               className="bg-transparent border-none text-text-primary text-xs font-[inherit] outline-none w-full placeholder:text-text-muted"
@@ -97,7 +97,7 @@ export function ContentFilterSection() {
               </label>
             ))}
             {remainingCountries.length === 0 && (
-              <div className="text-xs text-text-muted py-1">Inga träffar</div>
+              <div className="text-xs text-text-muted py-1">Inga träffar.</div>
             )}
           </div>
         </div>

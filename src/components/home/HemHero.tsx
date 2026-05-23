@@ -39,7 +39,7 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
         : 'En lugn vecka.',
       stand: totalThisWeek > 0
         ? 'Inget i kväll — men ditt schema är inte tomt. Kolla veckan nedan.'
-        : 'Inget på schemat. Bra läge för att hitta något nytt.',
+        : 'Inget på schemat. Utforska Rekommendationer för att hitta något.',
     };
   }
 

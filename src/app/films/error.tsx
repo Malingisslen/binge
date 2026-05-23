@@ -15,7 +15,7 @@ export default function FilmsError({
       reset={reset}
       scope="app:films"
       heading="Kunde inte ladda filmen"
-      body="TMDB svarade inte som förväntat. Försök igen om en stund."
+      body="Kunde inte hämta filmdata. Försök igen om en stund."
     />
   );
 }

@@ -69,7 +69,7 @@ export function WatchlistCard({
     // rimlig text.
     if (subState === 'avslutad') return { text: 'Avslutad', tone: 'done' };
     if (subState === 'aktiv' && item.lastWatchedSeason) {
-      return { text: `Bakom · S${item.lastWatchedSeason}`, tone: 'accent' };
+      return { text: `Ligger efter · S${item.lastWatchedSeason}`, tone: 'accent' };
     }
     if (subState === 'ikapp') {
       return { text: upcomingWd ? `Nytt ${upcomingWd.toLowerCase()}` : 'Ikapp', tone: upcomingWd ? 'accent' : 'done' };

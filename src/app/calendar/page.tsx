@@ -111,7 +111,7 @@ function buildStandfirst(
 ): string {
   if (total === 0) {
     return isCurrent
-      ? 'Inget på schemat denna vecka. Bra läge för att hitta något nytt.'
+      ? 'Inget på schemat denna vecka. Utforska Rekommendationer för att hitta något.'
       : 'Inget på schemat den här veckan.';
   }
   const parts: string[] = [];

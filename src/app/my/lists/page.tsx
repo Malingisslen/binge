@@ -72,7 +72,7 @@ function ListsContent() {
       )}
 
       {lists.length === 0 && !showForm && (
-        <p className="text-sm text-text-muted">Du har inga listor ännu.</p>
+        <p className="text-sm text-text-muted">Inga listor än. Listor är kurerade samlingar av titlar — t.ex. &ldquo;Bästa Bond-filmer&rdquo; eller &ldquo;Mys-serier på hösten&rdquo;. Klicka <strong>Skapa ny lista</strong> för att börja.</p>
       )}
 
       <div className="space-y-[6px]">

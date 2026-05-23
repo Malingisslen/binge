@@ -50,7 +50,7 @@ export default function FriendsPageClient() {
         </TabButton>
       </div>
 
-      {isLoading && <div className="text-sm text-text-muted py-4">Laddar...</div>}
+      {isLoading && <div className="text-sm text-text-muted py-4">Laddar…</div>}
 
       {empty && tab === 'friends' && (
         <EmptyState

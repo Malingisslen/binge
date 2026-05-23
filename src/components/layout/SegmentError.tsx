@@ -47,7 +47,7 @@ export function SegmentError({
         {heading ?? 'Något gick fel'}
       </h2>
       <p className="text-sm text-text-muted mb-4 max-w-md">
-        {body ?? 'Ett oväntat fel uppstod. Försök ladda om sidan.'}
+        {body ?? 'Kunde inte ladda den här delen. Försök igen om en stund.'}
       </p>
       {error.digest && (
         <p className="text-[11px] text-text-muted mb-4 font-mono">ref: {error.digest}</p>

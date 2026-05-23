@@ -32,7 +32,7 @@ export default function AdminReportsPage() {
  */
 function AdminGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+  if (loading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!user?.isAdmin) {
     return (
       <div className="max-w-[480px]">
@@ -108,7 +108,7 @@ function ReportsDashboard() {
       )}
 
       {loading && (
-        <div className="text-sm text-text-muted py-4">Laddar...</div>
+        <div className="text-sm text-text-muted py-4">Laddar…</div>
       )}
 
       {!loading && reports.length === 0 && !error && (

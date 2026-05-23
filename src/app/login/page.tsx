@@ -79,9 +79,9 @@ export default function LoginPage() {
       } else if (code === 'auth/weak-password') {
         setError('Lösenordet måste vara minst 6 tecken.');
       } else if (mode === 'register') {
-        setError('Kunde inte skapa kontot. Kontrollera internetuppkopplingen och försök igen.');
+        setError('Kunde inte skapa kontot. Kontrollera anslutningen och försök igen.');
       } else {
-        setError('Inloggningen misslyckades. Kontrollera internetuppkopplingen och försök igen.');
+        setError('Inloggningen misslyckades. Kontrollera anslutningen och försök igen.');
       }
     }
     setSubmitting(false);

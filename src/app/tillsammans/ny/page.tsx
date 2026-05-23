@@ -198,7 +198,7 @@ function NyContent() {
             className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Share2 size={11} className="inline mr-1" />
-            {submitting ? 'Skapar...' : 'Skapa session och få länk'}
+            {submitting ? 'Skapar…' : 'Skapa session och få länk'}
           </button>
           <button
             type="button"

@@ -135,7 +135,7 @@ export function GroupSettingsModal({
             disabled={saving}
             className="px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
-            {saving ? 'Sparar...' : 'Spara'}
+            {saving ? 'Sparar…' : 'Spara'}
           </button>
           <button
             onClick={onClose}

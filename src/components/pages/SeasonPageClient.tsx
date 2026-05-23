@@ -25,7 +25,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
     ? computeMaskBoundary(progressMap, seriesId, members.map(m => m.uid))
     : null;
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!season) return <div className="text-sm text-text-muted py-4">Säsongen hittades inte.</div>;
 
   const episodes = season.episodes ?? [];

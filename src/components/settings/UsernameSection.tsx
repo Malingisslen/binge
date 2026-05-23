@@ -32,7 +32,7 @@ export function UsernameSection() {
     try {
       await updateUsername(usernameInput);
       toast('Användarnamn sparat');
-    } catch { toast('Något gick fel'); }
+    } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
     setSaving(false);
   };
 
@@ -67,7 +67,7 @@ export function UsernameSection() {
             value={bioInput}
             onChange={e => setBioInput(e.target.value)}
             onBlur={() => { if (bioInput !== user.bio) { updateBio(bioInput); toast('Bio sparad'); } }}
-            placeholder="Berätta lite om dig..."
+            placeholder="Berätta lite om dig…"
             maxLength={160}
             rows={2}
             className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] resize-none outline-none"

@@ -67,7 +67,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Skriv din recension..."
+            placeholder="Skriv din recension…"
             maxLength={2000}
             rows={3}
             className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
@@ -259,7 +259,7 @@ function ReviewComments({
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
-            placeholder="Skriv en kommentar..."
+            placeholder="Skriv en kommentar…"
             maxLength={500}
             className="flex-1 px-2 py-1 text-xxs border border-border-main rounded-sm bg-white"
           />

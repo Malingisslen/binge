@@ -75,10 +75,10 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
   return (
     <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-rule rounded-sm shadow-pop z-50 max-h-[400px] overflow-y-auto">
       {isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-ink-3">Söker...</div>
+        <div className="px-3 py-2 text-sm text-ink-3">Söker…</div>
       )}
       {!isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-ink-3">Inga resultat</div>
+        <div className="px-3 py-2 text-sm text-ink-3">Inga träffar.</div>
       )}
 
       {userResults.length > 0 && (

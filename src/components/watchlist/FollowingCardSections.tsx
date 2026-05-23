@@ -44,7 +44,7 @@ export function FollowingCardSections({
   if (totalEmpty) {
     return (
       <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
-        Inga titlar att visa
+        Inga serier i Följer än. Lägg till en serie via Rekommendationer eller sök.
       </div>
     );
   }

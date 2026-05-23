@@ -42,7 +42,7 @@ export function DataExportSection() {
         className="inline-flex items-center gap-1 px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer hover:bg-surface-hover disabled:opacity-50"
       >
         <Download size={11} />
-        {exporting ? 'Förbereder...' : 'Ladda ner mina data'}
+        {exporting ? 'Förbereder…' : 'Ladda ner mina data'}
       </button>
     </SettingsCard>
   );

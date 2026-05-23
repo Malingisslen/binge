@@ -17,7 +17,7 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
   }, [user, loading, router]);
 
   if (!mounted || loading) {
-    return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+    return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   }
 
   if (!user) {

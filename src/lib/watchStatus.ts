@@ -4,12 +4,13 @@ import type { TMDBTVShow } from '@/types/tmdb';
 import type { WatchStatus, WatchlistItem, MediaType, TvSubState } from '@/types';
 
 // User-facing labels per status. TV och film delar 'vill_se' och 'avbruten'
-// men har olika "main" status — TV bor i 'mina', film i 'sedd'.
+// men har olika "main" status — TV bor i 'mina' (UI: "Följer"), film i 'sedd'.
+// Vokabulär dokumenterat i docs/voice-and-tone.md.
 export const STATUS_LABELS: Record<WatchStatus, string> = {
   'vill_se': 'Vill se',
-  'mina': 'Mina serier',
+  'mina': 'Följer',
   'sedd': 'Sedd',
-  'avbruten': 'Avbröt',
+  'avbruten': 'Avbruten',
 };
 
 // Status-alternativ som visas i StatusButton-dropdown per mediaType.
@@ -29,8 +30,10 @@ export function statusOptionsFor(mediaType: MediaType): WatchStatus[] {
   return mediaType === 'tv' ? TV_STATUS_OPTIONS : MOVIE_STATUS_OPTIONS;
 }
 
-// I StatusButton vill vi visa "Lägger till" rather than "Mina serier" som
-// label på den aktiva valbart-att-välja-knappen. 'mina' = "Lägg till i samling".
+// statusLabel hanterar två kanttillfällen utöver STATUS_LABELS:
+//   - 'mina' på film bör aldrig hända i normalt UI; defensiv översättning till 'Sedd'.
+//   - 'sedd' i TV-menyn är en genväg som markerar alla avsnitt sedda → label
+//     förtydligas så användaren förstår effekten.
 export function statusLabel(status: WatchStatus, mediaType?: MediaType): string {
   if (mediaType === 'movie' && status === 'mina') return 'Sedd';
   if (mediaType === 'tv' && status === 'sedd') return 'Sedd (alla avsnitt)';

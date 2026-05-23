@@ -34,7 +34,7 @@ export default function NotesTextarea({ value, onChange, className }: NotesTexta
     <textarea
       value={localValue}
       onChange={e => handleChange(e.target.value)}
-      placeholder="Anteckning..."
+      placeholder="Anteckning…"
       maxLength={500}
       className={className ?? 'w-full max-w-[400px] h-[60px] px-2 py-1 text-base border border-border-main rounded-sm bg-surface font-[inherit] resize-none outline-none focus:border-accent'}
       rows={2}

@@ -20,7 +20,7 @@ interface Props {
 function whyForRow(spec: RowSpec): string {
   switch (spec.id.kind) {
     case 'trending':
-      return 'TMDB Sverige · uppdaterat veckovis';
+      return 'populärt i Sverige · uppdaterat veckovis';
     case 'latest-fav':
       return 'drivande seed · färska 5★-betyg';
     case 'similar':

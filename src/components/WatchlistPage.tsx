@@ -157,6 +157,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
   const standfirst = buildStandfirst(filtered.length, totalCount, status, mediaFilter);
 
+  const hasActiveFilters =
+    mediaFilter !== 'all' ||
+    !!providerFilter ||
+    behindFilterActive ||
+    searchQuery.length > 0;
+  const emptyMessage = hasActiveFilters
+    ? 'Inga titlar matchar dina filter. Justera ovan eller rensa.'
+    : totalCount === 0
+      ? 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.'
+      : 'Inga titlar att visa.';
+
   return (
     <>
       <header>
@@ -178,7 +189,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               {providerFilter.shortName}
             </span>
           )}
-          {behindFilterActive && <span>ligger efter</span>}
+          {behindFilterActive && <span>Ligger efter</span>}
           <button
             type="button"
             onClick={behindFilterActive && !providerFilter ? clearBehindFilter : clearProviderFilter}
@@ -335,7 +346,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             ))}
             {filtered.length === 0 && (
               <div className="col-span-full bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
-                Inga titlar att visa
+                {emptyMessage}
               </div>
             )}
           </div>
@@ -442,7 +453,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-3 py-4 text-center text-sm text-text-muted">
-                    Inga titlar att visa
+                    {emptyMessage}
                   </td>
                 </tr>
               )}

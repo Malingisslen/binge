@@ -59,7 +59,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
   });
 
-  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar…</div>;
   if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
 
   const watchlistItem = mounted ? getItem(movie.id) : undefined;

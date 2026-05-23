@@ -31,7 +31,7 @@ function GrupperList() {
       </header>
       <div style={{ marginTop: 28 }} />
 
-      {loading && <div className="text-sm text-text-muted py-4">Laddar grupper...</div>}
+      {loading && <div className="text-sm text-text-muted py-4">Laddar grupper…</div>}
 
       {!loading && groups.length === 0 && (
         <div className="bg-surface border border-border-main rounded-sm p-6 text-center">

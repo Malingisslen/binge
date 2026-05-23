@@ -22,7 +22,7 @@ export function TasteDataSection() {
       const final = await backfillGenreIds(uid, p => setProgress({ ...p }));
       toast(`Klar — ${final.updated} titlar uppdaterade`);
     } catch {
-      toast('Kunde inte uppdatera genre-data. Kontrollera internetuppkopplingen och försök igen.');
+      toast('Kunde inte uppdatera smakdata. Kontrollera anslutningen och försök igen.');
     } finally {
       setRunning(false);
     }
@@ -39,12 +39,12 @@ export function TasteDataSection() {
         className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
       >
         <Sparkles size={11} />
-        {running ? 'Uppdaterar...' : 'Uppdatera smakdata'}
+        {running ? 'Uppdaterar…' : 'Uppdatera smakdata'}
       </button>
       {progress && progress.total > 0 && (
         <div className="mt-2 text-xxs text-text-muted">
           {progress.processed}/{progress.total} — {progress.updated} uppdaterade
-          {progress.refreshed > 0 ? `, ${progress.refreshed} bekräftade på TMDB` : ''}
+          {progress.refreshed > 0 ? `, ${progress.refreshed} bekräftade mot källa` : ''}
           {progress.skipped > 0 ? `, ${progress.skipped} hoppade över` : ''}
           {progress.failed > 0 ? `, ${progress.failed} misslyckade` : ''}
         </div>

@@ -179,7 +179,7 @@ export default function DiscoverPage() {
           disabled={discoverLoading}
           className="mt-3 px-4 py-[5px] bg-surface border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer text-text-secondary hover:bg-surface-hover disabled:opacity-50"
         >
-          {discoverLoading ? 'Laddar...' : 'Visa fler'}
+          {discoverLoading ? 'Laddar…' : 'Visa fler'}
         </button>
       )}
     </>

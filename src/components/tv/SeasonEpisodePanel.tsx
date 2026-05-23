@@ -22,7 +22,7 @@ export default function SeasonEpisodePanel({
   if (isLoading) {
     return (
       <div className="bg-bg-2 border-t border-rule-2 px-4 py-2 text-xs text-ink-3">
-        Laddar...
+        Laddar…
       </div>
     );
   }

@@ -20,7 +20,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   const { data: followingCount } = useFollowingCount(data?.uid ?? null);
   const taste = useTasteMatch(data?.uid ?? null);
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!data) return <div className="text-sm text-text-muted py-4">Användaren hittades inte.</div>;
 
   // Tre-state från usePublicProfile: null (ej användare), { isPrivate }

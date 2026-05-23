@@ -26,7 +26,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
     [list?.items],
   );
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!list) return <div className="text-sm text-text-muted py-4">Listan hittades inte.</div>;
 
   // Optimistisk cache-uppdatering — undviker en extra getDoc per mutation. Om
@@ -141,7 +141,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
           type="search"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Sök film eller serie..."
+          placeholder="Sök film eller serie…"
           className="flex-1 py-1 text-xs border-none outline-none font-[inherit] bg-transparent"
           autoFocus
         />
@@ -155,7 +155,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
       </div>
 
       {query.length >= 2 && isLoading && (
-        <div className="text-xxs text-text-muted py-1">Söker...</div>
+        <div className="text-xxs text-text-muted py-1">Söker…</div>
       )}
 
       {query.length >= 2 && !isLoading && results.length === 0 && (

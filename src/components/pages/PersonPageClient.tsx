@@ -47,7 +47,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
   });
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!person) return <div className="text-sm text-text-muted py-4">Personen hittades inte.</div>;
 
   const photo = profileUrl(person.profile_path, 'w500');

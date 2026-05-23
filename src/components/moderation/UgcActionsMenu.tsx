@@ -156,7 +156,7 @@ function ReportDialog({
         reason,
         note: note.trim() || undefined,
       });
-      toast('Tack för rapporten. Vi tittar på det.');
+      toast('Rapporten skickad. Den granskas av en moderator.');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunde inte skicka rapporten.');

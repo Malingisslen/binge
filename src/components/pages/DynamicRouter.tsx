@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
  * loading: stöder en fallback-placeholder medan chunken laddas.
  */
 
-const LOADING = <div className="text-sm text-text-muted py-4">Laddar...</div>;
+const LOADING = <div className="text-sm text-text-muted py-4">Laddar…</div>;
 
 // MoviePageClient används som client-side fallback för movie-ids utanför
 // topp-N — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,

@@ -15,9 +15,9 @@ describe('STATUS_LABELS', () => {
   it('contains all four WatchStatus values with new labels', () => {
     expect(STATUS_LABELS).toEqual({
       'vill_se': 'Vill se',
-      'mina': 'Mina serier',
+      'mina': 'Följer',
       'sedd': 'Sedd',
-      'avbruten': 'Avbröt',
+      'avbruten': 'Avbruten',
     });
   });
 });
@@ -39,11 +39,11 @@ describe('statusLabel', () => {
   it('returns the generic label for vill_se / sedd / avbruten', () => {
     expect(statusLabel('vill_se')).toBe('Vill se');
     expect(statusLabel('sedd')).toBe('Sedd');
-    expect(statusLabel('avbruten')).toBe('Avbröt');
+    expect(statusLabel('avbruten')).toBe('Avbruten');
   });
 
-  it('shows "Mina serier" for mina (TV)', () => {
-    expect(statusLabel('mina', 'tv')).toBe('Mina serier');
+  it('shows "Följer" for mina (TV)', () => {
+    expect(statusLabel('mina', 'tv')).toBe('Följer');
   });
 
   it('translates mina → "Sedd" for movies (defensive — bör aldrig hända i normalt UI)', () => {

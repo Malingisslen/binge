@@ -74,7 +74,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     }
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
-  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar...</div>;
+  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar…</div>;
   if (!show) return <div className="text-sm text-ink-3 py-4">Serien hittades inte.</div>;
 
   const poster = posterUrl(show.poster_path, 'w500');

@@ -33,7 +33,7 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
   );
 
   if (loading) {
-    return <div className="text-sm text-ink-3 py-4">Laddar session...</div>;
+    return <div className="text-sm text-ink-3 py-4">Laddar session…</div>;
   }
 
   if (notFound || !session) {
@@ -194,7 +194,7 @@ function JoinSessionForm({
             disabled={submitting}
             className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
-            {submitting ? 'Går med...' : 'Gå med'}
+            {submitting ? 'Går med…' : 'Gå med'}
           </button>
         </div>
       </form>
@@ -337,7 +337,7 @@ function SessionMain({
       <div className="bg-surface border border-border-main rounded-sm mb-[8px]">
         <div className="flex items-center gap-2 px-3 py-[6px] border-b border-border-light text-xs">
           <Share2 size={12} className="text-text-muted" />
-          <code className="text-xxs flex-1 truncate text-text-secondary">{shareUrl || 'Hämtar länk...'}</code>
+          <code className="text-xxs flex-1 truncate text-text-secondary">{shareUrl || 'Hämtar länk…'}</code>
           <button
             type="button"
             onClick={copyShare}

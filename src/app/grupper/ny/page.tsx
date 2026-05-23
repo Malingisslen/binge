@@ -137,7 +137,7 @@ function NyGruppContent() {
             disabled={submitting}
             className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
-            {submitting ? 'Skapar...' : 'Skapa grupp'}
+            {submitting ? 'Skapar…' : 'Skapa grupp'}
           </button>
           <button
             type="button"

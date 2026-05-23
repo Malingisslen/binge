@@ -69,7 +69,7 @@ function GroupContent({ id }: { id: string }) {
   }, [inviteParam, uid, user, group, isMember, joining, id]);
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-4">Laddar grupp...</div>;
+    return <div className="text-sm text-text-muted py-4">Laddar grupp…</div>;
   }
 
   if (notFound || !group) {
@@ -191,7 +191,7 @@ function GroupView({
             className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Play size={11} />
-            {startingSession ? 'Startar...' : 'Starta session'}
+            {startingSession ? 'Startar…' : 'Starta session'}
           </button>
           {isOwner && (
             <button

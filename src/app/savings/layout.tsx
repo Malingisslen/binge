@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Streamingrådgivaren',
-  description: 'Få en lugn översikt över dina strömningsabonnemang, se vad du kan pausa och spara pengar varje månad.',
+  title: 'Sparande',
+  description: 'Översikt över dina streamingtjänster. Se vad du kan pausa och hur mycket du sparar per månad.',
   alternates: { canonical: '/savings/' },
 };
 

@@ -45,7 +45,7 @@ export function NotificationsSection() {
         toast('Push-notifs avaktiverade');
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Något gick fel — försök igen');
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
     } finally {
       setBusy(false);
     }

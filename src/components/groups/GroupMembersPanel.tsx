@@ -143,12 +143,12 @@ function AddMemberSearch({
         type="text"
         value={q}
         onChange={e => { setQ(e.target.value); setErr(null); }}
-        placeholder="Sök efter @användarnamn eller namn..."
+        placeholder="Sök efter @användarnamn eller namn…"
         className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white outline-none"
         autoFocus
       />
       {q.trim().length >= 2 && isLoading && (
-        <div className="text-xxs text-text-muted">Söker...</div>
+        <div className="text-xxs text-text-muted">Söker…</div>
       )}
       {q.trim().length >= 2 && !isLoading && filtered.length === 0 && (
         <div className="text-xxs text-text-muted">

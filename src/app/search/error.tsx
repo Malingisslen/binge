@@ -15,7 +15,7 @@ export default function SearchError({
       reset={reset}
       scope="app:search"
       heading="Sökningen misslyckades"
-      body="TMDB svarade inte. Försök med en annan sökterm eller vänta en stund."
+      body="Sökningen gick inte fram. Försök med en annan sökterm eller vänta en stund."
     />
   );
 }

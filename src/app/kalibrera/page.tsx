@@ -70,7 +70,7 @@ function KalibreraContent() {
   };
 
   if (isLoading) {
-    return <div className="text-sm text-text-muted py-4">Laddar...</div>;
+    return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   }
 
   if (pool.length === 0) {
@@ -78,7 +78,7 @@ function KalibreraContent() {
       <div className="max-w-[560px]">
         <h1 className="text-[18px] font-bold mb-2">Kalibrera din smak</h1>
         <p className="text-xs text-text-muted mb-3">
-          Kunde inte hämta titlar från TMDB. Försök igen senare.
+          Kunde inte hämta titlar just nu. Försök igen om en stund.
         </p>
         <Link href="/" className="text-accent no-underline text-xs">← Tillbaka till startsidan</Link>
       </div>
@@ -114,7 +114,7 @@ function KalibreraContent() {
             disabled={saving}
             className="px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
           >
-            {saving ? 'Sparar...' : 'Spara och gå till startsidan'}
+            {saving ? 'Sparar…' : 'Spara och gå till startsidan'}
           </button>
         </div>
       )}

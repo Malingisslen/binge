@@ -89,9 +89,9 @@ function SearchResults() {
       </div>
 
       {isLoading ? (
-        <div className="text-sm text-text-muted py-4">Söker...</div>
+        <div className="text-sm text-text-muted py-4">Söker…</div>
       ) : results.length === 0 ? (
-        <div className="text-sm text-text-muted py-4">Inga resultat hittades.</div>
+        <div className="text-sm text-text-muted py-4">Inga träffar.</div>
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
           <TitleGrid items={results} providerMap={providerMap} />
@@ -103,7 +103,7 @@ function SearchResults() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-text-muted py-4">Laddar...</div>}>
+    <Suspense fallback={<div className="text-sm text-text-muted py-4">Laddar…</div>}>
       <SearchResults />
     </Suspense>
   );
