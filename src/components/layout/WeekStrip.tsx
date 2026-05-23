@@ -120,6 +120,10 @@ export default function WeekStrip() {
         const series = seriesByDay[key] ?? [];
         const top = series[0];
         const rest = series.length - 1;
+        // Popovern är bara meningsfull när den tillför info utöver vad cellen
+        // redan visar inline — alltså flera serier samma dag ELLER flera
+        // avsnitt av samma serie. Annars duplicerar den bara titeln.
+        const showPop = series.length > 1 || (top != null && top.episodes > 1);
         return (
           <Link
             key={key}
@@ -149,7 +153,7 @@ export default function WeekStrip() {
                 <span aria-hidden="true">—</span>
               )}
             </span>
-            {series.length > 0 && (
+            {showPop && (
               <div className="day-pop" role="presentation">
                 <ul>
                   {series.map(s => (
