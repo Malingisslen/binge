@@ -27,6 +27,8 @@ import {
 import { auth, db } from '@/lib/firebase/config';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
+import { getProvider } from '@/lib/tmdb/providers';
+import { daysBetween, todayIso } from '@/lib/utils';
 import type { ItemVisibility, UserProfile } from '@/types';
 
 interface AuthState {
@@ -356,13 +358,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const next = { ...current, [providerId]: { pausedAt, resumeAt } };
     return updateUserField('providerPauses', next);
   }, [updateUserField, user?.providerPauses]);
-  const resumeProvider = useCallback((providerId: number) => {
+  const resumeProvider = useCallback(async (providerId: number) => {
+    if (!uid) return;
     const current = user?.providerPauses ?? {};
-    if (!current[providerId]) return Promise.resolve();
+    const pause = current[providerId];
+    if (!pause) return;
+
+    // Snapshot kostnaden vid resume — medvetet val, eftersom användaren kan
+    // ha justerat priset under pausen och vi vill ärligt redovisa det
+    // belopp som faktiskt sparades. Fallback till tjänstens default-pris.
+    const provider = getProvider(providerId);
+    const monthlyCost = user?.providerCosts?.[providerId] ?? provider?.defaultMonthlyCost ?? 0;
+    // Minst 1 dag — annars hamnar pause-then-instant-resume-test som 0 kr.
+    const durationDays = Math.max(1, daysBetween(pause.pausedAt));
+    const savedAmount = Math.round((monthlyCost * durationDays) / 30);
+
     const next = { ...current };
     delete next[providerId];
-    return updateUserField('providerPauses', next);
-  }, [updateUserField, user?.providerPauses]);
+
+    // Atomisk batch: skriv historik-doc + uppdaterade providerPauses i ett
+    // svep. Om något steg failar rullas båda tillbaka, så vi får inga
+    // orfaner — antingen är pausen kvar OCH historiken oskriven, eller så
+    // är pausen borta OCH historiken sparad.
+    const batch = writeBatch(db);
+    const historyRef = doc(collection(db, 'users', uid, 'pauseHistory'));
+    batch.set(historyRef, {
+      providerId,
+      providerShortName: provider?.shortName ?? `Provider ${providerId}`,
+      pausedAt: pause.pausedAt,
+      resumedAt: todayIso(),
+      monthlyCost,
+      durationDays,
+      savedAmount,
+      createdAt: serverTimestamp(),
+    });
+    batch.set(
+      doc(db, 'users', uid),
+      { providerPauses: next, updatedAt: serverTimestamp() },
+      { merge: true },
+    );
+    await batch.commit();
+    setUser(prev => prev ? { ...prev, providerPauses: next } : null);
+  }, [uid, user]);
   const updateBio = useCallback((bio: string) => updateUserField('bio', bio), [updateUserField]);
 
   const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {

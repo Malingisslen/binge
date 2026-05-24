@@ -98,6 +98,13 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
+    // Sparbeslut-historik för Streamingrådgivaren. Skrivs av resumeProvider
+    // när användaren tar av en paus, så "Sparat hittills" + "Senaste
+    // sparbesluten" har data att visa. Owner-only — inga andra läser.
+    match /users/{uid}/pauseHistory/{historyId} {
+      allow read, write: if isOwner(uid);
+    }
+
     // Blockerade användare — endast ägaren läser/skriver. Klient-filter i UI
     // gömmer blockerad användares innehåll (hygien-nivå, inte säkerhetsgräns).
     match /users/{uid}/blocked/{targetUid} {

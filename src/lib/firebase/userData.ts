@@ -40,6 +40,9 @@ export interface UserDataSnapshots {
   // behöver vi inte exponera tokens (de är device-specifika och meningslösa
   // utanför Firebase) — buildUserExport kan hoppa över detta fält.
   fcmTokensSnap: QuerySnapshot;
+  // Sparbeslut-historik (Streamingrådgivaren) — skrivs av resumeProvider.
+  // Inkluderas i export + delete-cascade.
+  pauseHistorySnap: QuerySnapshot;
   reviewsSnap: QuerySnapshot;
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
@@ -61,6 +64,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendRequestsSnap,
     friendRequestsSentSnap,
     fcmTokensSnap,
+    pauseHistorySnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
@@ -79,6 +83,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'friendRequests')),
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
+    getDocs(collection(db, 'users', uid, 'pauseHistory')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // doc-id = mitt uid (single-field collection-group-index på documentId)
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
@@ -102,6 +107,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendRequestsSnap,
     friendRequestsSentSnap,
     fcmTokensSnap,
+    pauseHistorySnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
