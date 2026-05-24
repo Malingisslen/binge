@@ -111,8 +111,8 @@ export default function UpcomingEpisodes() {
 
   const activeWeeks = weeks - trailingQuietWeeks;
   const summaryText = trailingQuietWeeks >= 3
-    ? `${totalEpisodes} ${pluralSv(totalEpisodes, 'avsnitt', 'avsnitt')} fördelade på ${shows.length} ${pluralSv(shows.length, 'serie', 'serier')} de närmaste ${activeWeeks} ${pluralSv(activeWeeks, 'veckan', 'veckorna')} — sedan en lugn period på ${trailingQuietWeeks} ${pluralSv(trailingQuietWeeks, 'vecka', 'veckor')}.`
-    : `${totalEpisodes} ${pluralSv(totalEpisodes, 'avsnitt', 'avsnitt')} fördelade på ${shows.length} ${pluralSv(shows.length, 'serie', 'serier')} de närmaste ${weeks} veckorna.`;
+    ? `${pluralSv(totalEpisodes, 'avsnitt', 'avsnitt')} fördelade på ${pluralSv(shows.length, 'serie', 'serier')} de närmaste ${pluralSv(activeWeeks, 'veckan', 'veckorna')} — sedan en lugn period på ${pluralSv(trailingQuietWeeks, 'vecka', 'veckor')}.`
+    : `${pluralSv(totalEpisodes, 'avsnitt', 'avsnitt')} fördelade på ${pluralSv(shows.length, 'serie', 'serier')} de närmaste ${weeks} veckorna.`;
 
   return (
     <div className="mb-[14px]">
@@ -164,7 +164,7 @@ export default function UpcomingEpisodes() {
         <div className="bg-surface border border-border-main border-l-[3px] border-l-border-main rounded-sm px-3 py-[8px] mt-[6px]">
           <p className="text-xs text-text-secondary">
             <strong className="text-text-primary">
-              {trailingQuietWeeks} {pluralSv(trailingQuietWeeks, 'lugn vecka', 'lugna veckor')} framöver
+              {pluralSv(trailingQuietWeeks, 'lugn vecka', 'lugna veckor')} framöver
             </strong>
             {' — bra läge att överväga en pausning när du är ikapp.'}
           </p>

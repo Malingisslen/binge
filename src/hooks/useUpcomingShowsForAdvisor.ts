@@ -1,17 +1,22 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useAdvisorTimeline } from './useAdvisorTimeline';
-import { useCalendarEntries } from './useCalendar';
+import { useSubscriptionAdvisor } from './useSubscriptionAdvisor';
+import { useCalendarEntries, getWeekStart } from './useCalendar';
+import { useAuth } from './useAuth';
 import { todayIso } from '@/lib/utils';
 
 // Per-serie-vy av kommande avsnitt för Streamingrådgivaren.
-// Återanvänder data från useAdvisorTimeline (som i sin tur återanvänder
-// useSubscriptionAdvisor) — vi gör inga egna TMDB-fetches här.
+//
+// Tidigare version gick via useAdvisorTimeline — men den hooken är byggd
+// för en vecko-grid och dedupar entries per (show, week). En serie som
+// släpper avsnitt onsdag + torsdag samma vecka tappade alltså 50% av
+// pillsen i V1-listan. Den här hooken läser calendar-entries direkt så
+// varje avsnitt får sin egen pill, oavsett hur tätt de ligger.
 
 export interface UpcomingEpisode {
   airDate: string;          // YYYY-MM-DD
-  episodeCode?: string;     // "S2E03" om TMDB-data finns
+  episodeCode?: string;     // "S2E03"
   weekIndex: number;        // 0..weeks-1
   isFinale: boolean;
   isToday: boolean;
@@ -31,81 +36,134 @@ export interface UpcomingShowsResult {
   shows: UpcomingShow[];
   totalEpisodes: number;
   weeks: number;
-  // Antal sammanhängande lugna veckor i slutet av fönstret. Används för att
-  // visa "X lugna veckor framöver" som pause-rekommendation under listan.
+  // Antal sammanhängande lugna veckor i slutet av fönstret. Används för
+  // pause-rekommendationen som visas under listan.
   trailingQuietWeeks: number;
   isLoading: boolean;
 }
 
 const DEFAULT_WEEKS = 8;
+const DAY_MS = 86400000;
 
 export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): UpcomingShowsResult {
-  const timeline = useAdvisorTimeline();
+  // useSubscriptionAdvisor's lookAheadDays påverkar bara status-bedömningar
+  // — providers-listan + show-attribution är samma. Default 60 räcker.
+  const advisor = useSubscriptionAdvisor();
   const { entries: calendarEntries, isLoading: calLoading } = useCalendarEntries();
+  const { user } = useAuth();
 
   return useMemo(() => {
     const today = todayIso();
+    const startMonday = getWeekStart(new Date());
+    const startMs = startMonday.getTime();
+    const horizonMs = startMs + weeks * 7 * DAY_MS;
+    const userPaused = new Set(Object.keys(user?.providerPauses ?? {}).map(Number));
 
-    // CalendarEntry har isFinale per avsnitt — bygg lookup per
-    // tmdbId+airDate så timeline-entries kan berikas. Timeline-datan har
-    // bara title + episodeCode + airDate utan finale-flagga.
-    const finaleSet = new Set<string>();
-    for (const e of calendarEntries) {
-      if (e.isFinale) finaleSet.add(`${e.tmdbId}|${e.airDate}`);
+    function weekIndexFor(dateIso: string): number {
+      const ms = new Date(dateIso + 'T00:00:00').getTime();
+      return Math.floor((ms - startMs) / (7 * DAY_MS));
     }
 
-    // Dedupe per tmdbId — en serie tillhör flera providers ibland.
-    // Första subscribed-lane som har serien får attribution. Det är
-    // sannolikt fel ibland (vi borde välja den lane med bäst valuta för
+    // Bygg show → provider-attribution. En serie som finns hos flera providers
+    // hamnar på första (non-paused) subscribed-provider vi ser. Det är
+    // sannolikt fel ibland (borde vara den provider med bäst valuta för
     // användaren) men låt det vara en uppföljning.
-    const showMap = new Map<number, UpcomingShow>();
-
-    for (const lane of timeline.subscribedLanes) {
-      // Skippa user-paused: vi ska inte trycka avsnitt på en tjänst som
-      // användaren aktivt sagt upp.
-      if (lane.kind === 'user-paused') continue;
-
-      for (const cell of lane.cells) {
-        if (cell.weekIndex >= weeks) continue;
-        for (const entry of cell.entries) {
-          const existing = showMap.get(entry.tmdbId);
-          const isFinale = finaleSet.has(`${entry.tmdbId}|${entry.airDate}`);
-          const episode: UpcomingEpisode = {
-            airDate: entry.airDate,
-            episodeCode: entry.episodeCode,
-            weekIndex: cell.weekIndex,
-            isFinale,
-            isToday: entry.airDate === today,
-          };
-          if (existing) {
-            // Lägg bara till om vi inte redan har samma airDate (kan hända
-            // om calendar och advisor-fallback råkar peka på samma datum).
-            if (!existing.episodes.some(e => e.airDate === entry.airDate)) {
-              existing.episodes.push(episode);
-            }
-          } else {
-            showMap.set(entry.tmdbId, {
-              tmdbId: entry.tmdbId,
-              title: entry.title,
-              providerId: lane.providerId,
-              providerShortName: lane.shortName,
-              providerColor: lane.color,
-              episodes: [episode],
-              firstAirDate: entry.airDate,
-            });
-          }
+    const showProviderMap = new Map<number, {
+      providerId: number;
+      providerShortName: string;
+      providerColor: string;
+    }>();
+    for (const p of advisor.providers) {
+      if (userPaused.has(p.providerId)) continue;
+      for (const show of p.shows) {
+        if (!showProviderMap.has(show.tmdbId)) {
+          showProviderMap.set(show.tmdbId, {
+            providerId: p.providerId,
+            providerShortName: p.shortName,
+            providerColor: p.color,
+          });
         }
       }
     }
 
-    // Sortera avsnitt per serie + uppdatera firstAirDate.
+    // Per-avsnitt iteration: läs ALLA calendar entries och plocka in dem
+    // som faller inom horizonten OCH ligger på en subscribed provider.
+    const showMap = new Map<number, UpcomingShow>();
+    for (const e of calendarEntries) {
+      if (e.airDate < today) continue;
+      const ms = new Date(e.airDate + 'T00:00:00').getTime();
+      if (ms >= horizonMs) continue;
+      const meta = showProviderMap.get(e.tmdbId);
+      if (!meta) continue;
+
+      const wi = weekIndexFor(e.airDate);
+      if (wi < 0 || wi >= weeks) continue;
+
+      const episode: UpcomingEpisode = {
+        airDate: e.airDate,
+        episodeCode: e.episodeCode,
+        weekIndex: wi,
+        isFinale: e.isFinale === true,
+        isToday: e.airDate === today,
+      };
+
+      const existing = showMap.get(e.tmdbId);
+      if (existing) {
+        if (!existing.episodes.some(ep => ep.airDate === e.airDate)) {
+          existing.episodes.push(episode);
+        }
+      } else {
+        showMap.set(e.tmdbId, {
+          tmdbId: e.tmdbId,
+          title: e.title,
+          providerId: meta.providerId,
+          providerShortName: meta.providerShortName,
+          providerColor: meta.providerColor,
+          episodes: [episode],
+          firstAirDate: e.airDate,
+        });
+      }
+    }
+
+    // Fallback: serier utan calendar entries men med en känd nextAirDate
+    // (typiskt en ny säsong som annonserats i TMDB men ännu inte börjat) får
+    // en enstaka pill så användaren ser att den är "på väg".
+    for (const p of advisor.providers) {
+      if (userPaused.has(p.providerId)) continue;
+      for (const show of p.shows) {
+        if (showMap.has(show.tmdbId)) continue;
+        if (!show.nextAirDate) continue;
+        if (show.nextAirDate < today) continue;
+        const ms = new Date(show.nextAirDate + 'T00:00:00').getTime();
+        if (ms >= horizonMs) continue;
+        const wi = weekIndexFor(show.nextAirDate);
+        if (wi < 0 || wi >= weeks) continue;
+
+        showMap.set(show.tmdbId, {
+          tmdbId: show.tmdbId,
+          title: show.title,
+          providerId: p.providerId,
+          providerShortName: p.shortName,
+          providerColor: p.color,
+          episodes: [{
+            airDate: show.nextAirDate,
+            episodeCode: show.nextEpisodeCode ?? undefined,
+            weekIndex: wi,
+            isFinale: false,
+            isToday: show.nextAirDate === today,
+          }],
+          firstAirDate: show.nextAirDate,
+        });
+      }
+    }
+
     showMap.forEach(s => {
       s.episodes.sort((a, b) => a.airDate.localeCompare(b.airDate));
       s.firstAirDate = s.episodes[0]?.airDate ?? s.firstAirDate;
     });
 
-    // Sortera serier: flest avsnitt först (= aktivast just nu), sedan
-    // tidigast first-air-date som tiebreaker så ordningen är stabil.
+    // Sortera: flest avsnitt först (= aktivast), sedan tidigast first-air
+    // som tiebreaker så ordningen är deterministisk.
     const shows = Array.from(showMap.values()).sort((a, b) => {
       if (b.episodes.length !== a.episodes.length) return b.episodes.length - a.episodes.length;
       return a.firstAirDate.localeCompare(b.firstAirDate);
@@ -113,8 +171,6 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
 
     const totalEpisodes = shows.reduce((sum, s) => sum + s.episodes.length, 0);
 
-    // Räkna efterhängande lugna veckor — bara om vi har minst en serie att
-    // visa (annars är hela perioden lugn vilket inte är "pause-värt").
     const weekHasEpisode = new Array(weeks).fill(false);
     for (const s of shows) {
       for (const e of s.episodes) {
@@ -138,5 +194,5 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
       trailingQuietWeeks,
       isLoading: calLoading,
     };
-  }, [timeline.subscribedLanes, calendarEntries, weeks, calLoading]);
+  }, [advisor.providers, calendarEntries, weeks, calLoading, user?.providerPauses]);
 }
