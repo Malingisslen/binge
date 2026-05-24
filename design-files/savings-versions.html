@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streamingrådgivaren — versionsjämförelse</title>
+<style>
+  :root {
+    --bg: #eeece8;
+    --surface: #faf8f5;
+    --surface-2: #f3f0ea;
+    --sidebar: #1e2028;
+    --accent: #d97b35;
+    --accent-deep: #b86329;
+    --ink: #1e2028;
+    --ink-2: #5a5a5a;
+    --ink-3: #8e8a82;
+    --rule: #d5d2cb;
+    --rule-2: #e8e5de;
+    --green: #6a7a4a;
+    --green-soft: #ecedd8;
+    --red: #b85240;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body {
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+
+  .switcher {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--sidebar); color: white;
+    padding: 11px 24px;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid #000;
+    flex-wrap: wrap;
+  }
+  .switcher h1 {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .switcher .desc {
+    font-size: 11px; color: #888; margin-right: auto;
+  }
+  .tab {
+    background: transparent; color: #ccc;
+    border: 1px solid #3a3a40;
+    padding: 5px 12px; border-radius: 2px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .tab:hover { color: white; border-color: #555; }
+  .tab.active {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+
+  .frame {
+    display: none;
+    max-width: 1100px; margin: 0 auto;
+    padding: 36px 32px 80px;
+  }
+  .frame.active { display: block; }
+
+  .crumb {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-3); margin-bottom: 6px; font-weight: 600;
+  }
+  .page-title {
+    font-size: 32px; font-weight: 700; letter-spacing: -0.5px;
+    line-height: 1.1; color: var(--ink);
+  }
+  .stand {
+    font-size: 14px; color: var(--ink-2); margin-top: 6px; line-height: 1.5;
+  }
+  .dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    vertical-align: middle; margin-right: 4px;
+  }
+
+  .action-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 2px; padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .action-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent); font-weight: 700; margin-bottom: 4px;
+  }
+  .action-body {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap;
+  }
+  .action-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .action-desc { font-size: 12px; color: var(--ink-2); margin-top: 2px; max-width: 540px; }
+  .btn-primary {
+    background: var(--accent); color: white;
+    padding: 7px 14px; border-radius: 2px; border: none;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--accent-deep); }
+  .btn-ghost {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 6px 12px; border-radius: 2px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+
+  .kpi-grid { display: grid; gap: 10px; margin-bottom: 16px; }
+  .kpi-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 10px 14px;
+  }
+  .kpi-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-3); font-weight: 600;
+  }
+  .kpi-value {
+    font-size: 18px; font-weight: 700; color: var(--ink);
+    margin-top: 3px; display: flex; align-items: center; gap: 6px;
+  }
+  .kpi-sub { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+
+  .timeline {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 12px 14px; margin-bottom: 14px;
+  }
+  .tl-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .tl-legend { display: flex; gap: 12px; font-size: 10px; color: var(--ink-3); margin-bottom: 10px; }
+  .tl-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 1px; margin-right: 4px; vertical-align: middle; }
+  .tl-grid {
+    display: grid; grid-template-columns: 90px 1fr 90px;
+    gap: 8px; align-items: center; margin-bottom: 4px;
+  }
+  .tl-name { font-size: 11px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 5px; }
+  .tl-cells { display: flex; gap: 2px; }
+  .tl-cell { width: 13px; height: 16px; border-radius: 2px; background: var(--surface-2); border: 1px solid var(--rule-2); }
+  .tl-cell.has { border: none; opacity: 0.7; }
+  .tl-foot { font-size: 10px; color: var(--ink-3); text-align: right; }
+
+  .block { margin-bottom: 16px; }
+  .block-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .block-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-3); font-weight: 700;
+  }
+  .block-meta { font-size: 10px; color: var(--ink-3); }
+  .dtable {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; width: 100%; border-collapse: collapse;
+  }
+  .dtable td {
+    padding: 7px 12px; border-bottom: 1px solid var(--rule-2);
+    font-size: 12px; vertical-align: middle;
+  }
+  .dtable tr:last-child td { border-bottom: none; }
+  .dtable .name { font-weight: 600; }
+  .dtable .muted { color: var(--ink-3); font-size: 11px; }
+  .dtable .right { text-align: right; white-space: nowrap; }
+  .dtable .check { color: var(--green); font-weight: 700; }
+  .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 2px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  }
+  .pill-orange { color: var(--accent); border: 1px solid var(--accent); }
+  .pill-green  { color: var(--green); border: 1px solid var(--green); }
+
+  /* Version A — hero */
+  .va-hero {
+    margin: 24px 0 22px; padding-bottom: 22px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .va-hero-amount {
+    font-size: 64px; font-weight: 700; letter-spacing: -2px;
+    line-height: 1; color: var(--ink);
+  }
+  .va-hero-unit {
+    font-size: 22px; color: var(--ink-3); font-weight: 500;
+    letter-spacing: -0.3px; margin-left: 4px;
+  }
+  .va-hero-meta { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .va-badge {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 700; padding: 3px 8px; border-radius: 2px;
+  }
+  .va-badge.neutral { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--rule); }
+  .va-meta-text { font-size: 12px; color: var(--ink-2); }
+
+  /* Version B — diagnos */
+  .vb-diagnosis {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 18px 20px; margin: 22px 0 18px;
+  }
+  .vb-diag-text { font-size: 17px; line-height: 1.4; color: var(--ink); font-weight: 500; }
+  .vb-diag-text strong { font-weight: 700; }
+  .vb-diag-text .negspace { color: var(--ink-3); font-weight: 400; }
+  .vb-todo { margin-bottom: 18px; }
+  .vb-todo-row {
+    display: grid; grid-template-columns: 32px 1fr auto;
+    align-items: center; gap: 14px; padding: 14px 16px;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; margin-bottom: 6px;
+  }
+  .vb-todo-num {
+    font-size: 22px; font-weight: 300; color: var(--ink-3);
+    text-align: center; line-height: 1;
+  }
+  .vb-todo-row.active .vb-todo-num { color: var(--accent); font-weight: 600; }
+  .vb-todo-row.passive { opacity: 0.65; }
+  .vb-todo-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .vb-todo-desc { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+  /* Version C/D/E — sidebar */
+  .vc-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 24px; margin-top: 22px;
+  }
+  .vc-side { display: flex; flex-direction: column; gap: 14px; }
+  .vc-side-block {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 12px 14px;
+  }
+  .vc-side-block h3 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-3); font-weight: 700; margin-bottom: 8px;
+  }
+  .vc-helper-text { font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+  .vc-helper-text strong { color: var(--ink); }
+  .vc-history-row {
+    display: flex; justify-content: space-between; padding: 5px 0;
+    font-size: 11px; border-bottom: 1px solid var(--rule-2);
+  }
+  .vc-history-row:last-child { border-bottom: none; }
+  .vc-history-name { color: var(--ink); font-weight: 600; }
+  .vc-history-amount { color: var(--green); font-weight: 700; }
+  .vc-history-date { color: var(--ink-3); font-size: 10px; }
+  .vc-savings-total { font-size: 24px; font-weight: 700; color: var(--green); margin: 2px 0 4px; }
+  .vc-next-check { font-size: 18px; font-weight: 700; color: var(--ink); }
+  .vc-next-check-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+  /* Upcoming episodes (B + E) */
+  .upcoming-summary {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--green);
+    border-radius: 2px; padding: 10px 14px; margin-bottom: 6px;
+    font-size: 12px; color: var(--ink-2);
+  }
+  .upcoming-summary strong { color: var(--ink); font-weight: 700; }
+  .upcoming-list {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; list-style: none; padding: 0;
+    margin-bottom: 8px;
+  }
+  .upcoming-week-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 14px 6px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .upcoming-week-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-2); font-weight: 700;
+  }
+  .upcoming-week-meta { font-size: 10px; color: var(--ink-3); }
+  .upcoming-row {
+    display: grid; grid-template-columns: 48px 1fr auto;
+    gap: 12px; padding: 10px 14px; align-items: center;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .upcoming-row:last-child { border-bottom: none; }
+  .upcoming-date { text-align: center; }
+  .upcoming-date .day {
+    font-size: 18px; font-weight: 700; line-height: 1; color: var(--ink);
+  }
+  .upcoming-date .dow {
+    font-size: 9px; color: var(--ink-3); margin-top: 2px;
+    text-transform: lowercase; letter-spacing: 0.3px;
+  }
+  .upcoming-row.today .upcoming-date .day { color: var(--accent); }
+  .upcoming-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .upcoming-title .episode {
+    color: var(--ink-3); font-weight: 500; margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .upcoming-meta { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+  .upcoming-badge {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 700; color: var(--accent);
+    border: 1px solid var(--accent); padding: 2px 6px; border-radius: 2px;
+  }
+  .upcoming-quiet {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--ink-3);
+    border-radius: 2px; padding: 10px 14px;
+    font-size: 12px; color: var(--ink-2); margin-bottom: 8px;
+  }
+  .upcoming-quiet strong { color: var(--ink); }
+  .upcoming-footer {
+    text-align: center; padding: 8px;
+    font-size: 11px; color: var(--ink-3);
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .upcoming-footer a { color: var(--accent); font-weight: 600; }
+
+  /* Variant switcher (intern tab-rad i E) */
+  .var-switcher {
+    display: flex; gap: 4px;
+    margin-bottom: 8px; padding: 4px;
+    background: var(--surface-2); border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    flex-wrap: wrap;
+  }
+  .var-tab {
+    background: transparent; color: var(--ink-3);
+    border: none; padding: 5px 10px; border-radius: 2px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    flex: 1; min-width: 90px;
+  }
+  .var-tab:hover { color: var(--ink); }
+  .var-tab.active {
+    background: var(--surface); color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+  .var-view { display: none; margin-bottom: 8px; }
+  .var-view.active { display: block; }
+
+  /* Variant 1 — Per serie */
+  .var1-list {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .var1-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    gap: 12px; padding: 10px 14px; align-items: center;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .var1-row:last-child { border-bottom: none; }
+  .var1-show {
+    font-size: 13px; font-weight: 600; color: var(--ink);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .var1-show .service {
+    font-size: 11px; color: var(--ink-3); font-weight: 500; margin-left: 6px;
+  }
+  .var1-pills { display: flex; gap: 3px; flex-wrap: wrap; }
+  .var1-pill {
+    font-size: 10px; padding: 2px 7px; border-radius: 2px;
+    background: var(--surface-2); border: 1px solid var(--rule-2);
+    color: var(--ink-2); font-variant-numeric: tabular-nums; font-weight: 600;
+  }
+  .var1-pill.today {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+  .var1-count {
+    font-size: 11px; color: var(--ink-3); white-space: nowrap;
+    min-width: 100px; text-align: right;
+  }
+
+  /* Variant 2 — Veckokort med thumbnails */
+  .var2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .var2-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 12px;
+  }
+  .var2-card.today { border-color: var(--accent); border-width: 1px; box-shadow: inset 3px 0 0 var(--accent); }
+  .var2-card.quiet {
+    background: var(--surface-2); grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+  }
+  .var2-card-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .var2-card-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--ink-2); font-weight: 700;
+  }
+  .var2-card-meta { font-size: 10px; color: var(--ink-3); }
+  .var2-thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .var2-thumb { display: flex; flex-direction: column; gap: 4px; }
+  .var2-poster {
+    aspect-ratio: 2/3; border-radius: 2px;
+    display: flex; align-items: flex-end; padding: 7px;
+    color: white; font-weight: 700; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    position: relative; overflow: hidden;
+  }
+  .var2-poster::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .var2-poster span { position: relative; z-index: 1; }
+  .var2-poster .ep {
+    position: absolute; top: 5px; right: 5px;
+    font-size: 9px; padding: 1px 5px;
+    background: rgba(0,0,0,0.55); border-radius: 2px;
+    z-index: 2; letter-spacing: 0;
+  }
+  .var2-thumb-meta {
+    font-size: 10px; color: var(--ink-3);
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* Variant 3 — Enkellinje per avsnitt */
+  .var3-list {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .var3-row {
+    display: grid; grid-template-columns: 76px 1fr 100px 60px;
+    gap: 10px; padding: 6px 14px; align-items: center;
+    border-bottom: 1px solid var(--rule-2); font-size: 12px;
+  }
+  .var3-row:last-child { border-bottom: none; }
+  .var3-row.today { background: rgba(217, 123, 53, 0.04); }
+  .var3-date {
+    font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 500;
+  }
+  .var3-row.today .var3-date { color: var(--accent); font-weight: 700; }
+  .var3-title { font-weight: 600; color: var(--ink); }
+  .var3-title .ep {
+    color: var(--ink-3); font-weight: 500; margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .var3-service {
+    font-size: 11px; color: var(--ink-3);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .var3-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 2px;
+    text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700;
+    text-align: center;
+  }
+  .var3-badge.today { background: var(--accent); color: white; }
+  .var3-badge.final { color: var(--ink-3); border: 1px solid var(--rule); }
+
+  /* Variant 4 — Visuell timeline med titel-pills */
+  .var4-grid {
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
+  }
+  .var4-week {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 2px; padding: 5px 4px;
+    min-height: 110px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .var4-week.today { border-color: var(--accent); border-width: 1px; }
+  .var4-week.quiet {
+    background: var(--surface-2); border-style: dashed;
+    align-items: center; justify-content: center;
+    color: var(--ink-3); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.5px; font-weight: 600;
+  }
+  .var4-week-label {
+    font-size: 9px; color: var(--ink-3); text-align: center;
+    text-transform: uppercase; letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--rule-2);
+    padding-bottom: 3px; margin-bottom: 1px; font-weight: 600;
+  }
+  .var4-week.today .var4-week-label {
+    color: var(--accent); border-bottom-color: var(--accent);
+  }
+  .var4-pill {
+    font-size: 9px; padding: 2px 4px; border-radius: 2px;
+    color: white; font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .var4-pill .ep { opacity: 0.75; margin-left: 2px; }
+
+  /* Version E — diagnos i sidebar-toppen */
+  .ve-diagnosis {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 2px; padding: 16px 20px; margin: 0 0 14px;
+  }
+  .ve-diag-text { font-size: 15px; line-height: 1.45; color: var(--ink); font-weight: 500; }
+  .ve-diag-text strong { font-weight: 700; }
+  .ve-diag-text .negspace { color: var(--ink-3); font-weight: 400; }
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <h1>Streamingrådgivaren — A/B/C/D/E</h1>
+  <span class="desc">5 designvarianter · live-data (247 kr/mån, 4 tjänster, Netflix-catchup)</span>
+  <button class="tab" data-v="a">A · Pengar-först</button>
+  <button class="tab" data-v="b">B · Diagnos-först</button>
+  <button class="tab" data-v="c">C · Två-kolumn</button>
+  <button class="tab" data-v="d">D · Hero + sidebar</button>
+  <button class="tab active" data-v="e">E · Diagnos + sidebar</button>
+</div>
+
+<!-- ============ VERSION A — Pengar-först ============ -->
+<div class="frame" id="v-a">
+  <div class="crumb">Streamingrådgivaren · 4 tjänster</div>
+  <h1 class="page-title">Streamingrådgivaren</h1>
+
+  <section class="va-hero">
+    <div class="va-hero-amount">247<span class="va-hero-unit"> kr/mån</span></div>
+    <div class="va-hero-meta">
+      <span class="va-badge neutral">Inget att pausa just nu</span>
+      <span class="va-meta-text">Alla 4 tjänster används aktivt. Nästa översyn kring 15 juni.</span>
+    </div>
+  </section>
+
+  <div class="action-card">
+    <div class="action-label">Slutför</div>
+    <div class="action-body">
+      <div>
+        <div class="action-title">Titta klart på Netflix</div>
+        <div class="action-desc">Du ligger efter på 3 serier här. Avsluta dem innan nästa pausfönster för att öppna en pausning på 109 kr/mån.</div>
+      </div>
+      <a class="btn-primary" href="#">Visa Netflix-serier (3)</a>
+    </div>
+  </div>
+
+  <div class="kpi-grid cols-2">
+    <div class="kpi-card">
+      <div class="kpi-label">Kostnad per aktiv serie</div>
+      <div class="kpi-value">8,2 kr</div>
+      <div class="kpi-sub">30 aktiva serier · normalspann 5–15 kr</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Sämst valuta</div>
+      <div class="kpi-value"><span class="dot" style="background:#e87170"></span>Netflix</div>
+      <div class="kpi-sub">109 kr · 1 aktiv serie · 109 kr/serie</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-head">
+      <h2 class="block-title">Kommande 6 månader</h2>
+      <span class="block-meta">Varje ruta = en vecka</span>
+    </div>
+    <div class="tl-legend">
+      <span><span class="sw" style="background:var(--accent-deep);opacity:0.65"></span>Vecka med avsnitt</span>
+      <span><span class="sw" style="background:var(--surface-2);border:1px solid var(--rule-2)"></span>Tom vecka</span>
+    </div>
+    <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#e87170"></span>Netflix</div><div class="tl-cells" id="tl-a-netflix"></div><div class="tl-foot">109 kr/mån</div></div>
+    <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#c84b66"></span>TV4</div><div class="tl-cells" id="tl-a-tv4"></div><div class="tl-foot">69 kr/mån</div></div>
+    <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#48a3d0"></span>Prime</div><div class="tl-cells" id="tl-a-prime"></div><div class="tl-foot">69 kr/mån</div></div>
+    <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#2a5a8a"></span>SVT</div><div class="tl-cells" id="tl-a-svt"></div><div class="tl-foot">Gratis</div></div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2 class="block-title">Din vill se per tjänst</h2><span class="block-meta">7 tjänster</span></div>
+    <table class="dtable">
+      <tr><td class="check" style="width:24px">✓</td><td class="name"><span class="dot" style="background:#48a3d0"></span>Amazon Prime Video</td><td>4 titlar (3 serier · 1 film)</td><td class="right muted">69 kr/mån</td><td class="right" style="width:90px"></td></tr>
+      <tr><td class="check">✓</td><td class="name"><span class="dot" style="background:#e87170"></span>Netflix</td><td>3 titlar (3 serier)</td><td class="right muted">109 kr/mån</td><td class="right"></td></tr>
+      <tr><td class="check">✓</td><td class="name"><span class="dot" style="background:#c84b66"></span>TV4 Play</td><td>1 titel (1 serie)</td><td class="right muted">69 kr/mån</td><td class="right"></td></tr>
+      <tr><td></td><td class="name muted"><span class="dot" style="background:#5a8aa8"></span>Max</td><td class="muted">5 titlar (5 serier)</td><td class="right muted">149 kr/mån</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+      <tr><td></td><td class="name muted"><span class="dot" style="background:#222"></span>Apple TV+</td><td class="muted">4 titlar (3 serier · 1 film)</td><td class="right muted">119 kr/mån</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ VERSION B — Diagnos-först ============ -->
+<div class="frame" id="v-b">
+  <div class="crumb">Streamingrådgivaren · 4 tjänster</div>
+  <h1 class="page-title">Streamingrådgivaren</h1>
+
+  <div class="vb-diagnosis">
+    <div class="vb-diag-text">
+      Du betalar <strong>247 kr/mån</strong> för 4 tjänster.
+      <span class="negspace">Inget kan pausas just nu — men du ligger efter på</span>
+      <strong>3 Netflix-serier</strong>.
+      <span class="negspace">Slutför dem så öppnas ett pausfönster värt</span>
+      <strong>109 kr/mån</strong>.
+    </div>
+  </div>
+
+  <div class="vb-todo">
+    <div class="vb-todo-row active">
+      <div class="vb-todo-num">1</div>
+      <div>
+        <div class="vb-todo-title">Slutför 3 Netflix-serier</div>
+        <div class="vb-todo-desc">Stranger Things · The Crown · Black Mirror — alla med 2–4 avsnitt kvar.</div>
+      </div>
+      <a class="btn-primary" href="#">Visa serierna →</a>
+    </div>
+    <div class="vb-todo-row passive">
+      <div class="vb-todo-num">2</div>
+      <div>
+        <div class="vb-todo-title">Pausa Netflix när du är klar</div>
+        <div class="vb-todo-desc">Inga andra serier från din Följer/Vill se ligger där de närmaste 60 dagarna.</div>
+      </div>
+      <span class="pill pill-green">Spar 109 kr/mån</span>
+    </div>
+    <div class="vb-todo-row passive">
+      <div class="vb-todo-num">3</div>
+      <div>
+        <div class="vb-todo-title">Överväg: 18 titlar på tjänster du inte har</div>
+        <div class="vb-todo-desc">Max har 5 serier du följer · Apple TV+ har 4 · Viaplay 4 · Disney+ 3.</div>
+      </div>
+      <a class="btn-ghost" href="#">Visa →</a>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="block-head"><h2 class="block-title">Dina tjänster</h2><span class="block-meta">Sorterat efter kostnad per aktiv serie</span></div>
+    <table class="dtable">
+      <tr><td class="name"><span class="dot" style="background:#c84b66"></span>TV4 Play</td><td class="muted">15 aktiva serier</td><td class="right">69 kr/mån</td><td class="right" style="font-weight:600;color:var(--green)">4,6 kr/serie</td></tr>
+      <tr><td class="name"><span class="dot" style="background:#48a3d0"></span>Amazon Prime</td><td class="muted">9 aktiva</td><td class="right">69 kr/mån</td><td class="right" style="font-weight:600">7,7 kr/serie</td></tr>
+      <tr><td class="name"><span class="dot" style="background:#2a5a8a"></span>SVT</td><td class="muted">5 aktiva</td><td class="right">0 kr</td><td class="right muted">gratis</td></tr>
+      <tr><td class="name"><span class="dot" style="background:#e87170"></span>Netflix</td><td class="muted">1 aktiv serie</td><td class="right">109 kr/mån</td><td class="right" style="font-weight:600;color:var(--red)">109 kr/serie</td></tr>
+    </table>
+  </div>
+
+  <div class="block">
+    <div class="block-head">
+      <h2 class="block-title">Närmaste avsnitt</h2>
+      <span class="block-meta">8 avsnitt nästa 2 veckor</span>
+    </div>
+
+    <div class="upcoming-summary">
+      <strong>8 avsnitt</strong> fördelade på Netflix + TV4 de närmaste 2 veckorna. Sedan en lugn period på 5 veckor — bra fönster för en Netflix-pausning när du är ikapp.
+    </div>
+
+    <div class="upcoming-list">
+      <div class="upcoming-week-head"><span class="upcoming-week-title">Vecka 21 · denna vecka</span><span class="upcoming-week-meta">4 avsnitt</span></div>
+      <div class="upcoming-row today">
+        <div class="upcoming-date"><div class="day">19</div><div class="dow">mån</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#e87170"></span>Stranger Things <span class="episode">S4E07</span></div>
+          <div class="upcoming-meta">Netflix · Sista avsnittet i säsongen</div>
+        </div>
+        <div class="upcoming-badge">Idag</div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">21</div><div class="dow">ons</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#c84b66"></span>Förrädarna <span class="episode">S2E03</span></div>
+          <div class="upcoming-meta">TV4</div>
+        </div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">22</div><div class="dow">tor</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#c84b66"></span>Förrädarna <span class="episode">S2E04</span></div>
+          <div class="upcoming-meta">TV4</div>
+        </div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">25</div><div class="dow">sön</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#e87170"></span>The Crown <span class="episode">S6E08</span></div>
+          <div class="upcoming-meta">Netflix</div>
+        </div>
+      </div>
+
+      <div class="upcoming-week-head"><span class="upcoming-week-title">Vecka 22</span><span class="upcoming-week-meta">4 avsnitt</span></div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">27</div><div class="dow">tis</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#c84b66"></span>Förrädarna <span class="episode">S2E05</span></div>
+          <div class="upcoming-meta">TV4</div>
+        </div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">28</div><div class="dow">ons</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#e87170"></span>Black Mirror <span class="episode">S7E03</span></div>
+          <div class="upcoming-meta">Netflix · Säsongsfinal</div>
+        </div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">29</div><div class="dow">tor</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#c84b66"></span>Förrädarna <span class="episode">S2E06</span></div>
+          <div class="upcoming-meta">TV4 · Säsongsfinal</div>
+        </div>
+      </div>
+      <div class="upcoming-row">
+        <div class="upcoming-date"><div class="day">1</div><div class="dow">sön</div></div>
+        <div>
+          <div class="upcoming-title"><span class="dot" style="background:#e87170"></span>The Crown <span class="episode">S6E09</span></div>
+          <div class="upcoming-meta">Netflix · Sista avsnittet</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="upcoming-quiet">
+      <strong>5 lugna veckor framöver</strong> (v.23–28). Inget från din Följer-lista har nya avsnitt — bra läge att pausa Netflix om du är ikapp då.
+    </div>
+
+    <div class="upcoming-footer">
+      <a href="#">Visa full 6-månaderskalender →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VERSION C — Två-kolumn ============ -->
+<div class="frame" id="v-c">
+  <div class="crumb">Streamingrådgivaren · 4 tjänster</div>
+  <h1 class="page-title">Streamingrådgivaren</h1>
+  <p class="stand">Alla dina tjänster används aktivt. Inget att pausa just nu — men du ligger efter på 3 Netflix-serier.</p>
+
+  <div class="vc-grid">
+    <div>
+      <div class="action-card">
+        <div class="action-label">Slutför</div>
+        <div class="action-body">
+          <div>
+            <div class="action-title">Titta klart på Netflix</div>
+            <div class="action-desc">Du ligger efter på 3 serier. Avsluta dem innan nästa pausfönster för att öppna en pausning värd 109 kr/mån.</div>
+          </div>
+          <a class="btn-primary" href="#">Visa Netflix-serier (3)</a>
+        </div>
+      </div>
+
+      <div class="kpi-grid cols-2">
+        <div class="kpi-card"><div class="kpi-label">Kostnad/mån</div><div class="kpi-value">247 kr</div><div class="kpi-sub">8,2 kr per aktiv serie</div></div>
+        <div class="kpi-card"><div class="kpi-label">Sämst valuta</div><div class="kpi-value"><span class="dot" style="background:#e87170"></span>Netflix</div><div class="kpi-sub">109 kr/serie</div></div>
+      </div>
+
+      <div class="timeline">
+        <div class="tl-head"><h2 class="block-title">Kommande 6 månader</h2><span class="block-meta">Varje ruta = en vecka</span></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#e87170"></span>Netflix</div><div class="tl-cells" id="tl-c-netflix"></div><div class="tl-foot">109 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#c84b66"></span>TV4</div><div class="tl-cells" id="tl-c-tv4"></div><div class="tl-foot">69 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#48a3d0"></span>Prime</div><div class="tl-cells" id="tl-c-prime"></div><div class="tl-foot">69 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#2a5a8a"></span>SVT</div><div class="tl-cells" id="tl-c-svt"></div><div class="tl-foot">Gratis</div></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h2 class="block-title">Din vill se per tjänst</h2><span class="block-meta">7 tjänster</span></div>
+        <table class="dtable">
+          <tr><td class="check" style="width:24px">✓</td><td class="name"><span class="dot" style="background:#48a3d0"></span>Amazon Prime</td><td>4 titlar</td><td class="right muted">69 kr/mån</td></tr>
+          <tr><td class="check">✓</td><td class="name"><span class="dot" style="background:#e87170"></span>Netflix</td><td>3 titlar</td><td class="right muted">109 kr/mån</td></tr>
+          <tr><td></td><td class="name muted"><span class="dot" style="background:#5a8aa8"></span>Max</td><td class="muted">5 titlar</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+          <tr><td></td><td class="name muted"><span class="dot" style="background:#222"></span>Apple TV+</td><td class="muted">4 titlar</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <aside class="vc-side">
+      <div class="vc-side-block"><h3>Så fungerar pausen</h3><p class="vc-helper-text">När du <strong>pausar</strong> en tjänst säger du upp den hos streamingbolaget själv — vi markerar den som pausad här och pingar dig när det är dags att starta om.</p></div>
+      <div class="vc-side-block"><h3>Sparat hittills</h3><div class="vc-savings-total">1 240 kr</div><p class="vc-helper-text" style="font-size:11px">Sedan du började använda Streamingrådgivaren för 8 månader sedan.</p></div>
+      <div class="vc-side-block"><h3>Senaste sparbesluten</h3>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade HBO Max</div><div class="vc-history-date">12 mars · 67 dagar sedan</div></div><div class="vc-history-amount">+335 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Disney+</div><div class="vc-history-date">3 feb · 109 dagar sedan</div></div><div class="vc-history-amount">+545 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Viaplay</div><div class="vc-history-date">15 jan · 128 dagar sedan</div></div><div class="vc-history-amount">+360 kr</div></div>
+      </div>
+      <div class="vc-side-block"><h3>Nästa översyn</h3><div class="vc-next-check">15 juni</div><div class="vc-next-check-sub">När 3 Netflix-serier förväntas vara slutförda</div></div>
+    </aside>
+  </div>
+</div>
+
+<!-- ============ VERSION D — Hero + sidebar ============ -->
+<div class="frame" id="v-d">
+  <div class="crumb">Streamingrådgivaren · 4 tjänster</div>
+  <h1 class="page-title">Streamingrådgivaren</h1>
+
+  <section class="va-hero">
+    <div class="va-hero-amount">247<span class="va-hero-unit"> kr/mån</span></div>
+    <div class="va-hero-meta">
+      <span class="va-badge neutral">Inget att pausa just nu</span>
+      <span class="va-meta-text">Alla 4 tjänster används aktivt. Nästa översyn kring 15 juni.</span>
+    </div>
+  </section>
+
+  <div class="vc-grid">
+    <div>
+      <div class="action-card">
+        <div class="action-label">Slutför</div>
+        <div class="action-body">
+          <div>
+            <div class="action-title">Titta klart på Netflix</div>
+            <div class="action-desc">Du ligger efter på 3 serier. Avsluta dem innan nästa pausfönster för att öppna en pausning värd 109 kr/mån.</div>
+          </div>
+          <a class="btn-primary" href="#">Visa Netflix-serier (3)</a>
+        </div>
+      </div>
+
+      <div class="kpi-grid cols-2">
+        <div class="kpi-card"><div class="kpi-label">Kostnad per aktiv serie</div><div class="kpi-value">8,2 kr</div><div class="kpi-sub">30 aktiva serier · normalspann 5–15 kr</div></div>
+        <div class="kpi-card"><div class="kpi-label">Sämst valuta</div><div class="kpi-value"><span class="dot" style="background:#e87170"></span>Netflix</div><div class="kpi-sub">109 kr · 1 aktiv serie</div></div>
+      </div>
+
+      <div class="timeline">
+        <div class="tl-head"><h2 class="block-title">Kommande 6 månader</h2><span class="block-meta">Varje ruta = en vecka</span></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#e87170"></span>Netflix</div><div class="tl-cells" id="tl-d-netflix"></div><div class="tl-foot">109 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#c84b66"></span>TV4</div><div class="tl-cells" id="tl-d-tv4"></div><div class="tl-foot">69 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#48a3d0"></span>Prime</div><div class="tl-cells" id="tl-d-prime"></div><div class="tl-foot">69 kr/mån</div></div>
+        <div class="tl-grid"><div class="tl-name"><span class="dot" style="background:#2a5a8a"></span>SVT</div><div class="tl-cells" id="tl-d-svt"></div><div class="tl-foot">Gratis</div></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h2 class="block-title">Din vill se per tjänst</h2><span class="block-meta">7 tjänster</span></div>
+        <table class="dtable">
+          <tr><td class="check" style="width:24px">✓</td><td class="name"><span class="dot" style="background:#48a3d0"></span>Amazon Prime</td><td>4 titlar</td><td class="right muted">69 kr/mån</td></tr>
+          <tr><td class="check">✓</td><td class="name"><span class="dot" style="background:#e87170"></span>Netflix</td><td>3 titlar</td><td class="right muted">109 kr/mån</td></tr>
+          <tr><td></td><td class="name muted"><span class="dot" style="background:#5a8aa8"></span>Max</td><td class="muted">5 titlar</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+          <tr><td></td><td class="name muted"><span class="dot" style="background:#222"></span>Apple TV+</td><td class="muted">4 titlar</td><td class="right"><span class="pill pill-orange">Ej tecknad</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <aside class="vc-side">
+      <div class="vc-side-block"><h3>Sparat hittills</h3><div class="vc-savings-total">1 240 kr</div><p class="vc-helper-text" style="font-size:11px">Sedan du började använda Streamingrådgivaren för 8 månader sedan.</p></div>
+      <div class="vc-side-block"><h3>Senaste sparbesluten</h3>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade HBO Max</div><div class="vc-history-date">12 mars · 67 dagar sedan</div></div><div class="vc-history-amount">+335 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Disney+</div><div class="vc-history-date">3 feb · 109 dagar sedan</div></div><div class="vc-history-amount">+545 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Viaplay</div><div class="vc-history-date">15 jan · 128 dagar sedan</div></div><div class="vc-history-amount">+360 kr</div></div>
+      </div>
+      <div class="vc-side-block"><h3>Nästa översyn</h3><div class="vc-next-check">15 juni</div><div class="vc-next-check-sub">När 3 Netflix-serier förväntas vara slutförda</div></div>
+      <div class="vc-side-block"><h3>Så fungerar pausen</h3><p class="vc-helper-text">När du <strong>pausar</strong> en tjänst säger du upp den hos streamingbolaget själv — vi markerar den som pausad här och pingar dig när det är dags att starta om.</p></div>
+    </aside>
+  </div>
+</div>
+
+<!-- ============ VERSION E — Diagnos + sidebar (B + C) ============ -->
+<div class="frame active" id="v-e">
+  <div class="crumb">Streamingrådgivaren · 4 tjänster</div>
+  <h1 class="page-title">Streamingrådgivaren</h1>
+
+  <div class="vc-grid">
+    <div>
+      <div class="ve-diagnosis">
+        <div class="ve-diag-text">
+          Du betalar <strong>247 kr/mån</strong> för 4 tjänster.
+          <span class="negspace">Inget kan pausas just nu — men du ligger efter på</span>
+          <strong>3 Netflix-serier</strong>.
+          <span class="negspace">Slutför dem så öppnas ett pausfönster värt</span>
+          <strong>109 kr/mån</strong>.
+        </div>
+      </div>
+
+      <div class="vb-todo">
+        <div class="vb-todo-row active">
+          <div class="vb-todo-num">1</div>
+          <div>
+            <div class="vb-todo-title">Slutför 3 Netflix-serier</div>
+            <div class="vb-todo-desc">Stranger Things · The Crown · Black Mirror — alla med 2–4 avsnitt kvar.</div>
+          </div>
+          <a class="btn-primary" href="#">Visa serierna →</a>
+        </div>
+        <div class="vb-todo-row passive">
+          <div class="vb-todo-num">2</div>
+          <div>
+            <div class="vb-todo-title">Pausa Netflix när du är klar</div>
+            <div class="vb-todo-desc">Inga andra serier från din Följer/Vill se ligger där de närmaste 60 dagarna.</div>
+          </div>
+          <span class="pill pill-green">Spar 109 kr/mån</span>
+        </div>
+        <div class="vb-todo-row passive">
+          <div class="vb-todo-num">3</div>
+          <div>
+            <div class="vb-todo-title">Överväg: 18 titlar på tjänster du inte har</div>
+            <div class="vb-todo-desc">Max har 5 serier du följer · Apple TV+ har 4 · Viaplay 4 · Disney+ 3.</div>
+          </div>
+          <a class="btn-ghost" href="#">Visa →</a>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h2 class="block-title">Dina tjänster</h2><span class="block-meta">Sorterat efter kostnad per aktiv serie</span></div>
+        <table class="dtable">
+          <tr><td class="name"><span class="dot" style="background:#c84b66"></span>TV4 Play</td><td class="muted">15 aktiva</td><td class="right">69 kr/mån</td><td class="right" style="font-weight:600;color:var(--green)">4,6 kr/serie</td></tr>
+          <tr><td class="name"><span class="dot" style="background:#48a3d0"></span>Amazon Prime</td><td class="muted">9 aktiva</td><td class="right">69 kr/mån</td><td class="right" style="font-weight:600">7,7 kr/serie</td></tr>
+          <tr><td class="name"><span class="dot" style="background:#2a5a8a"></span>SVT</td><td class="muted">5 aktiva</td><td class="right">0 kr</td><td class="right muted">gratis</td></tr>
+          <tr><td class="name"><span class="dot" style="background:#e87170"></span>Netflix</td><td class="muted">1 aktiv</td><td class="right">109 kr/mån</td><td class="right" style="font-weight:600;color:var(--red)">109 kr/serie</td></tr>
+        </table>
+      </div>
+
+      <div class="block">
+        <div class="block-head">
+          <h2 class="block-title">Närmaste avsnitt</h2>
+          <span class="block-meta">8 avsnitt nästa 2 veckor</span>
+        </div>
+
+        <div class="upcoming-summary">
+          <strong>8 avsnitt</strong> fördelade på Netflix + TV4 de närmaste 2 veckorna. Sedan en lugn period på 5 veckor — bra fönster för en Netflix-pausning när du är ikapp.
+        </div>
+
+        <div class="var-switcher">
+          <button class="var-tab active" data-var="1">Per serie</button>
+          <button class="var-tab" data-var="2">Veckokort</button>
+          <button class="var-tab" data-var="3">Enkellinje</button>
+          <button class="var-tab" data-var="4">Visuell</button>
+        </div>
+
+        <div class="var-view active" data-var-view="1">
+          <div class="var1-list">
+            <div class="var1-row">
+              <div class="var1-show"><span class="dot" style="background:#c84b66"></span>Förrädarna<span class="service">TV4</span></div>
+              <div class="var1-pills">
+                <span class="var1-pill" title="ons 21 maj · S2E03">21/5</span>
+                <span class="var1-pill" title="tor 22 maj · S2E04">22/5</span>
+                <span class="var1-pill" title="tis 27 maj · S2E05">27/5</span>
+                <span class="var1-pill" title="tor 29 maj · S2E06 · Säsongsfinal">29/5</span>
+              </div>
+              <div class="var1-count">4 avsnitt</div>
+            </div>
+            <div class="var1-row">
+              <div class="var1-show"><span class="dot" style="background:#e87170"></span>The Crown<span class="service">Netflix</span></div>
+              <div class="var1-pills">
+                <span class="var1-pill" title="sön 25 maj · S6E08">25/5</span>
+                <span class="var1-pill" title="sön 1 juni · S6E09 · Sista avsnittet">1/6</span>
+              </div>
+              <div class="var1-count">2 avsnitt</div>
+            </div>
+            <div class="var1-row">
+              <div class="var1-show"><span class="dot" style="background:#e87170"></span>Stranger Things<span class="service">Netflix</span></div>
+              <div class="var1-pills">
+                <span class="var1-pill today" title="mån 19 maj · S4E07 · Sista avsnittet i säsongen">Idag</span>
+              </div>
+              <div class="var1-count">1 avsnitt</div>
+            </div>
+            <div class="var1-row">
+              <div class="var1-show"><span class="dot" style="background:#e87170"></span>Black Mirror<span class="service">Netflix</span></div>
+              <div class="var1-pills">
+                <span class="var1-pill" title="ons 28 maj · S7E03 · Säsongsfinal">28/5</span>
+              </div>
+              <div class="var1-count">1 avsnitt</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="var-view" data-var-view="2">
+          <div class="var2-grid">
+            <div class="var2-card today">
+              <div class="var2-card-head"><span class="var2-card-title">Vecka 21 · denna vecka</span><span class="var2-card-meta">4 avsnitt</span></div>
+              <div class="var2-thumbs">
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#1a3a4a"><span>Stranger Things</span><span class="ep">S4E07</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#e87170"></span>mån 19/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#6b4a2c"><span>Förrädarna</span><span class="ep">S2E03</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#c84b66"></span>ons 21/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#6b4a2c"><span>Förrädarna</span><span class="ep">S2E04</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#c84b66"></span>tor 22/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#3a2845"><span>The Crown</span><span class="ep">S6E08</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#e87170"></span>sön 25/5</div>
+                </div>
+              </div>
+            </div>
+            <div class="var2-card">
+              <div class="var2-card-head"><span class="var2-card-title">Vecka 22</span><span class="var2-card-meta">4 avsnitt</span></div>
+              <div class="var2-thumbs">
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#6b4a2c"><span>Förrädarna</span><span class="ep">S2E05</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#c84b66"></span>tis 27/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#1a1a1f"><span>Black Mirror</span><span class="ep">S7E03</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#e87170"></span>ons 28/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#6b4a2c"><span>Förrädarna</span><span class="ep">S2E06</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#c84b66"></span>tor 29/5</div>
+                </div>
+                <div class="var2-thumb">
+                  <div class="var2-poster" style="background:#3a2845"><span>The Crown</span><span class="ep">S6E09</span></div>
+                  <div class="var2-thumb-meta"><span class="dot" style="background:#e87170"></span>sön 1/6</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="var-view" data-var-view="3">
+          <div class="var3-list">
+            <div class="var3-row today">
+              <span class="var3-date">mån 19/5</span>
+              <span class="var3-title">Stranger Things<span class="ep">S4E07</span></span>
+              <span class="var3-service"><span class="dot" style="background:#e87170"></span>Netflix</span>
+              <span class="var3-badge today">Idag</span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">ons 21/5</span>
+              <span class="var3-title">Förrädarna<span class="ep">S2E03</span></span>
+              <span class="var3-service"><span class="dot" style="background:#c84b66"></span>TV4</span>
+              <span></span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">tor 22/5</span>
+              <span class="var3-title">Förrädarna<span class="ep">S2E04</span></span>
+              <span class="var3-service"><span class="dot" style="background:#c84b66"></span>TV4</span>
+              <span></span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">sön 25/5</span>
+              <span class="var3-title">The Crown<span class="ep">S6E08</span></span>
+              <span class="var3-service"><span class="dot" style="background:#e87170"></span>Netflix</span>
+              <span></span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">tis 27/5</span>
+              <span class="var3-title">Förrädarna<span class="ep">S2E05</span></span>
+              <span class="var3-service"><span class="dot" style="background:#c84b66"></span>TV4</span>
+              <span></span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">ons 28/5</span>
+              <span class="var3-title">Black Mirror<span class="ep">S7E03</span></span>
+              <span class="var3-service"><span class="dot" style="background:#e87170"></span>Netflix</span>
+              <span class="var3-badge final">Final</span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">tor 29/5</span>
+              <span class="var3-title">Förrädarna<span class="ep">S2E06</span></span>
+              <span class="var3-service"><span class="dot" style="background:#c84b66"></span>TV4</span>
+              <span class="var3-badge final">Final</span>
+            </div>
+            <div class="var3-row">
+              <span class="var3-date">sön 1/6</span>
+              <span class="var3-title">The Crown<span class="ep">S6E09</span></span>
+              <span class="var3-service"><span class="dot" style="background:#e87170"></span>Netflix</span>
+              <span class="var3-badge final">Sista</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="var-view" data-var-view="4">
+          <div class="var4-grid">
+            <div class="var4-week today">
+              <div class="var4-week-label">v.21 · nu</div>
+              <span class="var4-pill" style="background:#e87170" title="Stranger Things S4E07 · mån 19/5 · Sista">ST<span class="ep">E07</span></span>
+              <span class="var4-pill" style="background:#c84b66" title="Förrädarna S2E03 · ons 21/5">FR<span class="ep">E03</span></span>
+              <span class="var4-pill" style="background:#c84b66" title="Förrädarna S2E04 · tor 22/5">FR<span class="ep">E04</span></span>
+              <span class="var4-pill" style="background:#e87170" title="The Crown S6E08 · sön 25/5">TC<span class="ep">E08</span></span>
+            </div>
+            <div class="var4-week">
+              <div class="var4-week-label">v.22</div>
+              <span class="var4-pill" style="background:#c84b66" title="Förrädarna S2E05 · tis 27/5">FR<span class="ep">E05</span></span>
+              <span class="var4-pill" style="background:#e87170" title="Black Mirror S7E03 · ons 28/5 · Säsongsfinal">BM<span class="ep">E03</span></span>
+              <span class="var4-pill" style="background:#c84b66" title="Förrädarna S2E06 · tor 29/5 · Säsongsfinal">FR<span class="ep">E06</span></span>
+              <span class="var4-pill" style="background:#e87170" title="The Crown S6E09 · sön 1/6 · Sista">TC<span class="ep">E09</span></span>
+            </div>
+            <div class="var4-week quiet">v.23</div>
+            <div class="var4-week quiet">v.24</div>
+            <div class="var4-week quiet">v.25</div>
+            <div class="var4-week quiet">v.26</div>
+            <div class="var4-week quiet">v.27</div>
+            <div class="var4-week quiet">v.28</div>
+          </div>
+        </div>
+
+        <div class="upcoming-quiet">
+          <strong>5 lugna veckor framöver</strong> (v.23–28). Inget från din Följer-lista har nya avsnitt — bra läge att pausa Netflix om du är ikapp då.
+        </div>
+
+        <div class="upcoming-footer">
+          <a href="#">Visa full 6-månaderskalender →</a>
+        </div>
+      </div>
+    </div>
+
+    <aside class="vc-side">
+      <div class="vc-side-block"><h3>Sparat hittills</h3><div class="vc-savings-total">1 240 kr</div><p class="vc-helper-text" style="font-size:11px">Sedan du började använda Streamingrådgivaren för 8 månader sedan.</p></div>
+      <div class="vc-side-block"><h3>Senaste sparbesluten</h3>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade HBO Max</div><div class="vc-history-date">12 mars · 67 dagar sedan</div></div><div class="vc-history-amount">+335 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Disney+</div><div class="vc-history-date">3 feb · 109 dagar sedan</div></div><div class="vc-history-amount">+545 kr</div></div>
+        <div class="vc-history-row"><div><div class="vc-history-name">Pausade Viaplay</div><div class="vc-history-date">15 jan · 128 dagar sedan</div></div><div class="vc-history-amount">+360 kr</div></div>
+      </div>
+      <div class="vc-side-block"><h3>Nästa översyn</h3><div class="vc-next-check">15 juni</div><div class="vc-next-check-sub">När 3 Netflix-serier förväntas vara slutförda</div></div>
+      <div class="vc-side-block"><h3>Så fungerar pausen</h3><p class="vc-helper-text">När du <strong>pausar</strong> en tjänst säger du upp den hos streamingbolaget själv — vi markerar den som pausad här och pingar dig när det är dags att starta om.</p></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.switcher .tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.switcher .tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.frame').forEach(f => f.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('v-' + btn.dataset.v).classList.add('active');
+      window.scrollTo(0, 0);
+    });
+  });
+
+  // Variant switcher inside version E
+  document.querySelectorAll('.var-switcher').forEach(group => {
+    group.querySelectorAll('.var-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetVar = btn.dataset.var;
+        const container = group.parentElement;
+        group.querySelectorAll('.var-tab').forEach(b => b.classList.remove('active'));
+        container.querySelectorAll('[data-var-view]').forEach(v => v.classList.remove('active'));
+        btn.classList.add('active');
+        container.querySelector('[data-var-view="' + targetVar + '"]').classList.add('active');
+      });
+    });
+  });
+
+  function buildCells(id, weeks, total, color) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    for (let i = 0; i < total; i++) {
+      const c = document.createElement('div');
+      c.className = 'tl-cell';
+      if (weeks.includes(i)) {
+        c.classList.add('has');
+        c.style.background = color;
+      }
+      el.appendChild(c);
+    }
+  }
+
+  buildCells('tl-a-netflix', [0,1], 26, '#e87170');
+  buildCells('tl-a-tv4',     [0,1,2], 26, '#c84b66');
+  buildCells('tl-a-prime',   [20], 26, '#48a3d0');
+  buildCells('tl-a-svt',     [], 26, '#2a5a8a');
+
+  buildCells('tl-b-netflix', [0,1], 8, '#e87170');
+  buildCells('tl-b-tv4',     [0,1,2], 8, '#c84b66');
+  buildCells('tl-b-prime',   [], 8, '#48a3d0');
+
+  buildCells('tl-c-netflix', [0,1], 26, '#e87170');
+  buildCells('tl-c-tv4',     [0,1,2], 26, '#c84b66');
+  buildCells('tl-c-prime',   [20], 26, '#48a3d0');
+  buildCells('tl-c-svt',     [], 26, '#2a5a8a');
+
+  buildCells('tl-d-netflix', [0,1], 26, '#e87170');
+  buildCells('tl-d-tv4',     [0,1,2], 26, '#c84b66');
+  buildCells('tl-d-prime',   [20], 26, '#48a3d0');
+  buildCells('tl-d-svt',     [], 26, '#2a5a8a');
+
+  buildCells('tl-e-netflix', [0,1], 8, '#e87170');
+  buildCells('tl-e-tv4',     [0,1,2], 8, '#c84b66');
+  buildCells('tl-e-prime',   [], 8, '#48a3d0');
+</script>
+</body>
+</html>

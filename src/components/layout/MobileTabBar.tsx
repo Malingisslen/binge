@@ -20,7 +20,7 @@ const TABS: readonly Tab[] = [
   { label: 'Bibl',  href: '/my/all/',    icon: LayoutGrid, matches: ['/my/', '/series', '/films'] },
   { label: 'Kal',   href: '/calendar/',  icon: Calendar },
   { label: 'Sök',   href: '/search/',    icon: Search, center: true },
-  { label: 'Spar',  href: '/savings/',   icon: BarChart3 },
+  { label: 'Råd',   href: '/savings/',   icon: BarChart3 },
   { label: 'Mig',   href: '/settings/',  icon: User, matches: ['/my/friends', '/feed', '/grupper', '/tillsammans', '/user/'] },
 ];
 

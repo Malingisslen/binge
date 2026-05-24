@@ -6,6 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import AdvisorTimeline from '@/components/savings/AdvisorTimeline';
+import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
@@ -322,8 +323,8 @@ function SavingsContent() {
     return (
       <>
         <header>
-          <div className="crumb">Sparande</div>
-          <h1 className="page-h1">Sparande</h1>
+          <div className="crumb">Streamingrådgivaren</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
           <p className="stand">Räknar…</p>
         </header>
       </>
@@ -334,8 +335,8 @@ function SavingsContent() {
     return (
       <>
         <header>
-          <div className="crumb">Sparande</div>
-          <h1 className="page-h1">Sparande</h1>
+          <div className="crumb">Streamingrådgivaren</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
           <p className="stand">
             Lägg till tjänster i <Link href="/settings/" style={{ color: 'var(--ink)', borderBottom: '1px solid var(--rule)' }}>inställningar</Link> för
             att få rådgivning om vad du kan pausa och spara på.
@@ -363,8 +364,8 @@ function SavingsContent() {
   return (
     <>
       <header>
-        <div className="crumb">Sparande · {activeProviders.length + pauseProviders.length} tjänster</div>
-        <h1 className="page-h1">Sparande</h1>
+        <div className="crumb">Streamingrådgivaren · {activeProviders.length + pauseProviders.length} tjänster</div>
+        <h1 className="page-h1">Streamingrådgivaren</h1>
         <p className="stand">
           {suggestedPauseCount > 0
             ? `${suggestedPauseCount} ${suggestedPauseCount === 1 ? 'tjänst kan pausas' : 'tjänster kan pausas'} just nu — du tittar inget aktivt på dem.`
@@ -454,6 +455,8 @@ function SavingsContent() {
           )}
         </div>
       </div>
+
+      <UpcomingEpisodes />
 
       <AdvisorTimeline />
 

@@ -20,9 +20,9 @@ export default function SparandeTile() {
   const featuredProvider = featured ? getProvider(featured.providerId) : null;
 
   return (
-    <section className="tile sparande" aria-label="Sparande">
+    <section className="tile sparande" aria-label="Streamingrådgivaren">
       <div className="h">
-        <span>Sparande · denna månad</span>
+        <span>Streamingrådgivaren</span>
         <Link href="/savings/" className="more">öppna →</Link>
       </div>
       {totalSavings > 0 ? (

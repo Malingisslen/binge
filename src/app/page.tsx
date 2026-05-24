@@ -53,7 +53,7 @@ const FAQ_JSON_LD = {
       name: 'Kan Binge.nu hjälpa mig spara pengar på streaming?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'Ja. Sparande på Binge.nu analyserar vilka av dina abonnemang som faktiskt används av titlarna i ditt bibliotek. Den visar vilka tjänster du kan pausa utan att missa något — och hur mycket du sparar per månad.',
+        text: 'Ja. Streamingrådgivaren på Binge.nu analyserar vilka av dina abonnemang som faktiskt används av titlarna i ditt bibliotek. Den visar vilka tjänster du kan pausa utan att missa något — och hur mycket du sparar per månad.',
       },
     },
     {
@@ -132,7 +132,7 @@ function LandingPage({ withTrending = true }: { withTrending?: boolean }) {
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-accent mb-[3px]">Sparande</div>
+              <div className="text-xs font-bold text-accent mb-[3px]">Streamingrådgivaren</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>

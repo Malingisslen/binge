@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 
 // The horizontal section nav that lives directly below the topbar on every
 // authenticated page. Order matches Direction H's subnav exactly:
-// Hem · Bibliotek · Kalender · Rekommendationer · Sparande · Vänner · Grupper.
+// Hem · Bibliotek · Kalender · Rekommendationer · Streamingrådgivaren · Vänner · Grupper.
 
 type NavItem = {
   label: string;
@@ -21,7 +21,7 @@ const ITEMS: readonly NavItem[] = [
   { label: 'Bibliotek', href: '/my/all/', matches: ['/my/', '/series', '/films'] },
   { label: 'Kalender', href: '/calendar/' },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/discover', '/kalibrera'] },
-  { label: 'Sparande', href: '/savings/' },
+  { label: 'Streamingrådgivaren', href: '/savings/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Grupper', href: '/grupper/', matches: ['/tillsammans/'] },
 ];
