@@ -8,6 +8,11 @@ import {
   getPopularMovies,
   profileUrl,
 } from '@/lib/tmdb/client';
+import {
+  SEO_PERSON_SOURCE_MOVIE_PAGES,
+  SEO_PERSON_CAST_PER_MOVIE,
+  SEO_PERSON_TARGET_IDS,
+} from '@/lib/tmdb/seoCoverage';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -21,23 +26,16 @@ export const dynamicParams = false;
  * sidor stöttar internal-linking-grafen som Google följer.
  *
  * Personer utanför topp-N hanteras via catch-all + client-side rendering.
+ *
+ * Konstanter delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
-
-// 100 pages × 20 filmer × 10 cast/film = ~20k cast-references innan dedup.
-// Dedup ger oss ~3-5k unika personer; vi tar topp 1000 (random ordering från
-// Set-iteration, men de mest sökta personerna kommer förmodligen återfinnas
-// i flera filmer och ranks naturligt högst eftersom de då dyker upp i Set-
-// iteration tidigare via fler träffar).
-const SOURCE_MOVIE_PAGES = 100;
-const CAST_PER_MOVIE = 10;
-const TARGET_IDS = 1000;
 
 const cachedGetPerson = cache((id: number) => getPerson(id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   try {
     // Hämta populära filmer, sen credits per film, sen samla cast-ids.
-    const pages = Array.from({ length: SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
+    const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
     const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p)));
     const movieIds = new Set<number>();
     for (const r of popularResults) {
@@ -53,13 +51,13 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     for (const r of movieDetails) {
       if (r.status === 'fulfilled') {
         const cast = r.value.credits?.cast ?? [];
-        for (const c of cast.slice(0, CAST_PER_MOVIE)) {
+        for (const c of cast.slice(0, SEO_PERSON_CAST_PER_MOVIE)) {
           if (c.id) peopleIds.add(c.id);
         }
       }
     }
 
-    const ids = Array.from(peopleIds).slice(0, TARGET_IDS);
+    const ids = Array.from(peopleIds).slice(0, SEO_PERSON_TARGET_IDS);
     return ids.map(id => ({ id: String(id) }));
   } catch (err) {
     console.warn('[person/[id]] generateStaticParams failed:', err);

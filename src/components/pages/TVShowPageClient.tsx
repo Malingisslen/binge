@@ -60,6 +60,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''}. ${show.overview?.slice(0, 180) ?? 'Se var serien finns att streama i Sverige.'}`
       : undefined,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
+    // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
+    // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.
+    indexable: !!show,
   });
 
   const watchlistItem = mounted && show ? getItem(show.id) : null;

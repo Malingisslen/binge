@@ -1,4 +1,29 @@
 User-agent: *
+
+# Privata routes — kräver auth, har även noindex via layout.tsx.
+# Disallow:ar dem för att frigöra crawl-budget för publika titlar.
+Disallow: /admin/
+Disallow: /feed/
+Disallow: /kalibrera/
+Disallow: /login/
+Disallow: /my/
+Disallow: /onboarding/
+Disallow: /recommendations/
+Disallow: /settings/
+Disallow: /stats/
+Disallow: /grupper/
+Disallow: /tillsammans/
+Disallow: /search
+
+# Tracking-params — varje variant skapar en separat URL utan canonical i SPA.
+Disallow: /*?utm_source=
+Disallow: /*?utm_medium=
+Disallow: /*?utm_campaign=
+Disallow: /*?utm_content=
+Disallow: /*?utm_term=
+Disallow: /*?gclid=
+Disallow: /*?fbclid=
+
 Allow: /
 
 Sitemap: https://binge.nu/sitemap.xml

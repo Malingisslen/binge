@@ -45,6 +45,9 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       ? `${person.name} — skådespelare och filmskapare. Se filmer och serier med ${person.name} och vad du kan streama i Sverige.`
       : undefined,
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
+    // Tar bort catch-all-shellets noindex när TMDB bekräftat att personen finns.
+    // Pre-renderade /person/[id] (topp-N) påverkas inte — egen statisk HTML.
+    indexable: !!person,
   });
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;

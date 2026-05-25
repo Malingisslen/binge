@@ -11,15 +11,27 @@ import { useEffect } from 'react';
  * - document.title (browser-flik)
  * - meta[name=description]
  * - og:title / og:description (social-share — Slack/Twitter/LinkedIn renderar JS)
+ * - link[rel=canonical]
+ * - meta[name=robots] om `indexable` anges (annars rörs den inte)
+ *
+ * **Indexable-flaggan**: catch-all-routens statiska HTML har noindex som default
+ * (se src/app/[...path]/page.tsx). Page-clients som *vet* att deras content
+ * ska vara indexerbart (MoviePageClient/TVShowPageClient/PersonPageClient med
+ * giltig TMDB-data) sätter `indexable: true` så vi tar bort noindex efter
+ * hydration. När data är undefined (loading/error) lämnar vi noindex orörd —
+ * defensiv default.
  *
  * Använd i klient-komponenten direkt efter att data är hämtad:
  *
  *   usePageMeta({
  *     title: `${movie.title} (${year}) — var streamar jag?`,
  *     description: `Se var du kan streama ${movie.title} i Sverige...`,
+ *     indexable: !!movie,
  *   });
  *
  * Vid unmount återställs defaulten från layout.tsx så nästa sida startar rent.
+ * Om indexable=true var satt återställs robots-metan till noindex (defensiv
+ * default för catch-all-shellet).
  *
  * OBS: crawlers som INTE renderar JS (Google Search Console är blandat) ser
  * fortfarande bara app-default-titeln. För 100% SEO-pålitlighet hade vi behövt
@@ -60,10 +72,17 @@ export function usePageMeta({
   title,
   description,
   ogImage,
+  indexable,
 }: {
   title: string;
   description?: string;
   ogImage?: string;
+  /**
+   * Om true → tar bort noindex från catch-all-shellet (sätter `index,follow`).
+   * Om false eller undefined → rör inte robots-metan (lämnar catch-all-defaulten).
+   * Page-clients ska sätta indexable: true bara när de har bekräftad data.
+   */
+  indexable?: boolean;
 }): void {
   useEffect(() => {
     const fullTitle = `${title} — Binge.nu`;
@@ -78,6 +97,11 @@ export function usePageMeta({
     if (ogImage) {
       setMeta('property', 'og:image', ogImage);
     }
+    if (indexable) {
+      // Tar bort noindex som catch-all-routens statiska metadata sätter.
+      // max-image-preview/max-snippet matchar root layout.tsx för konsekvens.
+      setMeta('name', 'robots', 'index,follow,max-image-preview:large,max-snippet:-1');
+    }
 
     return () => {
       document.title = DEFAULT_TITLE;
@@ -85,6 +109,12 @@ export function usePageMeta({
       setMeta('property', 'og:title', 'Binge.nu');
       setMeta('property', 'og:description', DEFAULT_DESCRIPTION);
       removeCanonical();
+      if (indexable) {
+        // Defensiv: återställ catch-all-defaulten när indexable-routen unmountar.
+        // Skyddar mot att nästa client-route ärver vår "index,follow" om den
+        // INTE själv är indexable (t.ex. user/group/tillsammans).
+        setMeta('name', 'robots', 'noindex,follow');
+      }
     };
-  }, [title, description, ogImage]);
+  }, [title, description, ogImage, indexable]);
 }

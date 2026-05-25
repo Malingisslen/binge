@@ -8,6 +8,11 @@ import {
   getTopRatedMovies,
   posterUrl,
 } from '@/lib/tmdb/client';
+import {
+  SEO_TITLE_PAGES,
+  SEO_TOP_RATED_PAGES,
+  SEO_TITLE_TARGET_IDS,
+} from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 
 export const dynamic = 'force-static';
@@ -23,16 +28,11 @@ export const dynamicParams = false;
  * Filmer utanför topp-N hanteras fortfarande av catch-all-routen via
  * client-side rendering — godtagbart kompromiss eftersom long-tail har
  * minimal söktrafik.
+ *
+ * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage —
+ * sitemap och pre-render MÅSTE adressera samma URL-mängd, annars genererar
+ * Google "Genomsökt – inte indexerad" för URLs i ena men inte andra.
  */
-
-// TMDB ger 20 titlar/page. För ~5000 unika ids: 250 pages × 2 källor → 500
-// page-fetches innan dedup. Behöver tweakas baserat på faktisk overlap.
-// TMDB ger 20 titlar/page. För ~5000 unika ids: 250 pages × 2 källor → 500
-// page-fetches innan dedup. Faktisk overlap mellan popular/top_rated kapar
-// resultatet till ~75% → ~5000 unika ids efter dedup.
-const POPULAR_PAGES = 250;
-const TOP_RATED_PAGES = 250;
-const TARGET_IDS = 5000;
 
 // React's cache() dedupar fetchen inom samma render-pass — Next anropar
 // generateMetadata och default-export separat per route, men cache() ser
@@ -59,11 +59,11 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     const [popular, topRated] = await Promise.all([
-      collectIds(getPopularMovies, POPULAR_PAGES),
-      collectIds(getTopRatedMovies, TOP_RATED_PAGES),
+      collectIds(getPopularMovies, SEO_TITLE_PAGES),
+      collectIds(getTopRatedMovies, SEO_TOP_RATED_PAGES),
     ]);
     const merged = new Set<number>([...popular, ...topRated]);
-    const ids = Array.from(merged).slice(0, TARGET_IDS);
+    const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);
     return ids.map(id => ({ id: String(id) }));
   } catch (err) {
     console.warn('[movie/[id]] generateStaticParams TMDB-fetch failed:', err);

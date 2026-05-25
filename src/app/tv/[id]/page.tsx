@@ -8,6 +8,11 @@ import {
   getTopRatedTV,
   posterUrl,
 } from '@/lib/tmdb/client';
+import {
+  SEO_TITLE_PAGES,
+  SEO_TOP_RATED_PAGES,
+  SEO_TITLE_TARGET_IDS,
+} from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 
 export const dynamic = 'force-static';
@@ -22,11 +27,9 @@ export const dynamicParams = false;
  *
  * Suspense-wrap krävs eftersom TVShowPageClient använder useSearchParams
  * (för `?fromGroup=`-parametern). Utan boundary failar Next-builden.
+ *
+ * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
-
-const POPULAR_PAGES = 250;
-const TOP_RATED_PAGES = 250;
-const TARGET_IDS = 5000;
 
 const cachedGetTVShow = cache((id: number) => getTVShow(id));
 
@@ -50,11 +53,11 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     const [popular, topRated] = await Promise.all([
-      collectIds(getPopularTV, POPULAR_PAGES),
-      collectIds(getTopRatedTV, TOP_RATED_PAGES),
+      collectIds(getPopularTV, SEO_TITLE_PAGES),
+      collectIds(getTopRatedTV, SEO_TOP_RATED_PAGES),
     ]);
     const merged = new Set<number>([...popular, ...topRated]);
-    const ids = Array.from(merged).slice(0, TARGET_IDS);
+    const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);
     return ids.map(id => ({ id: String(id) }));
   } catch (err) {
     console.warn('[tv/[id]] generateStaticParams TMDB-fetch failed:', err);

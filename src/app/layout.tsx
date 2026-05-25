@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     template: '%s — Binge.nu',
   },
   description: 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.',
+  // Defensiv default-canonical → undersidor som inte sätter egen alternates.canonical
+  // får root som fallback. movie/[id]/tv/[id]/person/[id] skriver över med egen URL
+  // i sina generateMetadata-hooks; här skyddar vi mot dubletter på catch-all-shellet
+  // när Google indexerar /index.html som "/" + diverse query-param-varianter.
+  alternates: { canonical: '/' },
   openGraph: {
     title: 'Binge.nu',
     description: 'Håll koll på vad du tittar på — se var film och serier finns att streama i Sverige.',

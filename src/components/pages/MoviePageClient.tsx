@@ -57,6 +57,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''}. ${movie.overview?.slice(0, 180) ?? 'Se var filmen finns att streama i Sverige.'}`
       : undefined,
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
+    // Tar bort catch-all-shellets noindex när TMDB bekräftat att filmen finns.
+    // Pre-renderade /movie/[id] (topp-N) påverkas inte — de har egen statisk
+    // HTML med generateMetadata och passerar aldrig catch-all-shellet.
+    indexable: !!movie,
   });
 
   if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar…</div>;
