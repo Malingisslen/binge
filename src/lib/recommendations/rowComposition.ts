@@ -96,6 +96,21 @@ export function applyClientFilters(
 }
 
 /**
+ * Roterar ett window av storlek `take` ur `items`, offsettat med `seed * take`,
+ * med wraparound. Används för per-rad "visa nya förslag"-knappen — låter oss
+ * visa olika titlar ur en redan-hämtad pool utan ny TMDB-trafik.
+ */
+export function rotatePool<T>(items: readonly T[], seed: number, take: number): T[] {
+  if (items.length === 0 || take <= 0) return [];
+  if (items.length <= take) return [...items];
+  const len = items.length;
+  const offset = ((seed * take) % len + len) % len;
+  const end = offset + take;
+  if (end <= len) return items.slice(offset, end);
+  return [...items.slice(offset), ...items.slice(0, end - len)];
+}
+
+/**
  * Score for the rad-1 similarity ranking. Lower index = higher score; /recommendations
  * is treated as more authoritative than /similar.
  */

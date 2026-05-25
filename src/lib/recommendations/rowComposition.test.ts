@@ -5,6 +5,7 @@ import {
   applyClientFilters,
   scoreSimilarity,
   containsSearchText,
+  rotatePool,
 } from './rowComposition';
 import type { RowTitle, FilterState } from '@/types';
 
@@ -135,6 +136,41 @@ describe('scoreSimilarity', () => {
 
   it('boosts /recommendations over /similar at same index', () => {
     expect(scoreSimilarity(0, 'recommendations')).toBeGreaterThan(scoreSimilarity(0, 'similar'));
+  });
+});
+
+describe('rotatePool', () => {
+  const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  it('returns first window for seed 0', () => {
+    expect(rotatePool(arr, 0, 3)).toEqual([1, 2, 3]);
+  });
+
+  it('advances by take each seed step', () => {
+    expect(rotatePool(arr, 1, 3)).toEqual([4, 5, 6]);
+    expect(rotatePool(arr, 2, 3)).toEqual([7, 8, 9]);
+  });
+
+  it('wraps around when window crosses the end', () => {
+    expect(rotatePool(arr, 3, 3)).toEqual([10, 1, 2]);
+  });
+
+  it('wraps fully when seed exceeds pool divisions', () => {
+    // seed 4 with take 3 → offset 12 % 10 = 2 → [3, 4, 5]
+    expect(rotatePool(arr, 4, 3)).toEqual([3, 4, 5]);
+  });
+
+  it('returns full array when pool is smaller than take', () => {
+    expect(rotatePool([1, 2], 5, 6)).toEqual([1, 2]);
+  });
+
+  it('handles empty input', () => {
+    expect(rotatePool<number>([], 3, 6)).toEqual([]);
+  });
+
+  it('handles negative seeds (defensive)', () => {
+    // -1 * 3 = -3, mod 10 with positive-shift = 7 → [8, 9, 10]
+    expect(rotatePool(arr, -1, 3)).toEqual([8, 9, 10]);
   });
 });
 

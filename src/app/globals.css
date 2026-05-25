@@ -1785,6 +1785,25 @@ button { font: inherit; cursor: pointer; }
   text-underline-offset: 3px;
 }
 .rec-cat .head .more:hover { color: var(--ink); }
+.rec-cat .head .rec-cat-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.rec-cat .head .rotate {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+}
+.rec-cat .head .rotate:hover { color: var(--ink); }
 
 .rec-grid {
   display: grid;

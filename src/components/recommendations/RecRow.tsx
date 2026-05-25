@@ -1,9 +1,22 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
+import { rotatePool } from '@/lib/recommendations/rowComposition';
 import RecCard from './RecCard';
 import type { RowResult, RowSpec } from '@/types';
+
+const ROW_VISIBLE = 6;
+const ROTATION_KEY_PREFIX = 'binge:rec-rotation:';
+
+function readSeed(rowKey: string): number {
+  if (typeof window === 'undefined') return 0;
+  const raw = window.localStorage.getItem(ROTATION_KEY_PREFIX + rowKey);
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
 
 // Direction H labelled-cascade row: numbered header (01–07), title, a
 // one-line rationale in mono next to it, a "visa fler →" exit, and a 6-grid
@@ -40,9 +53,21 @@ function whyForRow(spec: RowSpec): string {
 
 export default function RecRow({ result, index }: Props) {
   const { rowSpec, visible, backingPool, isLoading } = result;
-  const items = visible.length >= 6
-    ? visible.slice(0, 6)
-    : [...visible, ...backingPool.slice(0, 6 - visible.length)];
+  const [seed, setSeed] = useState<number>(() => readSeed(rowSpec.rowKey));
+
+  const merged = [...visible, ...backingPool];
+  const items = rotatePool(merged, seed, ROW_VISIBLE);
+  const canRotate = merged.length > ROW_VISIBLE;
+
+  const onRotate = useCallback(() => {
+    setSeed(prev => {
+      const next = prev + 1;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(ROTATION_KEY_PREFIX + rowSpec.rowKey, String(next));
+      }
+      return next;
+    });
+  }, [rowSpec.rowKey]);
 
   const providerMap = useSearchProviders(items);
 
@@ -60,7 +85,20 @@ export default function RecRow({ result, index }: Props) {
           <h3 id={`rec-cat-${rowSpec.rowKey}`}>{rowSpec.label}</h3>
         </div>
         <div className="why">{whyLine}</div>
-        <Link href={expandHref} className="more">visa fler →</Link>
+        <div className="rec-cat-actions">
+          {canRotate && (
+            <button
+              type="button"
+              onClick={onRotate}
+              className="rotate"
+              aria-label={`Visa nya förslag i ${rowSpec.label}`}
+              title="Visa nya förslag"
+            >
+              <RefreshCw size={11} aria-hidden /> blanda
+            </button>
+          )}
+          <Link href={expandHref} className="more">visa fler →</Link>
+        </div>
       </div>
       <div className="rec-grid">
         {items.map(t => {
