@@ -77,7 +77,16 @@ async function tmdbFetch<T>(
       const res = await fetch(url.toString(), { signal: opts.signal });
       if (res.status === 429 && attempt < 1) {
         const retryAfter = Number(res.headers.get('Retry-After')) || 1;
-        await new Promise(r => setTimeout(r, Math.min(retryAfter * 1000, 5000)));
+        // Abort-medveten väntan: utan detta håller en navigation-bort under
+        // backoffen kvar semaphore-sloten i upp till 5 s (M7). Lyssna på
+        // signalen så vi släpper sloten direkt vid abort.
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, Math.min(retryAfter * 1000, 5000));
+          opts.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new DOMException('Aborted', 'AbortError'));
+          }, { once: true });
+        });
         attempt++;
         continue;
       }

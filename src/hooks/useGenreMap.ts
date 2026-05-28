@@ -2,17 +2,18 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getMovieGenres, getTVGenres } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 
 export function useGenreMap(): Map<number, string> {
   const { data: movieGenres } = useQuery({
     queryKey: ['genres-movie'],
-    queryFn: getMovieGenres,
-    staleTime: 60 * 60 * 1000,
+    queryFn: ({ signal }) => getMovieGenres({ signal }),
+    staleTime: TMDB_STALE.GENRES,
   });
   const { data: tvGenres } = useQuery({
     queryKey: ['genres-tv'],
-    queryFn: getTVGenres,
-    staleTime: 60 * 60 * 1000,
+    queryFn: ({ signal }) => getTVGenres({ signal }),
+    staleTime: TMDB_STALE.GENRES,
   });
 
   const map = new Map<number, string>();

@@ -29,7 +29,9 @@ export const CATCHUP_THRESHOLD = 3;
 // Användaren ser tillbaka-felet i Streamingrådgivaren när vi räknar
 // "påbörjade" som "behind", så denna funktion är källan till sanning.
 export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): boolean {
-  if (!item.lastWatchedSeason) return false;
+  // == null (inte falsy): säsong 0 (Specials) är giltig progress och får inte
+  // kollapsas ihop med "ej börjat" (L3).
+  if (item.lastWatchedSeason == null) return false;
   const last = show.last_episode_to_air;
   if (!last) return false;
   const userS = item.lastWatchedSeason ?? 0;

@@ -60,8 +60,11 @@ describe('migrateStatus', () => {
   });
 
   describe('okända värden', () => {
-    it('TV → mina som säker default', () => {
-      expect(migrateStatus('garbage', 'tv')).toEqual({ status: 'mina', dropped: false });
+    // Okänd status defaultar till vill_se för BÅDE TV och film. Tidigare
+    // promotades TV tyst till 'mina' (aktiv samling utan progress) — fel, då
+    // titeln dök upp som 'aktiv' och nudgade användaren (M2).
+    it('TV → vill_se som säker default (ingen tyst promotion till mina)', () => {
+      expect(migrateStatus('garbage', 'tv')).toEqual({ status: 'vill_se', dropped: false });
     });
     it('film → vill_se som säker default (motsatsen av terminal)', () => {
       expect(migrateStatus('garbage', 'movie')).toEqual({ status: 'vill_se', dropped: false });

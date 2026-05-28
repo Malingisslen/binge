@@ -12,14 +12,16 @@ export function computeSessionProviders(
   participants: ReadonlyArray<{ providers: number[] }>,
   mode: ProviderMode,
 ): number[] {
-  const lists = participants
-    .map(p => p.providers)
-    .filter(list => list.length > 0);
-
-  if (lists.length === 0) return [];
+  if (participants.length === 0) return [];
 
   if (mode === 'intersect') {
-    return lists.reduce<number[]>((acc, list, idx) => {
+    // Snittet ska nollas av en deltagare UTAN providers — inget är tittbart
+    // för alla om någon saknar tjänster (M3). Tidigare filtrerades tomma
+    // listor bort före snittet, så en oifylld profil visade partnerns hela
+    // lista som "delad" och genererade kandidater ingen faktiskt kunde se.
+    const allLists = participants.map(p => p.providers);
+    if (allLists.some(list => list.length === 0)) return [];
+    return allLists.reduce<number[]>((acc, list, idx) => {
       const set = new Set(list);
       return idx === 0
         ? Array.from(set)
@@ -27,9 +29,9 @@ export function computeSessionProviders(
     }, []);
   }
 
-  // union
+  // union — tomma listor är harmlösa, ignorera dem.
   const s = new Set<number>();
-  for (const list of lists) list.forEach(id => s.add(id));
+  for (const p of participants) p.providers.forEach(id => s.add(id));
   return Array.from(s);
 }
 

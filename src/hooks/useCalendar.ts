@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { getProvider } from '@/lib/tmdb/providers';
 import { formatEpisodeCode } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
@@ -45,8 +46,12 @@ export function useCalendarEntries(): UseCalendarResult {
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
       queryKey: ['tv', id],
-      queryFn: () => getTVShow(id),
-      staleTime: 10 * 60 * 1000,
+      // Delad staleTime-konstant + signal: ['tv', id] läses även av useTVShow,
+      // useSubscriptionAdvisor och useRevivalNudges. Olika staleTime skulle få
+      // observers att slåss om cachen (H3). Signal avbryter in-flight fetches
+      // vid navigation bort så semaphore-slots inte läcker.
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
+      staleTime: TMDB_STALE.TV_DETAIL,
     })),
   });
 
@@ -86,7 +91,7 @@ export function useCalendarEntries(): UseCalendarResult {
       queryKey: ['tv-season', spec.showId, spec.seasonNum] as const,
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         getTVSeason(spec.showId, spec.seasonNum, { signal }),
-      staleTime: 30 * 60 * 1000,
+      staleTime: TMDB_STALE.SEASON,
     })),
   });
 

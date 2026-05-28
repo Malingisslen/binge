@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   collection,
   doc,
@@ -46,6 +46,10 @@ export function useFollowList(): FollowListState {
   const [following, setFollowing] = useState<FollowListUser[]>([]);
   const [followers, setFollowers] = useState<FollowListUser[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
+  // Cache per uid → profil (eller null = saknas/privat). Gör att vi bara
+  // hämtar NYA uids när follow-listan ändras, istället för att refetcha alla
+  // upp till 1000 profiler vid varje följ/avfölj (H5).
+  const profileCache = useRef<Map<string, FollowListUser | null>>(new Map());
 
   useEffect(() => {
     if (!uid) { setFollowingUids([]); setFollowerUids([]); return; }
@@ -58,7 +62,7 @@ export function useFollowList(): FollowListState {
 
   useEffect(() => {
     let cancelled = false;
-    setProfilesLoading(true);
+    const cache = profileCache.current;
     const allUids = Array.from(new Set([...followingUids, ...followerUids]));
     if (allUids.length === 0) {
       setFollowing([]);
@@ -67,7 +71,24 @@ export function useFollowList(): FollowListState {
       return;
     }
 
-    Promise.all(allUids.map(async u => {
+    const fallback = (u: string): FollowListUser => ({
+      uid: u, displayName: 'Privat användare', username: null, photoURL: null, isPublic: false,
+    });
+    const build = () => {
+      setFollowing(followingUids.map(u => cache.get(u) ?? fallback(u)));
+      setFollowers(followerUids.map(u => cache.get(u) ?? fallback(u)));
+    };
+
+    // Hämta bara uids vi inte redan har i cachen.
+    const missing = allUids.filter(u => !cache.has(u));
+    if (missing.length === 0) {
+      build();
+      setProfilesLoading(false);
+      return;
+    }
+
+    setProfilesLoading(true);
+    Promise.all(missing.map(async u => {
       try {
         const snap = await getDoc(doc(db, 'users', u));
         if (!snap.exists()) return [u, null] as const;
@@ -84,12 +105,8 @@ export function useFollowList(): FollowListState {
       }
     })).then(entries => {
       if (cancelled) return;
-      const map = new Map(entries.map(([u, p]) => [u, p]));
-      const fallback = (u: string): FollowListUser => ({
-        uid: u, displayName: 'Privat användare', username: null, photoURL: null, isPublic: false,
-      });
-      setFollowing(followingUids.map(u => map.get(u) ?? fallback(u)));
-      setFollowers(followerUids.map(u => map.get(u) ?? fallback(u)));
+      for (const [u, p] of entries) cache.set(u, p);
+      build();
       setProfilesLoading(false);
     });
 

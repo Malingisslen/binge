@@ -143,7 +143,7 @@ function CalibrationCard({
       <div className="relative h-[180px] bg-ink overflow-hidden">
         {backdrop && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={backdrop} alt="" className="w-full h-full object-cover object-[center_20%] opacity-60" loading="eager" decoding="async" />
+          <img src={backdrop} alt="" width={1280} height={720} className="w-full h-full object-cover object-[center_20%] opacity-60" loading="eager" decoding="async" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 flex gap-3 items-end">

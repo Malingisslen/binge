@@ -46,8 +46,10 @@ export function detectLatestFiveStar(
   for (const it of items) {
     if (it.rating !== 5) continue;
     if (!STRONG_SEED_STATUSES.includes(it.status)) continue;
-    const ts = it.updatedAt.getTime();
-    if (ts < cutoffMs) continue;
+    // updatedAt kan saknas på äldre/handredigerade Firestore-docs — guarda så
+    // .getTime() inte kastar (L2).
+    const ts = it.updatedAt?.getTime();
+    if (!ts || ts < cutoffMs) continue;
     if (!best || ts > best.ts) best = { item: it, ts };
   }
   if (!best) return null;

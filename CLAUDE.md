@@ -68,9 +68,9 @@ DynamicRouter.tsx + firebase.json rewrite.
 
 ### TMDB staleTime — dela via `TMDB_STALE`
 
-Tre ställen hämtar `['tv', id]`-queries (useTVShow, useSubscriptionAdvisor,
-useRevivalNudges). Om de registrerar olika `staleTime` slåss observers om
-senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
+Fyra ställen hämtar `['tv', id]`-queries (useTVShow, useSubscriptionAdvisor,
+useRevivalNudges, useCalendar). Om de registrerar olika `staleTime` slåss
+observers om senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
 `TMDB_STALE.TV_DETAIL`, `MOVIE_DETAIL`, `CATALOG`, `SEARCH`, `PERSON`, `GENRES`,
 `PROVIDERS`. **Alla callsites för samma queryKey måste använda samma konstant.**
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
 
 interface Toast {
   id: number;
@@ -16,13 +16,23 @@ const ToastContext = createContext<ToastState>({ show: () => {} });
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const show = useCallback((message: string) => {
     const id = nextId.current++;
     setToasts(prev => [...prev, { id, message }]);
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
+      timers.current.delete(id);
     }, 2500);
+    timers.current.set(id, timer);
+  }, []);
+
+  // Rensa eventuella pending timers vid unmount (L5) — undviker setState på en
+  // avmonterad provider (StrictMode/tester).
+  useEffect(() => {
+    const map = timers.current;
+    return () => { map.forEach(clearTimeout); map.clear(); };
   }, []);
 
   const value = useMemo(() => ({ show }), [show]);

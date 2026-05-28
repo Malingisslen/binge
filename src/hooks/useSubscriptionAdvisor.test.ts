@@ -255,6 +255,14 @@ describe('isUserBehindOnAired', () => {
     const show = makeShow({ last_episode_to_air: makeEpisode(2, 5) });
     expect(isUserBehindOnAired(item, show)).toBe(false);
   });
+
+  it('treats season 0 (Specials) progress as started, not "never started" (L3)', () => {
+    // lastWatchedSeason === 0 är giltig progress (Specials) och får inte
+    // kollapsas med null/"ej börjat". Användaren har sett S0E1 men S1E1 finns.
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(1, 1) });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
 });
 
 // --- findIdleNextCheckDate ---

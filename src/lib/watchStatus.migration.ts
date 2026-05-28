@@ -40,6 +40,10 @@ export function migrateStatus(
     case 'mina':
       return { status: 'mina', dropped: false };
     default:
-      return { status: isTv ? 'mina' : 'vill_se', dropped: false };
+      // Okänd/oväntad status (handredigerad doc, framtida schema, typo): defaulta
+      // till 'vill_se' för BÅDE film och TV. Tidigare promotades TV tyst till
+      // 'mina' (aktiv samling utan progress) vilket fick titeln att dyka upp som
+      // 'aktiv' och nudga användaren att titta på något hen aldrig lagt till (M2).
+      return { status: 'vill_se', dropped: false };
   }
 }
