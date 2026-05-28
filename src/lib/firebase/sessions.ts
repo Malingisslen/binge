@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './config';
-import { toDate, randomId } from './utils';
+import { toDate, generateSecureToken } from './utils';
 import type {
   SessionConfig,
   SessionCandidate,
@@ -46,7 +46,10 @@ export async function createSession(params: {
     expiresAt: Timestamp.fromDate(expiresAt),
   });
 
-  const participantId = params.hostUid ?? randomId();
+  // Krypto-säkert deltagar-ID för anonyma värdar. Ett gissningsbart ID skulle
+  // (med de öppna participant/swipe-skrivreglerna) låta en angripare skriva
+  // röster/veto i värdens namn. (M4)
+  const participantId = params.hostUid ?? generateSecureToken();
   await setDoc(doc(db, 'sessions', sessionRef.id, 'participants', participantId), {
     uid: params.hostUid,
     displayName: params.hostName,

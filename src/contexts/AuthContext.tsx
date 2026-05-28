@@ -529,6 +529,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refs.push(d.ref);
       refs.push(doc(db, 'users', d.id, 'friendRequests', id));
     });
+    // 2d. Inkomna grupp-inbjudningar — rensa så inga pending invites blir kvar.
+    snaps.groupInvitesSnap.docs.forEach(d => refs.push(d.ref));
 
     // 3. My reviews + all their subcollections (likes + comments on my reviews).
     for (const reviewDoc of snaps.reviewsSnap.docs) {

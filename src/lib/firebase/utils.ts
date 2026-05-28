@@ -6,10 +6,6 @@ export function toDate(val: unknown): Date {
   return new Date();
 }
 
-export function randomId(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
-}
-
 // Kryptografiskt slumpmässig token för delade hemligheter (invite-länkar).
 // Math.random är otillräcklig när hash:en lagrad i Firestore exponeras —
 // 128 bitars entropi gör brute-force omöjligt även med GPU-rigs.

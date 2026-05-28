@@ -133,7 +133,14 @@ service cloud.firestore {
     match /users/{uid}/followers/{followerUid} {
       allow read: if isOwner(uid);
       allow read: if get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
-      allow write: if isOwner(followerUid);
+      // Följar-spegeln får bara skrivas av följaren själv OCH bara när den
+      // matchande following/{uid}-doc:en finns EFTER commit — annars kan vem
+      // som helst forga följare för andra (M1). existsAfter (inte exists) krävs
+      // eftersom followUser skriver following + followers i samma batch; exists
+      // skulle se pre-commit-state där following ännu inte finns och neka.
+      allow create, update: if isOwner(followerUid)
+        && existsAfter(/databases/$(database)/documents/users/$(followerUid)/following/$(uid));
+      allow delete: if isOwner(followerUid);
     }
 
     // ---- friends-system (mutuell relation, kompletterar ensidiga follow) ----
@@ -181,6 +188,25 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow update: if false;
       allow delete: if isOwner(uid) || isOwner(toUid);
+    }
+
+    // ---- grupp-inbjudningar (samtyckesbaserade) ----
+    // Spegel av friendRequests-mönstret. Ägaren av en grupp skapar en inbjudan
+    // på mål-användarens väg; mål-användaren ser den, kan acceptera (lägger då
+    // till sig själv i gruppen via group-update accept-branchen) eller avböja.
+    // Doc-id = groupId så existens-checken i group-regeln blir trivial.
+    match /users/{uid}/groupInvites/{groupId} {
+      // Bara mottagaren ser sina inbjudningar.
+      allow read: if isOwner(uid);
+      // Bara gruppens ägare kan bjuda in, och bara någon annan än sig själv.
+      allow create: if isSignedIn()
+        && uid != request.auth.uid
+        && request.resource.data.fromUid == request.auth.uid
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
+      allow update: if false;
+      // Mottagaren raderar (accept/decline). Ägaren kan dra tillbaka en inbjudan.
+      allow delete: if isOwner(uid)
+        || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
     }
 
     // ---- usernames ----
@@ -288,16 +314,29 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.hostUid == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
 
+      // Anonyma deltagare tillåts (länk-delning utan inloggning) — men
+      // skrivningar måste följa fältkontraktet så ingen kan spamma godtyckliga
+      // fält eller blåsa upp dokumenten (kostnads-/skräp-skydd, H2).
       match /participants/{pid} {
         allow read: if true;
-        allow create, update: if true;
+        allow create, update: if
+          request.resource.data.keys().hasOnly([
+            'uid', 'displayName', 'providers', 'vetoRemaining',
+            'isHost', 'joinedAt', 'lastActiveAt'
+          ])
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() <= 80
+          && request.resource.data.providers is list
+          && request.resource.data.providers.size() <= 100;
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostUid == request.auth.uid;
       }
 
       match /swipes/{tmdbId} {
         allow read: if true;
-        allow create, update: if true;
+        allow create, update: if
+          request.resource.data.keys().hasOnly(['votes', 'updatedAt'])
+          && request.resource.data.votes is map;
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostUid == request.auth.uid;
       }
@@ -337,10 +376,21 @@ service cloud.firestore {
         && request.resource.data.memberUids.hasOnly([request.auth.uid])
         && request.auth.uid in request.resource.data.memberUids;
 
-      // Tillåt: ägaren (full write), medlem som lämnar (självborttag), gäst
-      // som joinar (verifierad via joinAttempts-subkollektionen)
+      // Tillåt: ägaren (write UTAN att lägga till andra uids), medlem som
+      // lämnar (självborttag), gäst som joinar via länk (joinAttempts), eller
+      // inbjuden användare som accepterar (groupInvites).
+      //
+      // VIKTIGT: ägaren kan INTE längre lägga till godtyckliga uids i
+      // memberUids. hasAll(new) kräver att gamla memberUids är en supermängd av
+      // de nya — dvs ägaren får bara ta bort medlemmar eller lämna listan
+      // oförändrad. Tillägg sker alltid genom att mål-användaren själv
+      // accepterar en inbjudan (accept-branchen nedan). Detta stänger H1 där
+      // ägaren tyst kunde lägga till vem som helst utan samtycke.
       allow update: if isSignedIn() && (
-        resource.data.ownerUid == request.auth.uid
+        (
+          resource.data.ownerUid == request.auth.uid
+          && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+        )
         || (
           // Medlem lämnar — tar bort sig själv
           request.auth.uid in resource.data.memberUids
@@ -358,6 +408,22 @@ service cloud.firestore {
           // (vilket i sin tur kräver att hash-checken på den subcollection-
           // regeln nedan passerade).
           exists(/databases/$(database)/documents/groups/$(groupId)/joinAttempts/$(request.auth.uid))
+          && !(request.auth.uid in resource.data.memberUids)
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.defaults == resource.data.defaults
+          && (!('inviteTokenHash' in request.resource.data)
+            || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
+          && (!('inviteTokenRotatedAt' in resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+        )
+        || (
+          // Invite-accept — bevisad genom att en inbjudan finns på
+          // users/{auth.uid}/groupInvites/{groupId} (skapad av ägaren).
+          // Användaren lägger BARA till sig själv. Samma oförändrade-fält-
+          // villkor som join-branchen.
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)/groupInvites/$(groupId))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
           && request.resource.data.ownerUid == resource.data.ownerUid

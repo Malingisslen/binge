@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Users, Share2, ChevronLeft, Check, X, Ban, LayoutGrid, Table2, Copy, Radio } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession, getStoredParticipantId, storeParticipantId } from '@/hooks/useSession';
 import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
+import { generateSecureToken } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress } from '@/lib/together/matching';
@@ -122,7 +123,7 @@ function JoinSessionForm({
 
     setSubmitting(true);
     try {
-      const pid = existingUid ?? randomId();
+      const pid = existingUid ?? generateSecureToken();
       await joinSession({
         sessionId,
         participantId: pid,
@@ -217,6 +218,8 @@ function SessionMain({
 }) {
   const [view, setView] = useState<'card' | 'table'>('card');
   const [shareCopied, setShareCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const [vetoConfirm, setVetoConfirm] = useState<SessionCandidate | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -285,7 +288,8 @@ function SessionMain({
     try {
       await navigator.clipboard.writeText(shareUrl);
       setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setShareCopied(false), 2000);
     } catch {/* ignore */}
   };
 
@@ -670,6 +674,3 @@ function MatchList({
   );
 }
 
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
-}

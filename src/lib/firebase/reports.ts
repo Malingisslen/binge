@@ -60,8 +60,22 @@ export interface Report {
   updatedAt?: Date;
 }
 
-let lastReportAt = 0;
 const REPORT_COOLDOWN_MS = 1000;
+const REPORT_COOLDOWN_KEY = 'binge:lastReportAt';
+
+// Cooldownen lagras i sessionStorage (inte en modulvariabel) så att en
+// page-reload inte nollställer den — annars kan en användare report-flooda
+// genom att ladda om sidan mellan varje rapport (M5). Detta är hygien, inte
+// en hård gräns; en server-side bucket är nästa steg om missbruk uppstår.
+function getLastReportAt(): number {
+  if (typeof window === 'undefined') return 0;
+  return Number(window.sessionStorage.getItem(REPORT_COOLDOWN_KEY)) || 0;
+}
+
+function setLastReportAt(ts: number): void {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(REPORT_COOLDOWN_KEY, String(ts));
+}
 
 export async function createReport(params: {
   reporterUid: string;
@@ -72,10 +86,10 @@ export async function createReport(params: {
   note?: string;
 }): Promise<void> {
   const now = Date.now();
-  if (now - lastReportAt < REPORT_COOLDOWN_MS) {
+  if (now - getLastReportAt() < REPORT_COOLDOWN_MS) {
     throw new Error('Vänta lite innan du rapporterar igen.');
   }
-  lastReportAt = now;
+  setLastReportAt(now);
 
   const trimmedNote = params.note?.trim().slice(0, 500);
 

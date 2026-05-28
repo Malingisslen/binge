@@ -18,14 +18,16 @@
  */
 
 export function JsonLd({ data }: { data: Record<string, unknown> }) {
-  // Inläsning via dangerouslySetInnerHTML undviker att React escapar JSON-
-  // strängen. JSON.stringify skyddar mot injection eftersom input bara är
-  // TMDB-data (som vi redan litar på).
+  // dangerouslySetInnerHTML krävs för att React inte ska escapa JSON-strängen.
+  // JSON.stringify ensam räcker INTE som injektionsskydd: en sträng som
+  // innehåller "</script>" (t.ex. en TMDB-overview) stänger script-blocket i
+  // HTML även inuti en JSON-sträng. Vi escapar därför "<" → "<" så
+  // sekvensen aldrig kan brytas ut ur blocket (M6).
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
   return (
     <script
       type="application/ld+json"
-
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: json }}
     />
   );
 }

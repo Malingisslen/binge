@@ -14,7 +14,15 @@ export function initAppCheck(): void {
   if (initialized) return;
   if (typeof window === 'undefined') return;
   const siteKey = process.env.NEXT_PUBLIC_APP_CHECK_SITE_KEY;
-  if (!siteKey) return;
+  if (!siteKey) {
+    // No-op utan site key är en medveten säker default — men i en prod-build
+    // betyder det att bot-skyddet är AV. Logga en varning så en oavsiktlig
+    // prod-deploy utan nyckel märks (S8). I dev är frånvaron väntad.
+    if (process.env.NEXT_PUBLIC_APP_ENV === 'production') {
+      console.warn('[app-check] NEXT_PUBLIC_APP_CHECK_SITE_KEY saknas — App Check är inaktiverat i produktion.');
+    }
+    return;
+  }
 
   initialized = true;
   try {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
-import { addMemberByUid, removeMember } from '@/lib/firebase/groups';
+import { inviteMemberByUid, removeMember } from '@/lib/firebase/groups';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { useAuth } from '@/hooks/useAuth';
 import type { ResolvedUser } from '@/lib/firebase/username';
@@ -14,9 +14,10 @@ import type { GroupMember } from '@/types';
  * Delete + add är owner-gated av parent (isOwner-prop).
  */
 export function GroupMembersPanel({
-  groupId, members, ownerUid, myUid, isOwner,
+  groupId, groupName, members, ownerUid, myUid, isOwner,
 }: {
   groupId: string;
+  groupName: string;
   members: GroupMember[];
   ownerUid: string;
   myUid: string;
@@ -41,6 +42,7 @@ export function GroupMembersPanel({
       {adding && isOwner && (
         <AddMemberSearch
           groupId={groupId}
+          groupName={groupName}
           existingUids={members.map(m => m.uid)}
           onDone={() => setAdding(false)}
         />
@@ -93,47 +95,50 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
   );
 }
 
-// Prefix-sökning för att lägga till medlem. Skriv minst två tecken — och en
-// dropdown med matchande publika användare visas. Klick lägger till direkt.
+// Prefix-sökning för att bjuda in medlem. Skriv minst två tecken — och en
+// dropdown med matchande publika användare visas. Klick SKICKAR en inbjudan;
+// användaren blir medlem först när hen själv accepterar (samtyckesmodell).
 // Listan filtrerar bort befintliga medlemmar och en själv så ägaren inte kan
 // råka klicka på fel rad.
 function AddMemberSearch({
-  groupId, existingUids, onDone,
+  groupId, groupName, existingUids,
 }: {
   groupId: string;
+  groupName: string;
   existingUids: string[];
   onDone: () => void;
 }) {
-  const { uid: myUid } = useAuth();
+  const { uid: myUid, user } = useAuth();
   const [q, setQ] = useState('');
-  const [adding, setAdding] = useState<string | null>(null);
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [invited, setInvited] = useState<Set<string>>(new Set());
   const [err, setErr] = useState<string | null>(null);
   const { data: results, isLoading } = useUserSearch(q);
 
   const filtered = (results ?? []).filter(u => u.uid !== myUid);
 
-  const handleAdd = async (target: ResolvedUser) => {
+  const handleInvite = async (target: ResolvedUser) => {
     if (existingUids.includes(target.uid)) {
       setErr('Användaren är redan medlem.');
       return;
     }
+    if (!myUid) return;
     setErr(null);
-    setAdding(target.uid);
+    setInviting(target.uid);
     try {
-      await addMemberByUid({
+      await inviteMemberByUid({
         groupId,
-        uid: target.uid,
-        displayName: target.displayName,
-        username: target.username,
-        photoURL: target.photoURL,
-        providers: target.myProviders,
+        groupName,
+        fromUid: myUid,
+        fromDisplayName: user?.displayName ?? 'Någon',
+        targetUid: target.uid,
       });
-      onDone();
+      setInvited(prev => new Set(prev).add(target.uid));
     } catch (e) {
       console.error(e);
-      setErr('Kunde inte lägga till.');
+      setErr('Kunde inte skicka inbjudan.');
     } finally {
-      setAdding(null);
+      setInviting(null);
     }
   };
 
@@ -159,7 +164,8 @@ function AddMemberSearch({
         <ul className="bg-white border border-border-main rounded-sm divide-y divide-border-light">
           {filtered.map(u => {
             const already = existingUids.includes(u.uid);
-            const busy = adding === u.uid;
+            const isInvited = invited.has(u.uid);
+            const busy = inviting === u.uid;
             return (
               <li key={u.uid} className="px-2 py-[5px] flex items-center gap-2">
                 <SmallAvatar name={u.displayName} photoURL={u.photoURL} />
@@ -168,11 +174,11 @@ function AddMemberSearch({
                   <div className="text-xxs text-text-muted truncate">@{u.username}</div>
                 </div>
                 <button
-                  onClick={() => handleAdd(u)}
-                  disabled={already || busy}
+                  onClick={() => handleInvite(u)}
+                  disabled={already || busy || isInvited}
                   className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-accent text-white disabled:bg-border-main disabled:text-text-muted disabled:cursor-default"
                 >
-                  {already ? 'Medlem' : busy ? 'Lägger till…' : 'Lägg till'}
+                  {already ? 'Medlem' : isInvited ? 'Inbjuden' : busy ? 'Bjuder in…' : 'Bjud in'}
                 </button>
               </li>
             );

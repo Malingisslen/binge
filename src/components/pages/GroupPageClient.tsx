@@ -215,6 +215,7 @@ function GroupView({
         <div className="space-y-3">
           <GroupMembersPanel
             groupId={groupId}
+            groupName={group.name}
             members={members}
             ownerUid={group.ownerUid}
             myUid={myUid}

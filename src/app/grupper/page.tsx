@@ -1,10 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Users, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
-import { useMyGroups } from '@/hooks/useGroups';
+import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
 
 export default function GrupperPage() {
   return <AuthGuard><GrupperList /></AuthGuard>;
@@ -16,6 +17,7 @@ function GrupperList() {
 
   return (
     <div style={{ maxWidth: 820 }}>
+      <PendingInvites />
       <header>
         <div className="crumb">Grupper · {groups.length} {groups.length === 1 ? 'grupp' : 'grupper'}</div>
         <h1 className="page-h1">Mina grupper</h1>
@@ -85,6 +87,58 @@ function GrupperList() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function PendingInvites() {
+  const { invites, accept, decline } = useMyGroupInvites();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  if (invites.length === 0) return null;
+
+  const handle = async (groupId: string, action: 'accept' | 'decline') => {
+    setBusy(groupId);
+    try {
+      await (action === 'accept' ? accept(groupId) : decline(groupId));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="bg-surface border border-border-main rounded-sm mb-4 overflow-hidden">
+      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+        Inbjudningar ({invites.length})
+      </div>
+      <ul className="divide-y divide-border-light">
+        {invites.map(inv => (
+          <li key={inv.groupId} className="px-3 py-2 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-text-primary truncate">{inv.groupName}</div>
+              <div className="text-xxs text-text-muted truncate">{inv.fromDisplayName} bjöd in dig</div>
+            </div>
+            <div className="flex gap-1">
+              <button
+                onClick={() => handle(inv.groupId, 'accept')}
+                disabled={busy === inv.groupId}
+                className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
+              >
+                Acceptera
+              </button>
+              <button
+                onClick={() => handle(inv.groupId, 'decline')}
+                disabled={busy === inv.groupId}
+                className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover disabled:opacity-60"
+              >
+                Avböj
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

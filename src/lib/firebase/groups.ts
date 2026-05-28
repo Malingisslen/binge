@@ -10,6 +10,9 @@ import {
   addDoc,
   query,
   where,
+  orderBy,
+  limit as queryLimit,
+  Timestamp,
   serverTimestamp,
   onSnapshot,
   arrayUnion,
@@ -183,7 +186,32 @@ export async function joinGroupViaToken(params: {
   return { ok: true };
 }
 
-export async function addMemberByUid(params: {
+// Samtyckesbaserad inbjudan (ersätter tidigare tysta addMemberByUid). Ägaren
+// skriver en inbjudan på mål-användarens väg; mål-användaren måste själv
+// acceptera innan medlemskap skapas. Mirror av sendFriendRequest-mönstret.
+// Doc-id = groupId så vi inte kan ha dubbletter och existens-checken i
+// firestore.rules blir trivial.
+export async function inviteMemberByUid(params: {
+  groupId: string;
+  groupName: string;
+  fromUid: string;
+  fromDisplayName: string;
+  targetUid: string;
+}): Promise<void> {
+  await setDoc(doc(db, 'users', params.targetUid, 'groupInvites', params.groupId), {
+    groupId: params.groupId,
+    groupName: params.groupName,
+    fromUid: params.fromUid,
+    fromDisplayName: params.fromDisplayName,
+    invitedAt: serverTimestamp(),
+  });
+}
+
+// Mål-användaren accepterar en inbjudan: lägger till sig själv i memberUids,
+// skriver sin member-doc och raderar inbjudan — allt atomiskt i en batch.
+// Firestore-regeln tillåter self-add eftersom groupInvites/{groupId} existerar
+// (exists() läser pre-commit-state, så raderingen i samma batch är OK).
+export async function acceptGroupInvite(params: {
   groupId: string;
   uid: string;
   displayName: string;
@@ -206,7 +234,13 @@ export async function addMemberByUid(params: {
     notifications: true,
     joinedAt: serverTimestamp(),
   });
+  batch.delete(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
   await batch.commit();
+}
+
+// Avböj inbjudan — raderar bara invite-doc:et utan att bli medlem.
+export async function declineGroupInvite(uid: string, groupId: string): Promise<void> {
+  await deleteDoc(doc(db, 'users', uid, 'groupInvites', groupId));
 }
 
 export async function removeMember(groupId: string, uid: string): Promise<void> {
@@ -381,9 +415,16 @@ export async function getRecentSessionPicksAcrossGroups(
   const all = await Promise.all(groupsSnap.docs.map(async groupDoc => {
     const groupName = (groupDoc.data().name as string) ?? '';
     try {
-      const histSnap = await getDocs(
+      // Avgränsa läsningen server-side: bara picks efter `since`, nyast först,
+      // max `limit` per grupp. Tidigare lästes HELA sessionHistory och
+      // filtrerades i JS — O(all-history × grupper) reads varje gång (H4).
+      // where + orderBy på samma fält kräver inget composite-index.
+      const histSnap = await getDocs(query(
         collection(db, 'groups', groupDoc.id, 'sessionHistory'),
-      );
+        where('pickedAt', '>', Timestamp.fromDate(since)),
+        orderBy('pickedAt', 'desc'),
+        queryLimit(limit),
+      ));
       return histSnap.docs.map(d => {
         const data = d.data();
         const pickedAt: Date = data.pickedAt?.toDate?.() ?? new Date(0);
@@ -560,4 +601,32 @@ export async function getGroupOnce(groupId: string): Promise<Group | null> {
   const snap = await getDoc(doc(db, 'groups', groupId));
   if (!snap.exists()) return null;
   return groupDocToObject(snap.id, snap.data());
+}
+
+export interface GroupInvite {
+  groupId: string;
+  groupName: string;
+  fromUid: string;
+  fromDisplayName: string;
+  invitedAt: Date;
+}
+
+// Live-prenumeration på inkomna grupp-inbjudningar för en användare. Speglar
+// useFriendRequests-mönstret men som onSnapshot (badge/lista uppdateras live).
+export function subscribeToMyGroupInvites(
+  uid: string,
+  cb: (invites: GroupInvite[]) => void,
+): () => void {
+  return onSnapshot(collection(db, 'users', uid, 'groupInvites'), snap => {
+    cb(snap.docs.map(d => {
+      const data = d.data();
+      return {
+        groupId: d.id,
+        groupName: (data.groupName as string) ?? 'Grupp',
+        fromUid: (data.fromUid as string) ?? '',
+        fromDisplayName: (data.fromDisplayName as string) ?? 'Någon',
+        invitedAt: toDate(data.invitedAt),
+      };
+    }));
+  });
 }
