@@ -3,12 +3,41 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useFriendActions } from '@/hooks/useFriends';
 import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { getProvider } from '@/lib/tmdb/providers';
+import type { FriendRequest } from '@/lib/firebase/friends';
+
+// Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
+// klient-satta fromDisplayName/fromUsername (förfalskbara — valideras inte
+// regel-sidigt). Faller tillbaka till de denormaliserade fälten om profilen
+// inte är läsbar (privat profil).
+function useSenderProfile(uid: string) {
+  return useQuery({
+    queryKey: ['sender-profile', uid],
+    queryFn: async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (!snap.exists()) return null;
+        const d = snap.data();
+        return {
+          displayName: (d.displayName as string | undefined) ?? null,
+          username: (d.username as string | null | undefined) ?? null,
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!uid,
+    staleTime: 60_000,
+  });
+}
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from
@@ -110,26 +139,12 @@ export default function TopbarActions() {
                     Vänskapsförfrågningar ({friendRequestsCount})
                   </div>
                   {friendRequests.slice(0, 5).map(r => (
-                    <div key={r.fromUid} className="popover-row friend-req">
-                      <div className="popover-row-title">{r.fromDisplayName}</div>
-                      {r.fromUsername && (
-                        <div className="popover-row-meta">@{r.fromUsername}</div>
-                      )}
-                      <div className="popover-actions">
-                        <button
-                          onClick={() => acceptFriendRequest(r.fromUid)}
-                          className="btn btn-sm btn-acc"
-                        >
-                          Acceptera
-                        </button>
-                        <button
-                          onClick={() => declineFriendRequest(r.fromUid)}
-                          className="btn btn-sm btn-ghost"
-                        >
-                          Avböj
-                        </button>
-                      </div>
-                    </div>
+                    <FriendRequestRow
+                      key={r.fromUid}
+                      request={r}
+                      onAccept={() => acceptFriendRequest(r.fromUid)}
+                      onDecline={() => declineFriendRequest(r.fromUid)}
+                    />
                   ))}
                 </>
               )}
@@ -213,6 +228,34 @@ export default function TopbarActions() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function FriendRequestRow({
+  request,
+  onAccept,
+  onDecline,
+}: {
+  request: FriendRequest;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const { data: sender } = useSenderProfile(request.fromUid);
+  const displayName = sender?.displayName ?? request.fromDisplayName;
+  const username = sender?.username ?? request.fromUsername;
+  return (
+    <div className="popover-row friend-req">
+      <div className="popover-row-title">{displayName}</div>
+      {username && <div className="popover-row-meta">@{username}</div>}
+      <div className="popover-actions">
+        <button onClick={onAccept} className="btn btn-sm btn-acc">
+          Acceptera
+        </button>
+        <button onClick={onDecline} className="btn btn-sm btn-ghost">
+          Avböj
+        </button>
+      </div>
     </div>
   );
 }

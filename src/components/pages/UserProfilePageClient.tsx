@@ -14,7 +14,6 @@ import { toneForId } from '@/lib/duotone';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
-  const { data: watchlist } = usePublicWatchlist(data?.uid ?? null);
   const { uid: myUid } = useAuth();
   // Följar-räkningen (getCountFromServer på följare/följer-subkollektionerna)
   // är per firestore.rules bara läsbar för publika profiler eller ägaren själv
@@ -25,6 +24,14 @@ export default function UserProfilePageClient({ username }: { username: string }
   const profileIsPublic = !!data && 'profile' in data
     && (data.profile.defaultVisibility ?? (data.profile.isPublic ? 'public' : 'private')) === 'public';
   const countableUid = (profileIsPublic || profileUid === myUid) ? profileUid : null;
+  // Watchlistan läses bara när profilen faktiskt är läsbar för mig. Att
+  // usePublicProfile returnerar { profile, uid } (inte { isPrivate }) betyder
+  // att rules redan släppt in mig — dvs profilen är publik, vän-synlig och jag
+  // är vän, eller min egen. Just då går watchlist-queries igenom. På privata/
+  // icke-vän-profiler skickar vi null så inga onödiga permission-denied loggas
+  // (hooken sväljer dessutom kvarvarande fel internt).
+  const watchlistUid = data && 'profile' in data ? data.uid : null;
+  const { data: watchlist } = usePublicWatchlist(watchlistUid);
   const { data: followerCount } = useFollowerCount(countableUid);
   const { data: followingCount } = useFollowingCount(countableUid);
   const taste = useTasteMatch(data?.uid ?? null);

@@ -23,6 +23,17 @@ service cloud.firestore {
         && u.matches('^[a-z0-9]([a-z0-9_-]{1,18}[a-z0-9])?$');
     }
 
+    // Denormaliserade identitetsfält (username/displayName) får inte förfalskas.
+    // De måste matcha avsändarens egen profil-doc, annars kan en användare
+    // skriva en recension/kommentar som ser ut att komma från någon annan (M5).
+    // Optionella fält valideras bara när de är satta — saknas de är det OK.
+    function matchesOwnIdentity(d) {
+      return (!('username' in d) || d.username == null
+          || d.username == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('username', null))
+        && (!('displayName' in d) || d.displayName == null
+          || d.displayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('displayName', null));
+    }
+
     // Reviews content bounds.
     function isValidReview(d) {
       return d.uid is string
@@ -30,13 +41,15 @@ service cloud.firestore {
         && d.mediaType in ['movie', 'tv']
         && d.text is string && d.text.size() <= 5000
         && (!('rating' in d) || d.rating == null || (d.rating is number && d.rating >= 0 && d.rating <= 10))
-        && (!('spoiler' in d) || d.spoiler is bool);
+        && (!('spoiler' in d) || d.spoiler is bool)
+        && matchesOwnIdentity(d);
     }
 
     // Comment content bounds.
     function isValidComment(d) {
       return d.uid is string
-        && d.text is string && d.text.size() >= 1 && d.text.size() <= 1000;
+        && d.text is string && d.text.size() >= 1 && d.text.size() <= 1000
+        && matchesOwnIdentity(d);
     }
 
     // List content bounds.
@@ -69,7 +82,14 @@ service cloud.firestore {
           // Får inte sätta/röra isAdmin via update
           !('isAdmin' in request.resource.data)
           || request.resource.data.isAdmin == resource.data.get('isAdmin', false)
-        );
+        )
+        // Bio + displayName längd-/typvalidering (L4) — bara när fältet är satt.
+        && (!('bio' in request.resource.data)
+          || request.resource.data.bio == null
+          || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
+        && (!('displayName' in request.resource.data)
+          || request.resource.data.displayName == null
+          || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80));
       allow delete: if isOwner(uid);
     }
     match /users/{uid}/watchlist/{itemId} {
@@ -336,7 +356,8 @@ service cloud.firestore {
         allow read: if true;
         allow create, update: if
           request.resource.data.keys().hasOnly(['votes', 'updatedAt'])
-          && request.resource.data.votes is map;
+          && request.resource.data.votes is map
+          && request.resource.data.votes.size() <= 50;
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostUid == request.auth.uid;
       }
@@ -464,9 +485,14 @@ service cloud.firestore {
         allow read: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
 
-        // Sig själv eller ägaren kan skriva
+        // Sig själv (men bara om man faktiskt är medlem i gruppen — L1) eller
+        // ägaren kan skriva. Utan medlemskaps-villkoret kunde vem som helst
+        // skriva en självmedlemskaps-doc i en godtycklig grupp.
         allow create, update, delete: if isSignedIn() && (
-          request.auth.uid == memberUid
+          (
+            request.auth.uid == memberUid
+            && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          )
           || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid
         );
       }
@@ -483,9 +509,28 @@ service cloud.firestore {
         // sessions/{sessionId}/participants — vilket skulle göra reglerna
         // tunga. Begränsar i stället till gruppmedlemmar och vägrar bara
         // om sessionen inte är groupId-bunden, men det görs i klienten.)
+        // Fältkontrakt (L3) — matchar exakt vad recordGroupSessionPick skriver
+        // (groups.ts). hasOnly + typ-/storleksvalidering hindrar skräpfält och
+        // uppblåsta dokument.
         allow create, update: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
-          && request.resource.data.sessionId == sessionId;
+          && request.resource.data.sessionId == sessionId
+          && request.resource.data.keys().hasOnly([
+            'sessionId', 'pickedByUid', 'pickedTmdbId', 'mediaType', 'mediaTitle',
+            'posterPath', 'participantUids', 'pickedAt'
+          ])
+          // Skribenten måste logga sig själv som pick:are — gör det omöjligt
+          // att förfalska vem som valde (push-functionen litar på fältet).
+          && request.resource.data.pickedByUid == request.auth.uid
+          && request.resource.data.pickedTmdbId is int
+          && request.resource.data.pickedTmdbId > 0
+          && request.resource.data.mediaType in ['movie', 'tv']
+          && request.resource.data.mediaTitle is string
+          && request.resource.data.mediaTitle.size() <= 300
+          && (request.resource.data.posterPath == null
+            || (request.resource.data.posterPath is string && request.resource.data.posterPath.size() <= 300))
+          && request.resource.data.participantUids is list
+          && request.resource.data.participantUids.size() <= 50;
         // Bara ägare av gruppen kan radera historiken.
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;

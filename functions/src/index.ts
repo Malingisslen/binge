@@ -175,15 +175,19 @@ export const onFriendRequestCreate = onDocumentCreated(
  * alla medlemmar utom skribenten.
  *
  * Path: groups/{groupId}/sessionHistory/{sessionId}
- * Payload-fält (skrivs av recordGroupSessionPick):
+ * Payload-fält (skrivs av recordGroupSessionPick i src/lib/firebase/groups.ts):
  *   - sessionId: string
- *   - tmdbId: number
+ *   - pickedByUid: string   (uid för den som valde; == skrivaren, enforced i rules)
+ *   - pickedTmdbId: number
  *   - mediaType: 'movie' | 'tv'
- *   - title: string
+ *   - mediaTitle: string
  *   - posterPath: string | null
- *   - pickedByUid: string
- *   - pickedByName: string
+ *   - participantUids: string[]
  *   - pickedAt: serverTimestamp
+ *
+ * Skribenten (pickedByUid) får ingen egen push. Hens namn slås upp
+ * auktoritativt från users/{pickedByUid}.displayName — vi litar inte på
+ * något denormaliserat/förfalskbart namnfält i pick-dokumentet.
  */
 export const onSessionPickCreate = onDocumentCreated(
   'groups/{groupId}/sessionHistory/{sessionId}',
@@ -191,9 +195,10 @@ export const onSessionPickCreate = onDocumentCreated(
     const data = event.data?.data();
     if (!data) return;
     const groupId = event.params.groupId;
-    const pickedByUid = data.pickedByUid as string;
-    const pickedByName = (data.pickedByName as string) ?? 'Någon';
-    const title = (data.title as string) ?? 'en titel';
+    const mediaTitle = (data.mediaTitle as string) ?? 'en titel';
+    // Explicit, regel-verifierad picker-uid (== skrivaren). Faller tillbaka
+    // på null för ev. äldre dokument utan fältet.
+    const pickedByUid = (data.pickedByUid as string) ?? null;
 
     const db = getFirestore();
     const groupSnap = await db.collection('groups').doc(groupId).get();
@@ -211,8 +216,17 @@ export const onSessionPickCreate = onDocumentCreated(
       return;
     }
 
+    // Slå upp skribentens namn auktoritativt (ej förfalskbart denormaliserat
+    // fält). Faller tillbaka på "Någon" om profilen saknar displayName eller
+    // pickedByUid saknas (äldre dokument).
+    let pickerName = 'Någon';
+    if (pickedByUid) {
+      const userSnap = await db.collection('users').doc(pickedByUid).get();
+      pickerName = (userSnap.data()?.displayName as string) || 'Någon';
+    }
+
     const actionUrl = `/grupper/${groupId}/`;
-    const body = `${pickedByName} har valt "${title}"`;
+    const body = `${pickerName} valde "${mediaTitle}"`;
 
     await Promise.allSettled(
       recipients.map(uid =>

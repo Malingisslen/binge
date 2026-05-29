@@ -1,6 +1,8 @@
 // Firestore security-rules-test mot emulatorn. Körs via:
 //   firebase emulators:exec --only firestore "node scripts/test-rules.mjs"
-// Verifierar de säkerhetskritiska reglerna från granskningen (H1/M1/H2).
+// Verifierar de säkerhetskritiska reglerna från granskningen
+// (H1/M1/H2 + audit-fixar: L1 self-membership, M5 recensions-identitet,
+//  L4 bio-validering, M1b sessionHistory pickedByUid).
 import { readFileSync } from 'node:fs';
 import {
   initializeTestEnvironment,
@@ -146,6 +148,85 @@ await check('deltagare med för långt displayName nekas',
   assertFails(setDoc(doc(anon, 'sessions', 's1', 'participants', 'p3'), {
     uid: null, displayName: 'x'.repeat(200), providers: [8],
     vetoRemaining: 1, isHost: false, joinedAt: 1, lastActiveAt: 1,
+  })));
+
+console.log('\n[L1] Medlemskaps-doc kräver att man är medlem');
+await testEnv.clearFirestore();
+await seedGroup(['alice', 'bob']); // ownerUid: alice
+
+// En icke-medlem kan inte injicera en självmedlemskaps-doc i en grupp.
+await check('icke-medlem kan inte self-adda member-doc',
+  assertFails(setDoc(doc(mallory, 'groups', GID, 'members', 'mallory'), {
+    uid: 'mallory', joinedAt: 1,
+  })));
+
+// En faktisk medlem kan skriva sin egen member-doc.
+await check('medlem kan skriva egen member-doc',
+  assertSucceeds(setDoc(doc(bob, 'groups', GID, 'members', 'bob'), {
+    uid: 'bob', joinedAt: 1,
+  })));
+
+console.log('\n[M5/L4] Recensions-identitet + bio-validering');
+await testEnv.clearFirestore();
+await testEnv.withSecurityRulesDisabled(async ctx => {
+  await setDoc(doc(ctx.firestore(), 'users', 'alice'), {
+    username: 'alice_handle', displayName: 'Alice',
+  });
+});
+
+const goodReview = {
+  uid: 'alice', tmdbId: 27205, mediaType: 'movie', text: 'Bra film',
+  username: 'alice_handle', displayName: 'Alice',
+};
+// Recension med identitet som matchar egen profil tillåts.
+await check('recension med egen identitet tillåts',
+  assertSucceeds(setDoc(doc(alice, 'reviews', 'r1'), goodReview)));
+
+// Recension med förfalskat username (annans handle) nekas (M5).
+await check('recension med förfalskat username nekas',
+  assertFails(setDoc(doc(alice, 'reviews', 'r2'), { ...goodReview, username: 'bob_handle' })));
+
+// Recension med förfalskat displayName nekas (M5).
+await check('recension med förfalskat displayName nekas',
+  assertFails(setDoc(doc(alice, 'reviews', 'r3'), { ...goodReview, displayName: 'Bob' })));
+
+// Identitetsfält är optionella — utelämnas de är det OK.
+await check('recension utan identitetsfält tillåts',
+  assertSucceeds(setDoc(doc(alice, 'reviews', 'r4'), {
+    uid: 'alice', tmdbId: 27205, mediaType: 'movie', text: 'Kort',
+  })));
+
+// Bio inom gränsen tillåts; över 160 tecken nekas (L4).
+await check('uppdatera egen bio <=160 tillåts',
+  assertSucceeds(updateDoc(doc(alice, 'users', 'alice'), { bio: 'x'.repeat(160) })));
+await check('uppdatera egen bio >160 nekas',
+  assertFails(updateDoc(doc(alice, 'users', 'alice'), { bio: 'x'.repeat(161) })));
+
+console.log('\n[M1b] sessionHistory-pick: pickedByUid kan inte förfalskas');
+await testEnv.clearFirestore();
+await seedGroup(['alice', 'bob']);
+const pickBase = {
+  sessionId: 'sess1', pickedTmdbId: 27205, mediaType: 'movie',
+  mediaTitle: 'Inception', posterPath: null, participantUids: ['alice', 'bob'],
+  pickedAt: 1,
+};
+
+// Medlem loggar pick med sin egen uid → tillåts.
+await check('medlem loggar pick med egen uid tillåts',
+  assertSucceeds(setDoc(doc(alice, 'groups', GID, 'sessionHistory', 'sess1'), {
+    ...pickBase, pickedByUid: 'alice',
+  })));
+
+// Medlem försöker logga pick i någon annans namn → nekas.
+await check('förfalskad pickedByUid (annans uid) nekas',
+  assertFails(setDoc(doc(alice, 'groups', GID, 'sessionHistory', 'sess2'), {
+    ...pickBase, sessionId: 'sess2', pickedByUid: 'bob',
+  })));
+
+// Okänt fält i pick-dokumentet → nekas (hasOnly).
+await check('pick med okänt fält nekas',
+  assertFails(setDoc(doc(alice, 'groups', GID, 'sessionHistory', 'sess3'), {
+    ...pickBase, sessionId: 'sess3', pickedByUid: 'alice', evil: 'x',
   })));
 
 await testEnv.cleanup();

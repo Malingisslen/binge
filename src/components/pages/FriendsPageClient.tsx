@@ -3,11 +3,39 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
 import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
+
+// Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
+// klient-satta fromDisplayName/fromUsername på request-doc:et (de valideras inte
+// regel-sidigt och är därmed förfalskbara). Faller tillbaka till de
+// denormaliserade fälten om profilen inte är läsbar (privat profil).
+function useSenderProfile(uid: string) {
+  return useQuery({
+    queryKey: ['sender-profile', uid],
+    queryFn: async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (!snap.exists()) return null;
+        const d = snap.data();
+        return {
+          displayName: (d.displayName as string | undefined) ?? null,
+          username: (d.username as string | null | undefined) ?? null,
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!uid,
+    staleTime: 60_000,
+  });
+}
 
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
@@ -145,19 +173,24 @@ function FriendRow({ friend }: { friend: FriendUser }) {
 
 function RequestRow({ request }: { request: FriendRequest }) {
   const { acceptFriendRequest, declineFriendRequest } = useFriendActions();
-  const profileLink = request.fromUsername ? `/user/${request.fromUsername}/` : null;
+  const { data: sender } = useSenderProfile(request.fromUid);
+  // Föredra namn/användarnamn från avsändarens egen profil; fall tillbaka till
+  // de denormaliserade request-fälten om profilen inte är läsbar.
+  const displayName = sender?.displayName ?? request.fromDisplayName;
+  const username = sender?.username ?? request.fromUsername;
+  const profileLink = username ? `/user/${username}/` : null;
   return (
     <li className="px-3 py-2 flex items-center gap-2">
-      <Avatar name={request.fromDisplayName} photoURL={request.fromPhotoURL} />
+      <Avatar name={displayName} photoURL={request.fromPhotoURL} />
       <div className="flex-1 min-w-0">
         {profileLink ? (
           <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
-            {request.fromDisplayName}
+            {displayName}
           </Link>
         ) : (
-          <div className="text-xs font-semibold text-text-muted truncate">{request.fromDisplayName}</div>
+          <div className="text-xs font-semibold text-text-muted truncate">{displayName}</div>
         )}
-        {request.fromUsername && <div className="text-xxs text-text-muted">@{request.fromUsername}</div>}
+        {username && <div className="text-xxs text-text-muted">@{username}</div>}
       </div>
       <div className="flex gap-1">
         <button

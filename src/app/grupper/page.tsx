@@ -3,9 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { doc, getDoc } from 'firebase/firestore';
 import AuthGuard from '@/components/AuthGuard';
+import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
+import type { GroupInvite } from '@/lib/firebase/groups';
 
 export default function GrupperPage() {
   return <AuthGuard><GrupperList /></AuthGuard>;
@@ -115,31 +119,93 @@ function PendingInvites() {
       </div>
       <ul className="divide-y divide-border-light">
         {invites.map(inv => (
-          <li key={inv.groupId} className="px-3 py-2 flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-text-primary truncate">{inv.groupName}</div>
-              <div className="text-xxs text-text-muted truncate">{inv.fromDisplayName} bjöd in dig</div>
-            </div>
-            <div className="flex gap-1">
-              <button
-                onClick={() => handle(inv.groupId, 'accept')}
-                disabled={busy === inv.groupId}
-                className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
-              >
-                Acceptera
-              </button>
-              <button
-                onClick={() => handle(inv.groupId, 'decline')}
-                disabled={busy === inv.groupId}
-                className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover disabled:opacity-60"
-              >
-                Avböj
-              </button>
-            </div>
-          </li>
+          <InviteRow
+            key={inv.groupId}
+            invite={inv}
+            busy={busy === inv.groupId}
+            onAccept={() => handle(inv.groupId, 'accept')}
+            onDecline={() => handle(inv.groupId, 'decline')}
+          />
         ))}
       </ul>
     </div>
+  );
+}
+
+// Slår upp gruppnamn via groupId och inbjudarens namn via fromUid istället för
+// att lita på klient-satta groupName/fromDisplayName på invite-doc:et (de
+// valideras inte regel-sidigt och är därmed förfalskbara). Faller tillbaka till
+// de denormaliserade fälten om uppslaget inte är läsbart.
+function useInviteIdentity(invite: GroupInvite) {
+  const groupQuery = useQuery({
+    queryKey: ['invite-group-name', invite.groupId],
+    queryFn: async () => {
+      try {
+        const snap = await getDoc(doc(db, 'groups', invite.groupId));
+        if (!snap.exists()) return null;
+        return (snap.data().name as string | undefined) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!invite.groupId,
+    staleTime: 60_000,
+  });
+  const senderQuery = useQuery({
+    queryKey: ['sender-profile', invite.fromUid],
+    queryFn: async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', invite.fromUid));
+        if (!snap.exists()) return null;
+        return (snap.data().displayName as string | undefined) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!invite.fromUid,
+    staleTime: 60_000,
+  });
+  return {
+    groupName: groupQuery.data ?? invite.groupName,
+    fromDisplayName: senderQuery.data ?? invite.fromDisplayName,
+  };
+}
+
+function InviteRow({
+  invite,
+  busy,
+  onAccept,
+  onDecline,
+}: {
+  invite: GroupInvite;
+  busy: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const { groupName, fromDisplayName } = useInviteIdentity(invite);
+  return (
+    <li className="px-3 py-2 flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-semibold text-text-primary truncate">{groupName}</div>
+        <div className="text-xxs text-text-muted truncate">{fromDisplayName} bjöd in dig</div>
+      </div>
+      <div className="flex gap-1">
+        <button
+          onClick={onAccept}
+          disabled={busy}
+          className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
+        >
+          Acceptera
+        </button>
+        <button
+          onClick={onDecline}
+          disabled={busy}
+          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover disabled:opacity-60"
+        >
+          Avböj
+        </button>
+      </div>
+    </li>
   );
 }
 

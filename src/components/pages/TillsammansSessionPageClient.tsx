@@ -589,6 +589,7 @@ function MatchList({
   session: TogetherSession;
   participants: SessionParticipant[];
 }) {
+  const { uid } = useAuth();
   const isGroupSession = !!session.groupId;
   const [picking, setPicking] = useState<number | null>(null);
   const [pickedTmdbId, setPickedTmdbId] = useState<number | null>(null);
@@ -596,13 +597,14 @@ function MatchList({
   // Logga till gruppens sessionHistory så filmkvällen syns på grupp-sidan
   // som "Senaste filmkvällar". Bara meningsfullt för grupp-bundna sessioner.
   const recordPick = async (m: ReturnType<typeof pickMatches>[number]) => {
-    if (!session.groupId) return;
+    if (!session.groupId || !uid) return;
     setPicking(m.candidate.tmdbId);
     try {
       const { recordGroupSessionPick } = await import('@/lib/firebase/groups');
       await recordGroupSessionPick({
         groupId: session.groupId,
         sessionId: session.id,
+        pickedByUid: uid,
         pickedTmdbId: m.candidate.tmdbId,
         mediaType: m.candidate.mediaType,
         mediaTitle: m.candidate.title,

@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  getDoc,
   setDoc,
   updateDoc,
   addDoc,
@@ -104,10 +103,14 @@ export async function recordSwipe(params: {
   vote: VoteKind;
 }): Promise<void> {
   const ref = doc(db, 'sessions', params.sessionId, 'swipes', String(params.tmdbId));
-  const snap = await getDoc(ref);
-  const existing = snap.exists() ? (snap.data().votes ?? {}) : {};
+  // Atomär per-nyckel-skrivning utan föregående läsning. Tidigare
+  // read-modify-write (getDoc → spread → setDoc) klobbade samtidiga röster:
+  // två deltagare som läste samma snapshot och skrev tillbaka skulle skriva
+  // över varandras röst. setDoc(merge) gör en djup-merge av nästlade mapar,
+  // så att bara den egna nyckeln i 'votes' sätts; andra deltagares röster
+  // lämnas orörda och mapen/dokumentet skapas om det saknas. (M4)
   await setDoc(ref, {
-    votes: { ...existing, [params.participantId]: params.vote },
+    votes: { [params.participantId]: params.vote },
     updatedAt: serverTimestamp(),
   }, { merge: true });
 

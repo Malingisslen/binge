@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc, getDocs, collection, query, limit } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where, limit, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { migrateStatus } from '@/lib/watchStatus.migration';
@@ -73,44 +73,86 @@ export function usePublicProfile(username: string) {
 // behöver användaren se mer får det bli via filterar/sök senare.
 const PUBLIC_WATCHLIST_LIMIT = 500;
 
+function mapWatchlistDoc(d: QueryDocumentSnapshot<DocumentData>): WatchlistItem {
+  const data = d.data();
+  const mediaType = data.mediaType as MediaType;
+  // Använd shared migration så publik profil ser samma statusar som
+  // ägaren — annars skulle vänner se 'följer' badge medan ägaren ser
+  // 'mina' i sin egen vy.
+  const { status, dropped } = migrateStatus(
+    data.status as string,
+    mediaType,
+    data.dropped as boolean | undefined,
+  );
+  return {
+    tmdbId: data.tmdbId as number,
+    mediaType,
+    status,
+    rating: (data.rating as number) ?? null,
+    notes: null,
+    title: data.title as string,
+    posterPath: (data.posterPath as string) ?? null,
+    releaseYear: (data.releaseYear as number) ?? null,
+    totalSeasons: (data.totalSeasons as number) ?? null,
+    lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
+    lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
+    dropped,
+    rewatchCount: (data.rewatchCount as number) ?? 0,
+    providers: (data.providers as number[]) ?? [],
+    genreIds: (data.genreIds as number[]) ?? [],
+    addedAt: toDate(data.addedAt),
+    updatedAt: toDate(data.updatedAt),
+    watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
+  } as WatchlistItem;
+}
+
 export function usePublicWatchlist(uid: string | null) {
   return useQuery({
     queryKey: ['public-watchlist', uid],
     queryFn: async () => {
-      const q = query(collection(db, 'users', uid!, 'watchlist'), limit(PUBLIC_WATCHLIST_LIMIT));
-      const snap = await getDocs(q);
-      return snap.docs.map(d => {
-        const data = d.data();
-        const mediaType = data.mediaType as MediaType;
-        // Använd shared migration så publik profil ser samma statusar som
-        // ägaren — annars skulle vänner se 'följer' badge medan ägaren ser
-        // 'mina' i sin egen vy.
-        const { status, dropped } = migrateStatus(
-          data.status as string,
-          mediaType,
-          data.dropped as boolean | undefined,
+      const col = collection(db, 'users', uid!, 'watchlist');
+      const byId = new Map<string, WatchlistItem>();
+
+      // firestore.rules tillåter en list-query bara om VARJE matchad doc är
+      // läsbar enligt en enda regel — rules filtrerar inte, de avvisar hela
+      // queryn så fort en doc faller utanför. Därför kan vi inte köra en
+      // ofiltrerad query (den dör om profilen har minst en privat titel).
+      // Vi gör istället en query per visibility-tier och slår ihop resultaten.
+
+      // 1. Publika items — alltid läsbara, så denna query går alltid igenom.
+      try {
+        const snap = await getDocs(
+          query(col, where('effectiveVisibility', '==', 'public'), limit(PUBLIC_WATCHLIST_LIMIT)),
         );
-        return {
-          tmdbId: data.tmdbId as number,
-          mediaType,
-          status,
-          rating: (data.rating as number) ?? null,
-          notes: null,
-          title: data.title as string,
-          posterPath: (data.posterPath as string) ?? null,
-          releaseYear: (data.releaseYear as number) ?? null,
-          totalSeasons: (data.totalSeasons as number) ?? null,
-          lastWatchedSeason: (data.lastWatchedSeason as number) ?? null,
-          lastWatchedEpisode: (data.lastWatchedEpisode as number) ?? null,
-          dropped,
-          rewatchCount: (data.rewatchCount as number) ?? 0,
-          providers: (data.providers as number[]) ?? [],
-          genreIds: (data.genreIds as number[]) ?? [],
-          addedAt: toDate(data.addedAt),
-          updatedAt: toDate(data.updatedAt),
-          watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
-        } as WatchlistItem;
-      });
+        snap.docs.forEach(d => byId.set(d.id, mapWatchlistDoc(d)));
+      } catch {
+        // Permission-denied (t.ex. helt privat profil) — svälj, fortsätt.
+      }
+
+      // 2. Vän-synliga items — bara läsbara om jag är vän med ägaren, annars
+      //    avvisar rules queryn. Svälj felet på privata/icke-vän-profiler.
+      try {
+        const snap = await getDocs(
+          query(col, where('effectiveVisibility', '==', 'friends'), limit(PUBLIC_WATCHLIST_LIMIT)),
+        );
+        snap.docs.forEach(d => byId.set(d.id, mapWatchlistDoc(d)));
+      } catch {
+        // Inte vän (eller privat) — inga vän-synliga items att visa.
+      }
+
+      // 3. Legacy-items utan effectiveVisibility-fältet (innan cascade-stämpling).
+      //    Firestore kan inte fråga på "fält saknas", så vi försöker en
+      //    ofiltrerad query — den går bara igenom om HELA watchlistan är
+      //    legacy-publik. Misslyckas den (blandade/privata items) sväljs den
+      //    och vi nöjer oss med de filtrerade tiers ovan.
+      try {
+        const snap = await getDocs(query(col, limit(PUBLIC_WATCHLIST_LIMIT)));
+        snap.docs.forEach(d => byId.set(d.id, mapWatchlistDoc(d)));
+      } catch {
+        // Förväntat på profiler med minst en privat/mixad titel — ignorera.
+      }
+
+      return Array.from(byId.values()).slice(0, PUBLIC_WATCHLIST_LIMIT);
     },
     enabled: uid !== null,
     staleTime: 60_000,

@@ -258,18 +258,40 @@ export async function leaveGroup(groupId: string, uid: string): Promise<void> {
 }
 
 export async function deleteGroup(groupId: string): Promise<void> {
-  // Best-effort cleanup. Members + watchlist subcollections must be deleted
-  // before the parent doc to avoid orphaned data; in production this would
-  // happen in a Cloud Function. For MVP we delete what we can client-side.
-  const [membersSnap, watchlistSnap] = await Promise.all([
+  // Best-effort cleanup. Members + watchlist (inkl. per-item progress) +
+  // sessionHistory-subcollections måste raderas innan parent-doc:et för att
+  // undvika orphaned data; i produktion skulle detta ske i en Cloud Function.
+  // För MVP raderar vi det vi kan klient-sidigt.
+  const [membersSnap, watchlistSnap, sessionHistorySnap] = await Promise.all([
     getDocs(collection(db, 'groups', groupId, 'members')),
     getDocs(collection(db, 'groups', groupId, 'watchlist')),
+    getDocs(collection(db, 'groups', groupId, 'sessionHistory')),
   ]);
-  const batch = writeBatch(db);
-  membersSnap.docs.forEach(d => batch.delete(d.ref));
-  watchlistSnap.docs.forEach(d => batch.delete(d.ref));
-  batch.delete(doc(db, 'groups', groupId));
-  await batch.commit();
+
+  // Varje watchlist-item kan ha en progress-subcollection
+  // (groups/{id}/watchlist/{tmdbId}/progress/{uid}) — hämta dem parallellt.
+  const progressSnaps = await Promise.all(
+    watchlistSnap.docs.map(d =>
+      getDocs(collection(d.ref, 'progress')),
+    ),
+  );
+
+  // Samla alla refs och committa i chunkar ≤450 för att hålla oss under
+  // Firestore-batchens 500-gräns (samma mönster som deleteAccount).
+  const refs = [
+    ...membersSnap.docs.map(d => d.ref),
+    ...watchlistSnap.docs.map(d => d.ref),
+    ...sessionHistorySnap.docs.map(d => d.ref),
+    ...progressSnaps.flatMap(snap => snap.docs.map(d => d.ref)),
+    doc(db, 'groups', groupId),
+  ];
+
+  const CHUNK = 450;
+  for (let i = 0; i < refs.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + CHUNK).forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
 }
 
 export async function updateMemberProviders(
@@ -365,6 +387,10 @@ export async function setGroupMemberProgress(params: {
 export async function recordGroupSessionPick(params: {
   groupId: string;
   sessionId: string;
+  /** uid för den som loggar pick:en. Måste vara den inloggade (rules
+   *  kräver pickedByUid == request.auth.uid) — så push-functionen kan
+   *  härleda skribenten förfalskningssäkert och slå upp hens namn. */
+  pickedByUid: string;
   pickedTmdbId: number;
   mediaType: 'movie' | 'tv';
   mediaTitle: string;
@@ -375,6 +401,7 @@ export async function recordGroupSessionPick(params: {
     doc(db, 'groups', params.groupId, 'sessionHistory', params.sessionId),
     {
       sessionId: params.sessionId,
+      pickedByUid: params.pickedByUid,
       pickedTmdbId: params.pickedTmdbId,
       mediaType: params.mediaType,
       mediaTitle: params.mediaTitle,
