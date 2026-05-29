@@ -16,8 +16,17 @@ export default function UserProfilePageClient({ username }: { username: string }
   const { data, isLoading } = usePublicProfile(username);
   const { data: watchlist } = usePublicWatchlist(data?.uid ?? null);
   const { uid: myUid } = useAuth();
-  const { data: followerCount } = useFollowerCount(data?.uid ?? null);
-  const { data: followingCount } = useFollowingCount(data?.uid ?? null);
+  // Följar-räkningen (getCountFromServer på följare/följer-subkollektionerna)
+  // är per firestore.rules bara läsbar för publika profiler eller ägaren själv
+  // (isOwner || isPublic — vänner ingår INTE). Att fråga på en privat profil
+  // ger permission-denied i konsolen och ändå ingen siffra. Skicka därför bara
+  // in uid när profilen faktiskt är publik eller min egen.
+  const profileUid = data && 'uid' in data ? data.uid : null;
+  const profileIsPublic = !!data && 'profile' in data
+    && (data.profile.defaultVisibility ?? (data.profile.isPublic ? 'public' : 'private')) === 'public';
+  const countableUid = (profileIsPublic || profileUid === myUid) ? profileUid : null;
+  const { data: followerCount } = useFollowerCount(countableUid);
+  const { data: followingCount } = useFollowingCount(countableUid);
   const taste = useTasteMatch(data?.uid ?? null);
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
