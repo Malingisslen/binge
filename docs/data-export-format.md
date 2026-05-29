@@ -19,6 +19,11 @@ Filen är en JSON med följande top-level-struktur (se
   "notifications":   [ … ],
   "blocked":         [ … ],
   "following":       [ … ],
+  "friends":            [ … ],
+  "friendRequests":     [ … ],
+  "friendRequestsSent": [ … ],
+  "groupInvites":       [ … ],
+  "pauseHistory":       [ … ],
   "reviews":         [ … ],
   "reviewLikes":     [ … ],
   "reviewComments":  [ … ],
@@ -39,6 +44,11 @@ Filen är en JSON med följande top-level-struktur (se
 | `notifications` | `users/{uid}/notifications/{notifId}` | Notifikations-inbox |
 | `blocked` | `users/{uid}/blocked/{targetUid}` | Blockerade användare + timestamps |
 | `following` | `users/{uid}/following/{targetUid}` | Följda användar-uids + timestamps |
+| `friends` | `users/{uid}/friends/{friendUid}` | Vänner (ömsesidiga följningar) + timestamps |
+| `friendRequests` | `users/{uid}/friendRequests/{fromUid}` | Inkomna vänförfrågningar |
+| `friendRequestsSent` | `users/{uid}/friendRequestsSent/{toUid}` | Skickade vänförfrågningar |
+| `groupInvites` | `users/{uid}/groupInvites/{groupId}` | Inkomna grupp-inbjudningar |
+| `pauseHistory` | `users/{uid}/pauseHistory/{historyId}` | Sparbeslut-historik från Streamingrådgivaren |
 | `reviews` | `reviews/{reviewId}` (where uid==me) | Dina recensioner med text, betyg, spoiler-flagga |
 | `reviewLikes` | `reviews/*/likes/{uid}` | Likes du gjort på andras recensioner (doc-id = ditt uid) |
 | `reviewComments` | `reviews/*/comments/{commentId}` (where uid==me) | Dina kommentarer |
@@ -90,3 +100,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
 ### Changelog
 
 - **1.0 (2026-04-24)** — Initial version.
+- **1.0 (2026-05-29)** — Lade till user-owned-fält som redan hämtades men
+  tappades i exporten: `friends`, `friendRequests`, `friendRequestsSent`,
+  `groupInvites`, `pauseHistory`. Rent additivt (inga befintliga fält
+  ändrade), därför hålls `schemaVersion` på `1.0`.
