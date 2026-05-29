@@ -30,6 +30,11 @@ export interface BingeExport {
   notifications: ExportDoc[];
   blocked: ExportDoc[];
   following: ExportDoc[];
+  friends: ExportDoc[];
+  friendRequests: ExportDoc[];
+  friendRequestsSent: ExportDoc[];
+  groupInvites: ExportDoc[];
+  pauseHistory: ExportDoc[];
   reviews: ExportDoc[];
   reviewLikes: ExportDoc[];
   reviewComments: ExportDoc[];
@@ -48,6 +53,11 @@ Filen innehåller:
 - Notifikationer (notifications)
 - Blockerade användare (blocked)
 - Användare du följer (following)
+- Dina vänner (friends)
+- Inkomna vänförfrågningar (friendRequests)
+- Skickade vänförfrågningar (friendRequestsSent)
+- Inkomna grupp-inbjudningar (groupInvites)
+- Sparbeslut-historik från Streamingrådgivaren (pauseHistory)
 - Dina recensioner (reviews)
 - Gillamarkeringar du gjort (reviewLikes)
 - Kommentarer du skrivit (reviewComments)
@@ -85,6 +95,11 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     notifications: toExportDocs(s.notificationsSnap),
     blocked: toExportDocs(s.blockedSnap),
     following: toExportDocs(s.followingSnap),
+    friends: toExportDocs(s.friendsSnap),
+    friendRequests: toExportDocs(s.friendRequestsSnap),
+    friendRequestsSent: toExportDocs(s.friendRequestsSentSnap),
+    groupInvites: toExportDocs(s.groupInvitesSnap),
+    pauseHistory: toExportDocs(s.pauseHistorySnap),
     reviews: toExportDocs(s.reviewsSnap),
     reviewLikes: toExportDocs(s.reviewLikesSnap),
     reviewComments: toExportDocs(s.reviewCommentsSnap),

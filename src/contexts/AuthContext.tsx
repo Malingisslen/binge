@@ -501,6 +501,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
     snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
     snaps.blockedSnap.docs.forEach(d => refs.push(d.ref));
+    // Sparbeslut-historik (Streamingrådgivaren) — raderas så ingen
+    // pause-/resume-data blir kvar efter konto-radering.
+    snaps.pauseHistorySnap.docs.forEach(d => refs.push(d.ref));
     // FCM-tokens raderas så Cloud Functions inte fortsätter försöka skicka
     // push till en raderad användare. Server-side cleanup tar dem bort
     // till slut via 'registration-token-not-registered'-felet, men explicit
@@ -549,7 +552,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 5. My lists + hosted Tillsammans-sessions.
     snaps.listsSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.sessionsSnap.docs.forEach(d => refs.push(d.ref));
+    // För varje hostad session: radera participants- + swipes-subcollections
+    // innan session-doc. Server-side TTL (Sprint 10) städar visserligen bort
+    // utgångna sessioner, men defensiv radering här lämnar inga zombie-
+    // subcollections kvar efter konto-radering.
+    for (const sessionDoc of snaps.sessionsSnap.docs) {
+      const [participantsSnap, swipesSnap] = await Promise.all([
+        getDocs(collection(db, 'sessions', sessionDoc.id, 'participants')),
+        getDocs(collection(db, 'sessions', sessionDoc.id, 'swipes')),
+      ]);
+      participantsSnap.docs.forEach(d => refs.push(d.ref));
+      swipesSnap.docs.forEach(d => refs.push(d.ref));
+      refs.push(sessionDoc.ref);
+    }
 
     // 6. Groups: if I'm owner, delete the whole group + subcollections.
     //    If I'm a member, just remove myself from memberUids and delete my member doc.
