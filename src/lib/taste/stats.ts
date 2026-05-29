@@ -12,7 +12,7 @@ export interface ProfileStats {
 
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return item.rating / 10;
-  if (item.dropped) return 0;
+  if (item.status === 'avbruten') return 0;
   if (item.status === 'sedd') return 0.8;
   if (item.status === 'mina') return 0.6;
   return 0.3;

@@ -37,7 +37,7 @@ export default function RecCard({ item, whyLine, providers }: Props) {
   const [imgError, setImgError] = useState(false);
 
   const sub = item.media_type === 'tv' ? 'serie' : 'film';
-  const meta = year != null ? `${sub} · ${year} · ${item.vote_average.toFixed(1)}` : sub;
+  const meta = year != null ? `${sub} · ${year} · ${(item.vote_average ?? 0).toFixed(1)}` : sub;
 
   return (
     <div className="rec-card">

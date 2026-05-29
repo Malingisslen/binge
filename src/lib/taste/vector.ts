@@ -7,7 +7,7 @@ import type { TasteVector, WatchlistItem } from '@/types';
 // 'vill_se' är planerat (inte bevisat smakprofil) → neutral.
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return (item.rating / 10) * 2;
-  if (item.dropped) return -0.5;
+  if (item.status === 'avbruten') return -0.5;
   if (item.status === 'sedd') return 1;
   if (item.status === 'mina') return 0.75;
   return 0.25;

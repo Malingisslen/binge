@@ -38,7 +38,8 @@ export function migrateStatus(
     case 'avbruten':
       return { status: 'avbruten', dropped: false };
     case 'mina':
-      return { status: 'mina', dropped: false };
+      // Film har inget 'mina'-läge — downgrade till terminal 'sedd'. TV behåller.
+      return { status: isTv ? 'mina' : 'sedd', dropped: false };
     default:
       // Okänd/oväntad status (handredigerad doc, framtida schema, typo): defaulta
       // till 'vill_se' för BÅDE film och TV. Tidigare promotades TV tyst till

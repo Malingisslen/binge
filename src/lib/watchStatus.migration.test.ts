@@ -6,6 +6,9 @@ describe('migrateStatus', () => {
     it('passes mina through unchanged for TV', () => {
       expect(migrateStatus('mina', 'tv')).toEqual({ status: 'mina', dropped: false });
     });
+    it('downgrades mina → sedd for film (L7 — film har inget mina-läge)', () => {
+      expect(migrateStatus('mina', 'movie')).toEqual({ status: 'sedd', dropped: false });
+    });
     it('passes vill_se / sedd / avbruten unchanged', () => {
       expect(migrateStatus('vill_se', 'tv')).toEqual({ status: 'vill_se', dropped: false });
       expect(migrateStatus('sedd', 'movie')).toEqual({ status: 'sedd', dropped: false });

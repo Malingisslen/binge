@@ -126,6 +126,18 @@ describe('tvSubState', () => {
     const item = makeItem({ lastWatchedSeason: 1, lastWatchedEpisode: 1, tmdbStatus: 'Returning Series' });
     expect(tvSubState(item, undefined)).toBe('aktiv');
   });
+
+  it('treats season 0 (Specials) as having progress in fallback (L8)', () => {
+    // lastWatchedSeason === 0 är truthy-falskt men ett giltigt progress-värde
+    // (Specials). Tidigare föll detta tillbaka till "aktiv" trots Ended-status.
+    const item = makeItem({ lastWatchedSeason: 0, lastWatchedEpisode: 2, tmdbStatus: 'Ended' });
+    expect(tvSubState(item, undefined)).toBe('avslutad');
+  });
+
+  it('falls back to "aktiv" when no progress at all on an Ended show (L8)', () => {
+    const item = makeItem({ lastWatchedSeason: null, lastWatchedEpisode: null, tmdbStatus: 'Ended' });
+    expect(tvSubState(item, undefined)).toBe('aktiv');
+  });
 });
 
 describe('SUB_STATE_LABELS', () => {

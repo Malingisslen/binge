@@ -33,7 +33,10 @@ type SortKey = 'relevance' | 'rating' | 'release';
 
 function applySort(items: RowTitle[], sort: SortKey): RowTitle[] {
   if (sort === 'rating')   return [...items].sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
-  if (sort === 'release')  return [...items].sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''));
+  if (sort === 'release')  {
+    const d = (x: RowTitle) => x.release_date ?? x.first_air_date ?? '';
+    return [...items].sort((a, b) => d(b).localeCompare(d(a)));
+  }
   return items;
 }
 

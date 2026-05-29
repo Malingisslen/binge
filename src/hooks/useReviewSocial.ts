@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   collection,
   deleteDoc,
@@ -23,6 +23,9 @@ export function useReviewLikes(reviewId: string | null) {
   const { uid } = useAuth();
   const [likeCount, setLikeCount] = useState(0);
   const [iLike, setILike] = useState(false);
+  // Skydd mot dubbelräkning vid snabba dubbelklick — släpp inte in en ny
+  // toggle förrän den föregående skrivningen är klar.
+  const inFlight = useRef(false);
 
   // Likes skalar med review-popularitet — en viral recension kan få tusentals.
   // Vi lyssnar bara på inloggad användares eget like-dokument för iLike-state,
@@ -51,13 +54,28 @@ export function useReviewLikes(reviewId: string | null) {
 
   const toggle = async () => {
     if (!reviewId || !uid) return;
+    // Ignorera nya klick medan en skrivning pågår — annars dubbelräknas
+    // likeCount vid snabba dubbelklick.
+    if (inFlight.current) return;
+    inFlight.current = true;
     const ref = doc(db, 'reviews', reviewId, 'likes', uid);
-    if (iLike) {
-      await deleteDoc(ref);
-      setLikeCount(c => Math.max(0, c - 1)); // optimistisk
-    } else {
-      await setDoc(ref, { createdAt: serverTimestamp() });
-      setLikeCount(c => c + 1);
+    const wasLiked = iLike;
+    // Sätt iLike + likeCount optimistiskt direkt så UI:t inte hoppar och
+    // så snabba klick speglar rätt nästa-state innan onSnapshot hinner ikapp.
+    setILike(!wasLiked);
+    setLikeCount(c => (wasLiked ? Math.max(0, c - 1) : c + 1));
+    try {
+      if (wasLiked) {
+        await deleteDoc(ref);
+      } else {
+        await setDoc(ref, { createdAt: serverTimestamp() });
+      }
+    } catch {
+      // Rulla tillbaka optimismen om skrivningen misslyckas.
+      setILike(wasLiked);
+      setLikeCount(c => (wasLiked ? c + 1 : Math.max(0, c - 1)));
+    } finally {
+      inFlight.current = false;
     }
   };
 

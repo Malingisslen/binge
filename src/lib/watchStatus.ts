@@ -54,7 +54,7 @@ export function tvSubState(item: WatchlistItem, show: TMDBTVShow | undefined): T
   // Aktiv = har börjat men vi vet inte om det finns mer aireat → konservativ
   // gissning är "ikapp" om Ended, annars "aktiv". Bättre att visa "aktiv" som
   // default eftersom det driver användaren till att titta.
-  if (item.tmdbStatus && isEndedStatus(item.tmdbStatus) && item.lastWatchedSeason) {
+  if (item.tmdbStatus && isEndedStatus(item.tmdbStatus) && item.lastWatchedSeason != null) {
     return 'avslutad';
   }
   return 'aktiv';

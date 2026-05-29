@@ -81,7 +81,7 @@ export default function WeekStrip() {
       d.setDate(monday.getDate() + i);
       return d;
     });
-    return { monday, days, weekNumber: getWeekNumber(today), year: monday.getFullYear() };
+    return { monday, days, weekNumber: getWeekNumber(today), year: isoWeekYear(today) };
   }, [today]);
 
   if (!week || !today) {
@@ -170,6 +170,15 @@ export default function WeekStrip() {
       })}
     </div>
   );
+}
+
+// ISO-week-year: året som ägs av veckans torsdag (samma normalisering som
+// getWeekNumber). Måndagens kalenderår kan avvika vid årsskiftet — t.ex.
+// måndag 30 dec 2024 tillhör v1 2025, inte 2024.
+function isoWeekYear(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  return d.getUTCFullYear();
 }
 
 function sameDay(a: Date, b: Date): boolean {
