@@ -18,7 +18,7 @@ type NavItem = {
 
 const ITEMS: readonly NavItem[] = [
   { label: 'Hem', href: '/' },
-  { label: 'Bibliotek', href: '/my/all/', matches: ['/my/', '/series', '/films'] },
+  { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] },
   { label: 'Kalender', href: '/calendar/' },
   { label: 'Rekommendationer', href: '/recommendations/', matches: ['/discover', '/kalibrera'] },
   { label: 'Streamingrådgivaren', href: '/savings/' },

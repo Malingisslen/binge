@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Share2 } from 'lucide-react';
+import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
 import { generateCandidates } from '@/lib/together/candidates';
@@ -17,7 +18,7 @@ import type {
 } from '@/types';
 
 export default function NyTillsammansPage() {
-  return <NyContent />;
+  return <AuthGuard><NyContent /></AuthGuard>;
 }
 
 function NyContent() {

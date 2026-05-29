@@ -17,7 +17,7 @@ type Tab = {
 };
 
 const TABS: readonly Tab[] = [
-  { label: 'Bibl',  href: '/my/all/',    icon: LayoutGrid, matches: ['/my/', '/series', '/films'] },
+  { label: 'Bibl',  href: '/my/all/',    icon: LayoutGrid, matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] },
   { label: 'Kal',   href: '/calendar/',  icon: Calendar },
   { label: 'Sök',   href: '/search/',    icon: Search, center: true },
   { label: 'Råd',   href: '/savings/',   icon: BarChart3 },
