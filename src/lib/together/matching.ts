@@ -131,10 +131,10 @@ export function participantSwipeProgress(
   candidates: SessionCandidate[],
   participantId: string,
 ): { done: number; total: number } {
+  const swipeMap = new Map(swipes.map(s => [s.tmdbId, s]));
   let done = 0;
   for (const c of candidates) {
-    const swipe = swipes.find(s => s.tmdbId === c.tmdbId);
-    if (swipe?.votes[participantId]) done++;
+    if (swipeMap.get(c.tmdbId)?.votes[participantId]) done++;
   }
   return { done, total: candidates.length };
 }

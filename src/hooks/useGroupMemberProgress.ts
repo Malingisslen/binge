@@ -28,8 +28,12 @@ export function useGroupMemberProgress(groupId: string): Map<string, Map<number,
       try {
         // Hämta alla titlar i gruppens watchlist; för varje titel hämta
         // progress-subcollection. Två lager getDocs är dyrt om gruppen har
-        // 100+ titlar, men i praktiken har grupper 5-30 titlar. För
-        // optimering: använd collectionGroup('progress') med where('groupId').
+        // 100+ titlar, men i praktiken har grupper 5-30 titlar. Den riktiga
+        // N+1-fixen vore collectionGroup('progress') med where('groupId'), men
+        // det kräver ett extra groupId-fält på varje progress-doc + ett
+        // composite-index (extern Firestore-config). Tills det finns lutar vi
+        // oss istället på hårdare cache (se staleTime/gcTime nedan) så att de
+        // N+1 läsningarna inte upprepas vid varje rendering/navigering.
         const watchlistSnap = await getDocs(collection(db, 'groups', groupId, 'watchlist'));
         await Promise.all(watchlistSnap.docs.map(async itemDoc => {
           const tmdbId = (itemDoc.data().tmdbId as number) ?? Number(itemDoc.id);
@@ -55,9 +59,14 @@ export function useGroupMemberProgress(groupId: string): Map<string, Map<number,
       return outer;
     },
     enabled: !!groupId,
-    // 30 s — tight nog att fånga andras nya progress hyfsat snabbt utan
-    // att hamra Firestore vid varje rendering.
-    staleTime: 30_000,
+    // Cache-fix mot N+1: 60 s staleTime så in-/utnavigering och
+    // re-renderingar återanvänder samma resultat istället för att skjuta
+    // av watchlist- + progress-läsningarna på nytt. Fortfarande tight nog
+    // att fånga andras nya progress hyfsat snabbt. gcTime håller datat i
+    // cachen 5 min efter att vyn lämnats så snabb tillbaka-navigering inte
+    // betalar för en ny N+1-runda.
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });
 
   return useMemo(() => data ?? new Map(), [data]);

@@ -31,7 +31,7 @@ export interface CascadeOutput {
 export function useRecommendationsCascade(): CascadeOutput {
   const { items } = useWatchlist();
   const { user } = useAuth();
-  const myProviders = user?.myProviders ?? [];
+  const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
 
   const { strong, weak } = useMemo(() => classifySeeds(items), [items]);
   const allSeeds = useMemo(() => [...strong, ...weak], [strong, weak]);

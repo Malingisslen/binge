@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
@@ -9,13 +10,42 @@ import { CollapsibleSection } from './CollapsibleSection';
  * Stor sektion för att välja streamingtjänster, prenumerationsnivå och
  * kostnad per tjänst. Collapsible — default-öppen första gången (när
  * myProviders är tom).
+ *
+ * Checkbox-valen hålls i lokalt state och commitas först på Spara-knappen.
+ * Annars skulle varje klick köra grupp-cascaden i updateProviders (en
+ * groups-query + propagering till varje medlemskap), vilket är dyrt och
+ * sker oavsiktligt vid felklick.
  */
 export function ProvidersSection() {
   const { user, updateProviders, updateProviderCosts, updateProviderTier } = useAuth();
   const { show: toast } = useToast();
+
+  const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
+  const [selected, setSelected] = useState<number[]>(savedProviders);
+  const [saving, setSaving] = useState(false);
+
+  // Synka lokalt state om myProviders ändras externt (annan flik, onboarding).
+  useEffect(() => {
+    setSelected(savedProviders);
+  }, [savedProviders]);
+
   if (!user) return null;
 
   const flatrateProviders = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
+
+  const isDirty =
+    selected.length !== savedProviders.length ||
+    selected.some(id => !savedProviders.includes(id));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateProviders(selected);
+      toast('Tjänster uppdaterade');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <CollapsibleSection title="Mina streamingtjänster" defaultOpen={user.myProviders.length === 0}>
@@ -24,7 +54,7 @@ export function ProvidersSection() {
       </p>
       <div className="space-y-[2px]">
         {flatrateProviders.map(provider => {
-          const isSelected = user.myProviders.includes(provider.id);
+          const isSelected = selected.includes(provider.id);
           const selectedTierId = user.providerTiers?.[provider.id];
           const hasTiers = (provider.tiers?.length ?? 0) > 0;
           const isCustom = isSelected && hasTiers && !selectedTierId;
@@ -35,11 +65,11 @@ export function ProvidersSection() {
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => {
-                    const updated = isSelected
-                      ? user.myProviders.filter(id => id !== provider.id)
-                      : [...user.myProviders, provider.id];
-                    updateProviders(updated);
-                    toast('Tjänster uppdaterade');
+                    setSelected(prev =>
+                      prev.includes(provider.id)
+                        ? prev.filter(id => id !== provider.id)
+                        : [...prev, provider.id],
+                    );
                   }}
                   className="accent-accent w-[14px] h-[14px]"
                 />
@@ -93,6 +123,24 @@ export function ProvidersSection() {
           );
         })}
       </div>
+      {isDirty && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white disabled:opacity-50"
+          >
+            Spara
+          </button>
+          <button
+            onClick={() => setSelected(savedProviders)}
+            disabled={saving}
+            className="px-3 py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary disabled:opacity-50"
+          >
+            Ångra
+          </button>
+        </div>
+      )}
       {Object.keys(user.providerCosts ?? {}).length > 0 && (
         <div className="mt-2 pt-2 border-t border-border-light">
           <div className="text-xs text-text-secondary font-semibold">

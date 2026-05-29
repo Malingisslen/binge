@@ -19,7 +19,7 @@ export function useSessionTasteVectors(
 
   const results = useQueries({
     queries: authed.map(p => ({
-      queryKey: ['public-watchlist', p.uid],
+      queryKey: ['session-taste-watchlist', p.uid],
       queryFn: async (): Promise<WatchlistItem[]> => {
         const snap = await getDocs(collection(db, 'users', p.uid, 'watchlist'));
         return snap.docs.map(d => {
