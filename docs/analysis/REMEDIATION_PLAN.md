@@ -1,7 +1,7 @@
 # Binge — Remediation Plan (Phase 2)
 
-**Baserad på:** Phase 1-analys (rapporter raderade 2026-04-25 inför ev.
-publik repo; promptarna i `docs/analysis/prompts/` kan regenerera dem).
+**Baserad på:** Phase 1-analys (rapporter + prompt-system raderade inför
+publik repo).
 **Datum:** 2026-04-20
 **Omfattning:** Alla 190+ fynd från Phase 1, grupperade i 3 sprintar +
 backlog.
