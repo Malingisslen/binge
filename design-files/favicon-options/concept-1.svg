@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#1e2028"/>
+  <text x="16" y="24" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="24" font-weight="800" fill="#faf8f5">B</text>
+  <rect x="8" y="27" width="16" height="2" fill="#d97b35"/>
+</svg>

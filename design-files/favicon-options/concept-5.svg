@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <rect width="16" height="16" fill="#1e2028"/>
+  <!-- left spine (2px wide) -->
+  <rect x="4" y="3" width="2" height="10" fill="#faf8f5"/>
+  <!-- top bar -->
+  <rect x="4" y="3" width="7" height="1" fill="#faf8f5"/>
+  <!-- top bowl right edge -->
+  <rect x="11" y="4" width="1" height="3" fill="#faf8f5"/>
+  <!-- middle bar -->
+  <rect x="4" y="7" width="7" height="1" fill="#faf8f5"/>
+  <!-- bottom bowl right edge -->
+  <rect x="11" y="8" width="1" height="4" fill="#faf8f5"/>
+  <!-- bottom bar -->
+  <rect x="4" y="12" width="7" height="1" fill="#faf8f5"/>
+  <!-- orange accent under -->
+  <rect x="4" y="14" width="8" height="1" fill="#d97b35"/>
+</svg>
