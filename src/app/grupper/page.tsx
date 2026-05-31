@@ -29,11 +29,13 @@ function GrupperList() {
           Permanenta konstellationer — slipp bjuda in varje kväll. Bygg en delad
           watchlist, jämför betyg och starta en ny session med ett klick.
         </p>
-        <div className="actions">
-          <Link href="/grupper/ny" className="btn">
-            <Plus size={12} /> Ny grupp
-          </Link>
-        </div>
+        {groups.length > 0 && (
+          <div className="actions">
+            <Link href="/grupper/ny" className="btn">
+              <Plus size={12} /> Ny grupp
+            </Link>
+          </div>
+        )}
       </header>
       <div style={{ marginTop: 28 }} />
 
