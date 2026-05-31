@@ -130,7 +130,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     return result;
   }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, behindIds]);
 
-  const totalCount = status ? items.filter(i => i.status === status).length : items.length;
+  const totalCount = status
+    ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)).length
+    : items.length;
 
   // För /my/series-vyn: dela TV-shows i sub-states (aktiv/ikapp/avslutad)
   // baserat på derived state. Använder advisor-cachen för rik beräkning;
@@ -155,7 +157,13 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     });
   }, [filtered, status, advisor.unfinishedTmdbIds, showsByTmdbId]);
 
-  const standfirst = buildStandfirst(filtered.length, totalCount, status, mediaFilter);
+  // På /my/series (status==='mina') renderas endast TV-titlar i sektionerna
+  // (followingSections filtrerar bort movie-items). Räkna samma mängd i
+  // standfirst så subtitle inte säger mer än sektionerna visar.
+  const tvVisibleCount = filtered.filter(i => i.mediaType === 'tv').length;
+  const standfirst = status === 'mina'
+    ? buildStandfirst(tvVisibleCount, tvVisibleCount, status, mediaFilter)
+    : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
 
   const hasActiveFilters =
     mediaFilter !== 'all' ||
