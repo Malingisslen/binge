@@ -15,7 +15,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
   const searchParams = useSearchParams();
   const fromGroup = searchParams?.get('fromGroup') ?? null;
   const { data: season, isLoading } = useTVSeason(seriesId, seasonNum);
-  const { isWatched, markEpisodeWatched, markSeasonWatched } = useEpisodeProgressWithSync(seriesId);
+  const { isWatched, markEpisodeWatched, markSeasonWatched, progressLoading } = useEpisodeProgressWithSync(seriesId);
   // Spoiler-skydd (Fas 2b): hämta gruppens member-progress om vi kommer från
   // grupp-watchlist (`?fromGroup=`). Hooken kostar ingenting när fromGroup
   // är null — useGroup/useGroupMemberProgress no-op:ar då.
@@ -40,10 +40,10 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
           </Link>
           <h1 className="text-[18px] font-bold text-text-primary mt-1">{season.name}</h1>
           <span className="text-xs text-text-muted">
-            {watchedCount}/{episodes.length} avsnitt sedda
+            {progressLoading ? '—' : watchedCount}/{episodes.length} avsnitt sedda
           </span>
         </div>
-        {watchedCount < episodes.length && (
+        {!progressLoading && watchedCount < episodes.length && (
           <button
             onClick={() => markSeasonWatched(seasonNum, episodes.length)}
             className="px-[10px] py-[3px] border-none rounded-sm text-xs font-semibold cursor-pointer bg-accent text-white"
@@ -58,10 +58,10 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
           <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
             <div
               className="h-full bg-ink rounded-full transition-all"
-              style={{ width: `${episodes.length > 0 ? (watchedCount / episodes.length) * 100 : 0}%` }}
+              style={{ width: progressLoading ? '0%' : `${episodes.length > 0 ? (watchedCount / episodes.length) * 100 : 0}%` }}
             />
           </div>
-          <span className="text-xxs text-ink-3">{watchedCount}/{episodes.length}</span>
+          <span className="text-xxs text-ink-3">{progressLoading ? '—' : watchedCount}/{episodes.length}</span>
         </div>
 
         {episodes.map(ep => (
@@ -69,7 +69,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
             key={ep.id}
             episode={ep}
             seasonNumber={seasonNum}
-            watched={isWatched(seasonNum, ep.episode_number)}
+            watched={!progressLoading && isWatched(seasonNum, ep.episode_number)}
             spoilerMasked={isEpisodeMasked(maskBoundary, seasonNum, ep.episode_number)}
             onToggle={w => markEpisodeWatched(seasonNum, ep.episode_number, w)}
           />

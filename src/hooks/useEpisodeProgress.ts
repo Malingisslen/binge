@@ -9,9 +9,11 @@ import type { EpisodeProgress } from '@/types';
 export function useEpisodeProgress(tmdbId: number) {
   const { uid } = useAuth();
   const [progress, setProgress] = useState<EpisodeProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
 
   useEffect(() => {
-    if (!uid) { setProgress(null); return; }
+    if (!uid) { setProgress(null); setProgressLoading(false); return; }
+    setProgressLoading(true);
     const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
     const unsub = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
@@ -25,6 +27,7 @@ export function useEpisodeProgress(tmdbId: number) {
       } else {
         setProgress(null);
       }
+      setProgressLoading(false);
     });
     return () => unsub();
   }, [uid, tmdbId]);
@@ -85,5 +88,5 @@ export function useEpisodeProgress(tmdbId: number) {
     return total;
   }, [progress]);
 
-  return { progress, isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress, getTotalProgress };
+  return { progress, progressLoading, isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress, getTotalProgress };
 }
