@@ -30,9 +30,20 @@ export function buildCalendarEntries(seasonData: SeasonDatum[]): CalendarEntry[]
       : undefined;
     const showGenreIds = show.genres?.map(g => g.id) ?? [];
     const episodes = item.season?.episodes ?? [];
-    const finaleEp = episodes.length > 0
-      ? Math.max(...episodes.map(e => e.episode_number))
-      : 0;
+    // Fälla in det seedade next_episode_to_air i finale-beräkningen: när TMDB:s
+    // säsong-array släpar (t.ex. har E1–E9 men next_episode_to_air är E10) är
+    // det seedade avsnittet ofta självaste säsongsfinalen. Utan detta skulle
+    // det märkas isFinale: false eftersom array-maxet bara är E9.
+    const seeded = show.next_episode_to_air;
+    const sameSeasonSeed =
+      seeded && (episodes.length === 0 || seeded.season_number === episodes[0].season_number)
+        ? seeded.episode_number
+        : 0;
+    const finaleEp = Math.max(
+      0,
+      ...episodes.map(e => e.episode_number),
+      sameSeasonSeed,
+    );
 
     const push = (ep: TMDBEpisode) => {
       if (!ep.air_date) return;

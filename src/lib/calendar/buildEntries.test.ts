@@ -62,4 +62,14 @@ describe('buildCalendarEntries', () => {
     }];
     expect(buildCalendarEntries(data)).toHaveLength(0);
   });
+
+  it('marks the seeded finale episode isFinale even when the season array lags', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({ next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }) }),
+      season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
+    }];
+    const seeded = buildCalendarEntries(data).find(e => e.episode === 10);
+    expect(seeded?.isFinale).toBe(true);
+  });
 });
