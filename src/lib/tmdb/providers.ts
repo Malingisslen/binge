@@ -46,6 +46,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    aliases: [1899],
     tiers: [
       { id: 'ads', name: 'Basic med reklam', cost: 89 },
       { id: 'standard', name: 'Standard', cost: 149 },
@@ -80,14 +81,6 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'ads', name: 'Med reklam (Full HD)', cost: 89 },
       { id: 'premium', name: 'Premium (4K)', cost: 189 },
       { id: 'sport', name: 'Sport Premium', cost: 349 },
-    ],
-  },
-  {
-    id: 1899, name: 'Max', shortName: 'Max', color: '#002BE7', type: 'flatrate', defaultMonthlyCost: 149,
-    tiers: [
-      { id: 'ads', name: 'Basic med reklam', cost: 89 },
-      { id: 'standard', name: 'Standard', cost: 149 },
-      { id: 'premium', name: 'Premium', cost: 189 },
     ],
   },
   {
