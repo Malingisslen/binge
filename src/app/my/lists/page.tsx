@@ -90,7 +90,7 @@ function ListsContent() {
             </div>
             <button
               onClick={() => { deleteList(list.id); toast('Lista borttagen'); }}
-              className="text-xxs text-red-500 bg-transparent border-none cursor-pointer font-[inherit]"
+              className="px-2 py-[2px] text-xxs text-red-500 border border-border-main bg-surface rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
             >
               Ta bort
             </button>
