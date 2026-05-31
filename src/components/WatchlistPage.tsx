@@ -211,7 +211,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
-        {status !== 'mina' && (
+        {status !== 'mina' && status !== 'sedd' && (
           <div style={{ display: 'flex', gap: 6 }}>
             {(['all', 'tv', 'movie'] as const).map(f => (
               <button
