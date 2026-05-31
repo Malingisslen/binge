@@ -449,6 +449,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                           rating={item.rating}
                           onChange={r => updateRating(item.tmdbId, r)}
                           size="sm"
+                          dim={item.rating === null}
                         />
                         {item.rating !== null && (
                           <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
