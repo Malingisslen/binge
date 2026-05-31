@@ -11,6 +11,7 @@ import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 // Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
 // klient-satta fromDisplayName/fromUsername på request-doc:et (de valideras inte
@@ -56,12 +57,11 @@ export default function FriendsPageClient() {
 
   return (
     <div>
-      <div className="mb-3">
-        <h1 className="text-[18px] font-bold text-text-primary">Vänner</h1>
-        <p className="text-xs text-text-muted">
-          Hitta personer att följa via sökrutan i sidofältet — eller dela din profillänk.
-        </p>
-      </div>
+      <PageHeader
+        crumb="Vänner"
+        title="Vänner"
+        standfirst="Hitta personer att följa via sökrutan i sidofältet — eller dela din profillänk."
+      />
 
       <div className="flex border-b border-border-main mb-3">
         <TabButton active={tab === 'friends'} onClick={() => setTab('friends')}>

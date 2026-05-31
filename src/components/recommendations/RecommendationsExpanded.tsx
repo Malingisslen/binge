@@ -9,6 +9,7 @@ import { useNotInterested } from '@/hooks/useNotInterested';
 import { useAuth } from '@/hooks/useAuth';
 import { parseRowKey, DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, RowResult, RowTitle, MediaTypeFilter } from '@/types';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
   { value: 'all', label: 'Alla' },
@@ -96,8 +97,11 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
       >
         <ChevronLeft size={14} /> Tillbaka till rekommendationer
       </button>
-      <h1 className="text-[18px] font-bold text-text-primary mb-1">{spec.label}</h1>
-      <p className="text-xs text-text-muted mb-3">{spec.description ?? ''}</p>
+      <PageHeader
+        crumb="Rekommendationer"
+        title={spec.label}
+        standfirst={spec.description ?? undefined}
+      />
 
       <div className="flex gap-[1px] mb-3">
         {MEDIA_TABS.map(t => (

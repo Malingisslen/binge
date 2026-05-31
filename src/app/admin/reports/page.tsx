@@ -13,6 +13,7 @@ import {
   type Report,
   type ReportStatus,
 } from '@/lib/firebase/reports';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const STATUS_TABS: ReportStatus[] = ['open', 'reviewed', 'actioned', 'dismissed'];
 
@@ -85,7 +86,7 @@ function ReportsDashboard() {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">Rapporter</h1>
+      <PageHeader crumb="Admin · Rapporter" title="Rapporter" />
 
       <div className="flex gap-[1px] mb-3">
         {STATUS_TABS.map(s => (

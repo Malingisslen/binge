@@ -10,6 +10,7 @@ import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import TitleGrid from '@/components/title/TitleGrid';
 import { toneForId } from '@/lib/duotone';
 import type { MediaType, TMDBSearchResult } from '@/types';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const CONFIG = {
   tv: { title: 'Serier', popularLabel: 'Populära serier', emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!', hrefPrefix: '/tv/' },
@@ -49,7 +50,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-3">{cfg.title}</h1>
+      <PageHeader crumb={cfg.title} title={cfg.title} />
 
       {following.length > 0 ? (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">

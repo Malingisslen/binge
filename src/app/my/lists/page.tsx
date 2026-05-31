@@ -6,6 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { useMyLists } from '@/hooks/useLists';
 import { useToast } from '@/contexts/ToastContext';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 export default function ListsPage() {
   usePageMeta({ title: 'Mina listor' });
@@ -31,15 +32,18 @@ function ListsContent() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-[18px] font-bold text-text-primary">Mina listor</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white"
-        >
-          Skapa ny lista
-        </button>
-      </div>
+      <PageHeader
+        crumb="Bibliotek · Listor"
+        title="Mina listor"
+        actions={
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white"
+          >
+            Skapa ny lista
+          </button>
+        }
+      />
 
       {showForm && (
         <div className="bg-surface border border-border-main rounded-sm p-3 mb-3">

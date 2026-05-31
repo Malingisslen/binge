@@ -12,6 +12,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import type { TMDBSearchResult, UserList, UserListItem } from '@/types';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -61,17 +62,18 @@ export default function ListPageClient({ listId }: { listId: string }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <h1 className="text-[18px] font-bold text-text-primary">{list.title}</h1>
-        {isOwner && !showPicker && (
+      <PageHeader
+        crumb="Lista"
+        title={list.title}
+        actions={isOwner && !showPicker ? (
           <button
             onClick={() => setShowPicker(true)}
             className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white shrink-0"
           >
             <Plus size={12} /> Lägg till titel
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
       {list.description && (
         <p className="text-xs text-text-muted mb-2">{list.description}</p>
       )}
