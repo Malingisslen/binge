@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import LegalPageShell from '@/components/layout/LegalPageShell';
 
 export const metadata: Metadata = {
-  title: 'Integritetspolicy — Binge.nu',
   description:
     'Hur Binge.nu hanterar dina personuppgifter enligt GDPR och svensk dataskyddslag.',
 };

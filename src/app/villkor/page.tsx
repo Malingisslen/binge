@@ -3,7 +3,6 @@ import Link from 'next/link';
 import LegalPageShell from '@/components/layout/LegalPageShell';
 
 export const metadata: Metadata = {
-  title: 'Användarvillkor — Binge.nu',
   description:
     'Villkor för användning av Binge.nu — bevakningstjänst för film och TV-serier i Sverige.',
 };

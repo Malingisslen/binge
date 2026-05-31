@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import LegalPageShell from '@/components/layout/LegalPageShell';
 
 export const metadata: Metadata = {
-  title: 'Community-regler — Binge.nu',
   description:
     'Riktlinjer för recensioner, listor och socialt innehåll på Binge.nu.',
 };
