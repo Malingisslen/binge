@@ -5,9 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getTVShow, getTVSeason } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { getProvider } from '@/lib/tmdb/providers';
-import { formatEpisodeCode } from '@/lib/utils';
-import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { buildCalendarEntries } from '@/lib/calendar/buildEntries';
 import type { TMDBTVShow } from '@/types';
 
 export interface CalendarEntry {
@@ -73,7 +71,7 @@ export function useCalendarEntries(): UseCalendarResult {
   const seasonSpecs = useMemo(() => {
     return shows.map(show => ({
       showId: show.id,
-      seasonNum: show.number_of_seasons,
+      seasonNum: show.next_episode_to_air?.season_number ?? show.number_of_seasons,
       show,
     }));
   }, [shows]);
@@ -110,53 +108,10 @@ export function useCalendarEntries(): UseCalendarResult {
   const seasonsPending =
     seasonSpecs.length > 0 && seasonQueries.some(q => q.isPending);
 
-  const entries: CalendarEntry[] = useMemo(() => {
-    if (seasonData.length === 0) return [];
-    const result: CalendarEntry[] = [];
-
-    for (const item of seasonData) {
-      if (!item.season?.episodes) continue;
-
-      const providers = item.show['watch/providers']?.results?.SE;
-      const flatrate = providers?.flatrate?.[0];
-      const providerName = flatrate
-        ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name)
-        : undefined;
-
-      // Pre-compute finale episode number for the current season so each
-      // CalendarEntry can carry `isFinale` without re-deriving downstream.
-      const finaleEp = item.season.episodes.length > 0
-        ? Math.max(...item.season.episodes.map(e => e.episode_number))
-        : 0;
-      const showGenreIds = item.show.genres?.map(g => g.id) ?? [];
-
-      for (const ep of item.season.episodes) {
-        if (!ep.air_date) continue;
-        result.push({
-          tmdbId: item.showId,
-          title: preferOriginalTitle(item.show.name, item.show.original_name),
-          posterPath: item.show.poster_path,
-          backdropPath: ep.still_path ?? item.show.backdrop_path ?? null,
-          season: ep.season_number,
-          episode: ep.episode_number,
-          episodeCode: formatEpisodeCode(ep.season_number, ep.episode_number),
-          episodeName: ep.name,
-          episodeOverview: ep.overview ?? undefined,
-          airDate: ep.air_date,
-          provider: providerName,
-          runtime: ep.runtime ?? undefined,
-          // S1E1 = series premiere when the show only has one season,
-          // otherwise "ny säsong"-flag. We collapse both into `isPremiere`
-          // so the badge in the calendar week board says "premiär" for either.
-          isPremiere: ep.episode_number === 1,
-          isFinale: finaleEp > 0 && ep.episode_number === finaleEp,
-          genreIds: showGenreIds,
-        });
-      }
-    }
-
-    return result;
-  }, [seasonData]);
+  const entries: CalendarEntry[] = useMemo(
+    () => buildCalendarEntries(seasonData),
+    [seasonData]
+  );
 
   // Kalendern är "loading" om något steg i vattenfallet fortfarande väntar:
   // (1) shows-queries har inte registrerats än, (2) någon show-detail är
