@@ -9,6 +9,7 @@ import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTrending, posterUrl, backdropUrl, isAddableMediaType } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const ROUND_SIZE = 10;
 
@@ -91,13 +92,12 @@ function KalibreraContent() {
         <ChevronLeft size={12} /> Startsidan
       </Link>
 
-      <div className="flex items-center gap-2 mb-2">
-        <Sparkles size={18} className="text-accent" />
-        <h1 className="text-[18px] font-bold text-text-primary">Kalibrera din smak</h1>
-      </div>
-      <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Svara på 10 populära titlar. Tumme upp om du är intresserad, ner om inte. Påverkar dina rekommendationer och smak-match.
-      </p>
+      <PageHeader
+        crumb="Inställningar"
+        title="Kalibrera din smak"
+        icon={<Sparkles size={18} className="text-accent" />}
+        standfirst="Svara på 10 populära titlar. Tumme upp om du är intresserad, ner om inte. Påverkar dina rekommendationer och smak-match."
+      />
 
       {!done && current && (
         <CalibrationCard item={current} onVote={onVote} onSkip={onSkip} progress={{ current: index + 1, total: pool.length }} />

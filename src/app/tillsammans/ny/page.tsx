@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Users, Share2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
 import { generateCandidates } from '@/lib/together/candidates';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
@@ -77,13 +78,12 @@ function NyContent() {
 
   return (
     <div className="max-w-[680px]">
-      <div className="flex items-center gap-2 mb-3">
-        <Users size={18} className="text-accent" />
-        <h1 className="text-[18px] font-bold text-text-primary">Tillsammans ikväll</h1>
-      </div>
-      <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Skapa en delad session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto.
-      </p>
+      <PageHeader
+        crumb="Tillsammans"
+        title="Tillsammans ikväll"
+        icon={<Users size={18} className="text-accent" />}
+        standfirst="Skapa en delad session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto."
+      />
 
       <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
         <FormSection title="Du">

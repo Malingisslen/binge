@@ -8,6 +8,7 @@ import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
 import { useAuth } from '@/hooks/useAuth';
 import { createGroup } from '@/lib/firebase/groups';
 import { cacheInviteToken } from '@/lib/groupInviteCache';
+import { PageHeader } from '@/components/layout/PageHeader';
 import type {
   AggregationStrategy,
   GroupDefaults,
@@ -62,15 +63,12 @@ function NyGruppContent() {
 
   return (
     <div className="max-w-[680px]">
-      <div className="flex items-center gap-2 mb-3">
-        <Users size={18} className="text-accent" />
-        <h1 className="text-[18px] font-bold text-text-primary">Ny grupp</h1>
-      </div>
-      <p className="text-xs text-text-muted mb-4 leading-relaxed">
-        Skapa en permanent konstellation — bjud in via länk eller @handle. Era
-        streamingtjänster och inställningar lever vidare mellan kvällar, så ni
-        kan starta en ny session utan att ställa in allt på nytt.
-      </p>
+      <PageHeader
+        crumb="Grupper"
+        title="Ny grupp"
+        icon={<Users size={18} className="text-accent" />}
+        standfirst="Skapa en permanent konstellation — bjud in via länk eller @handle. Era streamingtjänster och inställningar lever vidare mellan kvällar, så ni kan starta en ny session utan att ställa in allt på nytt."
+      />
 
       <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
         <FormSection title="Gruppnamn">
