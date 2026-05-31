@@ -13,7 +13,7 @@ export function DisplaySection() {
     <SettingsCard title="Visning">
       <p className="text-xs text-text-muted mb-2">Standardvy för listor.</p>
       <div className="flex gap-2">
-        {(['table', 'grid'] as const).map(v => (
+        {(['table', 'cards', 'grid'] as const).map(v => (
           <button
             key={v}
             onClick={() => { updateDefaultView(v); toast('Inställning sparad'); }}
@@ -23,7 +23,7 @@ export function DisplaySection() {
                 : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
             }`}
           >
-            {v === 'table' ? 'Tabell' : 'Rutnät'}
+            {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}
           </button>
         ))}
       </div>

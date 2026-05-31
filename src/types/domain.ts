@@ -94,7 +94,7 @@ export interface UserProfile {
   /** @deprecated — använd defaultVisibility. Bibehålls för rules-fallback. */
   isPublic: boolean;
   myProviders: number[];
-  defaultView: 'table' | 'grid';
+  defaultView: 'table' | 'grid' | 'cards';
   hideNonLatinTitles: boolean;
   hiddenCountries: string[];
   providerCosts: Record<number, number>;

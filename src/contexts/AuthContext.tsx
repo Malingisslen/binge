@@ -44,7 +44,7 @@ interface AuthState {
   resendEmailVerification: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProviders: (providers: number[]) => Promise<void>;
-  updateDefaultView: (view: 'table' | 'grid') => Promise<void>;
+  updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
@@ -325,7 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       snap.docs.map(d => updateMemberProviders(d.id, uid, providers).catch(() => {})),
     );
   }, [updateUserField, uid]);
-  const updateDefaultView = useCallback((view: 'table' | 'grid') => updateUserField('defaultView', view), [updateUserField]);
+  const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;
