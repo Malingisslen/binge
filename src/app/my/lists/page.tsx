@@ -5,8 +5,10 @@ import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import { useMyLists } from '@/hooks/useLists';
 import { useToast } from '@/contexts/ToastContext';
+import { usePageMeta } from '@/hooks/usePageMeta';
 
 export default function ListsPage() {
+  usePageMeta({ title: 'Mina listor' });
   return <AuthGuard><ListsContent /></AuthGuard>;
 }
 

@@ -11,6 +11,7 @@ import ProfileStatsPanel from '@/components/social/ProfileStatsPanel';
 import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
+import { usePageMeta } from '@/hooks/usePageMeta';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -35,6 +36,9 @@ export default function UserProfilePageClient({ username }: { username: string }
   const { data: followerCount } = useFollowerCount(countableUid);
   const { data: followingCount } = useFollowingCount(countableUid);
   const taste = useTasteMatch(data?.uid ?? null);
+
+  const metaTitle = data && 'profile' in data ? data.profile.displayName : `@${username}`;
+  usePageMeta({ title: metaTitle });
 
   if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
   if (!data) return <div className="text-sm text-text-muted py-4">Användaren hittades inte.</div>;

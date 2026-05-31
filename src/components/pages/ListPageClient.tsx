@@ -6,6 +6,7 @@ import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePublicList, useListMutations } from '@/hooks/useLists';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
@@ -20,6 +21,8 @@ export default function ListPageClient({ listId }: { listId: string }) {
   const [showPicker, setShowPicker] = useState(false);
 
   const isOwner = !!(uid && list && list.uid === uid);
+
+  usePageMeta({ title: list?.title ?? 'Lista' });
 
   const existingIds = useMemo(
     () => new Set((list?.items ?? []).map(i => i.tmdbId)),
