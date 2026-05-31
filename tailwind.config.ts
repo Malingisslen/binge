@@ -69,12 +69,8 @@ const config: Config = {
         'border-table': 'var(--rule-2)',
         'cal-header': 'var(--bg-2)',
         'season-done': 'oklch(0.55 0.13 145)',
-        // Sidebar tokens stay defined for any straggler usage but they're
-        // unused by the new chrome.
+        // sidebar-bg kept — still used in src/app/page.tsx (landing hero section).
         'sidebar-bg': 'var(--ink)',
-        'text-sidebar': 'var(--ink-3)',
-        'text-sidebar-active': 'var(--bg)',
-        'sidebar-label': 'var(--ink-3)',
       },
       fontFamily: {
         sans: ['Albert Sans', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
@@ -88,9 +84,6 @@ const config: Config = {
         'base': '13.5px',
         'md': '14px',
         'lg': '15.5px',
-      },
-      width: {
-        sidebar: '210px', // legacy, unused
       },
       maxWidth: {
         canvas: '1320px',
