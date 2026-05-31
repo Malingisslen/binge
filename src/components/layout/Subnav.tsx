@@ -20,7 +20,7 @@ const ITEMS: readonly NavItem[] = [
   { label: 'Hem', href: '/' },
   { label: 'Bibliotek', href: '/my/all/', matches: ['/my/all', '/my/series', '/my/films', '/my/vill-se', '/my/avbrutna'] },
   { label: 'Kalender', href: '/calendar/' },
-  { label: 'Rekommendationer', href: '/recommendations/', matches: ['/discover', '/kalibrera'] },
+  { label: 'Rekommendationer', href: '/recommendations/', matches: ['/kalibrera'] },
   { label: 'Streamingrådgivaren', href: '/savings/' },
   { label: 'Vänner', href: '/my/friends/', matches: ['/feed', '/user/'] },
   { label: 'Grupper', href: '/grupper/', matches: ['/tillsammans/'] },
