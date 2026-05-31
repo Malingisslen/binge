@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Community-riktlinjer',
+  title: 'Community-regler',
   description: 'Riktlinjer för recensioner, kommentarer och social interaktion på Binge.nu.',
   alternates: { canonical: '/community-guidelines/' },
 };
