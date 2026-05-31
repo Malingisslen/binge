@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDiscoverMovies, useDiscoverTV } from '@/hooks/useTMDB';
 import { getProvider, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { usePageMeta } from '@/hooks/usePageMeta';
+import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
 import type { TMDBSearchResult } from '@/types';
 
@@ -76,14 +78,14 @@ export default function ProviderPageClient({ id }: { id: string }) {
   const hasMore = tab !== 'new' && page < 5 && ((tab === 'movies' ? movies : tv)?.total_pages ?? 0) > page;
   const providerName = provider?.name ?? SWEDISH_PROVIDERS.find(p => p.id === providerId)?.name ?? 'Okänd tjänst';
 
-  useEffect(() => {
-    document.title = `${providerName} — Binge.nu`;
-    return () => { document.title = 'Binge.nu — Håll koll på vad du tittar på'; };
-  }, [providerName]);
+  usePageMeta({ title: providerName });
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-1">{providerName}</h1>
+      <h1 className="text-[18px] font-bold text-text-primary mb-1 flex items-center gap-2">
+        {provider?.color && <ProviderDot color={provider.color} size={10} />}
+        {providerName}
+      </h1>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-[1px]">
           {([['new', 'Nytt'], ['movies', 'Filmer'], ['tv', 'Serier']] as const).map(([key, label]) => (
