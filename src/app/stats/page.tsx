@@ -47,10 +47,13 @@ function StatsContent() {
       .filter(p => p.provider)
       .sort((a, b) => b.count - a.count);
 
-    // Antal items där vi faktiskt frågat TMDB om SE-providers. Skiljer sig
-    // från items.length när användaren har titlar som backfillen inte hunnit
-    // checka — toppen-tjänster-räkningen blir då tunnare än verkligheten.
-    const withProviderData = items.filter(i => i.providersCheckedAt != null).length;
+    // "Med streaming-data" = titlar vi faktiskt har SE-providers för. Räkna
+    // providers-arrayen (som staplarna använder) ELLER providersCheckedAt —
+    // addItem sätter providers men inte providersCheckedAt, så enbart
+    // providersCheckedAt gav felaktigt "0 av N" trots att staplar visas.
+    const withProviderData = items.filter(
+      i => (i.providers?.length ?? 0) > 0 || i.providersCheckedAt != null
+    ).length;
 
     const totalRewatches = items.reduce((sum, i) => sum + (i.rewatchCount ?? 0), 0);
 
