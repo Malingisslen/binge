@@ -23,6 +23,7 @@
   /* rules */
   --rule:      oklch(0.88 0.006 80);
   --rule-2:    oklch(0.94 0.005 80);
+  --placeholder-fill: oklch(0.85 0.02 80);
 
   /* saffran — live / now / decisive */
   --acc:       oklch(0.72 0.14 75);
