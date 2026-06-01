@@ -6,6 +6,7 @@ import { getProvider, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
+import { PageHeader } from '@/components/layout/PageHeader';
 import type { TMDBSearchResult } from '@/types';
 
 type Tab = 'new' | 'movies' | 'tv';
@@ -82,27 +83,28 @@ export default function ProviderPageClient({ id }: { id: string }) {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-text-primary mb-1 flex items-center gap-2">
-        {provider?.color && <ProviderDot color={provider.color} size={10} />}
-        {providerName}
-      </h1>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex gap-[1px]">
+      <PageHeader
+        crumb="Streamingtjänst"
+        title={providerName}
+        icon={provider?.color ? <ProviderDot color={provider.color} size={10} /> : undefined}
+      />
+      <div className="flex items-center gap-2 mt-3 mb-3">
+        <div className="flex gap-[6px]">
           {([['new', 'Nytt'], ['movies', 'Filmer'], ['tv', 'Serier']] as const).map(([key, label]) => (
-            <span
+            <button
               key={key}
+              type="button"
               onClick={() => setTab(key)}
-              className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-                tab === key ? 'bg-accent text-white' : 'text-text-muted'
-              }`}
+              aria-pressed={tab === key}
+              className={`chip ${tab === key ? 'is-on' : ''}`}
             >
               {label}
-            </span>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="bg-surface border border-border-main rounded-sm">
+      <div className="bg-surface border border-rule rounded-sm">
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
       </div>
 
@@ -110,7 +112,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
         <button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="mt-3 px-4 py-[5px] bg-surface border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
         </button>
