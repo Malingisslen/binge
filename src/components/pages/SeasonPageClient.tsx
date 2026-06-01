@@ -8,6 +8,9 @@ import { useGroup } from '@/hooks/useGroups';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { computeMaskBoundary, isEpisodeMasked } from '@/lib/groupProgress';
 import EpisodeRow from '@/components/tv/EpisodeRow';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
@@ -25,35 +28,24 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
     ? computeMaskBoundary(progressMap, seriesId, members.map(m => m.uid))
     : null;
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
-  if (!season) return <div className="text-sm text-text-muted py-4">Säsongen hittades inte.</div>;
+  if (isLoading) return <LoadingView variant="detail" label="Laddar säsong…" />;
+  if (!season) return <NotFound crumb="Säsong" title="Säsongen hittades inte." />;
 
   const episodes = season.episodes ?? [];
   const watchedCount = episodes.filter(ep => isWatched(seasonNum, ep.episode_number)).length;
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <Link href={`/tv/${seriesId}/`} className="text-xs text-accent no-underline">
-            ← Tillbaka till serien
-          </Link>
-          <h1 className="text-[18px] font-bold text-text-primary mt-1">{season.name}</h1>
-          <span className="text-xs text-text-muted">
-            {progressLoading ? '—' : watchedCount}/{episodes.length} avsnitt sedda
-          </span>
-        </div>
-        {!progressLoading && watchedCount < episodes.length && (
-          <button
-            onClick={() => markSeasonWatched(seasonNum, episodes.length)}
-            className="px-[10px] py-[3px] border-none rounded-sm text-xs font-semibold cursor-pointer bg-accent text-white"
-          >
-            Markera alla sedda
-          </button>
-        )}
-      </div>
+      <PageHeader
+        crumb={<Link href={`/tv/${seriesId}/`} className="text-accent no-underline">← Tillbaka till serien</Link>}
+        title={season.name}
+        standfirst={`${progressLoading ? '—' : watchedCount}/${episodes.length} avsnitt sedda`}
+        actions={!progressLoading && watchedCount < episodes.length ? (
+          <button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} className="btn btn-acc btn-sm">Markera alla sedda</button>
+        ) : undefined}
+      />
 
-      <div className="bg-surface border border-border-main rounded-sm px-3 py-1">
+      <div className="bg-surface border border-rule rounded-sm px-3 py-1 mt-3">
         <div className="flex items-center gap-2 py-2 border-b border-border-light">
           <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
             <div
