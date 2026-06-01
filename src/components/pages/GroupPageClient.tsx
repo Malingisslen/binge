@@ -187,7 +187,7 @@ function GroupView({
               type="button"
               onClick={startSession}
               disabled={startingSession || members.length === 0}
-              className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+              className="btn btn-acc btn-sm"
             >
               <Play size={11} />
               {startingSession ? 'Startar…' : 'Starta session'}
@@ -196,7 +196,7 @@ function GroupView({
               <button
                 type="button"
                 onClick={() => setShowSettings(true)}
-                className="inline-flex items-center gap-1 px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
+                className="btn btn-ghost btn-sm"
               >
                 <Settings size={11} />
                 Inställningar
