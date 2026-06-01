@@ -6,6 +6,8 @@ import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import type { TMDBProvider } from '@/types';
@@ -89,9 +91,9 @@ function SearchResults() {
       </div>
 
       {isLoading ? (
-        <div className="text-sm text-text-muted py-4">Söker…</div>
+        <LoadingView label="Söker…" />
       ) : results.length === 0 ? (
-        <div className="text-sm text-text-muted py-4">Inga träffar.</div>
+        <EmptyState title="Inga träffar" body="Prova ett annat sökord." />
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
           <TitleGrid items={results} providerMap={providerMap} />

@@ -246,6 +246,21 @@ Posters renderas med per-genre duotone-filter via SVG-defs (`DuotoneFilters`, mo
 - Hover på filmkort → `translateY(-2px)` på `.poster`. Denna transform är **avsiktlig** — den gamla "inget transform/scale på hover"-regeln gäller inte längre.
 - Liten vit indikator-prick (bottom-right) syns vid hover som UX-ledtråd.
 
+### Bygg en ny vy — kanonisk recept
+
+Varje routad vy ska följa samma mönster:
+- **Rubrik:** `PageHeader` (`src/components/layout/PageHeader.tsx`) — aldrig en rå
+  `text-[18px] font-bold`-titel. Ger `.crumb`-ögonbryn + 44px `.page-h1` + `.stand`.
+- **Laddning:** `LoadingView` (`src/components/ui/LoadingView.tsx`) — inte en bar
+  "Laddar…"-sträng.
+- **Tomt / saknas:** `EmptyState` / `NotFound` (`src/components/ui/`) — designat
+  tillstånd med nästa-steg-CTA, inte bar text.
+- **Felfärger:** `danger`-token (`--danger` / `bg-danger-soft` / `text-danger-ink` /
+  `.btn-danger`) — aldrig råa Tailwind-röda (`text-red-*`, `bg-red-*`).
+
+En guard-test (`src/lib/design/consistency.test.ts`) failar om en
+`src/components/pages/*`-klient återinför 18px-titel-antimönstret.
+
 ### Generella designregler
 
 - **Ser inte AI-genererat ut.** Inga runda kort med stora skuggor, inga dekorativa gradienter, inga emojis i UI, inga dekorativa badges

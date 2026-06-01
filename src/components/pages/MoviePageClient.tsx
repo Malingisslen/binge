@@ -107,7 +107,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <div style={{
                 width: '100%', height: '100%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'oklch(0.85 0.02 80)',
+                color: 'var(--placeholder-fill)',
               }}>
                 <Film size={48} />
               </div>
@@ -303,7 +303,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                     <div style={{
                       width: '100%', height: '100%',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'oklch(0.85 0.02 80)',
+                      background: 'var(--placeholder-fill)',
                       color: 'var(--ink-3)',
                       fontWeight: 600, fontSize: 14,
                     }}>

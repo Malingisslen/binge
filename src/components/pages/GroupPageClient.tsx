@@ -20,6 +20,9 @@ import {
   LeavePanel,
   ProviderOverlapPanel,
 } from '@/components/groups/GroupSidePanels';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
 import type {
   Group,
   GroupMember,
@@ -69,36 +72,34 @@ function GroupContent({ id }: { id: string }) {
   }, [inviteParam, uid, user, group, isMember, joining, id]);
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-4">Laddar grupp…</div>;
+    return <LoadingView variant="detail" label="Laddar grupp…" />;
   }
 
   if (notFound || !group) {
     return (
-      <div className="max-w-[560px]">
-        <h1 className="text-[18px] font-bold mb-2">Gruppen hittades inte</h1>
-        <p className="text-xs text-text-muted mb-3">Länken kan vara felaktig eller så har gruppen tagits bort.</p>
-        <Link href="/grupper" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
-          Mina grupper
-        </Link>
-      </div>
+      <NotFound
+        crumb="Grupp"
+        title="Gruppen hittades inte"
+        body="Länken kan vara felaktig eller så har gruppen tagits bort."
+        action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+      />
     );
   }
 
   if (!isMember) {
     return (
-      <div className="max-w-[560px]">
-        <h1 className="text-[18px] font-bold mb-2">{group.name}</h1>
-        <p className="text-xs text-text-muted mb-3">
-          Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk.
-        </p>
+      <div>
+        <NotFound
+          crumb="Grupp"
+          title={group.name}
+          body="Du är inte medlem i den här gruppen. Be ägaren om en inbjudningslänk."
+          action={<Link href="/grupper" className="btn btn-acc btn-sm no-underline">Mina grupper</Link>}
+        />
         {joinError && (
-          <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-sm mb-3">
+          <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm mt-3">
             {joinError}
           </div>
         )}
-        <Link href="/grupper" className="inline-block px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline">
-          Mina grupper
-        </Link>
       </div>
     );
   }
@@ -171,47 +172,47 @@ function GroupView({
   };
 
   return (
-    <div className="max-w-[1100px]">
-      <Link
-        href="/grupper"
-        className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary no-underline mb-2"
-      >
-        <ChevronLeft size={12} /> Mina grupper
-      </Link>
-
-      <div className="flex items-start justify-between mb-3 gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <Users size={18} className="text-accent shrink-0" />
-          <h1 className="text-[18px] font-bold text-text-primary truncate">{group.name}</h1>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={startSession}
-            disabled={startingSession || members.length === 0}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
-          >
-            <Play size={11} />
-            {startingSession ? 'Startar…' : 'Starta session'}
-          </button>
-          {isOwner && (
+    <div>
+      <PageHeader
+        crumb={
+          <Link href="/grupper" className="inline-flex items-center gap-1 text-ink-3 hover:text-ink-2 no-underline">
+            <ChevronLeft size={12} /> Mina grupper
+          </Link>
+        }
+        title={group.name}
+        icon={<Users size={20} className="text-accent shrink-0" />}
+        actions={
+          <>
             <button
-              onClick={() => setShowSettings(true)}
-              className="inline-flex items-center gap-1 px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer"
+              type="button"
+              onClick={startSession}
+              disabled={startingSession || members.length === 0}
+              className="btn btn-acc btn-sm"
             >
-              <Settings size={11} />
-              Inställningar
+              <Play size={11} />
+              {startingSession ? 'Startar…' : 'Starta session'}
             </button>
-          )}
-        </div>
-      </div>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="btn btn-ghost btn-sm"
+              >
+                <Settings size={11} />
+                Inställningar
+              </button>
+            )}
+          </>
+        }
+      />
 
       {error && (
-        <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-sm mb-3">
+        <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm mb-3 mt-3">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-3 mt-3">
         <div className="space-y-3">
           <GroupMembersPanel
             groupId={groupId}

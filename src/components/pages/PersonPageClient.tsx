@@ -6,6 +6,10 @@ import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import TitleGrid from '@/components/title/TitleGrid';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBPerson } from '@/types';
 
 export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
@@ -50,15 +54,21 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     indexable: !!person,
   });
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
-  if (!person) return <div className="text-sm text-text-muted py-4">Personen hittades inte.</div>;
+  if (isLoading) return <LoadingView variant="detail" label="Laddar person…" />;
+  if (!person) return <NotFound crumb="Person" title="Personen hittades inte." body="Vi kunde inte hitta den här personen i TMDB." />;
 
   const photo = profileUrl(person.profile_path, 'w500');
   const birthYear = person.birthday?.substring(0, 4);
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row gap-4 mb-4">
+      <PageHeader
+        crumb={person.known_for_department ?? 'Person'}
+        title={person.name}
+        standfirst={[birthYear && `Född ${birthYear}`, person.place_of_birth].filter(Boolean).join(' · ') || undefined}
+      />
+
+      <div className="flex flex-col md:flex-row gap-4 mb-4 mt-3">
         <div className="shrink-0">
           {photo ? (
             <img src={photo} alt={person.name} className="w-[120px] md:w-[180px] rounded-sm" loading="eager" decoding="async" width={180} height={270} />
@@ -67,25 +77,21 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
           )}
         </div>
         <div className="flex-1">
-          <h1 className="text-[18px] font-bold text-text-primary mb-1">{person.name}</h1>
-          <div className="text-sm text-text-muted mb-2">
-            {person.known_for_department}
-            {birthYear && ` · Född ${birthYear}`}
-            {person.place_of_birth && ` · ${person.place_of_birth}`}
-          </div>
           {biography && (
-            <p className="text-base text-text-secondary leading-relaxed mb-3 line-clamp-6">{biography}</p>
+            <p className="text-base text-ink-2 leading-relaxed mb-3 line-clamp-6">{biography}</p>
           )}
         </div>
       </div>
 
-      {uniqueCredits.length > 0 && (
+      {uniqueCredits.length > 0 ? (
         <div className="mb-4">
-          <h2 className="text-sm font-bold text-text-secondary mb-2">Filmografi ({uniqueCredits.length})</h2>
-          <div className="bg-surface border border-border-main rounded-sm">
+          <h2 className="text-sm font-bold text-ink-2 mb-2">Filmografi ({uniqueCredits.length})</h2>
+          <div className="bg-surface border border-rule rounded-sm">
             <TitleGrid items={uniqueCredits} />
           </div>
         </div>
+      ) : (
+        <EmptyState title="Ingen filmografi" body="Vi hittade inga titlar för den här personen ännu." />
       )}
     </div>
   );

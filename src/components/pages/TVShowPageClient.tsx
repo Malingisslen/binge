@@ -133,7 +133,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <div style={{
                 width: '100%', height: '100%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'oklch(0.85 0.02 80)',
+                color: 'var(--placeholder-fill)',
               }}>
                 <Tv size={48} />
               </div>
@@ -267,7 +267,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               marginTop: 8,
               padding: '8px 14px',
               background: 'var(--acc-soft)',
-              border: '1px solid oklch(0.86 0.08 75)',
+              border: '1px solid var(--rule)',
               borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
               fontSize: 13.5, color: 'var(--ink-2)',
@@ -349,7 +349,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     <div style={{
                       width: '100%', height: '100%',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'oklch(0.85 0.02 80)',
+                      background: 'var(--placeholder-fill)',
                       color: 'var(--ink-3)',
                       fontWeight: 600, fontSize: 14,
                     }}>

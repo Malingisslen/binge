@@ -189,7 +189,7 @@ function NyContent() {
         )}
 
         {error && (
-          <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border-t border-red-200">{error}</div>
+          <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger/30">{error}</div>
         )}
 
         <div className="px-3 py-2 border-t border-border-light flex items-center gap-2">

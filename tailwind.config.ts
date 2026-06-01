@@ -46,6 +46,11 @@ const config: Config = {
         'warn-deep': 'var(--warn-deep)',
         'warn-ink': 'var(--warn-ink)',
 
+        // Danger — destructive / error (not part of the two-accent rule)
+        danger: 'var(--danger)',
+        'danger-soft': 'var(--danger-soft)',
+        'danger-ink': 'var(--danger-ink)',
+
         // Duotone — for use in legends, swatches, pill bars (the duotone
         // image filters themselves are SVG <filter>s, see DuotoneFilters).
         'duo-terra': 'var(--duo-terra)',

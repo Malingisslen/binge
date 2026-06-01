@@ -23,6 +23,7 @@
   /* rules */
   --rule:      oklch(0.88 0.006 80);
   --rule-2:    oklch(0.94 0.005 80);
+  --placeholder-fill: oklch(0.85 0.02 80);
 
   /* saffran — live / now / decisive */
   --acc:       oklch(0.72 0.14 75);
@@ -39,6 +40,13 @@
   --warn-soft: oklch(0.965 0.06 95);
   --warn-deep: oklch(0.72 0.13 80);
   --warn-ink:  oklch(0.42 0.10 80);
+
+  /* danger — destructive / error. Not part of the two-accent rule; reserved
+     for irreversible actions (radera) and error banners. Red, deliberately
+     desaturated to sit inside the warm oklch system. */
+  --danger:      oklch(0.55 0.17 25);
+  --danger-soft: oklch(0.955 0.04 25);
+  --danger-ink:  oklch(0.48 0.16 25);
 
   /* duotone palette — one per genre/category */
   --duo-terra:   oklch(0.62 0.08 30);
@@ -586,6 +594,20 @@ button { font: inherit; cursor: pointer; }
 .btn-acc:hover { background: oklch(0.50 0.13 70); border-color: oklch(0.50 0.13 70); }
 .btn.btn-sm,
 .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+.btn.btn-danger,
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+.btn-danger:hover { background: var(--danger-ink); border-color: var(--danger-ink); }
+.btn.btn-danger-ghost,
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--danger-ink);
+  border-color: var(--rule);
+}
+.btn-danger-ghost:hover { background: var(--danger-soft); border-color: var(--danger); }
 
 /* ─── Chips / pills ─── */
 .chip {

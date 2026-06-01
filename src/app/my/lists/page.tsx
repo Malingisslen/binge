@@ -7,6 +7,7 @@ import { useMyLists } from '@/hooks/useLists';
 import { useToast } from '@/contexts/ToastContext';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export default function ListsPage() {
   usePageMeta({ title: 'Mina listor' });
@@ -78,7 +79,15 @@ function ListsContent() {
       )}
 
       {lists.length === 0 && !showForm && (
-        <p className="text-sm text-text-muted">Inga listor än. Listor är kurerade samlingar av titlar — t.ex. &ldquo;Bästa Bond-filmer&rdquo; eller &ldquo;Mys-serier på hösten&rdquo;. Klicka <strong>Skapa ny lista</strong> för att börja.</p>
+        <EmptyState
+          title="Inga listor ännu"
+          body="Skapa en lista för att samla titlar du vill gruppera."
+          action={
+            <button onClick={() => setShowForm(true)} className="btn btn-acc btn-sm">
+              Skapa ny lista
+            </button>
+          }
+        />
       )}
 
       <div className="space-y-[6px]">

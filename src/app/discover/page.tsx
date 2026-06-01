@@ -116,15 +116,15 @@ export default function DiscoverPage() {
           ['movies', 'Filmer'],
           ['tv', 'Serier'],
         ] as const).map(([key, label]) => (
-          <span
+          <button
             key={key}
+            type="button"
+            aria-pressed={tab === key}
             onClick={() => setTab(key)}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              tab === key ? 'bg-accent text-white' : 'text-text-muted'
-            }`}
+            className={`chip ${tab === key ? 'is-on' : ''}`}
           >
             {label}
-          </span>
+          </button>
         ))}
       </div>
 
@@ -177,7 +177,7 @@ export default function DiscoverPage() {
         <button
           onClick={() => setPage(p => p + 1)}
           disabled={discoverLoading}
-          className="mt-3 px-4 py-[5px] bg-surface border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+          className="btn btn-ghost btn-sm disabled:opacity-50"
         >
           {discoverLoading ? 'Laddar…' : 'Visa fler'}
         </button>

@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTrending, posterUrl, backdropUrl, isAddableMediaType } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 const ROUND_SIZE = 10;
 
@@ -71,16 +72,16 @@ function KalibreraContent() {
   };
 
   if (isLoading) {
-    return <div className="text-sm text-text-muted py-4">Laddar…</div>;
+    return <LoadingView label="Laddar…" />;
   }
 
   if (pool.length === 0) {
     return (
       <div className="max-w-[560px]">
-        <h1 className="text-[18px] font-bold mb-2">Kalibrera din smak</h1>
-        <p className="text-xs text-text-muted mb-3">
-          Kunde inte hämta titlar just nu. Försök igen om en stund.
-        </p>
+        <PageHeader
+          title="Inga fler titlar att kalibrera"
+          standfirst="Kunde inte hämta titlar just nu. Försök igen om en stund."
+        />
         <Link href="/" className="text-accent no-underline text-xs">← Tillbaka till startsidan</Link>
       </div>
     );
@@ -165,7 +166,7 @@ function CalibrationCard({
       <div className="flex gap-1 px-3 py-2 border-t border-border-light">
         <button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-border-main rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-red-50 hover:border-red-300"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-border-main rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
         >
           <ThumbsDown size={12} /> Inte min grej
         </button>
