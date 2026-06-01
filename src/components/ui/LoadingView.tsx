@@ -27,7 +27,7 @@ export function LoadingView({
       {variant === 'grid' && (
         <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] py-2 animate-pulse" aria-hidden>
           {Array.from({ length: rows }).map((_, i) => (
-            <div key={i} data-skeleton className="poster bg-rule-2" />
+            <div key={i} data-skeleton className="aspect-[2/3] bg-rule-2 rounded-sm" />
           ))}
         </div>
       )}
