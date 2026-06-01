@@ -104,7 +104,7 @@ function ReportsDashboard() {
       </div>
 
       {error && (
-        <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-sm mb-3">
+        <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm mb-3">
           {error}
         </div>
       )}

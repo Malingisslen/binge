@@ -176,7 +176,7 @@ export default function LoginPage() {
               </label>
             </div>
           )}
-          {error && <div className="text-xs text-red-600 mb-2">{error}</div>}
+          {error && <div className="text-xs text-danger-ink mb-2">{error}</div>}
           <button
             type="submit"
             disabled={registerDisabled}

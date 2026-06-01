@@ -166,7 +166,7 @@ function CalibrationCard({
       <div className="flex gap-1 px-3 py-2 border-t border-border-light">
         <button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-border-main rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-red-50 hover:border-red-300"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-border-main rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
         >
           <ThumbsDown size={12} /> Inte min grej
         </button>
