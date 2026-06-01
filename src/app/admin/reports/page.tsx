@@ -14,6 +14,7 @@ import {
   type ReportStatus,
 } from '@/lib/firebase/reports';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 const STATUS_TABS: ReportStatus[] = ['open', 'reviewed', 'actioned', 'dismissed'];
 
@@ -33,11 +34,11 @@ export default function AdminReportsPage() {
  */
 function AdminGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
+  if (loading) return <LoadingView label="Laddar…" />;
   if (!user?.isAdmin) {
     return (
       <div className="max-w-[480px]">
-        <h1 className="text-[18px] font-bold mb-2">Åtkomst nekad</h1>
+        <PageHeader title="Åtkomst nekad" />
         <p className="text-xs text-text-muted">
           Den här sidan är bara för administratörer. Om du tror att detta är fel,
           kontakta <a href="mailto:hej@binge.nu" className="text-accent">hej@binge.nu</a>.
@@ -109,7 +110,7 @@ function ReportsDashboard() {
       )}
 
       {loading && (
-        <div className="text-sm text-text-muted py-4">Laddar…</div>
+        <LoadingView label="Laddar…" />
       )}
 
       {!loading && reports.length === 0 && !error && (

@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { doc, getDoc } from 'firebase/firestore';
 import AuthGuard from '@/components/AuthGuard';
 import { db } from '@/lib/firebase/config';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
 import type { GroupInvite } from '@/lib/firebase/groups';
@@ -39,7 +40,7 @@ function GrupperList() {
       </header>
       <div style={{ marginTop: 28 }} />
 
-      {loading && <div className="text-sm text-text-muted py-4">Laddar grupper…</div>}
+      {loading && <LoadingView label="Laddar grupper…" />}
 
       {!loading && groups.length === 0 && (
         <div className="bg-surface border border-border-main rounded-sm p-6 text-center">
