@@ -11,8 +11,7 @@ export default function CommunityGuidelinesPage() {
     <LegalPageShell
       title="Community-regler"
       lastUpdated="2026-06-01"
-      version="0.2 (utkast)"
-      draft
+      version="1.0"
     >
       <section>
         <p className="text-text-secondary">

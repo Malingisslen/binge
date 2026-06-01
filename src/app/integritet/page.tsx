@@ -11,8 +11,7 @@ export default function IntegritetPage() {
     <LegalPageShell
       title="Integritetspolicy"
       lastUpdated="2026-06-01"
-      version="0.2 (utkast)"
-      draft
+      version="1.0"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>

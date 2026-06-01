@@ -12,8 +12,7 @@ export default function VillkorPage() {
     <LegalPageShell
       title="Användarvillkor"
       lastUpdated="2026-06-01"
-      version="0.2 (utkast)"
-      draft
+      version="1.0"
     >
       <section>
         <h2>1. Vad Binge är</h2>
