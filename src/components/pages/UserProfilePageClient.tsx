@@ -12,6 +12,9 @@ import StatCard from '@/components/ui/StatCard';
 import { posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -40,18 +43,13 @@ export default function UserProfilePageClient({ username }: { username: string }
   const metaTitle = data && 'profile' in data ? data.profile.displayName : `@${username}`;
   usePageMeta({ title: metaTitle });
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
-  if (!data) return <div className="text-sm text-text-muted py-4">Användaren hittades inte.</div>;
+  if (isLoading) return <LoadingView variant="detail" label="Laddar profil…" />;
+  if (!data) return <NotFound crumb="Profil" title="Användaren hittades inte." />;
 
   // Tre-state från usePublicProfile: null (ej användare), { isPrivate }
   // (finns men ej läsbar), { profile, uid } (full).
   if ('isPrivate' in data) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-[18px] font-bold text-text-primary mb-1">@{username}</div>
-        <p className="text-sm text-text-muted">Den här profilen är privat.</p>
-      </div>
-    );
+    return <NotFound crumb={`@${username}`} title="Privat profil" body="Den här profilen är privat." />;
   }
 
   const { profile, uid } = data;
@@ -61,12 +59,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   // främlingar. (Faktiskt täcker rules redan detta, men dubbel-check.)
   const tier = profile.defaultVisibility ?? (profile.isPublic ? 'public' : 'private');
   if (tier === 'private' && uid !== myUid) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-[18px] font-bold text-text-primary mb-1">@{username}</div>
-        <p className="text-sm text-text-muted">Den här profilen är privat.</p>
-      </div>
-    );
+    return <NotFound crumb={`@${username}`} title="Privat profil" body="Den här profilen är privat." />;
   }
 
   // "Följer" på publik profil = TV-shows i 'mina' (samlingen). Sedd = filmer
@@ -81,21 +74,23 @@ export default function UserProfilePageClient({ username }: { username: string }
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-[18px] font-bold text-text-primary">{profile.displayName}</h1>
-        <div className="text-xs text-text-muted">@{username}</div>
-        {profile.bio && <p className="text-base text-text-secondary mt-1">{profile.bio}</p>}
-        <div className="flex items-center gap-2 mt-1">
-          {!isOwnProfile && <FollowButton targetUid={uid} />}
-          {!isOwnProfile && <FriendButton targetUid={uid} />}
-          {isOwnProfile && (
-            <Link href="/settings" className="text-xxs text-accent no-underline">Redigera profil</Link>
-          )}
-          <span className="text-xxs text-text-muted">{followerCount ?? 0} följare · {followingCount ?? 0} följer</span>
-        </div>
-      </div>
+      <PageHeader
+        crumb={`@${username}`}
+        title={profile.displayName}
+        standfirst={profile.bio || undefined}
+        actions={
+          <>
+            {!isOwnProfile && <FollowButton targetUid={uid} />}
+            {!isOwnProfile && <FriendButton targetUid={uid} />}
+            {isOwnProfile && (
+              <Link href="/settings" className="text-xs text-accent no-underline">Redigera profil</Link>
+            )}
+            <span className="text-xs text-ink-3">{followerCount ?? 0} följare · {followingCount ?? 0} följer</span>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-4 gap-[10px] mb-4">
+      <div className="grid grid-cols-4 gap-[10px] mb-4 mt-3">
         <StatCard label="Totalt" value={(watchlist ?? []).length} />
         <StatCard label="Följer" value={following.length} />
         <StatCard label="Sedd" value={watched.length} />
