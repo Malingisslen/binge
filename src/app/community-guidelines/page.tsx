@@ -10,8 +10,8 @@ export default function CommunityGuidelinesPage() {
   return (
     <LegalPageShell
       title="Community-regler"
-      lastUpdated="2026-04-20"
-      version="0.1 (utkast)"
+      lastUpdated="2026-06-01"
+      version="0.2 (utkast)"
       draft
     >
       <section>
@@ -58,10 +58,13 @@ export default function CommunityGuidelinesPage() {
       <section>
         <h2>Rapportering</h2>
         <p>
-          Ser du något som bryter mot reglerna? Skriv till{' '}
-          <a href="mailto:hej@binge.nu">hej@binge.nu</a> med länk till
-          innehållet och en kort beskrivning. Vi läser alla rapporter
-          och försöker svara inom några dagar.
+          Ser du något som bryter mot reglerna? Använd{' '}
+          <strong>rapportera-alternativet</strong> i menyn (•••) på recensioner,
+          kommentarer och profiler — det skickar en rapport direkt till oss. Du
+          kan också skriva till{' '}
+          <a href="mailto:hej@binge.nu">hej@binge.nu</a> med en länk till
+          innehållet och en kort beskrivning. Vi läser alla rapporter och
+          försöker svara inom några dagar.
         </p>
       </section>
 

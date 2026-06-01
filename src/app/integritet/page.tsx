@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-04-20"
-      version="0.1 (utkast)"
+      lastUpdated="2026-06-01"
+      version="0.2 (utkast)"
       draft
     >
       <section>
@@ -35,7 +35,10 @@ export default function IntegritetPage() {
           <li><strong>Användarnamn</strong> — om du valt ett publikt användarnamn för din profil.</li>
           <li><strong>Dina streamingtjänster</strong> — vilka tjänster du har, vilket abonnemang (nivå), pris, och eventuella pauser.</li>
           <li><strong>Din bevakningslista</strong> — titlar du följer, vill se eller har sett; betyg; anteckningar; avsnitts-framsteg.</li>
-          <li><strong>Recensioner, listor och sociala kopplingar</strong> — sådant du skapat eller valt att göra publikt.</li>
+          <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap.</li>
+          <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
+          <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
+          <li><strong>Push-notistoken</strong> — om du aktiverat push-notiser sparar vi en enhetsspecifik token (Firebase Cloud Messaging) för att kunna skicka notiser.</li>
           <li><strong>Teknisk logg-data</strong> — IP-adress och webbläsarens User-Agent hanteras av Firebase och Cloudflare för säkerhet och drift.</li>
         </ul>
         <p>
@@ -49,8 +52,8 @@ export default function IntegritetPage() {
         <h2>3. Varför vi behandlar uppgifterna (rättslig grund)</h2>
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren.</li>
-          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, missbruksskydd.</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för eventuella framtida inslag som statistik eller marknadsföring. Inga sådana används idag.</li>
+          <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga sådana används idag.</li>
         </ul>
       </section>
 
@@ -60,23 +63,28 @@ export default function IntegritetPage() {
           Vi använder följande personuppgiftsbiträden:
         </p>
         <ul>
-          <li><strong>Google / Firebase</strong> (autentisering, databas, drift) — behandlar uppgifterna enligt Googles standardiserade databehandlaravtal (DPA). Data lagras inom EU om Firebase-projektet är konfigurerat för EU-region.</li>
+          <li><strong>Google / Firebase</strong> (autentisering, databas, push-notiser, drift) — behandlar uppgifterna enligt Googles databehandlaravtal (DPA). Binges serverfunktioner körs i EU-regionen <code>europe-west1</code> (Belgien).{/* TODO (före publicering): bekräfta Firestore-databasens lagringsregion i Firebase Console och ange den explicit här. */}</li>
+          <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
+          <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
+          <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk feldata när något kraschar (felmeddelande, webbläsare och tillfälligt IP) så att vi kan rätta buggar.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
           <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
         </ul>
         <p>
-          Vi använder inga reklamnätverk, spårnings-pixlar eller
-          marknadsföringsverktyg.
+          Vi använder inga reklamnätverk eller marknadsföringsverktyg, och
+          ingen cookie-baserad spårning för annonsändamål.
         </p>
       </section>
 
       <section>
         <h2>5. Överföringar utanför EU/EES</h2>
         <p>
-          Google-tjänster kan vid vissa operationer överföra data till USA.
-          Google har då standardavtalsklausuler (SCC) och kompletterande
-          skyddsåtgärder som grund. TMDB är amerikanskt men tar inte emot
-          dina personuppgifter.
+          Vissa leverantörer är amerikanska eller kan vid enskilda operationer
+          överföra data till USA: Google (inklusive reCAPTCHA), Cloudflare och
+          Sentry. För dessa överföringar gäller EU-kommissionens
+          standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
+          Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
+          amerikanskt men tar inte emot dina personuppgifter.
         </p>
       </section>
 
@@ -89,12 +97,17 @@ export default function IntegritetPage() {
           <li>Teknisk logg-data i Firebase/Cloudflare sparas enligt respektive leverantörs standardtid (typiskt 30 dagar).</li>
           <li>
             <strong>Om du tar bort ditt konto</strong> raderar vi all din data
-            permanent: profil, bevakningslista, avsnittsframsteg, notifikationer,
-            blockeringar, följning-relationer, dina recensioner och kommentarer
-            (även publika), dina listor, Tillsammans-sessioner du är värd för,
-            och användarnamns-reservationen. Publikt innehåll anonymiseras inte —
-            det raderas helt. Återställning är inte möjlig efter 7 dagar
-            (Firestore Point-in-Time Recovery-fönstret).
+            permanent och omedelbart: profil, bevakningslista, avsnittsframsteg,
+            betyg och anteckningar, notifikationer, &quot;inte intresserad&quot;-
+            markeringar, Streamingrådgivaren-historik, push-notistoken,
+            blockeringar, vän- och följar-relationer (även de speglade hos
+            motparten), dina recensioner inklusive likes och kommentarer på dem,
+            kommentarer och likes du gjort på andras recensioner, dina listor,
+            Tillsammans-sessioner du är värd för, samt grupper du äger (grupper
+            du bara är medlem i lämnar du automatiskt). Slutligen raderas ditt
+            inloggningskonto och din användarnamns-reservation. Publikt innehåll
+            anonymiseras inte — det raderas helt. Återställning är inte möjlig
+            efter 7 dagar (Firestore Point-in-Time Recovery-fönstret).
           </li>
         </ul>
       </section>
@@ -122,6 +135,7 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här.</li>
           <li><strong>Funktionella cookies från Cloudflare</strong> (<code>__cf_bm</code>, <code>__cflb</code>) — används för botskydd och lastbalansering och är nödvändiga för att tjänsten ska fungera.</li>
+          <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
         </ul>
         <p>
           Om vi i framtiden lägger till statistik- eller marknadsförings-

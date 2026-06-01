@@ -11,8 +11,8 @@ export default function VillkorPage() {
   return (
     <LegalPageShell
       title="Användarvillkor"
-      lastUpdated="2026-04-20"
-      version="0.1 (utkast)"
+      lastUpdated="2026-06-01"
+      version="0.2 (utkast)"
       draft
     >
       <section>
@@ -123,11 +123,16 @@ export default function VillkorPage() {
         <h2>10. Att avsluta kontot</h2>
         <p>
           Du kan ta bort ditt konto när som helst via inställningar.
-          När du gör det raderar vi din profil, bevakningslista,
-          avsnittsframsteg, notifikationer och användarnamns-reservation.
-          Publika recensioner, kommentarer, listor och grupp-medlemskap
-          kan behöva hanteras separat — skriv till oss om du vill ha
-          dem fullständigt raderade.
+          Raderingen är fullständig och omedelbar: vi tar bort din profil,
+          bevakningslista, avsnittsframsteg, betyg och anteckningar,
+          notifikationer, dina recensioner (inklusive likes och kommentarer),
+          dina kommentarer och likes på andras recensioner, dina listor, dina
+          Tillsammans-sessioner, grupper du äger, dina vän- och
+          följar-relationer, push-notistoken och din användarnamns-reservation.
+          Grupper du bara är medlem i lämnar du automatiskt. Även publikt
+          innehåll raderas helt — det anonymiseras inte. Se{' '}
+          <Link href="/integritet">integritetspolicyn</Link> för fullständig
+          lista och dina rättigheter enligt GDPR.
         </p>
         <p>
           Vi kan stänga av eller ta bort ditt konto om du bryter mot
