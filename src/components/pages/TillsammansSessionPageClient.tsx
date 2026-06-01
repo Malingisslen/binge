@@ -13,6 +13,8 @@ import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress }
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
 import { toneForId } from '@/lib/duotone';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
@@ -34,7 +36,7 @@ export default function TillsammansSessionPageClient({ id }: { id: string }) {
   );
 
   if (loading) {
-    return <div className="text-sm text-ink-3 py-4">Laddar session…</div>;
+    return <LoadingView variant="detail" label="Laddar session…" />;
   }
 
   if (notFound || !session) {
@@ -141,12 +143,9 @@ function JoinSessionForm({
   };
 
   return (
-    <div className="max-w-[560px]">
-      <div className="flex items-center gap-2 mb-3">
-        <Users size={18} className="text-accent" />
-        <h1 className="text-[18px] font-bold">Gå med i sessionen</h1>
-      </div>
-      <p className="text-xs text-text-muted mb-4 leading-relaxed">
+    <div>
+      <PageHeader crumb="Tillsammans" title="Gå med i sessionen" icon={<Users size={20} className="text-accent" />} />
+      <p className="text-xs text-text-muted mb-4 mt-3 leading-relaxed">
         Någon har bjudit in dig att välja film tillsammans. Skriv ditt namn och kryssa för vilka streamingtjänster du har — bara titlar ni delar visas.
       </p>
 
