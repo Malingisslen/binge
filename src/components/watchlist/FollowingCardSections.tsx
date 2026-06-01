@@ -11,8 +11,8 @@ const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(au
 // "Ikapp" (väntar på nästa avsnitt — Returning Series)
 // "Avslutade" — collapsed default eftersom inget kommer mer
 //
-// Icke-TV-titlar (t.ex. legacy 'mina'-film) hamnar tillsammans med "Ligger
-// efter" eftersom de inte har sub-state.
+// Endast TV-titlar når hit — WatchlistPage filtrerar bort ev. legacy
+// 'mina'-film (mediaType !== 'tv') innan bucketBySubState anropas.
 export interface CardSections {
   aktiv: WatchlistItem[];
   ikapp: WatchlistItem[];
