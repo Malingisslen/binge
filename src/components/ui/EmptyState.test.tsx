@@ -10,7 +10,7 @@ describe('EmptyState', () => {
   });
 
   it('renders an action when provided', () => {
-    render(<EmptyState title="Tomt" action={<a href="/grupper">Mina grupper</a>} />);
+    render(<EmptyState title="Tomt" action={<a href="https://example.com">Mina grupper</a>} />);
     expect(screen.getByRole('link', { name: 'Mina grupper' })).toBeInTheDocument();
   });
 });
