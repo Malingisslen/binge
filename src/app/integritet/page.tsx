@@ -63,10 +63,9 @@ export default function IntegritetPage() {
           Vi använder följande personuppgiftsbiträden:
         </p>
         <ul>
-          <li><strong>Google / Firebase</strong> (autentisering, databas, push-notiser, drift) — behandlar uppgifterna enligt Googles databehandlaravtal (DPA). Binges serverfunktioner körs i EU-regionen <code>europe-west1</code> (Belgien).{/* TODO (före publicering): bekräfta Firestore-databasens lagringsregion i Firebase Console och ange den explicit här. */}</li>
+          <li><strong>Google / Firebase</strong> (autentisering, databas, push-notiser, drift) — behandlar uppgifterna enligt Googles databehandlaravtal (DPA). Dina uppgifter lagras inom EU: Firestore-databasen i multiregionen <code>eur3</code> (Belgien och Nederländerna) och serverfunktionerna i <code>europe-west1</code> (Belgien).</li>
           <li><strong>Google reCAPTCHA / Firebase App Check</strong> (bot- och missbruksskydd) — laddar ett skript från Google som analyserar webbläsarsignaler för att skilja människor från bottar. Sätter en teknisk token och skickar signaler till Google.</li>
           <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
-          <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk feldata när något kraschar (felmeddelande, webbläsare och tillfälligt IP) så att vi kan rätta buggar.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
           <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
         </ul>
@@ -80,8 +79,8 @@ export default function IntegritetPage() {
         <h2>5. Överföringar utanför EU/EES</h2>
         <p>
           Vissa leverantörer är amerikanska eller kan vid enskilda operationer
-          överföra data till USA: Google (inklusive reCAPTCHA), Cloudflare och
-          Sentry. För dessa överföringar gäller EU-kommissionens
+          överföra data till USA: Google (inklusive reCAPTCHA) och Cloudflare.
+          För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
           amerikanskt men tar inte emot dina personuppgifter.
