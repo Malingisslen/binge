@@ -96,7 +96,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
         <button
           onClick={() => setPage(p => p + 1)}
           disabled={isLoading}
-          className="mt-3 px-4 py-[5px] bg-surface border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+          className="btn btn-ghost btn-sm mt-3 disabled:opacity-50"
         >
           {isLoading ? 'Laddar…' : 'Visa fler'}
         </button>
