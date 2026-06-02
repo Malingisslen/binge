@@ -15,7 +15,8 @@ export function useDebouncedCommit<T>(
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<{ value: T } | null>(null);
   const commitRef = useRef(commit);
-  commitRef.current = commit;
+  // Keep the ref current without writing to it during render (react-hooks/refs).
+  useEffect(() => { commitRef.current = commit; });
 
   const flush = useCallback(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
