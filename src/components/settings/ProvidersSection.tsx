@@ -62,7 +62,7 @@ export function ProvidersSection() {
         style={
           isSelected
             ? { background: p.color, color: fg === 'white' ? '#fff' : 'var(--ink)' }
-            : { border: '1.5px solid var(--rule)', color: p.color }
+            : { border: `1.5px solid ${p.color}`, color: 'var(--ink)' }
         }
       >
         {p.shortName}
