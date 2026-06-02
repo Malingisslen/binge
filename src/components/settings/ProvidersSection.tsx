@@ -66,7 +66,7 @@ export function ProvidersSection() {
         }
       >
         {p.shortName}
-        {isSelected && <span className="absolute top-1 right-1.5 text-[10px]">✓</span>}
+        {isSelected && <span aria-hidden="true" className="absolute top-1 right-1.5 text-[10px]">✓</span>}
       </button>
     );
   };

@@ -47,8 +47,9 @@ export function SettingsSection({
       {collapsible ? (
         <button
           type="button"
+          aria-expanded={open}
           onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center justify-between px-3 pt-[10px] pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2/50"
+          className="w-full flex items-center justify-between px-3 pt-[10px] pb-2 cursor-pointer text-left rounded-t-md hover:bg-bg-2"
         >
           {eyebrow}
           {open
