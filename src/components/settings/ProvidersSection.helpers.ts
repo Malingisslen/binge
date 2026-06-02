@@ -1,3 +1,5 @@
+import { canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
+
 /** WCAG relative luminance → pick legible foreground for a hex background. */
 export function readableTextColor(hex: string): 'white' | 'ink' {
   let h = hex.replace('#', '').trim();
@@ -10,4 +12,34 @@ export function readableTextColor(hex: string): 'white' | 'ink' {
   // White and dark text reach equal contrast at L = √(1.05·0.05) − 0.05 ≈ 0.179.
   const CROSSOVER = Math.sqrt(1.05 * 0.05) - 0.05;
   return L <= CROSSOVER ? 'white' : 'ink';
+}
+
+/**
+ * Split a provider list into selected (in the order the user selected them)
+ * and available (remaining, in source order). Matching is canonical so
+ * aliases (e.g. TV4 Play 489/1944) never appear twice.
+ */
+export function splitProviders(
+  all: SwedishProvider[],
+  selectedIds: number[],
+): { selected: SwedishProvider[]; available: SwedishProvider[] } {
+  const canonSelected = [...new Set(selectedIds.map(canonicalProviderId))];
+  const byId = new Map(all.map(p => [canonicalProviderId(p.id), p]));
+  const selected = canonSelected
+    .map(id => byId.get(id))
+    .filter((p): p is SwedishProvider => Boolean(p));
+  const selectedSet = new Set(selected.map(p => canonicalProviderId(p.id)));
+  const available = all.filter(p => !selectedSet.has(canonicalProviderId(p.id)));
+  return { selected, available };
+}
+
+/** Sum monthly cost across the selected provider ids. */
+export function totalMonthlyCost(
+  selectedIds: number[],
+  providerCosts: Record<number, number>,
+): number {
+  return selectedIds.reduce(
+    (sum, id) => sum + (providerCosts[canonicalProviderId(id)] ?? 0),
+    0,
+  );
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readableTextColor } from './ProvidersSection.helpers';
+import { readableTextColor, splitProviders, totalMonthlyCost } from './ProvidersSection.helpers';
+import type { SwedishProvider } from '@/lib/tmdb/providers';
 
 describe('readableTextColor', () => {
   it('returns white on dark brand colors', () => {
@@ -22,5 +23,50 @@ describe('readableTextColor', () => {
   it('handles 3-digit hex and missing #', () => {
     expect(readableTextColor('fff')).toBe('ink');
     expect(readableTextColor('000')).toBe('white');
+  });
+});
+
+const P = (id: number, name: string): SwedishProvider =>
+  ({ id, name, shortName: name, color: '#000', type: 'flatrate' });
+
+describe('splitProviders', () => {
+  const all = [P(8, 'Netflix'), P(337, 'Disney+'), P(489, 'TV4 Play')];
+
+  it('splits selected (in selection order) from available (in source order)', () => {
+    const { selected, available } = splitProviders(all, [489, 8]);
+    expect(selected.map(p => p.id)).toEqual([489, 8]);
+    expect(available.map(p => p.id)).toEqual([337]);
+  });
+
+  it('matches via canonical id so aliases do not duplicate', () => {
+    // 1944 is an alias of 489 (TV4 Play)
+    const { selected, available } = splitProviders(all, [1944]);
+    expect(selected.map(p => p.id)).toEqual([489]);
+    expect(available.map(p => p.id)).toEqual([8, 337]);
+  });
+
+  it('ignores selected ids with no matching provider', () => {
+    const { selected } = splitProviders(all, [99999]);
+    expect(selected).toEqual([]);
+  });
+
+  it('dedupes when both an id and its alias are selected', () => {
+    const { selected } = splitProviders(all, [489, 1944]);
+    expect(selected.map(p => p.id)).toEqual([489]);
+  });
+});
+
+describe('totalMonthlyCost', () => {
+  it('sums costs for selected ids only', () => {
+    expect(totalMonthlyCost([8, 489], { 8: 109, 489: 69, 337: 159 })).toBe(178);
+  });
+  it('treats missing costs as 0', () => {
+    expect(totalMonthlyCost([8, 489], { 8: 109 })).toBe(109);
+  });
+  it('is 0 for empty selection', () => {
+    expect(totalMonthlyCost([], { 8: 109 })).toBe(0);
+  });
+  it('resolves alias ids against canonical cost keys', () => {
+    expect(totalMonthlyCost([1944], { 489: 69 })).toBe(69);
   });
 });
