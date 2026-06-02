@@ -38,15 +38,13 @@ export function ProvidersSection() {
 
   const toggle = (providerId: number) => {
     const canon = canonicalProviderId(providerId);
-    setSelected(prev => {
-      const has = prev.some(id => canonicalProviderId(id) === canon);
-      const next = has
-        ? prev.filter(id => canonicalProviderId(id) !== canon)
-        : [...prev, providerId];
-      setPendingSave(true);
-      schedule(next);
-      return next;
-    });
+    const has = selected.some(id => canonicalProviderId(id) === canon);
+    const next = has
+      ? selected.filter(id => canonicalProviderId(id) !== canon)
+      : [...selected, providerId];
+    setSelected(next);
+    setPendingSave(true);
+    schedule(next);
   };
 
   const { selected: selectedProviders, available } = splitProviders(FLATRATE, selected);
@@ -68,7 +66,7 @@ export function ProvidersSection() {
         }
       >
         {p.shortName}
-        {isSelected && <span className="absolute top-1 right-1.5 text-[10px]" style={{ color: fg === 'white' ? '#fff' : 'var(--ink)' }}>✓</span>}
+        {isSelected && <span className="absolute top-1 right-1.5 text-[10px]">✓</span>}
       </button>
     );
   };
