@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 
 export function DataExportSection() {
   const { uid } = useAuth();
@@ -31,19 +31,19 @@ export function DataExportSection() {
   };
 
   return (
-    <SettingsCard title="Exportera min data">
-      <p className="text-xs text-text-muted mb-2">
+    <SettingsSection title="Exportera min data">
+      <p className="text-xs text-ink-3 mb-2">
         Ladda ner all data om dig som en JSON-fil (GDPR artikel 20). Innehåller profil,
         bibliotek, betyg, progress, recensioner, listor och sociala kopplingar.
       </p>
       <button
         onClick={handleExport}
         disabled={exporting || !uid}
-        className="inline-flex items-center gap-1 px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer hover:bg-surface-hover disabled:opacity-50"
+        className="btn btn-ghost btn-sm disabled:opacity-50"
       >
         <Download size={11} />
         {exporting ? 'Förbereder…' : 'Ladda ner mina data'}
       </button>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

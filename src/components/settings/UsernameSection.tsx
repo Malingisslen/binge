@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 import type { ItemVisibility } from '@/types';
 
 const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: string }[] = [
@@ -37,32 +37,32 @@ export function UsernameSection() {
   };
 
   return (
-    <SettingsCard title="Publik profil">
+    <SettingsSection title="Publik profil">
       <div className="space-y-2">
         <div>
-          <label className="text-xs text-text-muted block mb-[2px]">Användarnamn</label>
+          <label className="text-xs text-ink-3 block mb-[2px]">Användarnamn</label>
           <div className="flex gap-2">
             <input
               value={usernameInput}
               onChange={e => setUsernameInput(e.target.value.toLowerCase())}
               placeholder="filmnerden"
               maxLength={20}
-              className="flex-1 px-2 py-[3px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none"
+              className="flex-1 px-2 py-[3px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
             />
             <button
               onClick={handleSaveUsername}
               disabled={saving || usernameInput === (user.username ?? '')}
-              className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white disabled:opacity-50"
+              className="btn btn-acc btn-sm disabled:opacity-50"
             >
               Spara
             </button>
           </div>
           {user.username && (
-            <div className="text-xxs text-text-muted mt-[2px]">binge.nu/user/{user.username}</div>
+            <div className="text-xxs text-ink-3 mt-[2px]">binge.nu/user/{user.username}</div>
           )}
         </div>
         <div>
-          <label className="text-xs text-text-muted block mb-[2px]">Bio</label>
+          <label className="text-xs text-ink-3 block mb-[2px]">Bio</label>
           <textarea
             value={bioInput}
             onChange={e => setBioInput(e.target.value)}
@@ -70,11 +70,11 @@ export function UsernameSection() {
             placeholder="Berätta lite om dig…"
             maxLength={160}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] resize-none outline-none"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] resize-none outline-none"
           />
         </div>
         <div>
-          <label className="text-xs text-text-muted block mb-[4px]">Standardsynlighet</label>
+          <label className="text-xs text-ink-3 block mb-[4px]">Standardsynlighet</label>
           <div className="space-y-[6px]">
             {VISIBILITY_OPTIONS.map(opt => (
               <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
@@ -87,17 +87,17 @@ export function UsernameSection() {
                     updateDefaultVisibility(opt.value);
                     toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
                   }}
-                  className="accent-accent mt-[2px] w-[13px] h-[13px] shrink-0"
+                  className="accent-acc-deep mt-[2px] w-[13px] h-[13px] shrink-0"
                 />
                 <span className="leading-tight">
-                  <span className="text-xs text-text-primary block">{opt.label}</span>
-                  <span className="text-xxs text-text-muted">{opt.description}</span>
+                  <span className="text-xs text-ink block">{opt.label}</span>
+                  <span className="text-xxs text-ink-3">{opt.description}</span>
                 </span>
               </label>
             ))}
           </div>
         </div>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

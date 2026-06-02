@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { enablePushForUser, disablePushForUser, isPushSupported } from '@/lib/firebase/messaging';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 
 /**
  * Push-notif-toggle (Fas 4). Två tillstånd:
@@ -52,15 +52,15 @@ export function NotificationsSection() {
   }
 
   return (
-    <SettingsCard title="Notifikationer">
-      <p className="text-xs text-text-muted mb-2">
+    <SettingsSection title="Notifikationer">
+      <p className="text-xs text-ink-3 mb-2">
         Få notiser när någon skickar en vänförfrågan eller när din grupp loggar
         en ny filmkväll. Notiser visas på den här enheten — andra enheter har
         sina egna inställningar.
       </p>
 
       {!supported ? (
-        <div className="text-xs text-text-muted py-2">
+        <div className="text-xs text-ink-3 py-2">
           Push-notiser stöds inte i den här webbläsaren.
         </div>
       ) : (
@@ -70,18 +70,18 @@ export function NotificationsSection() {
             checked={pushEnabled}
             disabled={busy}
             onChange={(e) => { void handleToggle(e.target.checked); }}
-            className="accent-accent w-[14px] h-[14px]"
+            className="accent-acc-deep w-[14px] h-[14px]"
           />
           Skicka push-notiser till den här enheten
         </label>
       )}
 
       {pushEnabled && (
-        <p className="text-xxs text-text-muted mt-2">
+        <p className="text-xxs text-ink-3 mt-2">
           För att tysta notiser per kanal i framtiden — använd de andra
           inställningarna nedan när vi byggt ut dem.
         </p>
       )}
-    </SettingsCard>
+    </SettingsSection>
   );
 }

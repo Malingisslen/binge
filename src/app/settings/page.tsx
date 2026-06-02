@@ -2,6 +2,8 @@
 
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { TMDB_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { ProfileSection } from '@/components/settings/ProfileSection';
 import { UsernameSection } from '@/components/settings/UsernameSection';
 import { ProvidersSection } from '@/components/settings/ProvidersSection';
@@ -22,28 +24,24 @@ function SettingsContent() {
 
   return (
     <>
-      <header>
-        <div className="crumb">Inställningar</div>
-        <h1 className="page-h1">Inställningar</h1>
-        <p className="stand">
-          Profil, tjänster, smak-data, notiser, export och radering — allt på ett ställe.
-        </p>
-      </header>
+      <PageHeader
+        crumb="Inställningar"
+        title="Inställningar"
+        standfirst="Profil, tjänster, smak-data, notiser, export och radering — allt på ett ställe."
+      />
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         <ProfileSection />
-      <UsernameSection />
-      <ProvidersSection />
-      <DisplaySection />
-      <ContentFilterSection />
-      <NotificationsSection />
-      <TasteDataSection />
-      <DataExportSection />
-      <DeleteAccountSection />
+        <UsernameSection />
+        <ProvidersSection />
+        <DisplaySection />
+        <ContentFilterSection />
+        <NotificationsSection />
+        <TasteDataSection />
+        <DataExportSection />
+        <DeleteAccountSection />
 
-        <div className="text-xxs text-text-muted mt-4">
-          This product uses the TMDB API but is not endorsed or certified by TMDB.
-        </div>
+        <div className="text-xxs text-ink-3 mt-4">{TMDB_ATTRIBUTION_EN}</div>
       </div>
     </>
   );

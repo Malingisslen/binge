@@ -1,28 +1,25 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 
 export function ProfileSection() {
   const { user, signOut } = useAuth();
   if (!user) return null;
 
   return (
-    <SettingsCard title="Profil">
+    <SettingsSection title="Profil">
       <div className="text-base">
-        <span className="text-text-muted text-xs mr-2">Namn:</span>
+        <span className="text-ink-3 text-xs mr-2">Namn:</span>
         {user.displayName}
       </div>
       <div className="text-base mt-1">
-        <span className="text-text-muted text-xs mr-2">E-post:</span>
+        <span className="text-ink-3 text-xs mr-2">E-post:</span>
         {user.email}
       </div>
-      <button
-        onClick={signOut}
-        className="mt-3 px-3 py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary hover:bg-surface-hover"
-      >
+      <button onClick={signOut} className="btn btn-ghost btn-sm mt-3">
         Logga ut
       </button>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

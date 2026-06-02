@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 
 export function DisplaySection() {
   const { user, updateDefaultView } = useAuth();
@@ -10,23 +10,19 @@ export function DisplaySection() {
   if (!user) return null;
 
   return (
-    <SettingsCard title="Visning">
-      <p className="text-xs text-text-muted mb-2">Standardvy för listor.</p>
+    <SettingsSection title="Visning">
+      <p className="text-xs text-ink-3 mb-2">Standardvy för listor.</p>
       <div className="flex gap-2">
         {(['table', 'cards', 'grid'] as const).map(v => (
           <button
             key={v}
             onClick={() => { updateDefaultView(v); toast('Inställning sparad'); }}
-            className={`px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer ${
-              user.defaultView === v
-                ? 'bg-accent text-white border-accent'
-                : 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
-            }`}
+            className={`btn btn-sm ${user.defaultView === v ? 'btn-acc' : 'btn-ghost'}`}
           >
             {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}
           </button>
         ))}
       </div>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

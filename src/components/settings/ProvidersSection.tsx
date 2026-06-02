@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
-import { CollapsibleSection } from './CollapsibleSection';
+import { SettingsSection } from './SettingsSection';
 
 /**
  * Stor sektion för att välja streamingtjänster, prenumerationsnivå och
@@ -48,8 +48,8 @@ export function ProvidersSection() {
   };
 
   return (
-    <CollapsibleSection title="Mina streamingtjänster" defaultOpen={user.myProviders.length === 0}>
-      <p className="text-xs text-text-muted mb-2">
+    <SettingsSection title="Mina streamingtjänster" collapsible defaultOpen={user.myProviders.length === 0}>
+      <p className="text-xs text-ink-3 mb-2">
         Välj vilka tjänster du prenumererar på och vilken nivå. Dessa markeras i hela appen.
       </p>
       <div className="space-y-[2px]">
@@ -71,7 +71,7 @@ export function ProvidersSection() {
                         : [...prev, provider.id],
                     );
                   }}
-                  className="accent-accent w-[14px] h-[14px]"
+                  className="accent-acc-deep w-[14px] h-[14px]"
                 />
                 <span
                   className="w-[8px] h-[8px] rounded-full inline-block shrink-0"
@@ -87,7 +87,7 @@ export function ProvidersSection() {
                     updateProviderTier(provider.id, val === '' ? null : val);
                     toast('Prenumeration uppdaterad');
                   }}
-                  className="px-1 py-[1px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none max-w-[160px]"
+                  className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none max-w-[160px]"
                 >
                   <option value="">Egen kostnad…</option>
                   {provider.tiers!.map(t => (
@@ -111,11 +111,11 @@ export function ProvidersSection() {
                     else costs[provider.id] = val;
                     updateProviderCosts(costs);
                   }}
-                  className="w-[70px] px-1 py-[1px] text-xs border border-border-main rounded-sm bg-surface text-text-primary font-[inherit] outline-none text-right"
+                  className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
                 />
               )}
               {isSelected && hasTiers && !isCustom && (
-                <span className="w-[70px] text-right text-xs text-text-muted tabular-nums">
+                <span className="w-[70px] text-right text-xs text-ink-3 tabular-nums">
                   {user.providerCosts?.[provider.id] ?? 0} kr
                 </span>
               )}
@@ -128,26 +128,26 @@ export function ProvidersSection() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white disabled:opacity-50"
+            className="btn btn-acc btn-sm disabled:opacity-50"
           >
             Spara
           </button>
           <button
             onClick={() => setSelected(savedProviders)}
             disabled={saving}
-            className="px-3 py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary disabled:opacity-50"
+            className="btn btn-ghost btn-sm disabled:opacity-50"
           >
             Ångra
           </button>
         </div>
       )}
       {Object.keys(user.providerCosts ?? {}).length > 0 && (
-        <div className="mt-2 pt-2 border-t border-border-light">
-          <div className="text-xs text-text-secondary font-semibold">
+        <div className="mt-2 pt-2 border-t border-rule-2">
+          <div className="text-xs text-ink-2 font-semibold">
             Totalt: {Object.values(user.providerCosts).reduce((sum, v) => sum + v, 0)} kr/mån
           </div>
         </div>
       )}
-    </CollapsibleSection>
+    </SettingsSection>
   );
 }

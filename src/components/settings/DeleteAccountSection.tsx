@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { SettingsCard } from './SettingsCard';
+import { SettingsSection } from './SettingsSection';
 
 export function DeleteAccountSection() {
   const [confirming, setConfirming] = useState(false);
@@ -29,14 +29,14 @@ export function DeleteAccountSection() {
   };
 
   return (
-    <SettingsCard title="Ta bort konto" tone="danger">
-      <p className="text-xs text-text-muted mb-2">
+    <SettingsSection title="Ta bort konto" tone="danger">
+      <p className="text-xs text-ink-3 mb-2">
         All data raderas permanent — bibliotek, betyg, avsnittsprogress och inställningar.
       </p>
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
-          className="px-3 py-[3px] border border-red-300 rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-red-600 hover:bg-red-50"
+          className="btn btn-danger-ghost btn-sm"
         >
           Ta bort mitt konto
         </button>
@@ -45,18 +45,15 @@ export function DeleteAccountSection() {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-red-600 text-white disabled:opacity-50"
+            className="btn btn-danger btn-sm disabled:opacity-50"
           >
             {deleting ? 'Raderar…' : 'Ja, ta bort permanent'}
           </button>
-          <button
-            onClick={() => setConfirming(false)}
-            className="px-3 py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary"
-          >
+          <button onClick={() => setConfirming(false)} className="btn btn-ghost btn-sm">
             Avbryt
           </button>
         </div>
       )}
-    </SettingsCard>
+    </SettingsSection>
   );
 }
