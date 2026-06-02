@@ -6,6 +6,7 @@ import { getProvider, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { PageHeader } from '@/components/layout/PageHeader';
 import type { TMDBSearchResult } from '@/types';
 
@@ -106,6 +107,9 @@ export default function ProviderPageClient({ id }: { id: string }) {
 
       <div className="bg-surface border border-rule rounded-sm">
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />
+        <div className="px-3 py-[6px] border-t border-rule">
+          <JustWatchCredit />
+        </div>
       </div>
 
       {hasMore && (

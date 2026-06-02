@@ -12,6 +12,7 @@ import ProvidersByValue from '@/components/savings/ProvidersByValue';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { titleHref } from '@/lib/tmdb/client';
@@ -249,6 +250,10 @@ function SavingsContent() {
             advisor={advisor}
             activePauses={advisor.activePauses}
           />
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <JustWatchCredit />
         </div>
       </div>
     </>

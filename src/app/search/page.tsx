@@ -6,6 +6,7 @@ import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
@@ -97,6 +98,9 @@ function SearchResults() {
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
           <TitleGrid items={results} providerMap={providerMap} />
+          <div className="px-3 py-[6px] border-t border-border-light">
+            <JustWatchCredit />
+          </div>
         </div>
       )}
     </>

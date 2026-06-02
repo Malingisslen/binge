@@ -12,6 +12,7 @@ Filen är en JSON med följande top-level-struktur (se
   "userId": "firebase-uid",
   "readme": "…",
   "tmdbAttribution": "…",
+  "justwatchAttribution": "…",
   "profile": { /* users/{uid} */ },
   "watchlist":      [{ "id": "…", "data": { /* … */ } }],
   "episodeProgress": [ … ],

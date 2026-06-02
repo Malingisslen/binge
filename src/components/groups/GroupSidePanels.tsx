@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import {
   disableInviteToken,
   leaveGroup,
@@ -44,6 +45,7 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
           <div className="text-xxs text-text-muted mb-1">Någon har ({union.length})</div>
           <ProviderPills ids={onlySome} />
         </div>
+        <JustWatchCredit className="block pt-1" />
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import LaterThisWeek from '@/components/home/LaterThisWeek';
 import SparandeTile from '@/components/home/SparandeTile';
 import VannerTile from '@/components/home/VannerTile';
 import GrupperTile from '@/components/home/GrupperTile';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 
 const FAQ_JSON_LD = {
@@ -270,6 +271,12 @@ function Dashboard() {
             <VannerTile />
             <GrupperTile />
           </aside>
+        </div>
+      )}
+
+      {hasLibrary && !isLoading && (
+        <div style={{ marginTop: 16 }}>
+          <JustWatchCredit />
         </div>
       )}
     </>

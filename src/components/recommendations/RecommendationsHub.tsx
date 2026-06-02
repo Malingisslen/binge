@@ -13,6 +13,7 @@ import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import RecRow from './RecRow';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import RecommendationsFilters from './RecommendationsFilters';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
@@ -153,6 +154,12 @@ export default function RecommendationsHub() {
         <p className="stand" style={{ marginTop: 24 }}>
           Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} matchar dina filter. Justera ovan eller rensa.
         </p>
+      )}
+
+      {visibleRows.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <JustWatchCredit />
+        </div>
       )}
     </>
   );

@@ -6,6 +6,7 @@ import { useTrending } from '@/hooks/useTMDB';
 import { discoverMovies, discoverTV, getMovieGenres, getTVGenres, isAddableMediaType } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 
@@ -171,6 +172,9 @@ export default function DiscoverPage() {
 
       <div className="bg-surface border border-border-main rounded-sm">
         <TitleGrid items={items} loading={isLoading && items.length === 0} />
+        <div className="px-3 py-[6px] border-t border-border-light">
+          <JustWatchCredit />
+        </div>
       </div>
 
       {hasMore && (

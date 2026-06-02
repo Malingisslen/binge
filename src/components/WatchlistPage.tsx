@@ -7,6 +7,7 @@ import { Search, Film, Tv, X } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -497,6 +498,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {totalCount > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <JustWatchCredit />
         </div>
       )}
     </>

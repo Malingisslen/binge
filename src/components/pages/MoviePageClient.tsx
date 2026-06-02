@@ -13,6 +13,7 @@ import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
@@ -250,6 +251,12 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
                 </div>
               )}
+            </div>
+          )}
+
+          {(subscription.length > 0 || hasRentBuy) && (
+            <div style={{ marginTop: 8 }}>
+              <JustWatchCredit />
             </div>
           )}
         </div>

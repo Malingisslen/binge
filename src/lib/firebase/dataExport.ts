@@ -1,4 +1,4 @@
-import { TMDB_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
+import { TMDB_ATTRIBUTION_EN, JUSTWATCH_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { collectUserDataSnapshots } from './userData';
 import type { QuerySnapshot } from 'firebase/firestore';
 
@@ -23,6 +23,7 @@ export interface BingeExport {
   userId: string;
   readme: string;
   tmdbAttribution: string;
+  justwatchAttribution: string;
   profile: Record<string, unknown> | null;
   watchlist: ExportDoc[];
   episodeProgress: ExportDoc[];
@@ -88,6 +89,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     userId: uid,
     readme: README_TEXT,
     tmdbAttribution: TMDB_ATTRIBUTION_EN,
+    justwatchAttribution: JUSTWATCH_ATTRIBUTION_EN,
     profile: s.profileSnap.exists() ? (s.profileSnap.data() as Record<string, unknown>) : null,
     watchlist: toExportDocs(s.watchlistSnap),
     episodeProgress: toExportDocs(s.episodeProgressSnap),

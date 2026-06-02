@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import WeekBoard from '@/components/calendar/WeekBoard';
 import MonthStrip from '@/components/calendar/MonthStrip';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
 
 export default function CalendarPage() {
@@ -98,6 +99,12 @@ function CalendarContent() {
         <p className="stand" style={{ marginTop: 24 }}>
           Visar avsnitt för serier du tittar på. Lägg till några serier i din lista för att se dem här.
         </p>
+      )}
+
+      {entries.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <JustWatchCredit />
+        </div>
       )}
     </>
   );

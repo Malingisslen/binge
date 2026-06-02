@@ -15,6 +15,7 @@ import { computeSessionProviders } from '@/lib/together/candidates';
 import { toneForId } from '@/lib/duotone';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
@@ -391,6 +392,10 @@ function SessionMain({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="mb-[8px]">
+        <JustWatchCredit />
       </div>
 
       {matches.length > 0 && (
