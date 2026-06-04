@@ -24,6 +24,15 @@ function docToList(id: string, data: Record<string, unknown>): UserList {
   };
 }
 
+// Varför ingen useInfiniteQuery här (A4.2): en lista lagrar sina titlar som
+// ett *array-fält* (`items`, muteras via arrayUnion), inte som en
+// subcollection — så det finns ingen obegränsad *collection*-query att
+// paginera. `useMyLists` är ett realtids-`onSnapshot`-abonnemang med
+// `limit(100)` (read-bomb-skydd), och `usePublicList` är en enda `getDoc`.
+// Att konvertera någon av dem till cursor-paginering skulle antingen tappa
+// realtid eller vara felaktigt. Om vi senare lägger till en publik
+// *lists-collection*-query (t.ex. "bläddra alla publika listor") är
+// `src/hooks/pagination.ts` (Task 3.8) mönstret för den.
 export function useMyLists() {
   const { uid } = useAuth();
   const [lists, setLists] = useState<UserList[]>([]);
