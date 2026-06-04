@@ -1,46 +1,59 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, limit } from 'firebase/firestore';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, limit, startAfter, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Review, MediaType } from '@/types';
 
-// Max antal recensioner vi visar per titel. Väl över "relevanta första
-// vyn"-tröskeln; populära filmer kan ha hundratals recensioner men ingen
-// läser längre ner än 50 utan paginering. När vi bygger paginering (TODO:
-// useInfiniteQuery + cursor på createdAt) höjer vi gränsen.
-const REVIEWS_PER_TITLE_LIMIT = 50;
+// Sidstorlek för recensioner per titel. Paginering via useInfiniteQuery +
+// Firestore startAfter-cursor på createdAt — "Visa fler" hämtar nästa sida.
+const REVIEWS_PAGE_SIZE = 20;
+
+interface ReviewsPage {
+  reviews: Review[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  full: boolean;
+}
+
+function mapReviewDoc(d: QueryDocumentSnapshot<DocumentData>): Review {
+  const data = d.data();
+  return {
+    id: d.id,
+    uid: data.uid,
+    tmdbId: data.tmdbId,
+    mediaType: data.mediaType,
+    text: data.text,
+    spoiler: data.spoiler ?? false,
+    rating: data.rating ?? null,
+    displayName: data.displayName ?? '',
+    username: data.username ?? null,
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+  } as Review;
+}
 
 export function useReviewsForTitle(tmdbId: number) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['reviews', tmdbId],
-    queryFn: async () => {
+    initialPageParam: null as QueryDocumentSnapshot<DocumentData> | null,
+    queryFn: async ({ pageParam }): Promise<ReviewsPage> => {
       const q = query(
         collection(db, 'reviews'),
         where('tmdbId', '==', tmdbId),
         orderBy('createdAt', 'desc'),
-        limit(REVIEWS_PER_TITLE_LIMIT),
+        ...(pageParam ? [startAfter(pageParam)] : []),
+        limit(REVIEWS_PAGE_SIZE),
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          uid: data.uid,
-          tmdbId: data.tmdbId,
-          mediaType: data.mediaType,
-          text: data.text,
-          spoiler: data.spoiler ?? false,
-          rating: data.rating ?? null,
-          displayName: data.displayName ?? '',
-          username: data.username ?? null,
-          createdAt: toDate(data.createdAt),
-          updatedAt: toDate(data.updatedAt),
-        } as Review;
-      });
+      return {
+        reviews: snap.docs.map(mapReviewDoc),
+        cursor: snap.docs.length === REVIEWS_PAGE_SIZE ? snap.docs[snap.docs.length - 1] : null,
+        full: snap.docs.length === REVIEWS_PAGE_SIZE,
+      };
     },
+    getNextPageParam: (last) => (last.full ? last.cursor : undefined),
     staleTime: 60_000,
   });
 }

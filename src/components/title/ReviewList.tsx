@@ -19,7 +19,8 @@ interface ReviewListProps {
 }
 
 export default function ReviewList({ tmdbId, mediaType, title, posterPath }: ReviewListProps) {
-  const { data: reviews, isLoading } = useReviewsForTitle(tmdbId);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useReviewsForTitle(tmdbId);
+  const reviews = data?.pages.flatMap(p => p.reviews);
   const { submitReview, deleteReview } = useReviewActions();
   const { uid } = useAuth();
   const { isBlocked } = useBlockedUsers();
@@ -106,6 +107,17 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       {otherReviews.map(r => (
         <ReviewCard key={r.id} review={r} />
       ))}
+
+      {hasNextPage && (
+        <button
+          type="button"
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="btn btn-ghost"
+        >
+          {isFetchingNextPage ? 'Laddar…' : 'Visa fler recensioner'}
+        </button>
+      )}
 
       {reviews.length === 0 && !showForm && (
         <p className="text-xs text-text-muted">Inga recensioner ännu.</p>
