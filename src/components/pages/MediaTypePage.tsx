@@ -11,10 +11,25 @@ import TitleGrid from '@/components/title/TitleGrid';
 import { toneForId } from '@/lib/duotone';
 import type { MediaType, TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
 
 const CONFIG = {
-  tv: { title: 'Serier', popularLabel: 'Populära serier', emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!', hrefPrefix: '/tv/' },
-  movie: { title: 'Filmer', popularLabel: 'Populära filmer', emptyText: 'Du tittar inte på några filmer ännu. Lägg till nedan!', hrefPrefix: '/movie/' },
+  tv: {
+    title: 'Serier',
+    standfirst: 'Alla TV-serier du följer — pågående, avslutade och kommande. Se var varje serie går att streama i Sverige.',
+    popularLabel: 'Populära serier',
+    emptyText: 'Du tittar inte på några serier ännu. Lägg till nedan!',
+    hrefPrefix: '/tv/',
+    path: '/series/',
+  },
+  movie: {
+    title: 'Filmer',
+    standfirst: 'Alla filmer du följer — sedda, sparade och kommande. Se var varje film går att streama i Sverige.',
+    popularLabel: 'Populära filmer',
+    emptyText: 'Du tittar inte på några filmer ännu. Lägg till nedan!',
+    hrefPrefix: '/movie/',
+    path: '/films/',
+  },
 } as const;
 
 export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
@@ -50,12 +65,22 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
 
   return (
     <div>
-      <PageHeader crumb={cfg.title} title={cfg.title} />
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: cfg.title, url: `https://binge.nu${cfg.path}` },
+      ])} />
+      <JsonLd data={collectionPageSchema({
+        name: cfg.title,
+        description: cfg.standfirst,
+        url: `https://binge.nu${cfg.path}`,
+      })} />
+
+      <PageHeader crumb={cfg.title} title={cfg.title} standfirst={cfg.standfirst} />
 
       {following.length > 0 ? (
         <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
           <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Följer</span>
+            <h2 className="text-sm font-bold text-text-secondary m-0">Följer</h2>
             <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-accent no-underline">
               Alla {following.length} →
             </Link>
@@ -82,7 +107,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
 
       <div className="bg-surface border border-border-main rounded-sm">
         <div className="px-3 py-[6px] border-b border-border-light">
-          <span className="text-sm font-bold text-text-secondary">{cfg.popularLabel}</span>
+          <h2 className="text-sm font-bold text-text-secondary m-0">{cfg.popularLabel}</h2>
         </div>
         <TitleGrid
           items={allResults.filter(r =>

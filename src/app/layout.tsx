@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     default: 'Binge.nu — Håll koll på vad du tittar på',
     template: '%s — Binge.nu',
   },
-  description: 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.',
+  description: 'Håll koll på film och TV-serier och se var varje titel finns att streama i Sverige — Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler tjänster.',
   // Defensiv default-canonical → undersidor som inte sätter egen alternates.canonical
   // får root som fallback. movie/[id]/tv/[id]/person/[id] skriver över med egen URL
   // i sina generateMetadata-hooks; här skyddar vi mot dubletter på catch-all-shellet
