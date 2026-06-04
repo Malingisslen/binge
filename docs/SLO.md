@@ -27,6 +27,20 @@ realistiskt.
 | INP | p75 < 200 ms | Plausible Web Vitals | TBD |
 | TMDB fetch | p95 < 1500 ms | Custom-Plausible-event | TBD |
 
+### Lighthouse-baseline (engångsmätning)
+
+_Mätt 2026-06-04 mot `https://binge.nu/` (Lighthouse desktop-preset, performance-kategorin)._
+
+| Mått | Värde |
+|------|-------|
+| Performance-score | 80 |
+| LCP (lab) | 3.4 s |
+| CLS (lab) | 0 |
+| TBT (lab) | 30 ms |
+
+Lab-värdena ovan är en engångs-snapshot för regressionsjämförelse. De
+fältbaserade p75-targetsen i tabellen ovan (Plausible Web Vitals) gäller fortsatt som SLO.
+
 ## Kvalitet (error rates)
 
 | Metric | Target | Källa | Status |
@@ -70,6 +84,6 @@ Vänta 2 veckor med att sätta trösklar. Bryts de sedan:
 ## Dokumentationsstatus
 
 - [ ] Fyll i uptime-baseline när UptimeRobot har 30 dagar data
-- [ ] Fyll i p75 LCP/CLS/INP när Plausible har 30 dagar data
+- [ ] Fyll i p75 LCP/CLS/INP när Plausible har 30 dagar data (Lighthouse lab-baseline införd 2026-06-04; fält-p75 väntar fortfarande på Plausible-data)
 - [ ] Fyll i Sentry-baseline när DSN är provisionerat + 30 dagar data
 - [ ] Re-visit efter Sprint 7 framework-upgrades (prestanda kan ändras)
