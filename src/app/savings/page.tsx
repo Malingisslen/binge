@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -15,6 +15,7 @@ import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
+import { trackEvent } from '@/lib/analytics';
 import { titleHref } from '@/lib/tmdb/client';
 import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
@@ -137,6 +138,12 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
   const { pauseProvider, resumeProvider } = useAuth();
+  const hasAdvisorProviders = advisor.providers.length > 0;
+  useEffect(() => {
+    if (!advisor.isLoading && hasAdvisorProviders) {
+      trackEvent('advisor_viewed', { providerCount: advisor.providers.length });
+    }
+  }, [advisor.isLoading, hasAdvisorProviders, advisor.providers.length]);
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
@@ -193,7 +200,7 @@ function SavingsContent() {
         {advisor.activePauses.length > 0 && (
           <ActivePausesSection
             pauses={advisor.activePauses}
-            onResume={(id) => resumeProvider(id)}
+            onResume={(id) => { resumeProvider(id); trackEvent('advisor_action_taken', { action: 'resume', providerId: id }); }}
           />
         )}
 
@@ -201,7 +208,7 @@ function SavingsContent() {
           <div className="min-w-0">
             <NumberedActionsList
               advisor={advisor}
-              onPauseProvider={(id, resumeAt) => pauseProvider(id, resumeAt)}
+              onPauseProvider={(id, resumeAt) => { pauseProvider(id, resumeAt); trackEvent('advisor_action_taken', { action: 'pause', providerId: id }); }}
               onShowSubscribeRows={handleShowSubscribeRows}
             />
 
