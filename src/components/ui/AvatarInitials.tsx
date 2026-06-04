@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Initials fallback for a person with no portrait. Pure derivation kept
  * separate from the component so it can be unit-tested without rendering.
@@ -13,6 +11,7 @@ export function deriveInitials(name: string): string {
 export function AvatarInitials({ name, size = 72 }: { name: string; size?: number }) {
   return (
     <div
+      role="img"
       aria-label={name}
       style={{
         width: '100%', height: '100%', display: 'flex',

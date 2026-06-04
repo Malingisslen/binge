@@ -102,12 +102,10 @@ export default function ListPageClient({ listId }: { listId: string }) {
       {list.items.length === 0 ? (
         <EmptyState
           title="Listan är tom"
-          body={isOwner
-            ? 'Lägg till din första titel med knappen ovan.'
-            : 'Den här listan har inga titlar ännu.'}
+          body={isOwner && !showPicker ? 'Lägg till din första titel med knappen ovan.' : isOwner ? 'Använd sökfältet ovan.' : 'Den här listan har inga titlar ännu.'}
         />
       ) : (
-        <div className="bg-surface border border-border-main rounded-sm mt-3">
+        <div className="bg-surface border border-rule rounded-sm mt-3">
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {list.items.map(item => {
             const poster = posterUrl(item.posterPath, 'w342');
