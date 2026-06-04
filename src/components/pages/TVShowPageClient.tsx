@@ -15,6 +15,7 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
@@ -353,15 +354,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                       height={72}
                     />
                   ) : (
-                    <div style={{
-                      width: '100%', height: '100%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'var(--placeholder-fill)',
-                      color: 'var(--ink-3)',
-                      fontWeight: 600, fontSize: 14,
-                    }}>
-                      {person.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                    </div>
+                    <AvatarInitials name={person.name} size={72} />
                   )}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
