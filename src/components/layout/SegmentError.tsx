@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { captureError } from '@/lib/sentry';
+import { trackEvent } from '@/lib/analytics';
 
 /**
  * Reusable segment-level error boundary body for app-router `error.tsx`.
@@ -35,6 +36,7 @@ export function SegmentError({
       kind: 'error-boundary',
       extra: { digest: error.digest },
     });
+    trackEvent('error_boundary_triggered', { scope });
   }, [error, scope]);
 
   return (

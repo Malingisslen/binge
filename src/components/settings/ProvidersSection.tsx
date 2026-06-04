@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
+import { trackEvent } from '@/lib/analytics';
 import { SettingsSection } from './SettingsSection';
 import {
   readableTextColor,
@@ -27,6 +28,7 @@ export function ProvidersSection() {
   const { schedule } = useDebouncedCommit<number[]>(async (ids) => {
     try {
       await updateProviders(ids);
+      trackEvent('providers_selected', { count: ids.length });
     } finally {
       setPendingSave(false);
     }

@@ -148,6 +148,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       ...(status === 'sedd' ? { watchedAt: serverTimestamp() } : {}),
       ...(isRewatch ? { rewatchCount: (currentItem?.rewatchCount ?? 0) + 1 } : {}),
     }, { merge: true });
+    trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
   }, [uid, items]);
 
   const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
