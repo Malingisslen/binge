@@ -37,7 +37,13 @@ export type AnalyticsEvent =
   | { name: 'donate_clicked'; props?: Record<string, never> }
   // Telemetri för React Query-fel — inga PII, bara kategori och första segment
   // av queryKey så vi kan se vilken subsystem som hostar felen.
-  | { name: 'query_error'; props: { scope: string; kind: 'query' | 'mutation' } };
+  | { name: 'query_error'; props: { scope: string; kind: 'query' | 'mutation' } }
+  | { name: 'providers_selected'; props: { count: number } }
+  | { name: 'advisor_viewed'; props: { providerCount: number } }
+  | { name: 'advisor_action_taken'; props: { action: 'pause' | 'resume' | 'subscribe' | 'catchup'; providerId: number } }
+  | { name: 'search_submitted'; props: { resultCount: number; mediaFilter: 'all' | 'movie' | 'tv' } }
+  | { name: 'status_changed'; props: { mediaType: 'movie' | 'tv'; status: 'vill_se' | 'mina' | 'sedd' | 'avbruten' } }
+  | { name: 'error_boundary_triggered'; props: { scope: string } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(
   name: T,
