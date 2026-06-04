@@ -11,7 +11,15 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // Frontend tests live under src/. The pure (firebase-free) Cloud Function
+    // aggregation helpers under functions/src are also unit-tested here so they
+    // run with the existing root toolchain — functions/ has no test runner of
+    // its own. Only *.test.ts files are matched, never the firebase-importing
+    // function entrypoints.
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'functions/src/**/*.{test,spec}.ts',
+    ],
     exclude: ['node_modules', '.next', 'out'],
     css: false,
   },

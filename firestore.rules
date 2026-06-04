@@ -308,6 +308,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- insikter (intern analys-dashboard) ----
+    // Rollup-dokumenten skrivs enbart av rollupInsights-functionen (admin-SDK,
+    // kringgår reglerna) och läses enbart av apiInsights-functionen. Klienten
+    // når aldrig collectionen direkt — datan exponeras bara via /api/insights
+    // bakom admin/token-auth. Neka därför all klient-åtkomst rakt av.
+    match /insights/{doc=**} {
+      allow read, write: if false;
+    }
+
     // ---- lists ----
     match /lists/{listId} {
       allow read: if resource.data.isPublic == true

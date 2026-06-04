@@ -244,3 +244,9 @@ export const onSessionPickCreate = onDocumentCreated(
     );
   },
 );
+
+// ── Insikter (intern analys-dashboard) ───────────────────────────────────────
+// rollupInsights: schemalagd Firestore-aggregering → insights/daily.
+// apiInsights: HTTP-endpoint bakom /api/insights (admin-token + Plausible-merge).
+export { rollupInsights } from './insights/rollup';
+export { apiInsights } from './insights/api';

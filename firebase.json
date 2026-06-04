@@ -8,7 +8,13 @@
       { "source": "/my/watched", "destination": "/my/films", "type": 301 },
       { "source": "/my/watched/", "destination": "/my/films/", "type": 301 }
     ],
-    "rewrites": [{ "source": "**", "destination": "/_/index.html" }],
+    "rewrites": [
+      {
+        "source": "/api/insights",
+        "function": { "functionId": "apiInsights", "region": "europe-west1" }
+      },
+      { "source": "**", "destination": "/_/index.html" }
+    ],
     "headers": [
       {
         "source": "**",

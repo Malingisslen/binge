@@ -5,6 +5,35 @@ Cloudflare, UptimeRobot, TMDB).
 
 ---
 
+## Insikter (intern analys-dashboard) — krävs innan /insikter visar riktig data
+
+Kod + wiring är klar och deployad-redo (Fas 1). Följande måste göras manuellt
+utanför repot:
+
+- [ ] **Deploya function + rules FÖRST** — `deploy.yml` (push→main) deployar bara
+      hosting. Kör manuellt: `firebase deploy --only functions:rollupInsights,functions:apiInsights,firestore:rules`
+      (annars 404 på `/api/insights` + rollupen körs aldrig).
+- [ ] **Function-secrets** — sätt:
+      `firebase functions:secrets:set INSIGHTS_TOKEN` (generera en hemlig sträng),
+      `firebase functions:secrets:set PLAUSIBLE_API_KEY` (skapas i plausible.io → Settings → API Keys),
+      `firebase functions:secrets:set PLAUSIBLE_SITE_ID` (= `binge.nu`).
+- [ ] **Plausible goals** — bekräfta att custom-events (`signed_up`, `title_added_watchlist`,
+      `review_created`, `advisor_pause_taken`, `donate_clicked`, `signed_in`,
+      `onboarding_completed`) är registrerade som goals i Plausible, annars 0 i goal-måtten.
+- [ ] **Admin-flagga** — sätt `users/{din-uid}.isAdmin = true` i Firestore Console
+      (görs bara manuellt — reglerna förbjuder klient-skrivning av fältet).
+- [ ] **Cloud Scheduler** — `rollupInsights` (`onSchedule`) aktiverar Scheduler-API:t
+      vid första deploy (Blaze krävs, redan på).
+- [ ] **Verifiera** — gå till `binge.nu/insikter` inloggad som admin (eller
+      `/insikter?token=<INSIGHTS_TOKEN>`); efter första rollup-körningen ska
+      nuläges-måtten fyllas i.
+
+Fas 2/3 (Web Vitals via Cloudflare RUM, Sentry-felfrekvens, drilldowns, CSV,
+auto-refresh, "Egen…"-datumväljare) är medvetet uppskjutna — se
+`docs/superpowers/specs/2026-06-02-binge-insikter-design.md`.
+
+---
+
 ## Status per 2026-04-24 (verifierat via Chrome-MCP-sweep)
 
 | Item | Status | Blockerare |
