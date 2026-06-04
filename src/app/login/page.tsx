@@ -12,7 +12,7 @@ import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 // accepts at sign-up. Bump this (e.g. to '2026-07-01') when either legal
 // document changes materially; the user's recorded version lets us
 // prompt for re-acceptance on change.
-const TERMS_VERSION = '2026-04-20';
+const TERMS_VERSION = '2026-06-04';
 
 export default function LoginPage() {
   const { user, signIn, signInEmail, register, loading } = useAuth();
