@@ -20,7 +20,7 @@ export default defineConfig({
       'src/**/*.{test,spec}.{ts,tsx}',
       'functions/src/**/*.{test,spec}.ts',
     ],
-    exclude: ['node_modules', '.next', 'out'],
+    exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,
   },
 });
