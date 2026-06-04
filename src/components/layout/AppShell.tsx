@@ -31,8 +31,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <>
         <DuotoneFilters />
-        <a href="#main" className="sr-only">Hoppa till innehåll</a>
-        <main id="main">{children}</main>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
+        >
+          Hoppa till innehåll
+        </a>
+        <main id="main" tabIndex={-1} className="outline-none">{children}</main>
         <Footer />
       </>
     );
@@ -41,12 +46,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <DuotoneFilters />
-      <a href="#main" className="sr-only">Hoppa till innehåll</a>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
+      >
+        Hoppa till innehåll
+      </a>
       <div className="app-shell">
         <AppTopbar />
         <Subnav />
         <EmailVerificationBanner />
-        <main id="main" className="canvas">{children}</main>
+        <main id="main" tabIndex={-1} className="canvas outline-none">{children}</main>
         <Footer />
       </div>
       <MobileTabBar />
