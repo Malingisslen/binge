@@ -8,6 +8,7 @@ import { useReviewLikes, useReviewComments } from '@/hooks/useReviewSocial';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
 import { UgcActionsMenu } from '@/components/moderation/UgcActionsMenu';
+import { JsonLd, reviewSchema } from './JsonLd';
 import type { MediaType, Review } from '@/types';
 
 interface ReviewListProps {
@@ -39,6 +40,12 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
   // recension visas alltid oavsett vad.
   const otherReviews = reviews.filter(r => r.uid !== uid && !isBlocked(r.uid));
 
+  const itemType = mediaType === 'tv' ? 'TVSeries' : 'Movie';
+  const itemUrl = `https://binge.nu/${mediaType === 'tv' ? 'tv' : 'movie'}/${tmdbId}/`;
+  const ldReviews = [myReview, ...otherReviews].filter(
+    (r): r is Review => !!r && !r.spoiler && r.text.trim().length > 0,
+  );
+
   const handleSubmit = async () => {
     if (!text.trim()) return;
     const titleMeta = title ? { title, posterPath: posterPath ?? null } : undefined;
@@ -50,6 +57,12 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
 
   return (
     <div className="mb-4">
+      {title && ldReviews.map(r => (
+        <JsonLd key={`ld-${r.id}`} data={reviewSchema({
+          id: r.id, authorName: r.displayName, reviewBody: r.text, rating: r.rating,
+          itemName: title, itemType, itemUrl,
+        })} />
+      ))}
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-sm font-bold text-text-secondary">Recensioner ({reviews.length})</h2>
         {uid && !myReview && (

@@ -174,6 +174,24 @@ export function collectionPageSchema(
   };
 }
 
+export interface ReviewSchemaInput {
+  id: string; authorName: string; reviewBody: string; rating: number | null;
+  itemName: string; itemType: 'Movie' | 'TVSeries'; itemUrl: string;
+}
+
+export function reviewSchema(input: ReviewSchemaInput): Record<string, unknown> {
+  const schema: Record<string, unknown> = {
+    '@context': 'https://schema.org', '@type': 'Review',
+    reviewBody: input.reviewBody,
+    author: { '@type': 'Person', name: input.authorName.trim() || 'Anonym' },
+    itemReviewed: { '@type': input.itemType, name: input.itemName, url: input.itemUrl },
+  };
+  if (input.rating != null) {
+    schema.reviewRating = { '@type': 'Rating', ratingValue: input.rating, bestRating: 10, worstRating: 1 };
+  }
+  return schema;
+}
+
 export function organizationSchema(siteUrl = 'https://binge.nu'): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',
