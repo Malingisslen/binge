@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useState, useMemo } from 'react';
+import { Suspense, useState, useMemo, useEffect } from 'react';
 import { useSearch } from '@/hooks/useTMDB';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +11,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
+import { trackEvent } from '@/lib/analytics';
 import type { TMDBProvider } from '@/types';
 
 type MediaFilter = 'all' | 'movie' | 'tv';
@@ -46,6 +47,12 @@ function SearchResults() {
       return flatrate.some(p => myProviders.includes(canonicalProviderId(p.provider_id)));
     });
   }, [filteredByType, onlyMyServices, myProviders, rawProviderMap]);
+
+  useEffect(() => {
+    if (!query.trim() || isLoading) return;
+    trackEvent('search_submitted', { resultCount: results.length, mediaFilter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, mediaFilter, isLoading]);
 
   const providerMap = useMemo(() => {
     const map: Record<string, TMDBProvider[]> = {};
