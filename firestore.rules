@@ -42,7 +42,12 @@ service cloud.firestore {
         && d.text is string && d.text.size() <= 5000
         && (!('rating' in d) || d.rating == null || (d.rating is number && d.rating >= 0 && d.rating <= 10))
         && (!('spoiler' in d) || d.spoiler is bool)
-        && matchesOwnIdentity(d);
+        && matchesOwnIdentity(d)
+        && d.keys().hasOnly([
+          'uid', 'tmdbId', 'mediaType', 'text', 'rating', 'spoiler',
+          'displayName', 'username', 'title', 'posterPath',
+          'createdAt', 'updatedAt'
+        ]);
     }
 
     // Comment content bounds.
@@ -58,6 +63,20 @@ service cloud.firestore {
         && d.title is string && d.title.size() >= 1 && d.title.size() <= 100
         && (!('description' in d) || d.description is string && d.description.size() <= 500)
         && d.isPublic is bool;
+    }
+
+    // Watchlist-item fältkontrakt (A2.1). Merge-writes betyder att
+    // request.resource.data är hela post-merge-doc:et, så listan måste täcka
+    // *varje* fält som en watchlist-doc någonsin kan hålla — unionen av allt
+    // WatchlistContext skriver (addItem/updateStatus/updateRating/.../updateProgress).
+    function isValidWatchlistItem(d) {
+      return d.keys().hasOnly([
+        'tmdbId', 'mediaType', 'status', 'rating', 'notes', 'title',
+        'posterPath', 'releaseYear', 'totalSeasons', 'lastWatchedSeason',
+        'lastWatchedEpisode', 'dropped', 'rewatchCount', 'providers',
+        'providersCheckedAt', 'visibility', 'genreIds', 'tmdbStatus',
+        'effectiveVisibility', 'isPublic', 'addedAt', 'updatedAt', 'watchedAt'
+      ]);
     }
 
     // ---- users ----
@@ -93,7 +112,8 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
     match /users/{uid}/watchlist/{itemId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isValidWatchlistItem(request.resource.data);
       // Tre-state visibility — denormaliserad från parent-profil. WatchlistContext
       // stämplar effectiveVisibility vid skrivning och AuthContext.updateDefault
       // Visibility cascadar när profilen toggles. Sparar en extra doc-read per
@@ -112,10 +132,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(uid)).data.get('isPublic', false) == true;
     }
     match /users/{uid}/episodeProgress/{itemId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['tmdbId', 'seasons']);
     }
     match /users/{uid}/notInterested/{itemId} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['tmdbId', 'mediaType', 'addedAt']);
     }
 
     // Sparbeslut-historik för Streamingrådgivaren. Skrivs av resumeProvider
