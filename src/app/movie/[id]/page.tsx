@@ -12,6 +12,7 @@ import {
   SEO_TITLE_PAGES,
   SEO_TOP_RATED_PAGES,
   SEO_TITLE_TARGET_IDS,
+  SEO_FALLBACK_MOVIE_IDS,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 
@@ -64,10 +65,13 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     ]);
     const merged = new Set<number>([...popular, ...topRated]);
     const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);
-    return ids.map(id => ({ id: String(id) }));
+    // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
+    // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
+    const safe = ids.length > 0 ? ids : SEO_FALLBACK_MOVIE_IDS;
+    return safe.map(id => ({ id: String(id) }));
   } catch (err) {
     console.warn('[movie/[id]] generateStaticParams TMDB-fetch failed:', err);
-    return [];
+    return SEO_FALLBACK_MOVIE_IDS.map(id => ({ id: String(id) }));
   }
 }
 

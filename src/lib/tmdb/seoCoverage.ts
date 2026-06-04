@@ -44,3 +44,27 @@ export const SEO_TITLE_TARGET_IDS = 15000;
 export const SEO_PERSON_SOURCE_MOVIE_PAGES = 100;
 export const SEO_PERSON_CAST_PER_MOVIE = 10;
 export const SEO_PERSON_TARGET_IDS = 1000;
+
+/**
+ * Fallback-IDs för `generateStaticParams`.
+ *
+ * Static export (`output: export`) med Next 16 kräver att en dynamisk route
+ * med `dynamicParams = false` returnerar minst ETT param från
+ * generateStaticParams — en tom array kastar
+ * "Page is missing generateStaticParams()" och bryter builden.
+ *
+ * Normalt fyller TMDB-fetchen listorna med tusentals IDs. Men i miljöer utan
+ * giltig TMDB-nyckel (t.ex. CI:s `ci-dummy`) failar alla fetchar och listan
+ * blir tom. Dessa handfull välkända, stabila TMDB-IDs garanterar att builden
+ * alltid producerar ≥1 statisk sida per route. I produktion (riktig nyckel)
+ * är de bara en delmängd av den fulla listan — ingen effekt på täckningen.
+ */
+export const SEO_FALLBACK_MOVIE_IDS = [
+  27205, 157336, 155, 550, 13, 680, 278, 238, 424, 603,
+];
+export const SEO_FALLBACK_TV_IDS = [
+  1399, 1396, 66732, 1668, 60625, 456, 62560, 82856, 94605, 1416,
+];
+export const SEO_FALLBACK_PERSON_IDS = [
+  287, 6193, 1245, 500, 31, 192, 62, 3223, 1136406, 18918,
+];

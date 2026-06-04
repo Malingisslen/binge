@@ -12,6 +12,7 @@ import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
   SEO_PERSON_TARGET_IDS,
+  SEO_FALLBACK_PERSON_IDS,
 } from '@/lib/tmdb/seoCoverage';
 
 export const dynamic = 'force-static';
@@ -58,10 +59,13 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     }
 
     const ids = Array.from(peopleIds).slice(0, SEO_PERSON_TARGET_IDS);
-    return ids.map(id => ({ id: String(id) }));
+    // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
+    // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
+    const safe = ids.length > 0 ? ids : SEO_FALLBACK_PERSON_IDS;
+    return safe.map(id => ({ id: String(id) }));
   } catch (err) {
     console.warn('[person/[id]] generateStaticParams failed:', err);
-    return [];
+    return SEO_FALLBACK_PERSON_IDS.map(id => ({ id: String(id) }));
   }
 }
 
