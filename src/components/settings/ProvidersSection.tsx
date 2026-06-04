@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
@@ -21,6 +21,7 @@ export function ProvidersSection() {
   const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
   const [selected, setSelected] = useState<number[]>(savedProviders);
   const [pendingSave, setPendingSave] = useState(false);
+  const addMoreRef = useRef<HTMLDivElement>(null);
 
   // Debounced commit of the (expensive, group-cascading) provider set.
   const { schedule } = useDebouncedCommit<number[]>(async (ids) => {
@@ -80,6 +81,16 @@ export function ProvidersSection() {
           </div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
             {selectedProviders.map(p => tile(p, true))}
+            {available.length > 0 && (
+              <button
+                type="button"
+                aria-label="Lägg till fler tjänster"
+                onClick={() => addMoreRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="h-[46px] rounded-md flex items-center justify-center border-[1.5px] border-dashed border-rule text-ink-3 text-[20px] leading-none transition-colors hover:border-ink-3 hover:text-ink"
+              >
+                +
+              </button>
+            )}
           </div>
         </>
       ) : (
@@ -89,12 +100,12 @@ export function ProvidersSection() {
       )}
 
       {available.length > 0 && (
-        <>
+        <div ref={addMoreRef}>
           <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Lägg till fler</div>
           <div className="grid grid-cols-4 gap-[7px] mb-4">
             {available.map(p => tile(p, false))}
           </div>
-        </>
+        </div>
       )}
 
       {selectedProviders.length > 0 && (
