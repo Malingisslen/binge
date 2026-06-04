@@ -161,7 +161,7 @@ function LandingPageTrending() {
     <section className="max-w-[1000px] mx-auto px-4 py-8">
       <div className="bg-surface border border-border-main rounded-sm">
         <div className="px-3 py-[6px] border-b border-border-light">
-          <span className="text-sm font-bold text-text-secondary">Trendande just nu</span>
+          <h2 className="text-sm font-bold text-text-secondary m-0">Trendande just nu</h2>
         </div>
         <TitleGrid items={items} />
       </div>

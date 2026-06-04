@@ -161,6 +161,19 @@ export function breadcrumbSchema(items: { name: string; url: string }[]): Record
   };
 }
 
+export function collectionPageSchema(
+  { name, description, url }: { name: string; description: string; url: string },
+): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name,
+    description,
+    url,
+    isPartOf: { '@type': 'WebSite', name: 'Binge.nu', url: 'https://binge.nu/' },
+  };
+}
+
 export function organizationSchema(siteUrl = 'https://binge.nu'): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',

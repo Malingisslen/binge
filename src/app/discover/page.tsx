@@ -9,6 +9,9 @@ import TitleGrid from '@/components/title/TitleGrid';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
+import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
+
+const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
 type Tab = 'trending' | 'movies' | 'tv';
 type SortOption = 'popularity.desc' | 'vote_average.desc' | 'primary_release_date.desc';
@@ -103,6 +106,16 @@ export default function DiscoverPage() {
 
   return (
     <>
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: 'Utforska', url: 'https://binge.nu/discover/' },
+      ])} />
+      <JsonLd data={collectionPageSchema({
+        name: 'Utforska film och serier i Sverige',
+        description: DISCOVER_DESCRIPTION,
+        url: 'https://binge.nu/discover/',
+      })} />
+
       <header>
         <div className="crumb">Utforska</div>
         <h1 className="page-h1">Utforska</h1>
