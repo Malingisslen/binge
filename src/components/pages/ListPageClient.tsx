@@ -13,6 +13,9 @@ import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHr
 import { toneForId } from '@/lib/duotone';
 import type { TMDBSearchResult, UserList, UserListItem } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -30,8 +33,17 @@ export default function ListPageClient({ listId }: { listId: string }) {
     [list?.items],
   );
 
-  if (isLoading) return <div className="text-sm text-text-muted py-4">Laddar…</div>;
-  if (!list) return <div className="text-sm text-text-muted py-4">Listan hittades inte.</div>;
+  if (isLoading) return <LoadingView variant="detail" label="Laddar lista…" />;
+  if (!list) {
+    return (
+      <NotFound
+        crumb="Lista"
+        title="Listan hittades inte"
+        body="Listan kan vara borttagen eller satt till privat."
+        action={<Link href="/bibliotek" className="btn btn-ghost">Till biblioteket</Link>}
+      />
+    );
+  }
 
   // Optimistisk cache-uppdatering — undviker en extra getDoc per mutation. Om
   // skrivningen failar i Firestore skulle UI:n driva i sär från servern; en
@@ -87,9 +99,17 @@ export default function ListPageClient({ listId }: { listId: string }) {
         />
       )}
 
-      <div className="bg-surface border border-border-main rounded-sm mt-3">
-        <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
-          {list.items.map(item => {
+      {list.items.length === 0 ? (
+        <EmptyState
+          title="Listan är tom"
+          body={isOwner
+            ? 'Lägg till din första titel med knappen ovan.'
+            : 'Den här listan har inga titlar ännu.'}
+        />
+      ) : (
+        <div className="bg-surface border border-border-main rounded-sm mt-3">
+          <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
+            {list.items.map(item => {
             const poster = posterUrl(item.posterPath, 'w342');
             const href = titleHref(item.mediaType, item.tmdbId);
             return (
@@ -117,8 +137,9 @@ export default function ListPageClient({ listId }: { listId: string }) {
               </div>
             );
           })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
