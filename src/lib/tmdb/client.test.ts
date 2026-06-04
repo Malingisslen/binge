@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { getDisplayTitle, getReleaseYear, extractYear } from './client';
+import { describe, it, expect, vi } from 'vitest';
+import { getDisplayTitle, getReleaseYear, extractYear, getTVShow } from './client';
 import type { TMDBSearchResult } from '@/types';
 
 function makeResult(partial: Partial<TMDBSearchResult>): TMDBSearchResult {
@@ -130,5 +130,18 @@ describe('getDisplayTitle', () => {
   it('returns "Okänd titel" when nothing is present', () => {
     const r = makeResult({});
     expect(getDisplayTitle(r)).toBe('Okänd titel');
+  });
+});
+
+describe('getTVShow abort', () => {
+  it('rejects immediately when the signal is already aborted', async () => {
+    // Pre-acquire bailout in tmdbFetch throws AbortError before getApiKey(),
+    // acquireSlot() or fetch() run — so this asserts the navigation-away guard.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(getTVShow(1, { signal: ac.signal })).rejects.toThrow();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });
