@@ -45,19 +45,16 @@ export function SegmentError({
       role="alert"
       aria-live="polite"
     >
-      <h2 className="text-[18px] font-bold text-text-primary mb-2">
+      <h2 className="text-md font-semibold text-danger-ink mb-2">
         {heading ?? 'Något gick fel'}
       </h2>
-      <p className="text-sm text-text-muted mb-4 max-w-md">
+      <p className="text-sm text-ink-2 mb-4 max-w-md">
         {body ?? 'Kunde inte ladda den här delen. Försök igen om en stund.'}
       </p>
       {error.digest && (
-        <p className="text-[11px] text-text-muted mb-4">ref: {error.digest}</p>
+        <p className="text-[11px] text-ink-3 mb-4">ref: {error.digest}</p>
       )}
-      <button
-        onClick={reset}
-        className="px-4 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-[inherit] cursor-pointer"
-      >
+      <button onClick={reset} className="btn btn-danger">
         Försök igen
       </button>
     </div>
