@@ -98,6 +98,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [uid]);
 
+  // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
+  // (effectiveVisibility + legacy isPublic-mirror) vid VARJE mutation. Gamla
+  // docs som skrevs innan cascade-stämplingen får då fälten första gången
+  // användaren rör titeln — ingen migrations-sweep behövs (matchar CLAUDE.md
+  // lazy-migration-filosofin; orörda docs förlitar sig på läsar-fallbacken i
+  // usePublicProfile). Anropas bara när item saknar per-item visibility-override.
+  const effectiveVisibilityNow = useCallback((): { effectiveVisibility: ItemVisibility; isPublic: boolean } => {
+    const eff = user?.defaultVisibility ?? 'private';
+    return { effectiveVisibility: eff, isPublic: eff === 'public' };
+  }, [user?.defaultVisibility]);
+
   const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
@@ -142,26 +153,32 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const currentItem = items.find(i => i.tmdbId === tmdbId);
     const isRewatch = status === 'sedd' && currentItem?.status === 'sedd';
+    const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, {
       status,
+      ...visFields,
       updatedAt: serverTimestamp(),
       ...(status === 'sedd' ? { watchedAt: serverTimestamp() } : {}),
       ...(isRewatch ? { rewatchCount: (currentItem?.rewatchCount ?? 0) + 1 } : {}),
     }, { merge: true });
     trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
-  }, [uid, items]);
+  }, [uid, items, effectiveVisibilityNow]);
 
   const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    await setDoc(ref, { rating, updatedAt: serverTimestamp() }, { merge: true });
-  }, [uid]);
+    const current = items.find(i => i.tmdbId === tmdbId);
+    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    await setDoc(ref, { rating, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+  }, [uid, items, effectiveVisibilityNow]);
 
   const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    await setDoc(ref, { notes, updatedAt: serverTimestamp() }, { merge: true });
-  }, [uid]);
+    const current = items.find(i => i.tmdbId === tmdbId);
+    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    await setDoc(ref, { notes, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+  }, [uid, items, effectiveVisibilityNow]);
 
   const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
@@ -176,9 +193,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         ? (current.mediaType === 'tv' ? 'mina' : 'sedd')
         : null;
     const newStatus = promoteStatus ?? current?.status ?? null;
+    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, {
       lastWatchedSeason: season,
       lastWatchedEpisode: episode,
+      ...visFields,
       updatedAt: serverTimestamp(),
       ...(promoteStatus ? { status: promoteStatus, watchedAt: promoteStatus === 'sedd' ? serverTimestamp() : null } : {}),
     }, { merge: true });
@@ -194,13 +213,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         status: newStatus,
       }),
     );
-  }, [uid, items]);
+  }, [uid, items, effectiveVisibilityNow]);
 
   const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    await setDoc(ref, { tmdbStatus, updatedAt: serverTimestamp() }, { merge: true });
-  }, [uid]);
+    const current = items.find(i => i.tmdbId === tmdbId);
+    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    await setDoc(ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+  }, [uid, items, effectiveVisibilityNow]);
 
   const removeItem = useCallback(async (tmdbId: number) => {
     if (!uid) return;

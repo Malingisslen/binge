@@ -145,6 +145,17 @@ export function usePublicWatchlist(uid: string | null) {
       //    ofiltrerad query — den går bara igenom om HELA watchlistan är
       //    legacy-publik. Misslyckas den (blandade/privata items) sväljs den
       //    och vi nöjer oss med de filtrerade tiers ovan.
+      //
+      //    Visibility-mekanism (A4.3): synligheten avgörs SERVER-SIDIGT via
+      //    query på `effectiveVisibility` + Firestore-rules (rules avvisar,
+      //    de filtrerar inte). En doc som saknar BÅDE `effectiveVisibility`
+      //    och `isPublic` faller därför default tillbaka till "inte publik" —
+      //    den matchar varken query 1 eller 2, och dyker bara upp via denna
+      //    fallback om hela listan är läsbar. "Frånvarande = inte publik" är
+      //    alltså den inbyggda säkra defaulten; ingen klient-sidig owner-flagg-
+      //    fallback behövs. Nya skrivningar re-asserterar fälten lazy-on-write
+      //    (se WatchlistContext) så gamla orörda docs migreras vid första
+      //    ändring.
       try {
         const snap = await getDocs(query(col, limit(PUBLIC_WATCHLIST_LIMIT)));
         snap.docs.forEach(d => byId.set(d.id, mapWatchlistDoc(d)));
