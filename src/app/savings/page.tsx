@@ -139,8 +139,13 @@ function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
   const { pauseProvider, resumeProvider } = useAuth();
   const hasAdvisorProviders = advisor.providers.length > 0;
+  // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
+  // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
+  // efter en pausning) re-fyra eventet och blåsa upp räkningen i Plausible.
+  const advisorViewedRef = useRef(false);
   useEffect(() => {
-    if (!advisor.isLoading && hasAdvisorProviders) {
+    if (!advisor.isLoading && hasAdvisorProviders && !advisorViewedRef.current) {
+      advisorViewedRef.current = true;
       trackEvent('advisor_viewed', { providerCount: advisor.providers.length });
     }
   }, [advisor.isLoading, hasAdvisorProviders, advisor.providers.length]);

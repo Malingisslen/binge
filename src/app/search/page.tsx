@@ -51,6 +51,9 @@ function SearchResults() {
   useEffect(() => {
     if (!query.trim() || isLoading) return;
     trackEvent('search_submitted', { resultCount: results.length, mediaFilter });
+    // Avsiktligt utelämnad: results.length. Vi vill fyra eventet en gång per
+    // distinkt sökning (query + media-flik), inte vid varje provider-filter-
+    // omräkning. results är en synkron useMemo så resultCount är aktuell här.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, mediaFilter, isLoading]);
 
