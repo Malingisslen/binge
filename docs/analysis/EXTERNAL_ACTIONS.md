@@ -3,6 +3,9 @@
 Åtgärder som kräver access utanför repot (Firebase Console, gcloud,
 Cloudflare, UptimeRobot, TMDB).
 
+> **Kör-ordning + exakta kommandon:** se [`docs/EXTERNAL_ACTIONS_RUNBOOK.md`](../EXTERNAL_ACTIONS_RUNBOOK.md)
+> — den här filen är status/checklista, runbooken är de körbara stegen.
+
 ---
 
 ## Insikter (intern analys-dashboard) — krävs innan /insikter visar riktig data
