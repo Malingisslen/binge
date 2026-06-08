@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { toneForGenreIds, DUOTONES, type Duotone } from '@/lib/duotone';
 import { getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
 import type { CalendarEntry } from '@/hooks/useCalendar';
+import { countEntries, summarizeCounts } from '@/lib/calendar/summary';
 
 // 5-week month-context strip below the week board. ISO week numbers in the
 // left rail (clickable to jump to that week). Episodes are rendered as
@@ -164,13 +165,14 @@ function ContextWeekRow({
         const isToday = sameDay(d, today);
         const muted = d.getMonth() !== todayMonth;
         const dayEntries = entriesByDay.get(key) ?? [];
+        const counts = countEntries(dayEntries);
         return (
           <button
             type="button"
             key={key}
             onClick={() => onJump(week.start)}
             className={`dcell${muted ? ' muted' : ''}${isToday ? ' today' : ''}`}
-            aria-label={`${d.getDate()} ${d.toLocaleDateString('sv-SE', { month: 'long' })}, ${dayEntries.length} avsnitt`}
+            aria-label={`${d.getDate()} ${d.toLocaleDateString('sv-SE', { month: 'long' })}, ${summarizeCounts(dayEntries)}`}
             style={{ font: 'inherit', textAlign: 'left' }}
           >
             <div className="d">{d.getDate()}</div>
@@ -184,8 +186,9 @@ function ContextWeekRow({
                 </div>
                 <div className="ct">
                   {dayEntries.length}
-                  {dayEntries.some(e => e.isPremiere) ? ' · premiär' : ''}
-                  {dayEntries.some(e => e.isFinale) ? ' · final' : ''}
+                  {counts.premieres > 0 ? ' · premiär' : ''}
+                  {counts.finales > 0 ? ' · final' : ''}
+                  {counts.movies > 0 ? ' · film' : ''}
                 </div>
               </>
             )}

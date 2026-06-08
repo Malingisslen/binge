@@ -1,4 +1,5 @@
 import type { CalendarEntry } from '@/hooks/useCalendar';
+import { entryKey } from '@/lib/calendar/entry';
 
 // Pick the "focal" episode for the Hem page — the one that gets the big
 // hero block. Priority:
@@ -43,7 +44,7 @@ function isoKey(d: Date): string {
 }
 
 export function focalEntryKey(e: CalendarEntry): string {
-  return `${e.tmdbId}-${e.episodeCode}`;
+  return entryKey(e);
 }
 
 // How many days from today until the focal episode airs.

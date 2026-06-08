@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useSubscriptionAdvisor } from './useSubscriptionAdvisor';
-import { useCalendarEntries, getWeekStart, getWeekNumber, type CalendarEntry } from './useCalendar';
+import { useCalendarEntries, getWeekStart, getWeekNumber, type EpisodeEntry } from './useCalendar';
 import { useAuth } from './useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { toIsoDate, todayIso } from '@/lib/utils';
@@ -99,8 +99,11 @@ export function useAdvisorTimeline(): TimelineResult {
 
     const pauses = user?.providerPauses ?? {};
 
-    const calendarByTmdb = new Map<number, CalendarEntry[]>();
+    // Timelinen handlar om TV-prenumerationer — bara avsnitts-entries är
+    // relevanta. Filmsläpp (kind 'movie') hör inte hemma i provider-lanesen.
+    const calendarByTmdb = new Map<number, EpisodeEntry[]>();
     for (const e of calendarEntries) {
+      if (e.kind !== 'episode') continue;
       const list = calendarByTmdb.get(e.tmdbId) ?? [];
       list.push(e);
       calendarByTmdb.set(e.tmdbId, list);

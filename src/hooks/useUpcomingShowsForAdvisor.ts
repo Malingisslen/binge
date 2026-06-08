@@ -90,6 +90,8 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
     // som faller inom horizonten OCH ligger på en subscribed provider.
     const showMap = new Map<number, UpcomingShow>();
     for (const e of calendarEntries) {
+      // Rådgivaren handlar om TV-avsnitt på prenumerationer — filmsläpp hör inte hit.
+      if (e.kind !== 'episode') continue;
       if (e.airDate < today) continue;
       const ms = new Date(e.airDate + 'T00:00:00').getTime();
       if (ms >= horizonMs) continue;

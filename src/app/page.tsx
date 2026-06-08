@@ -70,7 +70,7 @@ const FAQ_JSON_LD = {
       name: 'Hur håller jag koll på kommande avsnitt av mina serier?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'När du lägger till en TV-serie i din lista på Binge.nu visas kommande avsnitt automatiskt i din kalender, med datum och avsnittsinformation i svensk tidszon.',
+        text: 'När du lägger till en TV-serie i din lista på Binge.nu visas kommande avsnitt automatiskt i din kalender, med datum och avsnittsinformation i svensk tidszon. Kalendern visar även avsnitt för serier du vill se och digitala filmsläpp för filmer du vill se i Sverige.',
       },
     },
   ],

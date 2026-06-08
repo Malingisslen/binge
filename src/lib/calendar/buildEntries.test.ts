@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { buildCalendarEntries, type SeasonDatum } from './buildEntries';
-import type { TMDBTVShow, TMDBEpisode } from '@/types';
+import { buildCalendarEntries, buildMovieEntries, type SeasonDatum } from './buildEntries';
+import type { TMDBTVShow, TMDBEpisode, TMDBMovie } from '@/types';
+import type { EpisodeEntry, MovieEntry } from './types';
 
 function ep(partial: Partial<TMDBEpisode>): TMDBEpisode {
   return {
@@ -21,6 +22,11 @@ function show(partial: Partial<TMDBTVShow>): TMDBTVShow {
   } as TMDBTVShow;
 }
 
+// Narrowar union → EpisodeEntry för avsnitts-assertions.
+function eps(entries: (EpisodeEntry | MovieEntry)[]): EpisodeEntry[] {
+  return entries.filter((e): e is EpisodeEntry => e.kind === 'episode');
+}
+
 describe('buildCalendarEntries', () => {
   it('seeds an entry from next_episode_to_air when the season array lacks it', () => {
     const data: SeasonDatum[] = [{
@@ -28,7 +34,7 @@ describe('buildCalendarEntries', () => {
       show: show({ next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31', name: 'Finale' }) }),
       season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
     }];
-    const entries = buildCalendarEntries(data);
+    const entries = eps(buildCalendarEntries(data));
     const upcoming = entries.find(e => e.season === 4 && e.episode === 10);
     expect(upcoming).toBeDefined();
     expect(upcoming!.airDate).toBe('2026-05-31');
@@ -41,7 +47,7 @@ describe('buildCalendarEntries', () => {
       show: show({ next_episode_to_air: e10 }),
       season: { episodes: [e10] },
     }];
-    const entries = buildCalendarEntries(data);
+    const entries = eps(buildCalendarEntries(data));
     expect(entries.filter(e => e.season === 4 && e.episode === 10)).toHaveLength(1);
   });
 
@@ -69,7 +75,81 @@ describe('buildCalendarEntries', () => {
       show: show({ next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }) }),
       season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
     }];
-    const seeded = buildCalendarEntries(data).find(e => e.episode === 10);
+    const seeded = eps(buildCalendarEntries(data)).find(e => e.episode === 10);
     expect(seeded?.isFinale).toBe(true);
+  });
+
+  it('defaults source to "mina" and stamps "vill_se" when asked', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({ next_episode_to_air: null }),
+      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
+    }];
+    expect(buildCalendarEntries(data)[0].source).toBe('mina');
+    expect(buildCalendarEntries(data, 'vill_se')[0].source).toBe('vill_se');
+  });
+
+  it('tags every episode entry with kind "episode" and mediaType "tv"', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({ next_episode_to_air: null }),
+      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
+    }];
+    const entry = buildCalendarEntries(data)[0];
+    expect(entry.kind).toBe('episode');
+    expect(entry.mediaType).toBe('tv');
+  });
+});
+
+function movie(partial: Partial<TMDBMovie>): TMDBMovie {
+  return {
+    id: 500, title: 'Test Movie', original_title: 'Test Movie', overview: 'En film.',
+    poster_path: '/m.jpg', backdrop_path: '/mb.jpg', release_date: '2026-01-01',
+    runtime: 120, vote_average: 0, vote_count: 0,
+    genres: [{ id: 28, name: 'Action' }],
+    'watch/providers': { results: { SE: { flatrate: [] } } },
+    ...partial,
+  } as TMDBMovie;
+}
+
+function seDigital(date: string) {
+  return { results: [{ iso_3166_1: 'SE', release_dates: [{ type: 4, release_date: `${date}T00:00:00.000Z`, note: '' }] }] };
+}
+
+describe('buildMovieEntries', () => {
+  const now = new Date('2026-06-08T12:00:00');
+
+  it('includes a movie with a future SE digital release', () => {
+    const entries = buildMovieEntries([movie({ release_dates: seDigital('2026-06-20') })], now);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: 'movie', mediaType: 'movie', source: 'vill_se', releaseType: 'digital', airDate: '2026-06-20' });
+  });
+
+  it('skips movies whose SE digital release is in the past', () => {
+    const entries = buildMovieEntries([movie({ release_dates: seDigital('2026-05-01') })], now);
+    expect(entries).toHaveLength(0);
+  });
+
+  it('includes a movie releasing today (>= today)', () => {
+    const entries = buildMovieEntries([movie({ release_dates: seDigital('2026-06-08') })], now);
+    expect(entries).toHaveLength(1);
+  });
+
+  it('skips movies without an SE digital date', () => {
+    const onlyTheatrical = { results: [{ iso_3166_1: 'SE', release_dates: [{ type: 3, release_date: '2026-07-01T00:00:00.000Z', note: '' }] }] };
+    expect(buildMovieEntries([movie({ release_dates: onlyTheatrical })], now)).toHaveLength(0);
+    expect(buildMovieEntries([movie({ release_dates: undefined })], now)).toHaveLength(0);
+  });
+
+  it('carries provider, overview, runtime and genres onto the entry', () => {
+    const m = movie({
+      release_dates: seDigital('2026-06-20'),
+      'watch/providers': { results: { SE: { link: '', flatrate: [{ provider_id: 8, provider_name: 'Netflix', logo_path: '' }] } } },
+    });
+    const entry = buildMovieEntries([m], now)[0];
+    expect(entry.provider).toBeTruthy();
+    expect(entry.kind === 'movie' && entry.overview).toBe('En film.');
+    expect(entry.kind === 'movie' && entry.runtime).toBe(120);
+    expect(entry.genreIds).toEqual([28]);
   });
 });
