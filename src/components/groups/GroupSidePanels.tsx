@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -15,6 +15,12 @@ import {
   readInviteToken,
 } from '@/lib/groupInviteCache';
 import { useMountTime } from '@/hooks/useMountTime';
+import {
+  inviteTokenAgeDays,
+  inviteTokenAgeLabel,
+  shouldAutoRotateInviteToken,
+  STALE_NUDGE_AFTER_DAYS,
+} from '@/lib/groupInviteToken';
 
 /**
  * Sidopaneler i grupp-layouten som tillsammans varit ~200 rader inline
@@ -76,20 +82,16 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
   );
 }
 
-// Antal dagar innan vi nudge:ar om att rotera inbjudningslänken. Efter en
-// inbjudningslänk legat ute längre än så ökar sannolikheten att den läckt
-// till någon som inte längre hör hemma i gruppen.
-const TOKEN_STALE_DAYS = 180;
-
 // Plaintext-tokenet finns inte längre på Firestore (bara hash). Vi cachar
 // plaintext i localStorage per groupId så ägaren kan återbesöka panel:n och
 // kopiera länken igen. På en ny enhet syns inte länken — då måste ägaren
 // rotera för att få en ny synlig plaintext.
 export function InvitePanel({
-  groupId, group,
+  groupId, group, isOwner,
 }: {
   groupId: string;
   group: { inviteTokenHash: string | null; inviteTokenRotatedAt?: Date | null };
+  isOwner: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [working, setWorking] = useState(false);
@@ -102,6 +104,7 @@ export function InvitePanel({
 
   // Token är aktivt så länge hash finns på doc:et
   const tokenIsActive = group.inviteTokenHash !== null;
+  const rotatedAt = group.inviteTokenRotatedAt ?? null;
 
   const inviteUrl = useMemo(() => {
     if (!tokenIsActive || !cachedPlaintext) return null;
@@ -109,11 +112,10 @@ export function InvitePanel({
     return `${window.location.origin}/grupper/${groupId}?invite=${cachedPlaintext}`;
   }, [tokenIsActive, cachedPlaintext, groupId]);
 
-  const now = useMountTime();
-  const tokenAgeDays = now !== null && group.inviteTokenRotatedAt
-    ? Math.floor((now - group.inviteTokenRotatedAt.getTime()) / (24 * 60 * 60 * 1000))
-    : null;
-  const isStale = tokenAgeDays !== null && tokenAgeDays >= TOKEN_STALE_DAYS;
+  const now = useMountTime(); // number | null
+  const ageLabel = now !== null ? inviteTokenAgeLabel(rotatedAt, now) : null;
+  const ageDays = now !== null ? inviteTokenAgeDays(rotatedAt, now) : null;
+  const isStale = ageDays !== null && ageDays >= STALE_NUDGE_AFTER_DAYS;
 
   const copy = async () => {
     if (!inviteUrl) return;
@@ -126,7 +128,7 @@ export function InvitePanel({
     }
   };
 
-  const handleRotate = async () => {
+  const handleRotate = useCallback(async () => {
     setWorking(true);
     try {
       const plaintext = await rotateInviteToken(groupId);
@@ -135,7 +137,18 @@ export function InvitePanel({
     } finally {
       setWorking(false);
     }
-  };
+  }, [groupId]);
+
+  // Lazy auto-rotation: när ägaren öppnar panel:n och länken är äldre än
+  // auto-rotate-tröskeln (30 dagar) roterar vi tyst en gång per montering.
+  const autoRotatedRef = useRef(false);
+  useEffect(() => {
+    if (now === null || autoRotatedRef.current || working) return;
+    if (shouldAutoRotateInviteToken({ isOwner, tokenIsActive, rotatedAt, now })) {
+      autoRotatedRef.current = true;
+      void handleRotate();
+    }
+  }, [now, isOwner, tokenIsActive, rotatedAt, working, handleRotate]);
 
   const handleDisable = async () => {
     if (!confirm('Inaktivera inbjudningslänken? Befintliga länkar slutar fungera.')) return;
@@ -173,9 +186,9 @@ export function InvitePanel({
               </button>
             </div>
             {copied && <div className="text-xxs text-accent">Kopierad.</div>}
-            {isStale && (
+            {isStale && ageLabel && (
               <div className="text-xxs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1">
-                Länken är {tokenAgeDays} dagar gammal. Generera en ny om du misstänker att den läckt.
+                {ageLabel}. Generera en ny om du misstänker att den läckt.
               </div>
             )}
             <div className="flex gap-1">

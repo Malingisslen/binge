@@ -223,7 +223,7 @@ function GroupView({
             isOwner={isOwner}
           />
           <ProviderOverlapPanel intersect={intersectProviders} union={unionProviders} />
-          {isOwner && <InvitePanel groupId={groupId} group={group} />}
+          {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
           {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>
 
