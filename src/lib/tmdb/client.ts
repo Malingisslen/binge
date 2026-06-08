@@ -134,7 +134,7 @@ export function searchMulti(query: string, page = 1, opts?: TmdbFetchOpts): Prom
 // Movie
 export function getMovie(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
   return tmdbFetch(`/movie/${id}`, {
-    append_to_response: 'watch/providers,recommendations,credits,videos',
+    append_to_response: 'watch/providers,recommendations,credits,videos,release_dates',
   }, opts);
 }
 

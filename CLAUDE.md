@@ -74,11 +74,31 @@ observers om senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
 `TMDB_STALE.TV_DETAIL`, `MOVIE_DETAIL`, `CATALOG`, `SEARCH`, `PERSON`, `GENRES`,
 `PROVIDERS`. **Alla callsites för samma queryKey måste använda samma konstant.**
 
+`['movie', id]` är på samma sätt delad mellan `useMovie` (detaljsidan) och
+`useCalendar` (filmsläpp) — båda måste använda `TMDB_STALE.MOVIE_DETAIL`.
+
 ### TMDB rate-limit + AbortSignal
 
 `src/lib/tmdb/client.ts` har en 8-concurrent-semaphore + 429 Retry-After-respekt
 + AbortSignal hela vägen. React Query's `ctx.signal` skickas vidare i alla
 `useQuery`/`useQueries` så navigations-bort avbryter in-flight fetches.
+
+### Kalender — källor + entry-modell
+
+`useCalendar` (`src/hooks/useCalendar.ts`) bygger kalendern från tre källor:
+- **serier i 'mina'** → alla avsnitt (show-detail + säsong), med "markera sedd"-toggel
+- **serier i 'vill_se'** → samma pipeline, men `source: 'vill_se'` (ingen toggel)
+- **filmer i 'vill_se'** → svenskt digitalt släppdatum (`release_dates`, type 4 SE),
+  bara framtida datum
+
+`CalendarEntry` (`src/lib/calendar/types.ts`) är en **diskriminerad union** över
+`kind: 'episode' | 'movie'`. Per-kind-logik (nyckel, länk, badge, meta-rad,
+watched-behörighet) bor i `src/lib/calendar/entry.ts` — använd `entryKey`/
+`entryHref`/`entryMetaLine`/`entryBadge`/`canMarkWatched` i konsumenter istället
+för att gren på `kind` direkt. Räkning (avsnitt/film/premiär/final) via
+`src/lib/calendar/summary.ts`. Rådgivar-hooks (`useAdvisorTimeline`,
+`useUpcomingShowsForAdvisor`) filtrerar till `kind === 'episode'` — filmsläpp
+hör inte hemma i prenumerations-timelines.
 
 ### Data model (Firestore)
 

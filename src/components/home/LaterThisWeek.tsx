@@ -6,21 +6,18 @@ import { posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
 import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
+import { entryKey, entryHref, entryMetaLine } from '@/lib/calendar/entry';
 
-// Direction H filmstrip: up to 5 upcoming TV episodes (or films, but we
-// only track episodes here) for the rest of this week. Each card is a
-// duotone 2:3 poster + title + meta line (day · S/E · provider).
+// Direction H filmstrip: up to 5 upcoming events (TV episodes or digital movie
+// releases) for the rest of this week. Each card is a duotone 2:3 poster +
+// title + meta line (day · S/E or "Digital release" · provider).
 //
 // `excludeKey` lets the caller hide an entry that's already shown in the
-// focal block, so we don't repeat tonight's episode here.
+// focal block, so we don't repeat tonight's event here.
 
 interface Props {
   entries: CalendarEntry[];
-  excludeKey?: string; // `${tmdbId}-${episodeCode}` of the focal episode
-}
-
-function entryKey(e: CalendarEntry): string {
-  return `${e.tmdbId}-${e.episodeCode}`;
+  excludeKey?: string; // entryKey of the focal event
 }
 
 export default function LaterThisWeek({ entries, excludeKey }: Props) {
@@ -47,7 +44,7 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
       <div className="sect-h">
         <h3 id="hem-later-h3">Senare i veckan</h3>
         <span className="meta">
-          {upcoming.length} {upcoming.length === 1 ? 'avsnitt' : 'avsnitt'}
+          {upcoming.length} {upcoming.length === 1 ? 'händelse' : 'händelser'}
         </span>
       </div>
       <div className="filmstrip">
@@ -56,7 +53,7 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
           const tone = toneForId(e.tmdbId);
           const day = shortSwedishWeekday(e.airDate);
           return (
-            <Link key={entryKey(e)} href={`/tv/${e.tmdbId}/`} className="film-card">
+            <Link key={entryKey(e)} href={entryHref(e)} className="film-card">
               <div className={`poster duo-${tone}`}>
                 {poster ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -72,7 +69,7 @@ export default function LaterThisWeek({ entries, excludeKey }: Props) {
               </div>
               <div className="ttl">{e.title}</div>
               <div className="meta">
-                <span className="day">{day}</span> · {e.episodeCode}
+                <span className="day">{day}</span> · {entryMetaLine(e)}
                 {e.provider ? ` · ${e.provider}` : ''}
               </div>
             </Link>

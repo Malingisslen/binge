@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { shortSwedishWeekday } from '@/lib/utils';
 import type { CalendarEntry } from '@/hooks/useCalendar';
+import { entryHref } from '@/lib/calendar/entry';
 import { daysFromToday } from './focalPick';
 
 // Page-header for Hem: crumb (mono uppercase) → page-h1 → standfirst →
@@ -45,14 +46,37 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
 
   const days = daysFromToday(entry.airDate);
   const weekday = shortSwedishWeekday(entry.airDate);
+  const provider = entry.provider ?? 'din tjänst';
+
+  if (entry.kind === 'movie') {
+    if (days === 0) {
+      return {
+        crumb: `Hem · i dag · ${entry.provider ?? 'digitalt'}`,
+        h1: `${entry.title} släpps i dag.`,
+        stand: `Finns digitalt på ${provider} i dag.`,
+      };
+    }
+    if (days === 1) {
+      return {
+        crumb: `Hem · i morgon · ${entry.provider ?? 'digitalt'}`,
+        h1: `${entry.title} släpps i morgon.`,
+        stand: `Digital release ${weekday} på ${provider}.`,
+      };
+    }
+    return {
+      crumb: `Hem · ${weekday} · ${entry.provider ?? 'digitalt'}`,
+      h1: `${entry.title} släpps ${days <= 7 ? 'i veckan' : 'snart'}.`,
+      stand: `Digital release ${weekday} på ${provider}.`,
+    };
+  }
 
   if (days === 0) {
     return {
       crumb: `Hem · i dag · ${entry.provider ?? 'tillgängligt'}`,
       h1: `Ett nytt avsnitt av ${entry.title}.`,
       stand: entry.runtime
-        ? `Sänds i kväll på ${entry.provider ?? 'din tjänst'}. Avsnittet är ${entry.runtime} minuter.`
-        : `Sänds i kväll på ${entry.provider ?? 'din tjänst'}.`,
+        ? `Sänds i kväll på ${provider}. Avsnittet är ${entry.runtime} minuter.`
+        : `Sänds i kväll på ${provider}.`,
     };
   }
 
@@ -60,14 +84,14 @@ function buildCopy(entry: CalendarEntry | null, totalThisWeek: number, isLoading
     return {
       crumb: `Hem · i morgon · ${entry.provider ?? 'tillgängligt'}`,
       h1: `${entry.title} kommer i morgon.`,
-      stand: `Nästa avsnitt sänds ${weekday} på ${entry.provider ?? 'din tjänst'}.`,
+      stand: `Nästa avsnitt sänds ${weekday} på ${provider}.`,
     };
   }
 
   return {
     crumb: `Hem · ${weekday} · ${entry.provider ?? 'tillgängligt'}`,
     h1: `${entry.title} ${days <= 7 ? 'i veckan' : 'nästa vecka'}.`,
-    stand: `Nästa avsnitt sänds ${weekday} på ${entry.provider ?? 'din tjänst'}.`,
+    stand: `Nästa avsnitt sänds ${weekday} på ${provider}.`,
   };
 }
 
@@ -86,7 +110,7 @@ export default function HemHero({ focal, totalThisWeek, hasLibrary, isLoading = 
           null
         ) : focal ? (
           <>
-            <Link href={`/tv/${focal.tmdbId}/`} className="btn btn-acc">
+            <Link href={entryHref(focal)} className="btn btn-acc">
               Öppna {focal.title}
             </Link>
             <Link href="/calendar/" className="btn btn-ghost">Hela kalendern</Link>

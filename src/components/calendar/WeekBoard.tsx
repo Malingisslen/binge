@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react';
 import type { CalendarEntry } from '@/hooks/useCalendar';
+import { entryKey } from '@/lib/calendar/entry';
+import { summarizeCounts } from '@/lib/calendar/summary';
 import EventCard from './EventCard';
 
 // 7-column week board. Today's column gets the plum wash + 2px top rule.
@@ -65,9 +67,7 @@ export default function WeekBoard({ weekStart, entries }: Props) {
               <div className="lab">{lab}{isToday ? ' · idag' : ''}</div>
               <div className="date">{d.getDate()}</div>
               <div className="meta">
-                {dayEntries.length === 0
-                  ? '—'
-                  : `${dayEntries.length} avsnitt`}
+                {summarizeCounts(dayEntries)}
               </div>
             </div>
             <div className="col-body">
@@ -76,7 +76,7 @@ export default function WeekBoard({ weekStart, entries }: Props) {
               ) : (
                 dayEntries.map(e => (
                   <EventCard
-                    key={`${e.tmdbId}-${e.episodeCode}`}
+                    key={entryKey(e)}
                     entry={e}
                     isTonight={key === todayKey}
                   />

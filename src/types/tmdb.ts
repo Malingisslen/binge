@@ -39,6 +39,18 @@ export interface TMDBMovie {
   videos?: { results: TMDBVideo[] };
   recommendations?: { results: TMDBSearchResult[] };
   'watch/providers'?: { results: { SE?: TMDBProviderData } };
+  release_dates?: { results: TMDBReleaseDatesByCountry[] };
+}
+
+export interface TMDBReleaseDate {
+  type: number;        // 1 Premiere · 3 Theatrical · 4 Digital · 5 Physical · 6 TV
+  release_date: string; // ISO-8601 med tid (yyyy-mm-ddThh:mm:ss.sssZ)
+  note: string;
+}
+
+export interface TMDBReleaseDatesByCountry {
+  iso_3166_1: string;
+  release_dates: TMDBReleaseDate[];
 }
 
 export interface TMDBTVShow {

@@ -6,6 +6,7 @@ import WeekBoard from '@/components/calendar/WeekBoard';
 import MonthStrip from '@/components/calendar/MonthStrip';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
+import { countEntries } from '@/lib/calendar/summary';
 
 export default function CalendarPage() {
   return <AuthGuard><CalendarContent /></AuthGuard>;
@@ -33,8 +34,10 @@ function CalendarContent() {
     return entries.filter(e => e.airDate >= startKey && e.airDate < endKey);
   }, [entries, weekStart]);
 
-  const premiereCount = weekEntries.filter(e => e.isPremiere).length;
-  const finaleCount = weekEntries.filter(e => e.isFinale).length;
+  const counts = countEntries(weekEntries);
+  const premiereCount = counts.premieres;
+  const finaleCount = counts.finales;
+  const movieCount = counts.movies;
 
   const prevWeek = () => {
     const d = new Date(weekStart);
@@ -49,8 +52,9 @@ function CalendarContent() {
   const goToday = () => setWeekStart(todayWeekStart);
 
   // Standfirst copy varies on whether this is the current week and what's
-  // notable in it (premiärer, finaler, eller bara avsnitt).
-  const standfirst = buildStandfirst(weekEntries.length, premiereCount, finaleCount, isCurrentWeek);
+  // notable in it (premiärer, finaler, filmsläpp, eller bara avsnitt).
+  const standfirst = buildStandfirst(weekEntries.length, premiereCount, finaleCount, movieCount, isCurrentWeek);
+  const headline = buildHeadline(counts.episodes, movieCount, premiereCount);
 
   return (
     <>
@@ -58,11 +62,7 @@ function CalendarContent() {
         <div className="crumb">
           Kalender · v{weekNum} · {formatRange(weekStart)}
         </div>
-        <h1 className="page-h1">
-          {weekEntries.length === 0
-            ? 'En lugn vecka.'
-            : `Denna vecka — ${weekEntries.length} ${weekEntries.length === 1 ? 'avsnitt' : 'avsnitt'}${premiereCount > 0 ? ` och ${premiereCount} premiär${premiereCount === 1 ? '' : 'er'}` : ''}.`}
-        </h1>
+        <h1 className="page-h1">{headline}</h1>
         <p className="stand">{standfirst}</p>
       </header>
 
@@ -97,7 +97,9 @@ function CalendarContent() {
 
       {entries.length === 0 && (
         <p className="stand" style={{ marginTop: 24 }}>
-          Visar avsnitt för serier du tittar på. Lägg till några serier i din lista för att se dem här.
+          Visar avsnitt för serier du tittar på eller vill se, och digitala
+          filmsläpp för filmer du vill se. Lägg till några titlar i din lista
+          för att se dem här.
         </p>
       )}
 
@@ -110,10 +112,25 @@ function CalendarContent() {
   );
 }
 
+// Veckans h1: räknar avsnitt och filmer var för sig (en film är inget
+// "avsnitt"). Premiärer lyfts fram när de finns. Tom vecka → lugn ton.
+function buildHeadline(episodes: number, movies: number, premieres: number): string {
+  if (episodes === 0 && movies === 0) return 'En lugn vecka.';
+  const parts: string[] = [];
+  if (episodes > 0) parts.push(`${episodes} avsnitt`);
+  if (movies > 0) parts.push(`${movies} ${movies === 1 ? 'film' : 'filmer'}`);
+  const lead = parts.join(' och ');
+  const premPart = premieres > 0
+    ? ` och ${premieres} premiär${premieres === 1 ? '' : 'er'}`
+    : '';
+  return `Denna vecka — ${lead}${premPart}.`;
+}
+
 function buildStandfirst(
   total: number,
   premieres: number,
   finales: number,
+  movies: number,
   isCurrent: boolean,
 ): string {
   if (total === 0) {
@@ -124,12 +141,19 @@ function buildStandfirst(
   const parts: string[] = [];
   if (premieres > 0) parts.push(`${premieres} premiär${premieres === 1 ? '' : 'er'}`);
   if (finales > 0) parts.push(`${finales} säsongsfinal${finales === 1 ? '' : 'er'}`);
+  if (movies > 0) parts.push(`${movies} ${movies === 1 ? 'filmsläpp' : 'filmsläpp'}`);
   if (parts.length === 0) {
     return isCurrent
       ? 'Allt på schemat ligger nedanför. Markera avsnitten du har sett när du är klar.'
       : 'Veckans avsnitt nedan.';
   }
-  return `Inklusive ${parts.join(' och ')}. Markera avsnitten du har sett när du är klar.`;
+  return `Inklusive ${joinSwedish(parts)}. Markera avsnitten du har sett när du är klar.`;
+}
+
+// "a", "a och b", "a, b och c" — svensk uppräkning.
+function joinSwedish(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} och ${parts[parts.length - 1]}`;
 }
 
 function formatRange(weekStart: Date): string {
