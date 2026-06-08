@@ -148,6 +148,31 @@ describe('extractSEProviders', () => {
   });
 });
 
+describe('B1 — Max rebrand (id 384)', () => {
+  it('renders the HBO Max provider under the name "Max"', () => { expect(getProvider(384)?.name).toBe('Max'); });
+  it('keeps the legacy HBO Max alias 1899 mapped to id 384', () => {
+    expect(getProvider(1899)?.id).toBe(384); expect(canonicalProviderId(1899)).toBe(384);
+  });
+  it('lists Max exactly once', () => {
+    const named = SWEDISH_PROVIDERS.filter(p => p.name === 'Max' || p.name === 'HBO Max');
+    expect(named).toHaveLength(1); expect(named[0].name).toBe('Max');
+  });
+});
+describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
+  const C_MORE_LEGACY_ID = 1759; // CONFIRM against live TMDB before merge
+  it('canonicalises the C More legacy id to TV4 Play (489)', () => { expect(canonicalProviderId(C_MORE_LEGACY_ID)).toBe(489); });
+  it('resolves to the TV4 Play struct', () => {
+    expect(getProvider(C_MORE_LEGACY_ID)?.id).toBe(489); expect(getProvider(C_MORE_LEGACY_ID)?.name).toBe('TV4 Play');
+  });
+  it('keeps the existing TV4 Play alias 1944 intact', () => {
+    expect(canonicalProviderId(1944)).toBe(489); expect(canonicalProviderId(C_MORE_LEGACY_ID)).toBe(489);
+  });
+  it('dedupes a title listed under both 489 and C More legacy', () => {
+    const result = extractSEProviders({ 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 489 }, { provider_id: C_MORE_LEGACY_ID }] } } } });
+    expect(result).toEqual([489]);
+  });
+});
+
 describe('PROVIDER_MAP', () => {
   it('contains every canonical id', () => {
     for (const p of SWEDISH_PROVIDERS) {

@@ -45,7 +45,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
-    id: 384, name: 'HBO Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
+    id: 384, name: 'Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
     aliases: [1899],
     tiers: [
       { id: 'ads', name: 'Basic med reklam', cost: 89 },
@@ -65,7 +65,10 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   { id: 520, name: 'SVT Play', shortName: 'SVT', color: '#0F79AF', type: 'flatrate', defaultMonthlyCost: 0, isFree: true },
   {
     id: 489, name: 'TV4 Play', shortName: 'TV4', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
-    aliases: [1944],
+    // 1944 = TMDB:s nuvarande primär-id för TV4 Play. 1759 = retirerade C More
+    // (uppgick i TV4 Play); finns inte längre i TMDB:s live-katalog men gammal
+    // sparad provider-data kan innehålla det → canonicalisera till TV4 Play.
+    aliases: [1944, 1759],
     tiers: [
       { id: 'plus-ads', name: 'Plus med reklam', cost: 69 },
       { id: 'plus', name: 'Plus utan reklam', cost: 169 },
