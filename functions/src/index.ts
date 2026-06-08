@@ -152,3 +152,8 @@ export const onSessionPickCreate = onDocumentCreated(
 // apiInsights: HTTP-endpoint bakom /api/insights (admin-token + Plausible-merge).
 export { rollupInsights } from './insights/rollup';
 export { apiInsights } from './insights/api';
+
+// ── Episod-release-push (B4) ──────────────────────────────────────────────────
+// episodeReleaseNotify: schemalagd collectionGroup-scan → push:ar followers som
+// är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
+export { episodeReleaseNotify } from './episodeNotify';
