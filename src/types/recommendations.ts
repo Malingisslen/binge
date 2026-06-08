@@ -1,4 +1,5 @@
 // src/types/recommendations.ts
+import { assertNever } from '@/lib/assertNever';
 import type { MediaType } from './domain';
 import type { TMDBSearchResult } from './tmdb';
 
@@ -24,6 +25,7 @@ export function rowKey(id: RowId): string {
     case 'trending':    return 'trending';
     case 'latest-fav':  return 'latest-fav';
     case 'upcoming':    return 'upcoming';
+    default:            return assertNever(id);
   }
 }
 

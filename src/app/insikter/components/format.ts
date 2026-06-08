@@ -1,3 +1,4 @@
+import { assertNever } from '@/lib/assertNever';
 import type { MetricFormat } from '../metrics/types';
 
 export function formatScalar(value: number, format: MetricFormat): string {
@@ -11,5 +12,7 @@ export function formatScalar(value: number, format: MetricFormat): string {
       return `${Math.round(value)}%`;
     case 'duration':
       return format.unit === 's' ? `${value.toFixed(0)}s` : `${Math.round(value)}ms`;
+    default:
+      return assertNever(format);
   }
 }
