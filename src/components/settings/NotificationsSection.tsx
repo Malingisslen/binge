@@ -76,12 +76,12 @@ export function NotificationsSection() {
         </label>
       )}
 
-      {pushEnabled && (
-        <p className="text-xxs text-ink-3 mt-2">
-          För att tysta notiser per kanal i framtiden — använd de andra
-          inställningarna nedan när vi byggt ut dem.
-        </p>
-      )}
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.episodeReleases} disabled={busy}
+          onChange={(e) => { void updateNotificationSettings({ episodeReleases: e.target.checked }); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Notiser när en serie jag följer släpper ett nytt avsnitt
+      </label>
     </SettingsSection>
   );
 }

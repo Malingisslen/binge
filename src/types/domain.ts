@@ -123,6 +123,11 @@ export interface UserProfile {
   notificationSettings: {
     newEpisodes: boolean;
     availableOnMyServices: boolean;
+    // B4 — push när en serie du följer (status 'mina', sub-state 'ikapp')
+    // släpper ett nytt aireat avsnitt. Default true; settas av
+    // episodeReleaseNotify-Cloud-Functionen. Toggling OFF stoppar bara
+    // episod-push, inte vän-/grupp-notiser (de gatas av pushEnabled).
+    episodeReleases: boolean;
     // Fas 4 — push-notifs via FCM. Default false; sätts true när användaren
     // toggles ON i settings + grant:ar browser-permission. Toggling OFF
     // raderar token-doc:et på den här enheten (andra enheter behåller sina

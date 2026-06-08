@@ -145,6 +145,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
         newEpisodes: data.notificationSettings?.newEpisodes ?? true,
         availableOnMyServices: data.notificationSettings?.availableOnMyServices ?? true,
         pushEnabled: data.notificationSettings?.pushEnabled ?? false,
+        episodeReleases: data.notificationSettings?.episodeReleases ?? true,
       },
     };
 
@@ -181,6 +182,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       newEpisodes: true,
       availableOnMyServices: true,
       pushEnabled: false,
+      episodeReleases: true,
     },
   };
 
@@ -276,7 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerTiers: {},
       providerPauses: {},
       calibrationGenres: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
       createdAt: serverTimestamp(),
