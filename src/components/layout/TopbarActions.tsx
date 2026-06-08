@@ -179,7 +179,7 @@ export default function TopbarActions() {
                     )}
                   </div>
                   {notifications.slice(0, 10).map(n => {
-                    const provider = getProvider(n.providerId);
+                    const provider = n.providerId != null ? getProvider(n.providerId) : undefined;
                     const href = `/${n.mediaType === 'movie' ? 'movie' : 'tv'}/${n.tmdbId}/`;
                     return (
                       <Link
@@ -190,8 +190,14 @@ export default function TopbarActions() {
                       >
                         <div className="popover-row-title">{n.title}</div>
                         <div className="popover-row-meta">
-                          Finns nu på{' '}
-                          <span style={{ color: provider?.color ?? 'var(--ink-3)' }}>{n.providerName}</span>
+                          {n.kind === 'episode_release' ? (
+                            <>Nytt avsnitt{n.episodeCode ? ` ${n.episodeCode}` : ''}</>
+                          ) : (
+                            <>
+                              Finns nu på{' '}
+                              <span style={{ color: provider?.color ?? 'var(--ink-3)' }}>{n.providerName}</span>
+                            </>
+                          )}
                         </div>
                       </Link>
                     );

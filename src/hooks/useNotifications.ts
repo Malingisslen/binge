@@ -17,8 +17,13 @@ export interface AppNotification {
   tmdbId: number;
   mediaType: 'movie' | 'tv';
   title: string;
-  providerId: number;
-  providerName: string;
+  // Diskriminator: legacy provider-availability-notifs saknar `kind` och
+  // defaultas till 'provider_available'. Episod-release-notifs (Fas 6) sätter
+  // 'episode_release' + episodeCode och saknar provider-fälten.
+  kind: 'provider_available' | 'episode_release';
+  providerId: number | null;
+  providerName: string | null;
+  episodeCode: string | null;
   read: boolean;
   createdAt: Date;
 }
@@ -57,8 +62,10 @@ export function useNotifications() {
           tmdbId: data.tmdbId,
           mediaType: data.mediaType,
           title: data.title,
-          providerId: data.providerId,
-          providerName: data.providerName,
+          kind: data.kind === 'episode_release' ? 'episode_release' : 'provider_available',
+          providerId: data.providerId ?? null,
+          providerName: data.providerName ?? null,
+          episodeCode: data.episodeCode ?? null,
           read: data.read ?? false,
           createdAt: toDate(data.createdAt),
         } as AppNotification;

@@ -54,6 +54,23 @@ function episodeCode(last: LastEpisode): string {
   return `S${String(last.season_number).padStart(2, '0')}E${String(last.episode_number).padStart(2, '0')}`;
 }
 
+/**
+ * Leveranskontrakt (medvetna designval):
+ * - AT-MOST-ONCE: markören (lastNotifiedEpisode) avanceras till last.id efter
+ *   körningen oavsett om varje enskild push lyckades. En total FCM-utage ger
+ *   alltså ingen retry för det avsnittet. Episod-nudgen är "nice to have", inte
+ *   garanterad leverans — vi prioriterar idempotens (inga dubbletter vid re-run)
+ *   framför at-least-once.
+ * - TOM MOTTAGARLISTA avancerar också markören. Det är KORREKT: om ingen följare
+ *   är 'ikapp' när avsnittet släpps är alla antingen 'aktiv' (har redan backlog,
+ *   ska inte nudgas om ett nyare avsnitt) eller blir 'ikapp' först efter att de
+ *   sett avsnittet (då behöver de ingen "nytt avsnitt"-notis). Att inte notifiera
+ *   är rätt i båda fallen.
+ * - KOSTNAD: per-mottagare-läsningarna (episodeReleasesEnabled + sendPushToUser)
+ *   körs BARA när shouldNotify är sann, dvs när en följd serie faktiskt fått ett
+ *   nytt avsnitt — sällsynt per körning. Dominant kostnad är collectionGroup-
+ *   svepet (ett per körning), inte per-mottagare-fan-out:en.
+ */
 async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<number> {
   const info = await fetchTvAiringInfo(tmdbId);
   if (!info) return 0;
