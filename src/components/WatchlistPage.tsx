@@ -318,6 +318,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               placeholder="sök titel…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
               style={{
                 background: 'transparent', border: 0,
                 fontFamily: 'var(--mono)', fontSize: 11.5,

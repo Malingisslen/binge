@@ -45,7 +45,7 @@ function useSenderProfile(uid: string) {
 // chrome around it changes — keeps Sentry-shaped logic untouched in Phase 1.
 
 export default function TopbarActions() {
-  const { user, loading: authLoading, signIn, markNotificationsSeen } = useAuth();
+  const { user, loading: authLoading, signIn, signOut, markNotificationsSeen } = useAuth();
   const {
     notifications, friendRequests, recentPicks,
     unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
@@ -55,12 +55,17 @@ export default function TopbarActions() {
   const mySessions = useMySessions();
   const [bellOpen, setBellOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const sessionsRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const avatarBtnRef = useRef<HTMLButtonElement>(null);
   const closeBell = useCallback(() => setBellOpen(false), []);
   const closeSessions = useCallback(() => setSessionsOpen(false), []);
+  const closeUserMenu = useCallback(() => setUserMenuOpen(false), []);
   useClickOutside(bellRef, closeBell);
   useClickOutside(sessionsRef, closeSessions);
+  useClickOutside(userMenuRef, closeUserMenu);
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -76,7 +81,13 @@ export default function TopbarActions() {
 
   const hasNotifications =
     friendRequestsCount > 0 || recentPicksCount > 0 || notifications.length > 0;
-  const totalPending = mySessions.reduce((s, sess) => s + sess.pendingCount, 0);
+  // G7: badgen visar antal *sessioner* med osvepta kandidater — inte summan
+  // av kvarvarande svep (29 osvepta i en session ska inte se ut som 29
+  // notiser). Per-session-svepräknarna finns kvar i popover-raderna.
+  const pendingSessions = mySessions.filter(s => s.pendingCount > 0).length;
+  const pendingLabel = pendingSessions === 1
+    ? '1 session med osvepta titlar'
+    : `${pendingSessions} sessioner med osvepta titlar`;
 
   return (
     <div className="topbar-actions">
@@ -86,13 +97,13 @@ export default function TopbarActions() {
             type="button"
             onClick={() => setSessionsOpen(!sessionsOpen)}
             className="topbar-icon-btn"
-            title={totalPending > 0 ? `${totalPending} väntande svepningar` : 'Mina sessioner'}
-            aria-label={totalPending > 0 ? `Mina sessioner, ${totalPending} väntande svepningar` : 'Mina sessioner'}
+            title={pendingSessions > 0 ? pendingLabel : 'Mina sessioner'}
+            aria-label={pendingSessions > 0 ? `Mina sessioner, ${pendingLabel}` : 'Mina sessioner'}
             aria-expanded={sessionsOpen}
           >
             <Users size={16} aria-hidden="true" />
-            {totalPending > 0 && (
-              <span className="topbar-badge">{totalPending > 9 ? '9+' : totalPending}</span>
+            {pendingSessions > 0 && (
+              <span className="topbar-badge">{pendingSessions > 9 ? '9+' : pendingSessions}</span>
             )}
           </button>
           {sessionsOpen && (
@@ -209,9 +220,59 @@ export default function TopbarActions() {
         </div>
       )}
       {user ? (
-        <Link href="/settings/" className="topbar-avatar-link" aria-label={`Inställningar (${user.displayName})`}>
-          <div className="avatar">{user.displayName.charAt(0).toUpperCase()}</div>
-        </Link>
+        // S1: avataren öppnar en kontomeny (samma popover-mönster som
+        // klockan/sessionerna) istället för att hoppa direkt till
+        // /settings — "Min profil" var tidigare onåbar från appens krom.
+        <div
+          className="relative"
+          ref={userMenuRef}
+          onKeyDown={e => {
+            if (e.key === 'Escape' && userMenuOpen) {
+              setUserMenuOpen(false);
+              avatarBtnRef.current?.focus();
+            }
+          }}
+        >
+          <button
+            ref={avatarBtnRef}
+            type="button"
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="topbar-avatar-link topbar-avatar-btn"
+            aria-label={`Kontomeny (${user.displayName})`}
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+          >
+            <div className="avatar">{user.displayName.charAt(0).toUpperCase()}</div>
+          </button>
+          {userMenuOpen && (
+            <div className="topbar-popover" role="menu" aria-label="Kontomeny">
+              {/* "Min profil" kräver ett claimat username — utan det finns
+                  ingen publik profil-URL att länka till. */}
+              {user.username && (
+                <Link
+                  href={`/user/${user.username}/`}
+                  role="menuitem"
+                  className="popover-row"
+                  onClick={closeUserMenu}
+                >
+                  <div className="popover-row-title">Min profil</div>
+                  <div className="popover-row-meta">@{user.username}</div>
+                </Link>
+              )}
+              <Link href="/settings/" role="menuitem" className="popover-row" onClick={closeUserMenu}>
+                <div className="popover-row-title">Inställningar</div>
+              </Link>
+              <button
+                type="button"
+                role="menuitem"
+                className="popover-row popover-row-btn"
+                onClick={() => { closeUserMenu(); void signOut(); }}
+              >
+                <div className="popover-row-title">Logga ut</div>
+              </button>
+            </div>
+          )}
+        </div>
       ) : (
         <>
           {/*

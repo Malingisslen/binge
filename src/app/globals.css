@@ -469,6 +469,10 @@ button { font: inherit; cursor: pointer; }
 .acc-text { color: var(--acc-deep); font-weight: 500; }
 
 .topbar-avatar-link { display: inline-flex; }
+/* S1: avataren är en meny-knapp, inte en länk — nollställ button-kromet. */
+.topbar-avatar-btn { border: 0; background: transparent; padding: 0; cursor: pointer; }
+/* S1: "Logga ut" är en åtgärd (button), men ska se ut som övriga menyrader. */
+.popover-row-btn { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; }
 .avatar {
   width: 30px; height: 30px;
   background: var(--ink);
