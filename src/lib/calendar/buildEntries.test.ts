@@ -104,6 +104,18 @@ describe('buildCalendarEntries', () => {
     expect(buildCalendarEntries(data)[0].provider).toBeTruthy();
   });
 
+  it('falls back to ads providers when neither flatrate nor free exists (H3)', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({
+        next_episode_to_air: null,
+        'watch/providers': { results: { SE: { link: '', ads: [{ provider_id: 76, provider_name: 'Viafree', logo_path: '' }] } } },
+      }),
+      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
+    }];
+    expect(buildCalendarEntries(data)[0].provider).toBe('Viafree');
+  });
+
   it('leaves provider undefined when only rent/buy is available', () => {
     const data: SeasonDatum[] = [{
       showId: 100,

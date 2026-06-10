@@ -43,7 +43,7 @@ export function summarizeCounts(entries: readonly CalendarEntry[]): string {
   const { episodes, movies } = countEntries(entries);
   if (episodes === 0 && movies === 0) return '—';
   const parts: string[] = [];
-  if (episodes > 0) parts.push(`${episodes} ${episodes === 1 ? 'avsnitt' : 'avsnitt'}`);
+  if (episodes > 0) parts.push(`${episodes} avsnitt`); // "avsnitt" är invariant sing/plur
   if (movies > 0) parts.push(`${movies} ${movies === 1 ? 'film' : 'filmer'}`);
   return parts.join(' · ');
 }
