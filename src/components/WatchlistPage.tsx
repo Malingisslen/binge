@@ -297,7 +297,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <option value="rating">Betyg</option>
           <option value="releaseYear">År</option>
           <option value="addedAt">Tillagd</option>
-          <option value="watchedAt">Sedd datum</option>
+          {/* TV i 'mina' har aldrig watchedAt (film-only terminal) — dölj no-op-sorteringen där. */}
+          {status !== 'mina' && <option value="watchedAt">Sedd datum</option>}
         </select>
 
         {totalCount > 10 && (
