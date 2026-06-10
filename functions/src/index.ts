@@ -1,5 +1,6 @@
 /**
  * Cloud Functions för Binge — Fas 4: FCM push-notifs.
+ * Runtime: Node 22 — styrs av firebase.json functions.runtime (inte engines).
  *
  * Två firestore-triggers:
  *
