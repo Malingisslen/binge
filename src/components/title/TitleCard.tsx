@@ -7,7 +7,7 @@ import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHr
 import type { TMDBSearchResult } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { TMDBProvider, MediaType } from '@/types';
 import QuickAddButton from './QuickAddButton';
@@ -34,8 +34,12 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
   const Icon = item.media_type === 'tv' ? Tv : Film;
   const [imgError, setImgError] = useState(false);
 
-  const visibleBadges = providers?.slice(0, MAX_BADGES) ?? [];
-  const extraCount = (providers?.length ?? 0) - MAX_BADGES;
+  // Dedup på kanoniskt id innan vi slice:ar — annars kan t.ex. "HBO" och
+  // "HBO Max Amazon Channel" uppta två av tre badge-platser för samma
+  // tjänst (SÖ2).
+  const dedupedProviders = providers ? dedupeProvidersByCanonicalId(providers) : [];
+  const visibleBadges = dedupedProviders.slice(0, MAX_BADGES);
+  const extraCount = dedupedProviders.length - MAX_BADGES;
   // Direction H rule: TitleCard is an identification surface (lists,
   // grids, search results) → duotone. Genre-mapped when we have ids,
   // otherwise a deterministic fallback so the same title always gets
@@ -130,7 +134,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
             title={title}
             posterPath={item.poster_path}
             releaseYear={year}
-            providers={providers?.map(p => canonicalProviderId(p.provider_id))}
+            providers={providers ? dedupedProviders.map(p => canonicalProviderId(p.provider_id)) : undefined}
             genreIds={item.genre_ids}
           />
         </div>

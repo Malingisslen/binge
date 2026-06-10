@@ -6,6 +6,7 @@ import {
   canonicalProviderId,
   getProviderColor,
   extractSEProviders,
+  dedupeProvidersByCanonicalId,
 } from './providers';
 
 describe('SWEDISH_PROVIDERS catalog', () => {
@@ -170,6 +171,99 @@ describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
   it('dedupes a title listed under both 489 and C More legacy', () => {
     const result = extractSEProviders({ 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 489 }, { provider_id: C_MORE_LEGACY_ID }] } } } });
     expect(result).toEqual([489]);
+  });
+});
+
+describe('X3 — Amazon Channel-varianter canonicaliseras (live-verifierade SE-ids 2026-06-10)', () => {
+  it('mappar HBO Max Amazon Channel (1825) till Max (384)', () => {
+    expect(canonicalProviderId(1825)).toBe(384);
+    expect(getProvider(1825)?.name).toBe('Max');
+  });
+
+  it('mappar Apple TV Amazon Channel (2243) till Apple TV+ (350)', () => {
+    expect(canonicalProviderId(2243)).toBe(350);
+    expect(getProvider(2243)?.name).toBe('Apple TV+');
+  });
+
+  it('mappar Crunchyroll Amazon Channel (1968) till Crunchyroll (323)', () => {
+    expect(canonicalProviderId(1968)).toBe(323);
+    expect(getProvider(1968)?.name).toBe('Crunchyroll');
+  });
+});
+
+describe('X3/T1/SÖ2/M2 — dedupeProvidersByCanonicalId', () => {
+  const p = (provider_id: number, provider_name: string, logo_path = '/x.png') =>
+    ({ provider_id, provider_name, logo_path });
+
+  it('returnerar tom lista för tom input', () => {
+    expect(dedupeProvidersByCanonicalId([])).toEqual([]);
+  });
+
+  it('lämnar redan unika providers orörda i samma ordning', () => {
+    const list = [p(8, 'Netflix'), p(337, 'Disney+'), p(520, 'SVT Play')];
+    expect(dedupeProvidersByCanonicalId(list)).toEqual(list);
+  });
+
+  it('dedupar alias-id mot kanoniskt id (Max 384 + HBO Max Amazon Channel 1825)', () => {
+    const result = dedupeProvidersByCanonicalId([
+      p(384, 'Max'),
+      p(1825, 'HBO Max Amazon Channel'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(384);
+  });
+
+  it('behåller bas-entryn även när varianten kommer först i listan', () => {
+    const result = dedupeProvidersByCanonicalId([
+      p(2243, 'Apple TV Amazon Channel'),
+      p(350, 'Apple TV+'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(350);
+  });
+
+  it('dedupar okända framtida Amazon Channel-varianter via namn-suffix mot bas i listan', () => {
+    // 99001/99002 finns inte i SWEDISH_PROVIDERS — fallbacken matchar
+    // " Amazon Channel"-suffixet mot basnamnet i samma lista.
+    const result = dedupeProvidersByCanonicalId([
+      p(99001, 'MGM'),
+      p(99002, 'MGM Amazon Channel'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(99001);
+  });
+
+  it('hanterar plural-suffixet " Amazon Channels"', () => {
+    const result = dedupeProvidersByCanonicalId([
+      p(99003, 'Lionsgate+'),
+      p(99004, 'Lionsgate+ Amazon Channels'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(99003);
+  });
+
+  it('behåller en Amazon Channel-variant vars bas inte finns någonstans', () => {
+    // Titeln finns BARA via kanalen — då är kanalen den riktiga tjänsten.
+    const result = dedupeProvidersByCanonicalId([p(99005, 'Hayu Amazon Channel')]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(99005);
+  });
+
+  it('dedupar variant mot bas i katalogen via namn även utan alias-id', () => {
+    // Okänt variant-id men basnamnet matchar en SWEDISH_PROVIDER → kollapsa.
+    const result = dedupeProvidersByCanonicalId([
+      p(76, 'Viaplay'),
+      p(99006, 'Viaplay Amazon Channel'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].provider_id).toBe(76);
+  });
+});
+
+describe('A3 — enhetligt TV4 Play-namn', () => {
+  it('shortName för TV4 Play (489) är "TV4 Play" så alla ytor visar samma namn', () => {
+    expect(getProvider(489)?.shortName).toBe('TV4 Play');
+    expect(getProvider(489)?.name).toBe('TV4 Play');
   });
 });
 

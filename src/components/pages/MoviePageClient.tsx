@@ -21,7 +21,7 @@ import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
 import type { TMDBMovie } from '@/types';
@@ -75,7 +75,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const flatrate = providers?.flatrate ?? [];
   const free = providers?.free ?? [];
   const ads = providers?.ads ?? [];
-  const subscription = [...flatrate, ...free, ...ads];
+  // Dedup på kanoniskt id — annars visas t.ex. Max + "HBO Max Amazon
+  // Channel" som två logotyper för samma tjänst (M2).
+  const subscription = dedupeProvidersByCanonicalId([...flatrate, ...free, ...ads]);
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -220,8 +222,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {subscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 return logo ? (
+                  // Placeholder-bakgrund + eager: raden är above-the-fold och
+                  // utan fill renderas tomma vita rutor tills CDN:t svarar (T5).
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)' }} loading="lazy" decoding="async" width={28} height={28} />
+                  <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
                 ) : (
                   <ProviderTag key={p.provider_id} provider={p} size="md" />
                 );

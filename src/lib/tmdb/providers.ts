@@ -46,7 +46,9 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 384, name: 'Max', shortName: 'HBO', color: '#7B2FBE', type: 'flatrate', defaultMonthlyCost: 149,
-    aliases: [1899],
+    // 1899 = legacy HBO Max-id. 1825 = "HBO Max Amazon Channel"
+    // (live-verifierat SE-id 2026-06-10) — samma tjänst via Prime Video.
+    aliases: [1899, 1825],
     tiers: [
       { id: 'ads', name: 'Basic med reklam', cost: 89 },
       { id: 'standard', name: 'Standard', cost: 149 },
@@ -64,7 +66,10 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   { id: 520, name: 'SVT Play', shortName: 'SVT', color: '#0F79AF', type: 'flatrate', defaultMonthlyCost: 0, isFree: true },
   {
-    id: 489, name: 'TV4 Play', shortName: 'TV4', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
+    // shortName avsiktligt = name: advisor-ytor blandade "TV4" (shortName i
+    // timeline-lanes + Hem-widget) med "TV4 Play" (providerName i råd-texterna).
+    // Ett namn överallt (A3, QA-audit 2026-06-09).
+    id: 489, name: 'TV4 Play', shortName: 'TV4 Play', color: '#E2001A', type: 'flatrate', defaultMonthlyCost: 169,
     // 1944 = TMDB:s nuvarande primär-id för TV4 Play. 1759 = retirerade C More
     // (uppgick i TV4 Play); finns inte längre i TMDB:s live-katalog men gammal
     // sparad provider-data kan innehålla det → canonicalisera till TV4 Play.
@@ -75,7 +80,11 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'sport', name: 'Sport Total utan reklam', cost: 699 },
     ],
   },
-  { id: 350, name: 'Apple TV+', shortName: 'Apple', color: '#555555', type: 'flatrate', defaultMonthlyCost: 119 },
+  {
+    id: 350, name: 'Apple TV+', shortName: 'Apple', color: '#555555', type: 'flatrate', defaultMonthlyCost: 119,
+    // 2243 = "Apple TV Amazon Channel" (live-verifierat SE-id 2026-06-10).
+    aliases: [2243],
+  },
   { id: 531, name: 'Paramount+', shortName: 'P+', color: '#0064FF', type: 'flatrate', defaultMonthlyCost: 99 },
   {
     id: 510, name: 'Discovery+', shortName: 'Disc+', color: '#1E3264', type: 'flatrate', defaultMonthlyCost: 89,
@@ -88,6 +97,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 89,
+    // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
+    aliases: [1968],
     tiers: [
       { id: 'fan', name: 'Fan', cost: 89 },
       { id: 'megafan', name: 'Mega Fan', cost: 119 },
@@ -138,6 +149,59 @@ export function canonicalProviderId(id: number): number {
 
 export function getProviderColor(id: number): string {
   return PROVIDER_MAP.get(id)?.color ?? '#888';
+}
+
+// TMDB listar Prime Video-kanaler som egna providers med namn-suffixet
+// " Amazon Channel" (ibland plural). Kända varianter mappas via aliases ovan;
+// suffixet är fallback för framtida variant-ids vi inte hunnit katalogisera.
+const AMAZON_CHANNEL_SUFFIX = /\s+Amazon Channels?$/i;
+
+// Dedupar en renderbar providerlista (flatrate/free/ads) på kanoniskt id så
+// samma tjänst aldrig visas två gånger (X3/T1/SÖ2/M2, QA-audit 2026-06-09).
+// Två mekanismer:
+//   1. canonicalProviderId via alias-tabellen (kända variant-ids).
+//   2. Namn-suffix-fallback: "X Amazon Channel" kollapsar mot basen "X" om
+//      basen finns i SWEDISH_PROVIDERS eller i samma lista. Saknas basen helt
+//      behålls varianten — då ÄR kanalen den enda tjänsten som har titeln.
+// Bas-entryn (provider_id === kanoniskt id) vinner över varianten oavsett
+// ordning i listan; i övrigt behålls första förekomsten och ordningen.
+export function dedupeProvidersByCanonicalId<T extends { provider_id: number; provider_name: string }>(
+  list: T[],
+): T[] {
+  // Lowercase-namn → kanonisk nyckel för entries i listan, så en okänd
+  // variant kan hitta sin bas via namn-match.
+  const keyByName = new Map<string, number>();
+  for (const p of list) {
+    const name = p.provider_name.trim().toLowerCase();
+    if (!keyByName.has(name)) keyByName.set(name, canonicalProviderId(p.provider_id));
+  }
+
+  function resolveKey(p: T): number {
+    const mapped = PROVIDER_MAP.get(p.provider_id);
+    if (mapped) return mapped.id;
+    if (AMAZON_CHANNEL_SUFFIX.test(p.provider_name)) {
+      const base = p.provider_name.replace(AMAZON_CHANNEL_SUFFIX, '').trim().toLowerCase();
+      const catalog = SWEDISH_PROVIDERS.find(sp => sp.name.toLowerCase() === base);
+      if (catalog) return catalog.id;
+      const inList = keyByName.get(base);
+      if (inList !== undefined) return inList;
+    }
+    return p.provider_id;
+  }
+
+  const kept = new Map<number, T>();
+  for (const p of list) {
+    const key = resolveKey(p);
+    const existing = kept.get(key);
+    if (!existing) {
+      kept.set(key, p);
+    } else if (existing.provider_id !== key && p.provider_id === key) {
+      // Varianten råkade komma först — byt till bas-entryn (behåller
+      // first-seen-position eftersom Map bevarar insättningsordning).
+      kept.set(key, p);
+    }
+  }
+  return Array.from(kept.values());
 }
 
 // Plockar ut SE-streamingproviders från en TMDB-detalj (movie eller TV).

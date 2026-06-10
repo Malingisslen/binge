@@ -9,7 +9,7 @@ import TitleGrid from '@/components/title/TitleGrid';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { isAddableMediaType } from '@/lib/tmdb/client';
 import { trackEvent } from '@/lib/analytics';
 import type { TMDBProvider } from '@/types';
@@ -60,7 +60,9 @@ function SearchResults() {
   const providerMap = useMemo(() => {
     const map: Record<string, TMDBProvider[]> = {};
     for (const [key, data] of Object.entries(rawProviderMap)) {
-      if (data.flatrate) map[key] = data.flatrate;
+      // Dedup på kanoniskt id så sökkorten inte visar t.ex. "HBO" +
+      // "HBO Max Amazon Channel" som två chips för samma tjänst (SÖ2).
+      if (data.flatrate) map[key] = dedupeProvidersByCanonicalId(data.flatrate);
     }
     return map;
   }, [rawProviderMap]);
