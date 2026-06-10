@@ -14,6 +14,7 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
@@ -65,7 +66,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     indexable: !!movie,
   });
 
-  if (isLoading) return <div className="text-sm text-ink-3 py-4">Laddar…</div>;
+  if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
   if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
 
   const watchlistItem = mounted ? getItem(movie.id) : undefined;

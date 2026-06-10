@@ -6,6 +6,7 @@ import { discoverMovies, posterUrl } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { X } from 'lucide-react';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
 
@@ -78,7 +79,9 @@ export default function QuickRateModal({ open, onClose }: Props) {
           <button onClick={onClose} className="text-text-muted" aria-label="Stäng"><X size={16} /></button>
         </header>
         {isLoading ? (
-          <div className="p-8 text-center text-xs text-text-muted">Laddar…</div>
+          <div className="p-8">
+            <LoadingView label="Laddar titlar…" />
+          </div>
         ) : (
           <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {titles.map(t => {

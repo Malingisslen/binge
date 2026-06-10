@@ -18,6 +18,33 @@ function tsxFilesIn(dir: string): string[] {
     .map(f => join(dir, f));
 }
 
+function tsxFilesRecursive(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) return tsxFilesRecursive(full);
+    return entry.name.endsWith('.tsx') ? [full] : [];
+  });
+}
+
+// X2: bare "Laddar…" JSX-textnoder är förbjudna — använd <LoadingView>.
+// Regexen matchar bara literala textnoder (>Laddar…<), inte knapp-copy i
+// expressions ({isLoading ? 'Laddar…' : 'Visa fler'}) eller LoadingViews
+// default-label (som är en prop, inte en textnod).
+const BARE_LOADING_TEXT = />\s*Laddar…\s*</;
+
+describe('design consistency — loading states', () => {
+  it('no component or page renders a bare "Laddar…" text node (use LoadingView)', () => {
+    const roots = [
+      join(process.cwd(), 'src', 'components'),
+      join(process.cwd(), 'src', 'app'),
+    ];
+    const offenders = roots
+      .flatMap(tsxFilesRecursive)
+      .filter(f => BARE_LOADING_TEXT.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  });
+});
+
 describe('design consistency — dynamic route headers', () => {
   it('no page client uses the bare 18px font-bold page-title anti-pattern', () => {
     const offenders = tsxFilesIn(PAGES_DIR).filter(f => BANNED.test(readFileSync(f, 'utf8')));

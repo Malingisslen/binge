@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { rotatePool } from '@/lib/recommendations/rowComposition';
 import RecCard from './RecCard';
+import { LoadingView } from '@/components/ui/LoadingView';
 import type { RowResult, RowSpec } from '@/types';
 
 const ROW_VISIBLE = 6;
@@ -114,9 +115,7 @@ export default function RecRow({ result, index }: Props) {
         })}
       </div>
       {isLoading && items.length === 0 && (
-        <div style={{ padding: '24px 0', color: 'var(--ink-3)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-          Laddar…
-        </div>
+        <LoadingView variant="grid" rows={ROW_VISIBLE} label="Laddar förslag…" />
       )}
     </section>
   );

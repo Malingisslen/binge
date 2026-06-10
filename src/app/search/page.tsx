@@ -121,7 +121,7 @@ function SearchResults() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-text-muted py-4">Laddar…</div>}>
+    <Suspense fallback={<LoadingView label="Laddar sökningen…" />}>
       <SearchResults />
     </Suspense>
   );

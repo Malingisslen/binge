@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, type ReactNode } from 'react';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 export default function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -17,7 +18,9 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
   }, [user, loading, router]);
 
   if (!mounted || loading) {
-    return <div className="text-sm text-text-muted py-4">Laddar…</div>;
+    // X2/G6: designad loading-state — AuthGuard är första synliga tillstånd
+    // på varje inloggad sida, så bar "Laddar…"-text syntes överallt.
+    return <LoadingView label="Laddar…" />;
   }
 
   if (!user) {

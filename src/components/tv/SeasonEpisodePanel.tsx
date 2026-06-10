@@ -2,6 +2,7 @@
 
 import { useTVSeason } from '@/hooks/useTMDB';
 import EpisodeRow from './EpisodeRow';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { isEpisodeMasked, type MaskBoundary } from '@/lib/groupProgress';
 
 interface SeasonEpisodePanelProps {
@@ -21,8 +22,8 @@ export default function SeasonEpisodePanel({
 
   if (isLoading) {
     return (
-      <div className="bg-bg-2 border-t border-rule-2 px-4 py-2 text-xs text-ink-3">
-        Laddar…
+      <div className="bg-bg-2 border-t border-rule-2 px-4">
+        <LoadingView label="Laddar avsnitt…" />
       </div>
     );
   }

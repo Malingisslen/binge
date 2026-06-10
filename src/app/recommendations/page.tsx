@@ -5,11 +5,12 @@ import { useSearchParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import RecommendationsHub from '@/components/recommendations/RecommendationsHub';
 import RecommendationsExpanded from '@/components/recommendations/RecommendationsExpanded';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 export default function RecommendationsPage() {
   return (
     <AuthGuard>
-      <Suspense fallback={<div className="text-sm text-text-muted">Laddar…</div>}>
+      <Suspense fallback={<LoadingView label="Laddar…" />}>
         <RecsRouter />
       </Suspense>
     </AuthGuard>

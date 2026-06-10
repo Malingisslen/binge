@@ -17,6 +17,7 @@ import {
   getNextAirInfo,
   isWithinDays,
   isUserBehindOnAired,
+  aggregateAdvisorLoading,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -36,7 +37,7 @@ export {
 } from './useSubscriptionAdvisor.helpers';
 
 export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
-  const { getByStatus } = useWatchlist();
+  const { getByStatus, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
 
   const followingTV = useMemo(
@@ -70,7 +71,11 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     })),
   });
 
-  const isLoading = showQueries.some(q => q.isLoading);
+  // A1/X1: isLoading är "allt avgjort?"-flaggan — true tills watchlist-
+  // snapshoten landat OCH samtliga TV-detaljqueries avgjorts. Tidigare
+  // `some(q => q.isLoading)` var false medan watchlisten laddade (inga
+  // queries registrerade än) så konsumenter renderade partiell rådgivning.
+  const isLoading = aggregateAdvisorLoading(watchlistLoading, showQueries);
   // hasError = minst en fetch misslyckades + det saknas cached data för den.
   // Om en query tidigare lyckats och nu failar använder vi stale data, då
   // betraktar vi inte det som fel mot användaren.

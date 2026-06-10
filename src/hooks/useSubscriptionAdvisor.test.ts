@@ -6,6 +6,7 @@ import {
   getNextAirInfo,
   isWithinDays,
   isUserBehindOnAired,
+  aggregateAdvisorLoading,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 import type {
@@ -443,5 +444,48 @@ describe('CATCHUP_THRESHOLD', () => {
     // Locking this in: Changing the threshold is a product decision, not
     // a refactor. The test exists to catch an accidental change.
     expect(CATCHUP_THRESHOLD).toBe(3);
+  });
+});
+
+// --- aggregateAdvisorLoading (A1/X1: "allt laddat?"-gate) ---
+
+describe('aggregateAdvisorLoading', () => {
+  it('is loading while the watchlist snapshot has not arrived (even with zero queries)', () => {
+    // useQueries([]) rapporterar "klar" innan watchlist-items hunnit
+    // registrera sina TV-detaljqueries — utan watchlist-gaten skulle
+    // rådgivaren rendera definitiv rådgivning på noll data.
+    expect(aggregateAdvisorLoading(true, [])).toBe(true);
+  });
+
+  it('is loading while any detail query is still fetching its first data', () => {
+    const queries = [
+      { isPending: false, isFetching: false },
+      { isPending: true, isFetching: true },
+    ];
+    expect(aggregateAdvisorLoading(false, queries)).toBe(true);
+  });
+
+  it('settles when watchlist is loaded and every query has data', () => {
+    const queries = [
+      { isPending: false, isFetching: false },
+      { isPending: false, isFetching: false },
+    ];
+    expect(aggregateAdvisorLoading(false, queries)).toBe(false);
+  });
+
+  it('settles with no queries once the watchlist is loaded (user without TV-titlar)', () => {
+    expect(aggregateAdvisorLoading(false, [])).toBe(false);
+  });
+
+  it('treats errored queries as settled (error-state renderas, inte spinner)', () => {
+    // En query i error-state är inte pending — den ska inte hålla kvar
+    // LoadingView; hasError-flödet tar över.
+    const queries = [{ isPending: false, isFetching: false }];
+    expect(aggregateAdvisorLoading(false, queries)).toBe(false);
+  });
+
+  it('does not block on background refetch of already-cached data (stale-while-revalidate)', () => {
+    const queries = [{ isPending: false, isFetching: true }];
+    expect(aggregateAdvisorLoading(false, queries)).toBe(false);
   });
 });

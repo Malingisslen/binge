@@ -13,6 +13,7 @@ import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
@@ -157,13 +158,20 @@ function SavingsContent() {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  if (advisor.isLoading && advisor.providers.length === 0) {
+  // A1/A2: gatea på isLoading ENSAMT. Tidigare villkor `&& providers.length
+  // === 0` höll aldrig — providers byggs från user.myProviders och är icke-
+  // tom redan vid första compute, så diagnos + steg-rader renderades från
+  // partiell TMDB-data och flippade medan queries strömmade in. isLoading är
+  // numera "allt avgjort"-flaggan (watchlist + samtliga detaljqueries).
+  if (advisor.isLoading) {
     return (
-      <header>
-        <div className="crumb">Streamingrådgivaren</div>
-        <h1 className="page-h1">Streamingrådgivaren</h1>
-        <p className="stand">Räknar…</p>
-      </header>
+      <>
+        <header>
+          <div className="crumb">Streamingrådgivaren</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
+        </header>
+        <LoadingView label="Räknar på dina tjänster…" />
+      </>
     );
   }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 /**
  * Alla page-clients laddas via next/dynamic så varje route bara drar in
@@ -13,7 +14,9 @@ import dynamic from 'next/dynamic';
  * loading: stöder en fallback-placeholder medan chunken laddas.
  */
 
-const LOADING = <div className="text-sm text-text-muted py-4">Laddar…</div>;
+// X2/G6: chunk-fallbacken fronter ALLA dynamiska routes — designad
+// LoadingView istället för bar text, men fortsatt lättviktig (ingen layout).
+const LOADING = <LoadingView label="Laddar…" />;
 
 // MoviePageClient används som client-side fallback för movie-ids utanför
 // topp-N — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { backdropUrl, posterUrl } from '@/lib/tmdb/client';
 import { toneForId } from '@/lib/duotone';
@@ -31,6 +32,14 @@ export default function HemFocal({ entry }: Props) {
   const tone = toneForId(entry.tmdbId);
   const still = backdropUrl(entry.backdropPath, 'w1280');
   const poster = posterUrl(entry.posterPath, 'w342');
+  // H4: bitmap-placeholder — 21:9-ytan och postern skimrar tills respektive
+  // bild laddat (eller felat), sedan tonas bitmappen in. Utan detta står
+  // den stora .still-ytan visuellt tom i sekunder medan w1280-bilden hämtas.
+  // is-loaded sätts direkt när bilden saknas (duotone-fallbacken ska inte
+  // skimra för evigt) och via ref-callback för cache-träffade bilder vars
+  // onLoad hann fyra före hydration.
+  const [stillLoaded, setStillLoaded] = useState(false);
+  const [posterLoaded, setPosterLoaded] = useState(false);
   const badge = badgeForDay(days, isMovie);
   const href = entryHref(entry);
   const dayLabel = shortSwedishWeekday(entry.airDate).toUpperCase();
@@ -40,10 +49,20 @@ export default function HemFocal({ entry }: Props) {
 
   return (
     <article className="focal">
-      <div className={`still duo-${tone}`}>
+      <div className={`still duo-${tone}${!still || stillLoaded ? ' is-loaded' : ''}`}>
         {still ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={still} alt="" loading="eager" decoding="async" width={1280} height={548} />
+          <img
+            src={still}
+            alt=""
+            loading="eager"
+            decoding="async"
+            width={1280}
+            height={548}
+            onLoad={() => setStillLoaded(true)}
+            onError={() => setStillLoaded(true)}
+            ref={el => { if (el?.complete && el.naturalWidth > 0) setStillLoaded(true); }}
+          />
         ) : null}
         <div className="badge-stack">
           <span className={`b${badge.live ? ' live' : ''}`}>{badge.label}</span>
@@ -52,10 +71,20 @@ export default function HemFocal({ entry }: Props) {
       </div>
 
       <div className="body">
-        <Link href={href} className={`px duo-${tone}`} aria-label={entry.title}>
+        <Link href={href} className={`px duo-${tone}${!poster || posterLoaded ? ' is-loaded' : ''}`} aria-label={entry.title}>
           {poster ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={poster} alt="" loading="lazy" decoding="async" width={342} height={513} />
+            <img
+              src={poster}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width={342}
+              height={513}
+              onLoad={() => setPosterLoaded(true)}
+              onError={() => setPosterLoaded(true)}
+              ref={el => { if (el?.complete && el.naturalWidth > 0) setPosterLoaded(true); }}
+            />
           ) : null}
         </Link>
 

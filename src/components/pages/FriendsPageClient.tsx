@@ -12,6 +12,7 @@ import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFrie
 import { useAuth } from '@/hooks/useAuth';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 // Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
 // klient-satta fromDisplayName/fromUsername på request-doc:et (de valideras inte
@@ -78,7 +79,7 @@ export default function FriendsPageClient() {
         </TabButton>
       </div>
 
-      {isLoading && <div className="text-sm text-text-muted py-4">Laddar…</div>}
+      {isLoading && <LoadingView label="Laddar…" />}
 
       {empty && tab === 'friends' && (
         <EmptyState

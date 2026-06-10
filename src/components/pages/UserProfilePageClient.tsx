@@ -35,15 +35,26 @@ export default function UserProfilePageClient({ username }: { username: string }
   // icke-vän-profiler skickar vi null så inga onödiga permission-denied loggas
   // (hooken sväljer dessutom kvarvarande fel internt).
   const watchlistUid = data && 'profile' in data ? data.uid : null;
-  const { data: watchlist } = usePublicWatchlist(watchlistUid);
-  const { data: followerCount } = useFollowerCount(countableUid);
-  const { data: followingCount } = useFollowingCount(countableUid);
+  const watchlistQuery = usePublicWatchlist(watchlistUid);
+  const followerQuery = useFollowerCount(countableUid);
+  const followingQuery = useFollowingCount(countableUid);
+  const watchlist = watchlistQuery.data;
+  const followerCount = followerQuery.data;
+  const followingCount = followingQuery.data;
   const taste = useTasteMatch(data?.uid ?? null);
 
   const metaTitle = data && 'profile' in data ? data.profile.displayName : `@${username}`;
   usePageMeta({ title: metaTitle });
 
-  if (isLoading) return <LoadingView variant="detail" label="Laddar profil…" />;
+  // P1: stat-korten och följar-raden beräknas från egna queries (watchlist,
+  // follower/following-count) — gatea även på dem så profilen inte blinkar
+  // "0 · 0 · 0 · —" innan datan landat. Queriesarna är enabled-gatade på uid,
+  // så "laddar" = isPending medan fetch faktiskt pågår (inte idle/disabled).
+  const queryLoading = (q: { isPending: boolean; fetchStatus: string }) =>
+    q.isPending && q.fetchStatus !== 'idle';
+  const statsLoading = queryLoading(watchlistQuery) || queryLoading(followerQuery) || queryLoading(followingQuery);
+
+  if (isLoading || statsLoading) return <LoadingView variant="detail" label="Laddar profil…" />;
   if (!data) return <NotFound crumb="Profil" title="Användaren hittades inte." />;
 
   // Tre-state från usePublicProfile: null (ej användare), { isPrivate }

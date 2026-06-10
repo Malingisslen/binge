@@ -14,6 +14,7 @@ import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import RecRow from './RecRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { LoadingView } from '@/components/ui/LoadingView';
 import RecommendationsFilters from './RecommendationsFilters';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
@@ -47,7 +48,7 @@ function rowMatchesMediaFilter(
 
 export default function RecommendationsHub() {
   const cascade = useRecommendationsCascade();
-  const { items } = useWatchlist();
+  const { items, loading: watchlistLoading } = useWatchlist();
   const { items: ni } = useNotInterested();
   const { user } = useAuth();
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -98,10 +99,17 @@ export default function RecommendationsHub() {
   const hiddenCountries = user?.hiddenCountries ?? [];
   const myProviders = user?.myProviders ?? [];
 
+  // R1: prioritizeRows körs om för varje detail/keyword-query som löser —
+  // person-rader dyker upp och numreringen skiftar mitt under laddning.
+  // Rendera inte numrerade rader förrän detektionen är stabil: watchlisten
+  // har landat OCH alla detektions-queries (credits + keywords) avgjorts.
+  // Då körs prioriteringen en gång på komplett data och ordningen är fast.
+  const rowsPending = watchlistLoading || cascade.isLoadingDetection;
+
   return (
     <>
       <header>
-        <div className="crumb">Rekommendationer · {filteredRows.length} rader</div>
+        <div className="crumb">Rekommendationer{rowsPending ? '' : ` · ${filteredRows.length} rader`}</div>
         <h1 className="page-h1">Vad du kan se — och varför.</h1>
         <p className="stand">
           Sju kategorier sorterade efter vad du har tittat på senast. Varje rad
@@ -124,42 +132,49 @@ export default function RecommendationsHub() {
       </div>
 
       <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
-      <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
       <QuickRateModal open={quickRateOpen} onClose={() => setQuickRateOpen(false)} />
 
-      {visibleRows.map((spec, idx) => (
-        <RowDispatch
-          key={spec.rowKey}
-          spec={spec}
-          index={idx}
-          excludedIds={excludedIds}
-          filters={filters}
-          myProviders={myProviders}
-          topGenreIds={cascade.topGenreIds}
-          hiddenCountries={hiddenCountries}
-          latestFiveStar={cascade.latestFiveStar}
-        />
-      ))}
+      {rowsPending ? (
+        <LoadingView variant="grid" label="Laddar rekommendationer…" />
+      ) : (
+        <>
+          <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
 
-      {visibleRowCount < filteredRows.length && (
-        <button
-          onClick={() => setVisibleRowCount(c => c + 2)}
-          className="btn btn-ghost btn-sm"
-          style={{ marginTop: 24 }}
-        >
-          Visa fler rader ›
-        </button>
-      )}
-      {filteredRows.length === 0 && cascade.rows.length > 0 && (
-        <p className="stand" style={{ marginTop: 24 }}>
-          Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} matchar dina filter. Justera ovan eller rensa.
-        </p>
-      )}
+          {visibleRows.map((spec, idx) => (
+            <RowDispatch
+              key={spec.rowKey}
+              spec={spec}
+              index={idx}
+              excludedIds={excludedIds}
+              filters={filters}
+              myProviders={myProviders}
+              topGenreIds={cascade.topGenreIds}
+              hiddenCountries={hiddenCountries}
+              latestFiveStar={cascade.latestFiveStar}
+            />
+          ))}
 
-      {visibleRows.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <JustWatchCredit />
-        </div>
+          {visibleRowCount < filteredRows.length && (
+            <button
+              onClick={() => setVisibleRowCount(c => c + 2)}
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 24 }}
+            >
+              Visa fler rader ›
+            </button>
+          )}
+          {filteredRows.length === 0 && cascade.rows.length > 0 && (
+            <p className="stand" style={{ marginTop: 24 }}>
+              Inga {filters.mediaType === 'movie' ? 'filmer' : 'serier'} matchar dina filter. Justera ovan eller rensa.
+            </p>
+          )}
+
+          {visibleRows.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <JustWatchCredit />
+            </div>
+          )}
+        </>
       )}
     </>
   );

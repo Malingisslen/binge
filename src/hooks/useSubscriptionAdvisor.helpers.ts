@@ -11,6 +11,22 @@ import type {
   WatchlistItem,
 } from '@/types';
 
+// A1/X1: "allt laddat?"-aggregering för rådgivaren. Rådgivaren är klar först
+// när (a) watchlist-snapshoten från Firestore landat OCH (b) varje registrerad
+// TMDB-detaljquery avgjorts (data eller fel). Utan watchlist-gaten rapporterar
+// useQueries([]) "klar" innan items ens hunnit registrera sina queries, och
+// sidan renderar definitiv rådgivning på noll data som sedan flippar medan
+// queries strömmar in. Per query gäller isLoading-semantiken (isPending &&
+// isFetching): cached data blockerar inte (stale-while-revalidate), och
+// error-queries räknas som avgjorda så hasError-flödet kan ta över.
+export function aggregateAdvisorLoading(
+  watchlistLoading: boolean,
+  queries: ReadonlyArray<{ isPending: boolean; isFetching: boolean }>,
+): boolean {
+  if (watchlistLoading) return true;
+  return queries.some(q => q.isPending && q.isFetching);
+}
+
 export function findTopPausable(
   providers: ProviderAdvisory[],
   userPausedSet: Set<number>,

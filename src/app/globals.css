@@ -1032,6 +1032,35 @@ button { font: inherit; cursor: pointer; }
   .hem-focal-skeleton { animation: none; }
 }
 
+/* H4: bitmap-placeholder i focal-blocket — .still (21:9) och .px (poster)
+   skimrar tills bitmappen laddat, sedan tonas bilden in. Komponenten togglar
+   .is-loaded via onLoad/onError (HemFocal.tsx). Utan detta står den stora
+   bildytan tom i sekunder efter att skeleton→focal-swappen skett. */
+.focal .still:not(.is-loaded),
+.focal .body .px:not(.is-loaded) {
+  background: linear-gradient(
+    90deg,
+    var(--placeholder-fill) 0%,
+    oklch(0.90 0.015 80) 50%,
+    var(--placeholder-fill) 100%
+  );
+  background-size: 200% 100%;
+  animation: hem-focal-shimmer 1.6s ease-in-out infinite;
+}
+.focal .still img,
+.focal .body .px img {
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.focal .still.is-loaded img,
+.focal .body .px.is-loaded img { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .focal .still:not(.is-loaded),
+  .focal .body .px:not(.is-loaded) { animation: none; }
+  .focal .still img,
+  .focal .body .px img { transition: none; }
+}
+
 /* Filmstrip-skeleton — matchar .filmstrip-sektionens fotavtryck:
    sect-h-rad (~30px) + 18px-gap + filmstrip (grid med 5 cards, ~283px).
    Reserverar 330px så main-column inte växer plötsligt när

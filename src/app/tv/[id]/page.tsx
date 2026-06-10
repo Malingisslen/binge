@@ -2,6 +2,7 @@ import { cache, Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import TVShowPageClient from '@/components/pages/TVShowPageClient';
+import { LoadingView } from '@/components/ui/LoadingView';
 import {
   getTVShow,
   getPopularTV,
@@ -124,7 +125,7 @@ export default async function TVPage({ params }: { params: Promise<PageParams> }
   }
 
   return (
-    <Suspense fallback={<div className="text-sm text-ink-3 py-4">Laddar…</div>}>
+    <Suspense fallback={<LoadingView label="Laddar serien…" />}>
       <TVShowPageClient id={id} initialData={initialData} />
     </Suspense>
   );

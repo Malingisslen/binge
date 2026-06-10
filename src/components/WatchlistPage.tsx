@@ -8,6 +8,7 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -50,7 +51,7 @@ export default function WatchlistPage(props: WatchlistPageProps) {
 }
 
 function WatchlistPageInner({ status, title }: WatchlistPageProps) {
-  const { items, removeItem, updateStatus, updateRating } = useWatchlist();
+  const { items, loading: watchlistLoading, removeItem, updateStatus, updateRating } = useWatchlist();
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -176,6 +177,21 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     : totalCount === 0
       ? 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.'
       : 'Inga titlar i den här vyn. Pröva ett annat filter eller status ovan.';
+
+  // B13: medan Firestore-snapshoten laddar är items tom — utan denna gate
+  // blinkar tomma bibliotekets standfirst + empty-state innan titlarna
+  // landar. Gäller alla biblioteksvyer (en delad komponent).
+  if (watchlistLoading) {
+    return (
+      <>
+        <header>
+          <div className="crumb">Bibliotek · {labelForStatus(status)}</div>
+          <h1 className="page-h1">{title}</h1>
+        </header>
+        <LoadingView variant="grid" label="Laddar biblioteket…" />
+      </>
+    );
+  }
 
   return (
     <>
