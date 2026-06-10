@@ -24,9 +24,14 @@ import {
   bucketBySubState,
   CARD_GRID_CLASS,
 } from '@/components/watchlist/FollowingCardSections';
-import { tvSubState } from '@/lib/watchStatus';
+import {
+  librarySubState,
+  buildStandfirst,
+  LIBRARY_SUB_STATE_ORDER,
+} from '@/lib/libraryView';
+import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
-import type { WatchStatus, WatchlistItem, TMDBTVShow } from '@/types';
+import type { WatchStatus, WatchlistItem } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
@@ -83,6 +88,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [sort, setSort] = useState<SortKey>('updatedAt');
   const showAddedCol = status !== 'sedd';
   const showWatchedCol = status === 'sedd' || !status;
+  // B10/B14: /my/series ('mina') och /my/films ('sedd') kan per schema bara
+  // innehålla en medietyp — där är både TYP-kolumnen och medietyps-chipsen
+  // redundanta. Mixade vyer (vill_se/avbruten/all) behåller båda.
+  const singleMediaStatus = status === 'mina' || status === 'sedd';
+  const showTypeCol = !singleMediaStatus && mediaFilter === 'all';
+  // Bas: checkbox, poster, titel, år, tjänster, betyg = 6 kolumner.
+  const tableColCount =
+    6 + (showTypeCol ? 1 : 0) + (showAddedCol ? 1 : 0) + (showWatchedCol ? 1 : 0);
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,6 +113,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   }, [calendarEntries]);
 
   useEffect(() => {
+    // B15 (works-as-designed): /my/series öppnar alltid i Kort-vyn oavsett
+    // användarens defaultView-inställning. Kort är den enda vyn med
+    // sub-state-sektionsrubriker (Ligger efter/Pågående/…) — det är vyn som
+    // gör Följer-listan aktionerbar. Tabell/Rutnät får samma gruppordning
+    // (se displayItems) men utan rubriker. Medvetet undantag — ska inte
+    // flaggas som bugg i framtida audits.
     if (status === 'mina') return;
     if (user?.defaultView) setView(user.defaultView);
   }, [user?.defaultView, status]);
@@ -136,35 +155,47 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)).length
     : items.length;
 
-  // För /my/series-vyn: dela TV-shows i sub-states (aktiv/ikapp/avslutad)
-  // baserat på derived state. Använder advisor-cachen för rik beräkning;
-  // shows som inte är i cachen faller tillbaka till tmdbStatus-only-heuristik.
-  const showsByTmdbId = useMemo(() => {
-    const m = new Map<number, TMDBTVShow>();
-    if (!advisor.providers) return m;
-    // Vi har inte direkt tillgång till TMDBTVShow-cachen från advisor — gå
-    // istället via React Query om vi behöver. För nu räcker fallback i
-    // tvSubState (lastWatched + tmdbStatus). Behind-set från advisor täcker
-    // 95% av fallen för oss.
-    return m;
-  }, [advisor.providers]);
+  // B7/T2: substate för /my/series härleds från PERSISTERADE fält enbart
+  // (kontraktet bor i src/lib/libraryView.ts) + advisorns behind-set som
+  // "vet säkert bakom"-signal. Behind-settet bygger på TMDB-data som
+  // useSubscriptionAdvisor/useCalendarEntries redan hämtat för andra syften
+  // på den här sidan — INGEN extra TMDB-fan-out introduceras för substate.
+  const subStateOf = useMemo(() => {
+    const behind = advisor.unfinishedTmdbIds;
+    return (item: WatchlistItem) => librarySubState(item, behind.has(item.tmdbId));
+  }, [advisor.unfinishedTmdbIds]);
+
+  // B6: alla tre vyer (Kort/Tabell/Rutnät) visar samma gruppordning för
+  // /my/series — ligger efter → pågående → ej påbörjade → avslutade, stabilt
+  // sorterade inom gruppen enligt vald sortering. Kort-vyn lägger till
+  // sektionsrubriker; Tabell/Rutnät får ordningen utan rubriker (minst
+  // invasiva konsekventa designen — rubrikrader i en <table> är ett större
+  // ingrepp än det är värt).
+  const displayItems = useMemo(() => {
+    if (status !== 'mina') return filtered;
+    const rank = (i: WatchlistItem) =>
+      i.mediaType !== 'tv'
+        ? LIBRARY_SUB_STATE_ORDER.length
+        : LIBRARY_SUB_STATE_ORDER.indexOf(subStateOf(i));
+    return [...filtered].sort((a, b) => rank(a) - rank(b));
+  }, [filtered, status, subStateOf]);
 
   const followingSections = useMemo(() => {
     if (status !== 'mina') return null;
-    const tvItems = filtered.filter((i): i is WatchlistItem => i.mediaType === 'tv');
-    return bucketBySubState(tvItems, item => {
-      // Om showen är i advisor's behind-set vet vi 100% säkert att det är aktiv.
-      if (advisor.unfinishedTmdbIds.has(item.tmdbId)) return 'aktiv';
-      return tvSubState(item, showsByTmdbId.get(item.tmdbId));
-    });
-  }, [filtered, status, advisor.unfinishedTmdbIds, showsByTmdbId]);
+    const tvItems = displayItems.filter((i): i is WatchlistItem => i.mediaType === 'tv');
+    return bucketBySubState(tvItems, subStateOf);
+  }, [displayItems, status, subStateOf]);
 
   // På /my/series (status==='mina') renderas endast TV-titlar i sektionerna
   // (followingSections filtrerar bort movie-items). Räkna samma mängd i
-  // standfirst så subtitle inte säger mer än sektionerna visar.
+  // standfirst så subtitle inte säger mer än sektionerna visar — och räkna
+  // total mot samma TV-delmängd så "X av Y" stämmer vid sökning (B1/B5).
   const tvVisibleCount = filtered.filter(i => i.mediaType === 'tv').length;
+  const tvTotalCount = items.filter(
+    i => i.status === 'mina' && !i.dropped && i.mediaType === 'tv'
+  ).length;
   const standfirst = status === 'mina'
-    ? buildStandfirst(tvVisibleCount, tvVisibleCount, status, mediaFilter)
+    ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter)
     : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
 
   const hasActiveFilters =
@@ -227,8 +258,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         </div>
       )}
 
+      {/* B14: verktygsraden följer samma regelverk i alla biblioteksvyer:
+          [medietyps-chips — bara där listan kan blanda serier+film]
+          [sortdropdown — alltid] [sök — alltid när listan är > 10]
+          [vytogglar — alltid]. /my/series och /my/films är enmediavyer
+          (jfr B10) så chips vore döda knappar där — det är regeln, inte
+          en inkonsekvens. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
-        {status !== 'mina' && status !== 'sedd' && (
+        {!singleMediaStatus && (
           <div style={{ display: 'flex', gap: 6 }}>
             {(['all', 'tv', 'movie'] as const).map(f => (
               <button
@@ -243,27 +280,25 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )}
 
-        {status !== 'mina' && (
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value as SortKey)}
-            style={{
-              fontFamily: 'var(--mono)', fontSize: 12,
-              border: '1px solid var(--rule)', borderRadius: 6,
-              padding: '5px 10px',
-              background: 'var(--surface)', color: 'var(--ink-2)',
-              outline: 'none', cursor: 'pointer',
-              letterSpacing: 0.04,
-            }}
-          >
-            <option value="updatedAt">Senast ändrad</option>
-            <option value="title">Titel A-Ö</option>
-            <option value="rating">Betyg</option>
-            <option value="releaseYear">År</option>
-            <option value="addedAt">Tillagd</option>
-            <option value="watchedAt">Sedd datum</option>
-          </select>
-        )}
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value as SortKey)}
+          style={{
+            fontFamily: 'var(--mono)', fontSize: 12,
+            border: '1px solid var(--rule)', borderRadius: 6,
+            padding: '5px 10px',
+            background: 'var(--surface)', color: 'var(--ink-2)',
+            outline: 'none', cursor: 'pointer',
+            letterSpacing: 0.04,
+          }}
+        >
+          <option value="updatedAt">Senast ändrad</option>
+          <option value="title">Titel A-Ö</option>
+          <option value="rating">Betyg</option>
+          <option value="releaseYear">År</option>
+          <option value="addedAt">Tillagd</option>
+          <option value="watchedAt">Sedd datum</option>
+        </select>
 
         {totalCount > 10 && (
           <div style={{
@@ -304,7 +339,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
-          <span className="text-xs text-text-secondary">{selected.size} markerade</span>
+          <span className="text-xs text-text-secondary">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
           {(status === 'mina' || status === 'vill_se') && (
             <button
               onClick={async () => {
@@ -362,14 +397,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           />
         ) : (
           <div className={CARD_GRID_CLASS}>
-            {filtered.map(item => (
+            {displayItems.map(item => (
               <WatchlistCard
                 key={item.tmdbId}
                 item={item}
                 nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
               />
             ))}
-            {filtered.length === 0 && (
+            {displayItems.length === 0 && (
               <div className="col-span-full bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
                 {emptyMessage}
               </div>
@@ -384,9 +419,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 <th className="px-2 py-[6px] border-b border-border-light bg-cal-header w-[28px]">
                   <input
                     type="checkbox"
-                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    checked={displayItems.length > 0 && selected.size === displayItems.length}
                     onChange={e => {
-                      if (e.target.checked) setSelected(new Set(filtered.map(i => i.tmdbId)));
+                      if (e.target.checked) setSelected(new Set(displayItems.map(i => i.tmdbId)));
                       else setSelected(new Set());
                     }}
                     className="accent-accent w-[13px] h-[13px] cursor-pointer"
@@ -394,7 +429,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 </th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>
+                {showTypeCol && <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>}
                 <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">År</th>
                 {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tillagd</th>}
                 {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Sedd</th>}
@@ -403,7 +438,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item, idx) => {
+              {displayItems.map((item, idx) => {
                 const poster = posterUrl(item.posterPath, 'w92');
                 const href = titleHref(item.mediaType, item.tmdbId);
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
@@ -445,9 +480,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                         </div>
                       </Link>
                     </td>
-                    <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    {showTypeCol && <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {item.mediaType === 'movie' ? 'Film' : 'Serie'}
-                    </td>
+                    </td>}
                     <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
                       {item.releaseYear ?? '—'}
                     </td>
@@ -476,9 +511,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {displayItems.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-4 text-center text-sm text-text-muted">
+                  <td colSpan={tableColCount} className="px-3 py-4 text-center text-sm text-text-muted">
                     {emptyMessage}
                   </td>
                 </tr>
@@ -489,7 +524,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
-            {filtered.map(item => {
+            {displayItems.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
@@ -514,6 +549,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               );
             })}
           </div>
+          {/* B9: prickarna på postrarna är streamingtjänst-indikatorer (en
+              färg per tjänst, hover visar namnet) — utan legend lästes de
+              som oförklarade statusprickar. */}
+          {displayItems.length > 0 && (
+            <p className="px-3 pb-2 mt-0 text-xxs text-text-muted">
+              Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har.
+            </p>
+          )}
         </div>
       )}
 
@@ -537,23 +580,4 @@ function labelForStatus(status?: WatchStatus): string {
     case 'avbruten': return 'avbrutna';
     default:         return 'allt';
   }
-}
-
-function buildStandfirst(
-  visible: number,
-  total: number,
-  status: WatchStatus | undefined,
-  mediaFilter: 'all' | 'tv' | 'movie',
-): string {
-  const noun = mediaFilter === 'tv' ? 'serier' : mediaFilter === 'movie' ? 'filmer' : 'titlar';
-  if (total === 0) {
-    return 'Inget i biblioteket än. Hitta något att titta på via Rekommendationer.';
-  }
-  if (visible === 0) {
-    return `Inga ${noun} matchar dina filter. Justera ovan eller rensa.`;
-  }
-  if (visible === total) {
-    return `${visible} ${noun} i ${status ? 'denna lista' : 'biblioteket'}. Vi räknade åt dig.`;
-  }
-  return `${visible} av ${total} ${noun} visas. Filtrera mer eller justera vyn.`;
 }

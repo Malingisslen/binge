@@ -9,7 +9,14 @@ import { getProvider } from '@/lib/tmdb/providers';
 import { shortSwedishWeekday, daysBetween, todayIso } from '@/lib/utils';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import RatingStars from '@/components/title/RatingStars';
-import type { WatchlistItem, TvSubState } from '@/types';
+import {
+  librarySubState,
+  libraryProgressLabel,
+  seenEpisodeCode,
+  type LibrarySubState,
+  type ProgressTone,
+} from '@/lib/libraryView';
+import type { WatchlistItem } from '@/types';
 
 function upcomingWeekday(isoDate: string | undefined): string | null {
   if (!isoDate) return null;
@@ -30,9 +37,11 @@ export function WatchlistCard({
 }: {
   item: WatchlistItem;
   nextAirDate?: string;
-  // Aktiv/Ikapp/Avslutad — passas in från WatchlistPage som redan beräknat
-  // det via bucketBySubState. Skippas för film och för icke-/my/series-vyer.
-  subState?: TvSubState;
+  // Persisted-fields-only-substate (se kontraktet i src/lib/libraryView.ts) —
+  // passas in från WatchlistPage som redan beräknat det via bucketBySubState
+  // (inkl. advisorns behind-set). Skippas för film och för icke-/my/series-
+  // vyer; för TV i 'mina' utan prop härleder kortet själv från item-fälten.
+  subState?: LibrarySubState;
 }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
@@ -46,37 +55,39 @@ export function WatchlistCard({
     ? toneForGenreIds(item.genreIds)
     : toneForId(item.tmdbId);
 
+  // TV i 'mina': substate enligt persisted-fields-kontraktet i libraryView.ts.
+  // Prop:en vinner (WatchlistPage har advisorns behind-set); utan prop härleds
+  // baseline från item-fälten så /my/all-kort också får ärliga etiketter.
+  const effectiveSubState: LibrarySubState | null =
+    item.mediaType === 'tv' && item.status === 'mina'
+      ? (subState ?? librarySubState(item))
+      : null;
+
   const progressPct = useMemo(() => {
     if (item.mediaType !== 'tv') return null;
-    // TV i 'mina' med sub-state ikapp/avslutad = användaren är ikapp på allt
-    // aireat → bar full. Aktiv = bakom, räkna ungefärligt baserat på säsong.
+    // Avslutad = sedd till sista kända säsongen → bar full. Övriga states
+    // räknas ungefärligt baserat på säsong — vi påstår inte "100%" för
+    // pågående serier eftersom ikapp-vs-efter är obestämt utan aired-data.
     // (Legacy: TV med status 'sedd' kan finnas i ej-migrerade docs.)
-    if (subState === 'ikapp' || subState === 'avslutad') return 100;
+    if (effectiveSubState === 'avslutad') return 100;
     if (item.status === 'sedd') return 100;
     if (!item.totalSeasons || !item.lastWatchedSeason) return 0;
     const seasonPart = (item.lastWatchedSeason - 1) / item.totalSeasons;
     const episodePart = item.lastWatchedEpisode ? 1 / (item.totalSeasons * 20) : 0;
     return Math.min(100, Math.round((seasonPart + episodePart) * 100));
-  }, [item, subState]);
+  }, [item, effectiveSubState]);
 
   const upcomingWd = upcomingWeekday(nextAirDate);
-  const progressLabel: { text: string; tone: 'done' | 'accent' | 'muted' } = (() => {
+  const progressLabel: { text: string; tone: ProgressTone } = (() => {
     if (item.mediaType === 'movie') {
       return { text: item.status === 'sedd' ? 'Sedd' : '—', tone: item.status === 'sedd' ? 'done' : 'muted' };
     }
-    // TV. Sub-state-driven labels när vi vet sub-state — annars fall tillbaka
-    // till legacy/heuristik så icke-/my/series-vyer (t.ex. /my/all) också får
-    // rimlig text.
-    if (subState === 'avslutad') return { text: 'Avslutad', tone: 'done' };
-    if (subState === 'aktiv' && item.lastWatchedSeason) {
-      return { text: `Ligger efter · S${item.lastWatchedSeason}`, tone: 'accent' };
-    }
-    if (subState === 'ikapp') {
-      return { text: upcomingWd ? `Nytt ${upcomingWd}` : 'Ikapp', tone: upcomingWd ? 'accent' : 'done' };
-    }
+    // TV i 'mina': exhaustiva substate-etiketter (B2 — aldrig bara "—").
+    if (effectiveSubState) return libraryProgressLabel(item, effectiveSubState, upcomingWd);
+    // TV utanför 'mina' (vill_se/avbruten i /my/all m.fl.): visa vad vi vet.
     if (upcomingWd) return { text: `Nytt ${upcomingWd}`, tone: 'accent' };
-    if (!item.totalSeasons) return { text: '—', tone: 'muted' };
-    if (item.lastWatchedSeason) return { text: `Pågår S${item.lastWatchedSeason}`, tone: 'muted' };
+    const code = seenEpisodeCode(item);
+    if (code) return { text: `${code} sedd`, tone: 'muted' };
     return { text: 'Ej påbörjad', tone: 'muted' };
   })();
 
@@ -101,14 +112,14 @@ export function WatchlistCard({
             <div className="text-xs font-semibold truncate">{item.title}</div>
           </Link>
           <span className="shrink-0">
-            {item.rating !== null ? (
-              <span className="inline-flex items-center gap-[3px]">
-                <RatingStars rating={item.rating} readonly size="sm" />
+            {/* B8: obetygsatt = dimmade stjärnor — samma visning som
+                Tabell-vyn, så de två vyerna inte säger olika saker. */}
+            <span className="inline-flex items-center gap-[3px]">
+              <RatingStars rating={item.rating} readonly size="sm" dim={item.rating === null} />
+              {item.rating !== null && (
                 <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
-              </span>
-            ) : (
-              <span className="text-xxs text-text-muted/60">Ej betygsatt</span>
-            )}
+              )}
+            </span>
           </span>
         </div>
         <div className="text-xxs text-text-muted mt-[1px]">

@@ -2,28 +2,36 @@
 
 import { useState } from 'react';
 import { WatchlistCard } from './WatchlistCard';
-import type { WatchlistItem, TvSubState } from '@/types';
+import {
+  LIBRARY_SUB_STATE_ORDER,
+  LIBRARY_SECTION_LABELS,
+  type LibrarySubState,
+} from '@/lib/libraryView';
+import type { WatchlistItem } from '@/types';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
 
-// Specialvy för /my/series som delar upp TV-shows i sub-states:
-// "Ligger efter" (du har osedda aireade avsnitt) — överst, mest aktionerbar
-// "Ikapp" (väntar på nästa avsnitt — Returning Series)
-// "Avslutade" — collapsed default eftersom inget kommer mer
+// Specialvy för /my/series som delar upp TV-shows efter vad som är KNOWABLE
+// från persisterade fält (kontraktet bor i src/lib/libraryView.ts, B7/T2):
+//
+//   "Ligger efter"  — säkert bakom (aired-data via advisorns behind-set,
+//                     eller Ended-serie med osedda säsonger). Mest aktionerbar.
+//   "Pågående"      — påbörjad; ikapp-vs-efter går inte att avgöra utan
+//                     aired-data, så vi påstår ingetdera. Kortet visar bara
+//                     vad vi vet ("S2E10 sedd" / "Nytt ons").
+//   "Ej påbörjade"  — ingen progress sparad.
+//   "Avslutade"     — Ended/Canceled + sedd till sista kända säsongen.
+//                     Collapsed default eftersom inget mer kommer.
 //
 // Endast TV-titlar når hit — WatchlistPage filtrerar bort ev. legacy
 // 'mina'-film (mediaType !== 'tv') innan bucketBySubState anropas.
-export interface CardSections {
-  aktiv: WatchlistItem[];
-  ikapp: WatchlistItem[];
-  avslutad: WatchlistItem[];
-}
+export type CardSections = Record<LibrarySubState, WatchlistItem[]>;
 
 export function bucketBySubState(
   items: WatchlistItem[],
-  subStateOf: (item: WatchlistItem) => TvSubState,
+  subStateOf: (item: WatchlistItem) => LibrarySubState,
 ): CardSections {
-  const sections: CardSections = { aktiv: [], ikapp: [], avslutad: [] };
+  const sections: CardSections = { ligger_efter: [], paborjad: [], ej_paborjad: [], avslutad: [] };
   for (const item of items) {
     sections[subStateOf(item)].push(item);
   }
@@ -38,10 +46,9 @@ export function FollowingCardSections({
   nextAirByTmdbId: Map<number, string>;
 }) {
   const [avslutadOpen, setAvslutadOpen] = useState(false);
-  const { aktiv, ikapp, avslutad } = sections;
-  const totalEmpty = aktiv.length === 0 && ikapp.length === 0 && avslutad.length === 0;
+  const total = LIBRARY_SUB_STATE_ORDER.reduce((sum, key) => sum + sections[key].length, 0);
 
-  if (totalEmpty) {
+  if (total === 0) {
     return (
       <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
         Inga serier i Följer än. Lägg till en serie via Rekommendationer eller sök.
@@ -49,84 +56,70 @@ export function FollowingCardSections({
     );
   }
 
+  // B1: sektionsräknarna är scope:ade som "X av Y" mot samma totalsumma som
+  // standfirsten räknar, och wrappern får top-marginal så första rubriken
+  // inte kan läsas som en global räknare invid vytogglarna.
+  const countLabel = (n: number) => `${n} av ${total} ${total === 1 ? 'titel' : 'titlar'}`;
+
   return (
-    <div className="space-y-[14px]">
-      {aktiv.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">
-              Ligger efter
-            </h2>
-            <span className="text-xxs text-text-muted">
-              {aktiv.length} {aktiv.length === 1 ? 'titel' : 'titlar'}
-            </span>
-          </div>
-          <div className={CARD_GRID_CLASS}>
-            {aktiv.map(item => (
-              <WatchlistCard
-                key={item.tmdbId}
-                item={item}
-                nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
-                subState="aktiv"
-              />
-            ))}
-          </div>
-        </section>
-      )}
+    <div className="mt-[18px] space-y-[14px]">
+      {LIBRARY_SUB_STATE_ORDER.map(key => {
+        const items = sections[key];
+        if (items.length === 0) return null;
+        const heading = LIBRARY_SECTION_LABELS[key];
 
-      {ikapp.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">
-              Ikapp — väntar på nytt
-            </h2>
-            <span className="text-xxs text-text-muted">
-              {ikapp.length} {ikapp.length === 1 ? 'titel' : 'titlar'}
-            </span>
-          </div>
-          <div className={CARD_GRID_CLASS}>
-            {ikapp.map(item => (
-              <WatchlistCard
-                key={item.tmdbId}
-                item={item}
-                nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
-                subState="ikapp"
-              />
-            ))}
-          </div>
-        </section>
-      )}
+        if (key === 'avslutad') {
+          return (
+            <section key={key}>
+              <button
+                onClick={() => setAvslutadOpen(!avslutadOpen)}
+                className="w-full flex items-center justify-between mb-2 bg-transparent border-none p-0 cursor-pointer text-left"
+              >
+                <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold flex items-center gap-1">
+                  {heading}
+                  <span className="text-[9px] text-text-muted/70">
+                    {avslutadOpen ? '▾' : '▸'}
+                  </span>
+                </h2>
+                <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
+              </button>
+              {avslutadOpen && (
+                <div className={CARD_GRID_CLASS}>
+                  {items.map(item => (
+                    <WatchlistCard
+                      key={item.tmdbId}
+                      item={item}
+                      nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                      subState={key}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        }
 
-      {avslutad.length > 0 && (
-        <section>
-          <button
-            onClick={() => setAvslutadOpen(!avslutadOpen)}
-            className="w-full flex items-center justify-between mb-2 bg-transparent border-none p-0 cursor-pointer text-left"
-          >
-            <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold flex items-center gap-1">
-              Avslutade
-              <span className="text-[9px] text-text-muted/70">
-                {avslutadOpen ? '▾' : '▸'}
-              </span>
-            </h2>
-            <span className="text-xxs text-text-muted">
-              {avslutad.length} {avslutad.length === 1 ? 'titel' : 'titlar'}
-            </span>
-          </button>
-          {avslutadOpen && (
+        return (
+          <section key={key}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">
+                {heading}
+              </h2>
+              <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
+            </div>
             <div className={CARD_GRID_CLASS}>
-              {avslutad.map(item => (
+              {items.map(item => (
                 <WatchlistCard
                   key={item.tmdbId}
                   item={item}
                   nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
-                  subState="avslutad"
+                  subState={key}
                 />
               ))}
             </div>
-          )}
-        </section>
-      )}
+          </section>
+        );
+      })}
     </div>
   );
 }
