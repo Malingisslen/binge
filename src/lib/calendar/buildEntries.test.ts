@@ -113,7 +113,10 @@ describe('buildCalendarEntries', () => {
       }),
       season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
     }];
-    expect(buildCalendarEntries(data)[0].provider).toBe('Viafree');
+    // id 76 är ett Viaplay-alias i SWEDISH_PROVIDERS — pipelinen kanonicaliserar
+    // namnet (TMDB:s rå-namn "Viafree" → katalogens "Viaplay"). Ads-bucketen
+    // används OCH namnet normaliseras.
+    expect(buildCalendarEntries(data)[0].provider).toBe('Viaplay');
   });
 
   it('leaves provider undefined when only rent/buy is available', () => {
