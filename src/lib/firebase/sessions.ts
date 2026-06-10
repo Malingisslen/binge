@@ -23,7 +23,14 @@ const SESSION_TTL_DAYS = 7;
 
 export async function createSession(params: {
   hostUid: string | null;
+  // Sessionens etikett — visas i sessionslistor/popover. För grupp-startade
+  // sessioner är detta gruppnamnet.
   hostName: string;
+  // Värdens PERSONLIGA visningsnamn för deltagar-chippen (G3). Utan den här
+  // (vanlig /tillsammans/ny där hostName redan är personens namn) faller vi
+  // tillbaka på hostName — men en grupp-startad session ska visa personen i
+  // deltagarlistan, inte gruppnamnet.
+  hostDisplayName?: string;
   hostProviders: number[];
   config: SessionConfig;
   // Optional grupp-binding. När satt skrivs picks från sessionen till
@@ -51,7 +58,7 @@ export async function createSession(params: {
   const participantId = params.hostUid ?? generateSecureToken();
   await setDoc(doc(db, 'sessions', sessionRef.id, 'participants', participantId), {
     uid: params.hostUid,
-    displayName: params.hostName,
+    displayName: params.hostDisplayName ?? params.hostName,
     providers: params.hostProviders,
     vetoRemaining: 1,
     isHost: true,

@@ -7,6 +7,7 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
 import { toneForId } from '@/lib/duotone';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 
 /**
@@ -33,6 +34,7 @@ export function GroupWatchlistTable({
   );
 
   const memberProgress = useGroupMemberProgress(groupId);
+  const [itemToRemove, setItemToRemove] = useState<GroupWatchlistItem | null>(null);
 
   return (
     <div className="bg-surface border border-border-main rounded-sm">
@@ -135,12 +137,8 @@ export function GroupWatchlistTable({
                   <td className="text-right px-2 py-[6px]">
                     {canDelete && (
                       <button
-                        onClick={() => {
-                          if (confirm(`Ta bort "${item.title}" från gruppens watchlist?`)) {
-                            void removeFromGroupWatchlist(groupId, item.tmdbId);
-                          }
-                        }}
-                        className="text-text-muted hover:text-red-600 cursor-pointer"
+                        onClick={() => setItemToRemove(item)}
+                        className="text-text-muted hover:text-danger-ink cursor-pointer"
                         title="Ta bort"
                       >
                         <Trash2 size={11} />
@@ -152,6 +150,18 @@ export function GroupWatchlistTable({
             })}
           </tbody>
         </table>
+      )}
+      {itemToRemove && (
+        <ConfirmDialog
+          title="Ta bort titel?"
+          body={`"${itemToRemove.title}" tas bort från gruppens gemensamma bibliotek, inklusive allas betyg på den.`}
+          confirmLabel="Ta bort"
+          onConfirm={() => {
+            void removeFromGroupWatchlist(groupId, itemToRemove.tmdbId);
+            setItemToRemove(null);
+          }}
+          onCancel={() => setItemToRemove(null)}
+        />
       )}
     </div>
   );

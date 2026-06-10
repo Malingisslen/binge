@@ -7,7 +7,8 @@ import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
-import { generateCandidates } from '@/lib/together/candidates';
+import { generateCandidates, libraryExclusionIds } from '@/lib/together/candidates';
+import { useWatchlist } from '@/hooks/useWatchlist';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
 import { storeParticipantId } from '@/hooks/useSession';
 import { FormSection, FormRadioGroup } from '@/components/ui/FormSection';
@@ -24,6 +25,7 @@ export default function NyTillsammansPage() {
 
 function NyContent() {
   const { user, uid } = useAuth();
+  const { items: myLibrary } = useWatchlist();
   const router = useRouter();
 
   const [hostName, setHostName] = useState(user?.displayName ?? '');
@@ -66,7 +68,15 @@ function NyContent() {
         config,
       });
       storeParticipantId(sessionId, uid ?? sessionId);
-      const candidates = await generateCandidates({ config, providers });
+      // G4: föreslå inte titlar skaparen redan följer/sett/avbrutit.
+      // Övriga deltagare ansluter via länk EFTER att kandidaterna genererats
+      // (och deras watchlists är inte läsbara klient-sidigt), så bara
+      // skaparens bibliotek kan exkluderas här.
+      const candidates = await generateCandidates({
+        config,
+        providers,
+        excludeTmdbIds: libraryExclusionIds(myLibrary),
+      });
       await setSessionCandidates(sessionId, candidates);
       router.push(`/tillsammans/${sessionId}`);
     } catch (err) {
@@ -142,8 +152,8 @@ function NyContent() {
             value={providerMode}
             onChange={v => setProviderMode(v as ProviderMode)}
             options={[
-              { value: 'intersect', label: 'Alla har (intersect)', desc: 'Bara titlar alla deltagare kan streama' },
-              { value: 'union', label: 'Någon har (union)', desc: 'Inkluderar titlar som bara någon har' },
+              { value: 'intersect', label: 'Alla har', desc: 'Bara titlar alla deltagare kan streama' },
+              { value: 'union', label: 'Någon har', desc: 'Inkluderar titlar som bara någon har' },
             ]}
           />
         </FormSection>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { updateGroup } from '@/lib/firebase/groups';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type {
   AggregationStrategy,
   GroupDefaults,
@@ -14,8 +15,9 @@ import type {
  * Modal för att redigera gruppens namn + sessions-defaults.
  * Owner-only access — gate:as i GroupContent via isOwner-check innan render.
  *
- * onDelete triggas via "Radera grupp"-knapp och kräver en confirm() innan
- * parent tar beslutet om radering. Stängs på Escape eller backdrop-klick.
+ * onDelete triggas via "Radera grupp"-knapp och kräver en designad
+ * ConfirmDialog (G1) innan parent tar beslutet om radering. Stängs på
+ * Escape eller backdrop-klick.
  */
 export function GroupSettingsModal({
   groupId, name, defaults, onClose, onDelete,
@@ -31,13 +33,18 @@ export function GroupSettingsModal({
   const [aggregation, setAggregation] = useState<AggregationStrategy>(defaults.aggregation);
   const [mediaType, setMediaType] = useState<SessionMediaType>(defaults.mediaType);
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Stäng på Escape (tangentbord-a11y; klick-on-backdrop täcker mus).
+  // ConfirmDialog stoppar Escape-propagering själv, men gate:a ändå så
+  // settings-modalen inte stängs medan raderings-bekräftelsen är öppen.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !confirmingDelete) onClose();
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [onClose, confirmingDelete]);
 
   const save = async () => {
     setSaving(true);
@@ -144,15 +151,23 @@ export function GroupSettingsModal({
             Avbryt
           </button>
           <button
-            onClick={() => {
-              if (confirm('Radera gruppen permanent? Det går inte att ångra.')) onDelete();
-            }}
-            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-red-300 text-red-700 rounded-sm text-xs bg-white cursor-pointer"
+            onClick={() => setConfirmingDelete(true)}
+            className="ml-auto inline-flex items-center gap-1 px-3 py-[5px] border border-danger/40 text-danger-ink rounded-sm text-xs bg-white cursor-pointer hover:bg-danger-soft"
           >
             <Trash2 size={11} /> Radera grupp
           </button>
         </div>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Radera gruppen permanent?"
+          body="Medlemmar, gemensamt bibliotek och sessionshistorik raderas. Det går inte att ångra."
+          confirmLabel="Radera grupp"
+          onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
     </div>
   );
 }

@@ -101,8 +101,8 @@ function NyGruppContent() {
             value={providerMode}
             onChange={v => setProviderMode(v as ProviderMode)}
             options={[
-              { value: 'intersect', label: 'Alla har (intersect)', desc: 'Bara titlar alla medlemmar kan streama' },
-              { value: 'union', label: 'Någon har (union)', desc: 'Inkluderar titlar som bara någon har' },
+              { value: 'intersect', label: 'Alla har', desc: 'Bara titlar alla medlemmar kan streama' },
+              { value: 'union', label: 'Någon har', desc: 'Inkluderar titlar som bara någon har' },
             ]}
           />
         </FormSection>

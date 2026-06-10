@@ -257,16 +257,39 @@ export async function leaveGroup(groupId: string, uid: string): Promise<void> {
   return removeMember(groupId, uid);
 }
 
-export async function deleteGroup(groupId: string): Promise<void> {
+export async function deleteGroup(groupId: string, currentUid: string): Promise<void> {
   // Best-effort cleanup. Members + watchlist (inkl. per-item progress) +
   // sessionHistory-subcollections måste raderas innan parent-doc:et för att
   // undvika orphaned data; i produktion skulle detta ske i en Cloud Function.
   // För MVP raderar vi det vi kan klient-sidigt.
-  const [membersSnap, watchlistSnap, sessionHistorySnap] = await Promise.all([
+  const [membersSnap, watchlistSnap, sessionHistorySnap, sessionsSnap] = await Promise.all([
     getDocs(collection(db, 'groups', groupId, 'members')),
     getDocs(collection(db, 'groups', groupId, 'watchlist')),
     getDocs(collection(db, 'groups', groupId, 'sessionHistory')),
+    // G8: top-level sessions/{id} bär groupId och blir annars föräldralösa
+    // — kvar som "aktiva" i sessionslistor med den raderade gruppens namn.
+    getDocs(query(collection(db, 'sessions'), where('groupId', '==', groupId))),
   ]);
+
+  // Firestore-rules tillåter bara sessionens host (hostUid == auth.uid) att
+  // uppdatera/radera session-docs. Den raderande ägaren kan alltså bara städa
+  // sessioner hen själv startat: de märks 'expired' + avlänkas (groupId: null)
+  // så de försvinner ur aktiva listor och inte refererar en raderad grupp. Sessioner
+  // startade av ANDRA medlemmar kan inte röras klient-sidigt — de löper ut
+  // via expiresAt (7 dagar) och deras grupp-skrivningar ("Den här tar vi")
+  // är redan best-effort. Full städning hör hemma i en Cloud Function.
+  const mySessions = sessionsSnap.docs.filter(d => d.data().hostUid === currentUid);
+  if (mySessions.length > 0) {
+    const batch = writeBatch(db);
+    for (const d of mySessions) {
+      batch.update(d.ref, {
+        status: 'expired',
+        groupId: null,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
 
   // Varje watchlist-item kan ha en progress-subcollection
   // (groups/{id}/watchlist/{tmdbId}/progress/{uid}) — hämta dem parallellt.

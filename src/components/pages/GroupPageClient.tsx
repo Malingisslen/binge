@@ -9,8 +9,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
 import { joinGroupViaToken, deleteGroup } from '@/lib/firebase/groups';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
-import { computeSessionProviders, generateCandidates } from '@/lib/together/candidates';
+import {
+  computeSessionProviders,
+  generateCandidates,
+  libraryExclusionIds,
+} from '@/lib/together/candidates';
 import { storeParticipantId } from '@/hooks/useSession';
+import { useWatchlist } from '@/hooks/useWatchlist';
 import { GroupMembersPanel } from '@/components/groups/GroupMembersPanel';
 import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
 import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
@@ -131,6 +136,7 @@ function GroupView({
   isOwner: boolean;
 }) {
   const router = useRouter();
+  const { items: myLibrary } = useWatchlist();
   const [showSettings, setShowSettings] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,14 +164,23 @@ function GroupView({
       const me = members.find(m => m.uid === myUid);
       const sessionId = await createSession({
         hostUid: myUid,
+        // Sessionsetiketten är gruppnamnet, men deltagar-chippen ska visa
+        // personen som startade — inte gruppen (G3).
         hostName: group.name,
+        hostDisplayName: me?.displayName ?? 'Värd',
         hostProviders: me?.providers ?? [],
         config,
         groupId: group.id,
       });
       storeParticipantId(sessionId, myUid);
       const seedProviders = config.providerMode === 'intersect' ? intersectProviders : unionProviders;
-      const candidates = await generateCandidates({ config, providers: seedProviders });
+      // G4: föreslå inte titlar gruppen redan har i gemensamma biblioteket
+      // eller som jag själv följer/sett/avbrutit. Övriga medlemmars privata
+      // watchlists är inte läsbara klient-sidigt (Firestore-rules) — gruppens
+      // watchlist är proxyn för "det vi redan känner till tillsammans".
+      const excludeTmdbIds = libraryExclusionIds(myLibrary);
+      for (const item of watchlist) excludeTmdbIds.add(item.tmdbId);
+      const candidates = await generateCandidates({ config, providers: seedProviders, excludeTmdbIds });
       await setSessionCandidates(sessionId, candidates);
       router.push(`/tillsammans/${sessionId}`);
     } catch (err) {
@@ -250,7 +265,7 @@ function GroupView({
           defaults={group.defaults}
           onClose={() => setShowSettings(false)}
           onDelete={() => {
-            void deleteGroup(groupId).then(() => router.push('/grupper'));
+            void deleteGroup(groupId, myUid).then(() => router.push('/grupper'));
           }}
         />
       )}

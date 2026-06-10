@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { inviteMemberByUid, removeMember } from '@/lib/firebase/groups';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { useAuth } from '@/hooks/useAuth';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { ResolvedUser } from '@/lib/firebase/username';
 import type { GroupMember } from '@/types';
 
@@ -24,6 +25,7 @@ export function GroupMembersPanel({
   isOwner: boolean;
 }) {
   const [adding, setAdding] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   return (
     <div className="bg-surface border border-border-main rounded-sm">
       <div className="px-3 py-[6px] border-b border-border-light flex items-center justify-between">
@@ -64,12 +66,8 @@ export function GroupMembersPanel({
             </div>
             {isOwner && m.uid !== ownerUid && (
               <button
-                onClick={() => {
-                  if (confirm(`Ta bort ${m.displayName} från gruppen?`)) {
-                    void removeMember(groupId, m.uid);
-                  }
-                }}
-                className="text-xxs text-text-muted hover:text-red-600 cursor-pointer"
+                onClick={() => setMemberToRemove(m)}
+                className="text-xxs text-text-muted hover:text-danger-ink cursor-pointer"
                 title="Ta bort"
               >
                 <X size={12} />
@@ -78,6 +76,18 @@ export function GroupMembersPanel({
           </li>
         ))}
       </ul>
+      {memberToRemove && (
+        <ConfirmDialog
+          title="Ta bort medlem?"
+          body={`${memberToRemove.displayName} tas bort från gruppen och kan bara komma tillbaka via en ny inbjudan.`}
+          confirmLabel="Ta bort"
+          onConfirm={() => {
+            void removeMember(groupId, memberToRemove.uid);
+            setMemberToRemove(null);
+          }}
+          onCancel={() => setMemberToRemove(null)}
+        />
+      )}
     </div>
   );
 }

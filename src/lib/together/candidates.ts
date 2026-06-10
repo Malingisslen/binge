@@ -4,9 +4,50 @@ import type {
   SessionCandidate,
   SessionConfig,
   TMDBSearchResult,
+  WatchStatus,
 } from '@/types';
 
 const MAX_CANDIDATES = 30;
+
+/**
+ * Tmdb-ids ur ett bibliotek som INTE ska föreslås i en session (G4):
+ * 'mina' (följer redan), 'sedd' (redan sedd) och 'avbruten' (gav upp).
+ * 'vill_se' behålls medvetet — titlar man vill se är prima gemensamma
+ * kandidater; att de dyker upp i sviparkortleken är önskat, inte buggen.
+ */
+export function libraryExclusionIds(
+  items: ReadonlyArray<{ tmdbId: number; status: WatchStatus }>,
+): Set<number> {
+  const out = new Set<number>();
+  for (const item of items) {
+    if (item.status !== 'vill_se') out.add(item.tmdbId);
+  }
+  return out;
+}
+
+/**
+ * Pure ranking-pipeline för sviparkortleken: exkludera → dedupa →
+ * sortera på betyg → cappa till MAX_CANDIDATES. Extraherad ur
+ * generateCandidates för att kunna testas utan TMDB-fetch.
+ */
+export function rankCandidates(
+  candidates: ReadonlyArray<SessionCandidate>,
+  excludeTmdbIds?: ReadonlySet<number>,
+): SessionCandidate[] {
+  const seen = new Set<string>();
+  const deduped: SessionCandidate[] = [];
+  for (const c of candidates) {
+    if (excludeTmdbIds?.has(c.tmdbId)) continue;
+    const key = `${c.mediaType}-${c.tmdbId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(c);
+  }
+
+  deduped.sort((a, b) => b.voteAverage - a.voteAverage);
+
+  return deduped.slice(0, MAX_CANDIDATES);
+}
 
 export function computeSessionProviders(
   participants: ReadonlyArray<{ providers: number[] }>,
@@ -38,8 +79,12 @@ export function computeSessionProviders(
 export async function generateCandidates(params: {
   config: SessionConfig;
   providers: number[];
+  // Tmdb-ids som inte ska föreslås — deltagarnas bibliotek + gruppens
+  // gemensamma watchlist (G4). Discover hämtar en sida per medietyp
+  // (20+20 titlar) så poolen tål normal exkludering utan extra fetch.
+  excludeTmdbIds?: ReadonlySet<number>;
 }): Promise<SessionCandidate[]> {
-  const { config, providers } = params;
+  const { config, providers, excludeTmdbIds } = params;
   const candidates: SessionCandidate[] = [];
 
   const discoverParams: Record<string, string> = {
@@ -87,19 +132,7 @@ export async function generateCandidates(params: {
 
   await Promise.all(tasks);
 
-  // Dedup + sort by popularity-ish (vote_average * count). Vi har bara vote_average här.
-  const seen = new Set<string>();
-  const deduped: SessionCandidate[] = [];
-  for (const c of candidates) {
-    const key = `${c.mediaType}-${c.tmdbId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(c);
-  }
-
-  deduped.sort((a, b) => b.voteAverage - a.voteAverage);
-
-  return deduped.slice(0, MAX_CANDIDATES);
+  return rankCandidates(candidates, excludeTmdbIds);
 }
 
 function resultToCandidate(r: TMDBSearchResult, mediaType: 'movie' | 'tv'): SessionCandidate {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, LogOut, RefreshCw } from 'lucide-react';
 import { getProvider } from '@/lib/tmdb/providers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import {
   disableInviteToken,
   leaveGroup,
@@ -48,8 +49,16 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
           <ProviderPills ids={intersect} highlight />
         </div>
         <div>
-          <div className="text-xxs text-text-muted mb-1">Någon har ({union.length})</div>
-          <ProviderPills ids={onlySome} />
+          {/* Räknaren matchar pill-listan (union minus gemensamma) — inte
+              hela unionen (G2). Tom diff förklaras ärligt istället för "—". */}
+          <div className="text-xxs text-text-muted mb-1">Bara någon har ({onlySome.length})</div>
+          {onlySome.length > 0 ? (
+            <ProviderPills ids={onlySome} />
+          ) : (
+            <div className="text-xxs text-text-muted">
+              {union.length > 0 ? 'Alla har samma tjänster.' : 'Inga tjänster angivna ännu.'}
+            </div>
+          )}
         </div>
         <JustWatchCredit className="block pt-1" />
       </div>
@@ -150,8 +159,9 @@ export function InvitePanel({
     }
   }, [now, isOwner, tokenIsActive, rotatedAt, working, handleRotate]);
 
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
   const handleDisable = async () => {
-    if (!confirm('Inaktivera inbjudningslänken? Befintliga länkar slutar fungera.')) return;
+    setConfirmingDisable(false);
     setWorking(true);
     try {
       await disableInviteToken(groupId);
@@ -200,7 +210,7 @@ export function InvitePanel({
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
-                onClick={handleDisable}
+                onClick={() => setConfirmingDisable(true)}
                 disabled={working}
                 className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
@@ -224,7 +234,7 @@ export function InvitePanel({
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
-                onClick={handleDisable}
+                onClick={() => setConfirmingDisable(true)}
                 disabled={working}
                 className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
@@ -245,6 +255,15 @@ export function InvitePanel({
           </>
         )}
       </div>
+      {confirmingDisable && (
+        <ConfirmDialog
+          title="Inaktivera inbjudningslänken?"
+          body="Befintliga länkar slutar fungera direkt. Du kan skapa en ny länk när som helst."
+          confirmLabel="Inaktivera"
+          onConfirm={() => { void handleDisable(); }}
+          onCancel={() => setConfirmingDisable(false)}
+        />
+      )}
     </div>
   );
 }
@@ -257,21 +276,37 @@ export function LeavePanel({
   onLeft: () => void;
 }) {
   const [working, setWorking] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   return (
     <div className="bg-surface border border-border-main rounded-sm">
       <div className="px-3 py-2">
         <button
-          onClick={async () => {
-            if (!confirm('Lämna gruppen?')) return;
-            setWorking(true);
-            try { await leaveGroup(groupId, myUid); onLeft(); } finally { setWorking(false); }
-          }}
+          onClick={() => setConfirming(true)}
           disabled={working}
-          className="inline-flex items-center gap-1 text-xs text-red-700 hover:underline cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1 text-xs text-danger-ink hover:underline cursor-pointer disabled:opacity-50"
         >
           <LogOut size={11} /> Lämna gruppen
         </button>
       </div>
+      {confirming && (
+        <ConfirmDialog
+          title="Lämna gruppen?"
+          body="Du tas bort från medlemslistan och kan bara komma tillbaka via en ny inbjudan."
+          confirmLabel="Lämna gruppen"
+          busy={working}
+          onConfirm={async () => {
+            setWorking(true);
+            try {
+              await leaveGroup(groupId, myUid);
+              onLeft();
+            } finally {
+              setWorking(false);
+              setConfirming(false);
+            }
+          }}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </div>
   );
 }
