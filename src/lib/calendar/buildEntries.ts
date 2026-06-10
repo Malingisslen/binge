@@ -2,8 +2,20 @@ import { getProvider } from '@/lib/tmdb/providers';
 import { formatEpisodeCode } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { pickSwedishDigitalRelease } from './releaseDate';
-import type { TMDBTVShow, TMDBEpisode, TMDBMovie } from '@/types';
+import type { TMDBTVShow, TMDBEpisode, TMDBMovie, TMDBProviderData } from '@/types';
 import type { CalendarEntry, CalendarSource } from './types';
+
+/**
+ * Provider-policy för kalenderns metarader (H3): visa var titeln STREAMAS när
+ * TMDB vet det — flatrate, free eller ads (i den ordningen). Rent/buy räknas
+ * inte ("kan köpas" är inte "sänds på"). Saknar TMDB SE-data helt lämnas
+ * provider tom; konsumenterna (EventCard, LaterThisWeek) visar då bara
+ * dag · avsnittskod — det är datagränsen, inte en bugg.
+ */
+function streamingProviderName(data: TMDBProviderData | undefined): string | undefined {
+  const p = data?.flatrate?.[0] ?? data?.free?.[0] ?? data?.ads?.[0];
+  return p ? (getProvider(p.provider_id)?.shortName ?? p.provider_name) : undefined;
+}
 
 export interface SeasonDatum {
   showId: number;
@@ -32,10 +44,7 @@ export function buildCalendarEntries(
 
   for (const item of seasonData) {
     const { show } = item;
-    const flatrate = show['watch/providers']?.results?.SE?.flatrate?.[0];
-    const providerName = flatrate
-      ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name)
-      : undefined;
+    const providerName = streamingProviderName(show['watch/providers']?.results?.SE);
     const showGenreIds = show.genres?.map(g => g.id) ?? [];
     const episodes = item.season?.episodes ?? [];
     // Fälla in det seedade next_episode_to_air i finale-beräkningen: när TMDB:s
@@ -108,10 +117,7 @@ export function buildMovieEntries(
     // är lexikografiskt korrekt.
     if (releaseDate < todayKey) continue;
 
-    const flatrate = movie['watch/providers']?.results?.SE?.flatrate?.[0];
-    const providerName = flatrate
-      ? (getProvider(flatrate.provider_id)?.shortName ?? flatrate.provider_name)
-      : undefined;
+    const providerName = streamingProviderName(movie['watch/providers']?.results?.SE);
 
     result.push({
       kind: 'movie',

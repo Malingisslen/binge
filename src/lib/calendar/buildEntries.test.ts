@@ -89,6 +89,33 @@ describe('buildCalendarEntries', () => {
     expect(buildCalendarEntries(data, 'vill_se')[0].source).toBe('vill_se');
   });
 
+  it('falls back to free/ads providers when no flatrate exists (H3)', () => {
+    // "Var streamas detta?" ska besvaras även för titlar som bara ligger på
+    // en gratis-/reklamtjänst — annars blir metaraderna inkonsekventa mellan
+    // kort (provider på vissa, saknas på andra fast TMDB vet svaret).
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({
+        next_episode_to_air: null,
+        'watch/providers': { results: { SE: { link: '', free: [{ provider_id: 89, provider_name: 'TV4 Play', logo_path: '' }] } } },
+      }),
+      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
+    }];
+    expect(buildCalendarEntries(data)[0].provider).toBeTruthy();
+  });
+
+  it('leaves provider undefined when only rent/buy is available', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({
+        next_episode_to_air: null,
+        'watch/providers': { results: { SE: { link: '', buy: [{ provider_id: 2, provider_name: 'Apple TV', logo_path: '' }] } } },
+      }),
+      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
+    }];
+    expect(buildCalendarEntries(data)[0].provider).toBeUndefined();
+  });
+
   it('tags every episode entry with kind "episode" and mediaType "tv"', () => {
     const data: SeasonDatum[] = [{
       showId: 100,

@@ -8,6 +8,13 @@ import EventCard from './EventCard';
 
 // 7-column week board. Today's column gets the plum wash + 2px top rule.
 // Episodes airing today are flagged `isTonight` on the card.
+//
+// K4 — passerade dagar: medvetet val att VISA deras avsnitt (pipelinen har
+// hela säsongen, inklusive redan sända avsnitt) men dämpade via `.past`-
+// klassen, så veckan läses som ett helt schema och WeekBoard aldrig påstår
+// "— inget —" om en dag där avsnitt faktiskt sändes. Undantag: filmsläpp
+// byggs bara framåt (buildMovieEntries filtrerar bort passerade datum), så
+// en passerad dag kan sakna ett filmsläpp som fanns där när dagen var aktuell.
 
 const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
 
@@ -59,12 +66,13 @@ export default function WeekBoard({ weekStart, entries }: Props) {
       {days.map((d, i) => {
         const key = isoKey(d);
         const isToday = sameDay(d, today);
+        const isPast = d.getTime() < today.getTime();
         const dayEntries = entriesByDay.get(key) ?? [];
         const lab = DAY_LABELS[i];
         return (
-          <div key={key} className={`col${isToday ? ' today' : ''}`}>
+          <div key={key} className={`col${isToday ? ' today' : ''}${isPast ? ' past' : ''}`}>
             <div className="col-h">
-              <div className="lab">{lab}{isToday ? ' · idag' : ''}</div>
+              <div className="lab">{lab}{isToday ? ' · idag' : ''}{isPast ? ' · passerad' : ''}</div>
               <div className="date">{d.getDate()}</div>
               <div className="meta">
                 {summarizeCounts(dayEntries)}

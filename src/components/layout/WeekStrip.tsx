@@ -14,6 +14,14 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 // "+M till"-hint om fler serier släpper samma dag. Klick på cellen går till
 // /calendar/?day=YYYY-MM-DD där allt listas. Aggregeringen kör mot
 // `useCalendarEntries()`-cachen — gratis på sidor som redan har datan.
+//
+// K3: WeekStrip och /calendar delar SAMMA pipeline — useCalendarEntries med
+// queryKey ['tv', id]/['tv-season', ...] och TMDB_STALE-konstanter — så ett
+// steady-state-glapp mellan ytorna är strukturellt omöjligt. Det som såg ut
+// som divergens i QA:n var partiell data under laddning: strippen renderade
+// definitiva "—"/×N-värden medan säsonger fortfarande strömmade in. Därför
+// gate:as cellinnehållet på hookens isLoading (samma settled-kontrakt som
+// kalendersidan) och visar "…" tills datat har landat.
 
 const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
 
@@ -66,7 +74,7 @@ export default function WeekStrip() {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
 
-  const { entries } = useCalendarEntries();
+  const { entries, isLoading } = useCalendarEntries();
   const { getItem } = useWatchlist();
   const seriesByDay = useMemo(
     () => aggregateByDay(entries, (id) => getItem(id)?.rating ?? null),
@@ -123,7 +131,7 @@ export default function WeekStrip() {
         // Popovern är bara meningsfull när den tillför info utöver vad cellen
         // redan visar inline — alltså flera serier samma dag ELLER flera
         // avsnitt av samma serie. Annars duplicerar den bara titeln.
-        const showPop = series.length > 1 || (top != null && top.episodes > 1);
+        const showPop = !isLoading && (series.length > 1 || (top != null && top.episodes > 1));
         return (
           <Link
             key={key}
@@ -133,7 +141,13 @@ export default function WeekStrip() {
             <span className="lab">{DAY_LABELS[i]}</span>
             <span className="num">{d.getDate()}</span>
             <span className="count">
-              {top ? (
+              {isLoading ? (
+                // Säg inte "—" (= inget sänds) medan kalenderdatat laddar.
+                <>
+                  <span aria-hidden="true">…</span>
+                  <span className="sr-only">, laddar</span>
+                </>
+              ) : top ? (
                 <>
                   <strong>{top.title}</strong>
                   {top.episodes > 1 && (

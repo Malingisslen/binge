@@ -25,7 +25,16 @@ describe('countEntries', () => {
       episode(),
       movie(),
     ];
-    expect(countEntries(entries)).toEqual({ episodes: 3, movies: 1, premieres: 1, finales: 1, total: 4 });
+    expect(countEntries(entries)).toEqual({
+      episodes: 3, movies: 1, premieres: 1, finales: 1, premiereFinales: 0, total: 4,
+    });
+  });
+
+  it('counts an episode that is both premiere and finale in premiereFinales', () => {
+    const entries: CalendarEntry[] = [episode({ isPremiere: true, isFinale: true })];
+    expect(countEntries(entries)).toEqual({
+      episodes: 1, movies: 0, premieres: 1, finales: 1, premiereFinales: 1, total: 1,
+    });
   });
 });
 

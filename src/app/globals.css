@@ -1442,6 +1442,10 @@ button { font: inherit; cursor: pointer; }
 }
 .week-board .col:last-child { border-right: 0; }
 .week-board .col.today { background: oklch(0.965 0.03 300 / 0.55); }
+/* K4: passerade dagar visar sina avsnitt men dämpade — schemat ljuger inte
+   om vad som redan sänts, det tonar bara ner det. */
+.week-board .col.past .col-body { opacity: 0.55; }
+.week-board .col.past .col-h .date { color: var(--ink-3); }
 .week-board .col.today .col-h .lab,
 .week-board .col.today .col-h .date { color: var(--cal-deep); }
 .week-board .col.today .col-h::after { background: var(--cal-deep); }
