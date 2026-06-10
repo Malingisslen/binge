@@ -12,6 +12,7 @@ import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFrie
 import { useAuth } from '@/hooks/useAuth';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 
 // Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
@@ -42,6 +43,8 @@ function useSenderProfile(uid: string) {
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 
 export default function FriendsPageClient() {
+  // X5: 'Vänner' saknade — Binge.nu-suffix i dokumenttiteln.
+  usePageMeta({ title: 'Vänner' });
   const { following, followers, isLoading: followLoading } = useFollowList();
   const { data: friends = [], isLoading: friendsLoading } = useFriends();
   const { data: requests = [], isLoading: requestsLoading } = useFriendRequests();
@@ -61,7 +64,7 @@ export default function FriendsPageClient() {
       <PageHeader
         crumb="Vänner"
         title="Vänner"
-        standfirst="Hitta personer att följa via sökrutan i sidofältet — eller dela din profillänk."
+        standfirst="Hitta personer att följa via sökfältet i toppraden — eller dela din profillänk."
       />
 
       <div className="flex border-b border-border-main mb-3">
@@ -96,7 +99,7 @@ export default function FriendsPageClient() {
       {empty && tab === 'following' && (
         <EmptyState
           headline="Du följer ingen än"
-          body="Hitta andra användare via sökrutan i sidofältet — skriv minst två tecken så dyker användare upp ovanför titlar."
+          body="Hitta andra användare via sökfältet i toppraden — skriv minst två tecken så dyker användare upp ovanför titlar."
         />
       )}
       {empty && tab === 'followers' && (

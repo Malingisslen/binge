@@ -6,7 +6,9 @@
       { "source": "/my/following", "destination": "/my/series", "type": 301 },
       { "source": "/my/following/", "destination": "/my/series/", "type": 301 },
       { "source": "/my/watched", "destination": "/my/films", "type": 301 },
-      { "source": "/my/watched/", "destination": "/my/films/", "type": 301 }
+      { "source": "/my/watched/", "destination": "/my/films/", "type": 301 },
+      { "source": "/my/want-to-watch", "destination": "/my/vill-se", "type": 301 },
+      { "source": "/my/want-to-watch/", "destination": "/my/vill-se/", "type": 301 }
     ],
     "rewrites": [
       {

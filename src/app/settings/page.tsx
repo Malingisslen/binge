@@ -2,6 +2,7 @@
 
 import AuthGuard from '@/components/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TMDB_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { ProfileSection } from '@/components/settings/ProfileSection';
@@ -20,6 +21,9 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const { user } = useAuth();
+  // X5/S2: dokumenttiteln blev generisk vid klient-navigering trots statisk
+  // segment-metadata — sätt den klient-sidigt också.
+  usePageMeta({ title: 'Inställningar' });
   if (!user) return null;
 
   return (

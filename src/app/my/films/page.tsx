@@ -5,6 +5,6 @@ import WatchlistPage from '@/components/WatchlistPage';
 import { usePageMeta } from '@/hooks/usePageMeta';
 
 export default function FilmsPage() {
-  usePageMeta({ title: 'Mina filmer' });
+  usePageMeta({ title: 'Filmer' });
   return <AuthGuard><WatchlistPage status="sedd" title="Mina filmer" /></AuthGuard>;
 }

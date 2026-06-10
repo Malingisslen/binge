@@ -219,6 +219,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <div className="crumb">Bibliotek · {labelForStatus(status)}</div>
           <h1 className="page-h1">{title}</h1>
         </header>
+        <LibrarySubnav status={status} />
         <LoadingView variant="grid" label="Laddar biblioteket…" />
       </>
     );
@@ -233,6 +234,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         <h1 className="page-h1">{title}</h1>
         <p className="stand">{standfirst}</p>
       </header>
+
+      <LibrarySubnav status={status} />
 
       {(providerFilter || behindFilterActive) && (
         <div className="chip acc" style={{ marginTop: 18, padding: '6px 12px', display: 'inline-flex', gap: 8 }}>
@@ -567,6 +570,39 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         </div>
       )}
     </>
+  );
+}
+
+// B12: biblioteksvyerna (Följer/Vill se/Filmer/Avbrutna/Alla) var onåbara i
+// UI:t — Subnav "Bibliotek" pekar bara på /my/all. Den här länkraden gör
+// undervyerna nåbara från varje biblioteksvy. Riktiga <Link>:ar (inte
+// state-tabbar) så URL:erna förblir delbara; aktiv vy markeras via status-
+// propen som mappar 1:1 mot route.
+const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null }[] = [
+  { label: 'Följer',   href: '/my/series/',   status: 'mina' },
+  { label: 'Vill se',  href: '/my/vill-se/',  status: 'vill_se' },
+  { label: 'Filmer',   href: '/my/films/',    status: 'sedd' },
+  { label: 'Avbrutna', href: '/my/avbrutna/', status: 'avbruten' },
+  { label: 'Alla',     href: '/my/all/',      status: null },
+];
+
+function LibrarySubnav({ status }: { status?: WatchStatus }) {
+  return (
+    <nav aria-label="Biblioteksvyer" style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
+      {LIBRARY_VIEWS.map(view => {
+        const active = (status ?? null) === view.status;
+        return (
+          <Link
+            key={view.href}
+            href={view.href}
+            aria-current={active ? 'page' : undefined}
+            className={`chip no-underline${active ? ' is-on' : ''}`}
+          >
+            {view.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

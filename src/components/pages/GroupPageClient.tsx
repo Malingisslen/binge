@@ -21,6 +21,7 @@ import {
   ProviderOverlapPanel,
 } from '@/components/groups/GroupSidePanels';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import type {
@@ -37,6 +38,9 @@ export default function GroupPageClient({ id }: { id: string }) {
 function GroupContent({ id }: { id: string }) {
   const { user, uid } = useAuth();
   const { group, members, watchlist, loading, notFound } = useGroup(id);
+  // X5: gruppnamnet i dokumenttiteln när det laddats (rör inte indexability —
+  // catch-all-shellets noindex-default lämnas orörd).
+  usePageMeta({ title: group?.name ?? 'Grupp' });
   const searchParams = useSearchParams();
   const inviteParam = searchParams.get('invite');
 

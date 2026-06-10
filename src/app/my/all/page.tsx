@@ -5,6 +5,6 @@ import WatchlistPage from '@/components/WatchlistPage';
 import { usePageMeta } from '@/hooks/usePageMeta';
 
 export default function AllPage() {
-  usePageMeta({ title: 'Hela biblioteket' });
+  usePageMeta({ title: 'Allt' });
   return <AuthGuard><WatchlistPage title="Hela biblioteket" /></AuthGuard>;
 }

@@ -14,6 +14,7 @@ import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
 import { toneForId } from '@/lib/duotone';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } from '@/types';
@@ -21,6 +22,8 @@ import type { SessionCandidate, SessionParticipant, TogetherSession, VoteKind } 
 export default function TillsammansSessionPageClient({ id }: { id: string }) {
   const { session, participants, swipes, loading, notFound, expired } = useSession(id);
   const { uid, user } = useAuth();
+  // X5: unik dokumenttitel per session när den laddats (rör inte indexability).
+  usePageMeta({ title: session ? `Tillsammans hos ${session.hostName}` : 'Tillsammans' });
 
   const [participantId, setParticipantId] = useState<string | null>(null);
 
