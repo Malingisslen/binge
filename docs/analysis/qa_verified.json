@@ -1,0 +1,493 @@
+[
+ {
+  "id": "X3",
+  "verdict": "confirmed",
+  "rootCause": "canonicalProviderId (providers.ts:135) only maps ids present in the hardcoded aliases arrays — Max has [1899], TV4 Play has [1944, 1759] — so TMDB's Amazon Channel variant ids (Apple TV+ Amazon Channel, HBO Max Amazon Channel) pass through unmapped. Additionally, no display surface deduplicates the rendered provider list by canonical id; canonicalProviderId is only applied when saving watchlist items.",
+  "files": [
+   "src/lib/tmdb/providers.ts:48-55",
+   "src/lib/tmdb/providers.ts:78",
+   "src/lib/tmdb/providers.ts:119-137",
+   "src/components/pages/TVShowPageClient.tsx:91",
+   "src/components/pages/MoviePageClient.tsx:78",
+   "src/app/search/page.tsx:60-66"
+  ],
+  "fix": "Add the Amazon Channel variant ids to the aliases arrays (Apple TV+ at id 350, Max at id 384 — verify exact ids against TMDB /watch/providers?watch_region=SE; commonly 2100 for Apple TV+ Amazon Channel and 1825 for HBO Max Amazon Channel). Then add a shared helper, e.g. dedupeByCanonicalProvider(list: TMDBProvider[]), in providers.ts that keeps the first entry per canonicalProviderId, and apply it at all three display callsites (T1, M2, SÖ2).",
+  "effort": "M"
+ },
+ {
+  "id": "T1",
+  "verdict": "confirmed",
+  "rootCause": "TVShowPageClient builds subscription as a raw concat of flatrate+free+ads (line 91) and renders every entry in the 'finns på' row (lines 220-228) without canonical dedup — canonicalProviderId is only used for the persisted watchlist payload (line 111). Combined with the missing Amazon Channel aliases in providers.ts, Apple TV+ and its Amazon Channel variant render as two logos.",
+  "files": [
+   "src/components/pages/TVShowPageClient.tsx:87-91",
+   "src/components/pages/TVShowPageClient.tsx:217-228",
+   "src/lib/tmdb/providers.ts:78"
+  ],
+  "fix": "Filter the subscription array through the shared dedupeByCanonicalProvider helper (keep first occurrence per canonicalProviderId) before rendering, and add the Amazon Channel alias ids to providers.ts (see X3).",
+  "effort": "S"
+ },
+ {
+  "id": "SÖ2",
+  "verdict": "confirmed",
+  "rootCause": "search/page.tsx passes raw flatrate arrays into TitleGrid (providerMap useMemo, lines 60-66) and TitleCard labels each chip with mapped?.shortName ?? provider_name (TitleCard.tsx:90-105). Max (id 384/1899) maps to 'HBO' while the unmapped HBO Max Amazon Channel id falls back to its raw TMDB name, producing two chips for the same service.",
+  "files": [
+   "src/app/search/page.tsx:60-66",
+   "src/components/title/TitleCard.tsx:37-38",
+   "src/components/title/TitleCard.tsx:88-105",
+   "src/lib/tmdb/providers.ts:48-55"
+  ],
+  "fix": "In the providerMap useMemo (or inside TitleCard before slicing MAX_BADGES), dedupe each provider list by canonicalProviderId, and add the Amazon Channel aliases to providers.ts so the variant collapses into Max/Apple TV+.",
+  "effort": "S"
+ },
+ {
+  "id": "M2",
+  "verdict": "confirmed",
+  "rootCause": "Identical mechanism to T1 in the movie page: MoviePageClient builds subscription raw (lines 74-78) and renders it without canonical dedup (lines 217-228), so the HBO Max Amazon Channel variant shows as a second logo. The slow-loading empty boxes share T5's cause: logo <img loading=\"lazy\"> with no placeholder background.",
+  "files": [
+   "src/components/pages/MoviePageClient.tsx:74-78",
+   "src/components/pages/MoviePageClient.tsx:217-228",
+   "src/lib/tmdb/providers.ts:48-55"
+  ],
+  "fix": "Apply the same dedupeByCanonicalProvider filter to the subscription array as in T1, and apply the T5 logo-loading fix (eager load + placeholder background) to the same img element at line 224.",
+  "effort": "S"
+ },
+ {
+  "id": "A3",
+  "verdict": "confirmed",
+  "rootCause": "Provider 489 has name 'TV4 Play' and shortName 'TV4', and advisor surfaces mix the two fields: AdvisorTimeline lane labels use lane.shortName ('TV4') and the Hem SparandeTile uses shortName, while DiagnosisCard and NumberedActionsList render action.providerName ('TV4 Play') in the recommendation copy.",
+  "files": [
+   "src/lib/tmdb/providers.ts:67",
+   "src/components/savings/AdvisorTimeline.tsx:196",
+   "src/components/savings/DiagnosisCard.tsx:31",
+   "src/components/savings/NumberedActionsList.tsx:54-119",
+   "src/components/home/SparandeTile.tsx:64-77"
+  ],
+  "fix": "Pick one convention: render providerName in the advisor timeline lane label and SparandeTile (space allows 'TV4 Play'), reserving shortName strictly for tight badge contexts — or simply change shortName for id 489 to 'TV4 Play' if it fits the truncating lane label. One-line-per-callsite change.",
+  "effort": "S"
+ },
+ {
+  "id": "T5",
+  "verdict": "confirmed",
+  "rootCause": "Provider logos in the 'finns på' row are <img loading=\"lazy\" decoding=\"async\"> from the TMDB CDN (w92) with no placeholder styling — only a 1px border on a 28x28 box — so until the network responds the row renders as empty white squares. They are above the fold, so lazy loading adds avoidable delay.",
+  "files": [
+   "src/components/pages/TVShowPageClient.tsx:220-228",
+   "src/components/pages/MoviePageClient.tsx:220-228",
+   "src/lib/tmdb/client.ts:119-122"
+  ],
+  "fix": "For these few above-the-fold logos, switch to loading=\"eager\" (optionally fetchpriority=\"high\"), request the smaller w45 size from logoUrl, and add a background placeholder (e.g. background: var(--bg-2)) or show the ProviderTag text fallback until onLoad fires so the box is never blank.",
+  "effort": "S"
+ },
+ {
+  "id": "G1",
+  "verdict": "confirmed",
+  "rootCause": "The 'Radera grupp' button calls native window.confirm() before onDelete (GroupSettingsModal.tsx:148, documented as intended in the file's doc comment at line 17). The button also uses raw Tailwind reds (border-red-300 text-red-700) instead of danger tokens. Four sibling confirm() call sites exist in the same groups cluster.",
+  "files": [
+   "src/components/groups/GroupSettingsModal.tsx:146-153",
+   "src/components/groups/GroupMembersPanel.tsx:68",
+   "src/components/groups/GroupSidePanels.tsx:154",
+   "src/components/groups/GroupSidePanels.tsx:265",
+   "src/components/groups/GroupWatchlistTable.tsx:139"
+  ],
+  "fix": "Build a shared designed ConfirmDialog (surface modal, .btn-danger confirm button, danger tokens) and use it for 'Radera grupp'; migrate the other four confirm() call sites in the groups cluster to it. Also swap the raw red-* classes on the delete button to danger tokens per the design rule.",
+  "effort": "M"
+ },
+ {
+  "id": "G2",
+  "verdict": "confirmed",
+  "rootCause": "ProviderOverlapPanel labels the second row 'Någon har ({union.length})' but renders ProviderPills with onlySome = union minus intersect (GroupSidePanels.tsx:38,51-52). When all members' services are identical, onlySome is empty so ProviderPills renders '—' while the count still shows union.length.",
+  "files": [
+   "src/components/groups/GroupSidePanels.tsx:36-58",
+   "src/components/groups/GroupSidePanels.tsx:60-63"
+  ],
+  "fix": "Make count and content use the same list: change the label to use onlySome.length (and rename the row to something like 'Bara någon har' to match the subtraction semantics), or render the full union list under 'Någon har (union.length)'. Optionally show 'Alla har samma tjänster' instead of '—' when onlySome is empty.",
+  "effort": "S"
+ },
+ {
+  "id": "G3",
+  "verdict": "confirmed",
+  "rootCause": "When starting a session from a group, GroupPageClient passes hostName: group.name to createSession (GroupPageClient.tsx:157), and createSession writes that hostName as the host participant's displayName (sessions.ts:52-60). The participant chip in TillsammansSessionPageClient renders p.displayName (line 369), so the chip shows the group name with the host star.",
+  "files": [
+   "src/components/pages/GroupPageClient.tsx:154-161",
+   "src/lib/firebase/sessions.ts:24-63",
+   "src/components/pages/TillsammansSessionPageClient.tsx:356-372"
+  ],
+  "fix": "Split the two concepts in createSession: add a hostDisplayName param (the member's own name, e.g. members.find(m => m.uid === myUid)?.displayName) used for the participant doc, while keeping hostName/sessionName = group.name for the session doc (which the topbar popover uses as the session label).",
+  "effort": "S"
+ },
+ {
+  "id": "G4",
+  "verdict": "confirmed",
+  "rootCause": "generateCandidates builds candidates purely from TMDB /discover (popularity sort, provider filter) with no exclusion against anyone's library or the group watchlist (candidates.ts:38-103). Both callsites (GroupPageClient.startSession and /tillsammans/ny) pass only config + providers, so titles members already follow or rated 5★ surface as swipe candidates.",
+  "files": [
+   "src/lib/together/candidates.ts:38-103",
+   "src/components/pages/GroupPageClient.tsx:163-165",
+   "src/app/tillsammans/ny/page.tsx:62-69"
+  ],
+  "fix": "Add an excludeTmdbIds: Set<number> param to generateCandidates and filter before the MAX_CANDIDATES slice (fetch an extra discover page if the pool thins out). Populate it at the callsites from the creator's watchlist (WatchlistContext) plus the group watchlist; full cross-member exclusion would need member-library reads and can be a follow-up.",
+  "effort": "M"
+ },
+ {
+  "id": "G5",
+  "verdict": "confirmed",
+  "rootCause": "Both creation forms hardcode the internal enum names into the option labels: 'Alla har (intersect)' / 'Någon har (union)' (grupper/ny page lines 104-105, tillsammans/ny page lines 145-146). The GroupSettingsModal already uses the clean labels without the parenthetical.",
+  "files": [
+   "src/app/grupper/ny/page.tsx:104-105",
+   "src/app/tillsammans/ny/page.tsx:145-146",
+   "src/components/groups/GroupSettingsModal.tsx:113-114"
+  ],
+  "fix": "Drop the '(intersect)'/'(union)' parentheticals from the labels in both forms — the desc strings already explain the semantics, matching the settings modal's existing copy.",
+  "effort": "S"
+ },
+ {
+  "id": "G6",
+  "verdict": "confirmed",
+  "rootCause": "Two mechanisms: (1) AuthGuard renders a bare 'Laddar…' div during auth resolution (AuthGuard.tsx:19-21), and group/grupper pages are wrapped in it, so the first visible loading state is undesigned text even though the inner pages use LoadingView. (2) Neither GroupPageClient nor TillsammansSessionPageClient calls usePageMeta, so both dynamic routes keep the generic shared document title.",
+  "files": [
+   "src/components/AuthGuard.tsx:19-21",
+   "src/components/pages/GroupPageClient.tsx",
+   "src/components/pages/TillsammansSessionPageClient.tsx"
+  ],
+  "fix": "Return <LoadingView /> from AuthGuard instead of the bare div; add usePageMeta({ title: group.name }) in GroupPageClient and usePageMeta({ title: 'Tillsammans' }) (or session-aware title) in TillsammansSessionPageClient, following the MoviePageClient pattern.",
+  "effort": "S"
+ },
+ {
+  "id": "G7",
+  "verdict": "confirmed",
+  "rootCause": "The topbar sessions badge sums pendingCount (remaining swipes) across all tracked sessions and renders it capped at '9+' (TopbarActions.tsx:79,94-95), so 29 unswiped candidates in one session reads as 9+ notifications.",
+  "files": [
+   "src/components/layout/TopbarActions.tsx:79",
+   "src/components/layout/TopbarActions.tsx:94-96",
+   "src/hooks/useMySessions.ts:48-72"
+  ],
+  "fix": "Change the badge to the number of sessions with pendingCount > 0 (mySessions.filter(s => s.pendingCount > 0).length) — or a plain dot — and keep the per-session swipe counts in the popover rows where they already render. Update the title/aria-label strings on lines 89-90 to match.",
+  "effort": "S"
+ },
+ {
+  "id": "G8",
+  "verdict": "confirmed",
+  "rootCause": "deleteGroup batch-deletes only the group's subcollections (members, watchlist+progress, sessionHistory) and the group doc (groups.ts:260-295); top-level sessions/{id} docs carrying groupId are never touched, so sessions stay status 'active', remain in useMySessions, and still display the deleted group's name (hostName). Firestore rules (firestore.rules:363-368) only allow the session host to update/delete a session, so the group owner cannot clean sessions hosted by other members client-side.",
+  "files": [
+   "src/lib/firebase/groups.ts:260-295",
+   "src/lib/firebase/sessions.ts:191-199",
+   "firestore.rules:363-368",
+   "src/components/pages/TillsammansSessionPageClient.tsx:596-624",
+   "src/hooks/useMySessions.ts:48-58"
+  ],
+  "fix": "In deleteGroup, query sessions where('groupId','==',groupId) and setSessionStatus('closed')/delete the ones with hostUid == current uid; for the rest, add a read-time orphan guard — when session.groupId points to a missing group doc, treat the session as standalone (hide 'Den här tar vi' which would fail against the deleted group) or show an 'gruppen är raderad' marker. Long-term, move full cleanup to a Cloud Function trigger on group delete.",
+  "effort": "M"
+ },
+ {
+  "id": "B11",
+  "verdict": "confirmed",
+  "rootCause": "The 'Vill se' library view lives at /my/want-to-watch (src/app/my/want-to-watch/page.tsx) — the /my/vill-se URL documented in CLAUDE.md and referenced in Subnav/MobileTabBar `matches` arrays has no page directory and no firebase.json redirect. Unknown URLs hit the SPA rewrite ** → /_/index.html, where DynamicRouter has no matching segment branch and renders CatchAllClient's fallback: a raw `<div>Sidan hittades inte.</div>` instead of the designed NotFound component.",
+  "files": [
+   "C:/binge/src/app/my/want-to-watch/page.tsx:7",
+   "C:/binge/src/app/[...path]/CatchAllClient.tsx:9",
+   "C:/binge/src/components/pages/DynamicRouter.tsx:72",
+   "C:/binge/src/components/layout/Subnav.tsx:21",
+   "C:/binge/src/components/layout/MobileTabBar.tsx:20",
+   "C:/binge/firebase.json:5-10"
+  ],
+  "fix": "Rename the route directory src/app/my/want-to-watch → src/app/my/vill-se (matching CLAUDE.md, Subnav and MobileTabBar matches) and add a 301 redirect /my/want-to-watch → /my/vill-se in firebase.json redirects. Separately, replace CatchAllClient's raw-text fallback with the existing <NotFound /> component (src/components/ui/NotFound.tsx).",
+  "effort": "S"
+ },
+ {
+  "id": "B12",
+  "verdict": "confirmed",
+  "rootCause": "Subnav.tsx:21 and MobileTabBar.tsx:20 link 'Bibliotek' only to /my/all/, and WatchlistPage.tsx (the shared library component) renders media-type filter chips, sort and view toggles but no status sub-tabs — its only <Link>s are title rows. The sole deep links to /my/series in the whole app are MediaTypePage.tsx:84 and the advisor CTA (NumberedActionsList.tsx:68,114); nothing anywhere links to the vill-se or avbrutna views, so they are unreachable via UI.",
+  "files": [
+   "C:/binge/src/components/layout/Subnav.tsx:21",
+   "C:/binge/src/components/layout/MobileTabBar.tsx:20",
+   "C:/binge/src/components/WatchlistPage.tsx:214-287",
+   "C:/binge/src/components/pages/MediaTypePage.tsx:84",
+   "C:/binge/src/components/pages/FriendsPageClient.tsx:63"
+  ],
+  "fix": "Add a library sub-tab strip (Alla · Följer · Vill se · Filmer · Avbrutna → /my/all, /my/series, /my/vill-se, /my/films, /my/avbrutna) rendered inside WatchlistPage above the toolbar, using the existing .chip/is-on pattern with active state from usePathname. While touching nav copy, also fix FriendsPageClient.tsx:63 and :98 which still say 'sökrutan i sidofältet' — the sidebar no longer exists (search is in the topbar).",
+  "effort": "M"
+ },
+ {
+  "id": "S1",
+  "verdict": "confirmed",
+  "rootCause": "TopbarActions.tsx:212 renders the avatar as a plain <Link href=\"/settings/\"> with aria-label 'Inställningar' — there is no dropdown menu, and no other element in the app links to the user's own public profile (/user/{username}).",
+  "files": [
+   "C:/binge/src/components/layout/TopbarActions.tsx:211-214"
+  ],
+  "fix": "Replace the direct Link with a popover menu (reuse the existing topbar-popover + useClickOutside pattern already used twice in the same file) containing 'Min profil' → /user/{user.username}/, 'Inställningar' → /settings/, and 'Logga ut'. Avatar button gets aria-expanded/aria-haspopup.",
+  "effort": "M"
+ },
+ {
+  "id": "SÖ1",
+  "verdict": "confirmed",
+  "rootCause": "There is no keyboard-shortcut handler at all: no keydown listener in src/ checks for 'k' with metaKey or ctrlKey (the only document-level keydown listeners are SearchDropdown arrow/Enter navigation, modal Escape handlers, and UgcActionsMenu). The ⌘K badge in AppTopbar is purely decorative — the shortcut works on no platform, Mac included.",
+  "files": [
+   "C:/binge/src/components/layout/AppTopbar.tsx:31-43",
+   "C:/binge/src/hooks/useSearchBox.ts:6-26"
+  ],
+  "fix": "Add a document keydown listener (in useSearchBox or AppTopbar) for e.key === 'k' && (e.metaKey || e.ctrlKey): preventDefault, focus the search input (expose an inputRef from useSearchBox) and setSearchFocused(true). Skip when the event target is already an input/textarea/contenteditable.",
+  "effort": "S"
+ },
+ {
+  "id": "H1",
+  "verdict": "confirmed",
+  "rootCause": "The kbd hint is a hardcoded string '⌘K' in AppTopbar.tsx:42 with no platform detection, so Windows/Linux users see the Mac glyph.",
+  "files": [
+   "C:/binge/src/components/layout/AppTopbar.tsx:42"
+  ],
+  "fix": "Detect platform after mount (navigator.platform/userAgentData test for Mac, defaulting to Ctrl) and render '⌘K' vs 'Ctrl K' accordingly; gate on mounted state to avoid hydration mismatch in the static export. Do together with SÖ1 so the hint reflects a shortcut that actually works.",
+  "effort": "S"
+ },
+ {
+  "id": "SÖ3",
+  "verdict": "confirmed",
+  "rootCause": "No element in src/ sets a spellCheck attribute. The topbar search input (AppTopbar.tsx:34-41) and the library filter input (WatchlistPage.tsx:261-271) are plain type=\"text\" inputs, so browsers apply red spell-check underlines to search terms.",
+  "files": [
+   "C:/binge/src/components/layout/AppTopbar.tsx:34",
+   "C:/binge/src/components/WatchlistPage.tsx:261"
+  ],
+  "fix": "Add spellCheck={false} autoComplete=\"off\" autoCorrect=\"off\" autoCapitalize=\"off\" to both search inputs (and consider type=\"search\" on the topbar input).",
+  "effort": "S"
+ },
+ {
+  "id": "P2",
+  "verdict": "works-as-designed",
+  "rootCause": "Subnav.tsx:25 explicitly configures Vänner with matches: ['/feed', '/user/'], so any /user/* path intentionally lights up the Vänner item via the startsWith loop in isActive (Subnav.tsx:56-60). It is a deliberate mapping of profile pages to the social section, not a routing bug — but the component has no auth context, so it cannot exempt the user's own profile.",
+  "files": [
+   "C:/binge/src/components/layout/Subnav.tsx:25",
+   "C:/binge/src/components/layout/Subnav.tsx:51-62"
+  ],
+  "fix": "If the own-profile confusion should be addressed: read the signed-in username via useAuth in Subnav and exclude pathname === `/user/${user.username}/` from the Vänner match (or simply drop '/user/' from matches so no profile page activates Vänner). Becomes more natural once S1 adds a 'Min profil' menu entry.",
+  "effort": "S"
+ },
+ {
+  "id": "X1",
+  "verdict": "confirmed",
+  "rootCause": "Shared anti-pattern: surfaces consume hooks built on useQueries/Firestore subscriptions that yield partial results, and either ignore the loading flag entirely (WatchlistPage ignores WatchlistContext.loading; UserProfilePageClient ignores usePublicWatchlist's isLoading; RecommendationsHub ignores cascade.isLoadingDetection) or gate on a condition that is never true (savings page gates on advisor.providers.length===0, which is non-empty immediately since advisories are built from user.myProviders alone). Derived output is then recomputed and re-rendered as each TMDB query streams in.",
+  "files": [
+   "src/app/savings/page.tsx:160",
+   "src/components/WatchlistPage.tsx:53",
+   "src/components/pages/UserProfilePageClient.tsx:38",
+   "src/components/recommendations/RecommendationsHub.tsx:93-142",
+   "src/hooks/useSubscriptionAdvisor.ts:73",
+   "src/hooks/useRecommendationsCascade.ts:80-134",
+   "src/contexts/WatchlistContext.tsx:55"
+  ],
+  "fix": "Per-surface loading gates (see A1, B13, P1, R1): render LoadingView while the relevant hook reports loading instead of rendering derived results from partial data. All four hooks already expose a correct loading flag (advisor.isLoading, WatchlistContext.loading, query isLoading, cascade.isLoadingDetection) — only the consumers need fixing.",
+  "effort": "M"
+ },
+ {
+  "id": "B13",
+  "verdict": "confirmed",
+  "rootCause": "WatchlistPageInner destructures only items from useWatchlist and never reads the context's loading flag (WatchlistContext.tsx exposes loading at line 55). While the Firestore snapshot loads, items=[] so totalCount===0, which renders the empty-library standfirst (buildStandfirst, WatchlistPage.tsx:533-535) and emptyMessage 'Inget i biblioteket än…' (lines 174-178, 356-360, 463-468) until 298 titles pop in.",
+  "files": [
+   "src/components/WatchlistPage.tsx:53",
+   "src/components/WatchlistPage.tsx:174-178",
+   "src/components/WatchlistPage.tsx:533-535",
+   "src/contexts/WatchlistContext.tsx:55"
+  ],
+  "fix": "Destructure loading from useWatchlist() in WatchlistPageInner and return <LoadingView label=\"Laddar biblioteket…\" /> (early return before the header/list) while loading is true. This fixes /my/all and every other library view in one place.",
+  "effort": "S"
+ },
+ {
+  "id": "P1",
+  "verdict": "confirmed",
+  "rootCause": "UserProfilePageClient gates only on usePublicProfile's isLoading (line 46). The stat cards are computed from usePublicWatchlist (line 38), useFollowerCount/useFollowingCount (lines 39-40) — separate React Query queries whose isLoading is never read. While they load, the StatCards render (watchlist ?? []).length = 0 (lines 93-98) and the header renders followerCount ?? 0 (line 88), flashing 0 · 0 · 0 · — before data arrives.",
+  "files": [
+   "src/components/pages/UserProfilePageClient.tsx:38-40",
+   "src/components/pages/UserProfilePageClient.tsx:88",
+   "src/components/pages/UserProfilePageClient.tsx:93-98"
+  ],
+  "fix": "Destructure isLoading from usePublicWatchlist (and follower-count hooks) and either extend the existing LoadingView gate at line 46 to include watchlist loading, or render '—'/skeleton values in StatCard and the follower line until each query has data (note the hooks are enabled-gated on uid, so use isLoading && enabled semantics, e.g. isPending && fetchStatus !== 'idle').",
+  "effort": "S"
+ },
+ {
+  "id": "A1",
+  "verdict": "confirmed",
+  "rootCause": "The loading gate in SavingsContent is `advisor.isLoading && advisor.providers.length === 0` (savings/page.tsx:160), but useSubscriptionAdvisor builds providerAdvisories from user.myProviders alone (useSubscriptionAdvisor.ts:187-220) — providers is non-empty on the very first compute even with zero TMDB shows loaded. The gate therefore never holds, and DiagnosisCard/primaryAction (computed at lines 342-385 from partial `shows`) re-renders and flips as each ['tv', id] query resolves.",
+  "files": [
+   "src/app/savings/page.tsx:160-168",
+   "src/hooks/useSubscriptionAdvisor.ts:73",
+   "src/hooks/useSubscriptionAdvisor.ts:187-220",
+   "src/hooks/useSubscriptionAdvisor.ts:342-385"
+  ],
+  "fix": "Change the gate to `if (advisor.isLoading) return <LoadingView label=\"Räknar…\" />` (drop the providers.length condition; keep the no-providers empty state as the second branch). advisor.isLoading is already correct (some(q => q.isLoading) over all TV detail queries).",
+  "effort": "S"
+ },
+ {
+  "id": "A2",
+  "verdict": "confirmed",
+  "rootCause": "Same root cause as A1: step 3 in NumberedActionsList ('Överväg: N titlar … HBO 2 · Disney+ 3 …') sums advisor.subscribeAdvice (NumberedActionsList.tsx:72-86), which is rebuilt from the partial `shows` array on every resolved query, so the count and per-provider breakdown grow live while the page is visible.",
+  "files": [
+   "src/components/savings/NumberedActionsList.tsx:72-86",
+   "src/app/savings/page.tsx:160-168",
+   "src/hooks/useSubscriptionAdvisor.ts:225-264"
+  ],
+  "fix": "Fixed automatically by the A1 gate (render LoadingView until advisor.isLoading is false); no change needed in NumberedActionsList itself.",
+  "effort": "S"
+ },
+ {
+  "id": "R1",
+  "verdict": "confirmed",
+  "rootCause": "useRecommendationsCascade recomputes prioritizeRows on every detail/keyword query resolution (memo deps detailDataKey/keywordDataKey, useRecommendationsCascade.ts:74-134): person rows like 'Med Kristen Bell' only appear/re-rank once recurringPeople detection has credits, and upcomingCount lands late. RecommendationsHub numbers rows by their current array position (index passed to RecRow, RecommendationsHub.tsx:130-142, rendered as the '02'/'05' badge in RecRow.tsx:76), so rows visibly renumber and shift as the cascade re-prioritizes mid-load.",
+  "files": [
+   "src/hooks/useRecommendationsCascade.ts:74-134",
+   "src/components/recommendations/RecommendationsHub.tsx:93-142",
+   "src/components/recommendations/RecRow.tsx:76"
+  ],
+  "fix": "Gate the row list on cascade.isLoadingDetection (already exposed but unused): render LoadingView instead of visibleRows until detection queries settle, so prioritizeRows runs once on complete data and the numbering is stable. Alternatively freeze the first fully-computed row order in a ref.",
+  "effort": "S"
+ },
+ {
+  "id": "R3",
+  "verdict": "confirmed",
+  "rootCause": "RecRow renders a bare styled div with the string 'Laddar…' when a row is loading with no items (RecRow.tsx:116-120) instead of the design-system LoadingView. The page-level Suspense fallback in app/recommendations/page.tsx:12 is also a bare 'Laddar…' div. Rows backed by slow person/keyword queries sit in this state >10 s.",
+  "files": [
+   "src/components/recommendations/RecRow.tsx:116-120",
+   "src/app/recommendations/page.tsx:12",
+   "src/components/ui/LoadingView.tsx"
+  ],
+  "fix": "Replace the bare div in RecRow with <LoadingView label=\"Laddar förslag…\" /> (or a row-shaped skeleton matching .rec-grid), and use LoadingView as the Suspense fallback in recommendations/page.tsx.",
+  "effort": "S"
+ },
+ {
+  "id": "X2",
+  "verdict": "confirmed",
+  "rootCause": "Bare 'Laddar…' strings exist at ~10 call sites despite the LoadingView rule: the catch-all route chunk fallback (DynamicRouter.tsx:16, shared by all dynamic routes), AuthGuard (AuthGuard.tsx:20, shown on every authed page during auth resolve), plus per-page instances in MoviePageClient.tsx:68, TVShowPageClient.tsx:82, FriendsPageClient.tsx:81, SeasonEpisodePanel.tsx:25, RecRow.tsx:118, app/search/page.tsx:122, app/tv/[id]/page.tsx:127, app/recommendations/page.tsx:12. The design-consistency guard test only checks the 18px-title anti-pattern, not loading states.",
+  "files": [
+   "src/components/pages/DynamicRouter.tsx:16",
+   "src/components/AuthGuard.tsx:20",
+   "src/components/pages/MoviePageClient.tsx:68",
+   "src/components/pages/TVShowPageClient.tsx:82",
+   "src/components/pages/FriendsPageClient.tsx:81",
+   "src/components/tv/SeasonEpisodePanel.tsx:25",
+   "src/components/recommendations/RecRow.tsx:118",
+   "src/app/search/page.tsx:122",
+   "src/app/tv/[id]/page.tsx:127",
+   "src/app/recommendations/page.tsx:12"
+  ],
+  "fix": "Replace each bare 'Laddar…' div with <LoadingView> (DynamicRouter's LOADING constant and AuthGuard give the biggest win since they front every dynamic/authed route), and extend src/lib/design/consistency.test.ts to fail on bare 'Laddar…' divs in components.",
+  "effort": "S"
+ },
+ {
+  "id": "G6",
+  "verdict": "confirmed",
+  "rootCause": "GroupPageClient and TillsammansSessionPageClient do use LoadingView internally (GroupPageClient.tsx:75, TillsammansSessionPageClient.tsx:40), but users first see two bare 'Laddar…' states layered in front: the next/dynamic chunk fallback in DynamicRouter (DynamicRouter.tsx:16) and AuthGuard's auth-resolve state (AuthGuard.tsx:20). Neither client calls usePageMeta, so /grupper/:id and /tillsammans/:id keep the generic shared document title.",
+  "files": [
+   "src/components/pages/DynamicRouter.tsx:16",
+   "src/components/AuthGuard.tsx:20",
+   "src/components/pages/GroupPageClient.tsx:75",
+   "src/components/pages/TillsammansSessionPageClient.tsx:40"
+  ],
+  "fix": "Make DynamicRouter's LOADING constant and AuthGuard's loading branch render <LoadingView /> (covers both pages plus all other dynamic routes), and add usePageMeta({ title: group?.name / session label }) to GroupPageClient and TillsammansSessionPageClient.",
+  "effort": "S"
+ },
+ {
+  "id": "H4",
+  "verdict": "confirmed",
+  "rootCause": "The home page swaps the focal skeleton out the instant data loading finishes (isLoading ternary, app/page.tsx:253-267), but HemFocal's 21:9 backdrop <img> (w1280, loading=\"eager\") and poster bitmaps then load over the network with no placeholder state (HemFocal.tsx:43-60) — only the duotone class background shows. So the hero headline (HemHero copy) appears first and the large .still area sits visually empty for seconds: 'pops in stages, skeleton missing for the image part'.",
+  "files": [
+   "src/app/page.tsx:253-267",
+   "src/components/home/HemFocal.tsx:43-60",
+   "src/app/globals.css:1003-1033"
+  ],
+  "fix": "Add a bitmap-level placeholder: give .still (and .px) the same shimmer background as .hem-focal-skeleton until the img fires onLoad (toggle a class / opacity fade), or delay the skeleton-to-focal swap until the backdrop has preloaded (new Image().decode() on the w1280 URL).",
+  "effort": "S"
+ },
+ {
+  "id": "B1",
+  "verdict": "confirmed",
+  "rootCause": "Two correct counts at different scopes rendered without visual scoping: the standfirst counts all TV items in 'mina' (194, WatchlistPage tvVisibleCount), while the '173 titlar' is the 'Ligger efter' section-header count in FollowingCardSections, whose first section header renders flush under the view-toggle toolbar and reads as a global counter. 173 + 21 (Avslutade) = 194; the gap is amplified by B7 making the 'Ikapp' bucket permanently empty.",
+  "files": [
+   "src/components/WatchlistPage.tsx:164-167",
+   "src/components/watchlist/FollowingCardSections.tsx:54-63",
+   "src/components/WatchlistPage.tsx:341-346"
+  ],
+  "fix": "Visually scope the section counter (e.g. 'Ligger efter — 173 av 194' or move it inside a clearly bounded section card) and add top margin between the toolbar and the first section so the count cannot be read as global. Fixing B7 also makes the numbers reconcile (Ikapp section appears).",
+  "effort": "S"
+ },
+ {
+  "id": "B2",
+  "verdict": "confirmed",
+  "rootCause": "WatchlistCard.progressLabel has non-exhaustive label paths within a section: for subState 'aktiv' it only renders 'Ligger efter · SX' when item.lastWatchedSeason is set; otherwise it falls through to legacy heuristics yielding '—' (missing totalSeasons) or 'Ej påbörjad' (no lastWatchedSeason). Because B7 misbuckets everything into 'aktiv', all three labels appear mixed in the same 'Ligger efter' section.",
+  "files": [
+   "src/components/watchlist/WatchlistCard.tsx:63-81",
+   "src/components/WatchlistPage.tsx:151-159"
+  ],
+  "fix": "Make progressLabel exhaustive per sub-state: 'aktiv' without progress should say 'Ej påbörjad' explicitly (not '—'), 'ikapp' says 'Ikapp'/'Nytt {dag}', 'avslutad' says 'Avslutad'; reserve '—' for genuinely unknown data. Most of the visible inconsistency disappears once B7's bucketing is fixed so not-started/caught-up shows leave the 'Ligger efter' section.",
+  "effort": "S"
+ },
+ {
+  "id": "B7",
+  "verdict": "confirmed",
+  "rootCause": "WatchlistPage builds showsByTmdbId as a permanently empty Map (the useMemo returns an empty map with a comment admitting the TMDB data is never wired in), so tvSubState(item, undefined) always takes the fallback branch in watchStatus.ts which returns 'aktiv' for every show whose tmdbStatus is not Ended/Canceled — regardless of progress. Result: caught-up and never-started shows are bucketed into 'Ligger efter' and the 'Ikapp' bucket is unreachable.",
+  "files": [
+   "src/components/WatchlistPage.tsx:141-159",
+   "src/lib/watchStatus.ts:46-61",
+   "src/components/watchlist/FollowingCardSections.tsx:22-31"
+  ],
+  "fix": "Actually populate show data for tvSubState: the page already calls useCalendarEntries which fetches ['tv', id] for every 'mina' show with TMDB_STALE.TV_DETAIL — add a parallel useQueries on the same queryKeys (or expose the shows from useCalendarEntries) and build the Map from query.data, so isUserBehindOnAired/isEndedStatus run with real last_episode_to_air. Also harden the fallback so lastWatchedSeason == null never lands in 'aktiv'.",
+  "effort": "M"
+ },
+ {
+  "id": "B15",
+  "verdict": "works-as-designed",
+  "rootCause": "WatchlistPage initializes view to 'cards' when status === 'mina' and the effect that applies user.defaultView deliberately early-returns for status === 'mina' — an intentional exemption because the aktiv/ikapp/avslutad sections (FollowingCardSections) only exist in the Kort view. The Settings copy 'Standardvy för listor' promises it applies to all lists, which is what makes it read as a bug.",
+  "files": [
+   "src/components/WatchlistPage.tsx:85",
+   "src/components/WatchlistPage.tsx:101-104",
+   "src/components/settings/DisplaySection.tsx:13-25"
+  ],
+  "fix": "Either honor defaultView on /my/series too (requires bringing sub-state grouping to table/grid views, cf. audit B6), or keep the exemption and note it in the settings copy ('gäller ej Följer, som alltid öppnas i Kort') plus a code comment at the early return.",
+  "effort": "S"
+ },
+ {
+  "id": "T2",
+  "verdict": "confirmed",
+  "rootCause": "Same defect as B7: showsByTmdbId in WatchlistPage is always empty, so tvSubState falls back to tmdbStatus-only heuristics — Silo is 'Returning Series' (not ended), so the fallback returns 'aktiv' even though the user is caught up on all aired episodes. WatchlistCard then renders 'Ligger efter · S2' from item.lastWatchedSeason. With real TMDB data, isUserBehindOnAired would correctly return false (S2E10 watched == last_episode_to_air) and tvSubState would yield 'ikapp'.",
+  "files": [
+   "src/components/WatchlistPage.tsx:141-159",
+   "src/lib/watchStatus.ts:46-61",
+   "src/components/watchlist/WatchlistCard.tsx:71-73",
+   "src/hooks/useSubscriptionAdvisor.helpers.ts:31-42"
+  ],
+  "fix": "Same fix as B7: feed real TMDBTVShow objects (from the ['tv', id] React Query cache already warmed by useCalendarEntries on this page) into tvSubState so caught-up Returning Series derive 'ikapp' instead of 'aktiv'.",
+  "effort": "M"
+ },
+ {
+  "id": "K1",
+  "verdict": "likely",
+  "rootCause": "Within WeekBoard the day-cell count and the rendered cards derive from the exact same dayEntries array (summarizeCounts(dayEntries) vs dayEntries.map(EventCard)), so a steady-state mismatch is structurally impossible — the observed '2 avsnitt' vs 8+ cards is partial-data flicker: CalendarContent destructures only { entries } from useCalendarEntries and ignores the isLoading flag the hook explicitly provides, so the headline/cells render definitive counts while ~9 ONS entries (the Every Year After binge drop) stream in season-by-season. This is the calendar instance of cross-cutting finding X1.",
+  "files": [
+   "src/app/calendar/page.tsx:16",
+   "src/app/calendar/page.tsx:29-57",
+   "src/components/calendar/WeekBoard.tsx:62-85",
+   "src/hooks/useCalendar.ts:160-168"
+  ],
+  "fix": "Gate the calendar page on isLoading from useCalendarEntries: render LoadingView (per design rules) until the show/season/movie waterfall settles, instead of rendering headline counts and day cells from partial entries. Verify in browser that no steady-state mismatch remains afterwards.",
+  "effort": "S"
+ },
+ {
+  "id": "K2",
+  "verdict": "confirmed",
+  "rootCause": "The headline and standfirst mix overlapping categories: buildHeadline appends premieres as an additional ' och N premiär' term even though premieres are a subset of the episode count ('2 avsnitt och 1 premiär' reads as 3 events), and buildStandfirst counts finales/premieres independently where a single episode can be both (buildEntries marks E1 as isPremiere and the season's max episode as isFinale — a one-episode or seeded season is both), so '1 premiär och 2 säsongsfinaler' can exceed the 2 counted episodes.",
+  "files": [
+   "src/app/calendar/page.tsx:117-127",
+   "src/app/calendar/page.tsx:129-151",
+   "src/lib/calendar/buildEntries.ts:77-78",
+   "src/lib/calendar/summary.ts:13-28"
+  ],
+  "fix": "Rewrite the copy to subset phrasing: headline 'Denna vecka — N avsnitt' (plus filmer) and standfirst 'varav X premiärer och Y finaler', and when an episode is both premiere and finale count it in one category (or phrase as 'premiär och final') so the parts never exceed the total.",
+  "effort": "S"
+ },
+ {
+  "id": "H2",
+  "verdict": "works-as-designed",
+  "rootCause": "LaterThisWeek deliberately caps the filmstrip at 5 entries (.slice(0, 5), documented in the component comment 'up to 5 upcoming events'), and the section meta renders the capped length ('5 händelser') rather than the true total — so WeekStrip's '×8 +1' (9 ONS events) and the 5-card strip are both correct but there is no '+N till' overflow indication.",
+  "files": [
+   "src/components/home/LaterThisWeek.tsx:24-38",
+   "src/components/home/LaterThisWeek.tsx:44-49",
+   "src/components/layout/WeekStrip.tsx:27-63"
+  ],
+  "fix": "Compute the filtered total before slicing and surface the overflow: meta '5 av 12 händelser' plus a '+7 till →' link to /calendar at the end of the filmstrip, so the home view and WeekStrip counts visibly reconcile.",
+  "effort": "S"
+ }
+]
