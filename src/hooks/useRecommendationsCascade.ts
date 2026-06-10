@@ -24,6 +24,13 @@ export interface CascadeOutput {
   ratingCount: number;
   topGenreIds: number[];
   hasMyProviders: boolean;
+  /**
+   * Sant medan detalj-/keyword-queries för seed-titlarna fortfarande laddar.
+   * OBS: täcker INTE watchlist-snapshotens laddning — konsumenter som vill
+   * gate:a rendering på "allt klart" måste OR:a med WatchlistContext.loading
+   * (se RecommendationsHub.rowsPending). Med tom watchlist är denna false
+   * redan innan snapshotten landat.
+   */
   isLoadingDetection: boolean;
   latestFiveStar: { tmdbId: number; mediaType: 'movie' | 'tv'; daysSince: number } | null;
 }
