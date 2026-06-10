@@ -161,7 +161,6 @@ export function InvitePanel({
 
   const [confirmingDisable, setConfirmingDisable] = useState(false);
   const handleDisable = async () => {
-    setConfirmingDisable(false);
     setWorking(true);
     try {
       await disableInviteToken(groupId);
@@ -169,6 +168,7 @@ export function InvitePanel({
       setCachedPlaintext(null);
     } finally {
       setWorking(false);
+      setConfirmingDisable(false);
     }
   };
 

@@ -195,7 +195,7 @@ function AddMemberSearch({
           })}
         </ul>
       )}
-      {err && <div className="text-xxs text-red-700">{err}</div>}
+      {err && <div className="text-xxs text-danger-ink">{err}</div>}
     </div>
   );
 }

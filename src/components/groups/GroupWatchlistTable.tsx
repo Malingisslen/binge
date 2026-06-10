@@ -239,7 +239,7 @@ function RatingPicker({
           ))}
           <button
             onClick={() => { onChange(null); setOpen(false); }}
-            className="w-full text-xxs text-text-muted hover:text-red-600 mt-1 cursor-pointer"
+            className="w-full text-xxs text-text-muted hover:text-danger-ink mt-1 cursor-pointer"
           >
             Rensa
           </button>
