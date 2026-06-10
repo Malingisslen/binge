@@ -23,14 +23,19 @@ export function useSearchBox() {
   // (Firefox sökfält, Chrome adressfältssök).
   useEffect(() => {
     function handleShortcut(e: KeyboardEvent) {
+      // IME-guard: avbryt inte en pågående komposition (CJK-tangentbord).
+      if (e.isComposing) return;
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
+        // Konsumenter som inte kopplat inputRef (t.ex. landningssidans
+        // sökruta som bara använder query-statet) ska vara döda no-ops —
+        // utan denna gate skulle deras instans preventDefault:a i onödan
+        // och dubblera arbetet när topbarens instans också lyssnar.
         const input = inputRef.current;
-        if (input) {
-          input.focus();
-          input.select();
-          setSearchFocused(true);
-        }
+        if (!input) return;
+        e.preventDefault();
+        input.focus();
+        input.select();
+        setSearchFocused(true);
       }
     }
     document.addEventListener('keydown', handleShortcut);
