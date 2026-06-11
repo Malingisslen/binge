@@ -84,7 +84,7 @@ export function WatchlistCard({
     }
     // TV i 'mina': exhaustiva substate-etiketter (B2 — aldrig bara "—").
     if (effectiveSubState) return libraryProgressLabel(item, effectiveSubState, upcomingWd);
-    // TV utanför 'mina' (vill_se/avbruten i /my/all m.fl.): visa vad vi vet.
+    // TV utanför 'mina' (avbruten i /my/all m.fl.): visa vad vi vet.
     if (upcomingWd) return { text: `Nytt ${upcomingWd}`, tone: 'accent' };
     const code = seenEpisodeCode(item);
     if (code) return { text: `${code} sedd`, tone: 'muted' };

@@ -12,9 +12,9 @@ import type { CalendarEntry } from '@/hooks/useCalendar';
 // overlapping top-left, body below with title (line-clamped 2), meta line, and
 // a 2-line synopsis. Today's event wears a 3px plum inset rule.
 //
-// Renders three event kinds: episodes of shows you watch ('mina' — with a
-// "markera sedd"-toggle), episodes of shows you want to see ('vill_se' — no
-// toggle, "vill se"-tag instead), and Swedish digital movie releases.
+// Renders two event kinds: episodes of shows you follow ('mina', incl. ej
+// påbörjade — all with a "markera sedd"-toggle) and Swedish digital movie
+// releases ("vill se"-tag, no toggle).
 
 interface Props {
   entry: CalendarEntry;
