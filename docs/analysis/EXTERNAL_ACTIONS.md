@@ -343,6 +343,23 @@ main som failar lint kan fortfarande deploya om vi inte blocker.
 
 ---
 
+## Cloudflare Cache Rule för HTML (prestandaplan 2026-06-11, åtgärd 1b)
+
+Kräver inloggning i Cloudflare-dashboarden (free plan räcker):
+
+1. Caching → Cache Rules → Create rule, namn: `Edge-cache HTML kort`
+2. When incoming requests match: Hostname equals `binge.nu`
+3. Then: Eligible for cache, Edge TTL: **Override origin → 10 minutes**,
+   Browser TTL: **Respect origin**
+4. Spara. `/commit`-skillen purgar redan hela zonen vid deploy, så regeln är
+   säker — max 10 min stale efter en deploy som inte går via /commit.
+
+Effekt: long-tail-HTML (alla rewrites till /_/index.html) serveras från
+Cloudflare-edge (~0 ms origin-tid) istället för Fastly-MISS mot Firebase
+(~235–275 ms extra TTFB, live-uppmätt).
+
+---
+
 ## Sign-off
 
 All items done? Update this file's status here:
