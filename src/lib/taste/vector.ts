@@ -2,14 +2,14 @@ import type { TasteVector, WatchlistItem } from '@/types';
 
 // Viktning per WatchlistItem när vi bygger smakvektorn.
 // Baseline: items med rating räknas som 2×rating/10, items utan rating
-// räknas som en mild positiv signal om användaren har titeln i samlingen
-// ('sedd' film eller 'mina' TV) — antyder att hen valt att tracka den.
-// 'vill_se' är planerat (inte bevisat smakprofil) → neutral.
+// räknas som en mild positiv signal om användaren har titeln i samlingen.
+// Ej påbörjade 'mina'-serier är planerade (inte bevisad smak) — samma
+// vikt som 'vill_se', där de bodde före mergen (2026-06).
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return (item.rating / 10) * 2;
   if (item.status === 'avbruten') return -0.5;
   if (item.status === 'sedd') return 1;
-  if (item.status === 'mina') return 0.75;
+  if (item.status === 'mina') return item.lastWatchedSeason == null ? 0.25 : 0.75;
   return 0.25;
 }
 

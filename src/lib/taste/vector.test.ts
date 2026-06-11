@@ -29,6 +29,19 @@ function mkItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   };
 }
 
+describe('buildTasteVector — mina viktas på progress', () => {
+  it('ej påbörjad mina-serie väger som planerad (0.25), påbörjad som samling (0.75)', () => {
+    const unstarted = buildTasteVector([
+      mkItem({ status: 'mina', mediaType: 'tv', lastWatchedSeason: null, genreIds: [18] }),
+    ]);
+    expect(unstarted.genres[18]).toBe(0.25);
+    const started = buildTasteVector([
+      mkItem({ status: 'mina', mediaType: 'tv', lastWatchedSeason: 1, lastWatchedEpisode: 2, genreIds: [18] }),
+    ]);
+    expect(started.genres[18]).toBe(0.75);
+  });
+});
+
 describe('buildTasteVector — avbruten negativ smaksignal', () => {
   it('viktar avbruten utan rating negativt (-0.5)', () => {
     const v = buildTasteVector([

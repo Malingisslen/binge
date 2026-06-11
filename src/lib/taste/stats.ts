@@ -10,11 +10,13 @@ export interface ProfileStats {
   };
 }
 
+// Ej påbörjade 'mina'-serier viktas som planerade (vill_se-nivån) — se
+// taste/vector.ts för resonemanget.
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return item.rating / 10;
   if (item.status === 'avbruten') return 0;
   if (item.status === 'sedd') return 0.8;
-  if (item.status === 'mina') return 0.6;
+  if (item.status === 'mina') return item.lastWatchedSeason == null ? 0.3 : 0.6;
   return 0.3;
 }
 
