@@ -1374,7 +1374,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ### Medvetet INTE i denna plan (uppföljning)
 
-- **Lazy-ladda Firestore-SDK:n** (109 KB gzip, 26 % av first-load) — stor insats (23 filer importerar `{ db }` statiskt), och auditens rekommendation är att mäta om den efter att vattenfallsfixarna ovan landat. Mål om den görs: ~250 KB gzip gäst / ~350 KB inloggad.
+- **Lazy-ladda Firestore-SDK:n** (109 KB gzip, 26 % av first-load) — stor insats (23 filer importerar `{ db }` statiskt), och auditens rekommendation är att mäta om den efter att vattenfallsfixarna ovan landat. Mål om den görs: ~250 KB gzip gäst / ~350 KB inloggad. Samma refactor ska också rensa IndexedDB-cachen vid signOut/deleteAccount (terminate + clearIndexedDbPersistence) — går inte med module-level db.
 - **App-shell service worker** — omvärdera först om återbesöks-TTFB fortfarande är ett problem efter Task 1 + Cloudflare-regeln.
 - **TMDB-edge-Worker** — bryter inte gratis-constrainten för enbart katalog-endpoints men är en single point of failure; inte värd det nu.
 - **Duotone-ombyggnad** — profilera `/my/all` med stort bibliotek innan något görs.

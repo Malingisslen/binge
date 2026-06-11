@@ -306,6 +306,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // re-signed-in user starts with empty server-state instead of the
     // previous user's cached watchlist / reviews / notifications.
     queryClient.clear();
+    // OBS: Firestores IndexedDB-cache (persistentLocalCache) överlever
+    // signOut — rensning kräver terminate()+clearIndexedDbPersistence()
+    // och en ny instans, vilket inte går med module-level `db`. Hanteras
+    // i lazy-getDb()-uppföljningen (se prestandaplanens uppföljningssektion).
+    // Nästa users första snapshot ersätter cachen så fort auth bytt uid.
   }, [queryClient]);
 
   const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
@@ -633,6 +638,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await batch.commit();
     }
 
+    // OBS: Firestores IndexedDB-cache (persistentLocalCache) överlever raderingen —
+    // rensning kräver terminate()+clearIndexedDbPersistence(); se lazy-getDb()-uppföljningen.
     // Finally remove the Firebase Auth user.
     await deleteUser(currentUser);
   }, [user?.username]);
