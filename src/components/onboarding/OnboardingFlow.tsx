@@ -223,16 +223,16 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
   const canContinue = items.length > 0;
 
-  // intent='plan' → vill_se. intent='engage' → mina (TV) eller sedd (film).
-  // Onboarding-knapparna heter "Vill se" och "Följer/Sett" beroende på mediaType.
+  // TV: en väg — "Följ" (status mina; ej påbörjad tills första avsnittet
+  // markeras). Film: intent 'plan' → vill_se, 'engage' → sedd.
   const handleAdd = async (
     result: TMDBSearchResult & { media_type: 'movie' | 'tv' },
     intent: 'plan' | 'engage',
   ) => {
     const title = getDisplayTitle(result);
-    const status: WatchStatus = intent === 'plan'
-      ? 'vill_se'
-      : (result.media_type === 'tv' ? 'mina' : 'sedd');
+    const status: WatchStatus = result.media_type === 'tv'
+      ? 'mina'
+      : (intent === 'plan' ? 'vill_se' : 'sedd');
     await addItem({
       tmdbId: result.id,
       mediaType: result.media_type,
@@ -257,8 +257,8 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         Lägg till din första titel
       </h1>
       <p className="text-sm text-text-secondary mb-4">
-        Sök efter en film eller serie och välj om du vill se den eller följer
-        den.
+        Sök efter en film eller serie. Serier följer du; filmer markerar du
+        som vill se eller sedda.
       </p>
       <div className="flex items-center gap-2 mb-3 border border-border-main rounded-sm bg-white px-2">
         <Search size={13} className="text-text-muted" />
@@ -314,6 +314,13 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     <span className="text-xxs text-accent inline-flex items-center gap-1">
                       <Check size={11} /> Tillagd
                     </span>
+                  ) : r.media_type === 'tv' ? (
+                    <button
+                      onClick={() => handleAdd(r, 'engage')}
+                      className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
+                    >
+                      Följ
+                    </button>
                   ) : (
                     <div className="flex gap-1">
                       <button
@@ -326,7 +333,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                         onClick={() => handleAdd(r, 'engage')}
                         className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
                       >
-                        {r.media_type === 'tv' ? 'Följer' : 'Sedd'}
+                        Sedd
                       </button>
                     </div>
                   )}

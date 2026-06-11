@@ -7,7 +7,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
-import { statusLabel, statusOptionsFor } from '@/lib/watchStatus';
+import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { getTVShow } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import type { WatchStatus, MediaType, TMDBTVShow } from '@/types';
@@ -113,7 +113,7 @@ export default function QuickAddButton({
                 current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
               } bg-transparent`}
             >
-              {labelFor(status)}
+              {statusMenuLabel(status, mediaType)}
             </button>
           ))}
           {current && (
