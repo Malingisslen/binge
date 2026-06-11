@@ -4,7 +4,7 @@ import type { EpisodeEntry, MovieEntry, CalendarEntry } from './types';
 
 function episode(p: Partial<EpisodeEntry> = {}): EpisodeEntry {
   return {
-    kind: 'episode', mediaType: 'tv', source: 'mina', tmdbId: 1, title: 'S',
+    kind: 'episode', mediaType: 'tv', tmdbId: 1, title: 'S',
     posterPath: null, backdropPath: null, airDate: '2026-06-20',
     season: 1, episode: 1, episodeCode: 'S1E1', ...p,
   };
@@ -12,7 +12,7 @@ function episode(p: Partial<EpisodeEntry> = {}): EpisodeEntry {
 
 function movie(p: Partial<MovieEntry> = {}): MovieEntry {
   return {
-    kind: 'movie', mediaType: 'movie', source: 'vill_se', releaseType: 'digital',
+    kind: 'movie', mediaType: 'movie', releaseType: 'digital',
     tmdbId: 2, title: 'M', posterPath: null, backdropPath: null, airDate: '2026-06-20', ...p,
   };
 }

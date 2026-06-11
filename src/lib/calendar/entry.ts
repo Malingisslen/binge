@@ -38,8 +38,9 @@ export function entryBadge(e: CalendarEntry, isToday: boolean): string | null {
   return null;
 }
 
-/** True om vi ska visa "markera sedd"-toggeln. Bara avsnitt i serier du
- *  faktiskt tittar på ('mina') — inte vill-se eller filmsläpp. */
+/** True om vi ska visa "markera sedd"-toggeln. Alla avsnitt (även i ej
+ *  påbörjade serier — att bocka av E1 från kalendern är hur man börjar),
+ *  aldrig filmsläpp. */
 export function canMarkWatched(e: CalendarEntry): boolean {
-  return e.kind === 'episode' && e.source === 'mina';
+  return e.kind === 'episode';
 }

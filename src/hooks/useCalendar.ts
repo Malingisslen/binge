@@ -13,7 +13,6 @@ import type { TMDBTVShow, TMDBMovie } from '@/types';
 // importerar `CalendarEntry` från '@/hooks/useCalendar'.
 export type {
   CalendarEntry,
-  CalendarSource,
   EpisodeEntry,
   MovieEntry,
 } from '@/lib/calendar/types';
@@ -31,42 +30,32 @@ export interface UseCalendarResult {
 
 export function useCalendarEntries(): UseCalendarResult {
   const { getByStatus } = useWatchlist();
-  // Kalendern visar avsnitt för serier du tittar på ('mina') OCH serier du vill
-  // se ('vill_se') — samma show/säsong-pipeline, men källan stämplas så UI:n
-  // kan skilja dem åt (vill_se får ingen "markera sedd"-toggel). Vi behåller
-  // source-ordningen [...mina, ...vill_se] stabil så query-index inte hoppar.
+  // Kalendern visar avsnitt för alla serier du följer ('mina') — inklusive
+  // ej påbörjade (premiärbevakning är ett kärnvärde). Filmer i 'vill_se'
+  // bidrar med digitala släppdatum längre ner.
   const minaTV = getByStatus('mina', 'tv');
-  const villSeTV = getByStatus('vill_se', 'tv');
-  const tvSpecs = useMemo(
-    () => [
-      ...minaTV.map(i => ({ id: i.tmdbId, source: 'mina' as const })),
-      ...villSeTV.map(i => ({ id: i.tmdbId, source: 'vill_se' as const })),
-    ],
+  const tmdbIds = useMemo(
+    () => minaTV.map(i => i.tmdbId),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [minaTV.map(i => i.tmdbId).join(','), villSeTV.map(i => i.tmdbId).join(',')]
+    [minaTV.map(i => i.tmdbId).join(',')]
   );
-  const tmdbIds = useMemo(() => tvSpecs.map(s => s.id), [tvSpecs]);
 
   const showQueries = useQueries({
-    queries: tvSpecs.map(spec => ({
-      queryKey: ['tv', spec.id],
+    queries: tmdbIds.map(id => ({
+      queryKey: ['tv', id],
       // Delad staleTime-konstant + signal: ['tv', id] läses även av useTVShow,
       // useSubscriptionAdvisor och useRevivalNudges. Olika staleTime skulle få
       // observers att slåss om cachen (H3). Signal avbryter in-flight fetches
       // vid navigation bort så semaphore-slots inte läcker.
-      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(spec.id, { signal }),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
       staleTime: TMDB_STALE.TV_DETAIL,
     })),
   });
 
-  // Behåll source-taggen ihop med datat så entries kan byggas per källa.
   const shows = useMemo(
-    () =>
-      showQueries
-        .map((q, i) => ({ show: q.data, source: tvSpecs[i]?.source ?? 'mina' }))
-        .filter((x): x is { show: TMDBTVShow; source: 'mina' | 'vill_se' } => x.show != null),
+    () => showQueries.map(q => q.data).filter((d): d is TMDBTVShow => d != null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showQueries.map(q => q.dataUpdatedAt).join(','), tvSpecs]
+    [showQueries.map(q => q.dataUpdatedAt).join(',')]
   );
 
   // Loading-detektion baserad på data-närvaro snarare än react-querys
@@ -79,11 +68,10 @@ export function useCalendarEntries(): UseCalendarResult {
   const showsNotStartedYet = tmdbIds.length > 0 && showQueries.length === 0;
 
   const seasonSpecs = useMemo(() => {
-    return shows.map(({ show, source }) => ({
+    return shows.map(show => ({
       showId: show.id,
       seasonNum: show.next_episode_to_air?.season_number ?? show.number_of_seasons,
       show,
-      source,
     }));
   }, [shows]);
 
@@ -146,13 +134,8 @@ export function useCalendarEntries(): UseCalendarResult {
   const moviesPending = movieIds.length > 0 && movieQueries.some(q => q.isPending);
 
   const entries: CalendarEntry[] = useMemo(() => {
-    // Bygg avsnitts-entries per källa så source-taggen blir rätt, slå sedan
-    // ihop med filmsläppen.
-    const minaData = seasonData.filter(d => d.source === 'mina');
-    const villSeData = seasonData.filter(d => d.source === 'vill_se');
     return [
-      ...buildCalendarEntries(minaData, 'mina'),
-      ...buildCalendarEntries(villSeData, 'vill_se'),
+      ...buildCalendarEntries(seasonData),
       ...buildMovieEntries(movies),
     ];
   }, [seasonData, movies]);

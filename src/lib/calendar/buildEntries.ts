@@ -3,7 +3,7 @@ import { formatEpisodeCode } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { pickSwedishDigitalRelease } from './releaseDate';
 import type { TMDBTVShow, TMDBEpisode, TMDBMovie, TMDBProviderData } from '@/types';
-import type { CalendarEntry, CalendarSource } from './types';
+import type { CalendarEntry } from './types';
 
 /**
  * Provider-policy för kalenderns metarader (H3): visa var titeln STREAMAS när
@@ -29,14 +29,9 @@ export interface SeasonDatum {
  * ska tappas när TMDB:s säsong-episodes-array släpar efter show-nivåns
  * next_episode_to_air. Dedupe på `${tmdbId}-S{n}E{n}` så ett seedat avsnitt
  * aldrig dubblerar ett som redan finns i säsong-arrayen.
- *
- * `source` stämplas på varje entry. 'mina' (default) = serier du tittar på,
- * 'vill_se' = serier du vill se (samma pipeline, men UI:n döljer watched-
- * toggeln för vill_se).
  */
 export function buildCalendarEntries(
   seasonData: SeasonDatum[],
-  source: CalendarSource = 'mina',
 ): CalendarEntry[] {
   const result: CalendarEntry[] = [];
   const seen = new Set<string>();
@@ -70,7 +65,6 @@ export function buildCalendarEntries(
       result.push({
         kind: 'episode',
         mediaType: 'tv',
-        source,
         tmdbId: show.id,
         title: preferOriginalTitle(show.name, show.original_name),
         posterPath: show.poster_path,
@@ -122,7 +116,6 @@ export function buildMovieEntries(
     result.push({
       kind: 'movie',
       mediaType: 'movie',
-      source: 'vill_se',
       releaseType: 'digital',
       tmdbId: movie.id,
       title: preferOriginalTitle(movie.title, movie.original_title),

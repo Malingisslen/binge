@@ -3,15 +3,13 @@ import { entryKey, entryHref, entryMetaLine, entryBadge, canMarkWatched } from '
 import type { EpisodeEntry, MovieEntry } from './types';
 
 const episode: EpisodeEntry = {
-  kind: 'episode', mediaType: 'tv', source: 'mina', tmdbId: 100, title: 'Show',
+  kind: 'episode', mediaType: 'tv', tmdbId: 100, title: 'Show',
   posterPath: null, backdropPath: null, airDate: '2026-06-20',
   season: 2, episode: 5, episodeCode: 'S2E5', isPremiere: false, isFinale: false,
 };
 
-const villSeEpisode: EpisodeEntry = { ...episode, source: 'vill_se' };
-
 const movie: MovieEntry = {
-  kind: 'movie', mediaType: 'movie', source: 'vill_se', releaseType: 'digital',
+  kind: 'movie', mediaType: 'movie', releaseType: 'digital',
   tmdbId: 500, title: 'Film', posterPath: null, backdropPath: null, airDate: '2026-06-20',
 };
 
@@ -41,9 +39,8 @@ describe('entry helpers', () => {
     expect(entryBadge(movie, true)).toBe('släpps i dag');
   });
 
-  it('canMarkWatched only for episodes you actually watch', () => {
+  it('canMarkWatched for episodes, never for movie releases', () => {
     expect(canMarkWatched(episode)).toBe(true);
-    expect(canMarkWatched(villSeEpisode)).toBe(false);
     expect(canMarkWatched(movie)).toBe(false);
   });
 });

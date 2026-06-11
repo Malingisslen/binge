@@ -1,16 +1,13 @@
-// Kalenderns entry-modell. Kalendern visar tre slags händelser:
-//   1. Avsnitt av serier du tittar på ('mina')
-//   2. Avsnitt av serier du vill se ('vill_se') — samma pipeline, annan källa
-//   3. Digitala filmsläpp för filmer du vill se ('vill_se', media 'movie')
+// Kalenderns entry-modell. Kalendern visar två slags händelser:
+//   1. Avsnitt av serier du följer ('mina') — inkl. ej påbörjade; toggeln
+//      "markera sedd" gäller alla (att bocka av första avsnittet från
+//      kalendern flyttar bara läget ej_paborjad → aktiv/ikapp).
+//   2. Digitala filmsläpp för filmer du vill se ('vill_se', media 'movie')
 //
 // Avsnitt och filmsläpp har olika form, så CalendarEntry är en diskriminerad
 // union på `kind`. Delade fält ligger i CalendarEntryBase; per-kind-logik
 // (nyckel, länk, badge) bor i `entry.ts` så konsumenterna slipper sprida
 // `if (kind === ...)` överallt.
-
-/** Vilken watchlist-status titeln kom ifrån. Styr bl.a. om vi visar
- *  "markera sedd"-toggeln (bara på 'mina' — du tittar faktiskt). */
-export type CalendarSource = 'mina' | 'vill_se';
 
 interface CalendarEntryBase {
   tmdbId: number;
@@ -21,7 +18,6 @@ interface CalendarEntryBase {
   airDate: string;
   provider?: string;
   genreIds?: number[];
-  source: CalendarSource;
 }
 
 export interface EpisodeEntry extends CalendarEntryBase {

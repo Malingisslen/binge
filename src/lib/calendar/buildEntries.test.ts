@@ -79,16 +79,6 @@ describe('buildCalendarEntries', () => {
     expect(seeded?.isFinale).toBe(true);
   });
 
-  it('defaults source to "mina" and stamps "vill_se" when asked', () => {
-    const data: SeasonDatum[] = [{
-      showId: 100,
-      show: show({ next_episode_to_air: null }),
-      season: { episodes: [ep({ episode_number: 1, air_date: '2026-05-26' })] },
-    }];
-    expect(buildCalendarEntries(data)[0].source).toBe('mina');
-    expect(buildCalendarEntries(data, 'vill_se')[0].source).toBe('vill_se');
-  });
-
   it('falls back to free/ads providers when no flatrate exists (H3)', () => {
     // "Var streamas detta?" ska besvaras även för titlar som bara ligger på
     // en gratis-/reklamtjänst — annars blir metaraderna inkonsekventa mellan
@@ -164,7 +154,7 @@ describe('buildMovieEntries', () => {
   it('includes a movie with a future SE digital release', () => {
     const entries = buildMovieEntries([movie({ release_dates: seDigital('2026-06-20') })], now);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ kind: 'movie', mediaType: 'movie', source: 'vill_se', releaseType: 'digital', airDate: '2026-06-20' });
+    expect(entries[0]).toMatchObject({ kind: 'movie', mediaType: 'movie', releaseType: 'digital', airDate: '2026-06-20' });
   });
 
   it('skips movies whose SE digital release is in the past', () => {
