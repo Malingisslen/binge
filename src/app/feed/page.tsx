@@ -196,10 +196,10 @@ function FeedContent() {
 function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
   const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`;
   const poster = posterUrl(item.posterPath, 'w92');
-  // 'mina' (TV) översätts till "började följa" för socialt språk; film 'sedd'
-  // → "markerade som sedd"; vill_se → "vill se".
+  // 'mina' (TV) → "följer" (socialt språk); film 'sedd' → "markerade som
+  // sedd"; vill_se (film) → "vill se".
   const statusLabel =
-    item.status === 'mina' ? 'lade till i biblioteket'
+    item.status === 'mina' ? 'följer'
     : item.status === 'sedd' ? 'markerade som sedd'
     : item.status === 'vill_se' ? 'vill se'
     : 'uppdaterade';
