@@ -1,11 +1,13 @@
 'use client';
 
+import { memo, useCallback } from 'react';
 import { useTVSeason } from '@/hooks/useTMDB';
 import EpisodeRow from './EpisodeRow';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { isEpisodeMasked, type MaskBoundary } from '@/lib/groupProgress';
 import { countAiredEpisodes } from '@/lib/episodeLabel';
 import { todayIso } from '@/lib/utils';
+import type { TMDBEpisode } from '@/types';
 
 interface SeasonEpisodePanelProps {
   tmdbId: number;
@@ -17,10 +19,59 @@ interface SeasonEpisodePanelProps {
   maskBoundary?: MaskBoundary | null;
 }
 
+// T7: per-rad-wrapper med stabila callbacks. Tidigare byggdes onToggle/
+// onMarkUpTo som inline-closures i .map() — ny identitet varje render, vilket
+// gjorde memo:n på EpisodeRow verkningslös och re-renderade hela avsnitts-
+// listan vid varje progress-onSnapshot. Nu re-renderar bara rader vars
+// watched/masked-state faktiskt ändrats.
+const PanelEpisodeRow = memo(function PanelEpisodeRow({
+  episode, seasonNumber, episodeCount, watched, spoilerMasked, markEpisodeWatched, markUpTo,
+}: {
+  episode: TMDBEpisode;
+  seasonNumber: number;
+  episodeCount: number;
+  watched: boolean;
+  spoilerMasked: boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
+  markUpTo: (episodeNumber: number) => Promise<void>;
+}) {
+  const handleToggle = useCallback(
+    (w: boolean) => { void markEpisodeWatched(seasonNumber, episode.episode_number, w, episodeCount); },
+    [markEpisodeWatched, seasonNumber, episode.episode_number, episodeCount]
+  );
+  const handleMarkUpTo = useCallback(
+    () => { void markUpTo(episode.episode_number); },
+    [markUpTo, episode.episode_number]
+  );
+  return (
+    <EpisodeRow
+      episode={episode}
+      seasonNumber={seasonNumber}
+      watched={watched}
+      spoilerMasked={spoilerMasked}
+      onToggle={handleToggle}
+      onMarkUpTo={handleMarkUpTo}
+    />
+  );
+});
+
 export default function SeasonEpisodePanel({
   tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched, maskBoundary,
 }: SeasonEpisodePanelProps) {
   const { data: season, isLoading } = useTVSeason(tmdbId, seasonNumber);
+
+  // T7: hoistad "markera hit"-logik — en stabil funktion för hela panelen
+  // istället för en ny closure per rad och render.
+  const markUpTo = useCallback(async (episodeNumber: number) => {
+    if (previousSeasons) {
+      for (const ps of previousSeasons) {
+        if (ps.season_number > 0 && ps.season_number < seasonNumber) {
+          await markSeasonWatched(ps.season_number, ps.episode_count);
+        }
+      }
+    }
+    await markSeasonWatched(seasonNumber, episodeNumber);
+  }, [previousSeasons, seasonNumber, markSeasonWatched]);
 
   if (isLoading) {
     return (
@@ -73,23 +124,15 @@ export default function SeasonEpisodePanel({
       <div className="px-4 pb-3">
         <div className="eps">
           {episodes.map(ep => (
-            <EpisodeRow
+            <PanelEpisodeRow
               key={ep.id}
               episode={ep}
               seasonNumber={seasonNumber}
+              episodeCount={episodes.length}
               watched={isWatched(seasonNumber, ep.episode_number)}
               spoilerMasked={isEpisodeMasked(maskBoundary ?? null, seasonNumber, ep.episode_number)}
-              onToggle={watched => markEpisodeWatched(seasonNumber, ep.episode_number, watched, episodes.length)}
-              onMarkUpTo={async () => {
-                if (previousSeasons) {
-                  for (const ps of previousSeasons) {
-                    if (ps.season_number > 0 && ps.season_number < seasonNumber) {
-                      await markSeasonWatched(ps.season_number, ps.episode_count);
-                    }
-                  }
-                }
-                await markSeasonWatched(seasonNumber, ep.episode_number);
-              }}
+              markEpisodeWatched={markEpisodeWatched}
+              markUpTo={markUpTo}
             />
           ))}
         </div>

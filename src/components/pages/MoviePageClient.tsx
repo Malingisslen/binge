@@ -46,8 +46,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // T6 (samma mönster som TVShowPageClient): räknaren och griden måste visa
+  // samma antal — skär till 5 direkt så "N förslag" är ärligt.
   const mappedRecs = useMemo(
-    () => (movie?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'movie' as const })),
+    () => (movie?.recommendations?.results?.slice(0, 5) ?? []).map(r => ({ ...r, media_type: 'movie' as const })),
     [movie?.recommendations]
   );
 
@@ -338,7 +340,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             <span className="meta">{mappedRecs.length} förslag</span>
           </div>
           <div className="similar-grid">
-            {mappedRecs.slice(0, 5).map(rec => (
+            {mappedRecs.map(rec => (
               <RecCard key={`${rec.media_type}-${rec.id}`} item={rec} />
             ))}
           </div>

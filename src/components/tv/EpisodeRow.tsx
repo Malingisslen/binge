@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Lock, Check } from 'lucide-react';
 import type { TMDBEpisode } from '@/types';
 import { stillUrl } from '@/lib/tmdb/client';
@@ -29,7 +29,11 @@ function formatUnairedRunt(iso: string): string {
   return `${wd} ${d.getDate()}/${d.getMonth() + 1}`;
 }
 
-export default function EpisodeRow({
+// T7: memo — säsongspaneler renderar upp till ~30+ rader och varje
+// episodeProgress-onSnapshot re-renderar hela detaljsidan. Med memo hoppar
+// orörda rader över re-rendern (kräver stabila callbacks från föräldern —
+// se PanelEpisodeRow i SeasonEpisodePanel).
+function EpisodeRow({
   episode, seasonNumber, watched, onToggle, onMarkUpTo, spoilerMasked,
 }: EpisodeRowProps) {
   const [revealed, setRevealed] = useState(false);
@@ -113,3 +117,5 @@ export default function EpisodeRow({
     </div>
   );
 }
+
+export default memo(EpisodeRow);

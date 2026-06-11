@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useEpisodeProgress } from './useEpisodeProgress';
 import { useWatchlist } from './useWatchlist';
 import type { EpisodeProgress } from '@/types';
@@ -44,6 +44,16 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   const { progress, markEpisodeWatched: markEpisode, markSeasonWatched: markSeason } = episodeProgress;
   const { updateProgress } = useWatchlist();
 
+  // T7: progress läses via ref istället för closure-dep. Två vinster:
+  // (1) markEpisodeWatched byter inte identitet vid varje onSnapshot —
+  //     memo:ade avsnittsrader slipper re-rendera för callback-identitet;
+  // (2) sekventiella loopar ("Avmarkera alla") läser alltid senaste progress
+  //     istället för det värde som rådde när loopen startade.
+  // (uppdateras i effect — refs får inte skrivas under render; callbacken
+  // läser refen först vid användar-interaktion, långt efter effekten.)
+  const progressRef = useRef(progress);
+  useEffect(() => { progressRef.current = progress; }, [progress]);
+
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean, episodeCount?: number) => {
     if (watched) {
       await Promise.all([
@@ -62,14 +72,14 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
       // högsta kvarvarande sedda position ur episodeProgress (onSnapshot hinner
       // inte uppdatera lokal state före detta, så vi exkluderar avsnittet vi
       // just avmarkerade). Nollställ till 0,0 om inga avsnitt är sedda kvar.
-      const highest = highestWatchedPosition(progress, { season, episode });
+      const highest = highestWatchedPosition(progressRef.current, { season, episode });
       if (highest) {
         await updateProgress(tmdbId, highest.season, highest.episode);
       } else {
         await updateProgress(tmdbId, 0, 0);
       }
     }
-  }, [markEpisode, updateProgress, tmdbId, progress]);
+  }, [markEpisode, updateProgress, tmdbId]);
 
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
     await Promise.all([

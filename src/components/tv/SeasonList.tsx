@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import type { TMDBSeason } from '@/types';
@@ -28,7 +28,14 @@ export default function SeasonList({
 }: SeasonListProps) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
 
-  const displaySeasons = seasons.filter(s => s.season_number > 0);
+  const displaySeasons = useMemo(() => seasons.filter(s => s.season_number > 0), [seasons]);
+  // T7: stabil identitet — tidigare byggdes en ny array per SeasonRow och
+  // render (`displaySeasons.map(...)` inline), vilket bröt memo-kedjan ned
+  // till avsnittsraderna via markUpTo-callbackens deps.
+  const previousSeasonsMeta = useMemo(
+    () => displaySeasons.map(s => ({ season_number: s.season_number, episode_count: s.episode_count })),
+    [displaySeasons]
+  );
 
   const toggle = (seasonNumber: number) => {
     setExpandedSeason(prev => prev === seasonNumber ? null : seasonNumber);
@@ -51,7 +58,7 @@ export default function SeasonList({
                     expanded={expandedSeason === season.season_number}
                     tmdbId={tmdbId}
                     seasonNumber={season.season_number}
-                    previousSeasons={displaySeasons.map(s => ({ season_number: s.season_number, episode_count: s.episode_count }))}
+                    previousSeasons={previousSeasonsMeta}
                     onToggle={() => toggle(season.season_number)}
                     isWatched={isWatched}
                     markEpisodeWatched={markEpisodeWatched}
@@ -77,7 +84,7 @@ export default function SeasonList({
                 expanded={expandedSeason === season.season_number}
                 tmdbId={tmdbId}
                 seasonNumber={season.season_number}
-                previousSeasons={displaySeasons.map(s => ({ season_number: s.season_number, episode_count: s.episode_count }))}
+                previousSeasons={previousSeasonsMeta}
                 onToggle={() => toggle(season.season_number)}
                 isWatched={isWatched}
                 markEpisodeWatched={markEpisodeWatched}

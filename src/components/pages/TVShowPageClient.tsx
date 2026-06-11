@@ -50,8 +50,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // T6: räknaren ("N förslag") och griden måste visa samma antal — skär till 5
+  // (= similar-grid:s desktop-kolumner) redan här, istället för 8 i memo:t +
+  // slice(0, 5) i render som gav "8 förslag" med 5 synliga kort.
   const mappedRecs = useMemo(
-    () => (show?.recommendations?.results?.slice(0, 8) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
+    () => (show?.recommendations?.results?.slice(0, 5) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
     [show?.recommendations]
   );
 
@@ -384,7 +387,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <span className="meta">{mappedRecs.length} förslag</span>
           </div>
           <div className="similar-grid">
-            {mappedRecs.slice(0, 5).map(rec => (
+            {mappedRecs.map(rec => (
               <RecCard key={`${rec.media_type}-${rec.id}`} item={rec} />
             ))}
           </div>
