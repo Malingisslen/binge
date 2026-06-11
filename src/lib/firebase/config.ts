@@ -1,6 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  connectFirestoreEmulator,
+  type Firestore,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -21,7 +28,23 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 // or id". useEffect körs efter hydration → divet överlever.
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// IndexedDB-cache: första onSnapshot-callbacken serveras momentant från disk
+// (fromCache=true) och servern skickar bara deltan via resume-token. Det gör
+// watchlist-rendering vid återbesök omedelbar OCH sänker debiterade reads
+// (~160–200 per kallt besök utan cache). multipleTabManager så flera flikar
+// delar samma cache utan lås-konflikt.
+let firestoreDb: Firestore;
+try {
+  firestoreDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch {
+  // HMR i dev: initializeFirestore på en redan-initierad app kastar.
+  // Återanvänd den befintliga instansen.
+  firestoreDb = getFirestore(app);
+}
+export const db = firestoreDb;
 
 // Emulator-koppling: aktiveras när NEXT_PUBLIC_FIREBASE_USE_EMULATOR=true.
 // Vi kopplar bara en gång per app-instans — getApps()-guarden ovan säkerställer
