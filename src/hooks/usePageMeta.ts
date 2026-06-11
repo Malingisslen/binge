@@ -41,31 +41,53 @@ import { useEffect } from 'react';
 const DEFAULT_TITLE = 'Binge.nu — Håll koll på vad du tittar på';
 const DEFAULT_DESCRIPTION = 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.';
 
+/**
+ * Märker element som hooken själv skapat. Element UTAN attributet ägs av
+ * React/Next (App Router-metadata renderas som React 19-"hoistables") och får
+ * bara muteras — aldrig detachas. Reacts hoistable-städning kör
+ * `instance.parentNode.removeChild(instance)` utan null-check, så en manuellt
+ * bortplockad nod kraschar hela appen vid nästa navigering med
+ * "Cannot read properties of null (reading 'removeChild')" (Sentry BINGE-5).
+ */
+const OWNED_ATTR = 'data-binge-meta';
+
 function setMeta(attr: 'name' | 'property', key: string, value: string): void {
   if (typeof document === 'undefined') return;
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
   if (!el) {
     el = document.createElement('meta');
     el.setAttribute(attr, key);
+    el.setAttribute(OWNED_ATTR, '');
     document.head.appendChild(el);
   }
   el.setAttribute('content', value);
 }
 
-function setCanonical(href: string): void {
-  if (typeof document === 'undefined') return;
-  let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-  if (!el) {
-    el = document.createElement('link');
+/**
+ * Sätter canonical-href och returnerar en restore-funktion för effect-cleanup.
+ * Framework-ägd canonical (root layout sätter alternates.canonical som
+ * default på alla sidor) muteras och får sin href tillbakaställd; bara
+ * hook-skapade element tas bort ur DOM:en.
+ */
+function setCanonical(href: string): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const existing = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (existing && !existing.hasAttribute(OWNED_ATTR)) {
+    const prevHref = existing.getAttribute('href');
+    existing.setAttribute('href', href);
+    return () => {
+      if (prevHref === null) existing.removeAttribute('href');
+      else existing.setAttribute('href', prevHref);
+    };
+  }
+  const el = existing ?? document.createElement('link');
+  if (!existing) {
     el.setAttribute('rel', 'canonical');
+    el.setAttribute(OWNED_ATTR, '');
     document.head.appendChild(el);
   }
   el.setAttribute('href', href);
-}
-
-function removeCanonical(): void {
-  if (typeof document === 'undefined') return;
-  document.head.querySelector('link[rel="canonical"]')?.remove();
+  return () => el.remove();
 }
 
 export function usePageMeta({
@@ -88,7 +110,7 @@ export function usePageMeta({
     const fullTitle = `${title} — Binge.nu`;
     document.title = fullTitle;
     setMeta('property', 'og:title', fullTitle);
-    setCanonical(window.location.href.split('?')[0]);
+    const restoreCanonical = setCanonical(window.location.href.split('?')[0]);
 
     if (description) {
       setMeta('name', 'description', description);
@@ -108,7 +130,7 @@ export function usePageMeta({
       setMeta('name', 'description', DEFAULT_DESCRIPTION);
       setMeta('property', 'og:title', 'Binge.nu');
       setMeta('property', 'og:description', DEFAULT_DESCRIPTION);
-      removeCanonical();
+      restoreCanonical();
       if (indexable) {
         // Defensiv: återställ catch-all-defaulten när indexable-routen unmountar.
         // Skyddar mot att nästa client-route ärver vår "index,follow" om den
