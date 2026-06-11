@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   statusLabel,
+  statusMenuLabel,
   STATUS_LABELS,
   TV_STATUS_OPTIONS,
   MOVIE_STATUS_OPTIONS,
@@ -23,10 +24,10 @@ describe('STATUS_LABELS', () => {
 });
 
 describe('statusOptionsFor', () => {
-  it('TV menu offers vill_se, sedd (genväg → mina+lastWatched), avbruten', () => {
-    expect(statusOptionsFor('tv')).toEqual(['vill_se', 'sedd', 'avbruten']);
-    // 'mina' är inte ett menyval — det blir auto-set när första avsnittet markeras.
-    // 'sedd' är en UI-genväg som översätts till status=mina + lastWatched.
+  it('TV menu offers mina (CTA "Följ"), sedd (genväg → mina+lastWatched), avbruten', () => {
+    expect(statusOptionsFor('tv')).toEqual(['mina', 'sedd', 'avbruten']);
+    // 'vill_se' är avskaffat för TV — att vilja se en serie ÄR att följa den
+    // (läget 'ej_paborjad' härleds från avsaknad av progress).
   });
 
   it('Movie menu offers vill_se, sedd, avbruten — never mina (mina är TV-only)', () => {
@@ -48,6 +49,15 @@ describe('statusLabel', () => {
 
   it('translates mina → "Sedd" for movies (defensive — bör aldrig hända i normalt UI)', () => {
     expect(statusLabel('mina', 'movie')).toBe('Sedd');
+  });
+});
+
+describe('statusMenuLabel', () => {
+  it('uses the verb "Följ" for mina on TV (CTA), noun elsewhere', () => {
+    expect(statusMenuLabel('mina', 'tv')).toBe('Följ');
+    expect(statusMenuLabel('sedd', 'tv')).toBe('Sedd (alla avsnitt)');
+    expect(statusMenuLabel('vill_se', 'movie')).toBe('Vill se');
+    expect(statusMenuLabel('avbruten', 'tv')).toBe('Avbruten');
   });
 });
 
@@ -134,15 +144,22 @@ describe('tvSubState', () => {
     expect(tvSubState(item, undefined)).toBe('avslutad');
   });
 
-  it('falls back to "aktiv" when no progress at all on an Ended show (L8)', () => {
+  it('returns "ej_paborjad" when no progress at all, regardless of TMDB data', () => {
+    const item = makeItem({ lastWatchedSeason: null, lastWatchedEpisode: null });
+    const show = makeShow({ last_episode_to_air: makeEp(2, 3), status: 'Returning Series' });
+    expect(tvSubState(item, show)).toBe('ej_paborjad');
+  });
+
+  it('returns "ej_paborjad" without TMDB show when no progress (ersätter gamla aktiv-fallbacken)', () => {
     const item = makeItem({ lastWatchedSeason: null, lastWatchedEpisode: null, tmdbStatus: 'Ended' });
-    expect(tvSubState(item, undefined)).toBe('aktiv');
+    expect(tvSubState(item, undefined)).toBe('ej_paborjad');
   });
 });
 
 describe('SUB_STATE_LABELS', () => {
   it('has Swedish labels for each sub-state', () => {
     expect(SUB_STATE_LABELS).toEqual({
+      'ej_paborjad': 'Ej påbörjad',
       'aktiv': 'Ligger efter',
       'ikapp': 'Ikapp',
       'avslutad': 'Avslutad',

@@ -9,15 +9,18 @@ export type MediaType = 'movie' | 'tv';
 // progress + TMDB:s last_episode_to_air + tmdbStatus. Film stannar i 'sedd'
 // som terminal — film är klar när den är klar.
 //
-// 'följer' togs bort som status under preprod-refactor. Lazy migration i
-// WatchlistContext.docToItem normaliserar gamla Firestore-docs (TV 'följer'
-// → 'mina', film 'följer' → 'sedd', TV 'sedd' → 'mina'). Nya skrivningar
-// använder bara enum-värdena nedan.
+// 'följer' togs bort som status under preprod-refactor, och 'vill_se' är
+// film-only sedan 2026-06 — att vilja se en serie ÄR att följa den (läget
+// 'ej_paborjad' härleds). Lazy migration i WatchlistContext.docToItem
+// normaliserar gamla Firestore-docs (TV 'följer'/'vill_se' → 'mina', film
+// 'följer' → 'sedd', TV 'sedd' → 'mina'). Nya skrivningar använder bara
+// enum-värdena nedan.
 export type WatchStatus = 'vill_se' | 'mina' | 'sedd' | 'avbruten';
 
-// Härleds från progress + TMDB-data — aldrig sparad i Firestore. Används av
-// /my/series sub-tabs, advisor-räkningar, och badges i kort/tabeller.
-export type TvSubState = 'aktiv' | 'ikapp' | 'avslutad';
+// Härleds från progress + TMDB-data — aldrig sparad i Firestore. 'ej_paborjad'
+// = ingen progress alls (serien följs men inget avsnitt är markerat). Används
+// av /my/series sub-sektioner, advisor-räkningar, och badges i kort/tabeller.
+export type TvSubState = 'ej_paborjad' | 'aktiv' | 'ikapp' | 'avslutad';
 
 // Tre-state visibility för watchlist-items + user-profil.
 // 'private'  — bara ägaren ser
