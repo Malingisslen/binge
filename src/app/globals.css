@@ -651,7 +651,9 @@ button { font: inherit; cursor: pointer; }
   overflow: hidden;
   position: relative;
   border: 1px solid var(--rule);
-  background: oklch(0.16 0 0);
+  /* X4/B4: ljus placeholder under lazy-load — svart bakgrund gav "svarta
+     rutor" i sekunder på alla poster-ytor innan bitmappen landat. */
+  background: var(--placeholder-fill);
   display: block;
 }
 .poster img {

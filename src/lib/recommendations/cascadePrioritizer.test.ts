@@ -30,8 +30,8 @@ describe('prioritizeRows', () => {
   it('places latest-fav (5★ within 30d) at the top with recency-decayed score', () => {
     const inp: CascadeInput = {
       ...emptyInput(),
-      latestFiveStar: { tmdbId: 603, mediaType: 'movie', daysSince: 3 },
-      strongSeeds: [{ tmdbId: 603, mediaType: 'movie', rating: 5, ratedAt: null }],
+      latestFiveStar: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', daysSince: 3 },
+      strongSeeds: [{ tmdbId: 603, mediaType: 'movie', rating: 5, title: 'The Matrix', ratedAt: null }],
     };
     const rows = prioritizeRows(inp);
     expect(rows[0].id.kind).toBe('latest-fav');
@@ -41,7 +41,7 @@ describe('prioritizeRows', () => {
   it('person beats similar at high recurrence', () => {
     const inp: CascadeInput = {
       ...emptyInput(),
-      strongSeeds: [{ tmdbId: 1, mediaType: 'movie', rating: 5, ratedAt: null }],
+      strongSeeds: [{ tmdbId: 1, mediaType: 'movie', rating: 5, title: 'Seed A', ratedAt: null }],
       recurringPeople: [{ id: 100, name: 'A', recurrence: 6, knownFor: 'director' }],
     };
     const rows = prioritizeRows(inp);
@@ -53,7 +53,7 @@ describe('prioritizeRows', () => {
 
   it('emits up to 3 similar rows for top strong seeds', () => {
     const seeds = Array.from({ length: 5 }, (_, i) => ({
-      tmdbId: i + 1, mediaType: 'movie' as const, rating: 5, ratedAt: null,
+      tmdbId: i + 1, mediaType: 'movie' as const, rating: 5, title: `Seed ${i + 1}`, ratedAt: null,
     }));
     const rows = prioritizeRows({ ...emptyInput(), strongSeeds: seeds });
     expect(rows.filter(r => r.id.kind === 'similar').length).toBeLessThanOrEqual(3);
@@ -83,12 +83,35 @@ describe('prioritizeRows', () => {
     const inp: CascadeInput = {
       ...emptyInput(),
       strongSeeds: [
-        { tmdbId: 1, mediaType: 'movie', rating: 4, ratedAt: null },
-        { tmdbId: 2, mediaType: 'movie', rating: 5, ratedAt: null },
+        { tmdbId: 1, mediaType: 'movie', rating: 4, title: 'Fyran', ratedAt: null },
+        { tmdbId: 2, mediaType: 'movie', rating: 5, title: 'Femman', ratedAt: null },
       ],
     };
     const rows = prioritizeRows(inp);
     const similars = rows.filter(r => r.id.kind === 'similar');
-    expect(similars[0].label).toBe('Liknar dina 5★');
+    expect(similars[0].label).toBe('Liknar Femman');
+  });
+
+  it('R2: similar-row headings include the seed title (no duplicate headings at same rating)', () => {
+    const inp: CascadeInput = {
+      ...emptyInput(),
+      strongSeeds: [
+        { tmdbId: 1, mediaType: 'tv', rating: 5, title: 'Off Campus', ratedAt: null },
+        { tmdbId: 2, mediaType: 'tv', rating: 5, title: 'Silo', ratedAt: null },
+      ],
+    };
+    const labels = prioritizeRows(inp).filter(r => r.id.kind === 'similar').map(r => r.label);
+    expect(labels).toContain('Liknar Off Campus');
+    expect(labels).toContain('Liknar Silo');
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('R4: latest-fav heading names the title instead of a cryptic day count', () => {
+    const inp: CascadeInput = {
+      ...emptyInput(),
+      latestFiveStar: { tmdbId: 7, mediaType: 'tv', title: 'Off Campus', daysSince: 21 },
+    };
+    const row = prioritizeRows(inp).find(r => r.id.kind === 'latest-fav');
+    expect(row?.label).toBe('Liknar Off Campus — din senaste 5★');
   });
 });

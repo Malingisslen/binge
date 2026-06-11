@@ -11,6 +11,8 @@ import EpisodeRow from '@/components/tv/EpisodeRow';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
+import { countAiredEpisodes } from '@/lib/episodeLabel';
+import { todayIso } from '@/lib/utils';
 
 export default function SeasonPageClient({ id, num }: { id: string; num: string }) {
   const seriesId = parseInt(id, 10);
@@ -33,6 +35,8 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
 
   const episodes = season.episodes ?? [];
   const watchedCount = episodes.filter(ep => isWatched(seasonNum, ep.episode_number)).length;
+  // T3: visa inte "Markera alla sedda" för säsonger där inget avsnitt sänts än.
+  const airedCount = countAiredEpisodes(episodes, todayIso());
 
   return (
     <div>
@@ -40,7 +44,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
         crumb={<Link href={`/tv/${seriesId}/`} className="text-accent no-underline">← Tillbaka till serien</Link>}
         title={season.name}
         standfirst={`${progressLoading ? '—' : watchedCount}/${episodes.length} avsnitt sedda`}
-        actions={!progressLoading && watchedCount < episodes.length ? (
+        actions={!progressLoading && watchedCount < episodes.length && airedCount > 0 ? (
           <button type="button" onClick={() => markSeasonWatched(seasonNum, episodes.length)} className="btn btn-acc btn-sm">Markera alla sedda</button>
         ) : undefined}
       />

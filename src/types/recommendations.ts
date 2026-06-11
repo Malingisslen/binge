@@ -66,6 +66,8 @@ export interface Seed {
   tmdbId: number;
   mediaType: MediaType;
   rating: number;
+  /** Display title from WatchlistItem — used in row headings ("Liknar {title}"). */
+  title: string;
   /** Timestamp from WatchlistItem.updatedAt — used by row 9 recency scoring. */
   ratedAt: Date | null;
 }
@@ -91,7 +93,7 @@ export interface DominantGenre {
 /** What the cascade prioritizer takes as input. Pure data — no fetch fns. */
 export interface CascadeInput {
   /** Most recent 5★ rating within 30 days, or null. */
-  latestFiveStar: { tmdbId: number; mediaType: MediaType; daysSince: number } | null;
+  latestFiveStar: { tmdbId: number; mediaType: MediaType; title: string; daysSince: number } | null;
   strongSeeds: Seed[];   // 4-5★
   weakSeeds: Seed[];     // 3★
   recurringPeople: RecurringPerson[];

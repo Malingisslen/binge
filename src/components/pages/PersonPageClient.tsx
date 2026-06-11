@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
+import { translateDepartment } from '@/lib/tmdb/department';
+import { splitSelfCredits } from '@/lib/tmdb/personCredits';
 import TitleGrid from '@/components/title/TitleGrid';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -26,14 +28,18 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   });
 
   const biography = person?.biography || personEn?.biography || '';
+  // PE2: markera när bion är en engelsk fallback (TMDB saknar svensk text).
+  const biographyIsEnglishFallback = !person?.biography && !!personEn?.biography;
 
-  const uniqueCredits = useMemo(() => {
+  // PE3: separera Self-gästframträdanden (talkshows, galor) från riktiga
+  // roller så filmografin inte dränks i dem.
+  const { roles, selfCredits } = useMemo(() => {
     const allCredits = [
       ...(credits?.cast ?? []).map(c => ({ ...c, role: c.character })),
       ...(credits?.crew ?? []).filter(c => c.job === 'Director' || c.job === 'Creator').map(c => ({ ...c, role: c.job })),
     ];
     const seen = new Set<string>();
-    return allCredits
+    const unique = allCredits
       .filter(c => {
         const key = `${c.media_type}-${c.id}`;
         if (seen.has(key)) return false;
@@ -41,6 +47,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
         return isAddableMediaType(c);
       })
       .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+    return splitSelfCredits(unique);
   }, [credits]);
 
   usePageMeta({
@@ -63,7 +70,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   return (
     <div>
       <PageHeader
-        crumb={person.known_for_department ?? 'Person'}
+        crumb={translateDepartment(person.known_for_department)}
         title={person.name}
         standfirst={[birthYear && `Född ${birthYear}`, person.place_of_birth].filter(Boolean).join(' · ') || undefined}
       />
@@ -78,19 +85,38 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
         </div>
         <div className="flex-1">
           {biography && (
-            <p className="text-base text-ink-2 leading-relaxed mb-3 line-clamp-6">{biography}</p>
+            <>
+              <p className="text-base text-ink-2 leading-relaxed mb-3 line-clamp-6">{biography}</p>
+              {biographyIsEnglishFallback && (
+                <p className="text-xxs text-ink-3 mb-3">Biografi på engelska — svensk översättning saknas.</p>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {uniqueCredits.length > 0 ? (
+      {roles.length > 0 && (
         <div className="mb-4">
-          <h2 className="text-sm font-bold text-ink-2 mb-2">Filmografi ({uniqueCredits.length})</h2>
+          <h2 className="text-sm font-bold text-ink-2 mb-2">Filmografi ({roles.length})</h2>
           <div className="bg-surface border border-rule rounded-sm">
-            <TitleGrid items={uniqueCredits} />
+            <TitleGrid items={roles} />
           </div>
         </div>
-      ) : (
+      )}
+
+      {selfCredits.length > 0 && (
+        <details className="mb-4">
+          <summary className="text-sm font-bold text-ink-2 mb-2 cursor-pointer select-none">
+            Gästframträdanden ({selfCredits.length})
+            <span className="ml-2 font-normal text-xxs text-ink-3">talkshows, galor, dokumentärer — som sig själv</span>
+          </summary>
+          <div className="bg-surface border border-rule rounded-sm">
+            <TitleGrid items={selfCredits} />
+          </div>
+        </details>
+      )}
+
+      {roles.length === 0 && selfCredits.length === 0 && (
         <EmptyState title="Ingen filmografi" body="Vi hittade inga titlar för den här personen ännu." />
       )}
     </div>

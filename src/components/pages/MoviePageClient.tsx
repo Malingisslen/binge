@@ -14,6 +14,7 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
@@ -268,24 +269,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
         </div>
       </div>
 
-      {/* Trailer — raw 16:9 (preview surface) */}
-      {trailer && (
-        <section className="detail-section">
-          <div className="head">
-            <h2>Trailer</h2>
-            <span className="meta">YouTube · {trailer.type}</span>
-          </div>
-          <div className="raw ratio-16-9" style={{ maxWidth: 720 }}>
-            <iframe
-              src={`https://www.youtube.com/embed/${trailer.key}`}
-              title={trailer.name}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              style={{ width: '100%', height: '100%', border: 0 }}
-            />
-          </div>
-        </section>
-      )}
+      {/* Trailer — raw 16:9 (preview surface). Döljs helt när embed saknas/failar (M1). */}
+      <TrailerSection video={trailer} />
 
       {/* Cast — raw 1:1 circular portraits (preview surface) */}
       {cast.length > 0 && (

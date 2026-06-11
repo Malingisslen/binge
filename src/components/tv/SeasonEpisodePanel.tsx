@@ -4,6 +4,8 @@ import { useTVSeason } from '@/hooks/useTMDB';
 import EpisodeRow from './EpisodeRow';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { isEpisodeMasked, type MaskBoundary } from '@/lib/groupProgress';
+import { countAiredEpisodes } from '@/lib/episodeLabel';
+import { todayIso } from '@/lib/utils';
 
 interface SeasonEpisodePanelProps {
   tmdbId: number;
@@ -39,11 +41,13 @@ export default function SeasonEpisodePanel({
   const episodes = season.episodes;
   const watchedCount = episodes.filter(ep => isWatched(seasonNumber, ep.episode_number)).length;
   const allWatched = watchedCount >= episodes.length;
+  // T3: visa inte "Markera alla sedda" för säsonger där inget avsnitt sänts än.
+  const airedCount = countAiredEpisodes(episodes, todayIso());
 
   return (
     <div className="bg-bg-2 border-t border-rule-2">
       <div className="px-4 pt-2 pb-2 flex gap-2">
-        {!allWatched && (
+        {!allWatched && airedCount > 0 && (
           <button
             onClick={() => markSeasonWatched(seasonNumber, episodes.length)}
             className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border-none cursor-pointer bg-acc-deep text-white"

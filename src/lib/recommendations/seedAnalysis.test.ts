@@ -36,7 +36,7 @@ function mkItem(overrides: Partial<WatchlistItem>): WatchlistItem {
 }
 
 function mkSeed(overrides: Partial<Seed> & Pick<Seed, 'tmdbId'>): Seed {
-  return { mediaType: 'movie', rating: 5, ratedAt: null, ...overrides };
+  return { mediaType: 'movie', rating: 5, title: 'Test', ratedAt: null, ...overrides };
 }
 
 describe('classifySeeds', () => {

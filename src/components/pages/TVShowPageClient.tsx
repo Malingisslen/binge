@@ -15,6 +15,7 @@ import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
@@ -27,6 +28,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import ClientOnly from '@/components/utils/ClientOnly';
 import type { TMDBTVShow } from '@/types';
@@ -271,7 +273,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       <div style={{ marginTop: 18 }}>
         {nextEp && (
           <div className="chip acc" style={{ padding: '6px 12px' }}>
-            Nästa avsnitt: S{nextEp.season_number}E{nextEp.episode_number} — {nextEp.name} ({nextEp.air_date})
+            Nästa avsnitt: {formatNextEpisodeLabel(nextEp)}
           </div>
         )}
         <ClientOnly>
@@ -314,24 +316,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
         </section>
       </ClientOnly>
 
-      {/* Trailer — raw 16:9 video (preview surface) */}
-      {trailer && (
-        <section className="detail-section">
-          <div className="head">
-            <h2>Trailer</h2>
-            <span className="meta">YouTube · {trailer.type}</span>
-          </div>
-          <div className="raw ratio-16-9" style={{ maxWidth: 720 }}>
-            <iframe
-              src={`https://www.youtube.com/embed/${trailer.key}`}
-              title={trailer.name}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              style={{ width: '100%', height: '100%', border: 0 }}
-            />
-          </div>
-        </section>
-      )}
+      {/* Trailer — raw 16:9 video (preview surface). Döljs helt när embed saknas/failar (M1). */}
+      <TrailerSection video={trailer} />
 
       {/* Cast — raw 1:1 circular portraits (preview surface) */}
       {cast.length > 0 && (

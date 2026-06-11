@@ -32,7 +32,7 @@ export interface CascadeOutput {
    * redan innan snapshotten landat.
    */
   isLoadingDetection: boolean;
-  latestFiveStar: { tmdbId: number; mediaType: 'movie' | 'tv'; daysSince: number } | null;
+  latestFiveStar: { tmdbId: number; mediaType: 'movie' | 'tv'; title: string; daysSince: number } | null;
 }
 
 export function useRecommendationsCascade(): CascadeOutput {

@@ -28,6 +28,7 @@ export function classifySeeds(items: readonly WatchlistItem[]): {
       tmdbId: it.tmdbId,
       mediaType: it.mediaType,
       rating: it.rating,
+      title: it.title,
       ratedAt: it.updatedAt ?? null,
     };
     if (it.rating >= 4) strong.push(seed);
@@ -40,7 +41,7 @@ export function detectLatestFiveStar(
   items: readonly WatchlistItem[],
   now: Date,
   windowDays: number,
-): { tmdbId: number; mediaType: MediaType; daysSince: number } | null {
+): { tmdbId: number; mediaType: MediaType; title: string; daysSince: number } | null {
   const cutoffMs = now.getTime() - windowDays * 24 * 60 * 60 * 1000;
   let best: { item: WatchlistItem; ts: number } | null = null;
   for (const it of items) {
@@ -54,7 +55,7 @@ export function detectLatestFiveStar(
   }
   if (!best) return null;
   const daysSince = Math.floor((now.getTime() - best.ts) / (24 * 60 * 60 * 1000));
-  return { tmdbId: best.item.tmdbId, mediaType: best.item.mediaType, daysSince };
+  return { tmdbId: best.item.tmdbId, mediaType: best.item.mediaType, title: best.item.title, daysSince };
 }
 
 export function detectRecurringPeople(

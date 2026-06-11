@@ -27,7 +27,8 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
     out.push({
       id: { kind: 'latest-fav' },
       rowKey: rowKey({ kind: 'latest-fav' }),
-      label: `Liknar din senaste 5★ (${f.daysSince} dagar sedan)`,
+      // R4: "(21 dagar sedan)" var kryptiskt — säg vad som hände istället.
+      label: `Liknar ${f.title} — din senaste 5★`,
       score,
       jtbd: jtbdOf('latest-fav'),
     });
@@ -54,7 +55,9 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
     out.push({
       id: { kind: 'similar', mediaType: s.mediaType, tmdbId: s.tmdbId },
       rowKey: rowKey({ kind: 'similar', mediaType: s.mediaType, tmdbId: s.tmdbId }),
-      label: `Liknar dina ${s.rating}★`,
+      // R2: seed-titeln i rubriken — "Liknar dina 5★" gav identiska rubriker
+      // när flera seeds hade samma betyg.
+      label: `Liknar ${s.title}`,
       score,
       jtbd: jtbdOf('similar'),
       meta: { seed: s },
