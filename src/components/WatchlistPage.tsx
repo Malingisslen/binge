@@ -212,7 +212,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // B13: medan Firestore-snapshoten laddar är items tom — utan denna gate
   // blinkar tomma bibliotekets standfirst + empty-state innan titlarna
   // landar. Gäller alla biblioteksvyer (en delad komponent).
-  if (watchlistLoading) {
+  //
+  // X1-klass: /my/series sektionerar + ordnar på advisorns behind-set, som
+  // bygger på TV-detaljqueries. Gatear vi inte på advisor.isLoading (äkta
+  // settled-flagga sedan 9f5b731) grupperas korten på partiell data och
+  // migrerar synligt mellan sektioner allteftersom queries löser. Samma
+  // mönster som R1: rendera en gång på komplett data. Gäller BARA 'mina' —
+  // övriga biblioteksvyer använder inte advisor-datat och ska inte blockeras.
+  if (watchlistLoading || (status === 'mina' && advisor.isLoading)) {
     return (
       <>
         <header>
