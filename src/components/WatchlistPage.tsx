@@ -355,26 +355,6 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
           <span className="text-xs text-text-secondary">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
-          {(status === 'mina' || status === 'vill_se') && (
-            <button
-              onClick={async () => {
-                // För vill_se: flytta till mina (om TV) eller sedd (film) per item.
-                // För mina (TV): kommer rendera 0 items här eftersom 'mina' bara
-                // gäller TV och TV inte kan flyttas till 'sedd' längre — den
-                // klickas via bulk-radera istället. Lämnar knappen kvar för
-                // legacy-vill_se-blandade item.
-                await Promise.all(Array.from(selected).map(id => {
-                  const item = items.find(i => i.tmdbId === id);
-                  const target: 'mina' | 'sedd' = item?.mediaType === 'tv' ? 'mina' : 'sedd';
-                  return updateStatus(id, target);
-                }));
-                setSelected(new Set());
-              }}
-              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
-            >
-              Markera som tittad
-            </button>
-          )}
           {status === 'sedd' && (
             <button
               onClick={async () => {
@@ -597,7 +577,7 @@ const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null }
   { label: 'Alla',     href: '/my/all/',      status: null },
 ];
 
-function LibrarySubnav({ status }: { status?: WatchStatus }) {
+export function LibrarySubnav({ status }: { status?: WatchStatus }) {
   return (
     <nav aria-label="Biblioteksvyer" style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
       {LIBRARY_VIEWS.map(view => {
