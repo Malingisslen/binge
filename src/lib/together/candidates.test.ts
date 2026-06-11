@@ -18,18 +18,22 @@ function candidate(partial: Partial<SessionCandidate> & { tmdbId: number }): Ses
 }
 
 describe('libraryExclusionIds', () => {
-  it('exkluderar mina/sedd/avbruten men behåller vill_se', () => {
+  it('exkluderar sedd/avbruten/påbörjad mina men behåller vill_se + ej påbörjad mina', () => {
     const ids = libraryExclusionIds([
-      { tmdbId: 1, status: 'mina' },
-      { tmdbId: 2, status: 'sedd' },
-      { tmdbId: 3, status: 'avbruten' },
-      { tmdbId: 4, status: 'vill_se' },
+      { tmdbId: 1, status: 'mina', lastWatchedSeason: 2 },
+      { tmdbId: 2, status: 'sedd', lastWatchedSeason: null },
+      { tmdbId: 3, status: 'avbruten', lastWatchedSeason: null },
+      { tmdbId: 4, status: 'vill_se', lastWatchedSeason: null },
+      { tmdbId: 5, status: 'mina', lastWatchedSeason: null },
+      { tmdbId: 6, status: 'mina', lastWatchedSeason: 0 },
     ]);
     expect(ids.has(1)).toBe(true);
     expect(ids.has(2)).toBe(true);
     expect(ids.has(3)).toBe(true);
     // vill_se är prima sessions-kandidater — den som vill se titeln röstar ja.
     expect(ids.has(4)).toBe(false);
+    expect(ids.has(5)).toBe(false); // ej påbörjad — prima sessionskandidat
+    expect(ids.has(6)).toBe(true);  // säsong 0 (Specials) är progress
   });
 
   it('tom lista → tom mängd', () => {

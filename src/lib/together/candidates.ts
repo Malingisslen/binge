@@ -11,16 +11,20 @@ const MAX_CANDIDATES = 30;
 
 /**
  * Tmdb-ids ur ett bibliotek som INTE ska föreslås i en session (G4):
- * 'mina' (följer redan), 'sedd' (redan sedd) och 'avbruten' (gav upp).
- * 'vill_se' behålls medvetet — titlar man vill se är prima gemensamma
+ * 'sedd' (redan sedd), 'avbruten' (gav upp) och påbörjade 'mina'-serier
+ * (tittar redan). 'vill_se'-filmer och ej påbörjade 'mina'-serier behålls
+ * medvetet — titlar man vill se men inte börjat är prima gemensamma
  * kandidater; att de dyker upp i sviparkortleken är önskat, inte buggen.
+ * (== null, inte falsy: säsong 0/Specials räknas som påbörjad.)
  */
 export function libraryExclusionIds(
-  items: ReadonlyArray<{ tmdbId: number; status: WatchStatus }>,
+  items: ReadonlyArray<{ tmdbId: number; status: WatchStatus; lastWatchedSeason?: number | null }>,
 ): Set<number> {
   const out = new Set<number>();
   for (const item of items) {
-    if (item.status !== 'vill_se') out.add(item.tmdbId);
+    if (item.status === 'vill_se') continue;
+    if (item.status === 'mina' && item.lastWatchedSeason == null) continue;
+    out.add(item.tmdbId);
   }
   return out;
 }
