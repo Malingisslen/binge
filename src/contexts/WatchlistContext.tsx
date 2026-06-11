@@ -183,23 +183,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    // Auto-promote: om användaren markerar första avsnittet sett medan
-    // titeln ligger i 'vill_se' så flytta den automatiskt till 'mina' (TV)
-    // eller 'sedd' (film). Tar bort manuellt steg "ändra status först".
-    // Idempotent — körs bara på vill_se-items.
+    // Progress ändrar aldrig status: TV bor redan i 'mina' (vill_se för TV är
+    // avskaffat och normaliseras vid läsning), och sub-state (ej_paborjad →
+    // aktiv/ikapp) härleds — inget statusbyte behövs när första avsnittet
+    // markeras. (Gamla auto-promote-flytten vill_se→mina togs bort 2026-06.)
     const current = items.find(i => i.tmdbId === tmdbId);
-    const promoteStatus: WatchStatus | null =
-      current?.status === 'vill_se' && season >= 1 && episode >= 1
-        ? (current.mediaType === 'tv' ? 'mina' : 'sedd')
-        : null;
-    const newStatus = promoteStatus ?? current?.status ?? null;
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, {
       lastWatchedSeason: season,
       lastWatchedEpisode: episode,
       ...visFields,
       updatedAt: serverTimestamp(),
-      ...(promoteStatus ? { status: promoteStatus, watchedAt: promoteStatus === 'sedd' ? serverTimestamp() : null } : {}),
     }, { merge: true });
     // Fire-and-forget: sync progress till alla grupper jag är medlem i där
     // titeln finns. Block:ar inte UI:n om en grupp är flaky — fel slukas i
@@ -210,7 +204,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         tmdbId,
         lastWatchedSeason: season,
         lastWatchedEpisode: episode,
-        status: newStatus,
+        status: current?.status ?? null,
       }),
     );
   }, [uid, items, effectiveVisibilityNow]);
