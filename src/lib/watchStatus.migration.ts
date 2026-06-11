@@ -8,8 +8,8 @@ import type { WatchStatus, MediaType } from '@/types';
 // v2 — svenska + dropped-flag (Sprint 1 → Sprint 7):
 //   följer | vill_se | sedd | avbruten (+ data.dropped: boolean fortfarande)
 //
-// v3 — TV-aware, nuvarande (preprod-refactor):
-//   vill_se | mina | sedd (film) | avbruten
+// v3 — TV-aware, nuvarande (preprod-refactor; vill_se film-only sedan 2026-06):
+//   vill_se (film) | mina (TV) | sedd (film) | avbruten
 //
 // Migration sker lazy i WatchlistContext.docToItem och usePublicProfile.
 // Firestore-docs skrivs aldrig om bara för migration — först när användaren
@@ -30,7 +30,11 @@ export function migrateStatus(
       return { status: isTv ? 'mina' : 'sedd', dropped: false };
     case 'want_to_watch':
     case 'vill_se':
-      return { status: 'vill_se', dropped: false };
+      // TV: vill_se är avskaffat som lagrad status (2026-06) — serien följs
+      // och hamnar i läget 'ej_paborjad' (ingen progress). Film behåller
+      // vill_se. Firestore-docs med TV-vill_se kan ligga kvar länge; alla
+      // läsare normaliserar hit.
+      return { status: isTv ? 'mina' : 'vill_se', dropped: false };
     case 'watched':
     case 'sedd':
       return { status: isTv ? 'mina' : 'sedd', dropped: false };
@@ -41,10 +45,10 @@ export function migrateStatus(
       // Film har inget 'mina'-läge — downgrade till terminal 'sedd'. TV behåller.
       return { status: isTv ? 'mina' : 'sedd', dropped: false };
     default:
-      // Okänd/oväntad status (handredigerad doc, framtida schema, typo): defaulta
-      // till 'vill_se' för BÅDE film och TV. Tidigare promotades TV tyst till
-      // 'mina' (aktiv samling utan progress) vilket fick titeln att dyka upp som
-      // 'aktiv' och nudga användaren att titta på något hen aldrig lagt till (M2).
-      return { status: 'vill_se', dropped: false };
+      // Okänd/oväntad status (handredigerad doc, framtida schema, typo):
+      // film → 'vill_se'. TV → 'mina' — säkert numera eftersom mina utan
+      // progress härleds till 'ej_paborjad' (M2-fantombuggen som motiverade
+      // vill_se-defaulten är borta i och med ej_paborjad-läget).
+      return { status: isTv ? 'mina' : 'vill_se', dropped: false };
   }
 }
