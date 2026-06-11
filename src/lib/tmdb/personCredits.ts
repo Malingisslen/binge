@@ -2,12 +2,16 @@
 // dränker riktiga roller i filmografin. Separera dem så riktiga roller visas
 // först och gästframträdanden samlas i en egen sektion.
 
-const SELF_RE = /(?:^|[\s(\-–—/,])(self|himself|herself|themselves|sig själv)(?:$|[\s)\-–—/,.])/i;
+// Förankrad till HELA rollsträngen: "Self", "Self - Guest", "Self (archive
+// footage)", "Herself / Host" — men INTE spelade roller som råkar börja med
+// ordet ("Self Made", "Self Portrait"): efter nyckelordet krävs strängslut
+// eller en kvalificerare inledd med bindestreck/paren/snedstreck/komma.
+const SELF_RE = /^(?:self|himself|herself|themselves|sig själv)(?:\s*[-–—/,(].*)?$/i;
 
 /** Sant när cast-rollen är ett "Self"-gästframträdande (ej en spelad roll). */
 export function isSelfCredit(role: string | null | undefined): boolean {
   if (!role) return false;
-  return SELF_RE.test(role);
+  return SELF_RE.test(role.trim());
 }
 
 /** Dela upp credits i riktiga roller och Self-gästframträdanden. */

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { translateDepartment } from '@/lib/tmdb/department';
 import { splitSelfCredits } from '@/lib/tmdb/personCredits';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -24,7 +25,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     queryKey: ['person-en', personId],
     queryFn: () => getPersonEn(personId),
     enabled: !!person && !person.biography,
-    staleTime: 30 * 60 * 1000,
+    staleTime: TMDB_STALE.PERSON,
   });
 
   const biography = person?.biography || personEn?.biography || '';

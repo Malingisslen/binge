@@ -24,6 +24,19 @@ describe('isSelfCredit', () => {
     expect(isSelfCredit(undefined)).toBe(false);
   });
 
+  it('does not flag roles that merely START with a self-keyword (review-fynd WP8)', () => {
+    // Spelade roller — "Self" följt av vanligt ord utan kvalificerar-separator.
+    expect(isSelfCredit('Self Made')).toBe(false);
+    expect(isSelfCredit('Self Portrait')).toBe(false);
+    expect(isSelfCredit('Herself Alone')).toBe(false);
+  });
+
+  it('still detects qualified variants with slash/comma and stray whitespace', () => {
+    expect(isSelfCredit('Self / Narrator')).toBe(true);
+    expect(isSelfCredit('Self, Guest')).toBe(true);
+    expect(isSelfCredit('  Self  ')).toBe(true);
+  });
+
   it('does not flag crew jobs', () => {
     expect(isSelfCredit('Director')).toBe(false);
     expect(isSelfCredit('Creator')).toBe(false);
