@@ -59,10 +59,14 @@ Det här är var vi landar i förhållande till svenska peer sites:
 
 | Intern nyckel | UI-label | Var visas det |
 |---|---|---|
-| `vill_se` | **Vill se** | Status-chip, listrubrik, knapp |
-| `mina` (TV) | **Följer** | Status-chip, listrubrik (TV) |
+| `vill_se` (film-only) | **Vill se** | Status-chip + knapp (film); vy-rubrik för väljaren `/my/vill-se` |
+| `mina` (TV) | **Följer** (chip) / **Följ** (CTA-knapp) | Status-chip, listrubrik (TV); knappen är verbet, chipen substantivet |
 | `sedd` (film) | **Sedd** | Status-chip, listrubrik (film) |
 | `avbruten` | **Avbruten** | Status-chip, listrubrik |
+
+`vill_se` är film-only sedan 2026-06 — att vilja se en serie ÄR att följa den
+(läget "Ej påbörjad" härleds). Vyn `/my/vill-se` behåller namnet "Vill se" men
+är en *väljare* (filmer + ej påbörjade serier), inte en statuslista.
 
 **`'Mina serier'` (gammal label) byts mot `'Följer'`.** Anledningar:
 - Memory (`feedback_status_system.md`) säger detta är önskat status-system.
@@ -82,6 +86,7 @@ De delar aldrig samma yta.
 
 | Nyckel | UI-label | När |
 |---|---|---|
+| `ej_paborjad` | **Ej påbörjad** | Du följer serien men har inte markerat något avsnitt |
 | `aktiv` | **Ligger efter** | Det finns aireade avsnitt du inte sett |
 | `ikapp` | **Ikapp** | Du har sett allt aireat, serien pågår |
 | `avslutad` | **Avslutad** | Du har sett allt, serien är slut/inställd |

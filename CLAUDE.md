@@ -85,9 +85,10 @@ observers om senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
 
 ### Kalender — källor + entry-modell
 
-`useCalendar` (`src/hooks/useCalendar.ts`) bygger kalendern från tre källor:
-- **serier i 'mina'** → alla avsnitt (show-detail + säsong), med "markera sedd"-toggel
-- **serier i 'vill_se'** → samma pipeline, men `source: 'vill_se'` (ingen toggel)
+`useCalendar` (`src/hooks/useCalendar.ts`) bygger kalendern från två källor:
+- **serier i 'mina'** (inkl. ej påbörjade) → alla avsnitt (show-detail + säsong),
+  med "markera sedd"-toggel för alla — att bocka av E1 från kalendern är hur
+  man börjar på en ej påbörjad serie
 - **filmer i 'vill_se'** → svenskt digitalt släppdatum (`release_dates`, type 4 SE),
   bara framtida datum
 
@@ -139,40 +140,53 @@ den.
 ### WatchStatus + TV sub-states (TV-aware schema)
 
 ```
-'vill_se'   — vill se (både film + TV)
-'mina'      — TV ONLY: i samlingen (sub-state derive:as från progress + TMDB)
+'vill_se'   — vill se (ENDAST film sedan 2026-06; TV-vill_se lazy-migreras till 'mina')
+'mina'      — TV ONLY: följer (UI "Följer"; läge derive:as från progress + TMDB)
 'sedd'      — film ONLY: terminal (filmer går aldrig tillbaka)
 'avbruten'  — gav upp (både film + TV)
 ```
 
 **TV sub-state** (deriverat, aldrig sparat — beräknas via `tvSubState()` i
-`src/lib/watchStatus.ts`):
+`src/lib/watchStatus.ts`; biblioteket använder den persisted-fields-only
+varianten `librarySubState()` i `src/lib/libraryView.ts`):
+- `ej_paborjad` — följs men inget avsnitt markerat (ingen progress)
 - `aktiv`    — bakom på aireade avsnitt (har osedda S/E mot TMDB:s last_episode_to_air)
 - `ikapp`    — caught up + Returning Series → väntar på nytt
 - `avslutad` — caught up + Ended/Canceled → klar
 
 **Designval:** TV är aldrig "klar" på samma sätt som film — show vaknar från
 döden, får spinoffs, returnerar med nya säsonger. Därför har TV inget 'sedd'
-slutläge; istället bor allt aktivt under 'mina' och sub-state ändras
-automatiskt när TMDB:s last_episode_to_air rör sig. Endast film har 'sedd'
-som terminal — film är klar när den är klar.
+slutläge; istället bor seriens HELA liv under 'mina' (från ej påbörjad till
+avslutad) och läget ändras automatiskt när progress eller TMDB:s
+last_episode_to_air rör sig. "Vill se en serie" ÄR att följa den — knappen
+heter "Följ" (CTA-verb), chipen "Följer". Endast film har 'sedd' som terminal
+och 'vill_se' som bookmark — film är klar när den är klar.
 
-**Auto-promote:** `WatchlistContext.updateProgress` flyttar 'vill_se' → 'mina'
-(TV) eller 'sedd' (film) automatiskt när användaren markerar sitt första
-avsnitt sett. Tar bort manuellt status-byte.
+**Progress ändrar aldrig status.** `WatchlistContext.updateProgress` skriver
+bara lastWatched-fälten; läget (ej_paborjad → aktiv/ikapp) härleds. Den gamla
+auto-promote-flytten vill_se → mina togs bort 2026-06.
+
+**Ej påbörjad nycklar beteende på flera ställen** — använd progress
+(`lastWatchedSeason == null`), inte status: rådgivaren behandlar dem som
+will see-ankare (`splitTvByProgress`), Tillsammans behåller dem som
+sessionskandidater (`libraryExclusionIds`), taste-vikterna ger dem
+vill_se-nivå, och episodeNotify skickar inga pushar för dem.
 
 **Migration** (lazy, klient-sidigt i `migrateStatus`, `src/lib/watchStatus.migration.ts`):
+- 'vill_se' (TV) → 'mina' (landar som ej_paborjad); 'vill_se' (film) → oförändrat
 - 'följer' (TV) → 'mina'; 'följer' (film) → 'sedd' (rare)
 - 'sedd' (TV) → 'mina'; 'sedd' (film) → 'sedd' (oförändrat)
 - Engelska v1-schema (`watching`/`want_to_watch`/`watched`/`dropped`) hanteras samtidigt
 - Firestore-docs skrivs aldrig om bara för migration — bara när användaren
   ändrar något på en titel skrivs den med nya schemat. Så Firestore kan
-  innehålla 'följer'-strängar i mångmånader; läsare normaliserar.
+  innehålla 'följer'/'vill_se'-strängar på serier i mångmånader; läsare normaliserar.
 
 **Routes:**
-- `/my/series` — TV i 'mina' (sub-tabbar för aktiv/ikapp/avslutad i UI:n)
+- `/my/series` — TV i 'mina' (sektioner: ligger efter/pågående/ej påbörjade/avslutade)
 - `/my/films` — film i 'sedd'
-- `/my/vill-se`, `/my/avbrutna`, `/my/all` — mixed
+- `/my/vill-se` — väljaren ("vad ska du se ikväll?"): filmer i 'vill_se' + serier
+  i 'mina' utan progress. Ingen statushantering — `VillSePickerPage`, inte WatchlistPage.
+- `/my/avbrutna`, `/my/all` — mixed
 - Gamla `/my/following` → 301 → `/my/series` (firebase.json redirects)
 - Gamla `/my/watched` → 301 → `/my/films`
 
