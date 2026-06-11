@@ -351,7 +351,10 @@ Kräver inloggning i Cloudflare-dashboarden (free plan räcker):
 2. When incoming requests match: Hostname equals `binge.nu`
 3. Then: Eligible for cache, Edge TTL: **Override origin → 10 minutes**,
    Browser TTL: **Respect origin**
-4. Spara. `/commit`-skillen purgar redan hela zonen vid deploy, så regeln är
+4. Under **Advanced options** i Cache Rule: sätt **Status Code TTL** till
+   **no-cache för 4xx och 5xx** (eller motsvarande formulering i CF-UI:t) —
+   annars edge-cacheas felstatus i 10 min. Bara 200-svar ska edge-cacheas.
+5. Spara. `/commit`-skillen purgar redan hela zonen vid deploy, så regeln är
    säker — max 10 min stale efter en deploy som inte går via /commit.
 
 Effekt: long-tail-HTML (alla rewrites till /_/index.html) serveras från
