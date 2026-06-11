@@ -27,6 +27,22 @@ export function aggregateAdvisorLoading(
   return queries.some(q => q.isPending && q.isFetching);
 }
 
+// 'mina'-TV delas på progress: påbörjade serier är följer-ankare (driver
+// prenumerations-råd inom lookahead-fönstret), ej påbörjade behandlas som
+// vill se-ankare ("upcoming" — hindrar paus-råd men får inget datumfönster).
+// Bevarar exakt beteendet från när ej påbörjade serier låg i vill_se-statusen.
+// == null (inte falsy): säsong 0/Specials är giltig progress.
+export function splitTvByProgress(
+  items: WatchlistItem[],
+): { started: WatchlistItem[]; unstarted: WatchlistItem[] } {
+  const started: WatchlistItem[] = [];
+  const unstarted: WatchlistItem[] = [];
+  for (const item of items) {
+    (item.lastWatchedSeason == null ? unstarted : started).push(item);
+  }
+  return { started, unstarted };
+}
+
 export function findTopPausable(
   providers: ProviderAdvisory[],
   userPausedSet: Set<number>,

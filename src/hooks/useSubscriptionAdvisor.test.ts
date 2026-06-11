@@ -7,6 +7,7 @@ import {
   isWithinDays,
   isUserBehindOnAired,
   aggregateAdvisorLoading,
+  splitTvByProgress,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 import type {
@@ -70,6 +71,23 @@ function makeWatchlistItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     ...overrides,
   };
 }
+
+// --- splitTvByProgress ---
+
+describe('splitTvByProgress', () => {
+  it('delar mina-TV i started (har progress) och unstarted (ej påbörjad)', () => {
+    const started = makeWatchlistItem({ tmdbId: 1, lastWatchedSeason: 2, lastWatchedEpisode: 3 });
+    const specials = makeWatchlistItem({ tmdbId: 2, lastWatchedSeason: 0, lastWatchedEpisode: 1 });
+    const unstarted = makeWatchlistItem({ tmdbId: 3, lastWatchedSeason: null });
+    const result = splitTvByProgress([started, specials, unstarted]);
+    expect(result.started.map(i => i.tmdbId)).toEqual([1, 2]);
+    expect(result.unstarted.map(i => i.tmdbId)).toEqual([3]);
+  });
+
+  it('tom lista → två tomma listor', () => {
+    expect(splitTvByProgress([])).toEqual({ started: [], unstarted: [] });
+  });
+});
 
 // --- findTopPausable ---
 

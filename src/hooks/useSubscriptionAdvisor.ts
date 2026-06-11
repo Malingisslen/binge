@@ -18,6 +18,7 @@ import {
   isWithinDays,
   isUserBehindOnAired,
   aggregateAdvisorLoading,
+  splitTvByProgress,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -40,13 +41,20 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   const { getByStatus, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
 
-  const followingTV = useMemo(
+  // 'mina'-TV utan progress (ej påbörjad) behandlas som vill se-ankare —
+  // samma roll som TV-vill_se hade före mergen (2026-06). Påbörjade serier
+  // är följer-ankare. willSeeItems = vill_se-filmer + ej påbörjade serier.
+  const tvInMina = useMemo(
     () => getByStatus('mina', 'tv').filter(i => !i.dropped),
     [getByStatus]
   );
+  const { started: followingTV, unstarted: unstartedTV } = useMemo(
+    () => splitTvByProgress(tvInMina),
+    [tvInMina]
+  );
   const willSeeItems = useMemo(
-    () => getByStatus('vill_se').filter(i => !i.dropped),
-    [getByStatus]
+    () => [...getByStatus('vill_se').filter(i => !i.dropped), ...unstartedTV],
+    [getByStatus, unstartedTV]
   );
 
   // We fetch TMDB details for följer TV + vill_se TV (films' watch providers are already on the item's stored providers).
