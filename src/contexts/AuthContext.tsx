@@ -201,14 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // App Check MÅSTE initialiseras innan onAuthStateChanged subscribar.
-    // Auth attaches App Check tokens automatiskt till alla Identity Toolkit-
-    // calls (inkl. token-refresh på boot). Om App Check inte är initialiserad
-    // när Auth bootar hänger Auth för evigt och väntar på en token-provider
-    // som aldrig kommer. initAppCheck är idempotent — Providers kallar också,
-    // men barns useEffect firar före parents så vi behöver göra det här
-    // för att vinna race:t.
-    initAppCheck();
+    // App Check måste vara initierad innan onAuthStateChanged subscribar —
+    // Auth attachar App Check-tokens till alla Identity Toolkit-calls (inkl.
+    // token-refresh på boot) och hänger annars på en token-provider som
+    // aldrig kommer. initAppCheck() är async (lazy-laddad chunk) men resolvar
+    // direkt utan site key, så detta kostar inget i default-läget.
     // Warm-up: Firestore-SDK:n är lazy (se lib/firebase/db.ts). Återvändande
     // inloggade användare (wasLoggedIn-flaggan) får chunken hämtad direkt
     // efter first paint istället för att vänta på att onAuthStateChanged
@@ -216,35 +213,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (window.localStorage.getItem('binge:wasLoggedIn')) void getDb();
     } catch { /* private mode */ }
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const profile = await ensureUserProfile(firebaseUser);
-          setUser(profile);
-          setUid(firebaseUser.uid);
-          setEmailVerified(firebaseUser.emailVerified);
-          // SSR-flagga för startsidan: prerendrad HTML är alltid LandingPage
-          // (för Googlebot + LLM-crawlers). Inloggade återvändande användare
-          // hoppar direkt till dashboard-skeletten istället för att se en
-          // LandingPage-flicker — page.tsx läser den här flaggan synkront
-          // i en lazy useState-init innan hydration.
-          try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
-        } catch (err) {
-          console.error('Failed to load user profile:', err);
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    void initAppCheck().then(() => {
+      if (cancelled) return;
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          try {
+            const profile = await ensureUserProfile(firebaseUser);
+            setUser(profile);
+            setUid(firebaseUser.uid);
+            setEmailVerified(firebaseUser.emailVerified);
+            // SSR-flagga för startsidan: prerendrad HTML är alltid LandingPage
+            // (för Googlebot + LLM-crawlers). Inloggade återvändande användare
+            // hoppar direkt till dashboard-skeletten istället för att se en
+            // LandingPage-flicker — page.tsx läser den här flaggan synkront
+            // i en lazy useState-init innan hydration.
+            try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
+          } catch (err) {
+            console.error('Failed to load user profile:', err);
+            setUser(null);
+            setUid(null);
+            setEmailVerified(false);
+            try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
+          }
+        } else {
           setUser(null);
           setUid(null);
           setEmailVerified(false);
           try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
         }
-      } else {
-        setUser(null);
-        setUid(null);
-        setEmailVerified(false);
-        try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
-      }
-      setLoading(false);
+        setLoading(false);
+      });
     });
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
 
   const signIn = useCallback(async () => {

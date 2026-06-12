@@ -37,11 +37,12 @@ export default function Providers({ children }: { children: ReactNode }) {
   // Sentry: no-op om DSN saknas. App Check: no-op om site key saknas; måste
   // köras post-hydration eftersom ReCaptchaV3Provider:s placeholder-div
   // klubbas av React 19 om det skapas på module-load (se appCheck.ts).
-  // Effekter firar parent → child, så App Check är redo innan AuthProvider
-  // hinner subscribe:a på onAuthStateChanged.
+  // initAppCheck() returnar nu en Promise och AuthContext awaitar den själv
+  // innan onAuthStateChanged subscribar — det här anropet är en tidig kickoff
+  // som startar lazy-importen medan AuthProvider mountar.
   useEffect(() => {
     initSentry();
-    initAppCheck();
+    void initAppCheck();
     setPersister(createSyncStoragePersister({
       storage: window.localStorage,
       key: 'binge-rq-cache',
