@@ -1,14 +1,4 @@
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  onSnapshot,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from './config';
+import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken } from './utils';
 import type {
   SessionConfig,
@@ -40,6 +30,7 @@ export async function createSession(params: {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
 
+  const { db, collection, doc, setDoc, addDoc, serverTimestamp, Timestamp } = await fsdb();
   const sessionRef = await addDoc(collection(db, 'sessions'), {
     hostUid: params.hostUid,
     hostName: params.hostName,
@@ -73,6 +64,7 @@ export async function setSessionCandidates(
   sessionId: string,
   candidates: SessionCandidate[],
 ): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'sessions', sessionId), {
     candidates,
     updatedAt: serverTimestamp(),
@@ -86,6 +78,7 @@ export async function joinSession(params: {
   displayName: string;
   providers: number[];
 }): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
   await setDoc(doc(db, 'sessions', params.sessionId, 'participants', params.participantId), {
     uid: params.uid,
     displayName: params.displayName,
@@ -98,6 +91,7 @@ export async function joinSession(params: {
 }
 
 export async function updateParticipantActivity(sessionId: string, participantId: string): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'sessions', sessionId, 'participants', participantId), {
     lastActiveAt: serverTimestamp(),
   });
@@ -109,6 +103,7 @@ export async function recordSwipe(params: {
   participantId: string;
   vote: VoteKind;
 }): Promise<void> {
+  const { db, doc, setDoc, updateDoc, serverTimestamp } = await fsdb();
   const ref = doc(db, 'sessions', params.sessionId, 'swipes', String(params.tmdbId));
   // Atomär per-nyckel-skrivning utan föregående läsning. Tidigare
   // read-modify-write (getDoc → spread → setDoc) klobbade samtidiga röster:
@@ -171,34 +166,38 @@ export function subscribeToSession(
   sessionId: string,
   cb: (session: TogetherSession | null) => void,
 ): () => void {
-  return onSnapshot(doc(db, 'sessions', sessionId), snap => {
-    if (!snap.exists()) { cb(null); return; }
-    cb(sessionDocToObject(snap.id, snap.data()));
-  });
+  return lazySubscribe(({ db, doc, onSnapshot }) =>
+    onSnapshot(doc(db, 'sessions', sessionId), snap => {
+      if (!snap.exists()) { cb(null); return; }
+      cb(sessionDocToObject(snap.id, snap.data()));
+    }));
 }
 
 export function subscribeToParticipants(
   sessionId: string,
   cb: (participants: SessionParticipant[]) => void,
 ): () => void {
-  return onSnapshot(collection(db, 'sessions', sessionId, 'participants'), snap => {
-    cb(snap.docs.map(d => participantDocToObject(d.id, d.data())));
-  });
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(collection(db, 'sessions', sessionId, 'participants'), snap => {
+      cb(snap.docs.map(d => participantDocToObject(d.id, d.data())));
+    }));
 }
 
 export function subscribeToSwipes(
   sessionId: string,
   cb: (swipes: SessionSwipe[]) => void,
 ): () => void {
-  return onSnapshot(collection(db, 'sessions', sessionId, 'swipes'), snap => {
-    cb(snap.docs.map(d => swipeDocToObject(d.id, d.data())));
-  });
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(collection(db, 'sessions', sessionId, 'swipes'), snap => {
+      cb(snap.docs.map(d => swipeDocToObject(d.id, d.data())));
+    }));
 }
 
 export async function setSessionStatus(
   sessionId: string,
   status: TogetherSession['status'],
 ): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'sessions', sessionId), {
     status,
     updatedAt: serverTimestamp(),

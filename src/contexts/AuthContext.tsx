@@ -14,17 +14,9 @@ import {
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  getDocs,
-  collection,
-  writeBatch,
-  serverTimestamp,
-  type DocumentReference,
-} from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/config';
+import type { DocumentReference } from 'firebase/firestore';
+import { auth } from '@/lib/firebase/config';
+import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { getProvider } from '@/lib/tmdb/providers';
@@ -110,6 +102,7 @@ async function tryAutoClaimUsername(firebaseUser: User): Promise<string | null> 
 }
 
 async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
+  const { db, doc, getDoc, setDoc, serverTimestamp } = await fsdb();
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
 
@@ -216,6 +209,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // men barns useEffect firar före parents så vi behöver göra det här
     // för att vinna race:t.
     initAppCheck();
+    // Warm-up: Firestore-SDK:n är lazy (se lib/firebase/db.ts). Återvändande
+    // inloggade användare (wasLoggedIn-flaggan) får chunken hämtad direkt
+    // efter first paint istället för att vänta på att onAuthStateChanged
+    // resolvar — sparar ett nätverks-vattenfall innan första snapshoten.
+    try {
+      if (window.localStorage.getItem('binge:wasLoggedIn')) void getDb();
+    } catch { /* private mode */ }
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -262,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Create the user doc ourselves (instead of relying on onAuthStateChanged
     // + ensureUserProfile) so we can atomically include terms-acceptance
     // metadata. onAuthStateChanged will subsequently load the complete doc.
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', cred.user.uid), {
       displayName: name,
       email: cred.user.email ?? email,
@@ -306,15 +307,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // re-signed-in user starts with empty server-state instead of the
     // previous user's cached watchlist / reviews / notifications.
     queryClient.clear();
-    // OBS: Firestores IndexedDB-cache (persistentLocalCache) överlever
-    // signOut — rensning kräver terminate()+clearIndexedDbPersistence()
-    // och en ny instans, vilket inte går med module-level `db`. Hanteras
-    // i lazy-getDb()-uppföljningen (se prestandaplanens uppföljningssektion).
-    // Nästa users första snapshot ersätter cachen så fort auth bytt uid.
+    // GDPR-hygien på delad enhet: Firestores IndexedDB-cache
+    // (persistentLocalCache) överlever annars signOut, så nästa användare
+    // skulle kort kunna se föregående användares watchlist från disk.
+    // Fel sväljs i helpern — en misslyckad rensning blockerar aldrig
+    // utloggningen.
+    await clearFirestorePersistence();
   }, [queryClient]);
 
   const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', uid), { [field]: value, updatedAt: serverTimestamp() }, { merge: true });
     setUser(prev => prev ? { ...prev, [field]: value } : null);
   }, [uid]);
@@ -326,7 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // gruppens intersect/union hålls aktuell utan att medlemmen behöver
     // gå in i varje grupp och uppdatera.
     const { updateMemberProviders } = await import('@/lib/firebase/groups');
-    const { collection: col, getDocs: get, query: q, where } = await import('firebase/firestore');
+    const { db, collection: col, getDocs: get, query: q, where } = await fsdb();
     const snap = await get(q(col(db, 'groups'), where('memberUids', 'array-contains', uid)));
     await Promise.all(
       snap.docs.map(d => updateMemberProviders(d.id, uid, providers).catch(() => {})),
@@ -350,6 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       delete nextTiers[providerId];
     }
 
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', uid), {
       providerTiers: nextTiers,
       providerCosts: nextCosts,
@@ -387,6 +391,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // svep. Om något steg failar rullas båda tillbaka, så vi får inga
     // orfaner — antingen är pausen kvar OCH historiken oskriven, eller så
     // är pausen borta OCH historiken sparad.
+    const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
     const batch = writeBatch(db);
     const historyRef = doc(collection(db, 'users', uid, 'pauseHistory'));
     batch.set(historyRef, {
@@ -414,6 +419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Stega 1: uppdatera profil-fältet (+ legacy isPublic-mirror för bakåt-
     // kompatibilitet i rules under migrationsperioden).
     const isPublicMirror = visibility === 'public';
+    const { db, doc, setDoc, getDocs, collection, writeBatch, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', uid), {
       defaultVisibility: visibility,
       isPublic: isPublicMirror,
@@ -458,6 +464,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const markNotificationsSeen = useCallback(async () => {
     if (!uid) return;
     const now = new Date();
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', uid), {
       lastNotificationsSeenAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -473,6 +480,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!uid || !user) return;
     const merged = { ...user.notificationSettings, ...patch };
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     await setDoc(doc(db, 'users', uid), {
       notificationSettings: merged,
       updatedAt: serverTimestamp(),
@@ -500,6 +508,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // läggs till ska de uppdateras i collectUserDataSnapshots.
     const snaps = await collectUserDataSnapshots(id);
 
+    const { db, doc, getDocs, collection, writeBatch } = await fsdb();
     const refs: DocumentReference[] = [];
 
     // 1. Simple per-user subcollections.
@@ -638,10 +647,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await batch.commit();
     }
 
-    // OBS: Firestores IndexedDB-cache (persistentLocalCache) överlever raderingen —
-    // rensning kräver terminate()+clearIndexedDbPersistence(); se lazy-getDb()-uppföljningen.
-    // Finally remove the Firebase Auth user.
+    // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen:
+    // failar deleteUser (vanligast auth/requires-recent-login) finns kontot
+    // kvar och då ska cachen också vara kvar — användaren re-auth:ar och
+    // försöker igen mot en fräsch instans.
     await deleteUser(currentUser);
+
+    // GDPR: utan rensning ligger den raderade användarens watchlist m.m.
+    // kvar i IndexedDB på enheten. Fel sväljs i helpern.
+    await clearFirestorePersistence();
   }, [user?.username]);
 
   const value = useMemo(

@@ -1,8 +1,8 @@
 'use client';
 
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, limit, startAfter, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Review, MediaType } from '@/types';
@@ -39,6 +39,7 @@ export function useReviewsForTitle(tmdbId: number) {
     queryKey: ['reviews', tmdbId],
     initialPageParam: null as QueryDocumentSnapshot<DocumentData> | null,
     queryFn: async ({ pageParam }): Promise<ReviewsPage> => {
+      const { db, collection, query, where, orderBy, startAfter, limit, getDocs } = await fsdb();
       const q = query(
         collection(db, 'reviews'),
         where('tmdbId', '==', tmdbId),
@@ -72,6 +73,7 @@ export function useReviewActions() {
     titleMeta?: { title: string; posterPath: string | null },
   ) => {
     if (!uid || !user) return;
+    const { db, doc, collection, addDoc, updateDoc, serverTimestamp } = await fsdb();
     const reviewData = {
       uid,
       tmdbId,
@@ -93,6 +95,7 @@ export function useReviewActions() {
   };
 
   const deleteReview = async (reviewId: string, tmdbId: number) => {
+    const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'reviews', reviewId));
     queryClient.invalidateQueries({ queryKey: ['reviews', tmdbId] });
   };

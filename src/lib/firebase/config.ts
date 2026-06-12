@@ -1,13 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import {
-  initializeFirestore,
-  getFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  connectFirestoreEmulator,
-  type Firestore,
-} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -29,26 +21,10 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 
 export const auth = getAuth(app);
 
-// IndexedDB-cache: första onSnapshot-callbacken serveras momentant från disk
-// (fromCache=true) och servern skickar bara deltan via resume-token. Det gör
-// watchlist-rendering vid återbesök omedelbar OCH sänker debiterade reads
-// (~160–200 per kallt besök utan cache). multipleTabManager så flera flikar
-// delar samma cache utan lås-konflikt.
-let firestoreDb: Firestore;
-try {
-  firestoreDb = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
-} catch {
-  // HMR i dev: initializeFirestore på en redan-initierad app kastar.
-  // Återanvänd den befintliga instansen.
-  firestoreDb = getFirestore(app);
-}
-export const db = firestoreDb;
-
-// Emulator-koppling: aktiveras när NEXT_PUBLIC_FIREBASE_USE_EMULATOR=true.
-// Vi kopplar bara en gång per app-instans — getApps()-guarden ovan säkerställer
-// att detta bara körs en gång per page load.
+// Firestore bor INTE här längre — den initieras lat i ./db.ts (getDb/fsdb)
+// via dynamic import, så firebase/firestore (~109 KB gzip) hålls utanför
+// first-load-bundlen för anonyma besökare. Emulator-kopplingen för Firestore
+// följde med dit; här kopplas bara Auth.
 if (
   typeof window !== 'undefined' &&
   process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true' &&
@@ -56,9 +32,8 @@ if (
 ) {
   try {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
 
-    console.info('[firebase] emulator mode — auth:9099, firestore:8080');
+    console.info('[firebase] emulator mode — auth:9099');
   } catch (err) {
     // Dubbel-initialisering (HMR i dev) → redan kopplad. Okej att svälja.
 

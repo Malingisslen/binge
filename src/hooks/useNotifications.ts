@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { collection, doc, getDoc, onSnapshot, setDoc, writeBatch, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -49,13 +48,13 @@ export function useNotifications() {
   // Subscribera på provider-availability-notifs (legacy).
   useEffect(() => {
     if (!uid) { setNotifications([]); return; }
-    const q = query(
-      collection(db, 'users', uid, 'notifications'),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
-    const unsub = onSnapshot(q, snap => {
-      setNotifications(snap.docs.map(d => {
+    return lazySubscribe(({ db, collection, query, orderBy, limit, onSnapshot }) =>
+      onSnapshot(query(
+        collection(db, 'users', uid, 'notifications'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      ), snap => {
+        setNotifications(snap.docs.map(d => {
         const data = d.data();
         return {
           id: d.id,
@@ -69,9 +68,8 @@ export function useNotifications() {
           read: data.read ?? false,
           createdAt: toDate(data.createdAt),
         } as AppNotification;
+        }));
       }));
-    });
-    return () => unsub();
   }, [uid]);
 
   // Recent group session picks — hämtas via getRecentSessionPicksAcrossGroups.
@@ -108,6 +106,7 @@ export function useNotifications() {
           const flatrate = data.results?.SE?.flatrate ?? [];
           const match = flatrate.find(p => myProviders.includes(canonicalProviderId(p.provider_id)));
           if (match) {
+            const { db, doc, getDoc, setDoc, serverTimestamp } = await fsdb();
             const canonicalId = canonicalProviderId(match.provider_id);
             const notifId = `${item.tmdbId}-${canonicalId}`;
             const notifRef = doc(db, 'users', uid, 'notifications', notifId);
@@ -134,6 +133,7 @@ export function useNotifications() {
 
   const markRead = useCallback(async (notifId: string) => {
     if (!uid) return;
+    const { db, doc, setDoc } = await fsdb();
     await setDoc(doc(db, 'users', uid, 'notifications', notifId), { read: true }, { merge: true });
   }, [uid]);
 
@@ -141,6 +141,7 @@ export function useNotifications() {
     if (!uid) return;
     const unread = notifications.filter(n => !n.read);
     if (unread.length === 0) return;
+    const { db, doc, writeBatch } = await fsdb();
     const batch = writeBatch(db);
     unread.forEach(n => batch.update(doc(db, 'users', uid, 'notifications', n.id), { read: true }));
     await batch.commit();

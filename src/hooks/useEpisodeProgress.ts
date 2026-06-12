@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
 import type { EpisodeProgress } from '@/types';
 
@@ -14,22 +13,21 @@ export function useEpisodeProgress(tmdbId: number) {
   useEffect(() => {
     if (!uid) { setProgress(null); setProgressLoading(false); return; }
     setProgressLoading(true);
-    const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
-    const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        const raw = snap.data();
-        // Filter out corrupted dot-notation keys (e.g. "seasons.1.5") from old bug
-        if (raw.seasons && typeof raw.seasons === 'object') {
-          setProgress(raw as EpisodeProgress);
+    return lazySubscribe(({ db, doc, onSnapshot }) =>
+      onSnapshot(doc(db, 'users', uid, 'episodeProgress', String(tmdbId)), (snap) => {
+        if (snap.exists()) {
+          const raw = snap.data();
+          // Filter out corrupted dot-notation keys (e.g. "seasons.1.5") from old bug
+          if (raw.seasons && typeof raw.seasons === 'object') {
+            setProgress(raw as EpisodeProgress);
+          } else {
+            setProgress({ tmdbId: raw.tmdbId ?? tmdbId, seasons: {} } as EpisodeProgress);
+          }
         } else {
-          setProgress({ tmdbId: raw.tmdbId ?? tmdbId, seasons: {} } as EpisodeProgress);
+          setProgress(null);
         }
-      } else {
-        setProgress(null);
-      }
-      setProgressLoading(false);
-    });
-    return () => unsub();
+        setProgressLoading(false);
+      }));
   }, [uid, tmdbId]);
 
   const isWatched = useCallback((season: number, episode: number): boolean => {
@@ -38,6 +36,7 @@ export function useEpisodeProgress(tmdbId: number) {
 
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
     await setDoc(ref, {
       tmdbId,
@@ -54,6 +53,7 @@ export function useEpisodeProgress(tmdbId: number) {
 
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
     const seasonData: Record<string, { watched: boolean; watchedAt: unknown }> = {};
     for (let i = 1; i <= episodeCount; i++) {

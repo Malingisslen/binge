@@ -1,15 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  setDoc,
-  deleteDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MediaType } from '@/types';
 
@@ -38,18 +30,18 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid) { setItems([]); return; }
-    const ref = collection(db, 'users', uid, 'notInterested');
-    const unsub = onSnapshot(ref, (snap) => {
-      setItems(snap.docs.map(d => ({
-        tmdbId: d.data().tmdbId as number,
-        mediaType: d.data().mediaType as MediaType,
-      })));
-    });
-    return () => unsub();
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'notInterested'), (snap) => {
+        setItems(snap.docs.map(d => ({
+          tmdbId: d.data().tmdbId as number,
+          mediaType: d.data().mediaType as MediaType,
+        })));
+      }));
   }, [uid]);
 
   const add = useCallback(async (tmdbId: number, mediaType: MediaType) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'notInterested', String(tmdbId));
     await setDoc(ref, {
       tmdbId,
@@ -60,6 +52,7 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
 
   const remove = useCallback(async (tmdbId: number) => {
     if (!uid) return;
+    const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'users', uid, 'notInterested', String(tmdbId)));
   }, [uid]);
 

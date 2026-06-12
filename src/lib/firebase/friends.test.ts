@@ -17,7 +17,11 @@ const mocks = vi.hoisted(() => {
   return { setMock, deleteMock, commitMock, writeBatchMock, getDocMock, getDocsMock };
 });
 
-vi.mock('./config', () => ({ db: {} }));
+// friends.ts hämtar firestore-fns via fsdb() (lazy-laddningen i ./db) —
+// mocken returnerar den mockade firebase/firestore-modulen + dummy-db.
+vi.mock('./db', () => ({
+  fsdb: async () => ({ ...(await import('firebase/firestore')), db: {} }),
+}));
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db, ...path) => ({ _path: path.join('/') })),
   doc: vi.fn((_db, ...path) => ({ _path: path.join('/') })),

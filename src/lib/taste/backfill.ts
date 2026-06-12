@@ -1,5 +1,4 @@
-import { collection, doc, getDocs, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { getMovie, getTVShow } from '@/lib/tmdb/client';
 import { extractSEProviders } from '@/lib/tmdb/providers';
 
@@ -17,9 +16,16 @@ export interface BackfillProgress {
 // 60 dagar är en bra balans mellan färskhet och TMDB-rate-limit-budget.
 const STALE_AFTER_MS = 60 * 24 * 60 * 60 * 1000;
 
+// Firestore Timestamp duck-typas på toMillis() — instanceof skulle kräva en
+// statisk firebase/firestore-import (se lazy-laddningen i lib/firebase/db.ts).
 function timestampToMs(val: unknown): number | null {
-  if (val instanceof Timestamp) return val.toMillis();
   if (val instanceof Date) return val.getTime();
+  if (
+    typeof val === 'object' && val !== null &&
+    typeof (val as { toMillis?: unknown }).toMillis === 'function'
+  ) {
+    return (val as { toMillis(): number }).toMillis();
+  }
   return null;
 }
 
@@ -40,6 +46,7 @@ export async function backfillGenreIds(
   uid: string,
   onProgress?: (p: BackfillProgress) => void,
 ): Promise<BackfillProgress> {
+  const { db, doc, collection, getDocs, updateDoc, serverTimestamp } = await fsdb();
   const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
   const cutoffMs = Date.now() - STALE_AFTER_MS;
   const needs = snap.docs.filter(d => {

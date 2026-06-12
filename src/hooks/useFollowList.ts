@@ -1,15 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  limit,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Topp-cap för hur många UIDs vi materialiserar i klienten samtidigt. Matchar
@@ -53,10 +45,12 @@ export function useFollowList(): FollowListState {
 
   useEffect(() => {
     if (!uid) { setFollowingUids([]); setFollowerUids([]); return; }
-    const followingQ = query(collection(db, 'users', uid, 'following'), limit(FOLLOW_LIST_LIMIT));
-    const followersQ = query(collection(db, 'users', uid, 'followers'), limit(FOLLOW_LIST_LIMIT));
-    const unsub1 = onSnapshot(followingQ, snap => setFollowingUids(snap.docs.map(d => d.id)));
-    const unsub2 = onSnapshot(followersQ, snap => setFollowerUids(snap.docs.map(d => d.id)));
+    const unsub1 = lazySubscribe(({ db, collection, query, limit, onSnapshot }) =>
+      onSnapshot(query(collection(db, 'users', uid, 'following'), limit(FOLLOW_LIST_LIMIT)),
+        snap => setFollowingUids(snap.docs.map(d => d.id))));
+    const unsub2 = lazySubscribe(({ db, collection, query, limit, onSnapshot }) =>
+      onSnapshot(query(collection(db, 'users', uid, 'followers'), limit(FOLLOW_LIST_LIMIT)),
+        snap => setFollowerUids(snap.docs.map(d => d.id))));
     return () => { unsub1(); unsub2(); };
   }, [uid]);
 
@@ -90,6 +84,7 @@ export function useFollowList(): FollowListState {
     setProfilesLoading(true);
     Promise.all(missing.map(async u => {
       try {
+        const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'users', u));
         if (!snap.exists()) return [u, null] as const;
         const d = snap.data();

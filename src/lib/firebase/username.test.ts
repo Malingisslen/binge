@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // slugifyUsername/suggestUsernameFromIdentity är pure och rör inte Firestore,
-// men ./username importerar `db` från ./config för andra exporter — mocka så
+// men ./username importerar fsdb från ./db för andra exporter — mocka så
 // auth/Firestore inte triggar init i testmiljön.
-vi.mock('./config', () => ({ db: {} }));
+vi.mock('./db', () => ({
+  fsdb: async () => ({ ...(await import('firebase/firestore')), db: {} }),
+}));
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn(),
   getDoc: vi.fn(),

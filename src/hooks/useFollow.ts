@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, onSnapshot, writeBatch, serverTimestamp, getCountFromServer, query, limit } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Högsta antal följda vi läser för att beräkna is-following-relationer klient-
@@ -17,17 +16,17 @@ export function useFollowing() {
 
   useEffect(() => {
     if (!uid) { setFollowingUids([]); return; }
-    const q = query(collection(db, 'users', uid, 'following'), limit(FOLLOWING_LIMIT));
-    const unsub = onSnapshot(q, snap => {
-      setFollowingUids(snap.docs.map(d => d.id));
-    });
-    return () => unsub();
+    return lazySubscribe(({ db, collection, query, limit, onSnapshot }) =>
+      onSnapshot(query(collection(db, 'users', uid, 'following'), limit(FOLLOWING_LIMIT)), snap => {
+        setFollowingUids(snap.docs.map(d => d.id));
+      }));
   }, [uid]);
 
   const isFollowing = useCallback((targetUid: string) => followingUids.includes(targetUid), [followingUids]);
 
   const followUser = useCallback(async (targetUid: string) => {
     if (!uid) return;
+    const { db, doc, writeBatch, serverTimestamp } = await fsdb();
     const batch = writeBatch(db);
     batch.set(doc(db, 'users', uid, 'following', targetUid), { followedAt: serverTimestamp() });
     batch.set(doc(db, 'users', targetUid, 'followers', uid), { followedAt: serverTimestamp() });
@@ -36,6 +35,7 @@ export function useFollowing() {
 
   const unfollowUser = useCallback(async (targetUid: string) => {
     if (!uid) return;
+    const { db, doc, writeBatch } = await fsdb();
     const batch = writeBatch(db);
     batch.delete(doc(db, 'users', uid, 'following', targetUid));
     batch.delete(doc(db, 'users', targetUid, 'followers', uid));
@@ -52,6 +52,7 @@ export function useFollowerCount(uid: string | null) {
   return useQuery({
     queryKey: ['follower-count', uid],
     queryFn: async () => {
+      const { db, collection, getCountFromServer } = await fsdb();
       const snap = await getCountFromServer(collection(db, 'users', uid!, 'followers'));
       return snap.data().count;
     },
@@ -64,6 +65,7 @@ export function useFollowingCount(uid: string | null) {
   return useQuery({
     queryKey: ['following-count', uid],
     queryFn: async () => {
+      const { db, collection, getCountFromServer } = await fsdb();
       const snap = await getCountFromServer(collection(db, 'users', uid!, 'following'));
       return snap.data().count;
     },

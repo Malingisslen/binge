@@ -1,15 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  setDoc,
-  deleteDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
@@ -90,12 +82,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // uid bytte (sign-in eller account-switch) → tillbaka till loading
     // tills första snapshoten kommer.
     setLoading(true);
-    const ref = collection(db, 'users', uid, 'watchlist');
-    const unsub = onSnapshot(ref, (snap) => {
-      setItems(snap.docs.map(d => docToItem(d.data())));
-      setLoading(false);
-    });
-    return () => unsub();
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'watchlist'), (snap) => {
+        setItems(snap.docs.map(d => docToItem(d.data())));
+        setLoading(false);
+      }));
   }, [uid]);
 
   // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
@@ -111,6 +102,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
     const isFirst = items.length === 0;
     // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
@@ -134,6 +126,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     // visibility=null → ta bort override och fall tillbaka till profilens
     // defaultVisibility. Vi skickar bara fältet (Firestore har ingen
@@ -150,6 +143,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const currentItem = items.find(i => i.tmdbId === tmdbId);
     const isRewatch = status === 'sedd' && currentItem?.status === 'sedd';
@@ -166,6 +160,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const current = items.find(i => i.tmdbId === tmdbId);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
@@ -174,6 +169,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const current = items.find(i => i.tmdbId === tmdbId);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
@@ -182,6 +178,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     // Progress ändrar aldrig status: TV bor redan i 'mina' (vill_se för TV är
     // avskaffat och normaliseras vid läsning), och sub-state (ej_paborjad →
@@ -211,6 +208,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
     if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const current = items.find(i => i.tmdbId === tmdbId);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
@@ -219,6 +217,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const removeItem = useCallback(async (tmdbId: number) => {
     if (!uid) return;
+    const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)));
   }, [uid]);
 

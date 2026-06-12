@@ -1,25 +1,4 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  deleteField,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  limit as queryLimit,
-  Timestamp,
-  serverTimestamp,
-  onSnapshot,
-  arrayUnion,
-  arrayRemove,
-  writeBatch,
-} from 'firebase/firestore';
-import { db } from './config';
+import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
 import type {
   Group,
@@ -46,6 +25,7 @@ export async function createGroup(params: {
   const inviteToken = generateSecureToken();
   const inviteTokenHash = await sha256Hex(inviteToken);
 
+  const { db, addDoc, collection, doc, setDoc, serverTimestamp } = await fsdb();
   const groupRef = await addDoc(collection(db, 'groups'), {
     name: params.name,
     ownerUid: params.ownerUid,
@@ -75,6 +55,7 @@ export async function updateGroup(
   groupId: string,
   patch: Partial<Pick<Group, 'name' | 'defaults'>>,
 ): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'groups', groupId), {
     ...patch,
     updatedAt: serverTimestamp(),
@@ -87,6 +68,7 @@ export async function updateGroup(
 export async function rotateInviteToken(groupId: string): Promise<string> {
   const inviteToken = generateSecureToken();
   const inviteTokenHash = await sha256Hex(inviteToken);
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'groups', groupId), {
     inviteTokenHash,
     inviteTokenRotatedAt: serverTimestamp(),
@@ -96,11 +78,13 @@ export async function rotateInviteToken(groupId: string): Promise<string> {
 }
 
 export async function hasInGroupWatchlist(groupId: string, tmdbId: number): Promise<boolean> {
+  const { db, doc, getDoc } = await fsdb();
   const snap = await getDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
   return snap.exists();
 }
 
 export async function disableInviteToken(groupId: string): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'groups', groupId), {
     inviteTokenHash: null,
     updatedAt: serverTimestamp(),
@@ -128,6 +112,7 @@ export async function joinGroupViaToken(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' }> {
+  const { db, doc, getDoc, setDoc, deleteDoc, writeBatch, arrayUnion, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return { ok: false, reason: 'not_found' };
@@ -198,6 +183,7 @@ export async function inviteMemberByUid(params: {
   fromDisplayName: string;
   targetUid: string;
 }): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
   await setDoc(doc(db, 'users', params.targetUid, 'groupInvites', params.groupId), {
     groupId: params.groupId,
     groupName: params.groupName,
@@ -219,6 +205,7 @@ export async function acceptGroupInvite(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<void> {
+  const { db, doc, writeBatch, arrayUnion, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   batch.update(doc(db, 'groups', params.groupId), {
     memberUids: arrayUnion(params.uid),
@@ -240,10 +227,12 @@ export async function acceptGroupInvite(params: {
 
 // Avböj inbjudan — raderar bara invite-doc:et utan att bli medlem.
 export async function declineGroupInvite(uid: string, groupId: string): Promise<void> {
+  const { db, doc, deleteDoc } = await fsdb();
   await deleteDoc(doc(db, 'users', uid, 'groupInvites', groupId));
 }
 
 export async function removeMember(groupId: string, uid: string): Promise<void> {
+  const { db, doc, writeBatch, arrayRemove, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   batch.update(doc(db, 'groups', groupId), {
     memberUids: arrayRemove(uid),
@@ -262,6 +251,7 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
   // sessionHistory-subcollections måste raderas innan parent-doc:et för att
   // undvika orphaned data; i produktion skulle detta ske i en Cloud Function.
   // För MVP raderar vi det vi kan klient-sidigt.
+  const { db, doc, collection, getDocs, query, where, writeBatch, serverTimestamp } = await fsdb();
   const [membersSnap, watchlistSnap, sessionHistorySnap, sessionsSnap] = await Promise.all([
     getDocs(collection(db, 'groups', groupId, 'members')),
     getDocs(collection(db, 'groups', groupId, 'watchlist')),
@@ -322,6 +312,7 @@ export async function updateMemberProviders(
   uid: string,
   providers: number[],
 ): Promise<void> {
+  const { db, doc, updateDoc } = await fsdb();
   await updateDoc(doc(db, 'groups', groupId, 'members', uid), {
     providers,
   });
@@ -333,6 +324,7 @@ export async function setMemberRating(params: {
   uid: string;
   rating: number | null;
 }): Promise<void> {
+  const { db, doc, updateDoc, deleteField } = await fsdb();
   const ref = doc(db, 'groups', params.groupId, 'watchlist', String(params.tmdbId));
   await updateDoc(ref, {
     [`memberRatings.${params.uid}`]: params.rating == null ? deleteField() : params.rating,
@@ -348,6 +340,7 @@ export async function addToGroupWatchlist(params: {
   posterPath: string | null;
   releaseYear: number | null;
 }): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
   await setDoc(doc(db, 'groups', params.groupId, 'watchlist', String(params.tmdbId)), {
     tmdbId: params.tmdbId,
     mediaType: params.mediaType,
@@ -361,6 +354,7 @@ export async function addToGroupWatchlist(params: {
 }
 
 export async function removeFromGroupWatchlist(groupId: string, tmdbId: number): Promise<void> {
+  const { db, doc, deleteDoc } = await fsdb();
   await deleteDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
 }
 
@@ -380,6 +374,7 @@ export async function setGroupMemberProgress(params: {
   lastWatchedEpisode: number | null;
   status?: string | null;
 }): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
   const ref = doc(
     db, 'groups', params.groupId, 'watchlist', String(params.tmdbId),
     'progress', params.uid,
@@ -420,6 +415,7 @@ export async function recordGroupSessionPick(params: {
   posterPath: string | null;
   participantUids: string[];
 }): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
   await setDoc(
     doc(db, 'groups', params.groupId, 'sessionHistory', params.sessionId),
     {
@@ -457,6 +453,7 @@ export async function getRecentSessionPicksAcrossGroups(
   posterPath: string | null;
   pickedAt: Date;
 }>> {
+  const { db, collection, getDocs, query, where, orderBy, limit: queryLimit, Timestamp } = await fsdb();
   const groupsSnap = await getDocs(
     query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
   );
@@ -509,6 +506,7 @@ export async function getGroupSessionHistory(groupId: string, limit = 10): Promi
   participantUids: string[];
   pickedAt: Date;
 }[]> {
+  const { db, collection, getDocs } = await fsdb();
   const snap = await getDocs(collection(db, 'groups', groupId, 'sessionHistory'));
   const items = snap.docs.map(d => {
     const data = d.data();
@@ -534,6 +532,7 @@ export async function syncProgressToGroups(params: {
   status?: string | null;
 }): Promise<void> {
   try {
+    const { db, doc, getDoc, collection, getDocs, query, where } = await fsdb();
     const groupsSnap = await getDocs(
       query(collection(db, 'groups'), where('memberUids', 'array-contains', params.uid)),
     );
@@ -613,41 +612,45 @@ export function subscribeToGroup(
   groupId: string,
   cb: (group: Group | null) => void,
 ): () => void {
-  return onSnapshot(doc(db, 'groups', groupId), snap => {
-    if (!snap.exists()) { cb(null); return; }
-    cb(groupDocToObject(snap.id, snap.data()));
-  });
+  return lazySubscribe(({ db, doc, onSnapshot }) =>
+    onSnapshot(doc(db, 'groups', groupId), snap => {
+      if (!snap.exists()) { cb(null); return; }
+      cb(groupDocToObject(snap.id, snap.data()));
+    }));
 }
 
 export function subscribeToGroupMembers(
   groupId: string,
   cb: (members: GroupMember[]) => void,
 ): () => void {
-  return onSnapshot(collection(db, 'groups', groupId, 'members'), snap => {
-    cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
-  });
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(collection(db, 'groups', groupId, 'members'), snap => {
+      cb(snap.docs.map(d => memberDocToObject(d.id, d.data())));
+    }));
 }
 
 export function subscribeToGroupWatchlist(
   groupId: string,
   cb: (items: GroupWatchlistItem[]) => void,
 ): () => void {
-  return onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
-    cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
-  });
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
+      cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
+    }));
 }
 
 export function subscribeToMyGroups(
   uid: string,
   cb: (groups: Group[]) => void,
 ): () => void {
-  const q = query(collection(db, 'groups'), where('memberUids', 'array-contains', uid));
-  return onSnapshot(q, snap => {
-    cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
-  });
+  return lazySubscribe(({ db, collection, query, where, onSnapshot }) =>
+    onSnapshot(query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)), snap => {
+      cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
+    }));
 }
 
 export async function getGroupOnce(groupId: string): Promise<Group | null> {
+  const { db, doc, getDoc } = await fsdb();
   const snap = await getDoc(doc(db, 'groups', groupId));
   if (!snap.exists()) return null;
   return groupDocToObject(snap.id, snap.data());
@@ -667,16 +670,17 @@ export function subscribeToMyGroupInvites(
   uid: string,
   cb: (invites: GroupInvite[]) => void,
 ): () => void {
-  return onSnapshot(collection(db, 'users', uid, 'groupInvites'), snap => {
-    cb(snap.docs.map(d => {
-      const data = d.data();
-      return {
-        groupId: d.id,
-        groupName: (data.groupName as string) ?? 'Grupp',
-        fromUid: (data.fromUid as string) ?? '',
-        fromDisplayName: (data.fromDisplayName as string) ?? 'Någon',
-        invitedAt: toDate(data.invitedAt),
-      };
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(collection(db, 'users', uid, 'groupInvites'), snap => {
+      cb(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          groupId: d.id,
+          groupName: (data.groupName as string) ?? 'Grupp',
+          fromUid: (data.fromUid as string) ?? '',
+          fromDisplayName: (data.fromDisplayName as string) ?? 'Någon',
+          invitedAt: toDate(data.invitedAt),
+        };
+      }));
     }));
-  });
 }

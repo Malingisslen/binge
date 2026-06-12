@@ -4,8 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useFriendActions } from '@/hooks/useFriends';
@@ -23,6 +22,7 @@ function useSenderProfile(uid: string) {
     queryKey: ['sender-profile', uid],
     queryFn: async () => {
       try {
+        const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'users', uid));
         if (!snap.exists()) return null;
         const d = snap.data();

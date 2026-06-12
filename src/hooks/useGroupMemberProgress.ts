@@ -2,8 +2,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 
 export interface MemberProgress {
   lastWatchedSeason: number | null;
@@ -26,6 +25,7 @@ export function useGroupMemberProgress(groupId: string): Map<string, Map<number,
     queryFn: async (): Promise<Map<string, Map<number, MemberProgress>>> => {
       const outer = new Map<string, Map<number, MemberProgress>>();
       try {
+        const { db, collection, getDocs } = await fsdb();
         // Hämta alla titlar i gruppens watchlist; för varje titel hämta
         // progress-subcollection. Två lager getDocs är dyrt om gruppen har
         // 100+ titlar, men i praktiken har grupper 5-30 titlar. Den riktiga

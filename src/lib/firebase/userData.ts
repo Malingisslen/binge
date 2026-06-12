@@ -1,16 +1,5 @@
-import {
-  collection,
-  collectionGroup,
-  doc,
-  documentId,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  type DocumentSnapshot,
-  type QuerySnapshot,
-} from 'firebase/firestore';
-import { db } from './config';
+import type { DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
+import { fsdb } from './db';
 
 /**
  * Gemensam läsning av allt som tillhör en användare — används av både
@@ -55,6 +44,7 @@ export interface UserDataSnapshots {
 }
 
 export async function collectUserDataSnapshots(uid: string): Promise<UserDataSnapshots> {
+  const { db, collection, collectionGroup, doc, documentId, getDoc, getDocs, query, where } = await fsdb();
   const [
     profileSnap,
     watchlistSnap,
