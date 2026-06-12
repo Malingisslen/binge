@@ -27,6 +27,13 @@ interface AuthState {
   user: UserProfile | null;
   uid: string | null;
   loading: boolean;
+  /**
+   * True medan Firestore-profilen laddas EFTER att auth-beskedet kommit.
+   * `loading` (auth-besked) släpps direkt så watchlist/TMDB kan starta;
+   * ytor som kräver profildata (isAdmin-gates, onboarding-beslut) ska vänta
+   * på loading || profileLoading.
+   */
+  profileLoading: boolean;
   // Firebase Auth email-verification-state. Gör inte gating idag men UI:t
   // kan visa en banner när emailVerified=false (och resend därifrån).
   emailVerified: boolean;
@@ -58,6 +65,7 @@ const AuthContext = createContext<AuthState>({
   user: null,
   uid: null,
   loading: true,
+  profileLoading: false,
   emailVerified: false,
   signIn: async () => {},
   signInEmail: async () => {},
@@ -199,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   useEffect(() => {
     // App Check måste vara initierad innan onAuthStateChanged subscribar —
@@ -219,33 +228,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // alltid, annars fastnar appen i loading=true.
     void initAppCheck().then(() => {
       if (cancelled) return;
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         if (firebaseUser) {
-          try {
-            const profile = await ensureUserProfile(firebaseUser);
-            setUser(profile);
-            setUid(firebaseUser.uid);
-            setEmailVerified(firebaseUser.emailVerified);
-            // SSR-flagga för startsidan: prerendrad HTML är alltid LandingPage
-            // (för Googlebot + LLM-crawlers). Inloggade återvändande användare
-            // hoppar direkt till dashboard-skeletten istället för att se en
-            // LandingPage-flicker — page.tsx läser den här flaggan synkront
-            // i en lazy useState-init innan hydration.
-            try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
-          } catch (err) {
-            console.error('Failed to load user profile:', err);
-            setUser(null);
-            setUid(null);
-            setEmailVerified(false);
-            try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
-          }
+          // Släpp appen direkt på auth-beskedet — watchlist-snapshoten och
+          // sid-queries startar parallellt med profil-hämtningen istället
+          // för att serialiseras bakom den (en hel Firestore-RTT).
+          setUid(firebaseUser.uid);
+          setEmailVerified(firebaseUser.emailVerified);
+          setLoading(false);
+          setProfileLoading(true);
+          // SSR-flagga för startsidan: prerendrad HTML är alltid LandingPage
+          // (för Googlebot + LLM-crawlers). Inloggade återvändande användare
+          // hoppar direkt till dashboard-skeletten istället för att se en
+          // LandingPage-flicker — page.tsx läser den här flaggan synkront
+          // i en lazy useState-init innan hydration.
+          try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
+
+          void ensureUserProfile(firebaseUser)
+            .then((profile) => {
+              // Account-switch-skydd: skriv bara om samma användare
+              // fortfarande är inloggad när profilen landar.
+              if (auth.currentUser?.uid === firebaseUser.uid) setUser(profile);
+            })
+            .catch((err) => {
+              console.error('Failed to load user profile:', err);
+              // uid behålls — auth är giltig även om profil-läsningen
+              // failade; user-beroende ytor null-hanterar redan.
+              if (auth.currentUser?.uid === firebaseUser.uid) setUser(null);
+            })
+            .finally(() => {
+              if (auth.currentUser?.uid === firebaseUser.uid) setProfileLoading(false);
+            });
         } else {
           setUser(null);
           setUid(null);
           setEmailVerified(false);
+          setProfileLoading(false);
           try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
+          setLoading(false);
         }
-        setLoading(false);
       });
     });
     return () => {
@@ -667,7 +688,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      user, uid, loading, emailVerified,
+      user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,
@@ -675,7 +696,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCalibrationGenres, deleteAccount,
     }),
     [
-      user, uid, loading, emailVerified,
+      user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
       pauseProvider, resumeProvider,

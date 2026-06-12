@@ -284,7 +284,7 @@ function Dashboard() {
 }
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { uid, loading } = useAuth();
 
   // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
   const faqLd = (
@@ -317,9 +317,10 @@ export default function DashboardPage() {
     );
   }
 
-  // Auth resolverat utan user: anonym besökare. Visa LandingPage med
-  // trending-sektionen.
-  if (!user) {
+  // Auth resolverat utan uid: anonym besökare. Visa LandingPage med
+  // trending-sektionen. (Gatear på uid — inte user — eftersom profilen
+  // numera laddas parallellt och kan landa något senare än auth-beskedet.)
+  if (!uid) {
     return (
       <>
         {faqLd}

@@ -30,7 +30,7 @@ function urlToken(): string {
 }
 
 export default function InsikterClient() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profileLoading } = useAuth();
   const [range] = useDateRange();
 
   const token = urlToken();
@@ -55,7 +55,7 @@ export default function InsikterClient() {
   );
 
   // ── Access / loading / error gates ─────────────────────────────────────────
-  if (authLoading) {
+  if (authLoading || profileLoading) {
     return <div className="canvas">{header}<LoadingView label="Kontrollerar behörighet…" /></div>;
   }
 

@@ -33,8 +33,8 @@ export default function AdminReportsPage() {
  * reglerna enforce:ar samma sak mot servern; denna gate är bara för UX.
  */
 function AdminGate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <LoadingView label="Laddar…" />;
+  const { user, loading, profileLoading } = useAuth();
+  if (loading || profileLoading) return <LoadingView label="Laddar…" />;
   if (!user?.isAdmin) {
     return (
       <div className="max-w-[480px]">
