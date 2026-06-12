@@ -5,10 +5,16 @@ let initPromise: Promise<void> | null = null;
 // till alla Identity Toolkit-calls och hänger om providern inte är
 // registrerad när enforcement är på.
 //
+// OBS: bara REGISTRERINGEN måste föregå auth-subscribe — App Check-SDK:n
+// köar getToken() tills reCAPTCHA-libbet laddat, så vi behöver inte awaita
+// grecaptcha-ready.
+//
 // Lazy-import: firebase/app-check (~15 KB) laddas BARA när en site key finns.
 // Utan site key resolvar vi synkront utan att hämta någon kod — det är
-// default-läget och kostar noll. Idempotent via initPromise-memoiseringen
-// (StrictMode dubbelkör mount-effekter i dev).
+// default-läget och kostar noll. Med site key satt kostar awaiten ~1
+// chunk-RTT före första onAuthStateChanged på kall load (immutable-cachad
+// vid återbesök). Idempotent via initPromise-memoiseringen (StrictMode
+// dubbelkör mount-effekter i dev).
 export function initAppCheck(): Promise<void> {
   if (initPromise) return initPromise;
   if (typeof window === 'undefined') return Promise.resolve();
@@ -21,22 +27,35 @@ export function initAppCheck(): Promise<void> {
     if (process.env.NEXT_PUBLIC_APP_ENV === 'production') {
       console.warn('[app-check] NEXT_PUBLIC_APP_CHECK_SITE_KEY saknas — App Check är inaktiverat i produktion.');
     }
-    return Promise.resolve();
+    initPromise = Promise.resolve();
+    return initPromise;
   }
 
   initPromise = (async () => {
+    let mod: typeof import('firebase/app-check');
+    let appMod: typeof import('@/lib/firebase/config');
     try {
-      const [{ initializeAppCheck, ReCaptchaV3Provider }, { default: app }] = await Promise.all([
+      [mod, appMod] = await Promise.all([
         import('firebase/app-check'),
         import('@/lib/firebase/config'),
       ]);
+    } catch (err) {
+      // Transient chunk-fel (nätverksglapp/adblocker): nollställ memoiseringen
+      // så ett senare initAppCheck()-anrop kan försöka igen — annars är
+      // App Check tyst avstängt hela sessionen med enforcement-avvisningar
+      // som följd den dag site key är satt.
+      initPromise = null;
+      console.warn('[app-check] SDK-chunk kunde inte laddas:', err);
+      return;
+    }
+    try {
       // Fail-closed: debug-token bara i dev. Glöms variabeln eller får fel
       // värde i prod-build → debug är AV (säkert default).
       if (process.env.NEXT_PUBLIC_APP_ENV === 'development') {
         (globalThis as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
       }
-      initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider(siteKey),
+      mod.initializeAppCheck(appMod.default, {
+        provider: new mod.ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
     } catch (err) {

@@ -37,9 +37,10 @@ export default function Providers({ children }: { children: ReactNode }) {
   // Sentry: no-op om DSN saknas. App Check: no-op om site key saknas; måste
   // köras post-hydration eftersom ReCaptchaV3Provider:s placeholder-div
   // klubbas av React 19 om det skapas på module-load (se appCheck.ts).
-  // initAppCheck() returnar nu en Promise och AuthContext awaitar den själv
-  // innan onAuthStateChanged subscribar — det här anropet är en tidig kickoff
-  // som startar lazy-importen medan AuthProvider mountar.
+  // Redundant säkring — AuthContext-effekten (barn, fyrar först) äger den
+  // riktiga init-vägen och awaitar promisen innan onAuthStateChanged
+  // subscribar; det här anropet är en idempotent backstop om AuthProvider
+  // någonsin flyttas.
   useEffect(() => {
     initSentry();
     void initAppCheck();

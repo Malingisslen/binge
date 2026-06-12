@@ -215,6 +215,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* private mode */ }
     let unsubscribe: (() => void) | undefined;
     let cancelled = false;
+    // initAppCheck rejectar aldrig (fel sväljs internt) — subscriben nås
+    // alltid, annars fastnar appen i loading=true.
     void initAppCheck().then(() => {
       if (cancelled) return;
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
