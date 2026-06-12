@@ -8,8 +8,9 @@
  *   CI-builds, lokal dev och test-miljöer aldrig skickar events.
  * - SDK:n LAZY-importeras (samma mönster som messaging.ts) — @sentry/react
  *   är 26 KB gzip och ska inte ligga i first-load-bundlen på varje sida.
- *   captureError no-op:ar tills SDK:n laddats; fel under de första ~100 ms
- *   tappas medvetet (samma utfall som när DSN saknas).
+ *   captureError no-op:ar tills SDK:n laddats; fel som inträffar innan
+ *   SDK-chunken hunnit hämtas (sekunder på långsamma nätverk) tappas
+ *   medvetet — samma utfall som när DSN saknas.
  * - Ingen PII i events. email/username/UID scrubbas via beforeSend.
  * - Sampling: 100% errors, 0% performance (traces) i startläge.
  * - release = git-SHA om satt, annars 'dev'.
@@ -71,7 +72,10 @@ export function initSentry(): void {
     })
     .catch((err) => {
       console.warn('[sentry] SDK-laddning misslyckades:', err);
-      initStarted = false; // tillåt nytt försök vid nästa initSentry()
+      // Tillåt nytt försök om initSentry() anropas igen — i praktiken sker
+      // det inte (Providers.tsx kör sin effect en gång per sidladdning), så
+      // en adblocker-blockerad chunk ger INTE en retry-loop. Defensiv hygien.
+      initStarted = false;
     });
 }
 
