@@ -23,6 +23,15 @@ Allt som bara användaren själv ser tas bort helt:
 Inga återhämtningsbara referenser till datan finns efter radering,
 förutom Firestore PITR inom 7 dagar (administrativt bara).
 
+#### Per-titel-borttagning ("Ta bort" i biblioteket)
+
+"Ta bort" på en titel raderar watchlist-docen men lämnar medvetet kvar
+`users/{uid}/episodeProgress/{tmdbId}` — den som lägger tillbaka serien
+återupptar där hen var. Användaren informeras i borttagnings-toasten
+("Avsnittshistoriken sparas.") och kan välja **Rensa helt**, som även
+raderar historik-docen (`clearEpisodeProgress`). Vid kontoradering
+försvinner allt oavsett, enligt listan ovan.
+
 ### Publikt UGC → Hård radering (v1)
 
 Public-facing UGC tas bort helt, INTE anonymiseras, för följande

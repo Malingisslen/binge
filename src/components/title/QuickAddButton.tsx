@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
+import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { getTVShow } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import type { WatchStatus, MediaType, TMDBTVShow } from '@/types';
@@ -25,7 +26,7 @@ interface QuickAddButtonProps {
 export default function QuickAddButton({
   tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds,
 }: QuickAddButtonProps) {
-  const { user, signIn } = useAuth();
+  const { user, uid, signIn } = useAuth();
   const { getItem, addItem, removeItem } = useWatchlist();
   const { show: toast } = useToast();
   const queryClient = useQueryClient();
@@ -80,6 +81,29 @@ export default function QuickAddButton({
     toast(`${title} — ${labelFor(status)}`);
   }
 
+  function handleRemove() {
+    setOpen(false);
+    // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
+    // (återtillägg återupptar där man var) — säg det och erbjud full
+    // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
+    const ownerUid = uid;
+    const hadProgress =
+      mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
+    void removeItem(tmdbId);
+    if (hadProgress && ownerUid) {
+      toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
+        label: 'Rensa helt',
+        onClick: () => {
+          void clearEpisodeProgress(ownerUid, tmdbId)
+            .then(() => toast('Historiken rensad.'))
+            .catch(() => toast('Kunde inte rensa historiken. Försök igen om en stund.'));
+        },
+      });
+    } else {
+      toast(`${title} borttagen`);
+    }
+  }
+
   return (
     <div
       ref={ref}
@@ -120,7 +144,7 @@ export default function QuickAddButton({
             <>
               <div className="border-t border-border-light" />
               <button
-                onClick={() => { removeItem(tmdbId); toast(`${title} borttagen`); setOpen(false); }}
+                onClick={handleRemove}
                 className="block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover text-red-600 bg-transparent"
               >
                 Ta bort
