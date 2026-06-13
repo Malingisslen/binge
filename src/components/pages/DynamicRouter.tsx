@@ -21,10 +21,10 @@ const LOADING = <LoadingView label="Laddar…" />;
 // MoviePageClient används som client-side fallback för movie-ids utanför
 // topp-N — pre-renderade ids serveras av src/app/movie/[id]/page.tsx,
 // resten faller hit via firebase rewrite ** → /_/index.html.
-const MoviePageClient = dynamic(() => import('./MoviePageClient'), { ssr: false, loading: () => LOADING });
-const TVShowPageClient = dynamic(() => import('./TVShowPageClient'), { ssr: false, loading: () => LOADING });
+const MoviePageClient = dynamic(() => import(/* webpackPrefetch: true */ './MoviePageClient'), { ssr: false, loading: () => LOADING });
+const TVShowPageClient = dynamic(() => import(/* webpackPrefetch: true */ './TVShowPageClient'), { ssr: false, loading: () => LOADING });
 const SeasonPageClient = dynamic(() => import('./SeasonPageClient'), { ssr: false, loading: () => LOADING });
-const PersonPageClient = dynamic(() => import('./PersonPageClient'), { ssr: false, loading: () => LOADING });
+const PersonPageClient = dynamic(() => import(/* webpackPrefetch: true */ './PersonPageClient'), { ssr: false, loading: () => LOADING });
 const ProviderPageClient = dynamic(() => import('./ProviderPageClient'), { ssr: false, loading: () => LOADING });
 const UserProfilePageClient = dynamic(() => import('./UserProfilePageClient'), { ssr: false, loading: () => LOADING });
 const ListPageClient = dynamic(() => import('./ListPageClient'), { ssr: false, loading: () => LOADING });
@@ -40,7 +40,13 @@ export default function DynamicRouter({ fallback }: { fallback: React.ReactNode 
   // fallback, sedan dispatchar vi efter mount via vanlig state-update.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <>{fallback}</>;
+  // Pre-mount (= prerendrad HTML i out/_/index.html + första klient-rendern):
+  // neutral detalj-skeleton, INTE fallbacken. Fallbacken är NotFound-vyn och
+  // den prerendrade shellen serverar ALLA long-tail-URL:er via rewriten —
+  // en giltig delningslänk ska inte flasha "Sidan hittades inte" innan JS
+  // hunnit dispatcha. NotFound visas fortsatt post-mount för omatchade paths
+  // (sista return nedan).
+  if (!mounted) return <LoadingView variant="detail" label="Laddar…" />;
 
   const segments = pathname.split('/').filter(Boolean);
 
