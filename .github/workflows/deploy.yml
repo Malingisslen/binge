@@ -3,6 +3,12 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+  schedule:
+    # Veckovis metadata-refresh (måndag 04:00 UTC): bust:ar TMDB-byggcachen så
+    # titel-metadata (overview, providers, status) hålls färsk. Kod-deployer
+    # mellan refresharna återanvänder cachen och blir snabba.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
 
 concurrency:
   group: deploy-main
@@ -34,6 +40,25 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Restore .next build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            next-cache-${{ hashFiles('package-lock.json') }}-
+            next-cache-
+
+      - name: Restore TMDB build cache
+        uses: actions/cache@v4
+        with:
+          path: .tmdb-cache
+          # Rullande nyckel: varje körning sparar en ny cache, restore-keys
+          # plockar senaste. Ger "varm cache från förra deployen".
+          key: tmdb-cache-${{ github.run_id }}
+          restore-keys: |
+            tmdb-cache-
+
       - name: Build
         run: npm run build
         env:
@@ -48,6 +73,9 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           NEXT_PUBLIC_APP_ENV: production
           NEXT_PUBLIC_GIT_SHA: ${{ github.sha }}
+          # Tom sträng på push/dispatch (använd cachen). '1' på schedule →
+          # bust:ar cachen för en färsk metadata-refresh.
+          TMDB_CACHE_BUST: ${{ github.event_name == 'schedule' && '1' || '' }}
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
