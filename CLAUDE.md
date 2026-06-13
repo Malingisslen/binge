@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working agreement
+
+- **Solo, push-direct-to-main.** No PRs, no feature branches — commit and push to
+  `main` (which deploys hosting via `deploy.yml`). The one exception: a genuinely
+  risky migration (Firestore rules/schema/status-model) gets a written plan and an
+  explicit go-ahead first.
+- **Explain in product terms.** Malin directs the work but doesn't read code —
+  describe changes by what they do for users and the trade-offs they carry, not by
+  diff mechanics.
+- **Minimize running costs.** Firebase is Blaze with a 25 SEK/mån cap. Prefer the
+  lite TMDB queries on fan-out surfaces, respect the cache tiers, and flag anything
+  that would add a paid service.
+- **Testing honesty.** Tests prove intended behavior. Never weaken, skip, or rewrite
+  an assertion just to go green — if a test fails, the production code is the suspect.
+
 ## Project Overview
 
 Binge (binge.nu) is a Swedish media tracker for movies and TV shows. Users track what they're watching, want to watch, and have watched — with the killer feature being where each title is available on Swedish streaming services. Think Prisjakt for media: dense, functional, data-forward. The UI is in Swedish.
