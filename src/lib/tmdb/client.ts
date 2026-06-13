@@ -145,6 +145,21 @@ export function getTVShow(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow>
   }, opts);
 }
 
+// Lite-varianter för fan-out-ytor (kalender, rådgivare): behåller
+// watch/providers (rådgivaren matchar mot dem; kalenderns metarad visar
+// provider) men skippar credits/recommendations/videos/external_ids —
+// ~80 % mindre payload per titel. Egen queryKey ('tv-lite'/'movie-lite')
+// så titelsidornas fulla detaljsvar inte krockar i React Query-cachen.
+export function getTVShowLite(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow> {
+  return tmdbFetch(`/tv/${id}`, { append_to_response: 'watch/providers' }, opts);
+}
+
+export function getMovieLite(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
+  return tmdbFetch(`/movie/${id}`, {
+    append_to_response: 'watch/providers,release_dates',
+  }, opts);
+}
+
 // Recommendations (standalone — lighter than full detail call)
 export function getRecommendations(mediaType: 'movie' | 'tv', id: number, opts?: TmdbFetchOpts & { page?: number }): Promise<TMDBListResponse<TMDBSearchResult>> {
   const params: Record<string, string> = opts?.page && opts.page !== 1 ? { page: String(opts.page) } : {};

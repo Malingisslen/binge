@@ -68,14 +68,22 @@ DynamicRouter.tsx + firebase.json rewrite.
 
 ### TMDB staleTime — dela via `TMDB_STALE`
 
-Fyra ställen hämtar `['tv', id]`-queries (useTVShow, useSubscriptionAdvisor,
-useRevivalNudges, useCalendar). Om de registrerar olika `staleTime` slåss
-observers om senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
-`TMDB_STALE.TV_DETAIL`, `MOVIE_DETAIL`, `CATALOG`, `SEARCH`, `PERSON`, `GENRES`,
-`PROVIDERS`. **Alla callsites för samma queryKey måste använda samma konstant.**
+Flera hooks kan registrera samma queryKey — då MÅSTE de använda samma
+`TMDB_STALE`-konstant (annars slåss observers om senaste värde):
 
-`['movie', id]` är på samma sätt delad mellan `useMovie` (detaljsidan) och
-`useCalendar` (filmsläpp) — båda måste använda `TMDB_STALE.MOVIE_DETAIL`.
+- `['tv', id]` (full detalj, append_to_response): useTVShow + QuickAddButton
+  → `TMDB_STALE.TV_DETAIL`
+- `['tv-lite', id]` (bas + watch/providers): useCalendar + useSubscriptionAdvisor
+  → `TMDB_STALE.LITE_DETAIL`
+- `['movie', id]` (full detalj): useMovie → `TMDB_STALE.MOVIE_DETAIL`
+- `['movie-lite', id]` (bas + release_dates + providers): useCalendar
+  → `TMDB_STALE.LITE_DETAIL`
+
+Fan-out-ytor (kalender/rådgivare, en query per bibliotekstitel) ska använda
+lite-varianterna (`getTVShowLite`/`getMovieLite` i `src/lib/tmdb/client.ts`) —
+fulla detaljsvar är 5–10× större och hör hemma på titelsidor. Lite-nycklarna
+ingår i React Query-persist-whitelisten (`shouldPersistQuery` i
+`src/lib/queryClient.ts`) — full-nycklarna gör det medvetet inte.
 
 ### TMDB rate-limit + AbortSignal
 

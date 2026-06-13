@@ -20,6 +20,10 @@
 export const TMDB_STALE = {
   /** TV-show detail + detta som advisor/revival också läser. */
   TV_DETAIL: 10 * 60 * 1000,
+  /** Lite-detalj för kalender/rådgivare ('tv-lite'/'movie-lite') — driver
+   *  premiärbevakning, inte titelsidor. 6 h: air-datum flippar sällan
+   *  intra-dag, och varje cache-miss är en fan-out över hela biblioteket. */
+  LITE_DETAIL: 6 * 60 * 60 * 1000,
   /** Film-detail — inga next-air-date att oroa sig för. */
   MOVIE_DETAIL: 30 * 60 * 1000,
   /** Säsongsdata — episodernas air_date kan ändras men sällan. */
