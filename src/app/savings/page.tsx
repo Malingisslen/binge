@@ -138,7 +138,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
 
 function SavingsContent() {
   const advisor = useSubscriptionAdvisor(LOOK_AHEAD_DAYS);
-  const { pauseProvider, resumeProvider } = useAuth();
+  const { pauseProvider, resumeProvider, profileLoading } = useAuth();
   const hasAdvisorProviders = advisor.providers.length > 0;
   // En-skott per sidladd: fyr 'advisor_viewed' bara första gången rådgivaren
   // är klar med providers. Utan guarden skulle providerCount-ändringar (t.ex.
@@ -163,7 +163,14 @@ function SavingsContent() {
   // tom redan vid första compute, så diagnos + steg-rader renderades från
   // partiell TMDB-data och flippade medan queries strömmade in. isLoading är
   // numera "allt avgjort"-flaggan (watchlist + samtliga detaljqueries).
-  if (advisor.isLoading) {
+  //
+  // profileLoading: sedan auth-profilen laddas parallellt (icke-blockerande)
+  // är myProviders [] tills profilen landat. Med persistentLocalCache
+  // resolverar watchlisten direkt från disk, så advisor.isLoading kan bli
+  // false (TV-löst bibliotek → inga detaljqueries) MEDAN providers ännu är
+  // okända — utan den här gaten flashar "lägg till tjänster" till en användare
+  // som faktiskt har tjänster. Samma profilgate som admin/insikter.
+  if (advisor.isLoading || profileLoading) {
     return (
       <>
         <header>
