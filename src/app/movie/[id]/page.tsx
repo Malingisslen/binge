@@ -15,6 +15,7 @@ import {
   SEO_FALLBACK_MOVIE_IDS,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -38,7 +39,7 @@ export const dynamicParams = false;
 // React's cache() dedupar fetchen inom samma render-pass — Next anropar
 // generateMetadata och default-export separat per route, men cache() ser
 // till att TMDB bara träffas en gång per id.
-const cachedGetMovie = cache((id: number) => getMovie(id));
+const cachedGetMovie = cache((id: number) => fetchForBuild(getMovie, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   const collectIds = async (
@@ -60,8 +61,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     const [popular, topRated] = await Promise.all([
-      collectIds(getPopularMovies, SEO_TITLE_PAGES),
-      collectIds(getTopRatedMovies, SEO_TOP_RATED_PAGES),
+      collectIds(p => getPopularMovies(p, { signal: buildSignal() }), SEO_TITLE_PAGES),
+      collectIds(p => getTopRatedMovies(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES),
     ]);
     const merged = new Set<number>([...popular, ...topRated]);
     const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);

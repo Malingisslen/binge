@@ -16,6 +16,7 @@ import {
   SEO_FALLBACK_TV_IDS,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -33,7 +34,7 @@ export const dynamicParams = false;
  * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
 
-const cachedGetTVShow = cache((id: number) => getTVShow(id));
+const cachedGetTVShow = cache((id: number) => fetchForBuild(getTVShow, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   const collectIds = async (
@@ -55,8 +56,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     const [popular, topRated] = await Promise.all([
-      collectIds(getPopularTV, SEO_TITLE_PAGES),
-      collectIds(getTopRatedTV, SEO_TOP_RATED_PAGES),
+      collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES),
+      collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES),
     ]);
     const merged = new Set<number>([...popular, ...topRated]);
     const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);

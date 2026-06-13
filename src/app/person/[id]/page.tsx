@@ -14,6 +14,7 @@ import {
   SEO_PERSON_TARGET_IDS,
   SEO_FALLBACK_PERSON_IDS,
 } from '@/lib/tmdb/seoCoverage';
+import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -31,13 +32,13 @@ export const dynamicParams = false;
  * Konstanter delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
 
-const cachedGetPerson = cache((id: number) => getPerson(id));
+const cachedGetPerson = cache((id: number) => fetchForBuild(getPerson, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   try {
     // Hämta populära filmer, sen credits per film, sen samla cast-ids.
     const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
-    const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p)));
+    const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p, { signal: buildSignal() })));
     const movieIds = new Set<number>();
     for (const r of popularResults) {
       if (r.status === 'fulfilled') {
@@ -46,7 +47,7 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     }
 
     const movieDetails = await Promise.allSettled(
-      Array.from(movieIds).map(id => getMovie(id)),
+      Array.from(movieIds).map(id => getMovie(id, { signal: buildSignal() })),
     );
     const peopleIds = new Set<number>();
     for (const r of movieDetails) {
