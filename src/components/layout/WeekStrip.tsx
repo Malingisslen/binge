@@ -16,7 +16,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 // `useCalendarEntries()`-cachen — gratis på sidor som redan har datan.
 //
 // K3: WeekStrip och /calendar delar SAMMA pipeline — useCalendarEntries med
-// queryKey ['tv', id]/['tv-season', ...] och TMDB_STALE-konstanter — så ett
+// queryKey ['tv-lite', id]/['tv-season', ...] och TMDB_STALE-konstanter — så ett
 // steady-state-glapp mellan ytorna är strukturellt omöjligt. Det som såg ut
 // som divergens i QA:n var partiell data under laddning: strippen renderade
 // definitiva "—"/×N-värden medan säsonger fortfarande strömmade in. Därför

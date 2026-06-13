@@ -72,7 +72,7 @@ Flera hooks kan registrera samma queryKey — då MÅSTE de använda samma
 `TMDB_STALE`-konstant (annars slåss observers om senaste värde):
 
 - `['tv', id]` (full detalj, append_to_response): useTVShow + QuickAddButton
-  → `TMDB_STALE.TV_DETAIL`
+  + StatusButton → `TMDB_STALE.TV_DETAIL`
 - `['tv-lite', id]` (bas + watch/providers): useCalendar + useSubscriptionAdvisor
   → `TMDB_STALE.LITE_DETAIL`
 - `['movie', id]` (full detalj): useMovie → `TMDB_STALE.MOVIE_DETAIL`
