@@ -81,9 +81,16 @@ Flera hooks kan registrera samma queryKey — då MÅSTE de använda samma
 
 Fan-out-ytor (kalender/rådgivare, en query per bibliotekstitel) ska använda
 lite-varianterna (`getTVShowLite`/`getMovieLite` i `src/lib/tmdb/client.ts`) —
-fulla detaljsvar är 5–10× större och hör hemma på titelsidor. Lite-nycklarna
-ingår i React Query-persist-whitelisten (`shouldPersistQuery` i
-`src/lib/queryClient.ts`) — full-nycklarna gör det medvetet inte.
+fulla detaljsvar är 5–10× större och hör hemma på titelsidor.
+
+**React Query-persist (`shouldPersistQuery` i `src/lib/queryClient.ts`):**
+persisterar BARA små, delade katalog-queryer (`genres-*`, `trending`,
+`popular-*`, `discover-*`, `watch-providers`). Per-titel-data
+(`tv-lite`/`movie-lite`/`tv-season`) persisteras ALDRIG — den skalar med
+bibliotekets storlek och sprängde 5 MB-localStorage-taket i produktion (ett
+222-titlars bibliotek fyllde hela budgeten med enbart tv-lite). Per-titel-data
+re-fetchas billigt (gated) och watchlist-datan är redan momentan via Firestores
+IndexedDB-cache, så återbesök är snabba ändå.
 
 ### TMDB rate-limit + AbortSignal
 

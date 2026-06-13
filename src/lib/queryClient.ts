@@ -10,19 +10,18 @@ import { captureError } from './sentry';
 export const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 
 // Whitelist för vad som persisteras till localStorage (~5 MB-kvot).
-// Lite-queries (show-nivå) + katalogytor = det som gör återbesök snabba.
-// INTE fulla ['tv']/['movie']-detaljsvar (20–80 KB JSON styck × bibliotek
-// spränger kvoten) och INTE search (flyktigt).
 //
-// INTE 'tv-season': säsongssvaren (fulla avsnittslistor med stills/overviews)
-// är 30–60 KB/säsong och dominerade hela 5 MB-budgeten i produktion (mätt:
-// 5053 av 5092 KB var tv-season), vilket trängde ut de små värdefulla
-// queryerna via removeOldestQuery-eviction. Säsongsdata är kalender-specifik
-// och re-fetchas billigt (SEASON-tier, WeekStrip-defer:ad) — den hör inte
-// hemma i den knappa localStorage-budgeten. Show-nivå-'tv-lite' räcker för
-// att rådgivare/bibliotek ska rendera direkt vid återbesök.
+// PRINCIP: bara SMÅ, DELADE katalog-queryer — aldrig per-titel-data.
+// Per-titel-svar (tv-lite/movie-lite/tv-season) skalar med bibliotekets
+// storlek och får helt enkelt inte plats i den knappa ~5 MB-budgeten:
+// produktionsmätning på ett 222-titlars bibliotek visade att tv-lite ensamt
+// fyllde hela taket (4583 KB) precis som tv-season gjorde före det — cachen
+// låg konstant vid 5 MB och thrashade via removeOldestQuery-eviction.
+// Per-titel-data re-fetchas billigt (gated av WeekStrip-defer + advisor) och
+// biblioteks-/watchlist-datan är redan momentan via Firestores IndexedDB-cache
+// (persistentLocalCache), så återbesöks-upplevelsen bevaras ändå. Katalog-
+// queryerna nedan är några få KB totalt, stabila och delade mellan användare.
 const PERSISTED_QUERY_PREFIXES = new Set([
-  'tv-lite', 'movie-lite',
   'genres-movie', 'genres-tv', 'watch-providers',
   'trending', 'popular-movies', 'popular-tv', 'discover-movies', 'discover-tv',
 ]);
