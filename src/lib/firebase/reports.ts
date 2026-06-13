@@ -1,17 +1,5 @@
-import {
-  addDoc,
-  collection,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  type QueryConstraint,
-} from 'firebase/firestore';
-import { db } from './config';
+import type { QueryConstraint } from 'firebase/firestore';
+import { fsdb } from './db';
 import { toDate } from './utils';
 
 /**
@@ -93,6 +81,7 @@ export async function createReport(params: {
 
   const trimmedNote = params.note?.trim().slice(0, 500);
 
+  const { db, addDoc, collection, serverTimestamp } = await fsdb();
   await addDoc(collection(db, 'reports'), {
     reporterUid: params.reporterUid,
     targetType: params.targetType,
@@ -113,6 +102,7 @@ export async function listReports(options: {
   status?: ReportStatus;
   maxRows?: number;
 } = {}): Promise<Report[]> {
+  const { db, collection, getDocs, limit, orderBy, query, where } = await fsdb();
   const constraints: QueryConstraint[] = [];
   if (options.status) {
     constraints.push(where('status', '==', options.status));
@@ -142,6 +132,7 @@ export async function updateReportStatus(
   reportId: string,
   status: ReportStatus,
 ): Promise<void> {
+  const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'reports', reportId), {
     status,
     updatedAt: serverTimestamp(),

@@ -4,6 +4,30 @@ import { QueryCache, MutationCache, QueryClient } from '@tanstack/react-query';
 import { trackEvent } from './analytics';
 import { captureError } from './sentry';
 
+/** Delas med Providers.tsx — persist-fönstret OCH queryernas gcTime måste
+ *  vara samma värde: med gcTime < maxAge GC:as cachen innan den hinner
+ *  persisteras och localStorage-persisten blir i praktiken tom. */
+export const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
+
+// Whitelist för vad som persisteras till localStorage (~5 MB-kvot).
+// Lite-queries + säsonger + katalogytor = det som gör återbesök snabba.
+// INTE fulla ['tv']/['movie']-detaljsvar (20–80 KB JSON styck × bibliotek
+// spränger kvoten) och INTE search (flyktigt).
+const PERSISTED_QUERY_PREFIXES = new Set([
+  'tv-lite', 'movie-lite', 'tv-season',
+  'genres-movie', 'genres-tv', 'watch-providers',
+  'trending', 'popular-movies', 'popular-tv', 'discover-movies', 'discover-tv',
+]);
+
+export function shouldPersistQuery(query: {
+  queryKey: readonly unknown[];
+  state: { status: string };
+}): boolean {
+  if (query.state.status !== 'success') return false;
+  const head = query.queryKey[0];
+  return typeof head === 'string' && PERSISTED_QUERY_PREFIXES.has(head);
+}
+
 /**
  * Central React Query-klient med global felhantering.
  *
@@ -64,6 +88,8 @@ export function createQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         staleTime: 5 * 60 * 1000,
+        // Matchar PERSIST_MAX_AGE — se kommentaren vid konstanten.
+        gcTime: PERSIST_MAX_AGE,
         refetchOnWindowFocus: false,
         // Retry-kedja: 1 försök till med kort backoff. Firestore permission-fel
         // retryas inte eftersom de inte blir bättre av att försökas igen.

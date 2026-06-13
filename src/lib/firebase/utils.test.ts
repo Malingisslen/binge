@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { sha256Hex, generateSecureToken } from './utils';
+import { sha256Hex, generateSecureToken, toDate } from './utils';
+
+describe('toDate', () => {
+  it('returnerar Date-instanser oförändrade', () => {
+    const d = new Date('2026-01-01T12:00:00Z');
+    expect(toDate(d)).toBe(d);
+  });
+
+  it('konverterar Timestamp-lika objekt via deras toDate() — duck-typing, ingen firestore-import', () => {
+    // Firestore Timestamp duck-typas på toDate()-metoden så utils.ts inte
+    // behöver statiskt importera firebase/firestore (hela SDK:n i bundlen).
+    const d = new Date('2026-06-11T08:00:00Z');
+    expect(toDate({ toDate: () => d })).toBe(d);
+  });
+
+  it('faller tillbaka till "nu" för null/undefined/skräp', () => {
+    expect(toDate(null)).toBeInstanceOf(Date);
+    expect(toDate(undefined)).toBeInstanceOf(Date);
+    expect(toDate('2026-01-01')).toBeInstanceOf(Date);
+    expect(toDate({ toDate: 'inte en funktion' })).toBeInstanceOf(Date);
+  });
+});
 
 describe('sha256Hex', () => {
   it('matchar känt sha256 hex-värde för "" (tom sträng)', async () => {

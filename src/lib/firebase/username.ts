@@ -1,5 +1,4 @@
-import { doc, getDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
-import { db } from './config';
+import { fsdb } from './db';
 
 const USERNAME_REGEX = /^[a-z0-9]([a-z0-9-]{1,18}[a-z0-9])?$/;
 
@@ -42,6 +41,7 @@ export function suggestUsernameFromIdentity(
 }
 
 export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const { db, doc, getDoc } = await fsdb();
   const snap = await getDoc(doc(db, 'usernames', username));
   return !snap.exists();
 }
@@ -73,6 +73,7 @@ export interface ResolvedUser {
 export async function lookupUserByHandle(handle: string): Promise<ResolvedUser | null> {
   const cleaned = handle.trim().toLowerCase().replace(/^@/, '');
   if (!cleaned) return null;
+  const { db, doc, getDoc } = await fsdb();
   const usernameSnap = await getDoc(doc(db, 'usernames', cleaned));
   if (!usernameSnap.exists()) return null;
   const uid = usernameSnap.data().uid as string;
@@ -89,6 +90,7 @@ export async function lookupUserByHandle(handle: string): Promise<ResolvedUser |
 }
 
 export async function claimUsername(uid: string, username: string, oldUsername: string | null): Promise<void> {
+  const { db, doc, writeBatch, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   if (oldUsername) {
     batch.delete(doc(db, 'usernames', oldUsername));

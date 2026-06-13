@@ -1,20 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-  addDoc,
-  orderBy,
-  query,
-  limit,
-  getCountFromServer,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/hooks/useAuth';
 import type { ReviewComment } from '@/types';
@@ -36,16 +23,18 @@ export function useReviewLikes(reviewId: string | null) {
 
     // Hämta likeCount en gång vid mount — uppdateras vid toggle via optimism.
     let cancelled = false;
-    getCountFromServer(collection(db, 'reviews', reviewId, 'likes'))
+    fsdb()
+      .then(({ db, collection, getCountFromServer }) =>
+        getCountFromServer(collection(db, 'reviews', reviewId, 'likes')))
       .then(snap => { if (!cancelled) setLikeCount(snap.data().count); })
       .catch(() => { if (!cancelled) setLikeCount(0); });
 
     if (!uid) { return () => { cancelled = true; }; }
     // Lyssna bara på mitt eget like-dokument — 1 read istället för N.
-    const myLikeRef = doc(db, 'reviews', reviewId, 'likes', uid);
-    const unsub = onSnapshot(myLikeRef, snap => {
-      setILike(snap.exists());
-    });
+    const unsub = lazySubscribe(({ db, doc, onSnapshot }) =>
+      onSnapshot(doc(db, 'reviews', reviewId, 'likes', uid), snap => {
+        setILike(snap.exists());
+      }));
     return () => {
       cancelled = true;
       unsub();
@@ -58,6 +47,7 @@ export function useReviewLikes(reviewId: string | null) {
     // likeCount vid snabba dubbelklick.
     if (inFlight.current) return;
     inFlight.current = true;
+    const { db, doc, setDoc, deleteDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'reviews', reviewId, 'likes', uid);
     const wasLiked = iLike;
     // Sätt iLike + likeCount optimistiskt direkt så UI:t inte hoppar och
@@ -91,31 +81,31 @@ export function useReviewComments(reviewId: string | null) {
     // Begränsa antalet kommentarer vi prenumererar på. Populära recensioner
     // kan få hundratals kommentarer — vi visar de senaste 100 och lägger
     // till paginering när det blir aktuellt (TODO: useInfiniteQuery).
-    const q = query(
-      collection(db, 'reviews', reviewId, 'comments'),
-      orderBy('createdAt', 'asc'),
-      limit(100),
-    );
-    const unsub = onSnapshot(q, snap => {
-      setComments(snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          uid: data.uid as string,
-          text: data.text as string,
-          displayName: (data.displayName as string) ?? '',
-          username: (data.username as string | null) ?? null,
-          createdAt: toDate(data.createdAt),
-        };
+    return lazySubscribe(({ db, collection, query, orderBy, limit, onSnapshot }) =>
+      onSnapshot(query(
+        collection(db, 'reviews', reviewId, 'comments'),
+        orderBy('createdAt', 'asc'),
+        limit(100),
+      ), snap => {
+        setComments(snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            uid: data.uid as string,
+            text: data.text as string,
+            displayName: (data.displayName as string) ?? '',
+            username: (data.username as string | null) ?? null,
+            createdAt: toDate(data.createdAt),
+          };
+        }));
       }));
-    });
-    return () => unsub();
   }, [reviewId]);
 
   const addComment = async (text: string) => {
     if (!reviewId || !uid || !user) return;
     const trimmed = text.trim();
     if (!trimmed) return;
+    const { db, collection, addDoc, serverTimestamp } = await fsdb();
     await addDoc(collection(db, 'reviews', reviewId, 'comments'), {
       uid,
       text: trimmed,
@@ -127,6 +117,7 @@ export function useReviewComments(reviewId: string | null) {
 
   const deleteComment = async (commentId: string) => {
     if (!reviewId) return;
+    const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'reviews', reviewId, 'comments', commentId));
   };
 

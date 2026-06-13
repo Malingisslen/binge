@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
-import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
+import { posterUrl, posterSrcSet, getDisplayTitle, getReleaseYear, isAddableMediaType, titleHref } from '@/lib/tmdb/client';
 import type { TMDBSearchResult } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -61,6 +61,8 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           {poster && !imgError ? (
             <img
               src={poster}
+              srcSet={posterSrcSet(item.poster_path)}
+              sizes="(max-width: 768px) 45vw, 160px"
               alt={title}
               loading="lazy"
               decoding="async"

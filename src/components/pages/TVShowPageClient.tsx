@@ -138,7 +138,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           <div className={`poster duo-${tone}`}>
             {poster ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={poster} alt={displayTitle} loading="eager" decoding="async" width={342} height={513} />
+              <img src={poster} alt={displayTitle} loading="eager" fetchPriority="high" decoding="async" width={342} height={513} />
             ) : (
               <div style={{
                 width: '100%', height: '100%',

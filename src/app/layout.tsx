@@ -73,8 +73,16 @@ export default function RootLayout({
   return (
     <html lang="sv" suppressHydrationWarning className={albertSans.variable}>
       <head>
+        {/* TMDB-API:t fetch:as (CORS) → crossOrigin krävs för att socketen
+            ska återanvändas. image.tmdb.org konsumeras av <img> (no-CORS) →
+            INGEN crossOrigin, annars förvarmas fel socket-typ. Firebase-
+            origins (CORS-fetch): auth-token-refresh + Firestore är inloggades
+            första nätverkshopp — kall DNS+TLS kostar 100–300 ms på mobil. */}
         <link rel="preconnect" href="https://api.themoviedb.org" crossOrigin="" />
-        <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="" />
+        <link rel="preconnect" href="https://image.tmdb.org" />
+        <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossOrigin="" />
+        <link rel="preconnect" href="https://securetoken.googleapis.com" crossOrigin="" />
+        <link rel="preconnect" href="https://firestore.googleapis.com" crossOrigin="" />
         {/*
           Pre-hydration login-detect: sätter .returning-user på <html> innan
           body parsas, så CSS kan dölja LandingPage-flashen för återvändande

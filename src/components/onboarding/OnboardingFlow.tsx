@@ -9,8 +9,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
@@ -45,6 +44,7 @@ export function OnboardingFlow() {
   const finish = async () => {
     setSaving(true);
     try {
+      const { db, doc, setDoc, serverTimestamp } = await fsdb();
       await setDoc(
         doc(db, 'users', uid),
         { onboardingCompletedAt: serverTimestamp() },

@@ -2,8 +2,7 @@
 
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { getDocs, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { buildTasteVector } from '@/lib/taste/vector';
 import type { MediaType, SessionParticipant, TasteVector, WatchlistItem, WatchStatus } from '@/types';
 
@@ -21,6 +20,7 @@ export function useSessionTasteVectors(
     queries: authed.map(p => ({
       queryKey: ['session-taste-watchlist', p.uid],
       queryFn: async (): Promise<WatchlistItem[]> => {
+        const { db, collection, getDocs } = await fsdb();
         const snap = await getDocs(collection(db, 'users', p.uid, 'watchlist'));
         return snap.docs.map(d => {
           const data = d.data();

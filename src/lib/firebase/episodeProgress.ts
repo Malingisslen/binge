@@ -1,5 +1,4 @@
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from './config';
+import { fsdb } from './db';
 
 // "Rensa helt"-vägen vid borttagning av en serie. WatchlistContext.removeItem
 // raderar watchlist-docen, men per-avsnitt-historiken bor i en egen
@@ -9,5 +8,6 @@ import { db } from './config';
 // begäran (toast-åtgärden "Rensa helt" i StatusButton/QuickAddButton).
 // Policy dokumenterad i docs/data-retention-policy.md.
 export async function clearEpisodeProgress(uid: string, tmdbId: number): Promise<void> {
+  const { db, doc, deleteDoc } = await fsdb();
   await deleteDoc(doc(db, 'users', uid, 'episodeProgress', String(tmdbId)));
 }

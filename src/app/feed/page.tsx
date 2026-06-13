@@ -9,8 +9,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { useFollowing } from '@/hooks/useFollow';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
-import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import type { MediaType } from '@/types';
@@ -58,6 +57,7 @@ function FeedContent() {
     queryKey: ['feed', followingUids],
     queryFn: async (): Promise<FeedItem[]> => {
       if (followingUids.length === 0) return [];
+      const { db, doc, getDoc, collection, getDocs, query, where, orderBy, limit } = await fsdb();
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 

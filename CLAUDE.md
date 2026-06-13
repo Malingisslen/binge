@@ -68,14 +68,22 @@ DynamicRouter.tsx + firebase.json rewrite.
 
 ### TMDB staleTime — dela via `TMDB_STALE`
 
-Fyra ställen hämtar `['tv', id]`-queries (useTVShow, useSubscriptionAdvisor,
-useRevivalNudges, useCalendar). Om de registrerar olika `staleTime` slåss
-observers om senaste värde. Lösning: `src/lib/tmdb/cacheTiers.ts` exporterar
-`TMDB_STALE.TV_DETAIL`, `MOVIE_DETAIL`, `CATALOG`, `SEARCH`, `PERSON`, `GENRES`,
-`PROVIDERS`. **Alla callsites för samma queryKey måste använda samma konstant.**
+Flera hooks kan registrera samma queryKey — då MÅSTE de använda samma
+`TMDB_STALE`-konstant (annars slåss observers om senaste värde):
 
-`['movie', id]` är på samma sätt delad mellan `useMovie` (detaljsidan) och
-`useCalendar` (filmsläpp) — båda måste använda `TMDB_STALE.MOVIE_DETAIL`.
+- `['tv', id]` (full detalj, append_to_response): useTVShow + QuickAddButton
+  + StatusButton → `TMDB_STALE.TV_DETAIL`
+- `['tv-lite', id]` (bas + watch/providers): useCalendar + useSubscriptionAdvisor
+  → `TMDB_STALE.LITE_DETAIL`
+- `['movie', id]` (full detalj): useMovie → `TMDB_STALE.MOVIE_DETAIL`
+- `['movie-lite', id]` (bas + release_dates + providers): useCalendar
+  → `TMDB_STALE.LITE_DETAIL`
+
+Fan-out-ytor (kalender/rådgivare, en query per bibliotekstitel) ska använda
+lite-varianterna (`getTVShowLite`/`getMovieLite` i `src/lib/tmdb/client.ts`) —
+fulla detaljsvar är 5–10× större och hör hemma på titelsidor. Lite-nycklarna
+ingår i React Query-persist-whitelisten (`shouldPersistQuery` i
+`src/lib/queryClient.ts`) — full-nycklarna gör det medvetet inte.
 
 ### TMDB rate-limit + AbortSignal
 
@@ -276,7 +284,7 @@ Allt annat är platt. Inga `drop-shadow`-, `filter: blur`- eller godtyckliga box
 
 Posters renderas med per-genre duotone-filter via SVG-defs (`DuotoneFilters`, monteras en gång i `AppShell`). Åtta färgscheman: `duo-terra`, `duo-slate`, `duo-moss`, `duo-clay`, `duo-plum`, `duo-steel`, `duo-olive`, `duo-oxblood`.
 
-- Hover på poster → `filter: none` (avslöjar original-bitmap). Transition 220ms.
+- Hover på poster → `filter: none` (avslöjar original-bitmap) (momentant — SVG-filter→none kan inte interpoleras, så ingen transition).
 - Hover på filmkort → `translateY(-2px)` på `.poster`. Denna transform är **avsiktlig** — den gamla "inget transform/scale på hover"-regeln gäller inte längre.
 - Liten vit indikator-prick (bottom-right) syns vid hover som UX-ledtråd.
 

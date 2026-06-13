@@ -19,13 +19,15 @@ import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBa
 //   `filter: url(#duo-…)` picks up the SVG defs.
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { uid, loading } = useAuth();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   useFcmForeground();
 
-  const isLandingForGuest = mounted && !loading && !user && pathname === '/';
+  // Gatear på uid — inte user — så inloggade inte flashar guest-landing-
+  // kromen under den RTT profilen tar att landa efter auth-beskedet.
+  const isLandingForGuest = mounted && !loading && !uid && pathname === '/';
 
   if (isLandingForGuest) {
     return (

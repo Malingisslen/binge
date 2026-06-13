@@ -1,15 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
@@ -39,10 +31,10 @@ export function useBlockedUsers() {
       setBlockedUids(new Set());
       return;
     }
-    const unsub = onSnapshot(collection(db, 'users', uid, 'blocked'), snap => {
-      setBlockedUids(new Set(snap.docs.map(d => d.id)));
-    });
-    return () => unsub();
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'blocked'), snap => {
+        setBlockedUids(new Set(snap.docs.map(d => d.id)));
+      }));
   }, [uid]);
 
   const isBlocked = useCallback(
@@ -53,6 +45,7 @@ export function useBlockedUsers() {
   const blockUser = useCallback(
     async (targetUid: string) => {
       if (!uid || targetUid === uid) return;
+      const { db, doc, setDoc, serverTimestamp } = await fsdb();
       await setDoc(doc(db, 'users', uid, 'blocked', targetUid), {
         blockedAt: serverTimestamp(),
       });
@@ -63,6 +56,7 @@ export function useBlockedUsers() {
   const unblockUser = useCallback(
     async (targetUid: string) => {
       if (!uid) return;
+      const { db, doc, deleteDoc } = await fsdb();
       await deleteDoc(doc(db, 'users', uid, 'blocked', targetUid));
     },
     [uid],

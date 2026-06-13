@@ -4,9 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
 import AuthGuard from '@/components/AuthGuard';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
@@ -144,6 +143,7 @@ function useInviteIdentity(invite: GroupInvite) {
     queryKey: ['invite-group-name', invite.groupId],
     queryFn: async () => {
       try {
+        const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'groups', invite.groupId));
         if (!snap.exists()) return null;
         return (snap.data().name as string | undefined) ?? null;
@@ -158,6 +158,7 @@ function useInviteIdentity(invite: GroupInvite) {
     queryKey: ['sender-profile', invite.fromUid],
     queryFn: async () => {
       try {
+        const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'users', invite.fromUid));
         if (!snap.exists()) return null;
         return (snap.data().displayName as string | undefined) ?? null;

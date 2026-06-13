@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, type DocumentData } from 'firebase/firestore';
+import type { DocumentData } from 'firebase/firestore';
 import { useAuth } from './useAuth';
-import { db } from '@/lib/firebase/config';
+import { lazySubscribe } from '@/lib/firebase/db';
 
 // Avslutade sparbeslut för Streamingrådgivarens "Sparat hittills"- och
 // "Senaste sparbesluten"-block. Subcollectionen skrivs av resumeProvider
@@ -39,12 +39,10 @@ export function usePauseHistory(): UsePauseHistoryResult {
       return;
     }
     setIsLoading(true);
-    const ref = collection(db, 'users', uid, 'pauseHistory');
     // orderBy createdAt desc → nyast först. Listan trimmas av konsumenten
     // (sidebaren visar bara top 3).
-    const q = query(ref, orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
+    return lazySubscribe(({ db, collection, query, orderBy, onSnapshot }) => onSnapshot(
+      query(collection(db, 'users', uid, 'pauseHistory'), orderBy('createdAt', 'desc')),
       snap => {
         const list: PauseHistoryEntry[] = snap.docs.map(d => {
           const data = d.data() as DocumentData;
@@ -69,8 +67,7 @@ export function usePauseHistory(): UsePauseHistoryResult {
         setHistory([]);
         setIsLoading(false);
       },
-    );
-    return () => unsub();
+    ));
   }, [uid]);
 
   const totalSaved = history.reduce((sum, e) => sum + e.savedAmount, 0);

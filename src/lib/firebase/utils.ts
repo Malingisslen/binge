@@ -1,8 +1,14 @@
-import { Timestamp } from 'firebase/firestore';
-
+// Firestore Timestamp duck-typas på toDate()-metoden istället för
+// `instanceof Timestamp` — en statisk import av firebase/firestore härifrån
+// skulle dra in hela SDK:n i first-load-bundlen (se ./db.ts).
 export function toDate(val: unknown): Date {
-  if (val instanceof Timestamp) return val.toDate();
   if (val instanceof Date) return val;
+  if (
+    typeof val === 'object' && val !== null &&
+    typeof (val as { toDate?: unknown }).toDate === 'function'
+  ) {
+    return (val as { toDate(): Date }).toDate();
+  }
   return new Date();
 }
 

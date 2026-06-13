@@ -106,6 +106,13 @@ export function posterUrl(path: string | null, size: 'w92' | 'w154' | 'w185' | '
   return `${IMAGE_BASE}/${size}${path}`;
 }
 
+// srcset för poster-grids: låter browsern välja w185 för små celler/DPR1
+// och w342/w500 för stora/DPR2+. Använd med sizes-attribut i konsumenten.
+export function posterSrcSet(path: string | null): string | undefined {
+  if (!path) return undefined;
+  return `${IMAGE_BASE}/w185${path} 185w, ${IMAGE_BASE}/w342${path} 342w, ${IMAGE_BASE}/w500${path} 500w`;
+}
+
 export function stillUrl(path: string | null, size: 'w185' | 'w300' | 'w500' = 'w300'): string | null {
   if (!path) return null;
   return `${IMAGE_BASE}/${size}${path}`;
@@ -142,6 +149,21 @@ export function getMovie(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
 export function getTVShow(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow> {
   return tmdbFetch(`/tv/${id}`, {
     append_to_response: 'watch/providers,recommendations,credits,videos,external_ids',
+  }, opts);
+}
+
+// Lite-varianter för fan-out-ytor (kalender, rådgivare): behåller
+// watch/providers (rådgivaren matchar mot dem; kalenderns metarad visar
+// provider) men skippar credits/recommendations/videos/external_ids —
+// ~80 % mindre payload per titel. Egen queryKey ('tv-lite'/'movie-lite')
+// så titelsidornas fulla detaljsvar inte krockar i React Query-cachen.
+export function getTVShowLite(id: number, opts?: TmdbFetchOpts): Promise<TMDBTVShow> {
+  return tmdbFetch(`/tv/${id}`, { append_to_response: 'watch/providers' }, opts);
+}
+
+export function getMovieLite(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
+  return tmdbFetch(`/movie/${id}`, {
+    append_to_response: 'watch/providers,release_dates',
   }, opts);
 }
 

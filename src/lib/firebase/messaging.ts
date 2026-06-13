@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  doc,
-  collection,
-  setDoc,
-  deleteDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db } from './config';
+import { fsdb } from './db';
 
 // Lazy-importerar firebase/messaging eftersom den drar in en relativt stor
 // chunk + bryter SSR (window-references). Importeras bara när användaren
@@ -85,6 +78,7 @@ export async function enablePushForUser(uid: string, userAgent?: string): Promis
 
   // Steg 3: spara token i users/{uid}/fcmTokens. Använd autoid så samma
   // device kan få nytt doc om token roterar utan duplikat-kollision.
+  const { db, doc, collection, setDoc, serverTimestamp } = await fsdb();
   const tokensCol = collection(db, 'users', uid, 'fcmTokens');
   const tokenDoc = doc(tokensCol);
   await setDoc(tokenDoc, {
@@ -116,6 +110,7 @@ export async function disablePushForUser(uid: string): Promise<void> {
     const tokenId = localStorage.getItem(`binge:fcm:tokenId:${uid}`);
     if (tokenId) {
       try {
+        const { db, doc, deleteDoc } = await fsdb();
         await deleteDoc(doc(db, 'users', uid, 'fcmTokens', tokenId));
       } catch (err) {
         firestoreErr = err;

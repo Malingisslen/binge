@@ -132,8 +132,10 @@ function CalibrationCard({
   progress: { current: number; total: number };
 }) {
   const title = item.title ?? item.name ?? '';
-  const poster = posterUrl(item.poster_path, 'w500');
-  const backdrop = backdropUrl(item.backdrop_path);
+  // Liten 70px-slot → w154 räcker även på DPR2. Backdrop ligger bakom gradient
+  // i ~180px höjd → w780, inte w1280.
+  const poster = posterUrl(item.poster_path, 'w154');
+  const backdrop = backdropUrl(item.backdrop_path, 'w780');
   const year = (item.release_date ?? item.first_air_date ?? '').slice(0, 4);
 
   return (

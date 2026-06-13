@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { getTVShow, getTVSeason, getMovie } from '@/lib/tmdb/client';
+import { getTVShowLite, getTVSeason, getMovieLite } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { buildCalendarEntries, buildMovieEntries } from '@/lib/calendar/buildEntries';
 import type { TMDBTVShow, TMDBMovie } from '@/types';
@@ -28,7 +28,8 @@ export interface UseCalendarResult {
   isLoading: boolean;
 }
 
-export function useCalendarEntries(): UseCalendarResult {
+export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalendarResult {
+  const enabled = opts.enabled ?? true;
   const { getByStatus } = useWatchlist();
   // Kalendern visar avsnitt för alla serier du följer ('mina') — inklusive
   // ej påbörjade (premiärbevakning är ett kärnvärde). Filmer i 'vill_se'
@@ -42,13 +43,16 @@ export function useCalendarEntries(): UseCalendarResult {
 
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
-      queryKey: ['tv', id],
-      // Delad staleTime-konstant + signal: ['tv', id] läses även av useTVShow,
-      // useSubscriptionAdvisor och useRevivalNudges. Olika staleTime skulle få
-      // observers att slåss om cachen (H3). Signal avbryter in-flight fetches
-      // vid navigation bort så semaphore-slots inte läcker.
-      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
-      staleTime: TMDB_STALE.TV_DETAIL,
+      queryKey: ['tv-lite', id],
+      // Delad lite-nyckel + signal: ['tv-lite', id] läses även av
+      // useSubscriptionAdvisor — båda är fan-out-ytor som bara behöver
+      // basfält + watch/providers, inte fulla detaljsvaret. Samma
+      // staleTime-konstant (LITE_DETAIL) så observers inte slåss om cachen
+      // (H3). Signal avbryter in-flight fetches vid navigation bort så
+      // semaphore-slots inte läcker.
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShowLite(id, { signal }),
+      staleTime: TMDB_STALE.LITE_DETAIL,
+      enabled,
     })),
   });
 
@@ -89,6 +93,7 @@ export function useCalendarEntries(): UseCalendarResult {
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         getTVSeason(spec.showId, spec.seasonNum, { signal }),
       staleTime: TMDB_STALE.SEASON,
+      enabled,
     })),
   });
 
@@ -108,8 +113,10 @@ export function useCalendarEntries(): UseCalendarResult {
     seasonSpecs.length > 0 && seasonQueries.some(q => q.isPending);
 
   // --- Filmsläpp: filmer i 'vill_se' med svenskt digitalt releasedatum ---
-  // Delar queryKey ['movie', id] + staleTime med useMovie (detaljsidan) så
-  // cachen återanvänds. getMovie hämtar release_dates via append_to_response.
+  // Egen lite-nyckel ['movie-lite', id]: titelsidans fulla svar (['movie', id]
+  // via useMovie) är 5-10× större och ska inte fan-out:as här. getMovieLite
+  // hämtar release_dates + watch/providers via append_to_response — allt
+  // kalendern behöver.
   const villSeMovies = getByStatus('vill_se', 'movie');
   const movieIds = useMemo(
     () => villSeMovies.map(i => i.tmdbId),
@@ -119,9 +126,10 @@ export function useCalendarEntries(): UseCalendarResult {
 
   const movieQueries = useQueries({
     queries: movieIds.map(id => ({
-      queryKey: ['movie', id],
-      queryFn: ({ signal }: { signal: AbortSignal }) => getMovie(id, { signal }),
-      staleTime: TMDB_STALE.MOVIE_DETAIL,
+      queryKey: ['movie-lite', id],
+      queryFn: ({ signal }: { signal: AbortSignal }) => getMovieLite(id, { signal }),
+      staleTime: TMDB_STALE.LITE_DETAIL,
+      enabled,
     })),
   });
 

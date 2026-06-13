@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, arrayUnion, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserList, UserListItem } from '@/types';
@@ -42,20 +41,20 @@ export function useMyLists() {
     // Säkerhet mot read-bomb om en användare råkar skapa hundratals listor.
     // 100 räcker för normalbruk — paginering läggs till i UI innan vi bryr
     // oss om fler.
-    const q = query(
-      collection(db, 'lists'),
-      where('uid', '==', uid),
-      orderBy('updatedAt', 'desc'),
-      limit(100),
-    );
-    const unsub = onSnapshot(q, snap => {
-      setLists(snap.docs.map(d => docToList(d.id, d.data())));
-    });
-    return () => unsub();
+    return lazySubscribe(({ db, collection, query, where, orderBy, limit, onSnapshot }) =>
+      onSnapshot(query(
+        collection(db, 'lists'),
+        where('uid', '==', uid),
+        orderBy('updatedAt', 'desc'),
+        limit(100),
+      ), snap => {
+        setLists(snap.docs.map(d => docToList(d.id, d.data())));
+      }));
   }, [uid]);
 
   const createList = useCallback(async (title: string, description: string, isPublic: boolean) => {
     if (!uid) return;
+    const { db, addDoc, collection, serverTimestamp } = await fsdb();
     await addDoc(collection(db, 'lists'), {
       uid, title, description, isPublic, items: [],
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -63,6 +62,7 @@ export function useMyLists() {
   }, [uid]);
 
   const deleteList = useCallback(async (listId: string) => {
+    const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'lists', listId));
   }, []);
 
@@ -78,6 +78,7 @@ export function useMyLists() {
  */
 export function useListMutations() {
   const addItemToList = useCallback(async (listId: string, item: Omit<UserListItem, 'addedAt'>) => {
+    const { db, doc, updateDoc, arrayUnion, serverTimestamp } = await fsdb();
     await updateDoc(doc(db, 'lists', listId), {
       items: arrayUnion({ ...item, addedAt: new Date() }),
       updatedAt: serverTimestamp(),
@@ -85,6 +86,7 @@ export function useListMutations() {
   }, []);
 
   const removeItemFromList = useCallback(async (listId: string, tmdbId: number) => {
+    const { db, doc, getDoc, updateDoc, serverTimestamp } = await fsdb();
     const snap = await getDoc(doc(db, 'lists', listId));
     if (!snap.exists()) return;
     const items = (snap.data().items as UserListItem[]).filter(i => i.tmdbId !== tmdbId);
@@ -98,6 +100,7 @@ export function usePublicList(listId: string) {
   return useQuery({
     queryKey: ['public-list', listId],
     queryFn: async () => {
+      const { db, doc, getDoc } = await fsdb();
       const snap = await getDoc(doc(db, 'lists', listId));
       if (!snap.exists()) return null;
       return docToList(snap.id, snap.data());

@@ -1,12 +1,4 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  writeBatch,
-} from 'firebase/firestore';
-import { db } from './config';
+import { fsdb } from './db';
 
 // Friend-system: mutuell relation som kompletterar ensidiga follow.
 // Vänner får läsa privata watchlist-items (visibility='friends').
@@ -50,6 +42,7 @@ export async function sendFriendRequest(
   toUid: string,
 ): Promise<void> {
   if (myUid === toUid) throw new Error('Cannot send friend request to yourself');
+  const { db, doc, writeBatch, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   batch.set(doc(db, 'users', toUid, 'friendRequests', myUid), {
     fromUid: myUid,
@@ -66,6 +59,7 @@ export async function sendFriendRequest(
 
 // Avbryt egen utgående förfrågan (innan den accepteras).
 export async function cancelFriendRequest(myUid: string, toUid: string): Promise<void> {
+  const { db, doc, writeBatch } = await fsdb();
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', toUid, 'friendRequests', myUid));
   batch.delete(doc(db, 'users', myUid, 'friendRequestsSent', toUid));
@@ -76,6 +70,7 @@ export async function cancelFriendRequest(myUid: string, toUid: string): Promise
 // + rensar request-docs. Allt i en batch så vi inte kan hamna i ett halvt
 // tillstånd där request raderats men friends inte skapats (eller vice versa).
 export async function acceptFriendRequest(myUid: string, fromUid: string): Promise<void> {
+  const { db, doc, writeBatch, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   // Mutuell friends-relation (båda håll).
   batch.set(doc(db, 'users', myUid, 'friends', fromUid), {
@@ -92,6 +87,7 @@ export async function acceptFriendRequest(myUid: string, fromUid: string): Promi
 
 // Avböj inkommen förfrågan utan att skapa vänskap. Rensar bara request-spår.
 export async function declineFriendRequest(myUid: string, fromUid: string): Promise<void> {
+  const { db, doc, writeBatch } = await fsdb();
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', myUid, 'friendRequests', fromUid));
   batch.delete(doc(db, 'users', fromUid, 'friendRequestsSent', myUid));
@@ -101,6 +97,7 @@ export async function declineFriendRequest(myUid: string, fromUid: string): Prom
 // Ta bort befintlig vän (båda håll). Inte detsamma som decline — denna
 // körs när redan accepterad relation ska upphöra.
 export async function removeFriend(myUid: string, targetUid: string): Promise<void> {
+  const { db, doc, writeBatch } = await fsdb();
   const batch = writeBatch(db);
   batch.delete(doc(db, 'users', myUid, 'friends', targetUid));
   batch.delete(doc(db, 'users', targetUid, 'friends', myUid));
@@ -117,6 +114,7 @@ export async function removeFriend(myUid: string, targetUid: string): Promise<vo
 // (friends först eftersom det är det som mestast queryras).
 export async function getFriendStatus(myUid: string, targetUid: string): Promise<FriendStatus> {
   if (myUid === targetUid) return 'none'; // Edge case — egen profil
+  const { db, doc, getDoc } = await fsdb();
   const [friendsDoc, sentDoc, receivedDoc] = await Promise.all([
     getDoc(doc(db, 'users', myUid, 'friends', targetUid)),
     getDoc(doc(db, 'users', myUid, 'friendRequestsSent', targetUid)),
@@ -132,6 +130,7 @@ export async function getFriendStatus(myUid: string, targetUid: string): Promise
 // resolved profile-data (display name, photo, username). Konsumeras av
 // useFriends-hooken i UI.
 export async function listFriends(myUid: string): Promise<FriendUser[]> {
+  const { db, doc, getDoc, collection, getDocs } = await fsdb();
   const snap = await getDocs(collection(db, 'users', myUid, 'friends'));
   if (snap.empty) return [];
   // Hämta profile-doc per vän parallellt så displayName/photoURL är
@@ -160,6 +159,7 @@ export async function listFriends(myUid: string): Promise<FriendUser[]> {
 
 // Hämtar inkomna pending requests. Konsumeras av useFriendRequests-hooken.
 export async function listFriendRequests(myUid: string): Promise<FriendRequest[]> {
+  const { db, collection, getDocs } = await fsdb();
   const snap = await getDocs(collection(db, 'users', myUid, 'friendRequests'));
   return snap.docs.map(d => {
     const data = d.data();

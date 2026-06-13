@@ -672,11 +672,8 @@ button { font: inherit; cursor: pointer; }
 
 /* Hover-to-reveal: filter lifts so the raw bitmap is visible. Good as a
    design-review affordance and arguably also as a user feature ("show me
-   the real photo"). A tiny dot bottom-right is the visual cue. */
-.poster img,
-[class*="duo-"]:has(> img) > img {
-  transition: filter 220ms cubic-bezier(0.2, 0, 0, 1);
-}
+   the real photo"). A tiny dot bottom-right is the visual cue. Momentant —
+   filter: url(#duo-x) → none kan inte interpoleras, så ingen transition. */
 .poster:hover img,
 [class*="duo-"]:has(> img):hover > img {
   filter: none !important;

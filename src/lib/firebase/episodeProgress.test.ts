@@ -4,7 +4,11 @@ const mocks = vi.hoisted(() => ({
   deleteDocMock: vi.fn((..._args: unknown[]) => Promise.resolve()),
 }));
 
-vi.mock('./config', () => ({ db: {} }));
+// episodeProgress.ts hämtar firestore-fns via fsdb() (lazy-laddningen i ./db) —
+// mocken returnerar den mockade firebase/firestore-modulen + dummy-db.
+vi.mock('./db', () => ({
+  fsdb: async () => ({ ...(await import('firebase/firestore')), db: {} }),
+}));
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, ...path) => ({ _path: path.join('/') })),
   deleteDoc: (...args: unknown[]) => mocks.deleteDocMock(...args),

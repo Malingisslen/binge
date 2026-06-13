@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { getTVShow } from '@/lib/tmdb/client';
+import { getTVShowLite } from '@/lib/tmdb/client';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
@@ -72,9 +72,9 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
 
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
-      queryKey: ['tv', id],
-      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShow(id, { signal }),
-      staleTime: TMDB_STALE.TV_DETAIL,
+      queryKey: ['tv-lite', id],
+      queryFn: ({ signal }: { signal: AbortSignal }) => getTVShowLite(id, { signal }),
+      staleTime: TMDB_STALE.LITE_DETAIL,
       enabled: true,
     })),
   });

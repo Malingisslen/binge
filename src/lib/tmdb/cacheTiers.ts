@@ -10,8 +10,9 @@
  * Ändringar sker på ett ställe och alla observers enas.
  *
  * Tumregel:
- * - DETAIL (10 min): användar-facing, tål kort stalenss. Next-episode
- *   kan flippa samma dag så låg staleTime behövs.
+ * - TV_DETAIL (10 min): titelsidornas fulla ['tv', id]-svar. Fan-out-ytorna
+ *   (kalender/rådgivare) använder numera LITE_DETAIL (6h) — premiärbevakning
+ *   är dag-granulär, inte intra-dag, så 10-min-färskhet behövs inte där.
  * - CATALOG (30 min): listor som inte är tidskänsliga (popular, discover).
  * - STATIC (1 h): genre-mappar, person-bio — ändras sällan.
  * - SEARCH (5 min): debouncade användarsökningar.
@@ -20,6 +21,10 @@
 export const TMDB_STALE = {
   /** TV-show detail + detta som advisor/revival också läser. */
   TV_DETAIL: 10 * 60 * 1000,
+  /** Lite-detalj för kalender/rådgivare ('tv-lite'/'movie-lite') — driver
+   *  premiärbevakning, inte titelsidor. 6 h: air-datum flippar sällan
+   *  intra-dag, och varje cache-miss är en fan-out över hela biblioteket. */
+  LITE_DETAIL: 6 * 60 * 60 * 1000,
   /** Film-detail — inga next-air-date att oroa sig för. */
   MOVIE_DETAIL: 30 * 60 * 1000,
   /** Säsongsdata — episodernas air_date kan ändras men sällan. */

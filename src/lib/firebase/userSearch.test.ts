@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mocka firebase-moduler innan import. db från ./config används bara som
-// argument till query-konstruktorerna och returneras vidare ihjälmockat —
-// inga riktiga Firestore-anrop.
-vi.mock('./config', () => ({ db: {} }));
+// Mocka firebase-moduler innan import. userSearch hämtar db + firestore-fns
+// via fsdb() (lazy-laddningen i ./db) — mocken returnerar den mockade
+// firebase/firestore-modulen + dummy-db. Inga riktiga Firestore-anrop.
+vi.mock('./db', () => ({
+  fsdb: async () => ({ ...(await import('firebase/firestore')), db: {} }),
+}));
 
 const getDocsMock = vi.fn();
 const getDocMock = vi.fn();

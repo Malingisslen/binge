@@ -1,15 +1,4 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  limit,
-  orderBy,
-  documentId,
-} from 'firebase/firestore';
-import { db } from './config';
+import { fsdb } from './db';
 import type { ResolvedUser } from './username';
 
 // Prefix-sökning på `usernames/{username}` collection. Eftersom username är
@@ -34,7 +23,8 @@ export async function searchUsersByPrefix(
   const q = prefix.trim().toLowerCase().replace(/^@/, '');
   if (q.length < 2) return [];
 
-  const usernamesQuery = query(
+  const { db, collection, doc, getDoc, getDocs, query: fsQuery, where, limit, orderBy, documentId } = await fsdb();
+  const usernamesQuery = fsQuery(
     collection(db, 'usernames'),
     orderBy(documentId()),
     where(documentId(), '>=', q),

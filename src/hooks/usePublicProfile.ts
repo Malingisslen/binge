@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc, getDocs, collection, query, where, limit, type QueryDocumentSnapshot, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import type { UserProfile, WatchlistItem, MediaType } from '@/types';
@@ -23,6 +23,7 @@ export function usePublicProfile(username: string) {
   return useQuery<PublicProfileResult>({
     queryKey: ['public-profile', username],
     queryFn: async () => {
+      const { db, doc, getDoc } = await fsdb();
       const usernameSnap = await getDoc(doc(db, 'usernames', username));
       if (!usernameSnap.exists()) return null;
       const uid = usernameSnap.data().uid as string;
@@ -110,6 +111,7 @@ export function usePublicWatchlist(uid: string | null) {
   return useQuery({
     queryKey: ['public-watchlist', uid],
     queryFn: async () => {
+      const { db, collection, query, where, limit, getDocs } = await fsdb();
       const col = collection(db, 'users', uid!, 'watchlist');
       const byId = new Map<string, WatchlistItem>();
 

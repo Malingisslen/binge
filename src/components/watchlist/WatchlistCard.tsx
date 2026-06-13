@@ -45,7 +45,7 @@ export function WatchlistCard({
 }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
-  const poster = posterUrl(item.posterPath, 'w185');
+  const poster = posterUrl(item.posterPath, 'w92');
   const href = titleHref(item.mediaType, item.tmdbId);
   const Icon = item.mediaType === 'tv' ? Tv : Film;
   // Identification surface (library list) → duotone. Genre-mapped when we

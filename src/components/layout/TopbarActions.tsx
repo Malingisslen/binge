@@ -4,8 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { fsdb } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useFriendActions } from '@/hooks/useFriends';
@@ -23,6 +22,7 @@ function useSenderProfile(uid: string) {
     queryKey: ['sender-profile', uid],
     queryFn: async () => {
       try {
+        const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'users', uid));
         if (!snap.exists()) return null;
         const d = snap.data();
@@ -45,7 +45,7 @@ function useSenderProfile(uid: string) {
 // chrome around it changes — keeps Sentry-shaped logic untouched in Phase 1.
 
 export default function TopbarActions() {
-  const { user, loading: authLoading, signIn, signOut, markNotificationsSeen } = useAuth();
+  const { user, uid, loading: authLoading, signIn, signOut, markNotificationsSeen } = useAuth();
   const {
     notifications, friendRequests, recentPicks,
     unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
@@ -286,9 +286,12 @@ export default function TopbarActions() {
           <div className="topbar-avatar-link topbar-avatar-skeleton" aria-hidden="true">
             <div className="avatar" />
           </div>
-          {mounted && !authLoading && (
+          {mounted && !authLoading && !uid && (
             // Anonym + auth resolverad → "Logga in". CSS gör att denna och
             // skelettet inte krockar (skeleton hidden för anonyma).
+            // !uid-villkoret: profilen laddas parallellt efter auth-beskedet,
+            // så user kan vara null en RTT trots inloggad — visa skelettet
+            // (grenen ovanför) istället för en "Logga in"-flicker.
             <button onClick={signIn} className="topbar-signin-btn">
               Logga in
             </button>
