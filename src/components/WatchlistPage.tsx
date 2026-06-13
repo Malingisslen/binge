@@ -42,6 +42,11 @@ function fmtDate(d: Date | null): string {
 type ViewMode = 'table' | 'grid' | 'cards';
 type MediaFilter = 'all' | 'movie' | 'tv';
 
+// Stabil tom referens — behind-settet appliceras i EN re-bucketing när
+// advisorn settlat (X1: ingen gradvis sektionsmigration medan TV-detaljqueries
+// löser en och en).
+const EMPTY_BEHIND = new Set<number>();
+
 interface WatchlistPageProps {
   status?: WatchStatus;
   title: string;
@@ -161,9 +166,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // useSubscriptionAdvisor/useCalendarEntries redan hämtat för andra syften
   // på den här sidan — INGEN extra TMDB-fan-out introduceras för substate.
   const subStateOf = useMemo(() => {
-    const behind = advisor.unfinishedTmdbIds;
+    const behind = advisor.isLoading ? EMPTY_BEHIND : advisor.unfinishedTmdbIds;
     return (item: WatchlistItem) => librarySubState(item, behind.has(item.tmdbId));
-  }, [advisor.unfinishedTmdbIds]);
+  }, [advisor.isLoading, advisor.unfinishedTmdbIds]);
 
   // B6: alla tre vyer (Kort/Tabell/Rutnät) visar samma gruppordning för
   // /my/series — ligger efter → pågående → ej påbörjade → avslutade, stabilt
@@ -214,12 +219,15 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // landar. Gäller alla biblioteksvyer (en delad komponent).
   //
   // X1-klass: /my/series sektionerar + ordnar på advisorns behind-set, som
-  // bygger på TV-detaljqueries. Gatear vi inte på advisor.isLoading (äkta
-  // settled-flagga sedan 9f5b731) grupperas korten på partiell data och
-  // migrerar synligt mellan sektioner allteftersom queries löser. Samma
-  // mönster som R1: rendera en gång på komplett data. Gäller BARA 'mina' —
-  // övriga biblioteksvyer använder inte advisor-datat och ska inte blockeras.
-  if (watchlistLoading || (status === 'mina' && advisor.isLoading)) {
+  // bygger på TV-detaljqueries. Vi gatear INTE längre /my/series på
+  // advisor.isLoading — sidan renderas direkt på persisterade fält
+  // (librarySubState klarar knownBehind=false by design, behind-settet är
+  // fryst till EMPTY_BEHIND medan advisorn laddar). När advisorn settlat sker
+  // EN re-bucketing — ingen gradvis sektionsmigration medan queries löser en
+  // och en. Undantag: "ligger efter"-filtret (behindFilterActive) KRÄVER
+  // behind-settet, annars visar vi en felaktigt tom filtrerad lista — där
+  // behålls gaten. Övriga biblioteksvyer använder inte advisor-datat alls.
+  if (watchlistLoading || (behindFilterActive && advisor.isLoading)) {
     return (
       <>
         <header>
