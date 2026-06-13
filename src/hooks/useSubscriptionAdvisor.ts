@@ -17,6 +17,7 @@ import {
   getNextAirInfo,
   isWithinDays,
   isUserBehindOnAired,
+  isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
 } from './useSubscriptionAdvisor.helpers';
@@ -107,6 +108,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
         unfinishedTmdbIds: new Set<number>(),
+        endedCaughtUpTmdbIds: new Set<number>(),
       };
     }
     // Om alla TMDB-queries failar har vi ingen anchor-data att arbeta med.
@@ -123,6 +125,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
         activePauses: [] as ActivePause[],
         mostUsedProvider: null as MostUsedProvider | null,
         unfinishedTmdbIds: new Set<number>(),
+        endedCaughtUpTmdbIds: new Set<number>(),
       };
     }
 
@@ -345,10 +348,18 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
     // om användaren är ikapp eller bakom showens senaste aireade avsnitt.
     const showsByTmdbId = new Map<number, TMDBTVShow>(shows.map(s => [s.id, s]));
     const unfinishedTmdbIds = new Set<number>();
+    // tmdbIds där användaren är ikapp PÅ en avslutad/inställd serie. Samma
+    // redan-hämtade TMDB-data som behind-settet — biblioteket använder det för
+    // att flytta avslutade serier till "Avslutade" istället för catch-allen,
+    // även när lazy-backfillad tmdbStatus saknas (librarySubState).
+    const endedCaughtUpTmdbIds = new Set<number>();
     for (const item of followingTV) {
       const show = showsByTmdbId.get(item.tmdbId);
-      if (show && isUserBehindOnAired(item, show)) {
+      if (!show) continue;
+      if (isUserBehindOnAired(item, show)) {
         unfinishedTmdbIds.add(item.tmdbId);
+      } else if (isCaughtUpOnEndedShow(item, show)) {
+        endedCaughtUpTmdbIds.add(item.tmdbId);
       }
     }
 
@@ -438,6 +449,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       activePauses,
       mostUsedProvider,
       unfinishedTmdbIds,
+      endedCaughtUpTmdbIds,
     };
   }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 

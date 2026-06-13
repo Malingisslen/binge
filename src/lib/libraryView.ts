@@ -31,10 +31,21 @@ import type { WatchStatus, WatchlistItem } from '@/types';
 // används där sådan redan finns (titelsidor). Biblioteket använder denna.
 export type LibrarySubState = 'ligger_efter' | 'paborjad' | 'ej_paborjad' | 'avslutad';
 
-export function librarySubState(item: WatchlistItem, knownBehind = false): LibrarySubState {
+// `knownBehind` och `knownEndedCaughtUp` är ömsesidigt uteslutande live-signaler
+// från Streamingrådgivarens redan hämtade TMDB-data (samma som behind-settet —
+// INGEN extra fan-out): en serie är antingen bakom på aireade avsnitt
+// (knownBehind) eller ikapp. `knownEndedCaughtUp` = ikapp PÅ en Ended/Canceled
+// show → 'avslutad'. Detta fångar fallet där tmdbStatus/totalSeasons aldrig
+// lazy-backfillats men rådgivaren ändå vet att showen är slut.
+export function librarySubState(
+  item: WatchlistItem,
+  knownBehind = false,
+  knownEndedCaughtUp = false,
+): LibrarySubState {
   // == null (inte falsy): säsong 0 (Specials) är giltig progress.
   if (item.lastWatchedSeason == null) return 'ej_paborjad';
   if (knownBehind) return 'ligger_efter';
+  if (knownEndedCaughtUp) return 'avslutad';
   if (item.tmdbStatus != null && isEndedStatus(item.tmdbStatus) && item.totalSeasons != null) {
     return item.lastWatchedSeason < item.totalSeasons ? 'ligger_efter' : 'avslutad';
   }
@@ -48,7 +59,10 @@ export const LIBRARY_SUB_STATE_ORDER: LibrarySubState[] = [
 
 export const LIBRARY_SECTION_LABELS: Record<LibrarySubState, string> = {
   ligger_efter: 'Ligger efter',
-  paborjad: 'Pågående',
+  // "Påbörjade" (inte "Pågående"): den här catch-all-sektionen påstår bara att
+  // DU har börjat — inte att SERIEN sänds. En avslutad serie utan backfillad
+  // status kan hamna här innan rådgivaren laddat, och "Pågående" vore då fel.
+  paborjad: 'Påbörjade',
   ej_paborjad: 'Ej påbörjade',
   avslutad: 'Avslutade',
 };

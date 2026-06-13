@@ -6,6 +6,7 @@ import {
   getNextAirInfo,
   isWithinDays,
   isUserBehindOnAired,
+  isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
   CATCHUP_THRESHOLD,
@@ -281,6 +282,64 @@ describe('isUserBehindOnAired', () => {
     const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 1 });
     const show = makeShow({ last_episode_to_air: makeEpisode(1, 1) });
     expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+});
+
+// --- isCaughtUpOnEndedShow ---
+// Settet endedCaughtUpTmdbIds måste betyda EXAKT vad namnet säger: påbörjad,
+// ikapp på aireade avsnitt, OCH avslutad serie. Annars flyttar librarySubState
+// fel serier till "Avslutade" (collapsed → göms).
+describe('isCaughtUpOnEndedShow', () => {
+  function makeShow(overrides: Partial<TMDBTVShow>): TMDBTVShow {
+    return {
+      id: 1, name: 'Show', original_name: 'Show', overview: '', poster_path: null,
+      backdrop_path: null, first_air_date: '', last_air_date: '', vote_average: 0,
+      vote_count: 0, genres: [], number_of_seasons: 5, number_of_episodes: 50,
+      status: 'Ended', seasons: [], next_episode_to_air: null, last_episode_to_air: null,
+      ...overrides,
+    };
+  }
+  function makeEpisode(season: number, episode: number) {
+    return { id: 1, episode_number: episode, season_number: season, name: '', overview: '', air_date: '2024-01-01', still_path: null, vote_average: 0, runtime: 0 };
+  }
+
+  it('returns true when started, caught up to the finale, and the show has ended', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 5, lastWatchedEpisode: 10 });
+    const show = makeShow({ status: 'Ended', last_episode_to_air: makeEpisode(5, 10) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(true);
+  });
+
+  it('returns true for Canceled shows the user is caught up on', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 2, lastWatchedEpisode: 6 });
+    const show = makeShow({ status: 'Canceled', last_episode_to_air: makeEpisode(2, 6) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(true);
+  });
+
+  it('returns false when the user is still behind aired episodes (belongs in Ligger efter, not Avslutade)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 1, lastWatchedEpisode: 3 });
+    const show = makeShow({ status: 'Ended', last_episode_to_air: makeEpisode(5, 10) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
+  });
+
+  it('returns false when the show has not ended (Returning Series)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 2, lastWatchedEpisode: 5 });
+    const show = makeShow({ status: 'Returning Series', last_episode_to_air: makeEpisode(2, 5) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
+  });
+
+  it('returns false when last_episode_to_air is missing — no aired-data means caught-up is unprovable (the regression guard)', () => {
+    // Ended show utan last_episode_to_air: isUserBehindOnAired returnerar false
+    // (saknad aired-data), men vi VET inte att användaren är ikapp. Får inte
+    // klassas som avslutad — annars göms en serie man ligger 4 säsonger efter på.
+    const item = makeWatchlistItem({ lastWatchedSeason: 1, lastWatchedEpisode: 3 });
+    const show = makeShow({ status: 'Ended', last_episode_to_air: null });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
+  });
+
+  it('returns false for an unstarted show even if ended (belongs in Ej påbörjade)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: null });
+    const show = makeShow({ status: 'Ended', last_episode_to_air: makeEpisode(5, 10) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
   });
 });
 

@@ -89,6 +89,23 @@ describe('librarySubState', () => {
     const item = makeItem({ lastWatchedSeason: 1, lastWatchedEpisode: 4, tmdbStatus: null, totalSeasons: 2 });
     expect(librarySubState(item)).toBe('paborjad');
   });
+
+  // === knownEndedCaughtUp — rådgivarens redan hämtade aired-data (root-fix) ===
+  // En avslutad serie du är ikapp på ska landa i 'avslutad', inte i catch-all
+  // 'paborjad' — även när tmdbStatus/totalSeasons aldrig lazy-backfillats.
+  it('returns avslutad when advisor confirms caught-up + ended, even with no persisted tmdbStatus/totalSeasons', () => {
+    const item = makeItem({ lastWatchedSeason: 3, lastWatchedEpisode: 8, tmdbStatus: null, totalSeasons: null });
+    expect(librarySubState(item, false, true)).toBe('avslutad');
+  });
+
+  it('knownBehind wins over knownEndedCaughtUp (mutually exclusive live signals, defensive)', () => {
+    const item = makeItem({ lastWatchedSeason: 2, lastWatchedEpisode: 3 });
+    expect(librarySubState(item, true, true)).toBe('ligger_efter');
+  });
+
+  it('never claims avslutad for an unstarted show even with knownEndedCaughtUp', () => {
+    expect(librarySubState(makeItem({}), false, true)).toBe('ej_paborjad');
+  });
 });
 
 describe('LIBRARY_SUB_STATE_ORDER + LIBRARY_SECTION_LABELS', () => {
@@ -96,7 +113,7 @@ describe('LIBRARY_SUB_STATE_ORDER + LIBRARY_SECTION_LABELS', () => {
     expect(LIBRARY_SUB_STATE_ORDER).toEqual(['ligger_efter', 'paborjad', 'ej_paborjad', 'avslutad']);
     expect(LIBRARY_SECTION_LABELS).toEqual({
       ligger_efter: 'Ligger efter',
-      paborjad: 'Pågående',
+      paborjad: 'Påbörjade',
       ej_paborjad: 'Ej påbörjade',
       avslutad: 'Avslutade',
     });

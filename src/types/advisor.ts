@@ -94,4 +94,8 @@ export interface AdvisorResult {
   // aireade avsnitt. Används av WatchlistPage's ?status=behind-filter så
   // catchup-länken matchar siffran på Streamingrådgivar-kortet.
   unfinishedTmdbIds: Set<number>;
+  // tmdbIds för Följer-serier där användaren är ikapp PÅ en avslutad/inställd
+  // serie. /my/series använder det för att sortera avslutade serier till
+  // "Avslutade" även när lazy-backfillad tmdbStatus saknas (librarySubState).
+  endedCaughtUpTmdbIds: Set<number>;
 }

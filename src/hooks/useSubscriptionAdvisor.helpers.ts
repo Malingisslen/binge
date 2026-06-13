@@ -4,6 +4,7 @@
 // without pulling in Firebase/React Query/Auth dependencies.
 
 import { formatEpisodeCode, todayIso } from '@/lib/utils';
+import { isEndedStatus } from '@/lib/airingState';
 import type {
   TMDBTVShow,
   ProviderAdvisory,
@@ -71,6 +72,21 @@ export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): bool
   if (userS < last.season_number) return true;
   if (userS === last.season_number && userE < last.episode_number) return true;
   return false;
+}
+
+// Ikapp PÅ en avslutad/inställd serie. Kräver POSITIVT bevis på ikapp-läge,
+// inte bara "inte känd som bakom": serien måste vara påbörjad, ha aireade
+// avsnitt att vara ikapp mot (last_episode_to_air), användaren inte ligga efter
+// dem, OCH showen vara Ended/Canceled. Utan last_episode_to_air vet vi inte att
+// någon är ikapp — då får serien inte klassas som avslutad (annars göms en
+// serie man ligger flera säsonger efter på under collapsed "Avslutade").
+// Biblioteket använder detta (via endedCaughtUpTmdbIds) för att flytta avslutade
+// serier rätt även när lazy-backfillad tmdbStatus saknas.
+export function isCaughtUpOnEndedShow(item: WatchlistItem, show: TMDBTVShow): boolean {
+  if (item.lastWatchedSeason == null) return false; // ej påbörjad
+  if (!show.last_episode_to_air) return false;      // ingen aired-data → ikapp ej bevisbart
+  if (isUserBehindOnAired(item, show)) return false; // ligger efter
+  return isEndedStatus(show.status);
 }
 
 export function findCatchupCandidate(

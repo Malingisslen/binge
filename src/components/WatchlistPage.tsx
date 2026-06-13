@@ -120,7 +120,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   useEffect(() => {
     // B15 (works-as-designed): /my/series öppnar alltid i Kort-vyn oavsett
     // användarens defaultView-inställning. Kort är den enda vyn med
-    // sub-state-sektionsrubriker (Ligger efter/Pågående/…) — det är vyn som
+    // sub-state-sektionsrubriker (Ligger efter/Påbörjade/…) — det är vyn som
     // gör Följer-listan aktionerbar. Tabell/Rutnät får samma gruppordning
     // (se displayItems) men utan rubriker. Medvetet undantag — ska inte
     // flaggas som bugg i framtida audits.
@@ -167,8 +167,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // på den här sidan — INGEN extra TMDB-fan-out introduceras för substate.
   const subStateOf = useMemo(() => {
     const behind = advisor.isLoading ? EMPTY_BEHIND : advisor.unfinishedTmdbIds;
-    return (item: WatchlistItem) => librarySubState(item, behind.has(item.tmdbId));
-  }, [advisor.isLoading, advisor.unfinishedTmdbIds]);
+    const endedCaughtUp = advisor.isLoading ? EMPTY_BEHIND : advisor.endedCaughtUpTmdbIds;
+    return (item: WatchlistItem) =>
+      librarySubState(item, behind.has(item.tmdbId), endedCaughtUp.has(item.tmdbId));
+  }, [advisor.isLoading, advisor.unfinishedTmdbIds, advisor.endedCaughtUpTmdbIds]);
 
   // B6: alla tre vyer (Kort/Tabell/Rutnät) visar samma gruppordning för
   // /my/series — ligger efter → pågående → ej påbörjade → avslutade, stabilt

@@ -16,12 +16,14 @@ const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(au
 //
 //   "Ligger efter"  — säkert bakom (aired-data via advisorns behind-set,
 //                     eller Ended-serie med osedda säsonger). Mest aktionerbar.
-//   "Pågående"      — påbörjad; ikapp-vs-efter går inte att avgöra utan
-//                     aired-data, så vi påstår ingetdera. Kortet visar bara
-//                     vad vi vet ("S2E10 sedd" / "Nytt ons").
+//   "Påbörjade"     — du har börjat; ikapp-vs-efter går inte att avgöra utan
+//                     aired-data, så vi påstår ingetdera om SERIEN (namnet
+//                     säger bara att DU börjat, inte att den pågår). Kortet
+//                     visar bara vad vi vet ("S2E10 sedd" / "Nytt ons").
 //   "Ej påbörjade"  — ingen progress sparad.
-//   "Avslutade"     — Ended/Canceled + sedd till sista kända säsongen.
-//                     Collapsed default eftersom inget mer kommer.
+//   "Avslutade"     — Ended/Canceled + sedd till sista kända säsongen (eller
+//                     ikapp enligt advisorns aired-data). Collapsed default
+//                     eftersom inget mer kommer.
 //
 // Endast TV-titlar når hit — WatchlistPage filtrerar bort ev. legacy
 // 'mina'-film (mediaType !== 'tv') innan bucketBySubState anropas.
