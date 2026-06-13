@@ -56,6 +56,7 @@ export default function HemFocal({ entry }: Props) {
             src={still}
             alt=""
             loading="eager"
+            fetchPriority="high"
             decoding="async"
             width={1280}
             height={548}
@@ -77,7 +78,7 @@ export default function HemFocal({ entry }: Props) {
             <img
               src={poster}
               alt=""
-              loading="lazy"
+              loading="eager"
               decoding="async"
               width={342}
               height={513}
