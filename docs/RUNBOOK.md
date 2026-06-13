@@ -211,6 +211,23 @@ hänger:
 - Om återkommande: kolla Firebase Hosting-kvoterna (Spark har 1 GB/mån
   storage + 360 MB/dag transfer)
 
+### 6d. "took more than 60 seconds" / static export avbryts
+
+Symptom: `Failed to build /{tv,movie,person}/[id]/page: /…/<id> after 3 attempts. Export encountered an error … exiting the build.`
+
+Orsak: byggtids-TMDB-strypning fick en sida att passera Next 60s-tak. Ska inte
+längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
+`src/lib/tmdb/buildFetch.ts`), men om det återkommer:
+1. **Kör om** workflowen — oftast en övergående TMDB-strypning.
+2. Kontrollera att `.tmdb-cache` faktiskt restoras (steget "Restore TMDB build
+   cache" i deploy-loggen — "Cache restored" vs "Cache not found"). Kall cache
+   = full refetch = långsam/skör build.
+3. En kall körning (ny cache-nyckel, eller veckans `schedule`-refresh med
+   `TMDB_CACHE_BUST=1`) hämtar alla titlar och är förväntat långsam (~25 min) —
+   men ska förbli grön tack vare timeouten.
+4. Höj inte sidantalet (`SEO_*` i `seoCoverage.ts`); sänk aldrig
+   `BUILD_FETCH_TIMEOUT_MS` under ~10s (frisk fetch måste hinna klart).
+
 ---
 
 ## 7. "Sentry-alert triggade"

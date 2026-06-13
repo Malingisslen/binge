@@ -329,6 +329,22 @@ Se `.env.local.example` för dev-setup.
 till `out/` → Firebase Hosting (`public: "out"`) → Cloudflare proxy.
 SPA-rewrite `**` → `/index.html`.
 
+**Byggtids-TMDB (SEO-pre-rendering):** `/{tv,movie,person}/[id]` pre-renderas
+för ~25k populära titlar (`generateStaticParams`). Varje sida gör ett
+TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
+`buildCache.ts`):
+- **AbortSignal.timeout (20s)** på alla byggtids-anrop → ingen sida når Next
+  60s-tak; exporten kan aldrig avbrytas av en strypt fetch (otursdrabbade
+  sidor får tunn metadata, bygget förblir grönt).
+- **Fil-cache `.tmdb-cache/`** (TTL 7 dagar) persistas mellan CI-körningar via
+  `actions/cache`. Kod-deployer hämtar därför nästan inga titlar (cache-träff)
+  → ingen strypning, snabb deploy. Veckovis schemalagd deploy (cron i
+  `deploy.yml`) sätter `TMDB_CACHE_BUST=1` och hämtar färsk metadata.
+
+Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
+`noindex` by default, så en icke-pre-renderad titel indexeras opålitligt
+(endast efter JS-hydrering). Mekaniken är fixad; täckningen ska behållas.
+
 GitHub Actions-workflows:
 - `ci.yml` — lint + typecheck + test + build på PR:s och non-main pushes
 - `deploy.yml` — kvalitetsgrindar + deploy live på push till main
