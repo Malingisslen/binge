@@ -10,11 +10,19 @@ import { captureError } from './sentry';
 export const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 
 // Whitelist för vad som persisteras till localStorage (~5 MB-kvot).
-// Lite-queries + säsonger + katalogytor = det som gör återbesök snabba.
+// Lite-queries (show-nivå) + katalogytor = det som gör återbesök snabba.
 // INTE fulla ['tv']/['movie']-detaljsvar (20–80 KB JSON styck × bibliotek
 // spränger kvoten) och INTE search (flyktigt).
+//
+// INTE 'tv-season': säsongssvaren (fulla avsnittslistor med stills/overviews)
+// är 30–60 KB/säsong och dominerade hela 5 MB-budgeten i produktion (mätt:
+// 5053 av 5092 KB var tv-season), vilket trängde ut de små värdefulla
+// queryerna via removeOldestQuery-eviction. Säsongsdata är kalender-specifik
+// och re-fetchas billigt (SEASON-tier, WeekStrip-defer:ad) — den hör inte
+// hemma i den knappa localStorage-budgeten. Show-nivå-'tv-lite' räcker för
+// att rådgivare/bibliotek ska rendera direkt vid återbesök.
 const PERSISTED_QUERY_PREFIXES = new Set([
-  'tv-lite', 'movie-lite', 'tv-season',
+  'tv-lite', 'movie-lite',
   'genres-movie', 'genres-tv', 'watch-providers',
   'trending', 'popular-movies', 'popular-tv', 'discover-movies', 'discover-tv',
 ]);
