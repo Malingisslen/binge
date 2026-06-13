@@ -50,3 +50,6 @@ next-env.d.ts
 
 # lokala lighthouse-audits (regenereras via scripts/serve-spa.mjs + lighthouse CLI)
 .lighthouse/
+
+# TMDB-byggcache (persistas mellan CI-körningar via actions/cache, aldrig committad)
+.tmdb-cache/

@@ -32,7 +32,7 @@ export const dynamicParams = false;
  * Konstanter delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
 
-const cachedGetPerson = cache((id: number) => fetchForBuild(getPerson, id));
+const cachedGetPerson = cache((id: number) => fetchForBuild('person', getPerson, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   try {

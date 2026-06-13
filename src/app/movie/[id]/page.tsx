@@ -39,7 +39,7 @@ export const dynamicParams = false;
 // React's cache() dedupar fetchen inom samma render-pass — Next anropar
 // generateMetadata och default-export separat per route, men cache() ser
 // till att TMDB bara träffas en gång per id.
-const cachedGetMovie = cache((id: number) => fetchForBuild(getMovie, id));
+const cachedGetMovie = cache((id: number) => fetchForBuild('movie', getMovie, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   const collectIds = async (

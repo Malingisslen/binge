@@ -34,7 +34,7 @@ export const dynamicParams = false;
  * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
  */
 
-const cachedGetTVShow = cache((id: number) => fetchForBuild(getTVShow, id));
+const cachedGetTVShow = cache((id: number) => fetchForBuild('tv', getTVShow, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   const collectIds = async (

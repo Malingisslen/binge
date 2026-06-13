@@ -8,7 +8,10 @@
 // sidans generateMetadata/page faller tillbaka på tom metadata / undefined data
 // (try/catch finns redan på alla anropställen) → bygget förblir grönt.
 //
-// Cache-lagret komponeras in i steg 3 (se buildCache.ts).
+// Cachen (buildCache.ts) komponeras in nedan: cache-träff hoppar över fetchen
+// helt, så en kod-deploy hämtar nästan inga titlar.
+
+import { readBuildCache, writeBuildCache } from './buildCache';
 
 type IdFetcher<T> = (id: number, opts?: { signal?: AbortSignal }) => Promise<T>;
 
@@ -22,6 +25,14 @@ export function buildSignal(): AbortSignal {
   return AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS);
 }
 
-export function fetchForBuild<T>(fetcher: IdFetcher<T>, id: number): Promise<T> {
-  return fetcher(id, { signal: buildSignal() });
+export async function fetchForBuild<T>(
+  kind: string,
+  fetcher: IdFetcher<T>,
+  id: number,
+): Promise<T> {
+  const cached = readBuildCache<T>(kind, id);
+  if (cached !== null) return cached;
+  const data = await fetcher(id, { signal: buildSignal() });
+  writeBuildCache(kind, id, data);
+  return data;
 }
