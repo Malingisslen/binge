@@ -20,6 +20,9 @@ describe('shouldPersistQuery', () => {
     expect(shouldPersistQuery(q(['tv-lite', 123]))).toBe(false);
     expect(shouldPersistQuery(q(['movie-lite', 27205]))).toBe(false);
     expect(shouldPersistQuery(q(['tv-season', 123, 2]))).toBe(false);
+    // watch-providers är också per-titel (multi-country, ~40 KB/titel) —
+    // stod för 1396 av 1409 KB i produktion efter att tv-lite togs bort.
+    expect(shouldPersistQuery(q(['watch-providers', 'tv', 123]))).toBe(false);
   });
   it('skippar tunga/fulla detaljsvar och sök', () => {
     expect(shouldPersistQuery(q(['tv', 123]))).toBe(false);

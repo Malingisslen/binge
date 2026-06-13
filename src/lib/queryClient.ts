@@ -21,8 +21,12 @@ export const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 // biblioteks-/watchlist-datan är redan momentan via Firestores IndexedDB-cache
 // (persistentLocalCache), så återbesöks-upplevelsen bevaras ändå. Katalog-
 // queryerna nedan är några få KB totalt, stabila och delade mellan användare.
+// OBS: 'watch-providers' hör INTE hit — det är per-titel ('watch-providers',
+// mediaType, id) och multi-country-svaren är ~40 KB/titel. Mätt i produktion
+// stod den för 1396 av 1409 KB efter att tv-lite tagits bort. Samma princip:
+// per-titel-data persisteras aldrig, oavsett hur "liten" den ser ut.
 const PERSISTED_QUERY_PREFIXES = new Set([
-  'genres-movie', 'genres-tv', 'watch-providers',
+  'genres-movie', 'genres-tv',
   'trending', 'popular-movies', 'popular-tv', 'discover-movies', 'discover-tv',
 ]);
 
