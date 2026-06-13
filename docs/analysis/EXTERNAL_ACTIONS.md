@@ -343,23 +343,39 @@ main som failar lint kan fortfarande deploya om vi inte blocker.
 
 ---
 
-## Cloudflare Cache Rule för HTML (prestandaplan 2026-06-11, åtgärd 1b)
+## Cloudflare Cache Rule för HTML (prestandaplan 2026-06-11, åtgärd 1b) — ✅ KLAR 2026-06-13
 
-Kräver inloggning i Cloudflare-dashboarden (free plan räcker):
+Skapad och Active i Cloudflare-dashboarden (free plan). **As-built-konfiguration**
+(återskapa exakt så här om regeln någonsin måste byggas om):
 
-1. Caching → Cache Rules → Create rule, namn: `Edge-cache HTML kort`
-2. When incoming requests match: Hostname equals `binge.nu`
-3. Then: Eligible for cache, Edge TTL: **Override origin → 10 minutes**,
-   Browser TTL: **Respect origin**
-4. Under **Advanced options** i Cache Rule: sätt **Status Code TTL** till
-   **no-cache för 4xx och 5xx** (eller motsvarande formulering i CF-UI:t) —
-   annars edge-cacheas felstatus i 10 min. Bara 200-svar ska edge-cacheas.
-5. Spara. `/commit`-skillen purgar redan hela zonen vid deploy, så regeln är
-   säker — max 10 min stale efter en deploy som inte går via /commit.
+- **Namn:** `Edge-cache HTML kort` · Order: First
+- **When incoming requests match** (custom filter expression):
+  ```
+  (http.host eq "binge.nu" and not starts_with(http.request.uri.path, "/_next/") and not starts_with(http.request.uri.path, "/api/"))
+  ```
+  `/_next/`-exkludering är KRITISK — annars nedgraderas de immutable-cachade
+  statiska assetsen till 10 min edge-TTL. `/api/` exkluderar funktions-endpointen.
+- **Then → Cache eligibility:** Eligible for cache
+- **Edge TTL:** *Ignore cache-control header and use this TTL* → **10 minutes**.
+  (Origin skickar `no-cache` från firebase.json, så "ignore" krävs för att edge
+  alls ska cacha — "use cache-control if present" skulle bypassa.)
+- **Edge TTL → Status code TTL:** Scope *Greater than or equal* · `400` ·
+  Duration **No store** (felstatus 4xx/5xx cachas aldrig på edge).
+- **Browser TTL:** **Respect origin TTL** ← GOTCHA: lämnar man Browser TTL
+  oställd faller CF tillbaka på *zonens* Browser Cache TTL (4h default) och
+  skickar `max-age=14400` till browsern istället för origins `no-cache`. Måste
+  sättas explicit till "Respect origin TTL".
+
+**Verifierat live 2026-06-13:**
+- `curl -sI https://binge.nu/calendar/` → `Cache-Control: no-cache, must-revalidate`
+  + `Cf-Cache-Status: HIT` (edge cachar, browser revaliderar).
+- `/_next/static/*.js` → `public, max-age=31536000, immutable` + HIT (orört).
 
 Effekt: long-tail-HTML (alla rewrites till /_/index.html) serveras från
 Cloudflare-edge (~0 ms origin-tid) istället för Fastly-MISS mot Firebase
-(~235–275 ms extra TTFB, live-uppmätt).
+(~235–275 ms extra TTFB). `/commit`-skillen purgar hela zonen vid deploy, så
+max 10 min stale efter en deploy som inte går via /commit (browsern revaliderar
+ändå direkt eftersom den får no-cache).
 
 ---
 
