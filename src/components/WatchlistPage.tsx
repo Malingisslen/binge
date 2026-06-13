@@ -223,8 +223,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // advisor.isLoading — sidan renderas direkt på persisterade fält
   // (librarySubState klarar knownBehind=false by design, behind-settet är
   // fryst till EMPTY_BEHIND medan advisorn laddar). När advisorn settlat sker
-  // EN re-bucketing — ingen gradvis sektionsmigration medan queries löser en
-  // och en. Undantag: "ligger efter"-filtret (behindFilterActive) KRÄVER
+  // EN re-bucketing vid initial settle — ingen gradvis sektionsmigration medan
+  // queries löser en och en. (Senare Firestore-snapshots kan trigga ytterligare
+  // re-bucketings, men varje sådan är korrekt — inte den gradvisa flickern vi
+  // undviker här.) Undantag: "ligger efter"-filtret (behindFilterActive) KRÄVER
   // behind-settet, annars visar vi en felaktigt tom filtrerad lista — där
   // behålls gaten. Övriga biblioteksvyer använder inte advisor-datat alls.
   if (watchlistLoading || (behindFilterActive && advisor.isLoading)) {
