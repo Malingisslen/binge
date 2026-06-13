@@ -62,9 +62,10 @@ jobs:
       - name: Build
         # Säkerhetsspärr: ett friskt bygge tar ~7–8 min. Om TMDB-API:t stryper
         # oss kan byggets sidgenerering krypa i 40+ min och blockera deploy-kön.
-        # Fail fast efter 20 min istället — då syns problemet tydligt och kön
-        # släpps, istället för att en trög publicering låser allt.
-        timeout-minutes: 20
+        # Fail fast efter 30 min istället — fångar 40+ min-hängningarna men ger
+        # marginal åt den veckovisa full-refreshen (hämtar om alla titlar kallt)
+        # även en trög TMDB-dag, så vi inte kapar en legitim körning.
+        timeout-minutes: 30
         run: npm run build
         env:
           NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
