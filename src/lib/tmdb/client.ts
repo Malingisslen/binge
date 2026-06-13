@@ -106,6 +106,13 @@ export function posterUrl(path: string | null, size: 'w92' | 'w154' | 'w185' | '
   return `${IMAGE_BASE}/${size}${path}`;
 }
 
+// srcset för poster-grids: låter browsern välja w185 för små celler/DPR1
+// och w342/w500 för stora/DPR2+. Använd med sizes-attribut i konsumenten.
+export function posterSrcSet(path: string | null): string | undefined {
+  if (!path) return undefined;
+  return `${IMAGE_BASE}/w185${path} 185w, ${IMAGE_BASE}/w342${path} 342w, ${IMAGE_BASE}/w500${path} 500w`;
+}
+
 export function stillUrl(path: string | null, size: 'w185' | 'w300' | 'w500' = 'w300'): string | null {
   if (!path) return null;
   return `${IMAGE_BASE}/${size}${path}`;

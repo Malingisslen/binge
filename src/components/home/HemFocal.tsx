@@ -31,7 +31,7 @@ export default function HemFocal({ entry }: Props) {
   const days = daysFromToday(entry.airDate);
   const tone = toneForId(entry.tmdbId);
   const still = backdropUrl(entry.backdropPath, 'w1280');
-  const poster = posterUrl(entry.posterPath, 'w342');
+  const poster = posterUrl(entry.posterPath, 'w185');
   // H4: bitmap-placeholder — 21:9-ytan och postern skimrar tills respektive
   // bild laddat (eller felat), sedan tonas bitmappen in. Utan detta står
   // den stora .still-ytan visuellt tom i sekunder medan w1280-bilden hämtas.

@@ -37,8 +37,8 @@ export default function EventCard({ entry, isTonight = false }: Props) {
 
   // Still path preferred (episode-specific), backdrop as fallback. Both go
   // through the same duotone treatment.
-  const still = stillUrl(entry.backdropPath, 'w500')
-    ?? backdropUrl(entry.backdropPath, 'w780');
+  const still = stillUrl(entry.backdropPath, 'w300')
+    ?? backdropUrl(entry.backdropPath, 'w300');
 
   // Synopsis: episodes carry an episode name + overview; movies just an
   // overview. Narrow on `kind` to read the right fields.

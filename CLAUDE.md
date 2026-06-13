@@ -284,7 +284,7 @@ Allt annat är platt. Inga `drop-shadow`-, `filter: blur`- eller godtyckliga box
 
 Posters renderas med per-genre duotone-filter via SVG-defs (`DuotoneFilters`, monteras en gång i `AppShell`). Åtta färgscheman: `duo-terra`, `duo-slate`, `duo-moss`, `duo-clay`, `duo-plum`, `duo-steel`, `duo-olive`, `duo-oxblood`.
 
-- Hover på poster → `filter: none` (avslöjar original-bitmap). Transition 220ms.
+- Hover på poster → `filter: none` (avslöjar original-bitmap) (momentant — SVG-filter→none kan inte interpoleras, så ingen transition).
 - Hover på filmkort → `translateY(-2px)` på `.poster`. Denna transform är **avsiktlig** — den gamla "inget transform/scale på hover"-regeln gäller inte längre.
 - Liten vit indikator-prick (bottom-right) syns vid hover som UX-ledtråd.
 
