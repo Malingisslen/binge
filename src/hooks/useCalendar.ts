@@ -28,7 +28,8 @@ export interface UseCalendarResult {
   isLoading: boolean;
 }
 
-export function useCalendarEntries(): UseCalendarResult {
+export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalendarResult {
+  const enabled = opts.enabled ?? true;
   const { getByStatus } = useWatchlist();
   // Kalendern visar avsnitt för alla serier du följer ('mina') — inklusive
   // ej påbörjade (premiärbevakning är ett kärnvärde). Filmer i 'vill_se'
@@ -51,6 +52,7 @@ export function useCalendarEntries(): UseCalendarResult {
       // semaphore-slots inte läcker.
       queryFn: ({ signal }: { signal: AbortSignal }) => getTVShowLite(id, { signal }),
       staleTime: TMDB_STALE.LITE_DETAIL,
+      enabled,
     })),
   });
 
@@ -91,6 +93,7 @@ export function useCalendarEntries(): UseCalendarResult {
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         getTVSeason(spec.showId, spec.seasonNum, { signal }),
       staleTime: TMDB_STALE.SEASON,
+      enabled,
     })),
   });
 
@@ -126,6 +129,7 @@ export function useCalendarEntries(): UseCalendarResult {
       queryKey: ['movie-lite', id],
       queryFn: ({ signal }: { signal: AbortSignal }) => getMovieLite(id, { signal }),
       staleTime: TMDB_STALE.LITE_DETAIL,
+      enabled,
     })),
   });
 

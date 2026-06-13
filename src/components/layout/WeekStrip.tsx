@@ -74,7 +74,25 @@ export default function WeekStrip() {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
 
-  const { entries, isLoading } = useCalendarEntries();
+  // Strippen sitter på VARJE sida och dess kalenderpipeline (N show- + N
+  // säsongs-queries) tog tidigare semaforens alla 8 slots före sidans egna
+  // queries. Aktivera den först efter idle (~1,5 s) — sidans innehåll vinner
+  // first paint, strippen fylls strax efter. På /calendar och Hem kör sidans
+  // egen useCalendarEntries() (default enabled) så datat finns ändå direkt
+  // via delad cache.
+  const [calendarEnabled, setCalendarEnabled] = useState(false);
+  useEffect(() => {
+    const start = () => setCalendarEnabled(true);
+    const ric = window.requestIdleCallback;
+    if (typeof ric === 'function') {
+      const id = ric.call(window, start, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(start, 1500);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const { entries, isLoading } = useCalendarEntries({ enabled: calendarEnabled });
   const { getItem } = useWatchlist();
   const seriesByDay = useMemo(
     () => aggregateByDay(entries, (id) => getItem(id)?.rating ?? null),
