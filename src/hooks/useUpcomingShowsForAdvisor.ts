@@ -194,7 +194,11 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
       totalEpisodes,
       weeks,
       trailingQuietWeeks,
-      isLoading: calLoading,
+      // Vänta på BÅDE kalendern och rådgivaren. Kalendern kan lösas från cache
+      // (calLoading=false) medan rådgivaren fortfarande hämtar watchlist + TMDB
+      // (advisor.isLoading=true, providers=[]) → annars returneras ett falskt
+      // "inget på gång" som poppar in den riktiga listan när rådgivaren landar.
+      isLoading: calLoading || advisor.isLoading,
     };
-  }, [advisor.providers, calendarEntries, weeks, calLoading, user?.providerPauses]);
+  }, [advisor.providers, advisor.isLoading, calendarEntries, weeks, calLoading, user?.providerPauses]);
 }
