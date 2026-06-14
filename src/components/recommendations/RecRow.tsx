@@ -36,9 +36,9 @@ function whyForRow(spec: RowSpec): string {
     case 'trending':
       return 'populärt i Sverige · uppdaterat veckovis';
     case 'latest-fav':
-      return 'drivande seed · färska 5★-betyg';
+      return 'byggd på din senaste 5★-favorit';
     case 'similar':
-      return spec.meta?.seed ? 'matchar din seed-titel' : 'baserat på dina ratings';
+      return spec.meta?.seed ? 'utgår från en av dina favoriter' : 'baserat på dina betyg';
     case 'person':
       return spec.meta?.person?.knownFor === 'director'
         ? 'samma regissör'
@@ -46,7 +46,7 @@ function whyForRow(spec: RowSpec): string {
     case 'genre-canon':
       return 'kanon i din mest tittade genre';
     case 'thematic':
-      return 'extraherat tema · ej genre';
+      return 'röd tråd i dina favoriter';
     case 'upcoming':
       return 'kommande på dina tjänster';
   }
