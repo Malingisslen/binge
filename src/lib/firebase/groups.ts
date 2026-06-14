@@ -506,9 +506,17 @@ export async function getGroupSessionHistory(groupId: string, limit = 10): Promi
   participantUids: string[];
   pickedAt: Date;
 }[]> {
-  const { db, collection, getDocs } = await fsdb();
-  const snap = await getDocs(collection(db, 'groups', groupId, 'sessionHistory'));
-  const items = snap.docs.map(d => {
+  const { db, collection, getDocs, query, orderBy, limit: queryLimit } = await fsdb();
+  // Avgränsa server-side: nyast först, max `limit` docs. Tidigare lästes HELA
+  // sessionHistory och sorterades/slice:ades i JS — O(all-history) reads varje
+  // gång sektionen laddas (växer med gruppens ålder). Single-field orderBy
+  // kräver inget composite-index (samma mönster som getRecentSessionPicks…).
+  const snap = await getDocs(query(
+    collection(db, 'groups', groupId, 'sessionHistory'),
+    orderBy('pickedAt', 'desc'),
+    queryLimit(limit),
+  ));
+  return snap.docs.map(d => {
     const data = d.data();
     return {
       sessionId: d.id,
@@ -520,8 +528,6 @@ export async function getGroupSessionHistory(groupId: string, limit = 10): Promi
       pickedAt: data.pickedAt?.toDate?.() ?? new Date(),
     };
   });
-  items.sort((a, b) => b.pickedAt.getTime() - a.pickedAt.getTime());
-  return items.slice(0, limit);
 }
 
 export async function syncProgressToGroups(params: {
