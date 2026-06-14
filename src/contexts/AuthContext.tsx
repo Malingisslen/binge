@@ -279,6 +279,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // BIN-23: Firebase fire:ar inte onAuthStateChanged vid silent token-refresh,
+  // så emailVerified fastnar på false tills man loggar ut/in. Vanligaste flödet
+  // är att man klickar verifierings-länken i en ANNAN flik och återvänder hit —
+  // då reload:ar vi user:n på window-focus och uppdaterar flaggan så
+  // verifierings-bannern auto-döljs (täcker även "skicka igen → verifiera →
+  // tillbaka"). Hoppar reload:en när redan verifierad → ingen kostnad på
+  // hot-pathen, ingen Firestore-läsning.
+  useEffect(() => {
+    const onFocus = () => {
+      const u = auth.currentUser;
+      if (!u || u.emailVerified) return;
+      void u.reload()
+        .then(() => setEmailVerified(auth.currentUser?.emailVerified ?? false))
+        .catch(() => { /* offline/transient — bannern står kvar, ny chans vid nästa focus */ });
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
