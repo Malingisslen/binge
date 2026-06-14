@@ -159,9 +159,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     return result;
   }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, behindIds]);
 
-  const totalCount = status
-    ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)).length
-    : items.length;
+  const totalCount = useMemo(
+    () => status
+      ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)).length
+      : items.length,
+    [items, status]
+  );
 
   // B7/T2: substate för /my/series härleds från PERSISTERADE fält enbart
   // (kontraktet bor i src/lib/libraryView.ts) + advisorns behind-set som
@@ -200,10 +203,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // (followingSections filtrerar bort movie-items). Räkna samma mängd i
   // standfirst så subtitle inte säger mer än sektionerna visar — och räkna
   // total mot samma TV-delmängd så "X av Y" stämmer vid sökning (B1/B5).
-  const tvVisibleCount = filtered.filter(i => i.mediaType === 'tv').length;
-  const tvTotalCount = items.filter(
-    i => i.status === 'mina' && !i.dropped && i.mediaType === 'tv'
-  ).length;
+  const tvVisibleCount = useMemo(
+    () => filtered.filter(i => i.mediaType === 'tv').length,
+    [filtered]
+  );
+  const tvTotalCount = useMemo(
+    () => items.filter(i => i.status === 'mina' && !i.dropped && i.mediaType === 'tv').length,
+    [items]
+  );
   const standfirst = status === 'mina'
     ? buildStandfirst(tvVisibleCount, tvTotalCount, status, mediaFilter)
     : buildStandfirst(filtered.length, totalCount, status, mediaFilter);
