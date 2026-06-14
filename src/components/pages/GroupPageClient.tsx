@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Users, ChevronLeft, Play, Settings } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
@@ -19,7 +20,6 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { GroupMembersPanel } from '@/components/groups/GroupMembersPanel';
 import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
 import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
-import { GroupSettingsModal } from '@/components/groups/GroupSettingsModal';
 import {
   InvitePanel,
   LeavePanel,
@@ -35,6 +35,11 @@ import type {
   GroupWatchlistItem,
   SessionConfig,
 } from '@/types';
+
+const GroupSettingsModal = dynamic(
+  () => import('@/components/groups/GroupSettingsModal').then(m => m.GroupSettingsModal),
+  { ssr: false },
+);
 
 export default function GroupPageClient({ id }: { id: string }) {
   return <AuthGuard><GroupContent id={id} /></AuthGuard>;

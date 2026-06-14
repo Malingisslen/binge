@@ -1,17 +1,16 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
-import AdvisorTimeline from '@/components/savings/AdvisorTimeline';
+import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
-import WillSeePerProvider from '@/components/savings/WillSeePerProvider';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
@@ -22,6 +21,9 @@ import { formatSwedishDate } from '@/lib/utils';
 import type { AdvisedShow, ActivePause, SubscribeAdvisory } from '@/types';
 
 const LOOK_AHEAD_DAYS = 60;
+
+const AdvisorTimeline = dynamic(() => import('@/components/savings/AdvisorTimeline'), { ssr: false });
+const WillSeePerProvider = dynamic(() => import('@/components/savings/WillSeePerProvider'), { ssr: false });
 
 export default function SavingsPage() {
   return <AuthGuard><SavingsContent /></AuthGuard>;
@@ -151,10 +153,12 @@ function SavingsContent() {
     }
   }, [advisor.isLoading, hasAdvisorProviders, advisor.providers.length]);
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
     if (!el) return;
     el.open = true;
+    setDetailsOpen(true);
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -239,13 +243,17 @@ function SavingsContent() {
 
             <UpcomingEpisodes />
 
-            <details ref={detailsRef} className="mb-3 scroll-mt-3 mt-3">
+            <details
+              ref={detailsRef}
+              className="mb-3 scroll-mt-3 mt-3"
+              onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
+            >
               <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted cursor-pointer select-none list-none">
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
-                <AdvisorTimeline />
-                <WillSeePerProvider rows={advisor.willSeeByProvider} />
+                {detailsOpen && <AdvisorTimeline />}
+                {detailsOpen && <WillSeePerProvider rows={advisor.willSeeByProvider} />}
                 {hasSubscribeDetails && (
                   <div>
                     <div className="flex items-baseline justify-between mb-[6px]">
