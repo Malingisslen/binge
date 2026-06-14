@@ -69,14 +69,52 @@ describe('buildCalendarEntries', () => {
     expect(buildCalendarEntries(data)).toHaveLength(0);
   });
 
-  it('marks the seeded finale episode isFinale even when the season array lags', () => {
+  // TMDBSeason-fixture för isFinale-korskoll (BIN-13).
+  const seasonMeta = (season_number: number, episode_count: number) => ({
+    id: season_number, season_number, episode_count,
+    name: `Säsong ${season_number}`, overview: '', poster_path: null, air_date: '2026-05-01',
+  });
+
+  it('marks the seeded finale episode isFinale when the season array lags but the listing is known-complete', () => {
     const data: SeasonDatum[] = [{
       showId: 100,
-      show: show({ next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }) }),
+      show: show({
+        // Säsongen har 10 avsnitt totalt; arrayen släpar (bara E9), E10 seedas.
+        seasons: [seasonMeta(4, 10)],
+        next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }),
+      }),
       season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
     }];
     const seeded = eps(buildCalendarEntries(data)).find(e => e.episode === 10);
     expect(seeded?.isFinale).toBe(true);
+  });
+
+  it('does NOT flag a mid-run episode as finale when the season listing trails episode_count (BIN-13)', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({
+        // Säsongen har 20 avsnitt men TMDB:s array släpar (E9 + seedat E10).
+        // E10 får INTE bli "säsongsfinal" — listningen är inte komplett.
+        seasons: [seasonMeta(4, 20)],
+        next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }),
+      }),
+      season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
+    }];
+    const seeded = eps(buildCalendarEntries(data)).find(e => e.episode === 10);
+    expect(seeded?.isFinale).toBe(false);
+  });
+
+  it('does not flag any finale when season episode_count is unavailable (prefer false)', () => {
+    const data: SeasonDatum[] = [{
+      showId: 100,
+      show: show({
+        seasons: [], // ingen episode_count-signal
+        next_episode_to_air: ep({ season_number: 4, episode_number: 10, air_date: '2026-05-31' }),
+      }),
+      season: { episodes: [ep({ season_number: 4, episode_number: 9, air_date: '2026-05-24' })] },
+    }];
+    const seeded = eps(buildCalendarEntries(data)).find(e => e.episode === 10);
+    expect(seeded?.isFinale).toBe(false);
   });
 
   it('falls back to free/ads providers when no flatrate exists (H3)', () => {

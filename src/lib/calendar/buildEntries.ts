@@ -51,11 +51,21 @@ export function buildCalendarEntries(
       seeded && (episodes.length === 0 || seeded.season_number === episodes[0].season_number)
         ? seeded.episode_number
         : 0;
-    const finaleEp = Math.max(
+    const maxKnownEp = Math.max(
       0,
       ...episodes.map(e => e.episode_number),
       sameSeasonSeed,
     );
+    // BIN-13: korskolla mot säsongens FAKTISKA episode_count innan ett avsnitt
+    // flaggas som final. TMDB:s säsong-array är community-redigerad och back-half-
+    // avsnitt saknas ofta för en pågående säsong — då skulle maxKnownEp landa på
+    // ett mittenavsnitt och ge fel "säsongsfinal"-badge. Sätt finaleEp bara när
+    // listningen är KÄND komplett (når episode_count). Saknas episode_count →
+    // ingen final (hellre fel åt säkra hållet).
+    const seasonNumber = episodes[0]?.season_number ?? seeded?.season_number;
+    const seasonEpisodeCount = show.seasons?.find(s => s.season_number === seasonNumber)?.episode_count;
+    const finaleEp =
+      seasonEpisodeCount != null && maxKnownEp >= seasonEpisodeCount ? maxKnownEp : 0;
 
     const push = (ep: TMDBEpisode) => {
       if (!ep.air_date) return;
