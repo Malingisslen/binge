@@ -169,6 +169,18 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
+    // Report-throttle (BIN-25): per-user tidsstämpel som ger server-side
+    // rate-limit av reports. Skrivs i samma batch som varje rapport och
+    // läses av reports-create-regeln. Bara ägaren skriver, bara fältet
+    // lastReportAt satt till request.time (serverTimestamp).
+    match /users/{uid}/reportMeta/{docId} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['lastReportAt'])
+        && request.resource.data.lastReportAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+
     // Follow system
     match /users/{uid}/following/{targetUid} {
       allow read, write: if isOwner(uid);
@@ -328,7 +340,17 @@ service cloud.firestore {
         && request.resource.data.targetType in ['review', 'comment', 'user', 'list']
         && request.resource.data.targetId is string
         && request.resource.data.targetOwnerUid is string
-        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
+        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500))
+        // BIN-25 server-side rate-limit: samma batch MÅSTE stämpla
+        // users/{uid}/reportMeta/throttle till request.time, och förra rapporten
+        // måste vara äldre än cooldownen (10 s). exists()-grenen släpper igenom
+        // den allra första rapporten (ingen throttle-doc än). Stoppar
+        // console-loop-spam som klient-cooldownen inte kan.
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle).data.lastReportAt == request.time
+        && (
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle).data.lastReportAt < request.time - duration.value(10, 's')
+        );
 
       // Admin får uppdatera status + lägga till actionedAt/dismissedAt m.m.
       // men får INTE ändra core-fält som skulle manipulera historik.

@@ -37,6 +37,9 @@ export interface UserDataSnapshots {
   // behöver vi inte exponera tokens (de är device-specifika och meningslösa
   // utanför Firebase) — buildUserExport kan hoppa över detta fält.
   fcmTokensSnap: QuerySnapshot;
+  // Report-throttle-stämpel (BIN-25). Operationell metadata — med i delete-
+  // cascade så den inte orphan:as, men hoppas över i export (som fcmTokens).
+  reportMetaSnap: QuerySnapshot;
   // Sparbeslut-historik (Streamingrådgivaren) — skrivs av resumeProvider.
   // Inkluderas i export + delete-cascade.
   pauseHistorySnap: QuerySnapshot;
@@ -64,6 +67,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendRequestsSentSnap,
     groupInvitesSnap,
     fcmTokensSnap,
+    reportMetaSnap,
     pauseHistorySnap,
     reviewsSnap,
     reviewLikesSnap,
@@ -85,6 +89,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
     getDocs(collection(db, 'users', uid, 'groupInvites')),
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
+    getDocs(collection(db, 'users', uid, 'reportMeta')),
     getDocs(collection(db, 'users', uid, 'pauseHistory')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // doc-id = mitt uid (single-field collection-group-index på documentId)
@@ -111,6 +116,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     friendRequestsSentSnap,
     groupInvitesSnap,
     fcmTokensSnap,
+    reportMetaSnap,
     pauseHistorySnap,
     reviewsSnap,
     reviewLikesSnap,

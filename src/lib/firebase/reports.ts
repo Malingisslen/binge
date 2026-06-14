@@ -48,7 +48,10 @@ export interface Report {
   updatedAt?: Date;
 }
 
-const REPORT_COOLDOWN_MS = 1000;
+// Matchar cooldownen i firestore.rules (BIN-25). Klient-checken är bara snabb,
+// vänlig UX (slipper round-trip + permission-denied) — den hårda gränsen
+// enforce:as server-side via users/{uid}/reportMeta/throttle.
+const REPORT_COOLDOWN_MS = 10_000;
 const REPORT_COOLDOWN_KEY = 'binge:lastReportAt';
 
 // Cooldownen lagras i sessionStorage (inte en modulvariabel) så att en
@@ -81,8 +84,14 @@ export async function createReport(params: {
 
   const trimmedNote = params.note?.trim().slice(0, 500);
 
-  const { db, addDoc, collection, serverTimestamp } = await fsdb();
-  await addDoc(collection(db, 'reports'), {
+  // Atomisk batch: rapporten + throttle-stämpeln skrivs tillsammans. Reglerna
+  // kräver att throttle-doc:en sätts till request.time i samma batch och att
+  // förra rapporten är äldre än cooldownen — annars nekas hela batchen (BIN-25).
+  const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
+  const batch = writeBatch(db);
+  // doc(collectionRef) utan id genererar ett klient-id (batch-motsvarigheten
+  // till addDoc) så rapport-skrivningen blir atomisk med throttle-stämpeln.
+  batch.set(doc(collection(db, 'reports')), {
     reporterUid: params.reporterUid,
     targetType: params.targetType,
     targetId: params.targetId,
@@ -92,6 +101,10 @@ export async function createReport(params: {
     status: 'open',
     createdAt: serverTimestamp(),
   });
+  batch.set(doc(db, 'users', params.reporterUid, 'reportMeta', 'throttle'), {
+    lastReportAt: serverTimestamp(),
+  });
+  await batch.commit();
 }
 
 /**

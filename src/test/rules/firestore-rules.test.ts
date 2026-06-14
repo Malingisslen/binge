@@ -5,7 +5,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -252,6 +252,82 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
     await assertSucceeds(setDoc(
       doc(victimDb(), 'users', ATTACKER, 'friends', VICTIM),
       { since: serverTimestamp() },
+    ));
+  });
+});
+
+// BIN-25 — server-side report rate-limit. A report can only be created when the
+// same batch stamps users/{uid}/reportMeta/throttle to request.time, and the
+// previous stamp is older than the cooldown. beforeEach clears Firestore so each
+// test's first report sees no prior throttle.
+describe('reports throttle (BIN-25)', () => {
+  function validReport() {
+    return {
+      reporterUid: OWNER, targetType: 'review', targetId: 'rev1',
+      targetOwnerUid: 'other_uid', reason: 'spam', status: 'open',
+      createdAt: serverTimestamp(),
+    };
+  }
+  function throttleRef(db: ReturnType<typeof ownerDb>) {
+    return doc(db, 'users', OWNER, 'reportMeta', 'throttle');
+  }
+
+  it('first report succeeds when the batch also stamps the throttle', async () => {
+    const db = ownerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reports', 'rep1'), validReport());
+    batch.set(throttleRef(db), { lastReportAt: serverTimestamp() });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('report WITHOUT the throttle stamp is rejected', async () => {
+    const db = ownerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reports', 'rep1'), validReport());
+    // no throttle write → getAfter(...).lastReportAt != request.time
+    await assertFails(batch.commit());
+  });
+
+  it('a second report within the cooldown is rejected', async () => {
+    const db = ownerDb();
+    const b1 = writeBatch(db);
+    b1.set(doc(db, 'reports', 'rep1'), validReport());
+    b1.set(throttleRef(db), { lastReportAt: serverTimestamp() });
+    await assertSucceeds(b1.commit());
+    const b2 = writeBatch(db);
+    b2.set(doc(db, 'reports', 'rep2'), validReport());
+    b2.set(throttleRef(db), { lastReportAt: serverTimestamp() });
+    // Båda batcharna körs i emulatorn inom millisekunder, alltså långt inom
+    // 10 s-cooldownen — förra stämpeln är garanterat färsk → andra rapporten nekas.
+    await assertFails(b2.commit());
+  });
+});
+
+describe('users/{uid}/reportMeta throttle write rule', () => {
+  it('owner can stamp lastReportAt = serverTimestamp()', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
+      { lastReportAt: serverTimestamp() },
+    ));
+  });
+  it('rejects extra fields beyond lastReportAt', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
+      { lastReportAt: serverTimestamp(), spam: 1 },
+    ));
+  });
+  it('rejects a forged past timestamp (cannot backdate to defeat the cooldown)', async () => {
+    // Rule kräver lastReportAt == request.time → en klient-satt gammal timestamp
+    // (för att låtsas att cooldownen redan löpt ut) nekas på throttle-doc-nivå.
+    await assertFails(setDoc(
+      doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
+      { lastReportAt: Timestamp.fromDate(new Date(Date.now() - 60_000)) },
+    ));
+  });
+  it('non-owner cannot stamp another user throttle', async () => {
+    await assertFails(setDoc(
+      doc(otherDb(), 'users', OWNER, 'reportMeta', 'throttle'),
+      { lastReportAt: serverTimestamp() },
     ));
   });
 });
