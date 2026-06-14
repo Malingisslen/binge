@@ -565,11 +565,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const id = currentUser.uid;
-    const username = user?.username ?? null;
 
     // Delad läsning med buildUserExport — om nya user-owned collections
     // läggs till ska de uppdateras i collectUserDataSnapshots.
     const snaps = await collectUserDataSnapshots(id);
+
+    // BIN-22: läs username AUKTORITATIVT från profil-doc:en, inte React-state.
+    // `user` kan vara null i fönstret efter att auth resolvat men innan profilen
+    // laddats (eller om ensureUserProfile failade) → då skulle usernames/
+    // {username}-reservationen aldrig raderas och blockera återanvändning.
+    const username = (snaps.profileSnap.data()?.username as string | undefined)
+      ?? user?.username ?? null;
 
     const { db, doc, getDocs, collection, writeBatch } = await fsdb();
     const refs: DocumentReference[] = [];
