@@ -64,10 +64,11 @@ used by `episodeReleaseNotify` and `rollupInsights`.
 ### Deletion
 
 Collect orphan `DocumentReference`s and delete in batches of 450 (the same
-ceiling the client deletion path uses), one `db.batch()` per chunk,
-`Promise.allSettled` across chunks. Batch errors are logged via
-`functions.logger`, not thrown — one failed batch never aborts the run; the next
-run retries whatever is left.
+ceiling the client deletion path uses), one `db.batch()` per chunk, committed
+sequentially in a `for` loop with a per-chunk `try/catch`. Batch errors are
+logged via `functions.logger`, not thrown — one failed batch never aborts the
+run; the next run retries whatever is left. (Sequential rather than concurrent
+commits keeps write-quota bounded.)
 
 ### Schedule
 
