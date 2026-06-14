@@ -105,7 +105,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
-    const isFirst = items.length === 0;
+    // Bara "första titeln" om biblioteket FAKTISKT är tomt — inte medan första
+    // Firestore-snapshotten fortfarande laddar (items är [] tills den landar),
+    // annars över-räknas first_title_added för återvändande användare vid kall
+    // laddning och förorenar aktiverings-funneln i /insikter (BIN-38).
+    const isFirst = items.length === 0 && !loading;
     // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
     // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
     // ärver default; per-item-override sätts via updateVisibility senare.
@@ -123,7 +127,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (isFirst) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, items.length, user?.defaultVisibility]);
+  }, [uid, items.length, loading, user?.defaultVisibility]);
 
   const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
