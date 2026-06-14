@@ -94,7 +94,13 @@ export function findCatchupCandidate(
   unfinishedIds: Set<number>,
 ): { provider: ProviderAdvisory; unfinishedCount: number } | undefined {
   return providers
-    .filter(p => p.status === 'active')
+    // BIN-17: nudga catchup för ALLA betalda tjänster med tillräckligt med
+    // backlog — inte bara 'active' (något airar inom 30 dagar). En tjänst där
+    // du har 3+ opåbörjade/halvsedda serier men inget airar snart (status
+    // 'pause'/'upcoming') är precis "du betalar men tittar inte → ta ikapp
+    // eller pausa", rådgivarens kärnvärde. Gratistjänster ('free') exkluderas:
+    // ingen kostnad att rättfärdiga.
+    .filter(p => p.status !== 'free')
     .map(p => ({
       provider: p,
       unfinishedCount: p.shows.filter(s => unfinishedIds.has(s.tmdbId)).length,

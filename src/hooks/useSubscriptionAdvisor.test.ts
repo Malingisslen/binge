@@ -199,11 +199,26 @@ describe('findCatchupCandidate', () => {
     expect(findCatchupCandidate(providers, new Set([1, 4]))).toBeUndefined();
   });
 
-  it('ignores non-active providers (pause candidates)', () => {
+  it('includes paid non-active providers with enough backlog (BIN-17)', () => {
+    // A paid service the user is paying for, with 3 unfinished shows but nothing
+    // airing soon ('pause'), IS a catchup candidate — "you're paying, catch up".
     const providers = [
       makeProvider({
         providerId: 8,
         status: 'pause',
+        shows: [makeShow(1), makeShow(2), makeShow(3)],
+      }),
+    ];
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3]));
+    expect(result?.provider.providerId).toBe(8);
+    expect(result?.unfinishedCount).toBe(3);
+  });
+
+  it('excludes free providers (no cost to justify catching up to save)', () => {
+    const providers = [
+      makeProvider({
+        providerId: 76,
+        status: 'free',
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
