@@ -56,6 +56,18 @@ describe('migrateStatus', () => {
       expect(migrateStatus('mina', 'tv', true)).toEqual({ status: 'avbruten', dropped: false });
       expect(migrateStatus('sedd', 'movie', true)).toEqual({ status: 'avbruten', dropped: false });
     });
+
+    // BIN-35: a legacy doc carries {status:'avbruten', dropped:true} and can't be
+    // revived because dropped:true wins on every read. The fix is in
+    // WatchlistContext.updateStatus: setting any non-avbruten status now also
+    // merge-writes dropped:false, clearing the stale flag. Once cleared, the
+    // next read passes droppedFlag=false and the revived status is honored
+    // instead of snapping back to 'avbruten'.
+    it('once the flag is cleared (droppedFlag=false), the revived status sticks', () => {
+      expect(migrateStatus('mina', 'tv', false)).toEqual({ status: 'mina', dropped: false });
+      expect(migrateStatus('vill_se', 'movie', false)).toEqual({ status: 'vill_se', dropped: false });
+      expect(migrateStatus('sedd', 'movie', false)).toEqual({ status: 'sedd', dropped: false });
+    });
   });
 
   describe('idempotens', () => {

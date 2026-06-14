@@ -6,6 +6,7 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
+import { buildStatusUpdate } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
@@ -146,15 +147,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const currentItem = items.find(i => i.tmdbId === tmdbId);
-    const isRewatch = status === 'sedd' && currentItem?.status === 'sedd';
     const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
-    await setDoc(ref, {
-      status,
-      ...visFields,
-      updatedAt: serverTimestamp(),
-      ...(status === 'sedd' ? { watchedAt: serverTimestamp() } : {}),
-      ...(isRewatch ? { rewatchCount: (currentItem?.rewatchCount ?? 0) + 1 } : {}),
-    }, { merge: true });
+    await setDoc(ref, buildStatusUpdate(status, {
+      now: serverTimestamp(),
+      visFields,
+      currentStatus: currentItem?.status,
+      currentRewatchCount: currentItem?.rewatchCount,
+    }), { merge: true });
     trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
   }, [uid, items, effectiveVisibilityNow]);
 
