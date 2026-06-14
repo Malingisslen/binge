@@ -76,7 +76,9 @@ type PageParams = { id: string };
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
   const { id } = await params;
   const showId = parseInt(id, 10);
-  if (!Number.isFinite(showId)) return {};
+  // Ogiltigt id → sidan kallar notFound() i body. Returnera noindex så den
+  // aldrig ärver root-layoutens index:true + canonical:/ (homepage-dubblett).
+  if (!Number.isFinite(showId)) return { robots: { index: false, follow: false } };
 
   try {
     const show = await cachedGetTVShow(showId);
@@ -109,7 +111,16 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       },
     };
   } catch {
-    return {};
+    // Build-time TMDB-hämtning misslyckades för denna förrenderade titel. Skicka
+    // ALDRIG en indexerbar sida med root-layoutens default-title + canonical:/
+    // (Google läser den som en homepage-dubblett). noindex + self-canonical tills
+    // ett senare lyckat bygge fyller i riktig metadata; klient-hydrering via
+    // usePageMeta sätter rätt title för besökare.
+    return {
+      title: 'Serie',
+      robots: { index: false, follow: true },
+      alternates: { canonical: `https://binge.nu/tv/${showId}/` },
+    };
   }
 }
 
