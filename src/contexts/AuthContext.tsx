@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   onAuthStateChanged,
@@ -45,6 +45,9 @@ interface AuthState {
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
+  // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
+  // state så samtidiga blur-skrivningar inte klobbrar varandra (BIN-40).
+  setProviderCost: (providerId: number, cost: number | null) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
@@ -75,6 +78,7 @@ const AuthContext = createContext<AuthState>({
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
+  setProviderCost: async () => {},
   updateProviderTier: async () => {},
   pauseProvider: async () => {},
   resumeProvider: async () => {},
@@ -365,6 +369,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [updateUserField, uid]);
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
+  // Spegel av user.providerCosts som uppdateras SYNKRONT i setProviderCost (före
+  // await) så att tabbning från provider A:s kostnad till B:s inte skriver två
+  // blur:ar mot samma stale render-snapshot och tappar A:s värde (BIN-40).
+  const providerCostsRef = useRef<Record<number, number>>({});
+  useEffect(() => { providerCostsRef.current = user?.providerCosts ?? {}; }, [user?.providerCosts]);
+  const setProviderCost = useCallback(async (providerId: number, cost: number | null) => {
+    const next = { ...providerCostsRef.current };
+    if (cost == null) delete next[providerId];
+    else next[providerId] = cost;
+    providerCostsRef.current = next;
+    await updateUserField('providerCosts', next);
+  }, [updateUserField]);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;
     const { getProvider } = await import('@/lib/tmdb/providers');
@@ -690,7 +706,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -698,7 +714,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

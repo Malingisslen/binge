@@ -16,7 +16,7 @@ import {
 const FLATRATE = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
 export function ProvidersSection() {
-  const { user, updateProviders, updateProviderCosts, updateProviderTier } = useAuth();
+  const { user, updateProviders, setProviderCost, updateProviderTier } = useAuth();
   const { show: toast } = useToast();
 
   const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -153,10 +153,13 @@ export function ProvidersSection() {
                       defaultValue={user.providerCosts?.[provider.id] ?? ''}
                       onBlur={e => {
                         const val = parseInt(e.target.value, 10);
-                        const costs = { ...user.providerCosts };
-                        if (isNaN(val) || val <= 0) delete costs[provider.id];
-                        else costs[provider.id] = val;
-                        updateProviderCosts(costs);
+                        const cost = isNaN(val) || val <= 0 ? null : val;
+                        // Funktionell merge mot senaste state (inte render-snapshot)
+                        // + felhantering — annars tappas en kostnad tyst om man
+                        // tabbar vidare, eller om skrivningen failar offline.
+                        setProviderCost(provider.id, cost).catch(() =>
+                          toast('Kunde inte spara kostnaden. Försök igen om en stund.'),
+                        );
                       }}
                       className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
                     />

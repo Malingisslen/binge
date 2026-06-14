@@ -28,6 +28,22 @@ export function NotificationsSection() {
   const supported = typeof window !== 'undefined' ? isPushSupported() : true;
   const pushEnabled = user.notificationSettings.pushEnabled;
 
+  // Samma busy-guard + try/catch+toast som handleToggle — annars kan snabba
+  // klick fyra parallella skrivningar och ett offline-fel sväljs tyst (UI:t
+  // hamnar ur synk med Firestore tills nästa profil-laddning).
+  async function handleEpisodeReleasesToggle(next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateNotificationSettings({ episodeReleases: next });
+      toast(next ? 'Avsnittsnotiser på' : 'Avsnittsnotiser av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busy) return;
     setBusy(true);
@@ -78,7 +94,7 @@ export function NotificationsSection() {
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
         <input type="checkbox" checked={user.notificationSettings.episodeReleases} disabled={busy}
-          onChange={(e) => { void updateNotificationSettings({ episodeReleases: e.target.checked }); }}
+          onChange={(e) => { void handleEpisodeReleasesToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en serie jag följer släpper ett nytt avsnitt
       </label>
