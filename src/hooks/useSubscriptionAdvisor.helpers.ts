@@ -135,6 +135,22 @@ export function getNextAirInfo(show: TMDBTVShow): { date: string | null; code: s
   return { date: null, code: null };
 }
 
+// Vilka tmdb-ids rådgivaren ska hämta TV-detaljer för: following-TV +
+// vill_se-TV (filmer har redan providers lagrade). Tom lista när enabled=false
+// så useQueries registrerar NOLL queries (ingen TMDB-fan-out) på bibliotekssidor
+// där rådgivarens output inte används.
+export function advisorTmdbIds(
+  enabled: boolean,
+  followingTV: WatchlistItem[],
+  willSeeItems: WatchlistItem[],
+): number[] {
+  if (!enabled) return [];
+  return Array.from(new Set([
+    ...followingTV.map(i => i.tmdbId),
+    ...willSeeItems.filter(i => i.mediaType === 'tv').map(i => i.tmdbId),
+  ]));
+}
+
 export function isWithinDays(dateStr: string | null, days: number): boolean {
   if (!dateStr) return false;
   const target = new Date(dateStr + 'T00:00:00');

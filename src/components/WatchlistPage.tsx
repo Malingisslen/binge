@@ -74,7 +74,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // koncept av "ligger efter på aireade avsnitt". useSubscriptionAdvisor
   // delar TMDB-cache med useCalendarEntries så ingen extra fetch.
   const behindFilterActive = status === 'mina' && searchParams.get('status') === 'behind';
-  const advisor = useSubscriptionAdvisor();
+  // Rådgivaren behövs bara på /my/series ('mina'): för sub-state-sektionering
+  // och "ligger efter"-filtret. På övriga bibliotekssidor används dess output
+  // inte — gate så den inte fan-out:ar TV-detaljqueries i onödan.
+  const advisor = useSubscriptionAdvisor(60, { enabled: status === 'mina' });
   const behindIds = behindFilterActive ? advisor.unfinishedTmdbIds : null;
   const clearProviderFilter = () => {
     const params = new URLSearchParams(searchParams);

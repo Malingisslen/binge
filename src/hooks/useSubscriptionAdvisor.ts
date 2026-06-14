@@ -20,6 +20,7 @@ import {
   isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
+  advisorTmdbIds,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -38,7 +39,11 @@ export {
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 
-export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
+export function useSubscriptionAdvisor(
+  lookAheadDays = 60,
+  options?: { enabled?: boolean },
+): AdvisorResult {
+  const enabled = options?.enabled ?? true;
   const { getByStatus, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
 
@@ -60,11 +65,8 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
 
   // We fetch TMDB details for följer TV + vill_se TV (films' watch providers are already on the item's stored providers).
   const tmdbIds = useMemo(
-    () => Array.from(new Set([
-      ...followingTV.map(i => i.tmdbId),
-      ...willSeeItems.filter(i => i.mediaType === 'tv').map(i => i.tmdbId),
-    ])),
-    [followingTV, willSeeItems]
+    () => advisorTmdbIds(enabled, followingTV, willSeeItems),
+    [enabled, followingTV, willSeeItems]
   );
 
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -84,7 +86,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   // snapshoten landat OCH samtliga TV-detaljqueries avgjorts. Tidigare
   // `some(q => q.isLoading)` var false medan watchlisten laddade (inga
   // queries registrerade än) så konsumenter renderade partiell rådgivning.
-  const isLoading = aggregateAdvisorLoading(watchlistLoading, showQueries);
+  const isLoading = enabled ? aggregateAdvisorLoading(watchlistLoading, showQueries) : false;
   // hasError = minst en fetch misslyckades + det saknas cached data för den.
   // Om en query tidigare lyckats och nu failar använder vi stale data, då
   // betraktar vi inte det som fel mot användaren.
@@ -96,7 +98,11 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
   );
 
   const computed = useMemo(() => {
-    if (myProviders.length === 0) {
+    // Avstängd rådgivare (enabled=false) ELLER inga tjänster konfigurerade →
+    // samma tomma, stabila shape. Guarden på !enabled hoppar dessutom över hela
+    // beräkningen på bibliotekssidor där rådgivaren är gated (annars körs den
+    // per render trots tom fan-out).
+    if (!enabled || myProviders.length === 0) {
       return {
         providers: [],
         subscribeAdvice: [],
@@ -451,7 +457,7 @@ export function useSubscriptionAdvisor(lookAheadDays = 60): AdvisorResult {
       unfinishedTmdbIds,
       endedCaughtUpTmdbIds,
     };
-  }, [shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
+  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
 
   return { ...computed, isLoading, hasError };
 }
