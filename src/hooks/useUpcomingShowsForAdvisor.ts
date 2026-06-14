@@ -5,6 +5,7 @@ import { useSubscriptionAdvisor } from './useSubscriptionAdvisor';
 import { useCalendarEntries, getWeekStart } from './useCalendar';
 import { useAuth } from './useAuth';
 import { todayIso } from '@/lib/utils';
+import { attributeShowsToProviders } from './useUpcomingShowsForAdvisor.helpers';
 
 // Per-serie-vy av kommande avsnitt för Streamingrådgivaren.
 //
@@ -64,27 +65,12 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
       return Math.floor((ms - startMs) / (7 * DAY_MS));
     }
 
-    // Bygg show → provider-attribution. En serie som finns hos flera providers
-    // hamnar på första (non-paused) subscribed-provider vi ser. Det är
-    // sannolikt fel ibland (borde vara den provider med bäst valuta för
-    // användaren) men låt det vara en uppföljning.
-    const showProviderMap = new Map<number, {
-      providerId: number;
-      providerShortName: string;
-      providerColor: string;
-    }>();
-    for (const p of advisor.providers) {
-      if (userPaused.has(p.providerId)) continue;
-      for (const show of p.shows) {
-        if (!showProviderMap.has(show.tmdbId)) {
-          showProviderMap.set(show.tmdbId, {
-            providerId: p.providerId,
-            providerShortName: p.shortName,
-            providerColor: p.color,
-          });
-        }
-      }
-    }
+    // Bygg show → provider-attribution. En serie som finns hos flera
+    // prenumererade tjänster attribueras till den som bär flest av användarens
+    // andra kommande serier (BIN-15) — inte den vi råkar iterera först — så
+    // per-tjänst-räkningen som behåll/säg-upp- och paus-rådet bygger på
+    // koncentreras rätt.
+    const showProviderMap = attributeShowsToProviders(advisor.providers, userPaused);
 
     // Per-avsnitt iteration: läs ALLA calendar entries och plocka in dem
     // som faller inom horizonten OCH ligger på en subscribed provider.
