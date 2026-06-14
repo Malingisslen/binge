@@ -17,8 +17,38 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Gate the deploy on the Firestore rules-test suite. A direct push to main
+    # never triggers ci.yml (it ignores main), so without this the rules tests
+    # would never run on the path a rules change actually takes.
+    needs: rules-tests
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so the rules/functions drift-guard below can diff this
+          # push (github.event.before..sha) to see which files changed.
+          fetch-depth: 0
+
+      # Drift guard: firestore.rules + functions/** are NOT auto-deployed — only
+      # hosting is. If a push to main changed them, fail loudly so prod can't
+      # silently run the old version. Deploy them manually, then ship hosting via
+      # the "Run workflow" button (workflow_dispatch), which skips this guard.
+      - name: Guard — rules/functions changed (deploy them manually)
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE=$(git rev-parse HEAD~1)
+          fi
+          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}" -- firestore.rules 'functions/**')
+          if [ -n "$CHANGED" ]; then
+            echo "::error::firestore.rules or functions/** changed — these are NOT auto-deployed by this workflow."
+            echo "Changed files:"
+            echo "$CHANGED"
+            echo "Deploy manually:  firebase deploy --only firestore:rules    # and/or --only functions"
+            echo "Then ship hosting via the 'Run workflow' button (workflow_dispatch) — that skips this guard."
+            exit 1
+          fi
+          echo "No firestore.rules / functions changes in this push — proceeding."
 
       - uses: actions/setup-node@v6
         with:
@@ -89,3 +119,41 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           channelId: live
           projectId: binge-nu
+
+  # Firestore security-rules tests run against the Firestore emulator (needs a
+  # JVM). Mirrors ci.yml's rules-tests job so the suite executes on push-to-main
+  # too — the deploy job above gates on it via `needs`. Kept separate so it can
+  # fail independently and run in parallel with the build.
+  rules-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Firebase CLI
+        # firebase-tools provides the `firebase` binary that `npm run test:rules`
+        # (firebase emulators:exec) needs. Pinned to match the version used locally.
+        run: npm i -g firebase-tools@14.27.0
+
+      - name: Cache Firestore emulator
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          # Version segment matches the firebase-tools pin above so a CLI bump
+          # rotates the cache instead of reusing a stale emulator JAR.
+          key: firebase-emulators-${{ runner.os }}-fbtools14.27.0
+
+      - name: Rules tests (Firestore emulator)
+        run: npm run test:rules

@@ -81,7 +81,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/firebase/emulators
-          key: firebase-emulators-${{ runner.os }}
+          # Version segment matches the firebase-tools pin above so a CLI bump
+          # rotates the cache instead of reusing a stale emulator JAR.
+          key: firebase-emulators-${{ runner.os }}-fbtools14.27.0
 
       - name: Rules tests (Firestore emulator)
         # Wraps vitest under `firebase emulators:exec --only firestore`.
