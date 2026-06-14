@@ -25,9 +25,10 @@ describe('entry helpers', () => {
     expect(entryHref(movie)).toBe('/movie/500/');
   });
 
-  it('entryMetaLine shows episode code or "Digital release"', () => {
+  it('entryMetaLine shows episode code or lowercase "digital release"', () => {
     expect(entryMetaLine(episode)).toBe('S2E5');
-    expect(entryMetaLine(movie)).toBe('Digital release');
+    // Gemener för att matcha entryBadge/HemFocal (BIN-16).
+    expect(entryMetaLine(movie)).toBe('digital release');
   });
 
   it('entryBadge reflects today, premiere and movie', () => {

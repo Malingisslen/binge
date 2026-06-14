@@ -18,9 +18,11 @@ export function entryHref(e: CalendarEntry): string {
   return `/${e.mediaType}/${e.tmdbId}/`;
 }
 
-/** Kort meta-rad: avsnittskod resp. "Digital release". */
+/** Kort meta-rad: avsnittskod resp. "digital release". */
 export function entryMetaLine(e: CalendarEntry): string {
-  return e.kind === 'movie' ? 'Digital release' : e.episodeCode;
+  // Gemener för att matcha entryBadge + HemFocal (BIN-16) — samma term ska se
+  // likadan ut på alla ytor.
+  return e.kind === 'movie' ? 'digital release' : e.episodeCode;
 }
 
 /**
