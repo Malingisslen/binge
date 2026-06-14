@@ -55,6 +55,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
       className="group relative"
       onPointerEnter={isTrackable ? () => prefetch.onPointerEnter(item.media_type as MediaType, item.id) : undefined}
       onPointerLeave={isTrackable ? prefetch.onPointerLeave : undefined}
+      onPointerDown={isTrackable ? () => prefetch.onPointerDown(item.media_type as MediaType, item.id) : undefined}
     >
       <Link href={href} className="no-underline" style={{ color: 'var(--ink)' }}>
         <div

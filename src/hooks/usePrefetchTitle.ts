@@ -35,5 +35,5 @@ export function usePrefetchTitle() {
     timer.current = setTimeout(() => fire(mediaType, id), HOVER_INTENT_MS);
   }, [cancel, fire]);
 
-  return { onPointerEnter, onPointerLeave: cancel, fire };
+  return { onPointerEnter, onPointerLeave: cancel, onPointerDown: fire, fire };
 }
