@@ -66,7 +66,10 @@ export default function StatusButton({
           rating: current?.rating ?? null,
           notes: current?.notes ?? null,
           totalSeasons: show.number_of_seasons ?? totalSeasons ?? null,
-          lastWatchedSeason: last?.season_number ?? show.number_of_seasons ?? current?.lastWatchedSeason ?? null,
+          // Ingen number_of_seasons-fallback (BIN-14): en serie utan aireat
+          // avsnitt (last == null) ska INTE få en fejkad säsongsmarkör — då
+          // skulle librarySubState läsa den som påbörjad. Null = ärligt ej_paborjad.
+          lastWatchedSeason: last?.season_number ?? current?.lastWatchedSeason ?? null,
           lastWatchedEpisode: last?.episode_number ?? current?.lastWatchedEpisode ?? null,
           providers: providers ?? current?.providers ?? [],
           genreIds: genreIds ?? current?.genreIds ?? [],
