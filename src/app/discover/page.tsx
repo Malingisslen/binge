@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTrending } from '@/hooks/useTMDB';
 import { discoverMovies, discoverTV, getMovieGenres, getTVGenres, isAddableMediaType } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,6 +30,7 @@ export default function DiscoverPage() {
   const [page, setPage] = useState(1);
   const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setPage(1);
@@ -72,6 +73,19 @@ export default function DiscoverPage() {
     ...(hiddenCountries.length
       ? { without_origin_country: hiddenCountries.join(',') }
       : {}),
+  };
+
+  // Prefetcha nästa sida på hover av "Visa fler" — samma queryKey som listan
+  // använder (['discover', tab, params]) fast med page+1, så klicket växer
+  // listan direkt. Bara för riktiga discover-tabbar (trending paginerar inte).
+  const prefetchNextPage = () => {
+    if (tab === 'trending') return;
+    const nextParams = { ...discoverParams, page: String(page + 1) };
+    void queryClient.prefetchQuery({
+      queryKey: ['discover', tab, nextParams],
+      queryFn: () => (tab === 'movies' ? discoverMovies(nextParams) : discoverTV(nextParams)),
+      staleTime: 5 * 60 * 1000,
+    });
   };
 
   const { data: discoverData, isLoading: discoverLoading } = useQuery({
@@ -193,6 +207,8 @@ export default function DiscoverPage() {
       {hasMore && (
         <button
           onClick={() => setPage(p => p + 1)}
+          onMouseEnter={prefetchNextPage}
+          onFocus={prefetchNextPage}
           disabled={discoverLoading}
           className="btn btn-ghost btn-sm disabled:opacity-50"
         >
