@@ -4,7 +4,9 @@ import { useMemo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, Tv } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTVShow } from '@/hooks/useTMDB';
+import { currentSeasonToPrefetch, seasonPrefetchSpec } from '@/lib/tmdb/prefetch';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, tvSchema, breadcrumbSchema } from '@/components/title/JsonLd';
 import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
@@ -49,6 +51,17 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // visar inget auth-state, sedan byter via vanlig state-update efter mount.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Prefetcha aktuell säsong i bakgrunden så SeasonList renderar direkt
+  // utan spinner när användaren expanderar den. Gate:at på `show` internt
+  // så att hooken kan ligga här, före early returns (Rules of Hooks).
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!show) return;
+    const season = currentSeasonToPrefetch(show);
+    if (season == null) return;
+    void queryClient.prefetchQuery(seasonPrefetchSpec(show.id, season));
+  }, [show, queryClient]);
 
   // T6: räknaren ("N förslag") och griden måste visa samma antal — skär till 5
   // (= similar-grid:s desktop-kolumner) redan här, istället för 8 i memo:t +
