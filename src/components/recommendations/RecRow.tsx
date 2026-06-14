@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
+import { useInView } from '@/hooks/useInView';
 import { rotatePool } from '@/lib/recommendations/rowComposition';
 import RecCard from './RecCard';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -70,7 +71,11 @@ export default function RecRow({ result, index }: Props) {
     });
   }, [rowSpec.rowKey]);
 
-  const providerMap = useSearchProviders(items);
+  // Hämta providers först när raden är ~300px från viklinjen — annars fan-out:ar
+  // /recommendations watch-providers för varje rad direkt vid mount (~6×rader).
+  // once: behåll laddat när raden scrollats förbi.
+  const { ref: rowRef, inView } = useInView<HTMLElement>({ rootMargin: '300px', once: true });
+  const providerMap = useSearchProviders(inView ? items : []);
 
   if (!isLoading && items.length === 0) return null;
 
@@ -79,7 +84,7 @@ export default function RecRow({ result, index }: Props) {
   const expandHref = `/recommendations/?row=${encodeURIComponent(rowSpec.rowKey)}`;
 
   return (
-    <section className="rec-cat" aria-labelledby={`rec-cat-${rowSpec.rowKey}`}>
+    <section ref={rowRef} className="rec-cat" aria-labelledby={`rec-cat-${rowSpec.rowKey}`}>
       <div className="head">
         <div className="l">
           <span className="num">{num}</span>
