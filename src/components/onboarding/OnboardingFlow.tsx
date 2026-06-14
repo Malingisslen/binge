@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { ArrowRight, ArrowLeft, Check, Search, Target } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -41,7 +40,10 @@ export function OnboardingFlow() {
 
   if (!uid || !user) return null;
 
-  const finish = async () => {
+  // Markerar onboarding som klar och navigerar. `destination` låter
+  // Kalibrera-CTA:n slutföra onboardingen INNAN den routar till /kalibrera/
+  // — annars lämnade primärknappen flödet med onboardingCompletedAt osatt.
+  const finish = async (destination = '/') => {
     setSaving(true);
     try {
       const { db, doc, setDoc, serverTimestamp } = await fsdb();
@@ -51,7 +53,7 @@ export function OnboardingFlow() {
         { merge: true },
       );
       trackEvent('onboarding_completed', { step_reached: step });
-      router.push('/');
+      router.push(destination);
     } finally {
       setSaving(false);
     }
@@ -385,7 +387,7 @@ function StepDone({
   saving,
 }: {
   onBack: () => void;
-  onFinish: () => Promise<void>;
+  onFinish: (destination?: string) => Promise<void>;
   saving: boolean;
 }) {
   return (
@@ -412,14 +414,15 @@ function StepDone({
           </div>
         </div>
         <div className="flex gap-2">
-          <Link
-            href="/kalibrera/"
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer no-underline"
+          <button
+            onClick={() => onFinish('/kalibrera/')}
+            disabled={saving}
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
-          </Link>
+          </button>
           <button
-            onClick={onFinish}
+            onClick={() => onFinish()}
             disabled={saving}
             className="px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
           >
@@ -437,7 +440,7 @@ function StepDone({
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
-          onClick={onFinish}
+          onClick={() => onFinish()}
           disabled={saving}
           className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
