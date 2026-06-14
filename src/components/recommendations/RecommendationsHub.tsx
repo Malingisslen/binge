@@ -49,7 +49,7 @@ function rowMatchesMediaFilter(
 export default function RecommendationsHub() {
   const cascade = useRecommendationsCascade();
   const { items, loading: watchlistLoading } = useWatchlist();
-  const { items: ni } = useNotInterested();
+  const { items: ni, loading: niLoading } = useNotInterested();
   const { user } = useAuth();
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [quickRateOpen, setQuickRateOpen] = useState(false);
@@ -104,7 +104,7 @@ export default function RecommendationsHub() {
   // Rendera inte numrerade rader förrän detektionen är stabil: watchlisten
   // har landat OCH alla detektions-queries (credits + keywords) avgjorts.
   // Då körs prioriteringen en gång på komplett data och ordningen är fast.
-  const rowsPending = watchlistLoading || cascade.isLoadingDetection;
+  const rowsPending = watchlistLoading || cascade.isLoadingDetection || niLoading;
 
   return (
     <>

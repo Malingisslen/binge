@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { parseRowKey, DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, RowResult, RowTitle, MediaTypeFilter } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
   { value: 'all', label: 'Alla' },
@@ -51,7 +52,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   const cascade = useRecommendationsCascade();
   const spec = cascade.rows.find(r => r.rowKey === rowKeyParam);
   const { items } = useWatchlist();
-  const { items: ni } = useNotInterested();
+  const { items: ni, loading: niLoading } = useNotInterested();
   const { user } = useAuth();
   const router = useRouter();
   const goBack = useCallback(() => router.push('/recommendations'), [router]);
@@ -126,16 +127,22 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
         </select>
       </div>
 
-      <ExpandedDispatch
-        spec={spec}
-        excludedIds={excludedIds}
-        filters={filters}
-        sort={sort}
-        myProviders={user?.myProviders ?? []}
-        topGenreIds={cascade.topGenreIds}
-        hiddenCountries={user?.hiddenCountries ?? []}
-        latestFiveStar={cascade.latestFiveStar}
-      />
+      {niLoading ? (
+        // Vänta på "inte intresserad"-listan innan gridden renderas — annars
+        // blinkar avfärdade titlar in tills snapshotten landat (BIN-37).
+        <LoadingView variant="grid" label="Laddar rekommendationer…" />
+      ) : (
+        <ExpandedDispatch
+          spec={spec}
+          excludedIds={excludedIds}
+          filters={filters}
+          sort={sort}
+          myProviders={user?.myProviders ?? []}
+          topGenreIds={cascade.topGenreIds}
+          hiddenCountries={user?.hiddenCountries ?? []}
+          latestFiveStar={cascade.latestFiveStar}
+        />
+      )}
     </>
   );
 }

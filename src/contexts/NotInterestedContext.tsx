@@ -12,6 +12,10 @@ export interface NotInterestedItem {
 
 interface NotInterestedState {
   items: NotInterestedItem[];
+  // true tills första Firestore-snapshotten landat. Konsumenter (rekommenda-
+  // tioner) gate:ar på den så avfärdade titlar inte blinkar in på kall laddning
+  // medan has() ännu returnerar false för allt (BIN-37).
+  loading: boolean;
   add: (tmdbId: number, mediaType: MediaType) => Promise<void>;
   remove: (tmdbId: number) => Promise<void>;
   has: (tmdbId: number) => boolean;
@@ -19,6 +23,7 @@ interface NotInterestedState {
 
 const NotInterestedContext = createContext<NotInterestedState>({
   items: [],
+  loading: true,
   add: async () => {},
   remove: async () => {},
   has: () => false,
@@ -27,15 +32,18 @@ const NotInterestedContext = createContext<NotInterestedState>({
 export function NotInterestedProvider({ children }: { children: ReactNode }) {
   const { uid } = useAuth();
   const [items, setItems] = useState<NotInterestedItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!uid) { setItems([]); return; }
+    if (!uid) { setItems([]); setLoading(false); return; }
+    setLoading(true);
     return lazySubscribe(({ db, collection, onSnapshot }) =>
       onSnapshot(collection(db, 'users', uid, 'notInterested'), (snap) => {
         setItems(snap.docs.map(d => ({
           tmdbId: d.data().tmdbId as number,
           mediaType: d.data().mediaType as MediaType,
         })));
+        setLoading(false);
       }));
   }, [uid]);
 
@@ -59,7 +67,7 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
   const idSet = useMemo(() => new Set(items.map(i => i.tmdbId)), [items]);
   const has = useCallback((tmdbId: number) => idSet.has(tmdbId), [idSet]);
 
-  const value = useMemo(() => ({ items, add, remove, has }), [items, add, remove, has]);
+  const value = useMemo(() => ({ items, loading, add, remove, has }), [items, loading, add, remove, has]);
 
   return (
     <NotInterestedContext.Provider value={value}>
