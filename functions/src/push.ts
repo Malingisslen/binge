@@ -35,18 +35,31 @@ export interface NotifPayload {
  * respekterar pushEnabled-flaggan. Rensar upp tokens som FCM rapporterar
  * som ogiltiga.
  */
-export async function sendPushToUser(recipientUid: string, payload: NotifPayload): Promise<void> {
+export async function sendPushToUser(
+  recipientUid: string,
+  payload: NotifPayload,
+  // Valfri: om anroparen redan läst users/{uid} (t.ex. episodeNotify) skickas
+  // pushEnabled in så vi hoppar över den dubbla profil-läsningen (BIN-33).
+  // Utelämnas av övriga triggers → standalone-läsningen nedan körs som förut.
+  prefetched?: { pushEnabled: boolean },
+): Promise<void> {
   const db = getFirestore();
 
-  const profileSnap = await db.collection('users').doc(recipientUid).get();
-  if (!profileSnap.exists) {
-    logger.info(`[push] skipping ${recipientUid} — user-doc missing`);
-    return;
+  let pushEnabled: boolean;
+  if (prefetched) {
+    pushEnabled = prefetched.pushEnabled;
+  } else {
+    const profileSnap = await db.collection('users').doc(recipientUid).get();
+    if (!profileSnap.exists) {
+      logger.info(`[push] skipping ${recipientUid} — user-doc missing`);
+      return;
+    }
+    const settings = profileSnap.data()?.notificationSettings as
+      | { pushEnabled?: boolean }
+      | undefined;
+    pushEnabled = settings?.pushEnabled === true;
   }
-  const settings = profileSnap.data()?.notificationSettings as
-    | { pushEnabled?: boolean }
-    | undefined;
-  if (!settings?.pushEnabled) {
+  if (!pushEnabled) {
     logger.info(`[push] skipping ${recipientUid} — pushEnabled=false`);
     return;
   }

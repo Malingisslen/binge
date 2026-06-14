@@ -44,11 +44,21 @@ async function readLastNotified(tmdbId: number): Promise<number | null> {
   const v = snap.data()?.lastNotifiedEpisode;
   return typeof v === 'number' ? v : null;
 }
-async function episodeReleasesEnabled(uid: string): Promise<boolean> {
+// Läser users/{uid} EN gång och returnerar båda notis-flaggorna, så vi slipper
+// den dubbla läsningen (episodeReleases här + pushEnabled i sendPushToUser).
+// null = user-doc saknas → notifiera inte alls. (BIN-33)
+async function readNotificationSettings(
+  uid: string,
+): Promise<{ episodeReleases: boolean; pushEnabled: boolean } | null> {
   const snap = await getFirestore().collection('users').doc(uid).get();
-  if (!snap.exists) return false;
-  const settings = snap.data()?.notificationSettings as { episodeReleases?: boolean } | undefined;
-  return settings?.episodeReleases !== false; // default on
+  if (!snap.exists) return null;
+  const settings = snap.data()?.notificationSettings as
+    | { episodeReleases?: boolean; pushEnabled?: boolean }
+    | undefined;
+  return {
+    episodeReleases: settings?.episodeReleases !== false, // default on
+    pushEnabled: settings?.pushEnabled === true, // default off (måste opt:a in)
+  };
 }
 function episodeCode(last: LastEpisode): string {
   return `S${String(last.season_number).padStart(2, '0')}E${String(last.episode_number).padStart(2, '0')}`;
@@ -66,7 +76,8 @@ function episodeCode(last: LastEpisode): string {
  *   ska inte nudgas om ett nyare avsnitt) eller blir 'ikapp' först efter att de
  *   sett avsnittet (då behöver de ingen "nytt avsnitt"-notis). Att inte notifiera
  *   är rätt i båda fallen.
- * - KOSTNAD: per-mottagare-läsningarna (episodeReleasesEnabled + sendPushToUser)
+ * - KOSTNAD: per-mottagare-läsningen (readNotificationSettings — en doc-läsning
+ *   vars pushEnabled vidarebefordras till sendPushToUser, BIN-33)
  *   körs BARA när shouldNotify är sann, dvs när en följd serie faktiskt fått ett
  *   nytt avsnitt — sällsynt per körning. Dominant kostnad är collectionGroup-
  *   svepet (ett per körning), inte per-mottagare-fan-out:en.
@@ -89,13 +100,16 @@ async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<numb
   const actionUrl = `/tv/${tmdbId}/`;
   let notified = 0;
   await Promise.allSettled(recipients.map(async (it) => {
-    if (!(await episodeReleasesEnabled(it.uid))) return;
+    // En läsning av users/{uid} för båda flaggorna; pushEnabled vidarebefordras
+    // till sendPushToUser så den slipper läsa samma doc igen (BIN-33).
+    const settings = await readNotificationSettings(it.uid);
+    if (!settings || !settings.episodeReleases) return;
     const notifId = `episode-${tmdbId}-${last.id}`;
     await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
       tmdbId, mediaType: 'tv', title: it.title || title, kind: 'episode_release',
       episodeCode: code, read: false, createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    await sendPushToUser(it.uid, { title: 'Nytt avsnitt', body: `${it.title || title} — ${code} har släppts`, actionUrl, tag: `episode-${tmdbId}` });
+    await sendPushToUser(it.uid, { title: 'Nytt avsnitt', body: `${it.title || title} — ${code} har släppts`, actionUrl, tag: `episode-${tmdbId}` }, { pushEnabled: settings.pushEnabled });
     notified += 1;
   }));
   await db.collection('episodeNotifyState').doc(String(tmdbId))
