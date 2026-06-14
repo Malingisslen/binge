@@ -10,6 +10,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Force a UTC+ timezone so date-logic tests are a real regression guard.
+    // CI runs on UTC runners where local==UTC, which hides any revert to
+    // toISOString()-style UTC date handling (the BIN-39 off-by-one bug). Pinning
+    // Europe/Stockholm here makes `npm test` exercise the offset everywhere —
+    // dev machines AND CI — instead of relying on a per-workflow env var.
+    env: { TZ: 'Europe/Stockholm' },
     setupFiles: ['./vitest.setup.ts'],
     // Frontend tests live under src/. The pure (firebase-free) Cloud Function
     // aggregation helpers under functions/src are also unit-tested here so they
