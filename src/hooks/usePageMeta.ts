@@ -40,6 +40,9 @@ import { useEffect } from 'react';
 
 const DEFAULT_TITLE = 'Binge.nu — Håll koll på vad du tittar på';
 const DEFAULT_DESCRIPTION = 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.';
+// Matchar layout.tsx OG-default — återställs vid unmount så en titelsidas poster
+// inte läcker till nästa sidas share-preview (BIN-30).
+const DEFAULT_OG_IMAGE = 'https://binge.nu/og-image.svg';
 
 /**
  * Märker element som hooken själv skapat. Element UTAN attributet ägs av
@@ -130,6 +133,9 @@ export function usePageMeta({
       setMeta('name', 'description', DEFAULT_DESCRIPTION);
       setMeta('property', 'og:title', 'Binge.nu');
       setMeta('property', 'og:description', DEFAULT_DESCRIPTION);
+      // Återställ og:image till layout-defaulten så en titelsidas poster inte
+      // ligger kvar i nästa client-routes share-preview (BIN-30).
+      setMeta('property', 'og:image', DEFAULT_OG_IMAGE);
       restoreCanonical();
       if (indexable) {
         // Defensiv: återställ catch-all-defaulten när indexable-routen unmountar.
