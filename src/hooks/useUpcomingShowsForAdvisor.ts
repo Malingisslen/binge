@@ -111,7 +111,11 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
 
       const existing = showMap.get(e.tmdbId);
       if (existing) {
-        if (!existing.episodes.some(ep => ep.airDate === e.airDate)) {
+        // Dedupa på episod-IDENTITET, inte datum (BIN-12): två avsnitt samma
+        // dag (double-premiere S1E01+S1E02, batch-drop) ska båda räknas — en
+        // air-date-only-guard tappade det andra + underräknade totalEpisodes.
+        // Kalender-entries är redan deduppade uppströms på tmdbId-S{n}E{n}.
+        if (!existing.episodes.some(ep => ep.episodeCode === e.episodeCode)) {
           existing.episodes.push(episode);
         }
       } else {
