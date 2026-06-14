@@ -45,6 +45,8 @@ export const TMDB_STALE = {
   PERSON_CREDITS: 4 * 60 * 60 * 1000,
   /** /movie/{id}/keywords + /tv/{id}/keywords. */
   KEYWORDS: 4 * 60 * 60 * 1000,
+  /** /movie/{id}/credits + /tv/{id}/credits — cast/crew av en titel är statiskt. */
+  CREDITS: 4 * 60 * 60 * 1000,
   /** /trending/all/week — region SE-puls. */
   TRENDING: 60 * 60 * 1000,
   /** /discover — genre-canon, upcoming, thematic. */

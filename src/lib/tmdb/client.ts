@@ -199,6 +199,20 @@ export function getTVKeywords(
   return tmdbFetch(`/tv/${id}/keywords`, {}, opts);
 }
 
+/**
+ * Credits (cast + crew) via the standalone /{type}/{id}/credits endpoint —
+ * far lighter than a full getMovie/getTVShow detail call. Movie and TV share
+ * the same response shape. Used by the recommendations cascade (fan-out surface)
+ * so it doesn't pull oversized detail payloads just to read credits.
+ */
+export function getCredits(
+  mediaType: 'movie' | 'tv',
+  id: number,
+  opts?: TmdbFetchOpts,
+): Promise<{ id: number; cast: { id: number; name: string }[]; crew: { id: number; name: string; job?: string }[] }> {
+  return tmdbFetch(`/${mediaType}/${id}/credits`, {}, opts);
+}
+
 /** Convenience — normalizes movie + tv keyword response into a flat array. */
 export async function getKeywords(
   mediaType: 'movie' | 'tv',

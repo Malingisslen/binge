@@ -37,6 +37,20 @@ export function classifySeeds(items: readonly WatchlistItem[]): {
   return { strong, weak };
 }
 
+/**
+ * Cap a seed list to the N most-recently-rated (ratedAt desc; missing
+ * timestamps sort last). Used to bound the recommendations-cascade fan-out:
+ * recurring-people/keyword detection only surfaces the top 3, so fetching
+ * detail/keywords for seeds beyond ~N adds TMDB cost with ~zero marginal value.
+ * Returns the input as-is when already within the cap.
+ */
+export function capRecentSeeds(seeds: readonly Seed[], n: number): Seed[] {
+  if (seeds.length <= n) return [...seeds];
+  return [...seeds]
+    .sort((a, b) => (b.ratedAt?.getTime() ?? 0) - (a.ratedAt?.getTime() ?? 0))
+    .slice(0, n);
+}
+
 export function detectLatestFiveStar(
   items: readonly WatchlistItem[],
   now: Date,

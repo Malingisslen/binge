@@ -4,10 +4,11 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { getMovie, getTVShow, getKeywords, discoverMovies } from '@/lib/tmdb/client';
+import { getCredits, getKeywords, discoverMovies } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import {
   classifySeeds,
+  capRecentSeeds,
   detectLatestFiveStar,
   detectRecurringPeople,
   detectRecurringKeywords,
@@ -18,6 +19,12 @@ import { prioritizeRows } from '@/lib/recommendations/cascadePrioritizer';
 import type { RowSpec } from '@/types';
 
 const FIVE_STAR_WINDOW_DAYS = 30;
+
+// Bound the per-seed TMDB fan-out (credits + keywords) to the N most-recently-
+// rated seeds. Recurring-people/keyword detection only surfaces the top 3, so
+// seeds beyond this add cost with ~zero marginal value. The full strong/weak
+// lists are still used for ratingCount and the top-3 "similar" rows.
+const SEED_FETCH_CAP = 20;
 
 export interface CascadeOutput {
   rows: RowSpec[];
@@ -43,19 +50,23 @@ export function useRecommendationsCascade(): CascadeOutput {
   const { strong, weak } = useMemo(() => classifySeeds(items), [items]);
   const allSeeds = useMemo(() => [...strong, ...weak], [strong, weak]);
 
-  // Per-strong-seed detail fetch — pulls credits from existing TV/Movie cache
-  const detailQueries = useQueries({
-    queries: strong.map(s => ({
-      queryKey: [s.mediaType, s.tmdbId],
-      queryFn: ({ signal }: { signal?: AbortSignal }) =>
-        s.mediaType === 'movie' ? getMovie(s.tmdbId, { signal }) : getTVShow(s.tmdbId, { signal }),
-      staleTime: s.mediaType === 'movie' ? TMDB_STALE.MOVIE_DETAIL : TMDB_STALE.TV_DETAIL,
+  // Capped seed lists for the expensive per-seed fan-out only. The full
+  // strong/weak lists drive ratingCount + the top-3 "similar" rows untouched.
+  const strongForFetch = useMemo(() => capRecentSeeds(strong, SEED_FETCH_CAP), [strong]);
+  const seedsForFetch = useMemo(() => capRecentSeeds(allSeeds, SEED_FETCH_CAP), [allSeeds]);
+
+  // Per-seed credits fetch — standalone /credits endpoint (lite), not full detail
+  const creditsQueries = useQueries({
+    queries: strongForFetch.map(s => ({
+      queryKey: ['rec-credits', s.mediaType, s.tmdbId],
+      queryFn: ({ signal }: { signal?: AbortSignal }) => getCredits(s.mediaType, s.tmdbId, { signal }),
+      staleTime: TMDB_STALE.CREDITS,
     })),
   });
 
   // Per-seed keyword fetch (separate endpoint, longer cache)
   const keywordQueries = useQueries({
-    queries: allSeeds.map(s => ({
+    queries: seedsForFetch.map(s => ({
       queryKey: ['rec-keywords', s.mediaType, s.tmdbId],
       queryFn: ({ signal }: { signal?: AbortSignal }) => getKeywords(s.mediaType, s.tmdbId, { signal }),
       staleTime: TMDB_STALE.KEYWORDS,
@@ -78,8 +89,8 @@ export function useRecommendationsCascade(): CascadeOutput {
   });
 
   // Derive stable keys from query arrays to avoid recreating memo on every query state change
-  const detailDataKey = detailQueries.map(q => q.data ? 'd' : '').join(',');
-  const detailLoadingKey = detailQueries.some(q => q.isLoading) ? 1 : 0;
+  const detailDataKey = creditsQueries.map(q => q.data ? 'd' : '').join(',');
+  const detailLoadingKey = creditsQueries.some(q => q.isLoading) ? 1 : 0;
   const keywordDataKey = keywordQueries.map(q => q.data ? 'k' : '').join(',');
   const keywordLoadingKey = keywordQueries.some(q => q.isLoading) ? 1 : 0;
   const upcomingDataLength = upcomingProbeQuery[0]?.data?.results?.length ?? 0;
@@ -87,30 +98,28 @@ export function useRecommendationsCascade(): CascadeOutput {
   return useMemo(() => {
     const isLoadingDetection = detailLoadingKey === 1 || keywordLoadingKey === 1;
 
-    // Build SeedCredits map from detail queries
+    // Build SeedCredits map from the standalone /credits responses ({cast, crew})
     const credits = new Map<number, SeedCredits>();
-    strong.forEach((s, i) => {
-      const data = detailQueries[i]?.data as
-        | { credits?: { cast?: { id: number; name: string }[]; crew?: { id: number; name: string; job?: string }[] } }
-        | undefined;
-      if (!data?.credits) return;
-      const crew = data.credits.crew ?? [];
+    strongForFetch.forEach((s, i) => {
+      const data = creditsQueries[i]?.data;
+      if (!data) return;
+      const crew = data.crew ?? [];
       const directorEntry = crew.find(c => c.job === 'Director');
       credits.set(s.tmdbId, {
-        cast: (data.credits.cast ?? []).map(c => ({ id: c.id, name: c.name })),
+        cast: (data.cast ?? []).map(c => ({ id: c.id, name: c.name })),
         director: directorEntry ? { id: directorEntry.id, name: directorEntry.name } : null,
       });
     });
 
     // Build keyword map
     const keywordsByTmdb = new Map<number, { id: number; name: string }[]>();
-    allSeeds.forEach((s, i) => {
+    seedsForFetch.forEach((s, i) => {
       const data = keywordQueries[i]?.data;
       if (data) keywordsByTmdb.set(s.tmdbId, data);
     });
 
-    const recurringPeople = detectRecurringPeople(strong, credits, 3);
-    const recurringKeywords = detectRecurringKeywords(allSeeds, keywordsByTmdb, 3);
+    const recurringPeople = detectRecurringPeople(strongForFetch, credits, 3);
+    const recurringKeywords = detectRecurringKeywords(seedsForFetch, keywordsByTmdb, 3);
     const dominantGenres = detectDominantGenres(items, 5);
     const latestFiveStar = detectLatestFiveStar(items, new Date(), FIVE_STAR_WINDOW_DAYS);
 
@@ -133,10 +142,10 @@ export function useRecommendationsCascade(): CascadeOutput {
       isLoadingDetection,
       latestFiveStar,
     };
-    // detailQueries / keywordQueries are intentionally NOT in deps — they're
+    // creditsQueries / keywordQueries are intentionally NOT in deps — they're
     // fresh arrays from useQueries each render, defeating memoization. The
     // derived *DataKey / *LoadingKey above capture the semantic state change
     // (which queries have data, which are loading) without unstable references.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, strong, weak, allSeeds, detailDataKey, detailLoadingKey, keywordDataKey, keywordLoadingKey, upcomingDataLength, myProviders]);
+  }, [items, strong, weak, strongForFetch, seedsForFetch, detailDataKey, detailLoadingKey, keywordDataKey, keywordLoadingKey, upcomingDataLength, myProviders]);
 }

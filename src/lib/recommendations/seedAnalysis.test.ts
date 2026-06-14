@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifySeeds,
+  capRecentSeeds,
   detectLatestFiveStar,
   detectRecurringPeople,
   detectRecurringKeywords,
@@ -67,6 +68,40 @@ describe('classifySeeds', () => {
       mkItem({ tmdbId: 2, rating: 5, status: 'mina' }),
     ];
     expect(classifySeeds(items).strong.map(s => s.tmdbId).sort()).toEqual([1, 2]);
+  });
+});
+
+describe('capRecentSeeds', () => {
+  it('returns the list unchanged (same contents + order) when within the cap', () => {
+    const seeds = [mkSeed({ tmdbId: 1 }), mkSeed({ tmdbId: 2 })];
+    expect(capRecentSeeds(seeds, 5).map(s => s.tmdbId)).toEqual([1, 2]);
+  });
+
+  it('keeps the N most-recently-rated when over the cap', () => {
+    const seeds = [
+      mkSeed({ tmdbId: 1, ratedAt: new Date('2024-01-01') }),
+      mkSeed({ tmdbId: 2, ratedAt: new Date('2024-06-01') }),
+      mkSeed({ tmdbId: 3, ratedAt: new Date('2024-03-01') }),
+    ];
+    const capped = capRecentSeeds(seeds, 2);
+    expect(capped.map(s => s.tmdbId)).toEqual([2, 3]); // newest first
+  });
+
+  it('sorts seeds with a missing ratedAt last', () => {
+    const seeds = [
+      mkSeed({ tmdbId: 1, ratedAt: null }),
+      mkSeed({ tmdbId: 2, ratedAt: new Date('2024-02-01') }),
+    ];
+    expect(capRecentSeeds(seeds, 1).map(s => s.tmdbId)).toEqual([2]);
+  });
+
+  it('does not mutate the input array', () => {
+    const seeds = [
+      mkSeed({ tmdbId: 1, ratedAt: new Date('2024-01-01') }),
+      mkSeed({ tmdbId: 2, ratedAt: new Date('2024-06-01') }),
+    ];
+    capRecentSeeds(seeds, 1);
+    expect(seeds.map(s => s.tmdbId)).toEqual([1, 2]);
   });
 });
 
