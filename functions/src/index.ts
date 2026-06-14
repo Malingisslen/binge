@@ -158,3 +158,9 @@ export { apiInsights } from './insights/api';
 // episodeReleaseNotify: schemalagd collectionGroup-scan → push:ar followers som
 // är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
 export { episodeReleaseNotify } from './episodeNotify';
+
+// ── Orphan-follow-sweep (BIN-21 storage-backstop) ────────────────────────────
+// reclaimOrphanFollows: veckovis collectionGroup-scan → raderar following/
+// followers-docs som pekar på ett raderat konto (inbound-follows som
+// deleteAccount inte får röra, ägda av följaren per firestore.rules).
+export { reclaimOrphanFollows } from './reclaimOrphanFollows';
