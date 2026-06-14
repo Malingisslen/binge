@@ -1904,21 +1904,6 @@ button { font: inherit; cursor: pointer; }
   margin-top: 3px;
   letter-spacing: 0.02em;
 }
-.rec-card .why-card {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-  margin-top: 4px;
-  letter-spacing: 0.04em;
-  opacity: 0;
-  transition: opacity 140ms;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rec-card:hover .why-card { opacity: 1; }
-.rec-card .why-card .m { color: var(--cal-deep); font-weight: 500; }
-
 /* Hover-reveal: scrim gradient + action buttons over the duotone poster */
 .rec-card .poster::before {
   content: "";

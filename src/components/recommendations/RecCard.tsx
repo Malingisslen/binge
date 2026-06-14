@@ -14,15 +14,13 @@ import NotInterestedButton from '@/components/title/NotInterestedButton';
 // Direction H recommendation card: duotone 2:3 poster (genre-mapped) +
 // title + sub line (mono). On hover, the poster border darkens and the
 // poster lifts. Quick-add + not-interested controls live in the corners.
-// Optional `whyLine` shows a row-specific rationale on hover.
 
 interface Props {
   item: TMDBSearchResult;
-  whyLine?: string;
   providers?: TMDBProvider[];
 }
 
-export default function RecCard({ item, whyLine, providers }: Props) {
+export default function RecCard({ item, providers }: Props) {
   useAuth(); // ensures hook order matches QuickAddButton (which uses auth)
   const { getItem } = useWatchlist();
   const isTrackable = isAddableMediaType(item);
@@ -66,11 +64,6 @@ export default function RecCard({ item, whyLine, providers }: Props) {
         <div className="ttl">{title}</div>
       </Link>
       <div className="sub">{meta}</div>
-      {whyLine && (
-        <div className="why-card">
-          <span className="m">{whyLine}</span>
-        </div>
-      )}
       {isTrackable && (
         <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}>
           <QuickAddButton
