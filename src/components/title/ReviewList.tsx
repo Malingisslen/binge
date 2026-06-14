@@ -260,6 +260,7 @@ function ReviewComments({
                     onClick={() => deleteComment(c.id)}
                     className="text-text-muted hover:text-red-600 bg-transparent border-none cursor-pointer p-0"
                     title="Ta bort"
+                    aria-label="Ta bort kommentar"
                   >
                     <X size={10} />
                   </button>

@@ -305,6 +305,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         <select
           value={sort}
           onChange={e => setSort(e.target.value as SortKey)}
+          aria-label="Sortera biblioteket"
           style={{
             fontFamily: 'var(--mono)', fontSize: 12,
             border: '1px solid var(--rule)', borderRadius: 6,
@@ -335,6 +336,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             <input
               type="text"
               placeholder="sök titel…"
+              aria-label="Sök i biblioteket"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               spellCheck={false}
@@ -426,6 +428,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 <th className="px-2 py-[6px] border-b border-border-light bg-cal-header w-[28px]">
                   <input
                     type="checkbox"
+                    aria-label="Välj alla"
                     checked={displayItems.length > 0 && selected.size === displayItems.length}
                     onChange={e => {
                       if (e.target.checked) setSelected(new Set(displayItems.map(i => i.tmdbId)));
@@ -454,6 +457,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
+                        aria-label={`Välj ${item.title}`}
                         checked={selected.has(item.tmdbId)}
                         onChange={() => setSelected(prev => {
                           const next = new Set(prev);
