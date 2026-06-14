@@ -214,7 +214,7 @@ function ReportDialog({
               {note.length}/500
             </div>
           </div>
-          {error && <div className="text-xxs text-red-700">{error}</div>}
+          {error && <div className="text-xxs text-danger-ink">{error}</div>}
         </div>
         <div className="px-3 py-2 border-t border-border-light flex items-center gap-2">
           <button

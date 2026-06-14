@@ -62,7 +62,8 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           className={`poster duo-${tone}`}
           style={{
             marginBottom: 3,
-            boxShadow: isTracked ? '0 0 0 2px var(--acc-deep)' : undefined,
+            outline: isTracked ? '2px solid var(--acc-deep)' : undefined,
+            outlineOffset: isTracked ? '-2px' : undefined,
           }}
         >
           {poster && !imgError ? (
@@ -106,7 +107,6 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
                   <span
                     key={p.provider_id}
                     style={{
-                      fontFamily: 'var(--mono)',
                       fontSize: 8,
                       padding: '1px 4px',
                       borderRadius: 1,
@@ -121,7 +121,6 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
               })}
               {extraCount > 0 && (
                 <span style={{
-                  fontFamily: 'var(--mono)',
                   fontSize: 8,
                   padding: '1px 4px',
                   borderRadius: 1,
@@ -172,7 +171,6 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
           {title}
         </div>
         <div style={{
-          fontFamily: 'var(--mono)',
           fontSize: 11,
           color: 'var(--ink-3)',
           marginTop: 2,

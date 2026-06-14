@@ -1960,7 +1960,7 @@ button { font: inherit; cursor: pointer; }
   font-weight: 500;
   cursor: pointer;
   letter-spacing: 0.04em;
-  box-shadow: 0 2px 6px oklch(0 0 0 / 0.18);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
   text-decoration: none;
 }
 .rec-card .quick-actions button:hover,

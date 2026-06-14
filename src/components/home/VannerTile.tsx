@@ -77,7 +77,7 @@ export default function VannerTile() {
                   {f.username && (
                     <span className="when">@{f.username}</span>
                   )}
-                  <div style={{ color: 'var(--ink-3)', fontFamily: 'var(--mono)', fontSize: 10.5, marginTop: 2, letterSpacing: 0.04 }}>
+                  <div style={{ color: 'var(--ink-3)', fontSize: 10.5, marginTop: 2, letterSpacing: 0.04 }}>
                     blev vän {formatSince(f.since)}
                   </div>
                 </div>

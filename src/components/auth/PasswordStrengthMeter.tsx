@@ -27,7 +27,7 @@ export function PasswordStrengthMeter({ strength }: { strength: PasswordStrength
         ))}
       </div>
       <div className={`text-xxs ${
-        strength.acceptable ? 'text-text-muted' : 'text-red-600'
+        strength.acceptable ? 'text-text-muted' : 'text-danger-ink'
       }`}>
         {strength.label}
         {strength.feedback ? ` — ${strength.feedback}` : ''}

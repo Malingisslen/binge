@@ -258,7 +258,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 
       {(providerFilter || behindFilterActive) && (
         <div className="chip acc" style={{ marginTop: 18, padding: '6px 12px', display: 'inline-flex', gap: 8 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+          <span style={{ fontSize: 11, letterSpacing: 0.12, textTransform: 'uppercase' }}>
             filter:
           </span>
           {providerFilter && (
@@ -307,7 +307,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           onChange={e => setSort(e.target.value as SortKey)}
           aria-label="Sortera biblioteket"
           style={{
-            fontFamily: 'var(--mono)', fontSize: 12,
+            fontSize: 12,
             border: '1px solid var(--rule)', borderRadius: 6,
             padding: '5px 10px',
             background: 'var(--surface)', color: 'var(--ink-2)',
@@ -345,7 +345,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               autoCapitalize="off"
               style={{
                 background: 'transparent', border: 0,
-                fontFamily: 'var(--mono)', fontSize: 11.5,
+                fontSize: 11.5,
                 color: 'var(--ink)', outline: 'none', width: 140,
               }}
             />
@@ -385,7 +385,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               await Promise.all(Array.from(selected).map(id => removeItem(id)));
               setSelected(new Set());
             }}
-            className="px-2 py-[2px] text-xs border border-red-300 rounded-sm cursor-pointer bg-surface text-red-600 font-[inherit]"
+            className="px-2 py-[2px] text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"
           >
             Ta bort
           </button>

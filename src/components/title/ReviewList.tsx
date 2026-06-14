@@ -148,7 +148,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         </div>
         <div className="flex items-center gap-1">
           {isOwn && onDelete && (
-            <button onClick={onDelete} className="text-xxs text-red-500 bg-transparent border-none cursor-pointer font-[inherit]">Ta bort</button>
+            <button onClick={onDelete} className="text-xxs text-danger-ink bg-transparent border-none cursor-pointer font-[inherit]">Ta bort</button>
           )}
           {!isOwn && (
             <UgcActionsMenu
@@ -258,7 +258,7 @@ function ReviewComments({
                 {canDelete ? (
                   <button
                     onClick={() => deleteComment(c.id)}
-                    className="text-text-muted hover:text-red-600 bg-transparent border-none cursor-pointer p-0"
+                    className="text-text-muted hover:text-danger-ink bg-transparent border-none cursor-pointer p-0"
                     title="Ta bort"
                     aria-label="Ta bort kommentar"
                   >

@@ -137,7 +137,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           </div>
           <h1>{displayTitle}</h1>
           {(directors.length > 0 || writers.length > 0) && (
-            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
               {directors.length > 0 && (
                 <>
                   regi:{' '}
@@ -197,7 +197,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               />
               <div>
                 {watchlistItem && (
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 3 }}>
                     Ditt betyg
                   </div>
                 )}
@@ -247,7 +247,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           )}
 
           {showRentBuy && hasRentBuy && (
-            <div style={{ marginTop: 10, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
@@ -304,7 +304,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   )}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.25 }}>{person.name}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
+                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.2 }}>
                   {person.character}
                 </div>
               </Link>

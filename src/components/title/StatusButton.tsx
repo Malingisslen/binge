@@ -150,7 +150,7 @@ export default function StatusButton({
               <div className="border-t border-border-light" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover text-red-600 bg-transparent"
+                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

@@ -64,7 +64,7 @@ export function ProvidersSection() {
         className="relative h-[46px] rounded-md flex items-center justify-center text-center text-[12px] font-bold px-2 transition-colors"
         style={
           isSelected
-            ? { background: p.color, color: fg === 'white' ? '#fff' : 'var(--ink)' }
+            ? { background: p.color, color: fg === 'white' ? 'white' : 'var(--ink)' }
             : { border: `1.5px solid ${p.color}`, color: 'var(--ink)' }
         }
       >
@@ -123,7 +123,7 @@ export function ProvidersSection() {
                 <div key={provider.id} className="flex items-center gap-[10px] py-[3px]">
                   <span
                     className="rounded-sm px-2 py-[1px] text-[11px] font-semibold min-w-[54px] text-center"
-                    style={{ background: provider.color, color: fg === 'white' ? '#fff' : 'var(--ink)' }}
+                    style={{ background: provider.color, color: fg === 'white' ? 'white' : 'var(--ink)' }}
                   >
                     {provider.shortName}
                   </span>

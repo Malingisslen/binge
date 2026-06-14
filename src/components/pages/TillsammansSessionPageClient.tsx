@@ -190,7 +190,7 @@ function JoinSessionForm({
           </div>
         </div>
         {error && (
-          <div className="px-3 py-2 text-xs text-red-700 bg-red-50 border-t border-red-200">{error}</div>
+          <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger">{error}</div>
         )}
         <div className="px-3 py-2 border-t border-border-light">
           <button
@@ -332,7 +332,7 @@ function SessionMain({
             </span>
           )}
           <span style={{
-            fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-3)',
+            fontSize: 11, color: 'var(--ink-3)',
             letterSpacing: 0.12, textTransform: 'uppercase',
             marginLeft: 'auto',
           }}>
@@ -476,13 +476,13 @@ function SwipeCard({
         <span>Veto kvar: <b className={me.vetoRemaining > 0 ? 'text-text-primary' : 'text-text-muted'}>{me.vetoRemaining}</b></span>
       </div>
       {vetoConfirm ? (
-        <div className="px-3 py-3 border-t border-red-200 bg-red-50 text-xs">
-          <div className="font-semibold text-red-800 mb-1">Lägg ett veto?</div>
+        <div className="px-3 py-3 border-t border-danger bg-danger-soft text-xs">
+          <div className="font-semibold text-danger-ink mb-1">Lägg ett veto?</div>
           <div className="text-text-secondary mb-2">Veto dödar den här titeln definitivt. Du kan använda det bara en gång per session.</div>
           <div className="flex gap-2">
             <button
               onClick={() => onVote(cand, 'veto')}
-              className="px-3 py-1 bg-red-600 text-white rounded-sm text-xs font-semibold cursor-pointer"
+              className="px-3 py-1 bg-danger text-white rounded-sm text-xs font-semibold cursor-pointer"
             >
               Ja, veto
             </button>
@@ -511,7 +511,7 @@ function SwipeCard({
           {me.vetoRemaining > 0 && (
             <button
               onClick={() => onVote(cand, 'veto')}
-              className="px-3 py-2 border border-red-300 bg-white text-red-700 rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+              className="px-3 py-2 border border-danger bg-white text-danger-ink rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
               title="Dödar denna titel definitivt"
             >
               <Ban size={14} /> Veto
@@ -571,7 +571,7 @@ function CandidateTable({
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
-                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-red-500 bg-red-100 text-red-700' : 'border-border-main bg-white text-text-muted'}`}
+                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-border-main bg-white text-text-muted'}`}
                       >
                         Veto
                       </button>
