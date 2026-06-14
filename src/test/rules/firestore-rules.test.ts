@@ -5,7 +5,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -328,6 +328,55 @@ describe('users/{uid}/reportMeta throttle write rule', () => {
     await assertFails(setDoc(
       doc(otherDb(), 'users', OWNER, 'reportMeta', 'throttle'),
       { lastReportAt: serverTimestamp() },
+    ));
+  });
+});
+
+// BIN-24 — Tillsammans participant uid anti-spoof. Anonymous participation stays
+// allowed (uid null), but a signed-in writer may only set their OWN uid, and an
+// anonymous writer may not carry a non-null uid (identity misattribution).
+describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
+  function validParticipant(uid: string | null) {
+    return {
+      uid, displayName: 'Spelare', providers: [], vetoRemaining: 1,
+      isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
+    };
+  }
+  it('signed-in user can create a participant carrying their own uid', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      validParticipant(OWNER),
+    ));
+  });
+  it('signed-in user cannot spoof another uid', async () => {
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      validParticipant('someone_else'),
+    ));
+  });
+  it('anonymous user can create a participant with uid null', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', 'anon1'),
+      validParticipant(null),
+    ));
+  });
+  it('anonymous user cannot carry a non-null uid', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', 'anon1'),
+      validParticipant(OWNER),
+    ));
+  });
+  it('a different signed-in user cannot update another participant doc', async () => {
+    // OWNER creates their participant (uid=OWNER); other_uid then tries to touch
+    // it. The merged doc's uid stays OWNER ≠ other_uid → guard denies (exercises
+    // the UPDATE branch + the cross-participant-write block).
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      validParticipant(OWNER),
+    ));
+    await assertFails(updateDoc(
+      doc(otherDb(), 'sessions', 's1', 'participants', 'p1'),
+      { lastActiveAt: serverTimestamp() },
     ));
   });
 });

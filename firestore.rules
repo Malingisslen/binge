@@ -407,7 +407,15 @@ service cloud.firestore {
       match /participants/{pid} {
         allow read: if true;
         allow create, update: if
-          request.resource.data.keys().hasOnly([
+          // Anti-spoof (BIN-24): uid-fältet måste matcha den som skriver — en
+          // inloggad får bara sätta sitt eget uid, en anonym måste sätta null.
+          // Stoppar att någon misattribuerar en annan användares identitet i
+          // session/grupp-UI:t. (Anonymt deltagande är fortfarande tillåtet.)
+          (
+            (request.auth != null && request.resource.data.uid == request.auth.uid)
+            || (request.auth == null && request.resource.data.uid == null)
+          )
+          && request.resource.data.keys().hasOnly([
             'uid', 'displayName', 'providers', 'vetoRemaining',
             'isHost', 'joinedAt', 'lastActiveAt'
           ])
