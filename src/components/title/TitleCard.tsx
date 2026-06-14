@@ -10,6 +10,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider, canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { TMDBProvider, MediaType } from '@/types';
+import { usePrefetchTitle } from '@/hooks/usePrefetchTitle';
 import QuickAddButton from './QuickAddButton';
 import NotInterestedButton from './NotInterestedButton';
 
@@ -33,6 +34,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
   const isTracked = isTrackable && !!getItem(item.id);
   const Icon = item.media_type === 'tv' ? Tv : Film;
   const [imgError, setImgError] = useState(false);
+  const prefetch = usePrefetchTitle();
 
   // Dedup på kanoniskt id innan vi slice:ar — annars kan t.ex. "HBO" och
   // "HBO Max Amazon Channel" uppta två av tre badge-platser för samma
@@ -49,7 +51,11 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
     : toneForId(item.id);
 
   return (
-    <div className="group relative">
+    <div
+      className="group relative"
+      onPointerEnter={isTrackable ? () => prefetch.onPointerEnter(item.media_type as MediaType, item.id) : undefined}
+      onPointerLeave={isTrackable ? prefetch.onPointerLeave : undefined}
+    >
       <Link href={href} className="no-underline" style={{ color: 'var(--ink)' }}>
         <div
           className={`poster duo-${tone}`}
