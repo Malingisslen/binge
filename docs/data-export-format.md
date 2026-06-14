@@ -20,6 +20,7 @@ Filen är en JSON med följande top-level-struktur (se
   "notifications":   [ … ],
   "blocked":         [ … ],
   "following":       [ … ],
+  "followers":       [ … ],
   "friends":            [ … ],
   "friendRequests":     [ … ],
   "friendRequestsSent": [ … ],
@@ -45,6 +46,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `notifications` | `users/{uid}/notifications/{notifId}` | Notifikations-inbox |
 | `blocked` | `users/{uid}/blocked/{targetUid}` | Blockerade användare + timestamps |
 | `following` | `users/{uid}/following/{targetUid}` | Följda användar-uids + timestamps |
+| `followers` | `users/{uid}/followers/{followerUid}` | Uids av de som följer dig + timestamps |
 | `friends` | `users/{uid}/friends/{friendUid}` | Vänner (ömsesidiga följningar) + timestamps |
 | `friendRequests` | `users/{uid}/friendRequests/{fromUid}` | Inkomna vänförfrågningar |
 | `friendRequestsSent` | `users/{uid}/friendRequestsSent/{toUid}` | Skickade vänförfrågningar |

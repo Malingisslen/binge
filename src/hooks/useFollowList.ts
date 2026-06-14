@@ -3,19 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
+import { type FollowListUser, type FollowProfile, resolveFollowRows } from './useFollowList.helpers';
+
+export type { FollowListUser } from './useFollowList.helpers';
 
 // Topp-cap för hur många UIDs vi materialiserar i klienten samtidigt. Matchar
 // FOLLOWING_LIMIT i useFollow.ts. Power-users med >500 följda får paginering
 // senare; tills dess sätter vi ett synligt tak.
 const FOLLOW_LIST_LIMIT = 500;
-
-export interface FollowListUser {
-  uid: string;
-  displayName: string;
-  username: string | null;
-  photoURL: string | null;
-  isPublic: boolean;
-}
 
 interface FollowListState {
   following: FollowListUser[];
@@ -38,10 +33,11 @@ export function useFollowList(): FollowListState {
   const [following, setFollowing] = useState<FollowListUser[]>([]);
   const [followers, setFollowers] = useState<FollowListUser[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
-  // Cache per uid → profil (eller null = saknas/privat). Gör att vi bara
-  // hämtar NYA uids när follow-listan ändras, istället för att refetcha alla
-  // upp till 1000 profiler vid varje följ/avfölj (H5).
-  const profileCache = useRef<Map<string, FollowListUser | null>>(new Map());
+  // Cache per uid → profil (FollowListUser), null (privat/fetch-fel) eller
+  // 'ghost' (profil-doc saknas = raderat konto). Gör att vi bara hämtar NYA
+  // uids när follow-listan ändras, istället för att refetcha alla upp till
+  // 1000 profiler vid varje följ/avfölj (H5).
+  const profileCache = useRef<Map<string, FollowProfile>>(new Map());
 
   useEffect(() => {
     if (!uid) { setFollowingUids([]); setFollowerUids([]); return; }
@@ -65,12 +61,9 @@ export function useFollowList(): FollowListState {
       return;
     }
 
-    const fallback = (u: string): FollowListUser => ({
-      uid: u, displayName: 'Privat användare', username: null, photoURL: null, isPublic: false,
-    });
     const build = () => {
-      setFollowing(followingUids.map(u => cache.get(u) ?? fallback(u)));
-      setFollowers(followerUids.map(u => cache.get(u) ?? fallback(u)));
+      setFollowing(resolveFollowRows(followingUids, cache));
+      setFollowers(resolveFollowRows(followerUids, cache));
     };
 
     // Hämta bara uids vi inte redan har i cachen.
@@ -86,7 +79,10 @@ export function useFollowList(): FollowListState {
       try {
         const { db, doc, getDoc } = await fsdb();
         const snap = await getDoc(doc(db, 'users', u));
-        if (!snap.exists()) return [u, null] as const;
+        // Profil-doc saknas = raderat konto (tombstone). Markera 'ghost' så
+        // resolveFollowRows filtrerar bort den dangling följ-referensen i
+        // stället för att visa den som "Privat användare" (BIN-21).
+        if (!snap.exists()) return [u, 'ghost'] as const;
         const d = snap.data();
         return [u, {
           uid: u,

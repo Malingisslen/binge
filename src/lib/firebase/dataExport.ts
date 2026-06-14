@@ -31,6 +31,7 @@ export interface BingeExport {
   notifications: ExportDoc[];
   blocked: ExportDoc[];
   following: ExportDoc[];
+  followers: ExportDoc[];
   friends: ExportDoc[];
   friendRequests: ExportDoc[];
   friendRequestsSent: ExportDoc[];
@@ -54,6 +55,7 @@ Filen innehåller:
 - Notifikationer (notifications)
 - Blockerade användare (blocked)
 - Användare du följer (following)
+- Användare som följer dig (followers)
 - Dina vänner (friends)
 - Inkomna vänförfrågningar (friendRequests)
 - Skickade vänförfrågningar (friendRequestsSent)
@@ -97,6 +99,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     notifications: toExportDocs(s.notificationsSnap),
     blocked: toExportDocs(s.blockedSnap),
     following: toExportDocs(s.followingSnap),
+    followers: toExportDocs(s.followersSnap),
     friends: toExportDocs(s.friendsSnap),
     friendRequests: toExportDocs(s.friendRequestsSnap),
     friendRequestsSent: toExportDocs(s.friendRequestsSentSnap),

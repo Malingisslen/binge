@@ -22,6 +22,11 @@ export interface UserDataSnapshots {
   notificationsSnap: QuerySnapshot;
   blockedSnap: QuerySnapshot;
   followingSnap: QuerySnapshot;
+  // Inkommande följare (spegel-subcollection). Med i export (GDPR Art. 20 —
+  // social graf åt båda håll). Raderas INTE här: varje doc ägs av följaren
+  // (rules: isOwner(followerUid)), så kontoinnehavaren kan inte radera dem;
+  // dangling-referenser filtreras lazy på läsning (useFollowList) istället.
+  followersSnap: QuerySnapshot;
   friendsSnap: QuerySnapshot;
   friendRequestsSnap: QuerySnapshot;
   friendRequestsSentSnap: QuerySnapshot;
@@ -53,6 +58,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     notificationsSnap,
     blockedSnap,
     followingSnap,
+    followersSnap,
     friendsSnap,
     friendRequestsSnap,
     friendRequestsSentSnap,
@@ -73,6 +79,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'notifications')),
     getDocs(collection(db, 'users', uid, 'blocked')),
     getDocs(collection(db, 'users', uid, 'following')),
+    getDocs(collection(db, 'users', uid, 'followers')),
     getDocs(collection(db, 'users', uid, 'friends')),
     getDocs(collection(db, 'users', uid, 'friendRequests')),
     getDocs(collection(db, 'users', uid, 'friendRequestsSent')),
@@ -98,6 +105,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     notificationsSnap,
     blockedSnap,
     followingSnap,
+    followersSnap,
     friendsSnap,
     friendRequestsSnap,
     friendRequestsSentSnap,
