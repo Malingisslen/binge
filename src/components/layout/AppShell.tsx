@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useFcmForeground } from '@/hooks/useFcmToken';
+import { useTitleLinkPrefetch } from '@/hooks/useTitleLinkPrefetch';
 import AppTopbar from '@/components/layout/AppTopbar';
 import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
@@ -24,6 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   useFcmForeground();
+  useTitleLinkPrefetch();
 
   // Gatear på uid — inte user — så inloggade inte flashar guest-landing-
   // kromen under den RTT profilen tar att landa efter auth-beskedet.

@@ -42,6 +42,19 @@ export function currentSeasonToPrefetch(show: {
   return null;
 }
 
+// Parsar en titellänks pathname → { mediaType, id } för /movie/:id och /tv/:id.
+// Returnerar null för allt annat (/person, /user, /my/*, okända paths). Anchor-
+// pathname strippar query, så /movie/603/?fromGroup=x kommer in som /movie/603/.
+// id måste vara > 0 — id 0 är aldrig ett giltigt TMDB-id och skulle annars mata
+// ett garanterat-404-anrop (och bränna en semafor-slot) på varje hover.
+export function parseTitleHref(path: string): { mediaType: MediaType; id: number } | null {
+  const m = path.match(/^\/(movie|tv)\/(\d+)(?:\/|$)/);
+  if (!m) return null;
+  const id = Number(m[2]);
+  if (id <= 0) return null;
+  return { mediaType: m[1] as MediaType, id };
+}
+
 export function seasonPrefetchSpec(
   seriesId: number,
   seasonNumber: number,

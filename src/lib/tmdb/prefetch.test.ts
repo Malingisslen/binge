@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { titlePrefetchSpec, currentSeasonToPrefetch } from './prefetch';
+import { titlePrefetchSpec, currentSeasonToPrefetch, parseTitleHref } from './prefetch';
 import { TMDB_STALE } from './cacheTiers';
 
 describe('titlePrefetchSpec', () => {
@@ -27,5 +27,26 @@ describe('currentSeasonToPrefetch', () => {
   it('returnerar null när serien saknar säsonger', () => {
     expect(currentSeasonToPrefetch({ number_of_seasons: 0, next_episode_to_air: null })).toBeNull();
     expect(currentSeasonToPrefetch({})).toBeNull();
+  });
+});
+
+describe('parseTitleHref', () => {
+  it('parsar movie- och tv-pathnames (med och utan trailing slash)', () => {
+    expect(parseTitleHref('/movie/603/')).toEqual({ mediaType: 'movie', id: 603 });
+    expect(parseTitleHref('/movie/603')).toEqual({ mediaType: 'movie', id: 603 });
+    expect(parseTitleHref('/tv/1399/')).toEqual({ mediaType: 'tv', id: 1399 });
+    expect(parseTitleHref('/tv/1399')).toEqual({ mediaType: 'tv', id: 1399 });
+  });
+  it('returnerar null för icke-titellänkar', () => {
+    expect(parseTitleHref('/person/5/')).toBeNull();
+    expect(parseTitleHref('/user/malin')).toBeNull();
+    expect(parseTitleHref('/my/series/')).toBeNull();
+    expect(parseTitleHref('/movies/5')).toBeNull();
+    expect(parseTitleHref('/movie/abc')).toBeNull();
+    expect(parseTitleHref('/')).toBeNull();
+  });
+  it('returnerar null för id 0 (aldrig ett giltigt TMDB-id)', () => {
+    expect(parseTitleHref('/movie/0')).toBeNull();
+    expect(parseTitleHref('/tv/0/')).toBeNull();
   });
 });
