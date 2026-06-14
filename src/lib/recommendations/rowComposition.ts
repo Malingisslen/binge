@@ -111,6 +111,41 @@ export function rotatePool<T>(items: readonly T[], seed: number, take: number): 
 }
 
 /**
+ * How many distinct rotation windows of size `take` it takes to surface every
+ * item in a pool of `poolSize`. The "blanda" button advances one window per
+ * click, so this is the number of clicks-from-zero that show something new.
+ */
+export function rotationWindowCount(poolSize: number, take: number): number {
+  if (poolSize <= 0 || take <= 0) return 0;
+  return Math.ceil(poolSize / take);
+}
+
+/**
+ * True once the user has rotated through the whole pool at least once — further
+ * "blanda" only repeats. A pool that fits in a single window (poolSize <= take)
+ * is never "tapped out": there was nothing to cycle, so the row isn't noise.
+ * Drives row retirement (demoteExhaustedRows) so a fresher row rises in its place.
+ */
+export function isPoolExhausted(seed: number, poolSize: number, take: number): boolean {
+  if (poolSize <= take) return false;
+  return seed >= rotationWindowCount(poolSize, take) - 1;
+}
+
+/**
+ * Stable reorder that sinks tapped-out rows to the bottom of the cascade so a
+ * still-fresh row rises into the visible window. Live rows keep their original
+ * (priority) order; exhausted rows keep theirs, just after the live ones.
+ */
+export function demoteExhaustedRows<T extends { rowKey: string }>(
+  rows: readonly T[],
+  exhausted: ReadonlySet<string>,
+): T[] {
+  const live = rows.filter(r => !exhausted.has(r.rowKey));
+  const tapped = rows.filter(r => exhausted.has(r.rowKey));
+  return [...live, ...tapped];
+}
+
+/**
  * Score for the rad-1 similarity ranking. Lower index = higher score; /recommendations
  * is treated as more authoritative than /similar.
  */
@@ -120,6 +155,63 @@ export function scoreSimilarity(
 ): number {
   const base = 1 / (index + 1);
   return source === 'recommendations' ? base * 1.5 : base;
+}
+
+/** Tuning for the "Liknar {titel}" pool. See composeSimilarPool. */
+export interface ComposeSimilarOpts {
+  /** Trust only the top N of /recommendations — TMDB's signal decays sharply with rank. */
+  recDepth: number;
+  /** Trust only the top N of /similar. */
+  simDepth: number;
+  /**
+   * Vote floor for /recommendations — kept low on purpose. TMDB's rec RANK is
+   * already a quality signal (collaborative co-watch), so a niche-but-related
+   * title with few votes is a good discovery, not noise. Only floors out the
+   * near-zero-vote degenerates. The depth cap does the real quality work here.
+   */
+  recFloor: number;
+  /** Vote floor for /similar — kills the catalog-dump junk (see below). */
+  simFloor: number;
+}
+
+/**
+ * Defaults calibrated against real TMDB data (seed "Off Campus", tv/273240):
+ * - /recommendations rank 1-10 are on-theme; rank 11+ drift to "shares one broad
+ *   genre" noise (Julia, Tracker, The Feed). recDepth caps the trusted head;
+ *   vote count is NOT the discriminator there (the drift titles have 40-300
+ *   votes) — so recFloor stays low and we trust the ranking.
+ * - /similar for a thinly-tagged seed returns ~52k results dominated by 0-8 vote
+ *   obscurities. simFloor removes them; simDepth bounds the rest.
+ */
+export const SIMILAR_POOL_DEFAULTS: ComposeSimilarOpts = {
+  recDepth: 10,
+  simDepth: 10,
+  recFloor: 5,
+  simFloor: 30,
+};
+
+/**
+ * Blend TMDB /recommendations + /similar into one ranked pool, gating out the
+ * low-signal tail. /recommendations is weighted above /similar at the same rank
+ * (see scoreSimilarity) and trusted further down (lenient recFloor); /similar is
+ * vote-floored hard to kill its catalog-dump. Both sources are depth-capped first,
+ * so the pool's size reflects how many titles we actually trust — not a padded
+ * 100. Callers still dedupe/exclude/filter the result.
+ */
+export function composeSimilarPool(
+  recs: readonly RowTitle[],
+  sims: readonly RowTitle[],
+  opts: ComposeSimilarOpts = SIMILAR_POOL_DEFAULTS,
+): RowTitle[] {
+  const scored: { t: RowTitle; s: number }[] = [];
+  recs.slice(0, opts.recDepth).forEach((t, i) => {
+    if ((t.vote_count ?? 0) >= opts.recFloor) scored.push({ t, s: scoreSimilarity(i, 'recommendations') });
+  });
+  sims.slice(0, opts.simDepth).forEach((t, i) => {
+    if ((t.vote_count ?? 0) >= opts.simFloor) scored.push({ t, s: scoreSimilarity(i, 'similar') });
+  });
+  scored.sort((a, b) => b.s - a.s);
+  return scored.map(x => x.t);
 }
 
 /** Score a title by popularity: vote_average × log(vote_count + 1). */

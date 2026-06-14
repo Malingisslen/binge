@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { useSearchProviders } from '@/hooks/useSearchProviders';
 import { useInView } from '@/hooks/useInView';
-import { rotatePool } from '@/lib/recommendations/rowComposition';
+import { rotatePool, isPoolExhausted } from '@/lib/recommendations/rowComposition';
+import { RowExhaustionContext } from './rowExhaustionContext';
 import RecCard from './RecCard';
 import { LoadingView } from '@/components/ui/LoadingView';
 import type { RowResult, RowSpec } from '@/types';
@@ -60,16 +61,29 @@ export default function RecRow({ result, index }: Props) {
   const merged = [...visible, ...backingPool];
   const items = rotatePool(merged, seed, ROW_VISIBLE);
   const canRotate = merged.length > ROW_VISIBLE;
+  // "Tapped out" = rotated through the whole pool at least once. Further blanda
+  // only repeats, so we retire the row (demoted by the hub) instead of looping.
+  const exhausted = isPoolExhausted(seed, merged.length, ROW_VISIBLE);
 
-  const onRotate = useCallback(() => {
-    setSeed(prev => {
-      const next = prev + 1;
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(ROTATION_KEY_PREFIX + rowSpec.rowKey, String(next));
-      }
-      return next;
-    });
+  const writeSeed = useCallback((next: number) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ROTATION_KEY_PREFIX + rowSpec.rowKey, String(next));
+    }
+    setSeed(next);
   }, [rowSpec.rowKey]);
+
+  const onRotate = useCallback(() => writeSeed(seed + 1), [writeSeed, seed]);
+  const onRestart = useCallback(() => writeSeed(0), [writeSeed]);
+
+  // Report tapped-out state up so the hub can sink this row beneath fresher ones.
+  // An empty pool (everything excluded) counts as tapped-out too — it would
+  // otherwise occupy a visible slot rendering nothing. Don't report on unmount:
+  // a demoted row that scrolls out of view must stay demoted, not bounce back.
+  const report = useContext(RowExhaustionContext);
+  const tappedOut = exhausted || (!isLoading && merged.length === 0);
+  useEffect(() => {
+    report(rowSpec.rowKey, tappedOut);
+  }, [report, rowSpec.rowKey, tappedOut]);
 
   // Hämta providers först när raden är ~300px från viklinjen — annars fan-out:ar
   // /recommendations watch-providers för varje rad direkt vid mount (~6×rader).
@@ -92,7 +106,7 @@ export default function RecRow({ result, index }: Props) {
         </div>
         <div className="why">{whyLine}</div>
         <div className="rec-cat-actions">
-          {canRotate && (
+          {canRotate && !exhausted && (
             <button
               type="button"
               onClick={onRotate}
@@ -101,6 +115,17 @@ export default function RecRow({ result, index }: Props) {
               title="Visa nya förslag"
             >
               <RefreshCw size={11} aria-hidden /> blanda
+            </button>
+          )}
+          {canRotate && exhausted && (
+            <button
+              type="button"
+              onClick={onRestart}
+              className="rotate"
+              aria-label={`Du har sett alla ${merged.length} förslag i ${rowSpec.label} — börja om`}
+              title="Du har sett alla förslag här"
+            >
+              <RefreshCw size={11} aria-hidden /> alla {merged.length} visade · börja om
             </button>
           )}
           <Link href={expandHref} className="more">visa fler →</Link>
@@ -114,7 +139,6 @@ export default function RecRow({ result, index }: Props) {
               key={`${t.media_type}-${t.id}`}
               item={t}
               providers={flatrate}
-              whyLine={whyLine}
             />
           );
         })}

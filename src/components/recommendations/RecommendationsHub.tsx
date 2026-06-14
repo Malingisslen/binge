@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRecommendationsCascade } from '@/hooks/useRecommendationsCascade';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useNotInterested } from '@/hooks/useNotInterested';
@@ -18,6 +18,8 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import RecommendationsFilters from './RecommendationsFilters';
 import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
+import { RowExhaustionContext, type ReportExhaustion } from './rowExhaustionContext';
+import { demoteExhaustedRows } from '@/lib/recommendations/rowComposition';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
 
@@ -73,6 +75,19 @@ export default function RecommendationsHub() {
     return s;
   }, [items, ni]);
 
+  // Rows report "tapped out" (pool fully rotated, or emptied by exclusions);
+  // we sink those down the cascade so a fresher row rises into view.
+  const [exhaustedRows, setExhaustedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const reportExhaustion = useCallback<ReportExhaustion>((rowKey, exhausted) => {
+    setExhaustedRows(prev => {
+      if (prev.has(rowKey) === exhausted) return prev;
+      const next = new Set(prev);
+      if (exhausted) next.add(rowKey);
+      else next.delete(rowKey);
+      return next;
+    });
+  }, []);
+
   const scrollThrottleRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -95,7 +110,11 @@ export default function RecommendationsHub() {
     () => cascade.rows.filter(spec => rowMatchesMediaFilter(spec, filters.mediaType, cascade.latestFiveStar)),
     [cascade.rows, filters.mediaType, cascade.latestFiveStar],
   );
-  const visibleRows = filteredRows.slice(0, visibleRowCount);
+  const orderedRows = useMemo(
+    () => demoteExhaustedRows(filteredRows, exhaustedRows),
+    [filteredRows, exhaustedRows],
+  );
+  const visibleRows = orderedRows.slice(0, visibleRowCount);
   const hiddenCountries = user?.hiddenCountries ?? [];
   const myProviders = user?.myProviders ?? [];
 
@@ -140,19 +159,21 @@ export default function RecommendationsHub() {
         <>
           <EmptyState ratingCount={cascade.ratingCount} onOpenQuickRate={() => setQuickRateOpen(true)} />
 
-          {visibleRows.map((spec, idx) => (
-            <RowDispatch
-              key={spec.rowKey}
-              spec={spec}
-              index={idx}
-              excludedIds={excludedIds}
-              filters={filters}
-              myProviders={myProviders}
-              topGenreIds={cascade.topGenreIds}
-              hiddenCountries={hiddenCountries}
-              latestFiveStar={cascade.latestFiveStar}
-            />
-          ))}
+          <RowExhaustionContext.Provider value={reportExhaustion}>
+            {visibleRows.map((spec, idx) => (
+              <RowDispatch
+                key={spec.rowKey}
+                spec={spec}
+                index={idx}
+                excludedIds={excludedIds}
+                filters={filters}
+                myProviders={myProviders}
+                topGenreIds={cascade.topGenreIds}
+                hiddenCountries={hiddenCountries}
+                latestFiveStar={cascade.latestFiveStar}
+              />
+            ))}
+          </RowExhaustionContext.Provider>
 
           {visibleRowCount < filteredRows.length && (
             <button

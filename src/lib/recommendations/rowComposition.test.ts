@@ -4,8 +4,13 @@ import {
   splitVisibleAndPool,
   applyClientFilters,
   scoreSimilarity,
+  composeSimilarPool,
+  SIMILAR_POOL_DEFAULTS,
   containsSearchText,
   rotatePool,
+  rotationWindowCount,
+  isPoolExhausted,
+  demoteExhaustedRows,
 } from './rowComposition';
 import type { RowTitle, FilterState } from '@/types';
 
@@ -139,6 +144,66 @@ describe('scoreSimilarity', () => {
   });
 });
 
+describe('composeSimilarPool', () => {
+  const t = (id: number, votes: number) => mkTitle({ id, vote_count: votes });
+  const opts = { recDepth: 10, simDepth: 10, recFloor: 0, simFloor: 0 };
+
+  it('trusts only the top recDepth of /recommendations (cuts the topic-drift tail)', () => {
+    // Off Campus regression: rank 1-10 are on-theme, rank 11+ drift to "just Drama".
+    const recs = Array.from({ length: 20 }, (_, i) => t(i + 1, 100));
+    const out = composeSimilarPool(recs, [], { ...opts, recDepth: 10 });
+    expect(out.map(x => x.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it('trusts only the top simDepth of /similar', () => {
+    const sims = Array.from({ length: 20 }, (_, i) => t(i + 1, 100));
+    const out = composeSimilarPool([], sims, { ...opts, simDepth: 5 });
+    expect(out).toHaveLength(5);
+  });
+
+  it('drops candidates below their source floor', () => {
+    const recs = [t(1, 100), t(2, 5)];
+    const sims = [t(3, 8), t(4, 200)];
+    const out = composeSimilarPool(recs, sims, { ...opts, recFloor: 30, simFloor: 30 });
+    expect(out.map(x => x.id)).toEqual([1, 4]);
+  });
+
+  it('treats missing vote_count as zero (floored out when a floor is set)', () => {
+    const recs = [mkTitle({ id: 1, vote_count: undefined }), t(2, 100)];
+    const out = composeSimilarPool(recs, [], { ...opts, recFloor: 1 });
+    expect(out.map(x => x.id)).toEqual([2]);
+  });
+
+  it('keeps a niche-but-recommended title a uniform 30-floor would wrongly drop', () => {
+    // Finding 5: TMDB rec RANK is itself a quality signal — Off Campus rank-4
+    // (Emperor of Ocean Park, 22 votes) is a real recommendation, not noise.
+    const out = composeSimilarPool([t(1, 22)], [], SIMILAR_POOL_DEFAULTS);
+    expect(out.map(x => x.id)).toEqual([1]);
+  });
+
+  it('still floors the /similar catalog-dump junk under defaults', () => {
+    const out = composeSimilarPool([], [t(1, 8), t(2, 27)], SIMILAR_POOL_DEFAULTS);
+    expect(out).toEqual([]);
+  });
+
+  it('ranks /recommendations above /similar at the same position', () => {
+    const out = composeSimilarPool([t(1, 100)], [t(2, 100)], opts);
+    expect(out.map(x => x.id)).toEqual([1, 2]);
+  });
+
+  it('preserves TMDB order within /recommendations (head ranks highest)', () => {
+    const recs = [t(3, 100), t(7, 100), t(5, 100)];
+    const out = composeSimilarPool(recs, [], opts);
+    expect(out.map(x => x.id)).toEqual([3, 7, 5]);
+  });
+
+  it('defaults are conservative — shallow rec depth, lenient rec floor, hard similar floor', () => {
+    expect(SIMILAR_POOL_DEFAULTS.recDepth).toBeLessThanOrEqual(12);
+    expect(SIMILAR_POOL_DEFAULTS.simFloor).toBeGreaterThanOrEqual(20);
+    expect(SIMILAR_POOL_DEFAULTS.recFloor).toBeLessThan(SIMILAR_POOL_DEFAULTS.simFloor);
+  });
+});
+
 describe('rotatePool', () => {
   const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -171,6 +236,53 @@ describe('rotatePool', () => {
   it('handles negative seeds (defensive)', () => {
     // -1 * 3 = -3, mod 10 with positive-shift = 7 → [8, 9, 10]
     expect(rotatePool(arr, -1, 3)).toEqual([8, 9, 10]);
+  });
+});
+
+describe('rotationWindowCount', () => {
+  it('counts how many windows it takes to surface every title', () => {
+    expect(rotationWindowCount(9, 6)).toBe(2);
+    expect(rotationWindowCount(12, 6)).toBe(2);
+    expect(rotationWindowCount(13, 6)).toBe(3);
+    expect(rotationWindowCount(6, 6)).toBe(1);
+  });
+
+  it('is zero for an empty pool or non-positive window', () => {
+    expect(rotationWindowCount(0, 6)).toBe(0);
+    expect(rotationWindowCount(9, 0)).toBe(0);
+  });
+});
+
+describe('isPoolExhausted', () => {
+  it('is false for a pool that fits one window — nothing to cycle', () => {
+    expect(isPoolExhausted(0, 6, 6)).toBe(false);
+    expect(isPoolExhausted(5, 4, 6)).toBe(false);
+  });
+
+  it('stays false until the user has rotated past the last fresh window', () => {
+    // Off Campus: 9 trustworthy titles, 6-grid.
+    expect(isPoolExhausted(0, 9, 6)).toBe(false); // seen first 6 of 9
+    expect(isPoolExhausted(1, 9, 6)).toBe(true);  // one blanda → seen all 9
+  });
+
+  it('scales the threshold with pool depth (deeper pool = more blanda first)', () => {
+    expect(isPoolExhausted(1, 13, 6)).toBe(false);
+    expect(isPoolExhausted(2, 13, 6)).toBe(true);
+  });
+});
+
+describe('demoteExhaustedRows', () => {
+  const r = (rowKey: string) => ({ rowKey });
+
+  it('sinks tapped-out rows below live ones, order preserved within each group', () => {
+    const rows = [r('a'), r('b'), r('c'), r('d')];
+    expect(demoteExhaustedRows(rows, new Set(['a', 'c'])).map(x => x.rowKey))
+      .toEqual(['b', 'd', 'a', 'c']);
+  });
+
+  it('is a no-op when nothing is exhausted', () => {
+    const rows = [r('a'), r('b')];
+    expect(demoteExhaustedRows(rows, new Set()).map(x => x.rowKey)).toEqual(['a', 'b']);
   });
 });
 

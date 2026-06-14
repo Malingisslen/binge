@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { getRecommendations, getSimilar } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, scoreSimilarity } from '@/lib/recommendations/rowComposition';
+import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters, composeSimilarPool } from '@/lib/recommendations/rowComposition';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
@@ -40,13 +40,11 @@ export function useRowSimilar(
 
   return useMemo(() => {
     if (!seed) return { rowSpec, visible: [], backingPool: [], isLoading: false };
-    const recs = [...(recsP1 ?? []), ...(recsP2 ?? [])] as RowTitle[];
-    const sims = [...(simsP1 ?? []), ...(simsP2 ?? [])] as RowTitle[];
-    const scored: { t: RowTitle; s: number }[] = [];
-    recs.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType } as RowTitle, s: scoreSimilarity(i, 'recommendations') }));
-    sims.forEach((t, i) => scored.push({ t: { ...t, media_type: seed.mediaType } as RowTitle, s: scoreSimilarity(i, 'similar') }));
-    scored.sort((a, b) => b.s - a.s);
-    const ranked = scored.map(x => x.t);
+    const withType = (arr: typeof recsP1) =>
+      (arr ?? []).map(t => ({ ...t, media_type: seed.mediaType }) as RowTitle);
+    const recs = [...withType(recsP1), ...withType(recsP2)];
+    const sims = [...withType(simsP1), ...withType(simsP2)];
+    const ranked = composeSimilarPool(recs, sims);
     const filtered = applyClientFilters(dedupeAndExclude(ranked, excludedIds), filters);
     const pool = filtered.slice(0, POOL_TARGET);
     const split = splitVisibleAndPool(pool, VISIBLE_CAP);
