@@ -8,8 +8,36 @@ import {
   type LibrarySubState,
 } from '@/lib/libraryView';
 import type { WatchlistItem } from '@/types';
+import { useIncrementalList } from '@/hooks/useIncrementalList';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
+
+function SectionGrid({
+  items,
+  nextAirByTmdbId,
+  subState,
+}: {
+  items: WatchlistItem[];
+  nextAirByTmdbId: Map<number, string>;
+  subState: LibrarySubState;
+}) {
+  const { visible, hasMore, sentinelRef } = useIncrementalList(items);
+  return (
+    <>
+      <div className={CARD_GRID_CLASS}>
+        {visible.map(item => (
+          <WatchlistCard
+            key={item.tmdbId}
+            item={item}
+            nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+            subState={subState}
+          />
+        ))}
+      </div>
+      {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
+    </>
+  );
+}
 
 // Specialvy för /my/series som delar upp TV-shows efter vad som är KNOWABLE
 // från persisterade fält (kontraktet bor i src/lib/libraryView.ts, B7/T2):
@@ -86,16 +114,7 @@ export function FollowingCardSections({
                 <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
               </button>
               {avslutadOpen && (
-                <div className={CARD_GRID_CLASS}>
-                  {items.map(item => (
-                    <WatchlistCard
-                      key={item.tmdbId}
-                      item={item}
-                      nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
-                      subState={key}
-                    />
-                  ))}
-                </div>
+                <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} />
               )}
             </section>
           );
@@ -109,16 +128,7 @@ export function FollowingCardSections({
               </h2>
               <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
             </div>
-            <div className={CARD_GRID_CLASS}>
-              {items.map(item => (
-                <WatchlistCard
-                  key={item.tmdbId}
-                  item={item}
-                  nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
-                  subState={key}
-                />
-              ))}
-            </div>
+            <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} />
           </section>
         );
       })}

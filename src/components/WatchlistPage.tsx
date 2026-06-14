@@ -31,6 +31,7 @@ import {
 } from '@/lib/libraryView';
 import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
+import { useIncrementalList } from '@/hooks/useIncrementalList';
 import type { WatchStatus, WatchlistItem } from '@/types';
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
@@ -192,6 +193,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         : LIBRARY_SUB_STATE_ORDER.indexOf(subStateOf(i));
     return [...filtered].sort((a, b) => rank(a) - rank(b));
   }, [filtered, status, subStateOf]);
+
+  // Inkrementell rendering: rita ~100 åt gången, avslöja fler vid scroll.
+  // Nollställs vid filter/sortering (displayItems byter referens) så sökning
+  // aldrig re-renderar hela biblioteket. Markeringslogik (select-all m.m.)
+  // jobbar fortfarande mot hela displayItems — bara renderingen kapas.
+  const { visible: visibleItems, hasMore, sentinelRef } = useIncrementalList(displayItems);
 
   const followingSections = useMemo(() => {
     if (status !== 'mina') return null;
@@ -416,13 +423,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           />
         ) : (
           <div className={CARD_GRID_CLASS}>
-            {displayItems.map(item => (
+            {visibleItems.map(item => (
               <WatchlistCard
                 key={item.tmdbId}
                 item={item}
                 nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
               />
             ))}
+            {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
             {displayItems.length === 0 && (
               <div className="col-span-full bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
                 {emptyMessage}
@@ -431,6 +439,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )
       ) : view === 'table' ? (
+        <>
         <div className="bg-surface border border-border-main rounded-sm overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -458,7 +467,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               </tr>
             </thead>
             <tbody>
-              {displayItems.map((item, idx) => {
+              {visibleItems.map((item, idx) => {
                 const poster = posterUrl(item.posterPath, 'w92');
                 const href = titleHref(item.mediaType, item.tmdbId);
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
@@ -542,10 +551,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             </tbody>
           </table>
         </div>
+        {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
+        </>
       ) : (
         <div className="bg-surface border border-border-main rounded-sm">
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
-            {displayItems.map(item => {
+            {visibleItems.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
@@ -570,6 +581,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               );
             })}
           </div>
+          {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
           {/* B9: prickarna på postrarna är streamingtjänst-indikatorer (en
               färg per tjänst, hover visar namnet) — utan legend lästes de
               som oförklarade statusprickar. */}
