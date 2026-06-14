@@ -5,7 +5,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -176,5 +176,82 @@ describe('owner guard — positive control (factory shapes are schema-valid)', (
   });
   it('owner can write validNotInterested()', async () => {
     await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'notInterested', '603'), validNotInterested()));
+  });
+});
+
+// BIN-20 — forged friends doc must not let any user self-grant read access to
+// another user's private profile + friends-tier watchlist. The friends-create
+// rule now requires a real pending request between the two parties.
+describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
+  const VICTIM = 'victim_uid';
+  const ATTACKER = 'attacker_uid';
+
+  function attackerDb() { return testEnv.authenticatedContext(ATTACKER).firestore(); }
+  function victimDb() { return testEnv.authenticatedContext(VICTIM).firestore(); }
+
+  // Seed with rules disabled so the setup itself can't be blocked by the rule
+  // under test.
+  async function seedRequest(toUid: string, fromUid: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', toUid, 'friendRequests', fromUid), {
+        fromUid, fromDisplayName: 'Avsändare', sentAt: serverTimestamp(),
+      });
+    });
+  }
+  async function seedPrivateProfile(uid: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', uid), {
+        displayName: 'Offer', isPublic: false, defaultVisibility: 'private',
+      });
+    });
+  }
+
+  it('attacker cannot forge friends/{attacker} on a victim who never requested them', async () => {
+    // No pending request from VICTIM → ATTACKER exists.
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { since: serverTimestamp() },
+    ));
+  });
+
+  it('without a (forged) friend link, attacker cannot read victim private profile', async () => {
+    await seedPrivateProfile(VICTIM);
+    await assertFails(getDoc(doc(attackerDb(), 'users', VICTIM)));
+  });
+
+  it('attacker cannot forge friends/{victim} on their OWN subtree without a request', async () => {
+    // Owner-branch deny: attacker owns uid but no request from VICTIM exists.
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', ATTACKER, 'friends', VICTIM),
+      { since: serverTimestamp() },
+    ));
+  });
+
+  it('requester cannot self-write the friend doc — only the acceptor can (asymmetry)', async () => {
+    // Request goes ATTACKER → VICTIM, so only users/VICTIM/friendRequests/ATTACKER
+    // exists. ATTACKER writing users/VICTIM/friends/ATTACKER must still fail: the
+    // owner branch needs VICTIM as auth uid, and the mirror branch needs
+    // users/ATTACKER/friendRequests/VICTIM (absent). Pins the by-design asymmetry.
+    await seedRequest(VICTIM, ATTACKER);
+    await assertFails(setDoc(
+      doc(attackerDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { since: serverTimestamp() },
+    ));
+  });
+
+  it('legit accept (both sides) succeeds when an incoming request exists', async () => {
+    // VICTIM is the acceptor here; ATTACKER name reused only as the requester.
+    // Incoming request lives on the acceptor's side: users/{acceptor}/friendRequests/{requester}.
+    await seedRequest(VICTIM, ATTACKER);
+    // Owner-side write: acceptor (VICTIM) writes their own friends/{requester}.
+    await assertSucceeds(setDoc(
+      doc(victimDb(), 'users', VICTIM, 'friends', ATTACKER),
+      { since: serverTimestamp() },
+    ));
+    // Mirror write: acceptor (VICTIM) writes requester's friends/{acceptor}.
+    await assertSucceeds(setDoc(
+      doc(victimDb(), 'users', ATTACKER, 'friends', VICTIM),
+      { since: serverTimestamp() },
+    ));
   });
 });

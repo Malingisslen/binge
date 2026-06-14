@@ -198,9 +198,21 @@ service cloud.firestore {
     // — annars skulle de inte kunna se sin egen visibility-tier-tillgång).
     match /users/{uid}/friends/{targetUid} {
       allow read: if isOwner(uid) || isOwner(targetUid);
-      // Skapa: ägaren skriver (vid accept) ELLER targetUid skriver
-      // (motparts-spegling). Atomisk batch sker i klient (acceptFriendRequest).
-      allow create: if isOwner(uid) || isOwner(targetUid);
+      // Skapa: KRÄVER bevis på en riktig pending request mellan parterna —
+      // annars kan vem som helst forga `users/A/friends/C` ensidigt och därmed
+      // läsa A:s privata profil + vänner-tier-watchlist (read-reglerna litar på
+      // friends-docens blotta existens). Båda grenarna pekar på SAMMA bevis-doc:
+      // den inkomna requesten på acceptorns sida (users/{acceptor}/friendRequests/
+      // {requester}). acceptFriendRequest skriver båda friends-docs + raderar
+      // requesten i en atomisk batch; exists() (inte existsAfter) ser pre-commit-
+      // state där requesten fortfarande finns, så den legitima accepten passerar.
+      // - ägar-grenen (uid=acceptor): users/$(uid)/friendRequests/$(targetUid)
+      // - spegel-grenen (targetUid=acceptor): users/$(targetUid)/friendRequests/$(uid)
+      allow create: if
+        (isOwner(uid)
+          && exists(/databases/$(database)/documents/users/$(uid)/friendRequests/$(targetUid)))
+        || (isOwner(targetUid)
+          && exists(/databases/$(database)/documents/users/$(targetUid)/friendRequests/$(uid)));
       // Update: aldrig (since-fältet är immutable). Använd delete + create
       // om man vill resetta.
       allow update: if false;
