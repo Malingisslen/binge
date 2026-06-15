@@ -236,4 +236,61 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
     });
     expect(firstTitleAddedCount()).toBe(1);
   });
+
+  it('(d) ny användare lägger till TVÅ titlar FÖRE första snapshoten → eventet fyras exakt en gång (BIN-110)', async () => {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    expect(snapshotCallback).not.toBeNull();
+    expect(firstTitleAddedCount()).toBe(0);
+
+    // Två adds UNDER kall laddning, FÖRE snapshoten landar — first add film,
+    // sen tv (driver att payloaden = första addens mediaType, inte sista).
+    await act(async () => {
+      await addItemRef!(newTitle(201, 'movie'));
+    });
+    await act(async () => {
+      await addItemRef!(newTitle(202, 'tv'));
+    });
+    // Beslutet är fortfarande uppskjutet — inget fyrat vid add-tid.
+    expect(firstTitleAddedCount()).toBe(0);
+    expect(setDoc).toHaveBeenCalledTimes(2);
+
+    // Första snapshoten landar och innehåller BÅDA optimistiska skrivningarna
+    // (size===2). Gamla `snap.size <= 1`-grinden hade tappat eventet här.
+    await act(async () => {
+      snapshotCallback!(snap([doc(201, 'movie'), doc(202, 'tv')]));
+    });
+    // Fyras exakt en gång, med FÖRSTA addens mediaType.
+    expect(firstTitleAddedCount()).toBe(1);
+    expect(trackEvent).toHaveBeenCalledWith('first_title_added', { mediaType: 'movie' });
+  });
+
+  it('(e) återvändande användare (1 befintlig titel) lägger till TVÅ under kall laddning → eventet fyras INTE (BIN-110/BIN-38)', async () => {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    expect(snapshotCallback).not.toBeNull();
+
+    // Två adds FÖRE snapshoten.
+    await act(async () => {
+      await addItemRef!(newTitle(301));
+    });
+    await act(async () => {
+      await addItemRef!(newTitle(302));
+    });
+    expect(firstTitleAddedCount()).toBe(0);
+
+    // Första snapshoten landar med size===3: de två sessionens adds PLUS en
+    // titel som redan fanns (303) → återvändande användare. snap.size(3) -
+    // pendingCount(2) = 1 > 0 → fyra inte.
+    await act(async () => {
+      snapshotCallback!(snap([doc(301), doc(302), doc(303)]));
+    });
+    expect(firstTitleAddedCount()).toBe(0);
+  });
 });

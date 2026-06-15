@@ -95,17 +95,25 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   //    snapshoten för en återvändande användare → deras efterföljande adds är
   //    aldrig "första".
   //  - firstSnapshotSettledRef: har första snapshoten för nuvarande uid landat?
-  //  - pendingFirstAddRef: en add fyrades innan snapshoten settlat → kandidat
-  //    för "första titeln", väntar på att snapshoten ska bekräfta att
-  //    biblioteket var tomt innan denna session.
+  //  - pendingAddCountRef: hur många adds gjorde DENNA session FÖRE första
+  //    snapshoten? (BIN-110) Vi räknar dem alla — inte bara den första — så att
+  //    vi kan subtrahera dem från snapshotens storlek och avgöra om biblioteket
+  //    var genuint tomt innan sessionen. (En enskild kandidat räckte inte: om
+  //    en ny användare hann lägga till 2 titlar före snapshoten landade
+  //    snapshoten med size===2, och den gamla `snap.size <= 1`-grinden tappade
+  //    eventet.)
+  //  - pendingFirstMediaTypeRef: mediaType för den FÖRSTA pre-snapshot-adden,
+  //    för event-payloaden (en användare har bara EN första titel).
   const everNonEmptyRef = useRef(false);
   const firstSnapshotSettledRef = useRef(false);
-  const pendingFirstAddRef = useRef<{ mediaType: MediaType } | null>(null);
+  const pendingAddCountRef = useRef(0);
+  const pendingFirstMediaTypeRef = useRef<MediaType | null>(null);
 
   useEffect(() => {
     everNonEmptyRef.current = false;
     firstSnapshotSettledRef.current = false;
-    pendingFirstAddRef.current = null;
+    pendingAddCountRef.current = 0;
+    pendingFirstMediaTypeRef.current = null;
     if (!uid) { setItems([]); setLoading(false); return; }
     // uid bytte (sign-in eller account-switch) → tillbaka till loading
     // tills första snapshoten kommer.
@@ -114,16 +122,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       onSnapshot(collection(db, 'users', uid, 'watchlist'), (snap) => {
         const wasFirstSnapshot = !firstSnapshotSettledRef.current;
         firstSnapshotSettledRef.current = true;
-        // En väntande add som skedde före första snapshoten: avgör nu om det
-        // var en genuin förstagångs-add. Om denna FÖRSTA snapshot innehåller
-        // mer än 1 titel (den tillagda + minst en till) var biblioteket inte
-        // tomt → återvändande användare, fyra inte (BIN-38). Annars (0–1 titel)
-        // är användaren ny → fyra det uppskjutna eventet (BIN-56).
-        const pending = pendingFirstAddRef.current;
-        if (pending && wasFirstSnapshot) {
-          pendingFirstAddRef.current = null;
-          if (snap.size <= 1) {
-            trackEvent('first_title_added', { mediaType: pending.mediaType });
+        // Väntande adds som skedde före första snapshoten: avgör nu om de var
+        // en genuin förstagångs-add. Biblioteket var tomt INNAN denna session
+        // iff snapshotens storlek inte överstiger antalet adds som denna
+        // session gjorde före snapshoten — dvs alla titlar i snapshoten är våra
+        // egna optimistiska skrivningar (`snap.size - pendingAddCount <= 0`).
+        // Då är användaren ny → fyra det uppskjutna eventet en gång (BIN-56 +
+        // BIN-110, fungerar även när 2+ titlar lades till före snapshoten).
+        // Annars (snapshoten innehåller titlar utöver sessionens adds) →
+        // återvändande användare, fyra inte (BIN-38).
+        const pendingCount = pendingAddCountRef.current;
+        const pendingMediaType = pendingFirstMediaTypeRef.current;
+        if (pendingCount > 0 && pendingMediaType && wasFirstSnapshot) {
+          pendingAddCountRef.current = 0;
+          pendingFirstMediaTypeRef.current = null;
+          if (snap.size - pendingCount <= 0) {
+            trackEvent('first_title_added', { mediaType: pendingMediaType });
             // Stäng dörren: även om snapshoten landade tom (skrivningen ännu
             // ej round-trippad) får ingen senare add re-fyra eventet.
             everNonEmptyRef.current = true;
@@ -160,10 +174,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (firstSnapshotSettledRef.current) {
       if (!everNonEmptyRef.current) fireFirstNow = true;
       everNonEmptyRef.current = true;
-    } else if (!pendingFirstAddRef.current) {
-      // Första kandidaten under kall laddning. Senare adds samma laddning
-      // skriver inte över kandidaten (en användare kan bara ha EN första titel).
-      pendingFirstAddRef.current = { mediaType: item.mediaType };
+    } else {
+      // Kall laddning: räkna varje add (BIN-110) så snapshoten kan subtrahera
+      // sessionens egna skrivningar. Behåll bara den FÖRSTA addens mediaType
+      // för event-payloaden (en användare har bara EN första titel).
+      pendingAddCountRef.current += 1;
+      if (pendingFirstMediaTypeRef.current == null) {
+        pendingFirstMediaTypeRef.current = item.mediaType;
+      }
     }
     // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
     // varje item så läsregeln slipper joina mot parent-user-doc. Nya items

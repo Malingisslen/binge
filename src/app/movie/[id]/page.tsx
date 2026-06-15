@@ -11,8 +11,8 @@ import {
 import {
   SEO_TITLE_PAGES,
   SEO_TOP_RATED_PAGES,
-  SEO_TITLE_TARGET_IDS,
   SEO_FALLBACK_MOVIE_IDS,
+  cappedTitleIds,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
@@ -64,8 +64,7 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
       collectIds(p => getPopularMovies(p, { signal: buildSignal() }), SEO_TITLE_PAGES),
       collectIds(p => getTopRatedMovies(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES),
     ]);
-    const merged = new Set<number>([...popular, ...topRated]);
-    const ids = Array.from(merged).slice(0, SEO_TITLE_TARGET_IDS);
+    const ids = cappedTitleIds([...popular], [...topRated]);
     // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
     // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
     const safe = ids.length > 0 ? ids : SEO_FALLBACK_MOVIE_IDS;

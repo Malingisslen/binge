@@ -58,6 +58,22 @@ export const SEO_PERSON_CAST_PER_MOVIE = 10;
 export const SEO_PERSON_TARGET_IDS = 1000;
 
 /**
+ * Slå ihop populär- och topp-rankade title-IDs, deduppa och cappa till
+ * SEO_TITLE_TARGET_IDS — den ENDA källan för "vilken title-URL-mängd
+ * adresserar vi?". Både sitemap (src/app/sitemap.ts) och pre-rendren
+ * (src/app/{movie,tv}/[id]/page.tsx) MÅSTE kalla denna så de träffar EXAKT
+ * samma id-mängd; annars genererar Google "Genomsökt – inte indexerad".
+ *
+ * Ordningen är load-bearing: `popular` först, sedan `topRated`. Set bevarar
+ * insättningsordning, så slicen tar de första SEO_TITLE_TARGET_IDS unika
+ * ids i den ordningen. Ändra inte ordningen utan att ändra alla konsumenter
+ * samtidigt.
+ */
+export function cappedTitleIds(popular: number[], topRated: number[]): number[] {
+  return Array.from(new Set<number>([...popular, ...topRated])).slice(0, SEO_TITLE_TARGET_IDS);
+}
+
+/**
  * Fallback-IDs för `generateStaticParams`.
  *
  * Static export (`output: export`) med Next 16 kräver att en dynamisk route
