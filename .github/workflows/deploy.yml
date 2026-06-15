@@ -9,6 +9,11 @@ on:
     # mellan refresharna återanvänder cachen och blir snabba.
     - cron: '0 4 * * 1'
   workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: 'Full TMDB-cache-refresh (lång byggfönster ~175 min) — använd för att värma en kall cache manuellt mellan de veckovisa körningarna'
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-main
@@ -96,10 +101,12 @@ jobs:
         #    se buildFetch.ts) → tidsbundet även när cachen är helt kall. 45-min-
         #    taket ger marginal åt ett kallt bygge (innan veckovisa full-refreshen
         #    hunnit värma cachen) utan att vänta i evighet om TMDB verkligen hänger.
-        #  - Veckovis schemalagd refresh: stor budget → full metadata-refresh av
-        #    alla stale titlar (~1.5–2 h kallt). Får 150-min-tak så den faktiskt
-        #    hinner klart och repopulerar cachen.
-        timeout-minutes: ${{ github.event_name == 'schedule' && 150 || 45 }}
+        #  - Full refresh (veckovis schemalagd ELLER manuell workflow_dispatch med
+        #    full_refresh=true): stor budget → full metadata-refresh av alla stale
+        #    titlar (~1.5–2 h kallt). Får 175-min-tak så den hinner klart och
+        #    repopulerar cachen. Den manuella varianten finns för att värma en kall
+        #    cache på begäran (t.ex. om en veckas schemalagd körning missats).
+        timeout-minutes: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && 175 || 45 }}
         run: npm run build
         env:
           NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
@@ -117,7 +124,7 @@ jobs:
           # (1500/worker) → snabb, rullande refresh av de populäraste/stale.
           # Schedule: hög budget → full refresh av allt som är stale (cachen
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
-          TMDB_BUILD_REFRESH_BUDGET: ${{ github.event_name == 'schedule' && '1000000' || '' }}
+          TMDB_BUILD_REFRESH_BUDGET: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1000000' || '' }}
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
