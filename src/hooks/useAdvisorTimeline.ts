@@ -6,6 +6,7 @@ import { useCalendarEntries, getWeekStart, getWeekNumber, type EpisodeEntry } fr
 import { useAuth } from './useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
 import { toIsoDate, todayIso } from '@/lib/utils';
+import { weekIndexFromAnchor } from './useUpcomingShowsForAdvisor.helpers';
 import type { AdvisedShow } from '@/types';
 
 export const TIMELINE_WEEKS = 26;
@@ -67,12 +68,16 @@ export function useAdvisorTimeline(): TimelineResult {
 
   return useMemo(() => {
     const startMonday = getWeekStart(new Date());
-    const startMs = startMonday.getTime();
+    const startMondayIso = toIsoDate(startMonday);
     const weeks: TimelineWeek[] = [];
     let lastMonth = -1;
     for (let i = 0; i < TIMELINE_WEEKS; i++) {
-      const d = new Date(startMs + i * 7 * 86400000);
-      const end = new Date(startMs + (i * 7 + 6) * 86400000);
+      // Kalenderdags-stride (setDate) istället för fast-ms — DST-säkert så
+      // vecko-etiketterna inte glider en dag vid sommartidsbytet (BIN-105).
+      const d = new Date(startMonday);
+      d.setDate(d.getDate() + i * 7);
+      const end = new Date(startMonday);
+      end.setDate(end.getDate() + i * 7 + 6);
       const month = d.getMonth();
       const label = month !== lastMonth
         ? d.toLocaleDateString('sv-SE', { month: 'short' }).replace('.', '')
@@ -90,9 +95,11 @@ export function useAdvisorTimeline(): TimelineResult {
     }
 
     function weekIndexFor(dateIso: string): number | null {
-      const d = new Date(dateIso + 'T00:00:00');
-      const days = Math.floor((d.getTime() - startMs) / 86400000);
-      const wi = Math.floor(days / 7);
+      // DST-säkert vecko-index — kalenderdagar, inte fasta ms (BIN-105). En
+      // fast-ms-diff räknade fel när spannet korsade sommartidsbytet (sista
+      // söndagen i mars), så ett avsnitt exakt 7 dagar efter ankaret hamnade i
+      // vecka 0 istället för 1.
+      const wi = weekIndexFromAnchor(startMondayIso, dateIso);
       if (wi < 0 || wi >= TIMELINE_WEEKS) return null;
       return wi;
     }

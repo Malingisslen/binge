@@ -47,8 +47,13 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
     });
   }
 
-  // Row 1 — similar to top-3 strong seeds
-  const topSeeds = sortSeedsForSimilarRow(input.strongSeeds).slice(0, 3);
+  // Row 1 — similar to top-3 strong seeds. Exclude the latest-5★ seed: it already
+  // owns the dedicated latest-fav row above, so a 'similar' row for the same
+  // tmdbId+mediaType would be a duplicate "Liknar X"-rad (BIN-106).
+  const fav = input.latestFiveStar;
+  const topSeeds = sortSeedsForSimilarRow(input.strongSeeds)
+    .filter(s => !(fav && s.tmdbId === fav.tmdbId && s.mediaType === fav.mediaType))
+    .slice(0, 3);
   for (let i = 0; i < topSeeds.length; i++) {
     const s = topSeeds[i];
     const score = Math.min((topSeeds.length - i) * 12, 80);

@@ -92,6 +92,7 @@ export function isCaughtUpOnEndedShow(item: WatchlistItem, show: TMDBTVShow): bo
 export function findCatchupCandidate(
   providers: ProviderAdvisory[],
   unfinishedIds: Set<number>,
+  userPausedSet: Set<number>,
 ): { provider: ProviderAdvisory; unfinishedCount: number } | undefined {
   return providers
     // BIN-17: nudga catchup för ALLA betalda tjänster med tillräckligt med
@@ -101,6 +102,11 @@ export function findCatchupCandidate(
     // eller pausa", rådgivarens kärnvärde. Gratistjänster ('free') exkluderas:
     // ingen kostnad att rättfärdiga.
     .filter(p => p.status !== 'free')
+    // BIN-51: en tjänst användaren REDAN pausat ska aldrig bli ett
+    // catchup-nudge. Att be någon "ta ikapp på X" när X är medvetet pausad
+    // (sparläge) är motsägelsefullt — paus betyder "jag tar igen det senare".
+    // Samma userPausedSet som findTopPausable exkluderar.
+    .filter(p => !userPausedSet.has(p.providerId))
     .map(p => ({
       provider: p,
       unfinishedCount: p.shows.filter(s => unfinishedIds.has(s.tmdbId)).length,

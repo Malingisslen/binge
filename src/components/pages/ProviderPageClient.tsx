@@ -8,6 +8,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { localIsoDate } from '@/lib/utils';
 import type { TMDBSearchResult } from '@/types';
 
 type Tab = 'new' | 'movies' | 'tv';
@@ -22,7 +23,7 @@ export default function ProviderPageClient({ id }: { id: string }) {
   const oneMonthAgo = useMemo(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split('T')[0];
+    return localIsoDate(d);
   }, []);
 
   const movieParams = useMemo(() => {

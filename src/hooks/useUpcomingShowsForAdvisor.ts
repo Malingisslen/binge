@@ -4,8 +4,8 @@ import { useMemo } from 'react';
 import { useSubscriptionAdvisor } from './useSubscriptionAdvisor';
 import { useCalendarEntries, getWeekStart } from './useCalendar';
 import { useAuth } from './useAuth';
-import { todayIso } from '@/lib/utils';
-import { attributeShowsToProviders } from './useUpcomingShowsForAdvisor.helpers';
+import { todayIso, toIsoDate } from '@/lib/utils';
+import { attributeShowsToProviders, weekIndexFromAnchor } from './useUpcomingShowsForAdvisor.helpers';
 
 // Per-serie-vy av kommande avsnitt för Streamingrådgivaren.
 //
@@ -44,7 +44,6 @@ export interface UpcomingShowsResult {
 }
 
 const DEFAULT_WEEKS = 8;
-const DAY_MS = 86400000;
 
 export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): UpcomingShowsResult {
   // useSubscriptionAdvisor's lookAheadDays påverkar bara status-bedömningar
@@ -56,13 +55,12 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
   return useMemo(() => {
     const today = todayIso();
     const startMonday = getWeekStart(new Date());
-    const startMs = startMonday.getTime();
-    const horizonMs = startMs + weeks * 7 * DAY_MS;
+    const startMondayIso = toIsoDate(startMonday);
     const userPaused = new Set(Object.keys(user?.providerPauses ?? {}).map(Number));
 
     function weekIndexFor(dateIso: string): number {
-      const ms = new Date(dateIso + 'T00:00:00').getTime();
-      return Math.floor((ms - startMs) / (7 * DAY_MS));
+      // DST-säkert vecko-index — kalenderdagar, inte fasta ms (BIN-105).
+      return weekIndexFromAnchor(startMondayIso, dateIso);
     }
 
     // Bygg show → provider-attribution. En serie som finns hos flera
@@ -79,8 +77,8 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
       // Rådgivaren handlar om TV-avsnitt på prenumerationer — filmsläpp hör inte hit.
       if (e.kind !== 'episode') continue;
       if (e.airDate < today) continue;
-      const ms = new Date(e.airDate + 'T00:00:00').getTime();
-      if (ms >= horizonMs) continue;
+      // Övre gräns enbart via det DST-säkra kalenderdags-vecko-indexet (wi >= weeks
+      // nedan) — ingen separat fast-ms-horisont som driver isär över sommartid (BIN-105).
       const meta = showProviderMap.get(e.tmdbId);
       if (!meta) continue;
 
@@ -126,8 +124,6 @@ export function useUpcomingShowsForAdvisor(weeks: number = DEFAULT_WEEKS): Upcom
         if (showMap.has(show.tmdbId)) continue;
         if (!show.nextAirDate) continue;
         if (show.nextAirDate < today) continue;
-        const ms = new Date(show.nextAirDate + 'T00:00:00').getTime();
-        if (ms >= horizonMs) continue;
         const wi = weekIndexFor(show.nextAirDate);
         if (wi < 0 || wi >= weeks) continue;
 

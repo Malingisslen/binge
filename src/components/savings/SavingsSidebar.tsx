@@ -2,7 +2,7 @@
 
 import { usePauseHistory, type PauseHistoryEntry } from '@/hooks/usePauseHistory';
 import { useAuth } from '@/hooks/useAuth';
-import { formatSwedishDate, daysBetween, pluralSv } from '@/lib/utils';
+import { formatSwedishDate, daysBetween, pluralSv, localIsoDate } from '@/lib/utils';
 import type { AdvisorResult, ActivePause } from '@/types';
 
 // Höger spalt på Streamingrådgivaren. Stackar under main content på mobil.
@@ -50,7 +50,7 @@ function pickNextReviewDate(advisor: AdvisorResult): { date: string | null; rati
 
 function monthsSince(date: Date | null | undefined): number {
   if (!date) return 0;
-  const iso = date.toISOString().slice(0, 10);
+  const iso = localIsoDate(date);
   const days = daysBetween(iso);
   return Math.max(1, Math.floor(days / 30));
 }

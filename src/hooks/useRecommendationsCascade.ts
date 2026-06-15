@@ -16,6 +16,7 @@ import {
   type SeedCredits,
 } from '@/lib/recommendations/seedAnalysis';
 import { prioritizeRows } from '@/lib/recommendations/cascadePrioritizer';
+import { localIsoDate } from '@/lib/utils';
 import type { RowSpec } from '@/types';
 
 const FIVE_STAR_WINDOW_DAYS = 30;
@@ -74,7 +75,7 @@ export function useRecommendationsCascade(): CascadeOutput {
   });
 
   // Upcoming-count probe — single discover call
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate(new Date());
   const upcomingProbeQuery = useQueries({
     queries: [{
       queryKey: ['rec-upcoming-count', myProviders.join(','), today],

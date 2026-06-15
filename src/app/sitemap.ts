@@ -12,6 +12,7 @@ import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
   SEO_PERSON_TARGET_IDS,
+  SEO_TITLE_TARGET_IDS,
 } from '@/lib/tmdb/seoCoverage';
 
 // Next 16 + output:'export' kräver explicit static/revalidate-deklaration
@@ -90,8 +91,13 @@ async function titleEntries(): Promise<MetadataRoute.Sitemap> {
     collectIds(getTopRatedTV, SEO_TOP_RATED_PAGES),
   ]);
 
-  const movieIds = new Set<number>([...popularMovies, ...topMovies]);
-  const tvIds = new Set<number>([...popularTV, ...topTV]);
+  // Cap till SEO_TITLE_TARGET_IDS — EXAKT samma slice som pre-rendren i
+  // movie/[id]/page.tsx + tv/[id]/page.tsx (Array.from(merged).slice(...)).
+  // Set bevarar insättningsordning så slicen träffar samma id-mängd som
+  // pre-rendren. Utan cap kunde sitemap adressera fler URLs än som
+  // pre-renderas → "Genomsökt – inte indexerad" i GSC.
+  const movieIds = Array.from(new Set<number>([...popularMovies, ...topMovies])).slice(0, SEO_TITLE_TARGET_IDS);
+  const tvIds = Array.from(new Set<number>([...popularTV, ...topTV])).slice(0, SEO_TITLE_TARGET_IDS);
 
   for (const id of movieIds) {
     entries.push({

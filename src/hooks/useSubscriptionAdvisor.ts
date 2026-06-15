@@ -370,7 +370,7 @@ export function useSubscriptionAdvisor(
     }
 
     const topPausable = findTopPausable(providerAdvisories, userPausedSet);
-    const catchup = findCatchupCandidate(providerAdvisories, unfinishedTmdbIds);
+    const catchup = findCatchupCandidate(providerAdvisories, unfinishedTmdbIds, userPausedSet);
     const topSubscribe = subscribeAdvice[0];
 
     const pauseAction: Extract<PrimaryAction, { kind: 'pause' }> | null = topPausable ? {

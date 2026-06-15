@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -78,13 +78,58 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // first_title_added-grindning (BIN-56 + BIN-38). Den gamla grinden
+  // `items.length === 0 && !loading` hade två motstridiga krav:
+  //   - BIN-38: en återvändande användare som lägger till en titel UNDER kall
+  //     laddning (snapshoten inte landad → items===[]) får INTE fyra eventet.
+  //   - BIN-56: en helt ny användare som lägger till sin första titel UNDER
+  //     kall laddning MÅSTE fyra eventet — annars tappas det för alltid (när
+  //     snapshoten sen landar innehåller den ju titeln, så `items.length===0`
+  //     blir aldrig sant igen).
+  // Vid add-tid under kall laddning går de två fallen inte att skilja åt — vi
+  // vet inte om det tomma biblioteket är "ny användare" eller "snapshot inte
+  // landad än". Lösningen: skjut upp beslutet till första snapshoten har
+  // settlat, istället för att gissa vid add-tid.
+  //
+  //  - everNonEmptyRef: har en SNAPSHOT någonsin sett ≥1 titel? Sätts av första
+  //    snapshoten för en återvändande användare → deras efterföljande adds är
+  //    aldrig "första".
+  //  - firstSnapshotSettledRef: har första snapshoten för nuvarande uid landat?
+  //  - pendingFirstAddRef: en add fyrades innan snapshoten settlat → kandidat
+  //    för "första titeln", väntar på att snapshoten ska bekräfta att
+  //    biblioteket var tomt innan denna session.
+  const everNonEmptyRef = useRef(false);
+  const firstSnapshotSettledRef = useRef(false);
+  const pendingFirstAddRef = useRef<{ mediaType: MediaType } | null>(null);
+
   useEffect(() => {
+    everNonEmptyRef.current = false;
+    firstSnapshotSettledRef.current = false;
+    pendingFirstAddRef.current = null;
     if (!uid) { setItems([]); setLoading(false); return; }
     // uid bytte (sign-in eller account-switch) → tillbaka till loading
     // tills första snapshoten kommer.
     setLoading(true);
     return lazySubscribe(({ db, collection, onSnapshot }) =>
       onSnapshot(collection(db, 'users', uid, 'watchlist'), (snap) => {
+        const wasFirstSnapshot = !firstSnapshotSettledRef.current;
+        firstSnapshotSettledRef.current = true;
+        // En väntande add som skedde före första snapshoten: avgör nu om det
+        // var en genuin förstagångs-add. Om denna FÖRSTA snapshot innehåller
+        // mer än 1 titel (den tillagda + minst en till) var biblioteket inte
+        // tomt → återvändande användare, fyra inte (BIN-38). Annars (0–1 titel)
+        // är användaren ny → fyra det uppskjutna eventet (BIN-56).
+        const pending = pendingFirstAddRef.current;
+        if (pending && wasFirstSnapshot) {
+          pendingFirstAddRef.current = null;
+          if (snap.size <= 1) {
+            trackEvent('first_title_added', { mediaType: pending.mediaType });
+            // Stäng dörren: även om snapshoten landade tom (skrivningen ännu
+            // ej round-trippad) får ingen senare add re-fyra eventet.
+            everNonEmptyRef.current = true;
+          }
+        }
+        if (snap.size > 0) everNonEmptyRef.current = true;
         setItems(snap.docs.map(d => docToItem(d.data())));
         setLoading(false);
       }));
@@ -105,11 +150,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
-    // Bara "första titeln" om biblioteket FAKTISKT är tomt — inte medan första
-    // Firestore-snapshotten fortfarande laddar (items är [] tills den landar),
-    // annars över-räknas first_title_added för återvändande användare vid kall
-    // laddning och förorenar aktiverings-funneln i /insikter (BIN-38).
-    const isFirst = items.length === 0 && !loading;
+    // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
+    //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
+    //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
+    //  - Snapshoten har INTE settlat (kall laddning) → vi kan inte skilja ny
+    //    från återvändande användare. Spara en pending-kandidat och låt första
+    //    snapshoten avgöra. Fyra aldrig vid add-tid i detta läge.
+    let fireFirstNow = false;
+    if (firstSnapshotSettledRef.current) {
+      if (!everNonEmptyRef.current) fireFirstNow = true;
+      everNonEmptyRef.current = true;
+    } else if (!pendingFirstAddRef.current) {
+      // Första kandidaten under kall laddning. Senare adds samma laddning
+      // skriver inte över kandidaten (en användare kan bara ha EN första titel).
+      pendingFirstAddRef.current = { mediaType: item.mediaType };
+    }
     // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
     // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
     // ärver default; per-item-override sätts via updateVisibility senare.
@@ -124,10 +179,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
     }, { merge: true });
     trackEvent('title_added_watchlist', { mediaType: item.mediaType, status: item.status });
-    if (isFirst) {
+    if (fireFirstNow) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, items.length, loading, user?.defaultVisibility]);
+  }, [uid, user?.defaultVisibility]);
 
   const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;

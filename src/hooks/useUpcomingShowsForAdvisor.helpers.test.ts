@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { attributeShowsToProviders, type AttributionProvider } from './useUpcomingShowsForAdvisor.helpers';
+import {
+  attributeShowsToProviders,
+  weekIndexFromAnchor,
+  type AttributionProvider,
+} from './useUpcomingShowsForAdvisor.helpers';
 
 function provider(partial: Partial<AttributionProvider> & { providerId: number }): AttributionProvider {
   return {
@@ -67,5 +71,38 @@ describe('attributeShowsToProviders (BIN-15)', () => {
 
   it('returns an empty map when there are no providers', () => {
     expect(attributeShowsToProviders([], new Set()).size).toBe(0);
+  });
+});
+
+describe('weekIndexFromAnchor (BIN-105 DST-säkert)', () => {
+  it('ger index 0 för ankaret självt och dag 6, index 1 för dag 7', () => {
+    // Ankare 2026-03-23 (måndag). Vanlig vecka utan DST-övergång.
+    expect(weekIndexFromAnchor('2026-03-09', '2026-03-09')).toBe(0);
+    expect(weekIndexFromAnchor('2026-03-09', '2026-03-15')).toBe(0); // dag 6
+    expect(weekIndexFromAnchor('2026-03-09', '2026-03-16')).toBe(1); // dag 7
+  });
+
+  it('ger index 1 för ett datum exakt 7 kalenderdagar efter ankaret över VÅRENS DST-byte', () => {
+    // Sveriges spring-forward 2026 = sista söndagen i mars = 2026-03-29.
+    // Ankare måndag 2026-03-23, air date 2026-03-30 = 7 kalenderdagar senare,
+    // men spannet innehåller den 23-timmars-dagen. Fast-ms-räkning gav index 0
+    // (regressionen); kalenderdags-räkning ger korrekt index 1.
+    expect(weekIndexFromAnchor('2026-03-23', '2026-03-30')).toBe(1);
+    // Dag 6 (lördag 2026-03-28, före övergången) ligger fortfarande i vecka 0.
+    expect(weekIndexFromAnchor('2026-03-23', '2026-03-28')).toBe(0);
+    // Två veckor senare ger index 2.
+    expect(weekIndexFromAnchor('2026-03-23', '2026-04-06')).toBe(2);
+  });
+
+  it('förblir korrekt över HÖSTENS DST-byte (fall-back, 25h-dag)', () => {
+    // Sveriges fall-back 2026 = sista söndagen i oktober = 2026-10-25.
+    // Ankare måndag 2026-10-19, air date 2026-10-26 = 7 dagar senare → index 1
+    // trots 25-timmars-dagen i spannet.
+    expect(weekIndexFromAnchor('2026-10-19', '2026-10-26')).toBe(1);
+    expect(weekIndexFromAnchor('2026-10-19', '2026-10-24')).toBe(0); // dag 5
+  });
+
+  it('ger negativt index för datum före ankaret (caller klampar)', () => {
+    expect(weekIndexFromAnchor('2026-03-23', '2026-03-22')).toBe(-1);
   });
 });

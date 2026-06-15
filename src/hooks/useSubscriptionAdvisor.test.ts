@@ -156,7 +156,7 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(1), makeShow(2)],
       }),
     ];
-    expect(findCatchupCandidate(providers, new Set([1, 2]))).toBeUndefined();
+    expect(findCatchupCandidate(providers, new Set([1, 2]), new Set())).toBeUndefined();
   });
 
   it('returns a provider with exactly CATCHUP_THRESHOLD behind shows', () => {
@@ -166,7 +166,7 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
-    const result = findCatchupCandidate(providers, new Set([1, 2, 3]));
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3]), new Set());
     expect(result?.unfinishedCount).toBe(3);
   });
 
@@ -183,7 +183,7 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(4), makeShow(5), makeShow(6), makeShow(7)],
       }),
     ];
-    const result = findCatchupCandidate(providers, new Set([1, 2, 3, 4, 5, 6, 7]));
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3, 4, 5, 6, 7]), new Set());
     expect(result?.provider.providerId).toBe(119);
     expect(result?.unfinishedCount).toBe(4);
   });
@@ -196,7 +196,7 @@ describe('findCatchupCandidate', () => {
       }),
     ];
     // Only 2 of 4 are behind — under threshold.
-    expect(findCatchupCandidate(providers, new Set([1, 4]))).toBeUndefined();
+    expect(findCatchupCandidate(providers, new Set([1, 4]), new Set())).toBeUndefined();
   });
 
   it('includes paid non-active providers with enough backlog (BIN-17)', () => {
@@ -209,8 +209,43 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
-    const result = findCatchupCandidate(providers, new Set([1, 2, 3]));
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3]), new Set());
     expect(result?.provider.providerId).toBe(8);
+    expect(result?.unfinishedCount).toBe(3);
+  });
+
+  it('excludes a provider the user has already paused (BIN-51)', () => {
+    // Användaren har pausat tjänst 8 OCH ligger efter på 3 av dess serier
+    // (inget airar i fönstret → status 'pause'). Att nudga "ta ikapp på 8"
+    // när 8 är medvetet pausad är motsägelsefullt — den får inte bli
+    // catchup-kandidat.
+    const providers = [
+      makeProvider({
+        providerId: 8,
+        status: 'pause',
+        shows: [makeShow(1), makeShow(2), makeShow(3)],
+      }),
+    ];
+    expect(findCatchupCandidate(providers, new Set([1, 2, 3]), new Set([8]))).toBeUndefined();
+  });
+
+  it('picks a non-paused provider over a paused one even with more backlog (BIN-51)', () => {
+    // Pausad 8 har 4 osedda, aktiv 9 har 3. Den pausade skulle vunnit på
+    // backlog — men den är utesluten, så 9 väljs.
+    const providers = [
+      makeProvider({
+        providerId: 8,
+        status: 'pause',
+        shows: [makeShow(1), makeShow(2), makeShow(3), makeShow(4)],
+      }),
+      makeProvider({
+        providerId: 9,
+        status: 'pause',
+        shows: [makeShow(5), makeShow(6), makeShow(7)],
+      }),
+    ];
+    const result = findCatchupCandidate(providers, new Set([1, 2, 3, 4, 5, 6, 7]), new Set([8]));
+    expect(result?.provider.providerId).toBe(9);
     expect(result?.unfinishedCount).toBe(3);
   });
 
@@ -222,7 +257,7 @@ describe('findCatchupCandidate', () => {
         shows: [makeShow(1), makeShow(2), makeShow(3)],
       }),
     ];
-    expect(findCatchupCandidate(providers, new Set([1, 2, 3]))).toBeUndefined();
+    expect(findCatchupCandidate(providers, new Set([1, 2, 3]), new Set())).toBeUndefined();
   });
 });
 

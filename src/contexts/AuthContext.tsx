@@ -428,7 +428,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const current = user?.providerPauses ?? {};
     const existing = current[providerId];
     if (existing && existing.resumeAt === resumeAt) return Promise.resolve();
-    const pausedAt = existing?.pausedAt ?? new Date().toISOString().slice(0, 10);
+    const pausedAt = existing?.pausedAt ?? todayIso();
     const next = { ...current, [providerId]: { pausedAt, resumeAt } };
     return updateUserField('providerPauses', next);
   }, [updateUserField, user?.providerPauses]);

@@ -5,6 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { discoverMovies, discoverTV } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { dedupeAndExclude, splitVisibleAndPool, applyClientFilters } from '@/lib/recommendations/rowComposition';
+import { localIsoDate } from '@/lib/utils';
 import type { RowResult, RowSpec, FilterState, RowTitle } from '@/types';
 
 const VISIBLE_CAP = 20;
@@ -39,7 +40,7 @@ export function useRowUpcoming(
   excludedIds: ReadonlySet<number>,
   filters: FilterState,
 ): RowResult {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate(new Date());
   const enabled = myProviders.length > 0;
   const wantMovies = filters.mediaType !== 'tv';
   const wantTV = filters.mediaType !== 'movie';

@@ -36,6 +36,36 @@ describe('prioritizeRows', () => {
     const rows = prioritizeRows(inp);
     expect(rows[0].id.kind).toBe('latest-fav');
     expect(rows[0].score).toBe(97);
+    // BIN-106: the latest-fav seed must NOT also produce a duplicate 'similar' row.
+    expect(rows.find(r => r.id.kind === 'similar')).toBeUndefined();
+  });
+
+  it('BIN-106: latest-fav seed is excluded from similar rows, other seeds still emit', () => {
+    const inp: CascadeInput = {
+      ...emptyInput(),
+      latestFiveStar: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', daysSince: 3 },
+      strongSeeds: [
+        { tmdbId: 603, mediaType: 'movie', rating: 5, title: 'The Matrix', ratedAt: null },
+        { tmdbId: 27205, mediaType: 'movie', rating: 5, title: 'Inception', ratedAt: null },
+      ],
+    };
+    const rows = prioritizeRows(inp);
+    const similars = rows.filter(r => r.id.kind === 'similar');
+    // The duplicate (603) is dropped; Inception (a different seed) still gets a row.
+    expect(similars.map(r => r.id.kind === 'similar' && r.id.tmdbId)).toEqual([27205]);
+  });
+
+  it('BIN-106: same tmdbId but different mediaType is NOT treated as a duplicate', () => {
+    const inp: CascadeInput = {
+      ...emptyInput(),
+      latestFiveStar: { tmdbId: 42, mediaType: 'movie', title: 'Same Id Movie', daysSince: 1 },
+      strongSeeds: [
+        { tmdbId: 42, mediaType: 'tv', rating: 5, title: 'Same Id Show', ratedAt: null },
+      ],
+    };
+    const rows = prioritizeRows(inp);
+    const similar = rows.find(r => r.id.kind === 'similar');
+    expect(similar?.id.kind === 'similar' && similar.id.tmdbId).toBe(42);
   });
 
   it('person beats similar at high recurrence', () => {
