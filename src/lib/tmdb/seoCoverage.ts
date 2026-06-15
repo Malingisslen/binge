@@ -21,17 +21,20 @@
  * Byggtids-effekt vid SEO_TITLE_PAGES=500:
  *   500 pages × 20 results × 2 källor × 2 mediatyper = 40 000 TMDB-results
  *   innan dedup. ~50-60% overlap mellan popular/top_rated → ~10-12k unika
- *   per mediatyp = ~25k pre-renderade titlar. Build-tid ≈ 1.5-2 h på
- *   GitHub Actions free tier (6h-tak).
+ *   per mediatyp = ~25k pre-renderade titlar. En KALL full-hämtning tar
+ *   ≈ 1.5-2 h — men det gäller bara den veckovisa schemalagda refreshen (egen
+ *   150-min-timeout). Kod-deployer är budget-bundna (~7-15 min), se buildFetch.ts.
  *
  * Byggtids-resiliens (2026-06): varje byggtids-TMDB-anrop har en
  * AbortSignal.timeout (src/lib/tmdb/buildFetch.ts) så ingen sida kan nå Next
  * 60s static-generation-tak — exporten avbryts aldrig. Detaljsvaren cachas
  * dessutom på disk (src/lib/tmdb/buildCache.ts, .tmdb-cache/, persistas via
  * actions/cache) så kod-deployer återanvänder titeldata istället för att
- * hämta om ~25k titlar. En veckovis schemalagd deploy bust:ar cachen
- * (TMDB_CACHE_BUST=1) för färsk metadata. Höj därför INTE sidantalet för att
- * "spara byggtid" — byggtiden domineras numera av cache-träffar, inte fetch.
+ * hämta om ~25k titlar. Färskhet via rullande, BUDGETERAD refresh
+ * (buildFetch.ts): kod-deployer re-hämtar bara en tidsbunden andel stale
+ * titlar; den veckovisa schemalagda deployen kör med stor budget för full
+ * refresh. Höj därför INTE sidantalet för att "spara byggtid" — kod-deployens
+ * byggtid domineras av cache-träffar, inte fetch.
  */
 
 // Antal TMDB-pages från /movie/popular respektive /tv/popular vi pre-renderar.

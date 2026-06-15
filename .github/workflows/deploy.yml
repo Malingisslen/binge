@@ -90,12 +90,16 @@ jobs:
             tmdb-cache-
 
       - name: Build
-        # Säkerhetsspärr: ett friskt bygge tar ~7–8 min. Om TMDB-API:t stryper
-        # oss kan byggets sidgenerering krypa i 40+ min och blockera deploy-kön.
-        # Fail fast efter 30 min istället — fångar 40+ min-hängningarna men ger
-        # marginal åt den veckovisa full-refreshen (hämtar om alla titlar kallt)
-        # även en trög TMDB-dag, så vi inte kapar en legitim körning.
-        timeout-minutes: 30
+        # Två regimer delar bygget:
+        #  - Kod-deploy (push/dispatch): återanvänder .tmdb-cache och re-hämtar
+        #    bara en BUDGETERAD, rullande andel stale titlar (default 3000/worker,
+        #    se buildFetch.ts) → alltid tidsbundet (~7–15 min). 30-min-taket är
+        #    fail-fast om TMDB hänger; budgeten gör att bygget aldrig DRAR iväg dit.
+        #  - Veckovis schemalagd refresh: stor budget → full metadata-refresh av
+        #    alla stale titlar (~1.5–2 h kallt). Får 150-min-tak så den faktiskt
+        #    hinner klart och repopulerar cachen. (Tidigare timeout:ade den ALLTID
+        #    eftersom en full refresh aldrig ryms i 30 min.)
+        timeout-minutes: ${{ github.event_name == 'schedule' && 150 || 30 }}
         run: npm run build
         env:
           NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
@@ -109,9 +113,11 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           NEXT_PUBLIC_APP_ENV: production
           NEXT_PUBLIC_GIT_SHA: ${{ github.sha }}
-          # Tom sträng på push/dispatch (använd cachen). '1' på schedule →
-          # bust:ar cachen för en färsk metadata-refresh.
-          TMDB_CACHE_BUST: ${{ github.event_name == 'schedule' && '1' || '' }}
+          # Kod-deploy (push/dispatch): tom → buildFetch default-budget
+          # (3000/worker) → snabb, rullande refresh av de populäraste/stale.
+          # Schedule: hög budget → full refresh av allt som är stale (cachen
+          # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
+          TMDB_BUILD_REFRESH_BUDGET: ${{ github.event_name == 'schedule' && '1000000' || '' }}
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

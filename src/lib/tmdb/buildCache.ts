@@ -2,9 +2,15 @@
 //
 // Syfte: en kod-deploy ska INTE hämta om ~25k titlar. Varje detaljsvar
 // persistas i .tmdb-cache/{kind}-{id}.json med en tidsstämpel; nästa build
-// återanvänder det inom TTL. Cache-katalogen persistas mellan CI-körningar
-// via actions/cache (se .github/workflows/deploy.yml). Veckovis schemalagd
-// deploy sätter TMDB_CACHE_BUST=1 -> färsk hämtning som repopulerar cachen.
+// återanvänder det. Cache-katalogen persistas mellan CI-körningar via
+// actions/cache (se .github/workflows/deploy.yml).
+//
+// Färskhets-beslutet (när en post ska re-hämtas) bor i anroparen
+// (buildFetch.ts), inte här — den här modulen läser/skriver bara råa poster +
+// tidsstämpel och tillämpar ett HÅRT tak (HARD_TTL) bortom vilket en post är
+// för gammal för att ens serveras stale. Det gör att buildFetch kan göra en
+// MJUK, budgeterad rullande refresh istället för en allt-eller-inget-bust som
+// sprängde bygg-timeouten.
 //
 // Best-effort: alla fel (saknad/korrupt fil, skrivfel) behandlas som miss och
 // får ALDRIG bryta bygget.
@@ -12,9 +18,13 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 
-const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dagar
+// Hårt tak: en post äldre än så här serveras inte ens som stale — den
+// behandlas som saknad (→ buildFetch hämtar färskt eller faller tillbaka på
+// tunn metadata). Generöst tilltaget; den mjuka refresh-tröskeln (buildFetch)
+// är mycket kortare, så i praktiken når nästan inga poster hit.
+const HARD_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dagar
 
-interface CacheEntry<T> {
+export interface CacheEntry<T> {
   fetchedAt: number;
   data: T;
 }
@@ -29,15 +39,21 @@ function cachePath(kind: string, id: number): string {
   return join(cacheDir(), `${kind}-${id}.json`);
 }
 
-export function readBuildCache<T>(kind: string, id: number, now: number = Date.now()): T | null {
-  // Bust: tvinga miss så builden hämtar färskt och skriver om cachen.
-  if (process.env.TMDB_CACHE_BUST === '1') return null;
+/**
+ * Läs den råa cache-posten (data + tidsstämpel) eller null vid miss/korrupt/
+ * bortom HARD_TTL. Anroparen avgör om posten är färsk nog att slippa refresh.
+ */
+export function readBuildCacheEntry<T>(
+  kind: string,
+  id: number,
+  now: number = Date.now(),
+): CacheEntry<T> | null {
   try {
     const raw = readFileSync(cachePath(kind, id), 'utf8');
     const entry = JSON.parse(raw) as CacheEntry<T>;
     if (typeof entry.fetchedAt !== 'number') return null;
-    if (now - entry.fetchedAt > TTL_MS) return null;
-    return entry.data;
+    if (now - entry.fetchedAt > HARD_TTL_MS) return null; // för gammal → behandla som miss
+    return entry;
   } catch {
     return null; // saknad / korrupt -> miss
   }
