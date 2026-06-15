@@ -38,7 +38,11 @@ export const REFRESH_AFTER_MS = 6 * 24 * 60 * 60 * 1000; // 6 dagar
 
 // Default-tak för nätverkshämtningar per bygge (per worker). Schemalagd deploy
 // höjer det via TMDB_BUILD_REFRESH_BUDGET för en full refresh.
-const DEFAULT_REFRESH_BUDGET = 3000;
+// Tajt nog att ett KALLT kod-bygge (alla entries stale → budget förbrukas helt)
+// + 25k-sidors render ryms väl under push-byggets timeout även en trög TMDB-dag.
+// (3000 tippade över 30 min på en kall cache 2026-06-15.) Cachen värms ändå upp
+// av den veckovisa schemalagda full-refreshen; per-bygge-freshness är sekundärt.
+const DEFAULT_REFRESH_BUDGET = 1500;
 
 function refreshBudget(): number {
   const v = Number(process.env.TMDB_BUILD_REFRESH_BUDGET);

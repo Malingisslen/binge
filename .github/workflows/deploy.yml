@@ -92,14 +92,14 @@ jobs:
       - name: Build
         # Två regimer delar bygget:
         #  - Kod-deploy (push/dispatch): återanvänder .tmdb-cache och re-hämtar
-        #    bara en BUDGETERAD, rullande andel stale titlar (default 3000/worker,
-        #    se buildFetch.ts) → alltid tidsbundet (~7–15 min). 30-min-taket är
-        #    fail-fast om TMDB hänger; budgeten gör att bygget aldrig DRAR iväg dit.
+        #    bara en BUDGETERAD, rullande andel stale titlar (default 1500/worker,
+        #    se buildFetch.ts) → tidsbundet även när cachen är helt kall. 45-min-
+        #    taket ger marginal åt ett kallt bygge (innan veckovisa full-refreshen
+        #    hunnit värma cachen) utan att vänta i evighet om TMDB verkligen hänger.
         #  - Veckovis schemalagd refresh: stor budget → full metadata-refresh av
         #    alla stale titlar (~1.5–2 h kallt). Får 150-min-tak så den faktiskt
-        #    hinner klart och repopulerar cachen. (Tidigare timeout:ade den ALLTID
-        #    eftersom en full refresh aldrig ryms i 30 min.)
-        timeout-minutes: ${{ github.event_name == 'schedule' && 150 || 30 }}
+        #    hinner klart och repopulerar cachen.
+        timeout-minutes: ${{ github.event_name == 'schedule' && 150 || 45 }}
         run: npm run build
         env:
           NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
@@ -114,7 +114,7 @@ jobs:
           NEXT_PUBLIC_APP_ENV: production
           NEXT_PUBLIC_GIT_SHA: ${{ github.sha }}
           # Kod-deploy (push/dispatch): tom → buildFetch default-budget
-          # (3000/worker) → snabb, rullande refresh av de populäraste/stale.
+          # (1500/worker) → snabb, rullande refresh av de populäraste/stale.
           # Schedule: hög budget → full refresh av allt som är stale (cachen
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
           TMDB_BUILD_REFRESH_BUDGET: ${{ github.event_name == 'schedule' && '1000000' || '' }}

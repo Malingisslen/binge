@@ -224,7 +224,7 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    = full refetch = långsam/skör build.
 3. Två regimer (efter 2026-06): en **kod-deploy** (push/dispatch) re-hämtar bara
    en budgeterad andel stale titlar (`TMDB_BUILD_REFRESH_BUDGET`, default
-   3000/worker) → tidsbunden, 30-min-tak. Den **veckovisa `schedule`-refreshen**
+   1500/worker) → tidsbunden, 45-min-tak. Den **veckovisa `schedule`-refreshen**
    kör med stor budget → full metadata-refresh (~1.5-2 h) och har därför ett eget
    **150-min-tak**. (Tidigare delade båda 30 min → schedule-körningen timeout:ade
    ALLTID; det var själva buggen.) Om en schedule-körning ändå röd-timeout:ar:
