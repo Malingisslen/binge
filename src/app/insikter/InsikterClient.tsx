@@ -44,7 +44,10 @@ export default function InsikterClient() {
     return token || null;
   }, [isAdmin, token]);
 
-  const { data, loading, error, lastFetchedAt, isFirstLoad } = useInsightsData(getToken, range);
+  // Hold the fetch until auth + profile have resolved; only then can getToken
+  // mint a real ID token. Re-runs the moment this flips true.
+  const ready = !authLoading && !profileLoading && hasAccess;
+  const { data, loading, error, lastFetchedAt, isFirstLoad } = useInsightsData(getToken, range, ready);
 
   const header = (
     <PageHeader
