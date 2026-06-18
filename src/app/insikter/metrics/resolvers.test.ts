@@ -8,6 +8,7 @@ function emptyData(over: Partial<InsightsData> = {}): InsightsData {
     range: { preset: '30d', from: '2026-05-03', to: '2026-06-02' },
     rollup: null,
     plausible: null,
+    window: null,
     partial: false,
     ...over,
   };
@@ -99,5 +100,23 @@ describe('ratingsHistogram resolves to a 10-bucket breakdown labelled 1..10', ()
     expect(v.entries[0]).toEqual({ label: '1', value: 1 });
     expect(v.entries[6]).toEqual({ label: '7', value: 2 });
     expect(v.entries[9]).toEqual({ label: '10', value: 4 });
+  });
+});
+
+describe('period metrics read window deltas and floor at 0', () => {
+  it('newUsers and titlesAdded are NaN when window is null', () => {
+    expect(DATA_RESOLVERS.newUsers(emptyData())).toEqual({ kind: 'scalar', value: NaN });
+    expect(DATA_RESOLVERS.titlesAdded(emptyData())).toEqual({ kind: 'scalar', value: NaN });
+  });
+
+  it('reads the net deltas from window', () => {
+    const d = emptyData({ window: { basisDate: '2026-06-11', truncated: false, deltas: { users: 2, titlesTracked: 19 } } });
+    expect(DATA_RESOLVERS.newUsers(d)).toEqual({ kind: 'scalar', value: 2 });
+    expect(DATA_RESOLVERS.titlesAdded(d)).toEqual({ kind: 'scalar', value: 19 });
+  });
+
+  it('floors a negative net delta to 0 (never a minus under an "added" label)', () => {
+    const d = emptyData({ window: { basisDate: '2026-06-11', truncated: false, deltas: { users: 0, titlesTracked: -2 } } });
+    expect(DATA_RESOLVERS.titlesAdded(d)).toEqual({ kind: 'scalar', value: 0 });
   });
 });

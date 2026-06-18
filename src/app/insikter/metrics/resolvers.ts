@@ -29,9 +29,9 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   totalUsers: (d) => scalar(d.rollup?.totals.users ?? NaN),
   totalTitlesTracked: (d) => scalar(d.rollup?.totals.titlesTracked ?? NaN),
   totalReviews: (d) => scalar(d.rollup?.totals.reviews ?? NaN),
-  newUsers: (d) => scalar(d.plausible?.goals.signed_up ?? NaN),
-  activeVisitors: (d) => scalar(d.plausible?.visitors ?? NaN),
-  titlesAdded: (d) => scalar(d.plausible?.goals.title_added_watchlist ?? NaN),
+  newUsers: (d) => scalar(Math.max(0, d.window?.deltas.users ?? NaN)),
+  activeVisitors: (d) => scalar(d.plausible?.visitors ?? NaN), // pure web traffic — stays Plausible
+  titlesAdded: (d) => scalar(Math.max(0, d.window?.deltas.titlesTracked ?? NaN)),
 
   // ── Tillväxt ──────────────────────────────────────────────────────────────
   signupsTrend: (d) => ({

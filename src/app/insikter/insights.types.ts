@@ -54,10 +54,21 @@ export interface PlausibleData {
   signinMethodSplit: { google: number; email: number };
 }
 
+/** Net change between today's snapshot and a baseline snapshot (period metrics). */
+export interface WindowDeltas {
+  basisDate: string;   // document id of the baseline snapshot (YYYY-MM-DD)
+  truncated: boolean;  // baseline newer than requested window start (history too shallow)
+  deltas: {
+    users: number;         // raw net change (may be negative)
+    titlesTracked: number; // raw net change (may be negative)
+  };
+}
+
 export interface InsightsData {
   generatedAt: string;
   range: RangeInfo;
   rollup: RollupData | null;
   plausible: PlausibleData | null;
+  window: WindowDeltas | null; // null until at least one prior snapshot exists
   partial: boolean;
 }
