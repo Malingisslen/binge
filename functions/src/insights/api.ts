@@ -10,12 +10,13 @@
  */
 
 import * as crypto from 'crypto';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldPath } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { fetchPlausible } from './plausible';
+import { computeWindowDeltas } from './window';
 import type { InsightsData, RangeInfo, RollupData } from './types';
 
 const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
@@ -86,6 +87,35 @@ async function readRollup(): Promise<RollupData | null> {
   }
 }
 
+/**
+ * Baseline snapshot for the window: newest dated snapshot on or before `from`.
+ * Date ids ("2026-…") sort before the live "daily" doc ("d"), so a `<= {date}`
+ * bound excludes "daily" naturally. If history doesn't reach `from`, fall back
+ * to the oldest dated snapshot (the dashboard then shows a "sedan {datum}" note).
+ */
+async function readBaseline(
+  from: string,
+): Promise<{ data: RollupData; date: string } | null> {
+  const col = getFirestore().collection('insights');
+  try {
+    let snap = await col
+      .where(FieldPath.documentId(), '<=', from)
+      .orderBy(FieldPath.documentId(), 'desc')
+      .limit(1)
+      .get();
+    if (snap.empty) {
+      snap = await col.orderBy(FieldPath.documentId(), 'asc').limit(1).get();
+    }
+    if (snap.empty) return null;
+    const doc = snap.docs[0];
+    if (doc.id === 'daily') return null; // only the live doc exists — no history yet
+    return { data: doc.data() as RollupData, date: doc.id };
+  } catch (err) {
+    logger.error('readBaseline failed', err);
+    return null;
+  }
+}
+
 export const apiInsights = onRequest(
   {
     region: 'europe-west1',
@@ -103,13 +133,22 @@ export const apiInsights = onRequest(
 
     const range = parseRange(req.query as Record<string, unknown>);
 
-    const [rollup, plausible] = await Promise.all([readRollup(), fetchPlausible(range)]);
+    const [rollup, plausible, baseline] = await Promise.all([
+      readRollup(),
+      fetchPlausible(range),
+      readBaseline(range.from),
+    ]);
+
+    const window = rollup
+      ? computeWindowDeltas(rollup, baseline?.data ?? null, baseline?.date ?? null, range.from)
+      : null;
 
     const data: InsightsData = {
       generatedAt: new Date().toISOString(),
       range,
       rollup,
       plausible,
+      window,
       partial: rollup === null || rollup.partial || plausible === null,
     };
 
