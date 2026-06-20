@@ -32,6 +32,7 @@ import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
+import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
 import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
@@ -43,6 +44,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const movieId = parseInt(id, 10);
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { offers } = useStreamingOffers(movie?.id);
+  const cineasterna = useCineasternaCatalog();
   const { getItem, updateRating, updateNotes, updateStatus } = useWatchlist();
   useAuth();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -80,6 +82,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
   if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
 
+  const onCineasterna = cineasterna.has(movie.id);
+  const cineRental = cineasterna.rentalFor(movie.id);
   const watchlistItem = mounted ? getItem(movie.id) : undefined;
   const poster = posterUrl(movie.poster_path, 'w500');
   const tone = toneForGenreIds(movie.genres.map(g => g.id));
@@ -279,6 +283,20 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           )}
 
           <FreeWatchBadge free={free} ads={ads} />
+
+          {onCineasterna && (
+            <div style={{ marginTop: 8 }}>
+              <a
+                href="https://www.cineasterna.com/sv/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-sm bg-bg-2 text-ink-2 px-2 py-1 text-[12px]"
+              >
+                Finns på Cineasterna (via ditt bibliotek)
+                {cineRental && <span className="text-ink-3">· hyr {cineRental.amount} {cineRental.currency}</span>}
+              </a>
+            </div>
+          )}
 
           {showRentBuy && hasRentBuy && (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
