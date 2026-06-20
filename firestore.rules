@@ -367,6 +367,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // External ratings cache — written/read only by the titleRatings callable
+    // (Admin SDK bypasses rules); clients reach it through the callable, never directly.
+    match /titleRatings/{imdbId} {
+      allow read, write: if false;
+    }
+
     // ---- lists ----
     match /lists/{listId} {
       allow read: if resource.data.isPublic == true
