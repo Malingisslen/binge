@@ -191,6 +191,39 @@ describe('X3 — Amazon Channel-varianter canonicaliseras (live-verifierade SE-i
   });
 });
 
+describe('BIN-64 — provider-katalog SE-completeness (live-verifierat 2026-06-20)', () => {
+  it('SF Anytime (426) finns nu som hyr/köp-tjänst', () => {
+    const sf = getProvider(426);
+    expect(sf?.name).toBe('SF Anytime');
+    expect(sf?.type).toBe('rent');
+  });
+
+  it('TMDB:s nuvarande bas-id:n canonicaliseras till befintliga katalog-entries', () => {
+    // Title-nivå-data använder dessa id:n idag; aliasen gör att de känns igen
+    // utan att ändra den primära (sparad data förblir stabil).
+    expect(canonicalProviderId(283)).toBe(323);   // Crunchyroll
+    expect(canonicalProviderId(493)).toBe(520);   // SVT
+    expect(canonicalProviderId(1773)).toBe(431);  // SkyShowtime
+    expect(canonicalProviderId(188)).toBe(335);   // YouTube Premium
+    expect(canonicalProviderId(497)).toBe(521);   // Tele2 Play
+    expect(canonicalProviderId(517)).toBe(578);   // TriArt Play
+  });
+
+  it('getProvider resolver de nya alias-id:na till rätt tjänst', () => {
+    expect(getProvider(283)?.name).toBe('Crunchyroll');
+    expect(getProvider(493)?.name).toBe('SVT Play');
+    expect(getProvider(1773)?.name).toBe('SkyShowtime');
+  });
+
+  it('extractSEProviders känner igen en titel som TMDB listar under nutida id (283 → 323)', () => {
+    const result = extractSEProviders({
+      'watch/providers': { results: { SE: { flatrate: [{ provider_id: 1968 }, { provider_id: 283 }] } } },
+    });
+    // Både Amazon-kanalen (1968) och bas-id:t (283) → en enda Crunchyroll (323).
+    expect(result).toEqual([323]);
+  });
+});
+
 describe('X3/T1/SÖ2/M2 — dedupeProvidersByCanonicalId', () => {
   const p = (provider_id: number, provider_name: string, logo_path = '/x.png') =>
     ({ provider_id, provider_name, logo_path });
