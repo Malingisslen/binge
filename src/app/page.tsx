@@ -17,6 +17,8 @@ import HemFocal from '@/components/home/HemFocal';
 import LaterThisWeek from '@/components/home/LaterThisWeek';
 import BacklogResurfaceTile from '@/components/home/BacklogResurfaceTile';
 import { pickBacklogResurface } from '@/lib/backlogResurface';
+import ContinueWatchingTile from '@/components/home/ContinueWatchingTile';
+import { pickContinueWatching } from '@/lib/continueWatching';
 import SparandeTile from '@/components/home/SparandeTile';
 import VannerTile from '@/components/home/VannerTile';
 import GrupperTile from '@/components/home/GrupperTile';
@@ -215,6 +217,8 @@ function Dashboard() {
   const { items, loading: watchlistLoading } = useWatchlist();
   const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
 
+  // BIN-86: progress-driven "Fortsätt titta" (in-progress series, persisted-only).
+  const continueWatching = useMemo(() => pickContinueWatching(items), [items]);
   // BIN-88: resurfaced vill_se backlog (streamable on a service the user has).
   const resurfaced = useMemo(
     () => pickBacklogResurface(items, user?.myProviders ?? []),
@@ -272,6 +276,7 @@ function Dashboard() {
               <>
                 {focal && <HemFocal entry={focal} />}
                 <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+                <ContinueWatchingTile entries={continueWatching} />
                 <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
               </>
             )}
