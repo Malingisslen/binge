@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFilmDiary, diaryFilmCount } from './diary';
+import { buildFilmDiary, buildDiary, flattenEpisodeProgress, diaryEntryCount } from './diary';
 import type { WatchlistItem } from '@/types';
 
 const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
@@ -11,6 +11,8 @@ const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
   addedAt: new Date(), updatedAt: new Date(), watchedAt: null,
   ...over,
 }) as WatchlistItem;
+
+const ts = (iso: string) => ({ toDate: () => new Date(iso) });
 
 describe('buildFilmDiary (BIN-103)', () => {
   it('includes only sedd films with a watchedAt, sorted newest-first', () => {
@@ -24,7 +26,7 @@ describe('buildFilmDiary (BIN-103)', () => {
     const months = buildFilmDiary(items);
     const flat = months.flatMap(m => m.entries.map(e => e.item.title));
     expect(flat).toEqual(['New', 'Old']); // newest first, only the two valid films
-    expect(diaryFilmCount(months)).toBe(2);
+    expect(diaryEntryCount(months)).toBe(2);
   });
 
   it('groups by calendar month with a Swedish label', () => {
@@ -43,6 +45,51 @@ describe('buildFilmDiary (BIN-103)', () => {
 
   it('returns an empty list when nothing qualifies', () => {
     expect(buildFilmDiary([mk({ status: 'vill_se', watchedAt: null })])).toEqual([]);
-    expect(diaryFilmCount([])).toBe(0);
+    expect(diaryEntryCount([])).toBe(0);
+  });
+});
+
+describe('flattenEpisodeProgress (BIN-103)', () => {
+  it('flattens watched episodes with real timestamps, skipping unwatched/corrupt', () => {
+    const docs = [
+      {
+        id: '100', tmdbId: 100,
+        seasons: {
+          '1': {
+            '1': { watched: true, watchedAt: ts('2026-02-10T20:00:00') },
+            '2': { watched: false, watchedAt: null },                 // unwatched → skip
+            '3': { watched: true, watchedAt: null },                  // no timestamp → skip
+          },
+          'seasons.1.5': { '5': { watched: true, watchedAt: ts('2026-02-11T20:00:00') } }, // corrupt key → skip
+        },
+      },
+      { id: '200', seasons: { '2': { '4': { watched: true, watchedAt: ts('2026-02-12T20:00:00') } } } }, // tmdbId from id
+      { id: 'junk', seasons: {} }, // non-numeric id, no episodes → contributes nothing
+    ];
+    const eps = flattenEpisodeProgress(docs);
+    expect(eps).toEqual([
+      { tmdbId: 100, season: 1, episode: 1, watchedAt: new Date('2026-02-10T20:00:00') },
+      { tmdbId: 200, season: 2, episode: 4, watchedAt: new Date('2026-02-12T20:00:00') },
+    ]);
+  });
+});
+
+describe('buildDiary with episodes (BIN-103)', () => {
+  it('merges films + episodes by date, looking up show metadata from the library', () => {
+    const items = [
+      mk({ tmdbId: 1, title: 'En film', watchedAt: new Date('2026-03-15T12:00:00') }),
+      mk({ tmdbId: 100, title: 'En serie', mediaType: 'tv', status: 'mina', watchedAt: null }),
+    ];
+    const episodes = [
+      { tmdbId: 100, season: 2, episode: 5, watchedAt: new Date('2026-03-20T20:00:00') }, // newer than the film
+      { tmdbId: 999, season: 1, episode: 1, watchedAt: new Date('2026-03-25T20:00:00') }, // orphan (not in library) → skipped
+    ];
+    const months = buildDiary(items, episodes);
+    expect(months).toHaveLength(1);
+    expect(months[0].entries.map(e => [e.item.title, e.episodeCode])).toEqual([
+      ['En serie', 'S2E5'], // newest first
+      ['En film', null],
+    ]);
+    expect(diaryEntryCount(months)).toBe(2); // orphan episode excluded
   });
 });
