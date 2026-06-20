@@ -28,6 +28,8 @@ import ReviewList from '@/components/title/ReviewList';
 import { toneForGenreIds } from '@/lib/duotone';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useTitleRatings } from '@/hooks/useTitleRatings';
+import { RatingsRow } from '@/components/title/RatingsRow';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
@@ -46,6 +48,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const { data: show, isLoading } = useTVShow(showId, initialData);
   const { getItem, updateRating, updateNotes, updateTmdbStatus } = useWatchlist();
   useAuth();
+  const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch — server och initial-render
@@ -198,6 +201,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <span><span className="k">avsnitt</span><strong>{show.number_of_episodes}</strong></span>
             )}
             <span><span className="k">tmdb</span><strong>{show.vote_average.toFixed(1)} / 10</strong></span>
+            <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} />
             {imdbId && (
               <span>
                 <span className="k">imdb</span>

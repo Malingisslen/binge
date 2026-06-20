@@ -24,6 +24,8 @@ import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useTitleRatings } from '@/hooks/useTitleRatings';
+import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
@@ -40,6 +42,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { getItem, updateRating, updateNotes, updateStatus } = useWatchlist();
   useAuth();
+  const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch: SSR/initial-render visar inget
   // watchlist-state (eftersom Firebase/localStorage inte finns på server), och
@@ -176,6 +179,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <span><span className="k">längd</span><strong>{movie.runtime} min</strong></span>
             ) : null}
             <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
+            <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
             {movie.imdb_id && (
               <span>
                 <span className="k">imdb</span>
