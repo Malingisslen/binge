@@ -1,9 +1,33 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useState, useCallback } from 'react';
 import Link from 'next/link';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { useAdvisorTimeline, TIMELINE_WEEKS, type TimelineLane, type TimelineWeek } from '@/hooks/useAdvisorTimeline';
+
+// BIN-45 — styled Direction H hover tooltip for timeline cells (replaces the
+// unstyled native title= on content cells). Lifted to the top so it can render
+// with position:fixed, escaping the lane's overflow-x-auto clip; anchored above
+// the hovered cell via getBoundingClientRect. The cells keep their aria-label,
+// so this is a pure pointer/focus enhancement (screen readers are unaffected).
+interface TooltipState { x: number; y: number; heading: string; lines: string[] }
+
+function TimelineTooltip({ x, y, heading, lines }: TooltipState) {
+  return (
+    <div
+      role="tooltip"
+      className="fixed z-50 bg-surface border border-rule rounded-md shadow-pop px-[10px] py-[7px] pointer-events-none"
+      style={{ left: x, top: y, transform: 'translate(-50%, calc(-100% - 8px))', maxWidth: 240 }}
+    >
+      <div className="text-xxs font-semibold text-text-primary mb-[3px] whitespace-nowrap">{heading}</div>
+      <ul className="m-0 p-0 list-none flex flex-col gap-[1px]">
+        {lines.map((line, i) => (
+          <li key={i} className="text-xxs text-text-secondary leading-snug">{line}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 const CELL_WIDTH = 14;
 const CELL_GAP = 2;
@@ -40,6 +64,17 @@ const USER_PAUSED_CELL_STYLE: React.CSSProperties = {
 
 export default function AdvisorTimeline() {
   const { weeks, subscribedLanes, unsubscribedLanes, shouldRender, hasAirings, todayWeekIndex } = useAdvisorTimeline();
+  const [tip, setTip] = useState<TooltipState | null>(null);
+
+  const showTip = useCallback((el: HTMLElement, heading: string, lines: string[]) => {
+    const r = el.getBoundingClientRect();
+    // Clamp the centre-x so the 240px-max tooltip can't overflow the viewport
+    // for the far-left/right week cells (it's centred via translateX(-50%)).
+    const cx = Math.max(120, Math.min(r.left + r.width / 2, window.innerWidth - 120));
+    setTip({ x: cx, y: r.top, heading, lines });
+  }, []);
+  const hideTip = useCallback(() => setTip(null), []);
+
   if (!shouldRender) return null;
 
   if (!hasAirings) {
@@ -73,7 +108,7 @@ export default function AdvisorTimeline() {
 
           <div className="flex flex-col" style={{ gap: ROW_GAP }}>
             {subscribedLanes.map(lane => (
-              <Lane key={`sub-${lane.providerId}`} lane={lane} weeks={weeks} />
+              <Lane key={`sub-${lane.providerId}`} lane={lane} weeks={weeks} onShow={showTip} onHide={hideTip} />
             ))}
           </div>
 
@@ -84,13 +119,14 @@ export default function AdvisorTimeline() {
               </div>
               <div className="flex flex-col" style={{ gap: ROW_GAP }}>
                 {unsubscribedLanes.map(lane => (
-                  <Lane key={`un-${lane.providerId}`} lane={lane} weeks={weeks} />
+                  <Lane key={`un-${lane.providerId}`} lane={lane} weeks={weeks} onShow={showTip} onHide={hideTip} />
                 ))}
               </div>
             </>
           )}
         </div>
       </div>
+      {tip && <TimelineTooltip {...tip} />}
     </div>
   );
 }
@@ -173,7 +209,12 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
   );
 }
 
-function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
+function Lane({ lane, weeks, onShow, onHide }: {
+  lane: TimelineLane;
+  weeks: TimelineWeek[];
+  onShow: (el: HTMLElement, heading: string, lines: string[]) => void;
+  onHide: () => void;
+}) {
   const isUnsubscribed = lane.kind === 'unsubscribed';
   const isUserPaused = lane.kind === 'user-paused';
   const cellColor = isUnsubscribed ? 'var(--ink-3)' : lane.color;
@@ -202,14 +243,17 @@ function Lane({ lane, weeks }: { lane: TimelineLane; weeks: TimelineWeek[] }) {
           if (hasContent) {
             const entries = cell!.entries;
             const tooltipLines = entries.map(e => `${e.title}${e.episodeCode ? ` ${e.episodeCode}` : ''}`);
-            const title = `${weeks[i].rangeLabel}\n\n${tooltipLines.join('\n')}`;
+            const heading = `${lane.shortName} · ${weeks[i].rangeLabel}`;
             const ariaLabel = `${lane.shortName} ${weeks[i].rangeLabel}: ${entries.map(e => e.title).join(', ')}`;
             return (
               <Link
                 key={i}
                 href="/calendar"
-                title={title}
                 aria-label={ariaLabel}
+                onMouseEnter={e => onShow(e.currentTarget, heading, tooltipLines)}
+                onMouseLeave={onHide}
+                onFocus={e => onShow(e.currentTarget, heading, tooltipLines)}
+                onBlur={onHide}
                 className="block rounded-sm"
                 style={{ width: CELL_WIDTH, height: CELL_HEIGHT, backgroundColor: cellColor, opacity: cellOpacity }}
               />
