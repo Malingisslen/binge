@@ -48,9 +48,9 @@ export interface Report {
   updatedAt?: Date;
 }
 
-// Matchar cooldownen i firestore.rules (BIN-25). Klient-checken är bara snabb,
-// vänlig UX (slipper round-trip + permission-denied) — den hårda gränsen
-// enforce:as server-side via users/{uid}/reportMeta/throttle.
+// Matchar cooldownen i submitReport-callablen (BIN-49). Klient-checken är bara
+// snabb, vänlig UX (slipper round-trip) — den hårda gränsen enforce:as
+// server-side i callablens cooldown-transaktion.
 const REPORT_COOLDOWN_MS = 10_000;
 const REPORT_COOLDOWN_KEY = 'binge:lastReportAt';
 
@@ -69,6 +69,8 @@ function setLastReportAt(ts: number): void {
 }
 
 export async function createReport(params: {
+  // reporterUid behålls i signaturen för anroparen men skickas INTE till servern —
+  // callablen härleder den auktoritativt från auth-kontexten (BIN-49).
   reporterUid: string;
   targetType: ReportTargetType;
   targetId: string;
@@ -80,31 +82,38 @@ export async function createReport(params: {
   if (now - getLastReportAt() < REPORT_COOLDOWN_MS) {
     throw new Error('Vänta lite innan du rapporterar igen.');
   }
-  setLastReportAt(now);
 
+  // BIN-49: report-skapande går via den server-auktoritativa submitReport-
+  // callablen (reports-create-regeln är låst). Servern validerar payloaden,
+  // härleder reporterUid från auth, och enforce:ar cooldownen i en transaktion
+  // som inte går att kringgå genom batchning. Den lata importen håller
+  // firebase/functions utanför first-load-bundlen (samma motiv som fsdb).
+  const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
+  const app = (await import('./config')).default;
+  const functions = getFunctions(app, 'europe-west1');
+  if (
+    typeof window !== 'undefined' &&
+    process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true'
+  ) {
+    try { connectFunctionsEmulator(functions, '127.0.0.1', 5001); } catch { /* idempotent på samma instans; svälj ev. HMR-strul */ }
+  }
+
+  // Trimma/kapa noten redan på klienten (server kapar också, men detta undviker
+  // att skicka onödigt stora payloads — defense-in-depth + paritet med gamla flödet).
   const trimmedNote = params.note?.trim().slice(0, 500);
 
-  // Atomisk batch: rapporten + throttle-stämpeln skrivs tillsammans. Reglerna
-  // kräver att throttle-doc:en sätts till request.time i samma batch och att
-  // förra rapporten är äldre än cooldownen — annars nekas hela batchen (BIN-25).
-  const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
-  const batch = writeBatch(db);
-  // doc(collectionRef) utan id genererar ett klient-id (batch-motsvarigheten
-  // till addDoc) så rapport-skrivningen blir atomisk med throttle-stämpeln.
-  batch.set(doc(collection(db, 'reports')), {
-    reporterUid: params.reporterUid,
+  const submitReport = httpsCallable(functions, 'submitReport');
+  await submitReport({
     targetType: params.targetType,
     targetId: params.targetId,
     targetOwnerUid: params.targetOwnerUid,
     reason: params.reason,
     ...(trimmedNote ? { note: trimmedNote } : {}),
-    status: 'open',
-    createdAt: serverTimestamp(),
   });
-  batch.set(doc(db, 'users', params.reporterUid, 'reportMeta', 'throttle'), {
-    lastReportAt: serverTimestamp(),
-  });
-  await batch.commit();
+
+  // Stämpla klient-cooldownen först efter ett lyckat anrop — ett avvisat anrop
+  // (t.ex. server-cooldown) ska inte räknas som "nyss rapporterat".
+  setLastReportAt(now);
 }
 
 /**

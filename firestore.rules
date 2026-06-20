@@ -175,9 +175,11 @@ service cloud.firestore {
     // lastReportAt satt till request.time (serverTimestamp).
     match /users/{uid}/reportMeta/{docId} {
       allow read: if isOwner(uid);
-      allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['lastReportAt'])
-        && request.resource.data.lastReportAt == request.time;
+      // BIN-49: throttle-stämpeln skrivs nu enbart av submitReport-callablen
+      // (Admin SDK, kringgår reglerna) inuti dess cooldown-transaktion. Klienter
+      // får inte längre skriva den — annars kunde en klient nolla sin egen
+      // throttle och kringgå cooldownen. Delete behålls för deleteAccount-kaskaden.
+      allow create, update: if false;
       allow delete: if isOwner(uid);
     }
 
@@ -333,24 +335,14 @@ service cloud.firestore {
       // rapporter (sekretess mot reporterad target). Admins får läsa alla.
       allow read: if isAdmin();
 
-      allow create: if isSignedIn()
-        && request.resource.data.reporterUid == request.auth.uid
-        && request.resource.data.status == 'open'
-        && request.resource.data.reason in ['spam', 'hate', 'harassment', 'illegal', 'pii', 'other']
-        && request.resource.data.targetType in ['review', 'comment', 'user', 'list']
-        && request.resource.data.targetId is string
-        && request.resource.data.targetOwnerUid is string
-        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500))
-        // BIN-25 server-side rate-limit: samma batch MÅSTE stämpla
-        // users/{uid}/reportMeta/throttle till request.time, och förra rapporten
-        // måste vara äldre än cooldownen (10 s). exists()-grenen släpper igenom
-        // den allra första rapporten (ingen throttle-doc än). Stoppar
-        // console-loop-spam som klient-cooldownen inte kan.
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle).data.lastReportAt == request.time
-        && (
-          !exists(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle)
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)/reportMeta/throttle).data.lastReportAt < request.time - duration.value(10, 's')
-        );
+      // BIN-49: report-skapande är låst för klienter. Den gamla BIN-25-regeln
+      // gate:ade per BATCH (getAfter + throttle i samma batch), så en writeBatch
+      // med N report-creates + 1 throttle-skrivning släppte igenom alla N
+      // (~499 rapporter/10 s). Rules kan inte räkna syskon-skrivningar i en batch.
+      // Lösning: rapporter skapas nu via den server-auktoritativa submitReport-
+      // callablen (Admin SDK kringgår reglerna) som enforce:ar en cooldown per uid
+      // i en transaktion. Klienter får aldrig skriva direkt.
+      allow create: if false;
 
       // Admin får uppdatera status + lägga till actionedAt/dismissedAt m.m.
       // men får INTE ändra core-fält som skulle manipulera historik.

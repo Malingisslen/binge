@@ -5,18 +5,22 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
+  // Honor FIRESTORE_EMULATOR_HOST (set automatically by `firebase emulators:exec`)
+  // so the suite follows whatever port the emulator actually bound — robust when
+  // 8080 is taken (another emulator/session) and in CI. Falls back to the default.
+  const [emuHost, emuPort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
     firestore: {
       rules: readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8'),
-      host: '127.0.0.1', port: 8080,
+      host: emuHost, port: Number(emuPort),
     },
   });
 });
@@ -256,11 +260,13 @@ describe('users/{uid}/friends/{targetUid} — forged-friendship guard', () => {
   });
 });
 
-// BIN-25 — server-side report rate-limit. A report can only be created when the
-// same batch stamps users/{uid}/reportMeta/throttle to request.time, and the
-// previous stamp is older than the cooldown. beforeEach clears Firestore so each
-// test's first report sees no prior throttle.
-describe('reports throttle (BIN-25)', () => {
+// BIN-49 — report creation is locked to the submitReport callable. The old
+// BIN-25 rules throttle gated per *batch*, so a writeBatch of N report-creates +
+// 1 throttle write let all N through. The create rule is now `if false`: clients
+// can't write reports OR their throttle directly; only the server-authoritative
+// callable (Admin SDK, which bypasses rules) can, enforcing a transactional
+// per-uid cooldown the client can't pack into a batch.
+describe('reports create locked to submitReport callable (BIN-49)', () => {
   function validReport() {
     return {
       reporterUid: OWNER, targetType: 'review', targetId: 'rev1',
@@ -272,63 +278,60 @@ describe('reports throttle (BIN-25)', () => {
     return doc(db, 'users', OWNER, 'reportMeta', 'throttle');
   }
 
-  it('first report succeeds when the batch also stamps the throttle', async () => {
+  it('a plain client create is rejected (rule is `if false`)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'reports', 'rep1'), validReport()));
+  });
+
+  it('the old batch-bypass (report + throttle in one batch) is rejected', async () => {
+    // This is the exact vector BIN-49 closes: stamping the throttle in the same
+    // batch no longer satisfies any create condition — there is none.
     const db = ownerDb();
     const batch = writeBatch(db);
     batch.set(doc(db, 'reports', 'rep1'), validReport());
     batch.set(throttleRef(db), { lastReportAt: serverTimestamp() });
-    await assertSucceeds(batch.commit());
-  });
-
-  it('report WITHOUT the throttle stamp is rejected', async () => {
-    const db = ownerDb();
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'reports', 'rep1'), validReport());
-    // no throttle write → getAfter(...).lastReportAt != request.time
     await assertFails(batch.commit());
   });
 
-  it('a second report within the cooldown is rejected', async () => {
+  it('a multi-report batch (the abuse case) is rejected', async () => {
     const db = ownerDb();
-    const b1 = writeBatch(db);
-    b1.set(doc(db, 'reports', 'rep1'), validReport());
-    b1.set(throttleRef(db), { lastReportAt: serverTimestamp() });
-    await assertSucceeds(b1.commit());
-    const b2 = writeBatch(db);
-    b2.set(doc(db, 'reports', 'rep2'), validReport());
-    b2.set(throttleRef(db), { lastReportAt: serverTimestamp() });
-    // Båda batcharna körs i emulatorn inom millisekunder, alltså långt inom
-    // 10 s-cooldownen — förra stämpeln är garanterat färsk → andra rapporten nekas.
-    await assertFails(b2.commit());
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reports', 'rep1'), validReport());
+    batch.set(doc(db, 'reports', 'rep2'), validReport());
+    batch.set(doc(db, 'reports', 'rep3'), validReport());
+    batch.set(throttleRef(db), { lastReportAt: serverTimestamp() });
+    await assertFails(batch.commit());
   });
 });
 
-describe('users/{uid}/reportMeta throttle write rule', () => {
-  it('owner can stamp lastReportAt = serverTimestamp()', async () => {
-    await assertSucceeds(setDoc(
+describe('users/{uid}/reportMeta throttle write rule (BIN-49 locked)', () => {
+  it('owner can NO LONGER write their throttle directly (server-only now)', async () => {
+    // Previously allowed (BIN-25). Now create/update is `if false` — only the
+    // submitReport callable stamps it, so a client can't reset its own cooldown.
+    await assertFails(setDoc(
       doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
       { lastReportAt: serverTimestamp() },
     ));
   });
-  it('rejects extra fields beyond lastReportAt', async () => {
-    await assertFails(setDoc(
-      doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
-      { lastReportAt: serverTimestamp(), spam: 1 },
-    ));
-  });
-  it('rejects a forged past timestamp (cannot backdate to defeat the cooldown)', async () => {
-    // Rule kräver lastReportAt == request.time → en klient-satt gammal timestamp
-    // (för att låtsas att cooldownen redan löpt ut) nekas på throttle-doc-nivå.
-    await assertFails(setDoc(
-      doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle'),
-      { lastReportAt: Timestamp.fromDate(new Date(Date.now() - 60_000)) },
-    ));
-  });
-  it('non-owner cannot stamp another user throttle', async () => {
+  it('non-owner cannot write another user throttle either', async () => {
     await assertFails(setDoc(
       doc(otherDb(), 'users', OWNER, 'reportMeta', 'throttle'),
       { lastReportAt: serverTimestamp() },
     ));
+  });
+  it('owner can still delete their throttle (deleteAccount cascade)', async () => {
+    // Seed via the admin context (bypasses rules), then delete as the owner.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'reportMeta', 'throttle'),
+        { lastReportAt: serverTimestamp() });
+    });
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'reportMeta', 'throttle')));
+  });
+  it('non-owner cannot delete another user throttle', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'reportMeta', 'throttle'),
+        { lastReportAt: serverTimestamp() });
+    });
+    await assertFails(deleteDoc(doc(otherDb(), 'users', OWNER, 'reportMeta', 'throttle')));
   });
 });
 

@@ -170,3 +170,9 @@ export { reclaimOrphanFollows } from './reclaimOrphanFollows';
 // expiresAt, recursiveDelete inkl. participants/swipes) + notiser >90 dagar.
 // Trösklar från docs/data-retention-policy.md. Bounded/paginerad (BIN-50-mönster).
 export { retentionCleanup } from './retentionCleanup';
+
+// ── Report submit (BIN-49) ───────────────────────────────────────────────────
+// submitReport: callable som ersätter klient-writeBatch + rules-throttle (BIN-25,
+// som gick att kringgå per batch). Server-auktoritativ cooldown i transaktion;
+// reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
+export { submitReport } from './submitReport';
