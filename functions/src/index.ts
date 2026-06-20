@@ -181,3 +181,9 @@ export { submitReport } from './submitReport';
 // titleRatings: callable med 45-dagars delad Firestore-cache per IMDb-id.
 // Hämtar IMDb-score, Rotten Tomatoes och Metacritic från OMDb API.
 export { titleRatings } from './titleRatings';
+
+// ── Streaming offers refresh (MOTN) ──────────────────────────────────────────
+// streamingOffersRefresh: daglig schemalagd collectionGroup-scan → MOTN-fetch
+// för intent-titlar (film/vill_se + tv/mina med providers) → skriver
+// streamingOffers/{tmdbId} + streamingHealth/current. Admin-notif vid warn/critical.
+export { streamingOffersRefresh } from './streamingOffers';
