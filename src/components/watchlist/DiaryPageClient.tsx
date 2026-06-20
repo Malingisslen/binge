@@ -13,6 +13,16 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import RatingStars from '@/components/title/RatingStars';
 import { buildDiary, diaryEntryCount } from '@/lib/diary';
+import { computeBingeStats } from '@/lib/bingeStats';
+
+function StatBox({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="bg-surface border border-rule rounded-md px-[12px] py-[8px] min-w-[92px]">
+      <div className="text-[20px] font-bold text-text-primary leading-none tabular-nums">{value}</div>
+      <div className="text-xxs text-text-muted mt-[3px]">{label}</div>
+    </div>
+  );
+}
 
 // BIN-103 — activity diary. Reverse-chron list of watched films (by watchedAt)
 // merged with watched TV episodes (per-show episodeProgress), grouped by month.
@@ -23,6 +33,16 @@ export default function DiaryPageClient() {
   const { episodes, episodesLoading } = useAllEpisodeProgress();
   const months = useMemo(() => buildDiary(items, episodes), [items, episodes]);
   const total = diaryEntryCount(months);
+
+  const films = useMemo(
+    () => items
+      .filter(i => i.mediaType === 'movie' && i.status === 'sedd' && i.watchedAt != null)
+      .map(i => ({ watchedAt: i.watchedAt as Date })),
+    [items],
+  );
+  // BIN-102 — binge stats from the same watch data already loaded here.
+  const stats = useMemo(() => computeBingeStats(episodes, films, new Date()), [episodes, films]);
+  const hasStats = stats.currentStreakDays > 0 || stats.biggestDayEpisodes >= 2 || stats.episodesLast30 > 0;
 
   return (
     <div>
@@ -48,6 +68,19 @@ export default function DiaryPageClient() {
         </div>
       ) : (
         <div className="mt-[18px] space-y-[18px]">
+          {hasStats && (
+            <div className="flex flex-wrap gap-[8px]">
+              {stats.currentStreakDays > 0 && (
+                <StatBox value={stats.currentStreakDays} label={stats.currentStreakDays === 1 ? 'dag i rad' : 'dagar i rad'} />
+              )}
+              {stats.biggestDayEpisodes >= 2 && (
+                <StatBox value={stats.biggestDayEpisodes} label="avsnitt på en dag" />
+              )}
+              {stats.episodesLast30 > 0 && (
+                <StatBox value={stats.episodesLast30} label="avsnitt senaste 30 dagarna" />
+              )}
+            </div>
+          )}
           {months.map(month => (
             <section key={month.key}>
               <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
