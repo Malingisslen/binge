@@ -159,6 +159,13 @@ export { apiInsights } from './insights/api';
 // är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
 export { episodeReleaseNotify } from './episodeNotify';
 
+// ── "Tillgänglig på dina tjänster"-push (BIN-60) ─────────────────────────────
+// availableNotify: daglig collectionGroup-scan (vill_se + mina) → fetchar SE
+// flatrate per unik titel, diffar mot availableNotifyState-markör, push:ar
+// followers när en titel dyker upp på en tjänst de HAR (availableOnMyServices
+// + pushEnabled). Första observationen = baseline (ingen first-run-blast).
+export { availableNotify } from './availableNotify';
+
 // ── Orphan-follow-sweep (BIN-21 storage-backstop) ────────────────────────────
 // reclaimOrphanFollows: veckovis collectionGroup-scan → raderar following/
 // followers-docs som pekar på ett raderat konto (inbound-follows som

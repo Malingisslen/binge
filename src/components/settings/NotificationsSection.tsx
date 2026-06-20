@@ -44,6 +44,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleAvailableToggle(next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await updateNotificationSettings({ availableOnMyServices: next });
+      toast(next ? 'Tillgänglighetsnotiser på' : 'Tillgänglighetsnotiser av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busy) return;
     setBusy(true);
@@ -97,6 +110,13 @@ export function NotificationsSection() {
           onChange={(e) => { void handleEpisodeReleasesToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en serie jag följer släpper ett nytt avsnitt
+      </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.availableOnMyServices} disabled={busy}
+          onChange={(e) => { void handleAvailableToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Notiser när en titel jag vill se dyker upp på en tjänst jag har
       </label>
     </SettingsSection>
   );
