@@ -396,3 +396,11 @@ All items done? Update this file's status here:
 - [ ] Branch protection aktiverad på main
 
 Date completed: ___________
+
+---
+
+## External Ratings (OMDb)
+
+- `firebase functions:secrets:set OMDB_API_KEY` — OMDb API key (free tier 1,000/day;
+  $1/mo Patreon lifts it). Required by the `titleRatings` callable.
+- Callable function → `firebase deploy --only functions`. Rules → `firebase deploy --only firestore:rules`.

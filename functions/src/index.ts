@@ -176,3 +176,8 @@ export { retentionCleanup } from './retentionCleanup';
 // som gick att kringgå per batch). Server-auktoritativ cooldown i transaktion;
 // reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
 export { submitReport } from './submitReport';
+
+// ── External ratings (OMDb) ──────────────────────────────────────────────────
+// titleRatings: callable med 45-dagars delad Firestore-cache per IMDb-id.
+// Hämtar IMDb-score, Rotten Tomatoes och Metacritic från OMDb API.
+export { titleRatings } from './titleRatings';
