@@ -385,6 +385,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Cineasterna availability catalog — written by the cineasternaCatalogSync cron
+    // (Admin SDK bypasses rules), public read (it's catalog data, no PII).
+    match /cineasternaCatalog/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ---- lists ----
     match /lists/{listId} {
       allow read: if resource.data.isPublic == true
