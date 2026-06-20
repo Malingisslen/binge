@@ -678,21 +678,6 @@ button { font: inherit; cursor: pointer; }
 [class*="duo-"]:has(> img):hover > img {
   filter: none !important;
 }
-.poster::after,
-[class*="duo-"]:has(> img)::after {
-  content: "";
-  position: absolute;
-  inset: auto 4px 4px auto;
-  width: 6px; height: 6px;
-  border-radius: 1px;
-  background: oklch(1 0 0 / 0.9);
-  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.2);
-  opacity: 0;
-  transition: opacity 180ms;
-  pointer-events: none;
-}
-.poster:hover::after,
-[class*="duo-"]:has(> img):hover::after { opacity: 1; }
 
 /* ─── Pulse (saffran live indicator) ─── */
 @keyframes pulse-acc {

@@ -259,6 +259,9 @@ export default function TopbarActions() {
                   <div className="popover-row-meta">@{user.username}</div>
                 </Link>
               )}
+              <Link href="/stats/" role="menuitem" className="popover-row" onClick={closeUserMenu}>
+                <div className="popover-row-title">Statistik</div>
+              </Link>
               <Link href="/settings/" role="menuitem" className="popover-row" onClick={closeUserMenu}>
                 <div className="popover-row-title">Inställningar</div>
               </Link>

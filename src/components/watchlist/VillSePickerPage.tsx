@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
@@ -12,6 +12,7 @@ import { PosterProviderDots } from '@/components/watchlist/WatchlistProviderDisp
 import { LibrarySubnav } from '@/components/WatchlistPage';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/contexts/ToastContext';
 import { toneForId } from '@/lib/duotone';
 import type { WatchlistItem } from '@/types';
 
@@ -24,9 +25,22 @@ type MediaFilter = 'all' | 'tv' | 'movie';
 // (serier) och /my/films (filmer). Att samma serie även syns under
 // Följer → Ej påbörjade är avsiktligt: olika vyer, olika jobb.
 export default function VillSePickerPage() {
-  const { items, loading } = useWatchlist();
+  const { items, loading, updateStatus } = useWatchlist();
   const { user } = useAuth();
+  const { show: toast } = useToast();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+
+  // "Redan sett" — film-only genväg ur väljaren. 'sedd' är filmens terminala
+  // läge; TV har inget 'sedd'-slutläge så åtgärden visas bara på filmkort
+  // (jfr BIN-43). Kortet försvinner ur listan så fort statusen flippar bort
+  // från 'vill_se', vilket är feedbacken; toasten bekräftar i klartext.
+  const markSeen = useCallback(
+    async (item: WatchlistItem) => {
+      await updateStatus(item.tmdbId, 'sedd');
+      toast(`Markerad som sedd: ${item.title}`);
+    },
+    [updateStatus, toast]
+  );
 
   const myProviders = useMemo(
     () => new Set(user?.myProviders ?? []),
@@ -110,25 +124,36 @@ export default function VillSePickerPage() {
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
               return (
-                <Link key={`${item.mediaType}-${item.tmdbId}`} href={href} className="no-underline text-text-primary">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
-                    {poster ? (
-                      <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
-                    ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
-                        <Icon size={20} className="text-ink-3 opacity-40" />
-                        <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
-                      </div>
-                    )}
-                    <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
-                  </div>
-                  <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
-                    {item.title}
-                  </div>
-                  <div className="text-xxs text-text-muted">
-                    {item.mediaType === 'tv' ? 'Serie' : 'Film'}{item.releaseYear ? ` · ${item.releaseYear}` : ''}
-                  </div>
-                </Link>
+                <div key={`${item.mediaType}-${item.tmdbId}`}>
+                  <Link href={href} className="no-underline text-text-primary">
+                    <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+                      {poster ? (
+                        <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-1">
+                          <Icon size={20} className="text-ink-3 opacity-40" />
+                          <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
+                        </div>
+                      )}
+                      <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
+                    </div>
+                    <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
+                      {item.title}
+                    </div>
+                    <div className="text-xxs text-text-muted">
+                      {item.mediaType === 'tv' ? 'Serie' : 'Film'}{item.releaseYear ? ` · ${item.releaseYear}` : ''}
+                    </div>
+                  </Link>
+                  {item.mediaType === 'movie' && (
+                    <button
+                      type="button"
+                      onClick={() => void markSeen(item)}
+                      className="chip justify-center w-full mt-[5px]"
+                    >
+                      Redan sett
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
