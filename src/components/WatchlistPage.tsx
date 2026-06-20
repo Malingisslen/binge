@@ -675,19 +675,25 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
 // undervyerna nåbara från varje biblioteksvy. Riktiga <Link>:ar (inte
 // state-tabbar) så URL:erna förblir delbara; aktiv vy markeras via status-
 // propen som mappar 1:1 mot route.
-const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null }[] = [
+// `key` entries (Dagbok) are route-views without a WatchStatus; they go active
+// via the `activeKey` prop instead of status-matching, so they never collide
+// with the status tabs (notably 'Alla', whose status is also null).
+const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; key?: string }[] = [
   { label: 'Följer',   href: '/my/series/',   status: 'mina' },
   { label: 'Vill se',  href: '/my/vill-se/',  status: 'vill_se' },
   { label: 'Filmer',   href: '/my/films/',    status: 'sedd' },
   { label: 'Avbrutna', href: '/my/avbrutna/', status: 'avbruten' },
   { label: 'Alla',     href: '/my/all/',      status: null },
+  { label: 'Dagbok',   href: '/my/diary/',    status: null, key: 'diary' },
 ];
 
-export function LibrarySubnav({ status }: { status?: WatchStatus }) {
+export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; activeKey?: string }) {
   return (
     <nav aria-label="Biblioteksvyer" style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
       {LIBRARY_VIEWS.map(view => {
-        const active = (status ?? null) === view.status;
+        const active = view.key
+          ? view.key === activeKey
+          : !activeKey && (status ?? null) === view.status;
         return (
           <Link
             key={view.href}
