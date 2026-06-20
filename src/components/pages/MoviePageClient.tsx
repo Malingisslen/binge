@@ -8,6 +8,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { JsonLd, movieSchema, breadcrumbSchema } from '@/components/title/JsonLd';
 import { posterUrl, profileUrl, logoUrl } from '@/lib/tmdb/client';
 import StatusButton from '@/components/title/StatusButton';
+import WatchedDateEditor from '@/components/title/WatchedDateEditor';
 import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
@@ -37,7 +38,7 @@ import type { TMDBMovie } from '@/types';
 export default function MoviePageClient({ id, initialData }: { id: string; initialData?: TMDBMovie }) {
   const movieId = parseInt(id, 10);
   const { data: movie, isLoading } = useMovie(movieId, initialData);
-  const { getItem, updateRating, updateNotes } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateStatus } = useWatchlist();
   useAuth();
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch: SSR/initial-render visar inget
@@ -219,6 +220,12 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               />
               <NotInterestedButton tmdbId={movie.id} mediaType="movie" title={displayTitle} />
             </div>
+            {watchlistItem?.status === 'sedd' && (
+              <WatchedDateEditor
+                watchedAt={watchlistItem.watchedAt ?? null}
+                onChange={d => updateStatus(movie.id, 'sedd', d)}
+              />
+            )}
           </ClientOnly>
 
           {subscription.length > 0 && (

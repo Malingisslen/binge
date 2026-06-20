@@ -15,6 +15,13 @@ export interface StatusUpdateContext {
   currentStatus?: WatchStatus;
   /** The item's current rewatch count, for the rewatch increment. */
   currentRewatchCount?: number;
+  /**
+   * BIN-91: optional backdated watch time for a 'sedd'-write (a Timestamp/Date
+   * sentinel from the caller). When absent, `watchedAt` falls back to `now`.
+   * `updatedAt` always stays `now` — that's the real write time, only the
+   * *watched* moment is user-overridable.
+   */
+  watchedAtOverride?: unknown;
 }
 
 export function buildStatusUpdate(
@@ -26,7 +33,7 @@ export function buildStatusUpdate(
     status,
     ...ctx.visFields,
     updatedAt: ctx.now,
-    ...(status === 'sedd' ? { watchedAt: ctx.now } : {}),
+    ...(status === 'sedd' ? { watchedAt: ctx.watchedAtOverride ?? ctx.now } : {}),
     ...(isRewatch ? { rewatchCount: (ctx.currentRewatchCount ?? 0) + 1 } : {}),
     // BIN-35: clear the legacy v1/v2 `dropped` flag on any non-avbruten status.
     // migrateStatus lets `dropped:true` win unconditionally, so without this a

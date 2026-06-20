@@ -30,6 +30,24 @@ describe('buildStatusUpdate', () => {
     expect('watchedAt' in buildStatusUpdate('vill_se', base)).toBe(false);
   });
 
+  // BIN-91 — backdating.
+  it('uses watchedAtOverride for sedd when provided (updatedAt stays now)', () => {
+    const OVERRIDE = '__backdated__';
+    const p = buildStatusUpdate('sedd', { ...base, watchedAtOverride: OVERRIDE });
+    expect(p.watchedAt).toBe(OVERRIDE);
+    expect(p.updatedAt).toBe(TS); // write-time is always now, not the override
+  });
+
+  it('falls back to now when watchedAtOverride is absent or explicitly undefined', () => {
+    expect(buildStatusUpdate('sedd', base).watchedAt).toBe(TS);
+    // The context passes `undefined` literally (watchedAt ? … : undefined) — pin that.
+    expect(buildStatusUpdate('sedd', { ...base, watchedAtOverride: undefined }).watchedAt).toBe(TS);
+  });
+
+  it('ignores watchedAtOverride for non-sedd statuses (no watchedAt key)', () => {
+    expect('watchedAt' in buildStatusUpdate('mina', { ...base, watchedAtOverride: '__x__' })).toBe(false);
+  });
+
   it('increments rewatchCount only when re-marking sedd over sedd', () => {
     expect(buildStatusUpdate('sedd', { ...base, currentStatus: 'sedd', currentRewatchCount: 2 }).rewatchCount).toBe(3);
     // First time to sedd (from another status) → no rewatch increment.

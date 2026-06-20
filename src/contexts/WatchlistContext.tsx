@@ -48,7 +48,7 @@ interface WatchlistState {
   loading: boolean;
   addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
   updateVisibility: (tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
-  updateStatus: (tmdbId: number, status: WatchStatus) => Promise<void>;
+  updateStatus: (tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
@@ -219,9 +219,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
   }, [uid, user?.defaultVisibility]);
 
-  const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus) => {
+  const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus, watchedAt?: Date) => {
     if (!uid) return;
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
+    const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const currentItem = items.find(i => i.tmdbId === tmdbId);
     const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
@@ -230,6 +230,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       visFields,
       currentStatus: currentItem?.status,
       currentRewatchCount: currentItem?.rewatchCount,
+      // BIN-91: backdaterat sett-datum (film). undefined → faller tillbaka på now.
+      watchedAtOverride: watchedAt ? Timestamp.fromDate(watchedAt) : undefined,
     }), { merge: true });
     trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
   }, [uid, items, effectiveVisibilityNow]);
