@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Search, Film, Tv, X } from 'lucide-react';
+import { Search, Film, Tv, X, Check } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -110,6 +110,13 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     6 + (showTypeCol ? 1 : 0) + (showAddedCol ? 1 : 0) + (showWatchedCol ? 1 : 0);
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // BIN-42: "Välj"-läge togglar kryssrutor i kort/rutnät (tabellen har egna).
+  const [selectMode, setSelectMode] = useState(false);
+  const toggleSelect = (id: number) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   // BIN-44: library filter row (genre OR-match + min-rating), client-side.
   const [genreFilter, setGenreFilter] = useState<number[]>([]);
@@ -387,7 +394,15 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )}
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <button
+          type="button"
+          onClick={() => { setSelectMode(m => !m); setSelected(new Set()); }}
+          className={`chip${selectMode ? ' is-on' : ''}`}
+          style={{ marginLeft: 'auto' }}
+        >
+          {selectMode ? 'Klar' : 'Välj'}
+        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
           {(['table', 'cards', 'grid'] as const).map(v => (
             <button
               key={v}
@@ -449,6 +464,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <FollowingCardSections
             sections={followingSections}
             nextAirByTmdbId={nextAirByTmdbId}
+            selectMode={selectMode}
+            isSelected={id => selected.has(id)}
+            onToggleSelect={toggleSelect}
           />
         ) : (
           <div className={CARD_GRID_CLASS}>
@@ -457,6 +475,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 key={item.tmdbId}
                 item={item}
                 nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                selectMode={selectMode}
+                selected={selected.has(item.tmdbId)}
+                onToggleSelect={() => toggleSelect(item.tmdbId)}
               />
             ))}
             {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
@@ -589,9 +610,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
-              return (
-                <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
+              const isSel = selected.has(item.tmdbId);
+              const inner = (
+                <>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-accent' : ''}`}>
                     {poster ? (
                       <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                     ) : (
@@ -601,11 +623,35 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       </div>
                     )}
                     <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
+                    {selectMode && (
+                      <span className={`absolute top-1 left-1 z-[1] inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
+                        isSel ? 'bg-accent border-accent text-white' : 'border-rule bg-surface'
+                      }`}>
+                        {isSel && <Check size={11} />}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.title}
                   </div>
                   <div className="text-xxs text-text-muted">{item.releaseYear ?? '—'}</div>
+                </>
+              );
+              return selectMode ? (
+                <div
+                  key={item.tmdbId}
+                  role="checkbox"
+                  aria-checked={isSel}
+                  aria-label={`Välj ${item.title}`}
+                  tabIndex={0}
+                  onClick={() => toggleSelect(item.tmdbId)}
+                  className="cursor-pointer text-text-primary"
+                >
+                  {inner}
+                </div>
+              ) : (
+                <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
+                  {inner}
                 </Link>
               );
             })}

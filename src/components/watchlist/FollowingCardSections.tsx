@@ -12,15 +12,24 @@ import { useIncrementalList } from '@/hooks/useIncrementalList';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
 
+interface SelectProps {
+  selectMode?: boolean;
+  isSelected?: (id: number) => boolean;
+  onToggleSelect?: (id: number) => void;
+}
+
 function SectionGrid({
   items,
   nextAirByTmdbId,
   subState,
+  selectMode,
+  isSelected,
+  onToggleSelect,
 }: {
   items: WatchlistItem[];
   nextAirByTmdbId: Map<number, string>;
   subState: LibrarySubState;
-}) {
+} & SelectProps) {
   const { visible, hasMore, sentinelRef } = useIncrementalList(items);
   return (
     <>
@@ -31,6 +40,9 @@ function SectionGrid({
             item={item}
             nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
             subState={subState}
+            selectMode={selectMode}
+            selected={isSelected?.(item.tmdbId) ?? false}
+            onToggleSelect={() => onToggleSelect?.(item.tmdbId)}
           />
         ))}
       </div>
@@ -71,10 +83,13 @@ export function bucketBySubState(
 export function FollowingCardSections({
   sections,
   nextAirByTmdbId,
+  selectMode,
+  isSelected,
+  onToggleSelect,
 }: {
   sections: CardSections;
   nextAirByTmdbId: Map<number, string>;
-}) {
+} & SelectProps) {
   const [avslutadOpen, setAvslutadOpen] = useState(false);
   const total = LIBRARY_SUB_STATE_ORDER.reduce((sum, key) => sum + sections[key].length, 0);
 
@@ -114,7 +129,7 @@ export function FollowingCardSections({
                 <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
               </button>
               {avslutadOpen && (
-                <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} />
+                <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />
               )}
             </section>
           );
@@ -128,7 +143,7 @@ export function FollowingCardSections({
               </h2>
               <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
             </div>
-            <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} />
+            <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />
           </section>
         );
       })}

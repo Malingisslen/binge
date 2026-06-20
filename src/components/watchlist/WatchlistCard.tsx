@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { Film, Tv } from 'lucide-react';
+import { Film, Tv, Check } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useAuth } from '@/hooks/useAuth';
 import { getProvider } from '@/lib/tmdb/providers';
@@ -34,6 +34,9 @@ export function WatchlistCard({
   item,
   nextAirDate,
   subState,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   item: WatchlistItem;
   nextAirDate?: string;
@@ -42,6 +45,11 @@ export function WatchlistCard({
   // (inkl. advisorns behind-set). Skippas för film och för icke-/my/series-
   // vyer; för TV i 'mina' utan prop härleder kortet själv från item-fälten.
   subState?: LibrarySubState;
+  // BIN-42: multi-select. I select-läge togglar klick på kortet markeringen
+  // istället för att navigera (inre länkar avaktiveras).
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const { user } = useAuth();
   const myProviders = user?.myProviders ?? [];
@@ -93,24 +101,54 @@ export function WatchlistCard({
 
   const providersToShow = item.providers.slice(0, 3);
 
-  return (
-    <div className="bg-surface border border-rule rounded-sm p-[10px] flex gap-[10px] hover:border-rule-2 transition-colors">
-      <Link href={href} className="shrink-0">
-        <div className={`poster duo-${tone} w-[50px] h-[75px]`} style={{ aspectRatio: '2 / 3' }}>
-          {poster ? (
-            <img src={poster} alt="" loading="lazy" decoding="async" width={50} height={75} />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-bg-2">
-              <Icon size={16} className="text-ink-3 opacity-40" />
-            </div>
-          )}
+  const posterInner = (
+    <div className={`poster duo-${tone} w-[50px] h-[75px]`} style={{ aspectRatio: '2 / 3' }}>
+      {poster ? (
+        <img src={poster} alt="" loading="lazy" decoding="async" width={50} height={75} />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-2">
+          <Icon size={16} className="text-ink-3 opacity-40" />
         </div>
-      </Link>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className={`bg-surface border rounded-sm p-[10px] flex gap-[10px] transition-colors ${
+        selectMode
+          ? `cursor-pointer ${selected ? 'border-accent' : 'border-rule hover:border-rule-2'}`
+          : 'border-rule hover:border-rule-2'
+      }`}
+      {...(selectMode
+        ? { onClick: onToggleSelect, role: 'checkbox', 'aria-checked': selected, 'aria-label': `Välj ${item.title}`, tabIndex: 0 }
+        : {})}
+    >
+      {selectMode && (
+        <span className="shrink-0 self-center" aria-hidden="true">
+          <span className={`inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
+            selected ? 'bg-accent border-accent text-white' : 'border-rule bg-surface'
+          }`}>
+            {selected && <Check size={11} />}
+          </span>
+        </span>
+      )}
+      {selectMode ? (
+        <span className="shrink-0">{posterInner}</span>
+      ) : (
+        <Link href={href} className="shrink-0">{posterInner}</Link>
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <Link href={href} className="no-underline text-text-primary min-w-0">
-            <div className="text-xs font-semibold truncate">{item.title}</div>
-          </Link>
+          {selectMode ? (
+            <span className="text-text-primary min-w-0">
+              <div className="text-xs font-semibold truncate">{item.title}</div>
+            </span>
+          ) : (
+            <Link href={href} className="no-underline text-text-primary min-w-0">
+              <div className="text-xs font-semibold truncate">{item.title}</div>
+            </Link>
+          )}
           <span className="shrink-0">
             {/* B8: obetygsatt = dimmade stjärnor — samma visning som
                 Tabell-vyn, så de två vyerna inte säger olika saker. */}
