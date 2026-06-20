@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { useSwedishWikiBio } from '@/hooks/useSwedishWikiBio';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { translateDepartment } from '@/lib/tmdb/department';
@@ -20,17 +21,25 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const { data: person, isLoading } = usePerson(personId, initialData);
   const { data: credits } = usePersonCredits(personId);
 
-  // Fallback to English bio if Swedish is empty
+  const svBio = person?.biography || '';
+
+  // Only fetch Wikipedia fallback when TMDB has no Swedish bio.
+  const wikiBio = useSwedishWikiBio(person?.id, !!person && !svBio);
+
+  // Fallback to English TMDB bio if both Swedish sources are empty.
   const { data: personEn } = useQuery({
     queryKey: ['person-en', personId],
     queryFn: () => getPersonEn(personId),
-    enabled: !!person && !person.biography,
+    enabled: !!person && !svBio && !wikiBio?.text,
     staleTime: TMDB_STALE.PERSON,
   });
 
-  const biography = person?.biography || personEn?.biography || '';
-  // PE2: markera när bion är en engelsk fallback (TMDB saknar svensk text).
-  const biographyIsEnglishFallback = !person?.biography && !!personEn?.biography;
+  const enBio = personEn?.biography || '';
+
+  // Precedence: sv TMDB → sv Wikipedia → en TMDB
+  const biography = svBio || wikiBio?.text || enBio || '';
+  const bioSource: 'tmdb-sv' | 'wiki-sv' | 'tmdb-en' | null =
+    svBio ? 'tmdb-sv' : wikiBio?.text ? 'wiki-sv' : enBio ? 'tmdb-en' : null;
 
   // PE3: separera Self-gästframträdanden (talkshows, galor) från riktiga
   // roller så filmografin inte dränks i dem.
@@ -88,7 +97,16 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
           {biography && (
             <>
               <p className="text-base text-ink-2 leading-relaxed mb-3 line-clamp-6">{biography}</p>
-              {biographyIsEnglishFallback && (
+              {bioSource === 'wiki-sv' && wikiBio && (
+                <p className="text-xxs text-ink-3 mb-3">
+                  Biografi från{' '}
+                  <a href={wikiBio.pageUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                    svenska Wikipedia
+                  </a>{' '}
+                  (CC BY-SA).
+                </p>
+              )}
+              {bioSource === 'tmdb-en' && (
                 <p className="text-xxs text-ink-3 mb-3">Biografi på engelska — svensk översättning saknas.</p>
               )}
             </>
