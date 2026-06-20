@@ -28,6 +28,7 @@ export const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
 const PERSISTED_QUERY_PREFIXES = new Set([
   'genres-movie', 'genres-tv',
   'trending', 'popular-movies', 'popular-tv', 'discover-movies', 'discover-tv',
+  'cineasterna-catalog', // small shared catalog (~tens of KB); safe to persist
 ]);
 
 export function shouldPersistQuery(query: {
