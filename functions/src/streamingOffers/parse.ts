@@ -10,9 +10,9 @@ export const MOTN_TO_TMDB_PROVIDER: Record<string, number> = {
   viaplay: 76,
   appletv: 2,         // Apple TV (rent/buy)
   appletvplus: 350,   // Apple TV+
-  svtplay: 1773,
-  tv4play: 497,
-  skyshowtime: 1773,  // verify against providers.ts; adjust if a distinct id exists
+  svtplay: 520,
+  tv4play: 489,
+  skyshowtime: 431,
   google: 3,
 };
 

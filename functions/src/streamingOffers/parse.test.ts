@@ -7,6 +7,9 @@ describe('MOTN_TO_TMDB_PROVIDER', () => {
     expect(MOTN_TO_TMDB_PROVIDER.netflix).toBe(8);
     expect(MOTN_TO_TMDB_PROVIDER.disney).toBe(337);
     expect(MOTN_TO_TMDB_PROVIDER.prime).toBe(119);
+    expect(MOTN_TO_TMDB_PROVIDER.svtplay).toBe(520);
+    expect(MOTN_TO_TMDB_PROVIDER.skyshowtime).toBe(431);
+    expect(MOTN_TO_TMDB_PROVIDER.tv4play).toBe(489);
   });
 });
 
