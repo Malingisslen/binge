@@ -30,7 +30,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const { data: personEn } = useQuery({
     queryKey: ['person-en', personId],
     queryFn: () => getPersonEn(personId),
-    enabled: !!person && !svBio && !wikiBio?.text,
+    enabled: !!person && !svBio,
     staleTime: TMDB_STALE.PERSON,
   });
 
