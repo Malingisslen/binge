@@ -30,6 +30,8 @@ import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
+import { useStreamingOffers } from '@/hooks/useStreamingOffers';
+import { offerForProvider } from '@/lib/streaming/offers';
 import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
@@ -40,6 +42,7 @@ import type { TMDBMovie } from '@/types';
 export default function MoviePageClient({ id, initialData }: { id: string; initialData?: TMDBMovie }) {
   const movieId = parseInt(id, 10);
   const { data: movie, isLoading } = useMovie(movieId, initialData);
+  const { offers } = useStreamingOffers(movie?.id);
   const { getItem, updateRating, updateNotes, updateStatus } = useWatchlist();
   useAuth();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -237,14 +240,29 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <span className="lab">finns på</span>
               {subscription.map(p => {
                 const logo = logoUrl(p.logo_path);
-                return logo ? (
+                const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
+                if (logo) {
                   // Placeholder-bakgrund + eager: raden är above-the-fold och
                   // utan fill renderas tomma vita rutor tills CDN:t svarar (T5).
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.provider_id} src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
-                ) : (
-                  <ProviderTag key={p.provider_id} provider={p} size="md" />
-                );
+                  const now = Date.now();
+                  const leaving = offer && offer.leaving && Math.round((Date.parse(offer.leaving) - now) / 86400000) <= 14 && Math.round((Date.parse(offer.leaving) - now) / 86400000) >= 0;
+                  const leavingLabel = leaving && offer ? (() => { const d = new Date(offer.leaving!); return `lämnar ${d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}`; })() : null;
+                  const imgEl = (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
+                  );
+                  return (
+                    <span key={p.provider_id} className="inline-flex items-center gap-1">
+                      {offer?.link ? (
+                        <a href={offer.link} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                      ) : imgEl}
+                      {leavingLabel && (
+                        <span className="rounded-sm bg-danger-soft text-danger-ink px-1 text-[11px]">{leavingLabel}</span>
+                      )}
+                    </span>
+                  );
+                }
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} />;
               })}
               {hasRentBuy && (
                 <button
@@ -265,13 +283,13 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} />)}
                 </div>
               )}
             </div>
@@ -280,6 +298,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           {(subscription.length > 0 || hasRentBuy) && (
             <div style={{ marginTop: 8 }}>
               <JustWatchCredit />
+              <span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
         </div>
