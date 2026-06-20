@@ -373,6 +373,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Streaming offers (deeplinks, prices, leaving dates) — written by the
+    // streamingOffersRefresh cron (Admin SDK bypasses rules), public read.
+    match /streamingOffers/{tmdbId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Internal freshness/health for the streaming-offers governor — never client-readable.
+    match /streamingHealth/{doc} {
+      allow read, write: if false;
+    }
+
     // ---- lists ----
     match /lists/{listId} {
       allow read: if resource.data.isPublic == true
