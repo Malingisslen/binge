@@ -16,7 +16,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   const isMine = user?.myProviders.includes(canonicalProviderId(provider.provider_id)) ?? false;
   const label = mapped?.shortName ?? provider.provider_name;
 
-  const now = nowMs ?? Date.now();
+  const now = nowMs ?? 0;
   const leaving = offer && isLeavingSoon(offer, now);
   const price =
     offer && (offer.type === 'rent' || offer.type === 'buy') && offer.priceAmount != null

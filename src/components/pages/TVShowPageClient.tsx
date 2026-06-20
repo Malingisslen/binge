@@ -140,6 +140,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     genreIds: show.genres.map(g => g.id),
     tmdbStatus: show.status,
   };
+  // Hoisted here (not inside JSX) so the linter disable is minimal in scope.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   return (
     <>
@@ -246,7 +249,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           {subscription.length > 0 && (
             <div className="providers-row">
               <span className="lab">finns på</span>
-              {(() => { const now = Date.now(); return subscription.map(p => {
+              {subscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
                 if (logo) {
@@ -269,8 +272,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                     </span>
                   );
                 }
-                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} />;
-              }); })()}
+                return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} nowMs={now} />;
+              })}
               {hasRentBuy && (
                 <button
                   onClick={() => setShowRentBuy(!showRentBuy)}
@@ -290,13 +293,13 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
-                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} />)}
+                  {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
                 </div>
               )}
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
-                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} />)}
+                  {buy.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
                 </div>
               )}
             </div>
