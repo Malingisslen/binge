@@ -102,7 +102,7 @@ export function GroupSettingsModal({
             <select
               value={mediaType}
               onChange={e => setMediaType(e.target.value as SessionMediaType)}
-              className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
+              className="select w-full"
             >
               <option value="movie">Bara filmer</option>
               <option value="tv">Bara serier</option>
@@ -115,7 +115,7 @@ export function GroupSettingsModal({
             <select
               value={providerMode}
               onChange={e => setProviderMode(e.target.value as ProviderMode)}
-              className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
+              className="select w-full"
             >
               <option value="intersect">Alla har</option>
               <option value="union">Någon har</option>
@@ -127,7 +127,7 @@ export function GroupSettingsModal({
             <select
               value={aggregation}
               onChange={e => setAggregation(e.target.value as AggregationStrategy)}
-              className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
+              className="select w-full"
             >
               <option value="least_misery">Ingen hatar det</option>
               <option value="average">Flest positiva</option>

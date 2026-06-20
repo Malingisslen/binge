@@ -140,7 +140,7 @@ export function ProvidersSection() {
                         updateProviderTier(provider.id, val === '' ? null : val);
                         toast('Prenumeration uppdaterad');
                       }}
-                      className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none max-w-[180px]"
+                      className="select max-w-[180px]"
                     >
                       <option value="">Egen kostnad…</option>
                       {provider.tiers!.map(t => (

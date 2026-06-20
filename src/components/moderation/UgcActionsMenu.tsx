@@ -191,7 +191,7 @@ function ReportDialog({
             <select
               value={reason}
               onChange={e => setReason(e.target.value as ReportReason)}
-              className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white"
+              className="select w-full"
             >
               {Object.entries(REPORT_REASON_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>{label}</option>

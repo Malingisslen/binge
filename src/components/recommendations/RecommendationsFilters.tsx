@@ -52,7 +52,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
       <select
         value={filters.genre}
         onChange={e => onChange({ ...filters, genre: e.target.value })}
-        className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary outline-none"
+        className="select"
       >
         <option value="">Alla genrer</option>
         {allGenres.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
@@ -60,7 +60,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
       <select
         value={filters.country}
         onChange={e => onChange({ ...filters, country: e.target.value })}
-        className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary outline-none"
+        className="select"
       >
         <option value="">Alla länder</option>
         {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -68,7 +68,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
       <select
         value={filters.decade}
         onChange={e => onChange({ ...filters, decade: e.target.value })}
-        className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary outline-none"
+        className="select"
       >
         <option value="">Alla decennier</option>
         {DECADES.map(d => <option key={d} value={d}>{d}-talet</option>)}

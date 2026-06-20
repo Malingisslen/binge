@@ -348,14 +348,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           value={sort}
           onChange={e => setSort(e.target.value as SortKey)}
           aria-label="Sortera biblioteket"
-          style={{
-            fontSize: 12,
-            border: '1px solid var(--rule)', borderRadius: 6,
-            padding: '5px 10px',
-            background: 'var(--surface)', color: 'var(--ink-2)',
-            outline: 'none', cursor: 'pointer',
-            letterSpacing: 0.04,
-          }}
+          className="select"
         >
           <option value="updatedAt">Senast ändrad</option>
           <option value="title">Titel A-Ö</option>

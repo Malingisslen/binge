@@ -120,7 +120,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
-        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary">
+        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="select">
           <option value="relevance">Relevans</option>
           <option value="rating">Betyg</option>
           <option value="release">Premiärdatum</option>

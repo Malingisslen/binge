@@ -162,7 +162,7 @@ export default function DiscoverPage() {
           <select
             value={genre}
             onChange={e => setGenre(e.target.value)}
-            className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
+            className="select"
           >
             <option value="">Alla genrer</option>
             {(genres ?? []).map(g => (
@@ -175,7 +175,7 @@ export default function DiscoverPage() {
             <select
               value={sort}
               onChange={e => setSort(e.target.value as SortOption)}
-              className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary font-[inherit] outline-none"
+              className="select"
             >
               {Object.entries(SORT_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
