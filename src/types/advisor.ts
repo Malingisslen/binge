@@ -28,6 +28,20 @@ export interface WillSeePerProviderRow {
   movieCount: number;
 }
 
+// Coverage optimizer (BIN-87): en rankad rekommendation om vilken EJ-tecknad
+// betald flatrate-tjänst som låser upp mest av användarens Vill se.
+export interface CoverageOption {
+  providerId: number;
+  providerName: string;
+  shortName: string;
+  color: string;
+  monthlyCost: number; // > 0 (gratis-tjänster exkluderas — inget att "skaffa")
+  titleCount: number;  // tvCount + movieCount
+  tvCount: number;
+  movieCount: number;
+  krPerTitle: number;  // monthlyCost / titleCount, avrundat — pris per upplåst titel
+}
+
 export interface ProviderBase {
   providerId: number;
   providerName: string;

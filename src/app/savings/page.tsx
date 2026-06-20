@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
+import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -240,6 +241,8 @@ function SavingsContent() {
               providers={advisor.providers}
               activePauses={advisor.activePauses}
             />
+
+            <CoverageOptimizer rows={advisor.willSeeByProvider} />
 
             <UpcomingEpisodes />
 

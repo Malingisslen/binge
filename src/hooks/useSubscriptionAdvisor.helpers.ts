@@ -10,6 +10,8 @@ import type {
   ProviderAdvisory,
   ActivePause,
   WatchlistItem,
+  WillSeePerProviderRow,
+  CoverageOption,
 } from '@/types';
 
 // A1/X1: "allt laddat?"-aggregering för rådgivaren. Rådgivaren är klar först
@@ -171,4 +173,39 @@ export function isWithinDays(dateStr: string | null, days: number): boolean {
   const windowEnd = new Date(now);
   windowEnd.setDate(windowEnd.getDate() + days);
   return target >= now && target <= windowEnd;
+}
+
+// BIN-87 — coverage optimizer ("vilken tjänst låser upp mest av din Vill se").
+// Inversen av rådgivaren: den vanliga rådgivaren resonerar om tjänster du REDAN
+// har; den här rankar EJ-tecknade betalda flatrate-tjänster efter hur många
+// vill_se/följer-titlar var och en skulle låsa upp. Tar willSeeByProvider-raderna
+// (redan flatrate-filtrerade + per-tjänst-räknade i hooken) så ingen ny TMDB-
+// hämtning behövs. Gratis-tjänster (monthlyCost 0/null, t.ex. SVT Play) hoppas
+// över — det finns inget att "skaffa". Rankning: mest täckning först, sedan
+// lägst kr/titel (billigast per upplåst titel) som tiebreak.
+export function rankCoverageOptions(rows: WillSeePerProviderRow[]): CoverageOption[] {
+  const options: CoverageOption[] = [];
+  for (const r of rows) {
+    if (r.isSubscribed) continue;                          // bara ej-tecknade
+    if (r.monthlyCost == null || r.monthlyCost <= 0) continue; // bara betalda
+    const titleCount = r.tvCount + r.movieCount;
+    if (titleCount <= 0) continue;                         // måste låsa upp något
+    options.push({
+      providerId: r.providerId,
+      providerName: r.providerName,
+      shortName: r.shortName,
+      color: r.color,
+      monthlyCost: r.monthlyCost,
+      titleCount,
+      tvCount: r.tvCount,
+      movieCount: r.movieCount,
+      krPerTitle: Math.round(r.monthlyCost / titleCount),
+    });
+  }
+  options.sort((a, b) => {
+    if (b.titleCount !== a.titleCount) return b.titleCount - a.titleCount; // mest täckning
+    if (a.krPerTitle !== b.krPerTitle) return a.krPerTitle - b.krPerTitle; // billigast/titel
+    return a.providerName.localeCompare(b.providerName, 'sv');             // stabil ordning
+  });
+  return options;
 }
