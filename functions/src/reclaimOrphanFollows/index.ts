@@ -17,9 +17,14 @@
  * This sweep is the storage backstop that actually reclaims them.
  *
  * Detection: read every users/* doc id into an "alive" Set, then any
- * following/followers doc whose owner OR other endpoint is not in that Set is an
- * orphan (see logic.ts). The Admin SDK bypasses firestore.rules, so no rule
- * change is needed.
+ * following/followers doc whose owner OR other endpoint is not in that Set, AND
+ * which is older than a grace window, is an orphan (see logic.ts). The grace
+ * window (BIN-50 #1) protects follows created mid-sweep from being mistaken for
+ * orphans because of read-skew against the alive snapshot. The Admin SDK
+ * bypasses firestore.rules, so no rule change is needed.
+ *
+ * Scans are paginated (BIN-50 #2) so a growing user/follow graph never loads in
+ * a single query result; per-page filtering keeps peak memory bounded.
  *
  * Cost: reads = #users + #following docs + #followers docs, deletes only for
  * actual orphans. A few hundred ops/week at binge's size — well under the free
@@ -29,30 +34,79 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
-import type { DocumentReference } from 'firebase-admin/firestore';
-import { isOrphanFollow, type FollowKind, type FollowRef } from './logic';
+import type { DocumentReference, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { isReclaimableOrphan, parseFollowedAt, type FollowKind, type FollowRef } from './logic';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
 
-/** All uids whose users/{uid} profile still exists (id-only read, minimal egress). */
-async function readAliveUids(): Promise<Set<string>> {
-  const snap = await getFirestore().collection('users').select().get();
-  return new Set(snap.docs.map((d) => d.id));
-}
+/** Page size for the bounded scans (BIN-50 #2) — never load the whole graph at once. */
+const PAGE_SIZE = 2000;
 
 /**
- * Scan a follow collection-group and return the orphaned doc refs. ownerUid is
- * the users/{uid} that contains the subcollection; otherUid is the doc id.
+ * Grace window (BIN-50 #1): follows created within this window of the run start
+ * are never reclaimed, so the read-skew between the alive-users snapshot and the
+ * follow scan can't delete a valid follow for a just-registered user. The sweep
+ * runs in seconds; 24h is a generous margin whose only cost is that a follow to
+ * a user deleted right after it was made waits one extra weekly cycle.
  */
-async function collectOrphans(kind: FollowKind, aliveUids: Set<string>): Promise<DocumentReference[]> {
-  const snap = await getFirestore().collectionGroup(kind).select().get();
+const GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * All uids whose users/{uid} profile still exists (id-only read, minimal egress),
+ * read in bounded pages so one run never holds the whole user table in a single
+ * query result.
+ */
+async function readAliveUids(): Promise<Set<string>> {
+  const db = getFirestore();
+  const alive = new Set<string>();
+  let cursor: QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let q = db.collection('users').select().orderBy('__name__').limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) alive.add(d.id);
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return alive;
+}
+
+
+/**
+ * Scan a follow collection-group in bounded pages and return the doc refs that
+ * are safe to reclaim. ownerUid is the users/{uid} that contains the
+ * subcollection; otherUid is the doc id. Filters per page so peak memory is
+ * page-size + (few) orphans, not the whole follow graph.
+ */
+async function collectOrphans(
+  kind: FollowKind,
+  aliveUids: Set<string>,
+  cutoffMs: number,
+): Promise<DocumentReference[]> {
+  const db = getFirestore();
   const orphans: DocumentReference[] = [];
-  for (const d of snap.docs) {
-    const ownerUid = d.ref.parent.parent?.id;
-    if (!ownerUid) continue; // not under users/{uid}/{kind}/ — skip defensively
-    const ref: FollowRef = { kind, ownerUid, otherUid: d.id };
-    if (isOrphanFollow(ref, aliveUids)) orphans.push(d.ref);
+  let cursor: QueryDocumentSnapshot | undefined;
+  for (;;) {
+    // select('followedAt') is load-bearing: the grace window (BIN-50 #1) reads
+    // this field. Dropping it makes parseFollowedAt see undefined for every doc
+    // → all treated as old → grace window silently disabled. Keep it.
+    let q = db.collectionGroup(kind).select('followedAt').orderBy('__name__').limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      const ownerUid = d.ref.parent.parent?.id;
+      if (!ownerUid) continue; // not under users/{uid}/{kind}/ — skip defensively
+      const ref: FollowRef = { kind, ownerUid, otherUid: d.id };
+      const followedAtMs = parseFollowedAt(d.get('followedAt'));
+      if (isReclaimableOrphan({ ref, followedAtMs }, aliveUids, cutoffMs)) {
+        orphans.push(d.ref);
+      }
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
   }
   return orphans;
 }
@@ -78,6 +132,10 @@ async function deleteInBatches(refs: DocumentReference[]): Promise<number> {
 export const reclaimOrphanFollows = onSchedule(
   { schedule: 'every 168 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB' },
   async () => {
+    // Grace cutoff is anchored to the run start, before any reads, so follows
+    // created during the sweep are always newer than it (BIN-50 #1).
+    const cutoffMs = Date.now() - GRACE_MS;
+
     let aliveUids: Set<string>;
     try {
       aliveUids = await readAliveUids();
@@ -87,11 +145,11 @@ export const reclaimOrphanFollows = onSchedule(
     }
 
     const [followingOrphans, followersOrphans] = await Promise.all([
-      collectOrphans('following', aliveUids).catch((err) => {
+      collectOrphans('following', aliveUids, cutoffMs).catch((err) => {
         logger.error('reclaimOrphanFollows: following scan failed', err);
         return [] as DocumentReference[];
       }),
-      collectOrphans('followers', aliveUids).catch((err) => {
+      collectOrphans('followers', aliveUids, cutoffMs).catch((err) => {
         logger.error('reclaimOrphanFollows: followers scan failed', err);
         return [] as DocumentReference[];
       }),
