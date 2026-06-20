@@ -107,6 +107,14 @@ export interface TMDBPersonCredits {
   crew: (TMDBSearchResult & { job?: string; department?: string })[];
 }
 
+export interface TMDBPersonExternalIds {
+  wikidata_id?: string | null;
+  imdb_id?: string | null;
+  facebook_id?: string | null;
+  instagram_id?: string | null;
+  twitter_id?: string | null;
+}
+
 export interface TMDBSeason {
   id: number;
   season_number: number;

@@ -8,6 +8,7 @@ import type {
   TMDBProviderData,
   TMDBPerson,
   TMDBPersonCredits,
+  TMDBPersonExternalIds,
 } from '@/types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -238,6 +239,10 @@ export function getPersonEn(id: number, opts?: TmdbFetchOpts): Promise<TMDBPerso
 
 export function getPersonCredits(id: number, opts?: TmdbFetchOpts): Promise<TMDBPersonCredits> {
   return tmdbFetch(`/person/${id}/combined_credits`, {}, opts);
+}
+
+export function getPersonExternalIds(id: number, opts?: TmdbFetchOpts): Promise<TMDBPersonExternalIds> {
+  return tmdbFetch(`/person/${id}/external_ids`, {}, opts);
 }
 
 export function getTVSeason(seriesId: number, seasonNumber: number, opts?: TmdbFetchOpts): Promise<TMDBSeasonDetail> {
