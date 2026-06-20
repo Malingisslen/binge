@@ -87,4 +87,12 @@ describe('computeHealth', () => {
   it('critical past 21 days', () => {
     expect(computeHealth(2100, 95, '2026-06-20T00:00:00Z').status).toBe('critical');
   });
+  it('exactly 14 days is still ok (boundary)', () => {
+    // ceil(1330/95) = 14
+    expect(computeHealth(1330, 95, '2026-06-20T00:00:00Z').status).toBe('ok');
+  });
+  it('exactly 21 days is still warn not critical (boundary)', () => {
+    // ceil(1995/95) = 21
+    expect(computeHealth(1995, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
+  });
 });
