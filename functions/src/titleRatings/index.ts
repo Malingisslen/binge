@@ -31,6 +31,7 @@ export const titleRatings = onCall(
     let ratings;
     try {
       const res = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${key}`);
+      if (!res.ok) throw new Error(`OMDb HTTP ${res.status}`);
       ratings = parseOmdbRatings(await res.json());
     } catch (err) {
       logger.warn(`titleRatings: OMDb fetch failed for ${imdbId}`, err);
