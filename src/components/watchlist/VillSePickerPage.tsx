@@ -14,6 +14,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { toneForId } from '@/lib/duotone';
+import { MOODS, filterByMood } from '@/lib/moodLens';
 import type { WatchlistItem } from '@/types';
 
 type MediaFilter = 'all' | 'tv' | 'movie';
@@ -29,6 +30,7 @@ export default function VillSePickerPage() {
   const { user } = useAuth();
   const { show: toast } = useToast();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+  const [mood, setMood] = useState<string | null>(null);
 
   // "Redan sett" — film-only genväg ur väljaren. 'sedd' är filmens terminala
   // läge; TV har inget 'sedd'-slutläge så åtgärden visas bara på filmkort
@@ -53,7 +55,8 @@ export default function VillSePickerPage() {
         ? i.status === 'vill_se'
         : i.status === 'mina' && !i.dropped && i.lastWatchedSeason == null
     );
-    const filtered = mediaFilter === 'all' ? base : base.filter(i => i.mediaType === mediaFilter);
+    const byMedia = mediaFilter === 'all' ? base : base.filter(i => i.mediaType === mediaFilter);
+    const filtered = filterByMood(byMedia, mood);
     // Valögonblickets sortering: det du kan se direkt (finns på dina
     // tjänster) överst, därefter senast tillagd.
     const onMine = (i: WatchlistItem) => i.providers.some(p => myProviders.has(p));
@@ -63,7 +66,7 @@ export default function VillSePickerPage() {
       if (am !== bm) return am - bm;
       return b.addedAt.getTime() - a.addedAt.getTime();
     });
-  }, [items, mediaFilter, myProviders]);
+  }, [items, mediaFilter, mood, myProviders]);
 
   const header = (
     <PageHeader
@@ -95,23 +98,55 @@ export default function VillSePickerPage() {
             type="button"
             onClick={() => setMediaFilter(f)}
             className={`chip${mediaFilter === f ? ' is-on' : ''}`}
+            aria-pressed={mediaFilter === f}
           >
             {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
           </button>
         ))}
       </div>
 
+      {/* BIN-93 — humör-lins: filtrera nattens val på känsla (genre-baserat). */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        {MOODS.map(m => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setMood(cur => (cur === m.id ? null : m.id))}
+            className={`chip${mood === m.id ? ' is-on' : ''}`}
+            aria-pressed={mood === m.id}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       {picks.length === 0 ? (
         <div style={{ marginTop: 18 }}>
-          <EmptyState
-            title="Inget att välja på."
-            body="Här samlas filmer du vill se och serier du följer men inte börjat. Hitta något via Rekommendationer."
-            action={
-              <Link href="/recommendations/" className="chip no-underline">
-                Till rekommendationer
-              </Link>
-            }
-          />
+          {mediaFilter !== 'all' || mood !== null ? (
+            <EmptyState
+              title="Inga titlar matchar."
+              body="Inget i din lista passar de valda filtren just nu."
+              action={
+                <button
+                  type="button"
+                  onClick={() => { setMediaFilter('all'); setMood(null); }}
+                  className="chip"
+                >
+                  Rensa filter
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title="Inget att välja på."
+              body="Här samlas filmer du vill se och serier du följer men inte börjat. Hitta något via Rekommendationer."
+              action={
+                <Link href="/recommendations/" className="chip no-underline">
+                  Till rekommendationer
+                </Link>
+              }
+            />
+          )}
         </div>
       ) : (
         <>
