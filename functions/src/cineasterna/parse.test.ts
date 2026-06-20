@@ -24,6 +24,9 @@ describe('parseTitles', () => {
     expect(parseTitles({ success: false })).toEqual([]);
     expect(parseTitles(null)).toEqual([]);
   });
+  it('returns [] when titles is not an array', () => {
+    expect(parseTitles({ success: true, titles: 'bad' })).toEqual([]);
+  });
 });
 
 describe('dedupeByImdb', () => {
@@ -46,5 +49,11 @@ describe('detectRot', () => {
   });
   it('allows the first-ever run (prev 0)', () => {
     expect(detectRot(0, 500)).toBe(false);
+  });
+  it('exactly 50% is NOT rot (boundary)', () => {
+    expect(detectRot(1000, 500)).toBe(false);
+  });
+  it('just under 50% IS rot (boundary)', () => {
+    expect(detectRot(1000, 499)).toBe(true);
   });
 });
