@@ -1,0 +1,55 @@
+import { describe, it, expect } from 'vitest';
+import { computeSpendSnapshot } from './spendSnapshot';
+import type { WatchlistItem } from '@/types';
+
+const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
+  tmdbId: 1, mediaType: 'movie', status: 'vill_se', rating: null, notes: null,
+  title: 'X', posterPath: null, releaseYear: null, totalSeasons: null,
+  lastWatchedSeason: null, lastWatchedEpisode: null, dropped: false,
+  rewatchCount: 0, providers: [], providersCheckedAt: null, visibility: null,
+  genreIds: [], tmdbStatus: null,
+  addedAt: new Date(), updatedAt: new Date(), watchedAt: null,
+  ...over,
+}) as WatchlistItem;
+
+describe('computeSpendSnapshot (BIN-99)', () => {
+  it('splits owned spend into active vs idle by backlog availability', () => {
+    // Netflix(8)=149 has a vill_se title; Viaplay(76)=169 has none → idle.
+    const items = [mk({ tmdbId: 1, status: 'vill_se', providers: [8] })];
+    const snap = computeSpendSnapshot([8, 76], items, {});
+    expect(snap.totalKr).toBe(149 + 169);
+    expect(snap.activeKr).toBe(149);
+    expect(snap.idleKr).toBe(169);
+    expect(snap.idleProviders.map(p => p.id)).toEqual([76]);
+  });
+
+  it('respects providerCosts overrides over defaults', () => {
+    const snap = computeSpendSnapshot([8], [mk({ providers: [8] })], { 8: 99 });
+    expect(snap.totalKr).toBe(99);
+    expect(snap.activeKr).toBe(99);
+  });
+
+  it('counts followed series (mina) as active backlog, ignores sedd/avbruten', () => {
+    const seriesActive = mk({ tmdbId: 2, mediaType: 'tv', status: 'mina', providers: [76] });
+    const watched = mk({ tmdbId: 3, status: 'sedd', providers: [8] }); // sedd → not backlog
+    const snap = computeSpendSnapshot([8, 76], [seriesActive, watched], {});
+    expect(snap.activeKr).toBe(169);          // Viaplay active via the followed series
+    expect(snap.idleProviders.map(p => p.id)).toEqual([8]); // Netflix idle (only a sedd title)
+  });
+
+  it('excludes free services (0 cost) from spend', () => {
+    // SVT Play (520) is free → not counted even though owned.
+    const snap = computeSpendSnapshot([520, 8], [mk({ providers: [8] })], {});
+    expect(snap.totalKr).toBe(149);
+    // And the free service must NOT show up as idle spend (pins the cost<=0 guard).
+    expect(snap.idleProviders.some(p => p.id === 520)).toBe(false);
+  });
+
+  it('sorts idle providers priciest-first', () => {
+    const snap = computeSpendSnapshot([531, 8, 76], [], {}); // none active
+    // Viaplay 169 > Netflix 149 > Paramount+ 99
+    expect(snap.idleProviders.map(p => p.id)).toEqual([76, 8, 531]);
+    expect(snap.activeKr).toBe(0);
+    expect(snap.idleKr).toBe(snap.totalKr);
+  });
+});

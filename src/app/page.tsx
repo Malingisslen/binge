@@ -20,6 +20,7 @@ import { pickBacklogResurface } from '@/lib/backlogResurface';
 import ContinueWatchingTile from '@/components/home/ContinueWatchingTile';
 import { pickContinueWatching } from '@/lib/continueWatching';
 import SparandeTile from '@/components/home/SparandeTile';
+import SpendSnapshotTile from '@/components/home/SpendSnapshotTile';
 import VannerTile from '@/components/home/VannerTile';
 import GrupperTile from '@/components/home/GrupperTile';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -282,6 +283,7 @@ function Dashboard() {
             )}
           </div>
           <aside className="rail" aria-label="Sidostatistik">
+            <SpendSnapshotTile />
             <SparandeTile />
             <VannerTile />
             <GrupperTile />
