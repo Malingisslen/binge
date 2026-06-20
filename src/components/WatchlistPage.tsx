@@ -27,8 +27,11 @@ import {
 import {
   librarySubState,
   buildStandfirst,
+  itemPassesGenreRating,
+  genresInLibrary,
   LIBRARY_SUB_STATE_ORDER,
 } from '@/lib/libraryView';
+import FilterRow from '@/components/watchlist/FilterRow';
 import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
@@ -108,6 +111,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  // BIN-44: library filter row (genre OR-match + min-rating), client-side.
+  const [genreFilter, setGenreFilter] = useState<number[]>([]);
+  const [minRating, setMinRating] = useState<number | null>(null);
   const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
     const m = new Map<number, string>();
@@ -140,6 +146,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     if (providerFilterId != null) {
       result = result.filter(i => i.providers.includes(providerFilterId));
     }
+    if (genreFilter.length > 0 || minRating != null) {
+      result = result.filter(i => itemPassesGenreRating(i, genreFilter, minRating));
+    }
     if (behindIds) {
       result = result.filter(i => behindIds.has(i.tmdbId));
     }
@@ -158,7 +167,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, behindIds]);
+  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, genreFilter, minRating, behindIds]);
+
+  // Genrer som finns i denna lista (base-filtrerad på status) → filterchips
+  // visar bara relevanta val och försvinner inte när man filtrerar (BIN-44).
+  const availableGenres = useMemo(
+    () => genresInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
+    [items, status],
+  );
 
   const totalCount = useMemo(
     () => status
@@ -226,6 +242,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     mediaFilter !== 'all' ||
     !!providerFilter ||
     behindFilterActive ||
+    genreFilter.length > 0 ||
+    minRating != null ||
     searchQuery.length > 0;
   const emptyMessage = hasActiveFilters
     ? 'Inga titlar matchar dina filter. Justera ovan eller rensa.'
@@ -382,6 +400,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           ))}
         </div>
       </div>
+
+      <FilterRow
+        genres={availableGenres}
+        genreFilter={genreFilter}
+        onToggleGenre={id => {
+          setGenreFilter(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
+          setSelected(new Set());
+        }}
+        minRating={minRating}
+        onSetMinRating={r => { setMinRating(r); setSelected(new Set()); }}
+      />
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">

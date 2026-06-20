@@ -4,6 +4,8 @@ import {
   libraryProgressLabel,
   seenEpisodeCode,
   buildStandfirst,
+  itemPassesGenreRating,
+  genresInLibrary,
   LIBRARY_SUB_STATE_ORDER,
   LIBRARY_SECTION_LABELS,
 } from './libraryView';
@@ -193,5 +195,47 @@ describe('buildStandfirst', () => {
   it('handles empty library and empty filter results', () => {
     expect(buildStandfirst(0, 0, 'mina', 'all')).toBe('Inget i biblioteket än. Hitta något att titta på via Rekommendationer.');
     expect(buildStandfirst(0, 10, 'mina', 'all')).toBe('Inga titlar matchar dina filter. Justera ovan eller rensa.');
+  });
+});
+
+describe('itemPassesGenreRating (BIN-44)', () => {
+  it('no filters → passes everything', () => {
+    expect(itemPassesGenreRating(makeItem({ genreIds: [], rating: null }), [], null)).toBe(true);
+  });
+  it('genre is OR-match (item has at least one selected genre)', () => {
+    const item = makeItem({ genreIds: [18, 35] }); // Drama, Komedi
+    expect(itemPassesGenreRating(item, [35], null)).toBe(true);   // matches Komedi
+    expect(itemPassesGenreRating(item, [28], null)).toBe(false);  // no Action
+    expect(itemPassesGenreRating(item, [28, 18], null)).toBe(true); // matches Drama
+  });
+  it('minRating excludes lower or unrated', () => {
+    expect(itemPassesGenreRating(makeItem({ rating: 8 }), [], 7)).toBe(true);
+    expect(itemPassesGenreRating(makeItem({ rating: 7 }), [], 7)).toBe(true); // boundary inclusive
+    expect(itemPassesGenreRating(makeItem({ rating: 6 }), [], 7)).toBe(false);
+    expect(itemPassesGenreRating(makeItem({ rating: null }), [], 7)).toBe(false);
+  });
+  it('combines genre AND rating', () => {
+    const item = makeItem({ genreIds: [18], rating: 8 });
+    expect(itemPassesGenreRating(item, [18], 7)).toBe(true);
+    expect(itemPassesGenreRating(item, [18], 9)).toBe(false); // rating too low
+    expect(itemPassesGenreRating(item, [28], 7)).toBe(false); // genre miss
+  });
+});
+
+describe('genresInLibrary (BIN-44)', () => {
+  it('dedupes genres present and sorts by Swedish name', () => {
+    // Insertion order (35, 18, 28) deliberately differs from sorted order, so
+    // the name assertion genuinely pins the sort (not just Set insertion order).
+    const items = [
+      makeItem({ genreIds: [35, 18] }), // Komedi, Drama
+      makeItem({ genreIds: [28, 35] }), // Action, Komedi (dup)
+    ];
+    const res = genresInLibrary(items);
+    expect(res.map(g => g.id).sort((a, b) => a - b)).toEqual([18, 28, 35]);
+    // Sorted by Swedish name (not insertion order Komedi/Drama/Action): Action, Drama, Komedi
+    expect(res.map(g => g.name)).toEqual(['Action', 'Drama', 'Komedi']);
+  });
+  it('returns [] for empty library', () => {
+    expect(genresInLibrary([])).toEqual([]);
   });
 });

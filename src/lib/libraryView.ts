@@ -3,6 +3,7 @@
 
 import { isEndedStatus } from '@/lib/airingState';
 import { pluralSv } from '@/lib/utils';
+import { genreLabel } from '@/lib/tmdb/genreLabels';
 import type { WatchStatus, WatchlistItem } from '@/types';
 
 // === Substate för /my/series — persisted-fields-only (B7/T2/B2) ===
@@ -122,4 +123,30 @@ export function buildStandfirst(
     return `${pluralSv(visible, sing, plur)} i ${status ? 'denna lista' : 'biblioteket'}. Vi räknade åt dig.`;
   }
   return `${visible} av ${total} ${plur} visas. Filtrera mer eller justera vyn.`;
+}
+
+// === Bibliotekets filterrad (BIN-44) — rena, klient-sidiga axlar ===
+// Provider + typ filtreras redan på sidan; dessa lägger till genre + betyg
+// (sub-state filtreras i komponenten via subStateOf eftersom den behöver
+// rådgivarens behind-set). Allt på redan inläst watchlist-data — noll TMDB.
+
+/** OR-match på genre (titeln har minst en av de valda) + lägsta betyg. */
+export function itemPassesGenreRating(
+  item: WatchlistItem,
+  genreIds: number[],
+  minRating: number | null,
+): boolean {
+  if (genreIds.length > 0 && !genreIds.some(g => item.genreIds.includes(g))) return false;
+  if (minRating != null && (item.rating == null || item.rating < minRating)) return false;
+  return true;
+}
+
+/** De genrer som faktiskt finns i den givna listan, sorterade på svenskt namn —
+ *  så filterchips bara visar relevanta val (inte alla 26 TMDB-genrer). */
+export function genresInLibrary(items: WatchlistItem[]): { id: number; name: string }[] {
+  const ids = new Set<number>();
+  for (const i of items) for (const g of i.genreIds ?? []) ids.add(g);
+  return Array.from(ids)
+    .map(id => ({ id, name: genreLabel(id) }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 }
