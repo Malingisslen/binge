@@ -1,8 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, MessageCircle } from 'lucide-react';
+import { Heart, MessageCircle, TrendingUp } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import QuickAddButton from '@/components/title/QuickAddButton';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -11,7 +12,8 @@ import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
-import { posterUrl } from '@/lib/tmdb/client';
+import { posterUrl, titleHref } from '@/lib/tmdb/client';
+import { computeFollowTrending, type TrendingTitle } from '@/lib/feedTrending';
 import type { MediaType } from '@/types';
 
 interface FeedWatchlistItem {
@@ -127,6 +129,14 @@ function FeedContent() {
     staleTime: 2 * 60 * 1000,
   });
 
+  // BIN-101: aggregate "trendar bland personer du följer" from the same feed
+  // data (no extra reads). Blocked users filtered out first so they don't count.
+  const visibleItems = useMemo(
+    () => (feedItems ?? []).filter(item => !isBlocked(item.uid)),
+    [feedItems, isBlocked],
+  );
+  const trending = useMemo(() => computeFollowTrending(visibleItems), [visibleItems]);
+
   return (
     <>
       <header>
@@ -139,6 +149,8 @@ function FeedContent() {
       <div style={{ marginTop: 28 }}>
 
       {isLoading && <LoadingView label="Laddar…" />}
+
+      {!isLoading && trending.length > 0 && <TrendingRow titles={trending} />}
 
       {!isLoading && followingUids.length === 0 && (
         <div className="bg-surface border border-border-main rounded-sm px-4 py-4">
@@ -182,7 +194,7 @@ function FeedContent() {
       )}
 
       <div className="space-y-[6px]">
-        {feedItems?.filter(item => !isBlocked(item.uid)).map((item, i) => {
+        {visibleItems.map((item, i) => {
           const key = item.kind === 'review' ? `r-${item.reviewId}` : `w-${item.uid}-${item.tmdbId}-${i}`;
           if (item.kind === 'review') return <FeedReviewCard key={key} item={item} />;
           return <FeedWatchlistCard key={key} item={item} />;
@@ -190,6 +202,41 @@ function FeedContent() {
       </div>
       </div>
     </>
+  );
+}
+
+// BIN-101 — social-proof discovery row: titles ≥2 followed users recently added.
+function TrendingRow({ titles }: { titles: TrendingTitle[] }) {
+  const followerLabel = (t: TrendingTitle) =>
+    `${t.followerCount} du följer har den`;
+  return (
+    <section className="mb-4">
+      <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2 flex items-center gap-1">
+        <TrendingUp size={12} aria-hidden /> Trendar bland personer du följer
+      </h2>
+      <div className="flex gap-[8px] overflow-x-auto pb-1">
+        {titles.map(t => {
+          const poster = posterUrl(t.posterPath, 'w92');
+          return (
+            <Link
+              key={t.tmdbId}
+              href={titleHref(t.mediaType === 'movie' ? 'movie' : 'tv', t.tmdbId)}
+              className="shrink-0 w-[120px] bg-surface border border-rule rounded-md p-[8px] no-underline hover:border-rule-2 transition-colors"
+            >
+              <div className="flex gap-[8px]">
+                {poster && (
+                  <img src={poster} alt="" className="w-[34px] h-[51px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={34} height={51} />
+                )}
+                <div className="min-w-0">
+                  <div className="text-xxs font-semibold text-text-primary leading-snug line-clamp-3">{t.title}</div>
+                </div>
+              </div>
+              <div className="text-xxs text-accent font-semibold mt-[6px]">{followerLabel(t)}</div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
