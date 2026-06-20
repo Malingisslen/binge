@@ -102,6 +102,8 @@ export interface UserProfile {
   hiddenCountries: string[];
   providerCosts: Record<number, number>;
   providerTiers: Record<number, string>;
+  // BIN-46: valfri faktureringsdag (1–28) per provider för förnyelse-nedräkning.
+  providerRenewalDays: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;
   calibrationGenres: Record<number, number> | null;
   createdAt: Date;

@@ -48,6 +48,9 @@ interface AuthState {
   // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
   // state så samtidiga blur-skrivningar inte klobbrar varandra (BIN-40).
   setProviderCost: (providerId: number, cost: number | null) => Promise<void>;
+  // Sätt/ta bort EN providers faktureringsdag (null = ta bort). Samma
+  // funktionella-merge-härdning som setProviderCost (BIN-46, jfr BIN-40).
+  setProviderRenewalDay: (providerId: number, day: number | null) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
@@ -79,6 +82,7 @@ const AuthContext = createContext<AuthState>({
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
   setProviderCost: async () => {},
+  setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
   pauseProvider: async () => {},
   resumeProvider: async () => {},
@@ -137,6 +141,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       providerTiers: (data.providerTiers as Record<number, string>) ?? {},
+      providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
       providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
       calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
       createdAt: data.createdAt?.toDate() ?? new Date(),
@@ -179,6 +184,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     hiddenCountries: [],
     providerCosts: {},
     providerTiers: {},
+    providerRenewalDays: {},
     providerPauses: {},
     calibrationGenres: null,
     createdAt: new Date(),
@@ -328,6 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hiddenCountries: [],
       providerCosts: {},
       providerTiers: {},
+      providerRenewalDays: {},
       providerPauses: {},
       calibrationGenres: null,
       notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true },
@@ -399,6 +406,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else next[providerId] = cost;
     providerCostsRef.current = next;
     await updateUserField('providerCosts', next);
+  }, [updateUserField]);
+  // Samma synkrona-spegel-mönster som providerCosts (BIN-46) så tabbning mellan
+  // fält inte skriver mot en stale render-snapshot och tappar ett värde.
+  const providerRenewalDaysRef = useRef<Record<number, number>>({});
+  useEffect(() => { providerRenewalDaysRef.current = user?.providerRenewalDays ?? {}; }, [user?.providerRenewalDays]);
+  const setProviderRenewalDay = useCallback(async (providerId: number, day: number | null) => {
+    const next = { ...providerRenewalDaysRef.current };
+    if (day == null) delete next[providerId];
+    else next[providerId] = day;
+    providerRenewalDaysRef.current = next;
+    await updateUserField('providerRenewalDays', next);
   }, [updateUserField]);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;
@@ -733,7 +751,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -741,7 +759,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

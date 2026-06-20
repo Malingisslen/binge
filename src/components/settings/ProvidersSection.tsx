@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { SWEDISH_PROVIDERS, canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
+import { isValidBillingDay, daysUntilRenewal } from '@/lib/renewal';
 import { trackEvent } from '@/lib/analytics';
 import { SettingsSection } from './SettingsSection';
 import {
@@ -16,7 +17,7 @@ import {
 const FLATRATE = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
 export function ProvidersSection() {
-  const { user, updateProviders, setProviderCost, updateProviderTier } = useAuth();
+  const { user, updateProviders, setProviderCost, setProviderRenewalDay, updateProviderTier } = useAuth();
   const { show: toast } = useToast();
 
   const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -119,6 +120,7 @@ export function ProvidersSection() {
               const hasTiers = (provider.tiers?.length ?? 0) > 0;
               const isCustom = hasTiers && !selectedTierId;
               const fg = readableTextColor(provider.color);
+              const renewalDay = user.providerRenewalDays?.[provider.id];
               return (
                 <div key={provider.id} className="flex items-center gap-[10px] py-[3px]">
                   <span
@@ -127,7 +129,9 @@ export function ProvidersSection() {
                   >
                     {provider.shortName}
                   </span>
-                  <span className="flex-1" />
+                  <span className="flex-1 text-[11px] text-ink-3">
+                    {renewalDay != null ? `förnyas om ${daysUntilRenewal(renewalDay, new Date())} d` : ''}
+                  </span>
                   {hasTiers ? (
                     <select
                       value={selectedTierId ?? ''}
@@ -164,6 +168,25 @@ export function ProvidersSection() {
                       className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
                     />
                   )}
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    step="1"
+                    placeholder="dag"
+                    aria-label={`Faktureringsdag för ${provider.name} (1–28)`}
+                    title="Faktureringsdag i månaden (1–28) — för förnyelse-nedräkning"
+                    defaultValue={renewalDay ?? ''}
+                    onBlur={e => {
+                      const val = parseInt(e.target.value, 10);
+                      const day = isValidBillingDay(val) ? val : null;
+                      // Samma härdning som kostnaden: funktionell merge + felhantering.
+                      setProviderRenewalDay(provider.id, day).catch(() =>
+                        toast('Kunde inte spara förnyelsedagen. Försök igen om en stund.'),
+                      );
+                    }}
+                    className="w-[48px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+                  />
                 </div>
               );
             })}

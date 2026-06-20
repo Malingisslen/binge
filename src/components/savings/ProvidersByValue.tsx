@@ -3,6 +3,8 @@
 import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import { pluralSv } from '@/lib/utils';
+import { daysUntilRenewal } from '@/lib/renewal';
+import { useAuth } from '@/hooks/useAuth';
 import type { ProviderAdvisory, ActivePause } from '@/types';
 
 // "Dina tjänster" sorterad efter kr/aktiv-serie — ersätter den gamla
@@ -32,8 +34,10 @@ const RED_THRESHOLD = 80;  // kr/serie över detta = röd
 const GREEN_THRESHOLD = 10; // kr/serie under detta = grön (men inte gratis)
 
 export default function ProvidersByValue({ providers, activePauses }: Props) {
+  const { user } = useAuth();
   if (providers.length === 0) return null;
 
+  const renewalDays = user?.providerRenewalDays ?? {};
   const userPausedSet = new Set(activePauses.map(p => p.providerId));
 
   const rows: Row[] = providers
@@ -73,10 +77,11 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
           <SrOnlyTableHeader columns={['Tjänst', 'Aktiva serier', 'Månadskostnad', 'Kostnad per aktiv serie']} />
           <tbody>
             {rows.map(row => {
+              const renewalDay = renewalDays[row.providerId];
               const krCellClass = row.isFree
                 ? 'text-text-muted'
                 : row.krPerShow != null && row.krPerShow >= RED_THRESHOLD
-                  ? 'text-red font-semibold'
+                  ? 'text-danger font-semibold'
                   : row.krPerShow != null && row.krPerShow <= GREEN_THRESHOLD
                     ? 'text-season-done font-semibold'
                     : 'text-text-secondary font-semibold';
@@ -93,6 +98,9 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
                   </td>
                   <td className="px-3 py-[6px] text-xs text-text-secondary text-right whitespace-nowrap tabular-nums">
                     {row.isFree ? '0 kr' : `${row.monthlyCost} kr/mån`}
+                    {renewalDay != null && !row.isFree && (
+                      <span className="block text-xxs text-text-muted">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
+                    )}
                   </td>
                   <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>
                     {row.isFree
