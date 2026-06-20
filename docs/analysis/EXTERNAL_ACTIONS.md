@@ -415,3 +415,9 @@ Date completed: ___________
   notification to `users/{ADMIN_UID}/notifications` and pushes via FCM.
 - The cron is in `functions/` — remember `firebase deploy --only functions`
   (deploy.yml only deploys hosting).
+
+## Cineasterna catalog sync
+
+- Reuses the existing `TMDB_API_KEY` secret (for /find) + `ADMIN_UID` (rot alert). No new external account.
+- Cron in `functions/` → `firebase deploy --only functions`; rules → `firebase deploy --only firestore:rules`.
+- Source: undocumented but robots-permitted JSON API at backend.cineasterna.com. If it changes shape, the rot guard preserves the last good catalog and alerts the admin.

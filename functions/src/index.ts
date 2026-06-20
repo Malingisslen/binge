@@ -187,3 +187,10 @@ export { titleRatings } from './titleRatings';
 // för intent-titlar (film/vill_se + tv/mina med providers) → skriver
 // streamingOffers/{tmdbId} + streamingHealth/current. Admin-notif vid warn/critical.
 export { streamingOffersRefresh } from './streamingOffers';
+
+// ── Cineasterna catalog sync ──────────────────────────────────────────────────
+// cineasternaCatalogSync: veckovis schemalagd hämtning av Cineasterna-katalogen
+// (swedens filmmaker-on-demand-tjänst) → imdb→tmdb-matchning med cache
+// (cineasternaCatalog/imdbMap) → skriver cineasternaCatalog/current. Rot-guard
+// vägrar skriva om titlar sjunker >50 % (API-haveri) — admin-notif + bevara gammal katalog.
+export { cineasternaCatalogSync } from './cineasterna';
