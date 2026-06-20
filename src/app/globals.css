@@ -672,7 +672,9 @@ button { font: inherit; cursor: pointer; }
 
 /* Hover-to-reveal: filter lifts so the raw bitmap is visible. Good as a
    design-review affordance and arguably also as a user feature ("show me
-   the real photo"). A tiny dot bottom-right is the visual cue. Momentant —
+   the real photo"). Intentionally NO visible cue (badge/dot) — Direction H
+   keeps posters clean (no decorative badges); the reveal is a quiet bonus,
+   not an advertised control. Momentant —
    filter: url(#duo-x) → none kan inte interpoleras, så ingen transition. */
 .poster:hover img,
 [class*="duo-"]:has(> img):hover > img {
