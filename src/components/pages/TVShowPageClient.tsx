@@ -16,6 +16,7 @@ import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
 import ProviderTag from '@/components/title/ProviderTag';
+import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -260,6 +261,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               )}
             </div>
           )}
+
+          <FreeWatchBadge free={free} ads={ads} />
 
           {showRentBuy && hasRentBuy && (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>

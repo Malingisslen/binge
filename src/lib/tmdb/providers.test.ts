@@ -5,6 +5,7 @@ import {
   getProvider,
   canonicalProviderId,
   getProviderColor,
+  hasFreeProvider,
   extractSEProviders,
   dedupeProvidersByCanonicalId,
 } from './providers';
@@ -221,6 +222,18 @@ describe('BIN-64 — provider-katalog SE-completeness (live-verifierat 2026-06-2
     });
     // Både Amazon-kanalen (1968) och bas-id:t (283) → en enda Crunchyroll (323).
     expect(result).toEqual([323]);
+  });
+});
+
+describe('hasFreeProvider (BIN-90)', () => {
+  it('true när listan innehåller en gratis-tjänst (SVT Play 520 + alias 493)', () => {
+    expect(hasFreeProvider([8, 520])).toBe(true);  // Netflix + SVT Play
+    expect(hasFreeProvider([493])).toBe(true);      // SVT-alias → SVT Play (isFree)
+  });
+  it('false för enbart betalda tjänster, tom lista, eller okända ids', () => {
+    expect(hasFreeProvider([8, 337, 384])).toBe(false); // Netflix/Disney+/Max
+    expect(hasFreeProvider([])).toBe(false);
+    expect(hasFreeProvider([99999])).toBe(false);
   });
 });
 

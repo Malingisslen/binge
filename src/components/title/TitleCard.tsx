@@ -96,16 +96,22 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
               {visibleBadges.map(p => {
                 const mapped = getProvider(p.provider_id);
                 const isMine = myProviders.includes(canonicalProviderId(p.provider_id));
+                // BIN-90: gratis-tjänster (t.ex. SVT Play) tonas gröna så "0 kr"
+                // syns redan på kortet — återanvänder badge-platsen, ingen extra yta.
+                const isFree = mapped?.isFree === true;
                 return (
                   <span
                     key={p.provider_id}
+                    className={isFree ? 'bg-season-done text-white' : undefined}
                     style={{
                       fontSize: 8,
                       padding: '1px 4px',
                       borderRadius: 1,
                       letterSpacing: 0.04,
-                      background: isMine ? 'var(--acc-deep)' : 'oklch(0 0 0 / 0.65)',
-                      color: isMine ? 'white' : 'oklch(0.85 0 0)',
+                      ...(isFree ? {} : {
+                        background: isMine ? 'var(--acc-deep)' : 'oklch(0 0 0 / 0.65)',
+                        color: isMine ? 'white' : 'oklch(0.85 0 0)',
+                      }),
                     }}
                   >
                     {mapped?.shortName ?? p.provider_name}

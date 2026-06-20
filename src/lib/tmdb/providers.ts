@@ -165,6 +165,14 @@ export function getProviderColor(id: number): string {
   return PROVIDER_MAP.get(id)?.color ?? '#888';
 }
 
+// BIN-90: har titeln någon GRATIS-tjänst bland sina (kanoniska) provider-ids?
+// Används för en "Gratis"-markering på kort, där bara den mergade provider-listan
+// finns (titel-sidor har free/ads-kategorierna direkt från TMDB). Fångar
+// katalogens isFree-tjänster (t.ex. SVT Play); ren AVOD/ads-only syns på titel-sidan.
+export function hasFreeProvider(ids: number[]): boolean {
+  return ids.some(id => PROVIDER_MAP.get(id)?.isFree === true);
+}
+
 // TMDB listar Prime Video-kanaler som egna providers med namn-suffixet
 // " Amazon Channel" (ibland plural). Kända varianter mappas via aliases ovan;
 // suffixet är fallback för framtida variant-ids vi inte hunnit katalogisera.
