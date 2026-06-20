@@ -1,0 +1,71 @@
+import { describe, it, expect } from 'vitest';
+import {
+  isExpiredSession,
+  isStaleNotification,
+  tsToMillis,
+  SESSION_MAX_AGE_MS,
+  NOTIFICATION_MAX_AGE_MS,
+} from './logic';
+
+const now = 1_000_000_000_000; // fixed "now" for deterministic boundaries
+
+describe('tsToMillis', () => {
+  it('reads epoch ms from a Timestamp-like object (has toMillis)', () => {
+    expect(tsToMillis({ toMillis: () => 1_700_000_000_000 })).toBe(1_700_000_000_000);
+  });
+
+  it('returns null for missing / legacy / non-timestamp shapes', () => {
+    expect(tsToMillis(undefined)).toBe(null);
+    expect(tsToMillis(null)).toBe(null);
+    expect(tsToMillis(1_700_000_000_000)).toBe(null); // a raw number, not a Timestamp
+    expect(tsToMillis('2026-01-01')).toBe(null);
+    expect(tsToMillis({})).toBe(null);
+  });
+
+  it('returns null when toMillis yields a non-finite value', () => {
+    expect(tsToMillis({ toMillis: () => NaN })).toBe(null);
+    expect(tsToMillis({ toMillis: () => Infinity })).toBe(null);
+  });
+});
+
+describe('isExpiredSession', () => {
+  it('reaps when expiresAt is in the past', () => {
+    expect(isExpiredSession(now - 1, null, now)).toBe(true);
+  });
+
+  it('keeps when expiresAt is still in the future', () => {
+    expect(isExpiredSession(now + 1, null, now)).toBe(false);
+    expect(isExpiredSession(now, null, now)).toBe(false); // exactly now is not yet past
+  });
+
+  it('expiresAt takes precedence over createdAt', () => {
+    // Old createdAt but a future expiresAt → kept (the session was extended).
+    expect(isExpiredSession(now + 1, now - 10 * SESSION_MAX_AGE_MS, now)).toBe(false);
+  });
+
+  it('legacy session (no expiresAt): reaps only past the 30-day age', () => {
+    expect(isExpiredSession(null, now - SESSION_MAX_AGE_MS - 1, now)).toBe(true);
+    expect(isExpiredSession(null, now - SESSION_MAX_AGE_MS, now)).toBe(false); // exact boundary = kept
+    expect(isExpiredSession(null, now - SESSION_MAX_AGE_MS + 1, now)).toBe(false);
+  });
+
+  it('never reaps an undateable session (no expiresAt, no createdAt)', () => {
+    expect(isExpiredSession(null, null, now)).toBe(false);
+  });
+});
+
+describe('isStaleNotification', () => {
+  it('reaps when older than 90 days', () => {
+    expect(isStaleNotification(now - NOTIFICATION_MAX_AGE_MS - 1, now)).toBe(true);
+  });
+
+  it('keeps when within 90 days (boundary inclusive of "exactly 90 days" = kept)', () => {
+    expect(isStaleNotification(now - NOTIFICATION_MAX_AGE_MS + 1, now)).toBe(false);
+    expect(isStaleNotification(now - NOTIFICATION_MAX_AGE_MS, now)).toBe(false);
+    expect(isStaleNotification(now, now)).toBe(false);
+  });
+
+  it('never reaps an undateable notification (no createdAt)', () => {
+    expect(isStaleNotification(null, now)).toBe(false);
+  });
+});
