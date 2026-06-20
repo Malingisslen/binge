@@ -15,6 +15,8 @@ import { isAddableMediaType } from '@/lib/tmdb/client';
 import HemHero from '@/components/home/HemHero';
 import HemFocal from '@/components/home/HemFocal';
 import LaterThisWeek from '@/components/home/LaterThisWeek';
+import BacklogResurfaceTile from '@/components/home/BacklogResurfaceTile';
+import { pickBacklogResurface } from '@/lib/backlogResurface';
 import SparandeTile from '@/components/home/SparandeTile';
 import VannerTile from '@/components/home/VannerTile';
 import GrupperTile from '@/components/home/GrupperTile';
@@ -209,8 +211,15 @@ function DashboardSkeleton() {
 }
 
 function Dashboard() {
+  const { user } = useAuth();
   const { items, loading: watchlistLoading } = useWatchlist();
   const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
+
+  // BIN-88: resurfaced vill_se backlog (streamable on a service the user has).
+  const resurfaced = useMemo(
+    () => pickBacklogResurface(items, user?.myProviders ?? []),
+    [items, user?.myProviders],
+  );
 
   const { focal, totalThisWeek } = useMemo(() => {
     const focal = pickFocalEntry(calendarEntries);
@@ -263,6 +272,7 @@ function Dashboard() {
               <>
                 {focal && <HemFocal entry={focal} />}
                 <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+                <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
               </>
             )}
           </div>
