@@ -31,7 +31,7 @@ import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/pr
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
-import { offerForProvider } from '@/lib/streaming/offers';
+import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
@@ -238,15 +238,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           {subscription.length > 0 && (
             <div className="providers-row">
               <span className="lab">finns på</span>
-              {subscription.map(p => {
+              {(() => { const now = Date.now(); return subscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
                 if (logo) {
                   // Placeholder-bakgrund + eager: raden är above-the-fold och
                   // utan fill renderas tomma vita rutor tills CDN:t svarar (T5).
-                  const now = Date.now();
-                  const leaving = offer && offer.leaving && Math.round((Date.parse(offer.leaving) - now) / 86400000) <= 14 && Math.round((Date.parse(offer.leaving) - now) / 86400000) >= 0;
-                  const leavingLabel = leaving && offer ? (() => { const d = new Date(offer.leaving!); return `lämnar ${d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}`; })() : null;
+                  const leaving = isLeavingSoon(offer, now);
+                  const leavingLabel = leaving ? formatLeaving(offer!) : null;
                   const imgEl = (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={logo} alt={p.provider_name} title={p.provider_name} style={{ width: 28, height: 28, borderRadius: 3, border: '1px solid var(--rule)', background: 'var(--placeholder-fill)' }} loading="eager" decoding="async" width={28} height={28} />
@@ -263,7 +262,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   );
                 }
                 return <ProviderTag key={p.provider_id} provider={p} size="md" offer={offer} />;
-              })}
+              }); })()}
               {hasRentBuy && (
                 <button
                   onClick={() => setShowRentBuy(!showRentBuy)}
@@ -297,8 +296,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
           {(subscription.length > 0 || hasRentBuy) && (
             <div style={{ marginTop: 8 }}>
-              <JustWatchCredit />
-              <span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
+              <JustWatchCredit />{' · '}<span className="text-ink-3 text-[11px]">Tillgänglighet via Movie of the Night</span>
             </div>
           )}
         </div>
