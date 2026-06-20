@@ -164,3 +164,9 @@ export { episodeReleaseNotify } from './episodeNotify';
 // followers-docs som pekar på ett raderat konto (inbound-follows som
 // deleteAccount inte får röra, ägda av följaren per firestore.rules).
 export { reclaimOrphanFollows } from './reclaimOrphanFollows';
+
+// ── Retention cleanup (BIN-65) ───────────────────────────────────────────────
+// retentionCleanup: daglig scan → raderar utgångna Tillsammans-sessioner (past
+// expiresAt, recursiveDelete inkl. participants/swipes) + notiser >90 dagar.
+// Trösklar från docs/data-retention-policy.md. Bounded/paginerad (BIN-50-mönster).
+export { retentionCleanup } from './retentionCleanup';
