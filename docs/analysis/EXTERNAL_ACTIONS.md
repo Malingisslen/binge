@@ -404,3 +404,14 @@ Date completed: ___________
 - `firebase functions:secrets:set OMDB_API_KEY` — OMDb API key (free tier 1,000/day;
   $1/mo Patreon lifts it). Required by the `titleRatings` callable.
 - Callable function → `firebase deploy --only functions`. Rules → `firebase deploy --only firestore:rules`.
+
+## Streaming Offers (MOTN) — secrets the deployer must set
+
+- `firebase functions:secrets:set MOTN_API_KEY` — RapidAPI key for the Movie of
+  the Night "Streaming Availability" API (free tier = 100 req/day). Required by
+  the `streamingOffersRefresh` cron.
+- Admin uid for the freshness flag: set `ADMIN_UID` the same way
+  (`firebase functions:secrets:set ADMIN_UID`) — the cron writes the warn/critical
+  notification to `users/{ADMIN_UID}/notifications` and pushes via FCM.
+- The cron is in `functions/` — remember `firebase deploy --only functions`
+  (deploy.yml only deploys hosting).
