@@ -18,7 +18,7 @@ import LaterThisWeek from '@/components/home/LaterThisWeek';
 import BacklogResurfaceTile from '@/components/home/BacklogResurfaceTile';
 import { pickBacklogResurface } from '@/lib/backlogResurface';
 import ContinueWatchingTile from '@/components/home/ContinueWatchingTile';
-import { pickContinueWatching } from '@/lib/continueWatching';
+import { pickContinueWatching, latestAiredEpisodeByShow } from '@/lib/continueWatching';
 import SparandeTile from '@/components/home/SparandeTile';
 import SpendSnapshotTile from '@/components/home/SpendSnapshotTile';
 import VannerTile from '@/components/home/VannerTile';
@@ -218,8 +218,13 @@ function Dashboard() {
   const { items, loading: watchlistLoading } = useWatchlist();
   const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
 
-  // BIN-86: progress-driven "Fortsätt titta" (in-progress series, persisted-only).
-  const continueWatching = useMemo(() => pickContinueWatching(items), [items]);
+  // BIN-86: progress-driven "Fortsätt titta" (in-progress series). The calendar
+  // is already loaded here for the focal/week strip, so reuse its aired-episode
+  // data (no extra TMDB cost) to drop series you're caught up on.
+  const continueWatching = useMemo(() => {
+    const aired = latestAiredEpisodeByShow(calendarEntries, new Date());
+    return pickContinueWatching(items, { aired });
+  }, [items, calendarEntries]);
   // BIN-88: resurfaced vill_se backlog (streamable on a service the user has).
   const resurfaced = useMemo(
     () => pickBacklogResurface(items, user?.myProviders ?? []),
