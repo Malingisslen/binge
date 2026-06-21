@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { toneForId } from '@/lib/duotone';
 import { MOODS, filterByMood } from '@/lib/moodLens';
+import { RUNTIME_BUDGETS, runtimeBudgetLabel, filterByRuntime } from '@/lib/runtimeLens';
 import type { WatchlistItem } from '@/types';
 
 type MediaFilter = 'all' | 'tv' | 'movie';
@@ -31,6 +32,7 @@ export default function VillSePickerPage() {
   const { show: toast } = useToast();
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [mood, setMood] = useState<string | null>(null);
+  const [runtimeMax, setRuntimeMax] = useState<number | null>(null);
 
   // "Redan sett" — film-only genväg ur väljaren. 'sedd' är filmens terminala
   // läge; TV har inget 'sedd'-slutläge så åtgärden visas bara på filmkort
@@ -56,7 +58,8 @@ export default function VillSePickerPage() {
         : i.status === 'mina' && !i.dropped && i.lastWatchedSeason == null
     );
     const byMedia = mediaFilter === 'all' ? base : base.filter(i => i.mediaType === mediaFilter);
-    const filtered = filterByMood(byMedia, mood);
+    const byMood = filterByMood(byMedia, mood);
+    const filtered = filterByRuntime(byMood, runtimeMax);
     // Valögonblickets sortering: det du kan se direkt (finns på dina
     // tjänster) överst, därefter senast tillagd.
     const onMine = (i: WatchlistItem) => i.providers.some(p => myProviders.has(p));
@@ -66,7 +69,7 @@ export default function VillSePickerPage() {
       if (am !== bm) return am - bm;
       return b.addedAt.getTime() - a.addedAt.getTime();
     });
-  }, [items, mediaFilter, mood, myProviders]);
+  }, [items, mediaFilter, mood, runtimeMax, myProviders]);
 
   const header = (
     <PageHeader
@@ -120,16 +123,32 @@ export default function VillSePickerPage() {
         ))}
       </div>
 
+      {/* BIN-93 — tidsbudget-lins: "vad hinner jag?". Visar bara titlar med känd
+          längd när aktiv (okänd längd kan inte svara på frågan). */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        {RUNTIME_BUDGETS.map(max => (
+          <button
+            key={max}
+            type="button"
+            onClick={() => setRuntimeMax(cur => (cur === max ? null : max))}
+            className={`chip${runtimeMax === max ? ' is-on' : ''}`}
+            aria-pressed={runtimeMax === max}
+          >
+            {runtimeBudgetLabel(max)}
+          </button>
+        ))}
+      </div>
+
       {picks.length === 0 ? (
         <div style={{ marginTop: 18 }}>
-          {mediaFilter !== 'all' || mood !== null ? (
+          {mediaFilter !== 'all' || mood !== null || runtimeMax !== null ? (
             <EmptyState
               title="Inga titlar matchar."
-              body="Inget i din lista passar de valda filtren just nu."
+              body={`Inget i din lista passar de valda filtren just nu.${runtimeMax !== null ? ' Tidsbudgeten visar bara titlar med känd längd — längden fylls i när du öppnar en titelsida.' : ''}`}
               action={
                 <button
                   type="button"
-                  onClick={() => { setMediaFilter('all'); setMood(null); }}
+                  onClick={() => { setMediaFilter('all'); setMood(null); setRuntimeMax(null); }}
                   className="chip"
                 >
                   Rensa filter

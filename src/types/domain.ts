@@ -55,6 +55,11 @@ export interface WatchlistItem {
   visibility: ItemVisibility | null;
   genreIds: number[];
   tmdbStatus: string | null;
+  // BIN-93: denormalised runtime (minutes) for the Väljaren's runtime-budget
+  // lens. Optional — backfilled lazily from title-detail views (films:
+  // runtime; TV: episode_run_time[0]); never bulk-migrated. null/undefined =
+  // unknown (the filter never hides unknown-length titles).
+  runtime?: number | null;
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;

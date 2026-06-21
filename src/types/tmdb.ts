@@ -67,6 +67,9 @@ export interface TMDBTVShow {
   genres: { id: number; name: string }[];
   number_of_seasons: number;
   number_of_episodes: number;
+  // Per-episode runtime(s) in minutes; TMDB returns an array (often one value).
+  // Used for BIN-93's runtime lens (episode_run_time[0]).
+  episode_run_time?: number[];
   status: string;
   seasons: TMDBSeason[];
   next_episode_to_air: TMDBEpisode | null;

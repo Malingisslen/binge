@@ -45,7 +45,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
-  const { getItem, updateRating, updateNotes, updateStatus } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateStatus, setRuntime } = useWatchlist();
   useAuth();
   const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
@@ -55,6 +55,15 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // Googlebot ska inte se "i biblioteket"-chip eller stjärnbetyg i HTML.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // BIN-93: lazily backfill runtime onto the watchlist doc from the detail we
+  // already fetched (free — no extra request). setRuntime no-ops unless the
+  // title is in the library and runtime is still unknown.
+  const movieRuntime = movie?.runtime ?? null;
+  useEffect(() => {
+    if (!mounted || !movie || movieRuntime == null) return;
+    void setRuntime(movie.id, movieRuntime);
+  }, [mounted, movie, movieRuntime, setRuntime]);
 
   // T6 (samma mönster som TVShowPageClient): räknaren och griden måste visa
   // samma antal — skär till 5 direkt så "N förslag" är ärligt.

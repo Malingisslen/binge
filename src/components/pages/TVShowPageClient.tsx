@@ -49,7 +49,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const fromGroup = searchParams?.get('fromGroup') ?? null;
   const { data: show, isLoading } = useTVShow(showId, initialData);
   const { offers } = useStreamingOffers(show?.id);
-  const { getItem, updateRating, updateNotes, updateTmdbStatus } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime } = useWatchlist();
   useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
@@ -69,6 +69,14 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     if (season == null) return;
     void queryClient.prefetchQuery(seasonPrefetchSpec(show.id, season));
   }, [show, queryClient]);
+
+  // BIN-93: lazily backfill per-episode runtime onto the watchlist doc (free —
+  // from the detail already fetched). No-ops unless in-library + runtime unknown.
+  const showRuntime = show?.episode_run_time?.[0] ?? null;
+  useEffect(() => {
+    if (!mounted || !show || showRuntime == null) return;
+    void setRuntime(show.id, showRuntime);
+  }, [mounted, show, showRuntime, setRuntime]);
 
   // T6: räknaren ("N förslag") och griden måste visa samma antal — skär till 5
   // (= similar-grid:s desktop-kolumner) redan här, istället för 8 i memo:t +

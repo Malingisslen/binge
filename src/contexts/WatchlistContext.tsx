@@ -31,6 +31,7 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     visibility: (data.visibility as ItemVisibility) ?? null,
     genreIds: (data.genreIds as number[]) ?? [],
     tmdbStatus: (data.tmdbStatus as string) ?? null,
+    runtime: (data.runtime as number | undefined) ?? null,
     addedAt: toDate(data.addedAt),
     updatedAt: toDate(data.updatedAt),
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
@@ -53,6 +54,7 @@ interface WatchlistState {
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
   updateTmdbStatus: (tmdbId: number, tmdbStatus: string | null) => Promise<void>;
+  setRuntime: (tmdbId: number, runtime: number | null) => Promise<void>;
   removeItem: (tmdbId: number) => Promise<void>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
   getItem: (tmdbId: number) => WatchlistItem | null;
@@ -67,6 +69,7 @@ const WatchlistContext = createContext<WatchlistState>({
   updateNotes: async () => {},
   updateProgress: async () => {},
   updateTmdbStatus: async () => {},
+  setRuntime: async () => {},
   updateVisibility: async () => {},
   removeItem: async () => {},
   getByStatus: () => [],
@@ -293,6 +296,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     await setDoc(ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
 
+  // BIN-93: lazy runtime backfill from title-detail views. Writes only when the
+  // title is already in the library and runtime is still unknown — and never
+  // bumps updatedAt (it's a silent denormalisation, not a user edit, so it must
+  // not reorder "senast ändrad").
+  const setRuntime = useCallback(async (tmdbId: number, runtime: number | null) => {
+    if (!uid || runtime == null) return;
+    const current = items.find(i => i.tmdbId === tmdbId);
+    if (!current || current.runtime != null) return;
+    const { db, doc, setDoc } = await fsdb();
+    await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), { runtime }, { merge: true });
+  }, [uid, items]);
+
   const removeItem = useCallback(async (tmdbId: number) => {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
@@ -308,8 +323,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const value = useMemo(() => ({
-    items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem,
-  }), [items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, updateVisibility, removeItem, getByStatus, getItem]);
+    items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem,
+  }), [items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>
