@@ -79,7 +79,9 @@ service cloud.firestore {
       return d.uid is string
         && d.title is string && d.title.size() >= 1 && d.title.size() <= 100
         && (!('description' in d) || d.description is string && d.description.size() <= 500)
-        && d.isPublic is bool;
+        && d.isPublic is bool
+        // BIN-100: optional editors[] (co-editor uids). Owner-managed; bounded.
+        && (!('editors' in d) || (d.editors is list && d.editors.size() <= 20));
     }
 
     // Watchlist-item fältkontrakt (A2.1). Merge-writes betyder att
@@ -429,14 +431,23 @@ service cloud.firestore {
     // ---- lists ----
     match /lists/{listId} {
       allow read: if resource.data.isPublic == true
-        || (isSignedIn() && request.auth.uid == resource.data.uid);
+        || (isSignedIn() && request.auth.uid == resource.data.uid)
+        // BIN-100: co-editors can always read the list they edit.
+        || (isSignedIn() && request.auth.uid in resource.data.get('editors', []));
       allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid
         && isValidList(request.resource.data);
+      // Owner: full control (metadata, editors[], items).
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
         && isValidList(request.resource.data);
+      // BIN-100: co-editor may change ONLY the items array (+ updatedAt). The
+      // hasOnly-clause is the safety core — an editor cannot touch isPublic,
+      // editors[], uid, title or description, so they can't escalate or hijack.
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.get('editors', [])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt']);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
