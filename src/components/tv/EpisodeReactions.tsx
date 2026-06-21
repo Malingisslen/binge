@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useEpisodeReactions, type EpisodeReaction } from '@/hooks/useEpisodeReactions';
+import { LoadingView } from '@/components/ui/LoadingView';
 
 // BIN-95: per-episode reaction thread. The whole thread is spoiler-gated on the
 // viewer's own progress — if they haven't watched THIS episode, no reactions are
@@ -82,7 +83,7 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
       )}
 
       {loading ? (
-        <div className="text-xxs text-text-muted py-1">Laddar…</div>
+        <LoadingView label="Laddar reaktioner…" />
       ) : reactions.length === 0 ? (
         <div className="text-xxs text-text-muted py-1">Inga reaktioner än — bli först.</div>
       ) : (
