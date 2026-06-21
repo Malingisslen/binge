@@ -166,6 +166,13 @@ export { episodeReleaseNotify } from './episodeNotify';
 // + pushEnabled). Första observationen = baseline (ingen first-run-blast).
 export { availableNotify } from './availableNotify';
 
+// ── Community ratings (BIN-104) ──────────────────────────────────────────────
+// communityRatingMaintain: onWrite-trigger på watchlist → underhåller per-titel-
+// aggregat titleRatingsAggregate/{mediaType}_{tmdbId} {count,sum} via atomisk
+// FieldValue.increment (no-op om betyget inte ändrats). Admin-skrivet; läses
+// publikt för "Binge-snitt" på titelsidor.
+export { communityRatingMaintain } from './communityRatings';
+
 // ── Orphan-follow-sweep (BIN-21 storage-backstop) ────────────────────────────
 // reclaimOrphanFollows: veckovis collectionGroup-scan → raderar following/
 // followers-docs som pekar på ett raderat konto (inbound-follows som

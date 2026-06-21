@@ -433,6 +433,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Community rating aggregate (BIN-104) — {count,sum} per title, maintained
+    // by the communityRatingMaintain trigger (Admin SDK). Public read for the
+    // "Binge-snitt" på titelsidor; never client-written (no vote-stuffing).
+    match /titleRatingsAggregate/{titleId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Internal freshness/health for the streaming-offers governor — never client-readable.
     match /streamingHealth/{doc} {
       allow read, write: if false;

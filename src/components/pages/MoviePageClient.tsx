@@ -13,6 +13,7 @@ import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
+import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -198,6 +199,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <span><span className="k">längd</span><strong>{movie.runtime} min</strong></span>
             ) : null}
             <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
+            <CommunityRating mediaType="movie" tmdbId={movie.id} />
             <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
             {movie.imdb_id && (
               <span>

@@ -15,6 +15,7 @@ import NotInterestedButton from '@/components/title/NotInterestedButton';
 import AddToListButton from '@/components/title/AddToListButton';
 import AddToGroupButton from '@/components/title/AddToGroupButton';
 import RatingStars from '@/components/title/RatingStars';
+import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -215,6 +216,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <span><span className="k">avsnitt</span><strong>{show.number_of_episodes}</strong></span>
             )}
             <span><span className="k">tmdb</span><strong>{show.vote_average.toFixed(1)} / 10</strong></span>
+            <CommunityRating mediaType="tv" tmdbId={show.id} />
             <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} />
             {imdbId && (
               <span>

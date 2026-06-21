@@ -529,3 +529,17 @@ describe('users/{uid}/listFollows/{listId} (BIN-96)', () => {
     await assertFails(deleteDoc(doc(otherDb(), 'users', OWNER, 'listFollows', 'l6')));
   });
 });
+
+// BIN-104: community rating aggregate — public read, Admin-only write.
+describe('titleRatingsAggregate/{titleId} (BIN-104)', () => {
+  it('is publicly readable (Binge-snitt på titelsidor)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'titleRatingsAggregate', 'movie_603'), { count: 10, sum: 80 });
+    });
+    await assertSucceeds(getDoc(doc(anonDb(), 'titleRatingsAggregate', 'movie_603')));
+  });
+  it('cannot be written by clients (no vote-stuffing)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'titleRatingsAggregate', 'movie_603'), { count: 1, sum: 8 }));
+    await assertFails(setDoc(doc(anonDb(), 'titleRatingsAggregate', 'tv_1399'), { count: 1, sum: 8 }));
+  });
+});
