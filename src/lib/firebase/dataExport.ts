@@ -37,6 +37,7 @@ export interface BingeExport {
   friendRequestsSent: ExportDoc[];
   groupInvites: ExportDoc[];
   pauseHistory: ExportDoc[];
+  listFollows: ExportDoc[];
   reviews: ExportDoc[];
   reviewLikes: ExportDoc[];
   reviewComments: ExportDoc[];
@@ -69,6 +70,7 @@ Filen innehåller:
 - Dina avsnitts-reaktioner (episodeReactions)
 - Dina listor (lists)
 - Listor du är medredigerare i (editableLists)
+- Listor du följer (listFollows)
 - Tillsammans-sessioner du är värd för (sessions)
 - Grupper du är medlem i (groupMemberships)
 
@@ -109,6 +111,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     friendRequestsSent: toExportDocs(s.friendRequestsSentSnap),
     groupInvites: toExportDocs(s.groupInvitesSnap),
     pauseHistory: toExportDocs(s.pauseHistorySnap),
+    listFollows: toExportDocs(s.listFollowsSnap),
     reviews: toExportDocs(s.reviewsSnap),
     reviewLikes: toExportDocs(s.reviewLikesSnap),
     reviewComments: toExportDocs(s.reviewCommentsSnap),

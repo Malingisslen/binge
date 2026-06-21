@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
-import { useMyLists } from '@/hooks/useLists';
+import { useMyLists, useFollowedLists } from '@/hooks/useLists';
 import { useToast } from '@/contexts/ToastContext';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -16,6 +16,7 @@ export default function ListsPage() {
 
 function ListsContent() {
   const { lists, createList, deleteList } = useMyLists();
+  const followed = useFollowedLists();
   const { show: toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -110,6 +111,28 @@ function ListsContent() {
           </div>
         ))}
       </div>
+
+      {followed.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+            Följda listor
+          </h2>
+          <div className="space-y-[6px]">
+            {followed.map(list => (
+              <Link
+                key={list.id}
+                href={`/list/${list.id}/`}
+                className="block bg-surface border border-border-main rounded-sm px-3 py-2 no-underline hover:border-rule-2 transition-colors"
+              >
+                <div className="text-base font-semibold text-text-primary">{list.title}</div>
+                <div className="text-xs text-text-muted">
+                  {list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

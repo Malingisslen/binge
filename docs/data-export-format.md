@@ -26,6 +26,7 @@ Filen är en JSON med följande top-level-struktur (se
   "friendRequestsSent": [ … ],
   "groupInvites":       [ … ],
   "pauseHistory":       [ … ],
+  "listFollows":        [ … ],
   "reviews":         [ … ],
   "reviewLikes":     [ … ],
   "reviewComments":  [ … ],
@@ -58,6 +59,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `reviewLikes` | `reviews/*/likes/{uid}` | Likes du gjort på andras recensioner (doc-id = ditt uid) |
 | `reviewComments` | `reviews/*/comments/{commentId}` (where uid==me) | Dina kommentarer |
 | `episodeReactions` | `episodeReactions/*/reactions/{id}` (where uid==me) | Dina avsnitts-reaktioner (BIN-95) |
+| `listFollows` | `users/{uid}/listFollows/{listId}` | Listor du följer (BIN-96) |
 | `lists` | `lists/{listId}` (where uid==me) | Dina egenkurerade listor + items |
 | `editableLists` | `lists/{listId}` (editors array-contains me) | Listor du är medredigerare i (BIN-100) |
 | `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för |

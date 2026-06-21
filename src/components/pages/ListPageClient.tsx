@@ -6,7 +6,7 @@ import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
-import { usePublicList, useListMutations, useListEditors } from '@/hooks/useLists';
+import { usePublicList, useListMutations, useListEditors, useListFollows } from '@/hooks/useLists';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -23,6 +23,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
   const { data: list, isLoading } = usePublicList(listId);
   const { addItemToList, removeItemFromList } = useListMutations();
   const { addEditor, removeEditor } = useListEditors();
+  const { isFollowing, followList, unfollowList } = useListFollows();
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
 
@@ -88,6 +89,17 @@ export default function ListPageClient({ listId }: { listId: string }) {
             className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white shrink-0"
           >
             <Plus size={12} /> Lägg till titel
+          </button>
+        ) : (!canEdit && uid) ? (
+          // BIN-96: följ/avfölj någon annans lista (inloggad, ej egen lista
+          // och ej medredigerare — canEdit täcker både ägare och editors).
+          <button
+            type="button"
+            onClick={() => isFollowing(listId) ? unfollowList(listId) : followList(listId, list.uid)}
+            className={`chip${isFollowing(listId) ? ' is-on' : ''} shrink-0`}
+            aria-pressed={isFollowing(listId)}
+          >
+            {isFollowing(listId) ? 'Följer' : 'Följ lista'}
           </button>
         ) : undefined}
       />
