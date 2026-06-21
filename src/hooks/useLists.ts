@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { lookupUserByHandle } from '@/lib/firebase/username';
 import type { UserList, UserListItem } from '@/types';
 
 function docToList(id: string, data: Record<string, unknown>): UserList {
@@ -14,6 +15,7 @@ function docToList(id: string, data: Record<string, unknown>): UserList {
     title: data.title as string,
     description: (data.description as string) ?? '',
     isPublic: (data.isPublic as boolean) ?? false,
+    editors: (data.editors as string[]) ?? [],
     items: ((data.items as UserListItem[]) ?? []).map(i => ({
       ...i,
       addedAt: toDate(i.addedAt),
@@ -94,6 +96,64 @@ export function useListMutations() {
   }, []);
 
   return { addItemToList, removeItemFromList };
+}
+
+// BIN-100: collaborative lists. The owner manages editors[] (add by @handle /
+// remove); co-editors may add/remove items (rules enforce items-only writes).
+export function useListEditors() {
+  const addEditor = useCallback(async (listId: string, handle: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const resolved = await lookupUserByHandle(handle);
+      if (!resolved) return { ok: false, error: 'Hittade ingen användare med det användarnamnet.' };
+      const { db, doc, updateDoc, arrayUnion, serverTimestamp } = await fsdb();
+      await updateDoc(doc(db, 'lists', listId), {
+        editors: arrayUnion(resolved.uid),
+        updatedAt: serverTimestamp(),
+      });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Kunde inte spara. Försök igen om en stund.' };
+    }
+  }, []);
+
+  const removeEditor = useCallback(async (listId: string, editorUid: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const { db, doc, updateDoc, arrayRemove, serverTimestamp } = await fsdb();
+      await updateDoc(doc(db, 'lists', listId), {
+        editors: arrayRemove(editorUid),
+        updatedAt: serverTimestamp(),
+      });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Kunde inte ta bort medredigeraren.' };
+    }
+  }, []);
+
+  return { addEditor, removeEditor };
+}
+
+// Lists shared WITH me (I'm an editor, not owner). array-contains only (no
+// orderBy → uses the automatic single-field array index, no composite needed);
+// sorted client-side.
+export function useEditableLists() {
+  const { uid } = useAuth();
+  const [lists, setLists] = useState<UserList[]>([]);
+  useEffect(() => {
+    if (!uid) { setLists([]); return; }
+    return lazySubscribe(({ db, collection, query, where, limit, onSnapshot }) =>
+      onSnapshot(query(
+        collection(db, 'lists'),
+        where('editors', 'array-contains', uid),
+        limit(100),
+      ), snap => {
+        setLists(
+          snap.docs
+            .map(d => docToList(d.id, d.data()))
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+        );
+      }));
+  }, [uid]);
+  return lists;
 }
 
 export function usePublicList(listId: string) {

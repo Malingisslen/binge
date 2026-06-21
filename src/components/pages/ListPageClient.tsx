@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { fsdb } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
-import { usePublicList, useListMutations } from '@/hooks/useLists';
+import { usePublicList, useListMutations, useListEditors } from '@/hooks/useLists';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -21,10 +22,14 @@ export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
   const { data: list, isLoading } = usePublicList(listId);
   const { addItemToList, removeItemFromList } = useListMutations();
+  const { addEditor, removeEditor } = useListEditors();
   const queryClient = useQueryClient();
   const [showPicker, setShowPicker] = useState(false);
 
   const isOwner = !!(uid && list && list.uid === uid);
+  // BIN-100: owner OR a co-editor may add/remove items. Only the owner manages
+  // the editor list itself.
+  const canEdit = isOwner || !!(uid && list?.editors?.includes(uid));
 
   usePageMeta({ title: list?.title ?? 'Lista' });
 
@@ -77,7 +82,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
       <PageHeader
         crumb="Lista"
         title={list.title}
-        actions={isOwner && !showPicker ? (
+        actions={canEdit && !showPicker ? (
           <button
             onClick={() => setShowPicker(true)}
             className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white shrink-0"
@@ -90,8 +95,19 @@ export default function ListPageClient({ listId }: { listId: string }) {
         <p className="text-xs text-text-muted mb-2">{list.description}</p>
       )}
       <span className="text-xxs text-text-muted">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
+      {!isOwner && canEdit && (
+        <span className="text-xxs text-accent ml-2">· du är medredigerare</span>
+      )}
 
-      {isOwner && showPicker && (
+      {isOwner && (
+        <EditorsManager
+          editors={list.editors}
+          onAdd={(handle) => addEditor(listId, handle)}
+          onRemove={(u) => removeEditor(listId, u)}
+        />
+      )}
+
+      {canEdit && showPicker && (
         <TitlePicker
           existingIds={existingIds}
           onAdd={handleAdd}
@@ -102,7 +118,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
       {list.items.length === 0 ? (
         <EmptyState
           title="Listan är tom"
-          body={isOwner && !showPicker ? 'Lägg till din första titel med knappen ovan.' : isOwner ? 'Använd sökfältet ovan.' : 'Den här listan har inga titlar ännu.'}
+          body={canEdit && !showPicker ? 'Lägg till din första titel med knappen ovan.' : canEdit ? 'Använd sökfältet ovan.' : 'Den här listan har inga titlar ännu.'}
         />
       ) : (
         <div className="bg-surface border border-rule rounded-sm mt-3">
@@ -118,7 +134,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
                   </div>
                   <div className="text-xs font-semibold truncate">{item.title}</div>
                 </Link>
-                {isOwner && (
+                {canEdit && (
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -230,6 +246,84 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+// BIN-100: owner-only co-editor management. Add by @handle, remove by row.
+// Editors can add/remove items but never change list metadata (rules-enforced).
+function EditorsManager({ editors, onAdd, onRemove }: {
+  editors: string[];
+  onAdd: (handle: string) => Promise<{ ok: boolean; error?: string }>;
+  onRemove: (uid: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [handle, setHandle] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    const h = handle.trim().replace(/^@/, '');
+    if (!h || busy) return;
+    setBusy(true);
+    setMsg(null);
+    const res = await onAdd(h);
+    setBusy(false);
+    if (res.ok) { setHandle(''); setMsg('Medredigerare tillagd.'); }
+    else setMsg(res.error ?? 'Kunde inte lägga till.');
+  };
+  const handleRemove = async (uid: string) => {
+    const res = await onRemove(uid);
+    if (!res.ok) setMsg(res.error ?? 'Kunde inte ta bort medredigeraren.');
+  };
+  return (
+    <div className="bg-surface border border-rule rounded-md px-3 py-[10px] mt-3 max-w-[420px]">
+      <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Medredigerare</div>
+      <p className="text-xxs text-text-muted mb-2">
+        De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
+      </p>
+      <div className="flex gap-[6px] items-center mb-1">
+        <input
+          value={handle}
+          onChange={e => setHandle(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
+          placeholder="@användarnamn"
+          className="select flex-1"
+        />
+        <button type="button" onClick={() => void submit()} disabled={busy} className="chip">Lägg till</button>
+      </div>
+      {msg && <div className="text-xxs text-text-muted mb-2">{msg}</div>}
+      {editors.length > 0 && (
+        <div className="flex flex-col gap-[4px] mt-2">
+          {editors.map(uid => <EditorRow key={uid} uid={uid} onRemove={() => handleRemove(uid)} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditorRow({ uid, onRemove }: { uid: string; onRemove: () => void }) {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const { db, doc, getDoc } = await fsdb();
+        const snap = await getDoc(doc(db, 'users', uid));
+        const d = snap.exists() ? snap.data() : null;
+        if (active) setName((d?.displayName as string) || (d?.username as string) || 'Användare');
+      } catch { if (active) setName('Användare'); }
+    })();
+    return () => { active = false; };
+  }, [uid]);
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-text-primary truncate">{name ?? '…'}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-xxs text-danger-ink border border-rule rounded-sm px-2 py-[1px] bg-surface cursor-pointer shrink-0 ml-2"
+      >
+        Ta bort
+      </button>
     </div>
   );
 }

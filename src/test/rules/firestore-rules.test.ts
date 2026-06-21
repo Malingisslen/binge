@@ -383,3 +383,50 @@ describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
     ));
   });
 });
+
+// BIN-100: collaborative lists — owner manages editors[], editors edit items only.
+async function seedCollabList(listId: string, opts: { isPublic: boolean; editors: string[] }) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'lists', listId), {
+      uid: OWNER, title: 'Delad lista', description: '', isPublic: opts.isPublic,
+      items: [], editors: opts.editors, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+  });
+}
+
+describe('lists collaborative editing (BIN-100)', () => {
+  it('owner can add an editor', async () => {
+    await seedCollabList('cl1', { isPublic: true, editors: [] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'lists', 'cl1'),
+      { editors: ['other_uid'], updatedAt: serverTimestamp() }));
+  });
+  it('editor can add items (items-only update)', async () => {
+    await seedCollabList('cl2', { isPublic: true, editors: ['other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl2'),
+      { items: [{ tmdbId: 1, mediaType: 'movie' }], updatedAt: serverTimestamp() }));
+  });
+  it('editor may omit updatedAt (hasOnly is a ceiling, not a floor)', async () => {
+    await seedCollabList('cl2b', { isPublic: true, editors: ['other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl2b'), { items: [{ tmdbId: 2 }] }));
+  });
+  it('editor CANNOT change isPublic', async () => {
+    await seedCollabList('cl3', { isPublic: false, editors: ['other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl3'), { isPublic: true }));
+  });
+  it('editor CANNOT change the editors list (no escalation)', async () => {
+    await seedCollabList('cl4', { isPublic: true, editors: ['other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl4'), { editors: ['other_uid', 'sneaky'] }));
+  });
+  it('non-editor non-owner cannot update', async () => {
+    await seedCollabList('cl5', { isPublic: true, editors: [] });
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl5'), { items: [], updatedAt: serverTimestamp() }));
+  });
+  it('editor can read a private list they edit', async () => {
+    await seedCollabList('cl6', { isPublic: false, editors: ['other_uid'] });
+    await assertSucceeds(getDoc(doc(otherDb(), 'lists', 'cl6')));
+  });
+  it('non-editor cannot read a private list', async () => {
+    await seedCollabList('cl7', { isPublic: false, editors: [] });
+    await assertFails(getDoc(doc(otherDb(), 'lists', 'cl7')));
+  });
+});

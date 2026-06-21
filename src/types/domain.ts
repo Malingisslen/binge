@@ -153,6 +153,9 @@ export interface UserList {
   description: string;
   isPublic: boolean;
   items: UserListItem[];
+  // BIN-100: co-editor uids. Owner-managed; editors may add/remove items only
+  // (enforced in firestore.rules via a hasOnly(['items','updatedAt']) clause).
+  editors: string[];
   createdAt: Date;
   updatedAt: Date;
 }

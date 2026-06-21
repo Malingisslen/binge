@@ -47,6 +47,11 @@ export interface UserDataSnapshots {
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
   listsSnap: QuerySnapshot;
+  // Lists I co-edit (BIN-100, editors array-contains me). In export (my
+  // editorship is my data). NOT deleted here — the list is owned by someone
+  // else (rules: only the owner writes metadata); my uid lingers in editors[]
+  // until they remove me, same as the followers-snapshot precedent.
+  editableListsSnap: QuerySnapshot;
   sessionsSnap: QuerySnapshot;
   groupsSnap: QuerySnapshot;
 }
@@ -73,6 +78,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     reviewLikesSnap,
     reviewCommentsSnap,
     listsSnap,
+    editableListsSnap,
     sessionsSnap,
     groupsSnap,
   ] = await Promise.all([
@@ -96,6 +102,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
     getDocs(query(collectionGroup(db, 'comments'), where('uid', '==', uid))),
     getDocs(query(collection(db, 'lists'), where('uid', '==', uid))),
+    getDocs(query(collection(db, 'lists'), where('editors', 'array-contains', uid))),
     getDocs(query(collection(db, 'sessions'), where('hostUid', '==', uid))),
     getDocs(
       query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
@@ -122,6 +129,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     reviewLikesSnap,
     reviewCommentsSnap,
     listsSnap,
+    editableListsSnap,
     sessionsSnap,
     groupsSnap,
   };
