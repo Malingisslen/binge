@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ToastProvider, useToast } from './ToastContext';
 
 function Trigger({ action }: { action?: { label: string; onClick: () => void } }) {
   const { show } = useToast();
   return <button onClick={() => show('Testtoast', action)}>visa</button>;
+}
+
+function RatingTrigger({ onRate }: { onRate: (n: number) => void }) {
+  const { showRating } = useToast();
+  return <button onClick={() => showRating('Betygsätt Dune?', onRate)}>betygsätt</button>;
 }
 
 describe('ToastProvider', () => {
@@ -31,5 +36,59 @@ describe('ToastProvider', () => {
     fireEvent.click(screen.getByText('visa'));
     expect(screen.getByText('Testtoast')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Rensa helt' })).toBeNull();
+  });
+});
+
+describe('ToastProvider showRating (betyg-vid-sedd)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('renderar meddelande + tryckbara stjärnor; klick kör onRate och stänger toasten', () => {
+    const onRate = vi.fn();
+    render(
+      <ToastProvider>
+        <RatingTrigger onRate={onRate} />
+      </ToastProvider>,
+    );
+    act(() => { fireEvent.click(screen.getByText('betygsätt')); });
+    expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
+
+    const stars = document.querySelectorAll('span[class*="cursor-pointer"]');
+    expect(stars.length).toBe(5);
+    // jsdom getBoundingClientRect är noll → klick landar på en hel stjärna.
+    act(() => { fireEvent.click(stars[3]); });
+
+    expect(onRate).toHaveBeenCalledWith(4);
+    expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
+  });
+
+  it('stäng-knappen avfärdar toasten utan att sätta betyg', () => {
+    const onRate = vi.fn();
+    render(
+      <ToastProvider>
+        <RatingTrigger onRate={onRate} />
+      </ToastProvider>,
+    );
+    act(() => { fireEvent.click(screen.getByText('betygsätt')); });
+    expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Stäng' })); });
+    expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
+    expect(onRate).not.toHaveBeenCalled();
+  });
+
+  it('självdör efter 6 s utan att anropa onRate', () => {
+    const onRate = vi.fn();
+    render(
+      <ToastProvider>
+        <RatingTrigger onRate={onRate} />
+      </ToastProvider>,
+    );
+    act(() => { fireEvent.click(screen.getByText('betygsätt')); });
+    expect(screen.getByText('Betygsätt Dune?')).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByText('Betygsätt Dune?')).toBeNull();
+    expect(onRate).not.toHaveBeenCalled();
   });
 });

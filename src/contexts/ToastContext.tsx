@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+import RatingStars from '@/components/title/RatingStars';
 
 // Valfri åtgärdsknapp i toasten ("Rensa helt", "Ångra" …). Toasts med åtgärd
 // lever längre så användaren hinner läsa och välja; klick på knappen kör
@@ -14,13 +16,15 @@ interface Toast {
   id: number;
   message: string;
   action?: ToastAction;
+  onRate?: (rating: number) => void;
 }
 
 interface ToastState {
   show: (message: string, action?: ToastAction) => void;
+  showRating: (message: string, onRate: (rating: number) => void) => void;
 }
 
-const ToastContext = createContext<ToastState>({ show: () => {} });
+const ToastContext = createContext<ToastState>({ show: () => {}, showRating: () => {} });
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -46,6 +50,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timers.current.set(id, timer);
   }, []);
 
+  // Betygs-toasten: dyker upp när en titel markeras sedd. Lever lika länge som
+  // åtgärds-toasts (6 s) så användaren hinner trycka en stjärna; ignoreras den
+  // självdör den utan att sätta något betyg (titeln förblir sedd).
+  const showRating = useCallback((message: string, onRate: (rating: number) => void) => {
+    const id = nextId.current++;
+    setToasts(prev => [...prev, { id, message, onRate }]);
+    const timer = setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+      timers.current.delete(id);
+    }, 6000);
+    timers.current.set(id, timer);
+  }, []);
+
   // Rensa eventuella pending timers vid unmount (L5) — undviker setState på en
   // avmonterad provider (StrictMode/tester).
   useEffect(() => {
@@ -53,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return () => { map.forEach(clearTimeout); map.clear(); };
   }, []);
 
-  const value = useMemo(() => ({ show }), [show]);
+  const value = useMemo(() => ({ show, showRating }), [show, showRating]);
 
   return (
     <ToastContext.Provider value={value}>
@@ -70,6 +87,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             className="bg-ink text-white text-xs px-3 py-2 rounded-sm animate-[fadeIn_0.2s_ease-out] flex items-center gap-3"
           >
             <span>{t.message}</span>
+            {t.onRate && (
+              <RatingStars
+                rating={null}
+                size="md"
+                onChange={(n) => { t.onRate!(n); dismiss(t.id); }}
+              />
+            )}
             {t.action && (
               <button
                 type="button"
@@ -77,6 +101,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 className="text-xs font-semibold underline text-white bg-transparent border-none cursor-pointer p-0 shrink-0"
               >
                 {t.action.label}
+              </button>
+            )}
+            {t.onRate && (
+              <button
+                type="button"
+                onClick={() => dismiss(t.id)}
+                aria-label="Stäng"
+                className="text-white/60 bg-transparent border-none cursor-pointer p-0 shrink-0"
+              >
+                <X size={14} />
               </button>
             )}
           </div>

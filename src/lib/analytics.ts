@@ -43,6 +43,9 @@ export type AnalyticsEvent =
   | { name: 'advisor_action_taken'; props: { action: 'pause' | 'resume' | 'subscribe' | 'catchup'; providerId: number } }
   | { name: 'search_submitted'; props: { resultCount: number; mediaFilter: 'all' | 'movie' | 'tv' } }
   | { name: 'status_changed'; props: { mediaType: 'movie' | 'tv'; status: 'vill_se' | 'mina' | 'sedd' | 'avbruten' } }
+  // Betyg satt via stjärn-toasten som dyker upp när en titel markeras sedd —
+  // mäter om "betygsätt direkt"-nudgen faktiskt höjer betygsfrekvensen.
+  | { name: 'rate_on_sedd'; props: { mediaType: 'movie' | 'tv' } }
   | { name: 'error_boundary_triggered'; props: { scope: string } };
 
 export function trackEvent<T extends AnalyticsEvent['name']>(

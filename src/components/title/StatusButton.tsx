@@ -1,16 +1,14 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import type { WatchStatus, MediaType, TMDBTVShow } from '@/types';
+import type { WatchStatus, MediaType } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useMarkSeen } from '@/hooks/useMarkSeen';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
-import { getTVShow } from '@/lib/tmdb/client';
-import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -37,8 +35,8 @@ export default function StatusButton({
 }: StatusButtonProps) {
   const { uid } = useAuth();
   const { getItem, addItem, removeItem } = useWatchlist();
+  const markSeen = useMarkSeen();
   const { show: toast } = useToast();
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(tmdbId);
@@ -49,36 +47,13 @@ export default function StatusButton({
 
   async function handleSelect(status: WatchStatus) {
     setOpen(false);
-    // Specialfall (samma som QuickAddButton): 'sedd' på TV = "alla avsnitt
-    // sedda". Översätt till status='mina' + lastWatched satt till sista
-    // aireade avsnittet — annars skulle docen skrivas som rå 'sedd',
-    // normaliseras till 'mina' vid läsning och landa som "Ej påbörjad".
-    if (mediaType === 'tv' && status === 'sedd') {
-      try {
-        const show = await queryClient.fetchQuery<TMDBTVShow>({
-          queryKey: ['tv', tmdbId],
-          queryFn: ({ signal }) => getTVShow(tmdbId, { signal }),
-          staleTime: TMDB_STALE.TV_DETAIL,
-        });
-        const last = show.last_episode_to_air;
-        await addItem({
-          tmdbId, mediaType, status: 'mina', title, posterPath, releaseYear,
-          rating: current?.rating ?? null,
-          notes: current?.notes ?? null,
-          totalSeasons: show.number_of_seasons ?? totalSeasons ?? null,
-          // Ingen number_of_seasons-fallback (BIN-14): en serie utan aireat
-          // avsnitt (last == null) ska INTE få en fejkad säsongsmarkör — då
-          // skulle librarySubState läsa den som påbörjad. Null = ärligt ej_paborjad.
-          lastWatchedSeason: last?.season_number ?? current?.lastWatchedSeason ?? null,
-          lastWatchedEpisode: last?.episode_number ?? current?.lastWatchedEpisode ?? null,
-          providers: providers ?? current?.providers ?? [],
-          genreIds: genreIds ?? current?.genreIds ?? [],
-          tmdbStatus: show.status ?? tmdbStatus ?? current?.tmdbStatus ?? null,
-        });
-        toast(`${title} — ${labelFor('sedd')}`);
-      } catch {
-        toast('Kunde inte hämta serieinfo, försök igen');
-      }
+    // 'sedd' (film: terminal · TV: "alla avsnitt sedda" → 'mina') går via den
+    // delade markSeen-vägen, som även nudgar ett betyg om titeln saknar ett.
+    if (status === 'sedd') {
+      await markSeen({
+        tmdbId, mediaType, title, posterPath, releaseYear,
+        totalSeasons, providers, genreIds, tmdbStatus,
+      });
       return;
     }
     await addItem({
