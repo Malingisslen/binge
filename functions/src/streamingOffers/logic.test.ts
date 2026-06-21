@@ -73,6 +73,31 @@ describe('selectRefreshBatch', () => {
     const out = selectRefreshBatch(work, [], now, 2);
     expect(out).toHaveLength(2);
   });
+
+  it('already-expired titles (negative delta) are NOT promoted to tier-1 over never-checked titles', () => {
+    // tmdbId 1 has nextLeaving 3 days in the PAST — negative delta, already expired
+    // tmdbId 2 has never been checked — should be prioritized over the expired one
+    const existing: ExistingOffer[] = [
+      { tmdbId: 1, checkedAt: now - 2_000, nextLeaving: '2026-06-17' }, // 3 days ago
+    ];
+    const out = selectRefreshBatch(work, existing, now, 1);
+    // tmdbId 2 (never-checked, tier-0) beats tmdbId 1 (expired, tier-2)
+    expect(out).toEqual([2]);
+  });
+
+  it('already-expired titles lose to stale-but-checked titles (discriminating oracle for delta>=0 fix)', () => {
+    // Under old code: expired nextLeaving had no lower-bound, so expired title = tier-1 → wins
+    // Under fix: expired (negative delta) falls to tier-2 → stalest checkedAt wins → tmdbId 2
+    const existing: ExistingOffer[] = [
+      { tmdbId: 1, checkedAt: now - 2_000,  nextLeaving: '2026-06-17' }, // expired 3 days ago → was tier-1 (bug), now tier-2
+      { tmdbId: 2, checkedAt: now - 9_000,  nextLeaving: null },          // never-leaving, stale → tier-2
+      { tmdbId: 3, checkedAt: now - 5_000,  nextLeaving: null },          // never-leaving, less stale → tier-2
+    ];
+    const out = selectRefreshBatch(work, existing, now, 1);
+    // Both tmdbId 1 and 2 are tier-2; stalest checkedAt (9000ms ago) is tmdbId 2
+    // Old bug: tmdbId 1 was tier-1 and would have won → [1]; Fix: → [2]
+    expect(out).toEqual([2]);
+  });
 });
 
 describe('computeHealth', () => {
@@ -94,5 +119,11 @@ describe('computeHealth', () => {
   it('exactly 21 days is still warn not critical (boundary)', () => {
     // ceil(1995/95) = 21
     expect(computeHealth(1995, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
+  });
+  it('zero budget returns MAX_SAFE_INTEGER interval (not Infinity) and status critical', () => {
+    const h = computeHealth(100, 0, '2026-06-20T00:00:00Z');
+    expect(h.refreshIntervalDays).toBe(Number.MAX_SAFE_INTEGER);
+    expect(h.status).toBe('critical');
+    expect(isFinite(h.refreshIntervalDays)).toBe(true);
   });
 });

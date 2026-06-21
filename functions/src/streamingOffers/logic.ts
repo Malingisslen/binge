@@ -42,7 +42,12 @@ export function selectRefreshBatch(
   const tier = (tmdbId: number): number => {
     const e = byId.get(tmdbId);
     if (!e) return 0; // never checked
-    if (e.nextLeaving && Date.parse(e.nextLeaving) - nowMs <= NEAR_EXPIRY_DAYS * DAY_MS) return 1;
+    if (e.nextLeaving) {
+      const delta = Date.parse(e.nextLeaving) - nowMs;
+      // Only tier-1 if leaving is UPCOMING (delta >= 0) and within the near-expiry window.
+      // Already-expired (negative delta) fall through to tier-2 (stalest-first) — not priority.
+      if (delta >= 0 && delta <= NEAR_EXPIRY_DAYS * DAY_MS) return 1;
+    }
     return 2;
   };
   const sortKey = (tmdbId: number): number => byId.get(tmdbId)?.checkedAt ?? 0;
@@ -59,7 +64,8 @@ export function selectRefreshBatch(
 }
 
 export function computeHealth(workSetSize: number, budget: number, nowIso: string): HealthDoc {
-  const refreshIntervalDays = budget > 0 ? Math.ceil(workSetSize / budget) : Infinity;
+  // Use MAX_SAFE_INTEGER instead of Infinity: Firestore rejects Infinity/NaN as field values.
+  const refreshIntervalDays = budget > 0 ? Math.ceil(workSetSize / budget) : Number.MAX_SAFE_INTEGER;
   let status: HealthStatus = 'ok';
   if (refreshIntervalDays > CRITICAL_DAYS) status = 'critical';
   else if (refreshIntervalDays > WARN_DAYS) status = 'warn';

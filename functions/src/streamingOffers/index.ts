@@ -19,9 +19,12 @@ async function readWorkSet(): Promise<{ tmdbId: number; mediaType: 'movie' | 'tv
   const items: IntentItem[] = [];
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
+    // orderBy('status') — not orderBy('__name__') — so Firestore only returns docs
+    // that HAVE a 'status' field; this naturally excludes groups/{id}/watchlist docs
+    // (which have no status) while keeping all user watchlist docs (even legacy-status ones).
     let q = db.collectionGroup('watchlist')
       .select('mediaType', 'status', 'tmdbId', 'providers')
-      .orderBy('__name__').limit(PAGE_SIZE);
+      .orderBy('status').limit(PAGE_SIZE);
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
     if (snap.empty) break;
@@ -71,11 +74,22 @@ async function notifyAdmin(status: 'warn' | 'critical', intervalDays: number, us
   // FCM push reuses the existing sendPushToUser helper if desired (see episodeNotify).
 }
 
+/** Cloud Scheduler is at-least-once; skip if we already ran within the last 20 hours. */
+const IDEMPOTENCY_WINDOW_MS = 20 * 60 * 60 * 1000; // 20h — safe margin below 24h schedule
+
 export const streamingOffersRefresh = onSchedule(
   { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB', secrets: [MOTN_API_KEY, ADMIN_UID] },
   async () => {
     const db = getFirestore();
     const nowMs = Date.now();
+
+    // Idempotency guard: reject same-day Scheduler retries.
+    const healthSnap = await db.collection('streamingHealth').doc('current').get();
+    const lastRunAt = healthSnap.exists ? (healthSnap.get('lastRunAt') as number | undefined) : undefined;
+    if (lastRunAt !== undefined && nowMs - lastRunAt < IDEMPOTENCY_WINDOW_MS) {
+      logger.info('streamingOffersRefresh: skipping duplicate run (within 20h window)', { lastRunAt, nowMs });
+      return;
+    }
 
     const workSet = await readWorkSet();
     const existing = await readExisting();
@@ -95,7 +109,7 @@ export const streamingOffersRefresh = onSchedule(
 
     const health = computeHealth(workSet.length, DAILY_BUDGET, new Date(nowMs).toISOString());
     const prev = (await db.collection('streamingHealth').doc('current').get()).data();
-    await db.collection('streamingHealth').doc('current').set(health);
+    await db.collection('streamingHealth').doc('current').set({ ...health, lastRunAt: nowMs });
     if ((health.status === 'warn' || health.status === 'critical') && prev?.status !== health.status) {
       const users = (await db.collection('users').count().get()).data().count;
       await notifyAdmin(health.status, health.refreshIntervalDays, users);

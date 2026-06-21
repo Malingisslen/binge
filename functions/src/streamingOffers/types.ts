@@ -37,6 +37,8 @@ export interface HealthDoc {
   dailyBudget: number;
   refreshIntervalDays: number;
   status: HealthStatus;
+  /** Epoch ms of the last completed run; used for idempotency guard on Scheduler retry. */
+  lastRunAt?: number;
 }
 
 /** A watchlist row narrowed to what the governor needs. */
