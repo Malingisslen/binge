@@ -19,7 +19,8 @@ async function getSession(): Promise<string | null> {
         ? (raw as Record<string, unknown>)
         : {};
     const sid = json['portal_sessionid'] ?? null;
-    return typeof sid === 'string' ? sid : null;
+    if (typeof sid !== 'string' || sid.length === 0) return null;
+    return sid;
   } catch (err) {
     logger.error('cineasterna: session handshake failed', err);
     return null;
@@ -31,7 +32,8 @@ export async function fetchCatalog(): Promise<CineasternaTitle[]> {
   try {
     const sid = await getSession();
     if (!sid) return [];
-    const url = `${BASE}/library/title/get_new_titles?country_iso=se&num_titles=10000&portal_sessionid=${sid}`;
+    const params = new URLSearchParams({ country_iso: 'se', num_titles: '10000', portal_sessionid: sid });
+    const url = `${BASE}/library/title/get_new_titles?${params.toString()}`;
     const res = await fetch(url, { headers: { 'User-Agent': UA } });
     if (!res.ok) {
       logger.warn(`cineasterna: get_new_titles -> ${res.status}`);
