@@ -263,7 +263,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                         <a href={offer.link} target="_blank" rel="noopener noreferrer">{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
-                        <span className="rounded-sm bg-danger-soft text-danger-ink px-1 text-[11px]">{leavingLabel}</span>
+                        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>
                       )}
                     </span>
                   );

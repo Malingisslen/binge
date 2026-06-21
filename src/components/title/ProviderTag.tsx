@@ -47,7 +47,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
       {chip}
       {price && <span className="text-ink-2 text-[12px]">{price}</span>}
       {leaving && (
-        <span className="rounded-sm bg-danger-soft text-danger-ink px-1 text-[11px]">
+        <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">
           {formatLeaving(offer!)}
         </span>
       )}
