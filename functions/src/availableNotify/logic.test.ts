@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { diffNewProviders, qualifyingProviders } from './logic';
+import { diffNewProviders, qualifyingProviders, canonicalProviderId } from './logic';
+
+describe('canonicalProviderId (BIN-60)', () => {
+  it('maps every known alias to its canonical id (full map pinned vs providers.ts)', () => {
+    const expected: Record<number, number> = {
+      1899: 384, 1825: 384,   // Max
+      493: 520,               // SVT Play
+      1944: 489, 1759: 489,   // TV4 Play
+      2243: 350,              // Apple TV+
+      1968: 323, 283: 323,    // Crunchyroll
+      1773: 431,              // SkyShowtime
+      188: 335,               // YouTube Premium
+      497: 521,               // Tele2 Play
+      517: 578,               // TriArt Play
+    };
+    for (const [alias, canonical] of Object.entries(expected)) {
+      expect(canonicalProviderId(Number(alias))).toBe(canonical);
+    }
+  });
+  it('passes through ids that are already canonical / unknown', () => {
+    expect(canonicalProviderId(8)).toBe(8);     // Netflix (no alias)
+    expect(canonicalProviderId(489)).toBe(489); // already canonical
+  });
+});
 
 describe('diffNewProviders (BIN-60)', () => {
   it('returns [] on first observation (last === null) — baseline, no first-run blast', () => {

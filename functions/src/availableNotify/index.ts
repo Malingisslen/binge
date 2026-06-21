@@ -18,7 +18,7 @@ import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { sendPushToUser } from '../push';
 import { fetchSeFlatrate } from './tmdb';
-import { diffNewProviders, qualifyingProviders, type WatchlistTitleLite, type UserNotifSettings } from './logic';
+import { diffNewProviders, qualifyingProviders, canonicalProviderId, type WatchlistTitleLite, type UserNotifSettings } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
 
@@ -71,7 +71,14 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[]): Promis
   const mediaType = items[0]?.mediaType || 'tv';
   const providers = await fetchSeFlatrate(tmdbId, mediaType);
   if (providers === null) return 0; // fetch failed → skip, don't touch the marker
-  const currentIds = providers.map((p) => p.id);
+  // Canonicalise provider ids (TMDB aliases → one id), matching how the client
+  // stores myProviders + keys notif docs. Dedupe by canonical id, first name wins.
+  const nameById = new Map<number, string>();
+  for (const p of providers) {
+    const cid = canonicalProviderId(p.id);
+    if (!nameById.has(cid)) nameById.set(cid, p.name);
+  }
+  const currentIds = [...nameById.keys()];
   const last = await readLastFlatrate(tmdbId);
   const newIds = diffNewProviders(currentIds, last);
 
@@ -81,7 +88,6 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[]): Promis
 
   if (newIds.length === 0) { await writeMarker(); return 0; }
 
-  const nameById = new Map(providers.map((p) => [p.id, p.name]));
   const actionUrl = `/${mediaType === 'movie' ? 'movie' : 'tv'}/${tmdbId}/`;
   let notified = 0;
   await Promise.allSettled(items.map(async (it) => {
@@ -94,11 +100,15 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[]): Promis
     // "X går att streama nu" is the signal; the title page shows every provider.
     // The marker advances to include ALL current providers, so the others won't
     // re-fire later either. This is deliberate (avoids double-spam for one title).
-    const providerName = nameById.get(qualifying[0]) ?? 'en av dina tjänster';
-    const notifId = `available-${tmdbId}-${qualifying[0]}`;
+    const providerId = qualifying[0];
+    const providerName = nameById.get(providerId) ?? 'en av dina tjänster';
+    // Shape + id MATCH the client/inbox `provider_available` model
+    // (useNotifications.ts): kind, providerId (canonical), providerName, and
+    // the `${tmdbId}-${canonicalId}` doc id so the inbox renders + dedupes it.
+    const notifId = `${tmdbId}-${providerId}`;
     await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
-      tmdbId, mediaType, title: it.title, kind: 'available_on_service',
-      providerName, read: false, createdAt: FieldValue.serverTimestamp(),
+      tmdbId, mediaType, title: it.title, kind: 'provider_available',
+      providerId, providerName, read: false, createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     await sendPushToUser(it.uid, {
       title: `Nu på din ${providerName}`,

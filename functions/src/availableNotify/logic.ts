@@ -27,6 +27,29 @@ export interface UserNotifSettings {
   pushEnabled: boolean;
 }
 
+// Minimal alias→canonical provider map, mirrored from SWEDISH_PROVIDERS in
+// src/lib/tmdb/providers.ts (functions can't import @/ aliases). KEEP IN SYNC.
+// TMDB sometimes lists one service under several ids; the client stores
+// myProviders + the notif inbox keys on the canonical id, so the server must
+// canonicalise too — otherwise it (a) misses titles on an aliased provider the
+// user has, and (b) writes a notif id that won't dedupe against the inbox's
+// `${tmdbId}-${canonicalId}` convention.
+const ALIAS_TO_CANONICAL: Record<number, number> = {
+  1899: 384, 1825: 384,   // Max
+  493: 520,               // SVT Play
+  1944: 489, 1759: 489,   // TV4 Play
+  2243: 350,              // Apple TV+
+  1968: 323, 283: 323,    // Crunchyroll
+  1773: 431,              // SkyShowtime
+  188: 335,               // YouTube Premium
+  497: 521,               // Tele2 Play
+  517: 578,               // TriArt Play
+};
+
+export function canonicalProviderId(id: number): number {
+  return ALIAS_TO_CANONICAL[id] ?? id;
+}
+
 /**
  * Provider ids present in `current` that were not in `last`. `last === null`
  * (no prior observation) yields [] — baseline only, never a first-run blast.
