@@ -654,6 +654,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 4. My comments + likes on OTHERS' reviews (collection-group).
     snaps.reviewCommentsSnap.docs.forEach(d => refs.push(d.ref));
     snaps.reviewLikesSnap.docs.forEach(d => refs.push(d.ref));
+    // My episode reactions (BIN-95, collection-group 'reactions').
+    snaps.episodeReactionsSnap.docs.forEach(d => refs.push(d.ref));
 
     // 5. My lists + hosted Tillsammans-sessions.
     snaps.listsSnap.docs.forEach(d => refs.push(d.ref));

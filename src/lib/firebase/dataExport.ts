@@ -40,6 +40,7 @@ export interface BingeExport {
   reviews: ExportDoc[];
   reviewLikes: ExportDoc[];
   reviewComments: ExportDoc[];
+  episodeReactions: ExportDoc[];
   lists: ExportDoc[];
   sessions: ExportDoc[];
   groupMemberships: ExportDoc[];
@@ -64,6 +65,7 @@ Filen innehåller:
 - Dina recensioner (reviews)
 - Gillamarkeringar du gjort (reviewLikes)
 - Kommentarer du skrivit (reviewComments)
+- Dina avsnitts-reaktioner (episodeReactions)
 - Dina listor (lists)
 - Tillsammans-sessioner du är värd för (sessions)
 - Grupper du är medlem i (groupMemberships)
@@ -108,6 +110,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     reviews: toExportDocs(s.reviewsSnap),
     reviewLikes: toExportDocs(s.reviewLikesSnap),
     reviewComments: toExportDocs(s.reviewCommentsSnap),
+    episodeReactions: toExportDocs(s.episodeReactionsSnap),
     lists: toExportDocs(s.listsSnap),
     sessions: toExportDocs(s.sessionsSnap),
     groupMemberships: toExportDocs(s.groupsSnap),

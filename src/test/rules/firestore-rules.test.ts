@@ -383,3 +383,55 @@ describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
     ));
   });
 });
+
+// BIN-95: episode reactions — public read, own-write, non-forgeable identity.
+function validReaction(uid: string) {
+  return {
+    uid, tmdbId: 1399, mediaType: 'tv', seasonNumber: 1, episodeNumber: 3,
+    text: 'Vilket avsnitt!', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  };
+}
+describe('episodeReactions/{key}/reactions/{id} (BIN-95)', () => {
+  const path = ['episodeReactions', '1399_1_3', 'reactions'] as const;
+  it('is publicly readable', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path, 'r1'), validReaction(OWNER));
+    });
+    await assertSucceeds(getDoc(doc(anonDb(), ...path, 'r1')));
+  });
+  it('owner can post a valid reaction', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), ...path, 'r2'), validReaction(OWNER)));
+  });
+  it('cannot post under another uid (anti-spoof)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), ...path, 'r3'), validReaction('other_uid')));
+  });
+  it('rejects extra fields', async () => {
+    await assertFails(setDoc(doc(ownerDb(), ...path, 'r4'), { ...validReaction(OWNER), junk: 1 }));
+  });
+  it('rejects empty text', async () => {
+    await assertFails(setDoc(doc(ownerDb(), ...path, 'r5'), { ...validReaction(OWNER), text: '' }));
+  });
+  it('unauthenticated cannot post', async () => {
+    await assertFails(setDoc(doc(anonDb(), ...path, 'r6'), validReaction(OWNER)));
+  });
+  it('owner can delete own; non-owner cannot', async () => {
+    await setDoc(doc(ownerDb(), ...path, 'r7'), validReaction(OWNER));
+    await assertFails(deleteDoc(doc(otherDb(), ...path, 'r7')));
+    await assertSucceeds(deleteDoc(doc(ownerDb(), ...path, 'r7')));
+  });
+  it('rejects text over 2000 chars', async () => {
+    await assertFails(setDoc(doc(ownerDb(), ...path, 'r8'), { ...validReaction(OWNER), text: 'x'.repeat(2001) }));
+  });
+  it('non-owner cannot update a reaction', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path, 'ru1'), validReaction(OWNER));
+    });
+    await assertFails(updateDoc(doc(otherDb(), ...path, 'ru1'), { text: 'hijack' }));
+  });
+  it('owner cannot change uid on update (no ownership transfer)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path, 'ru2'), validReaction(OWNER));
+    });
+    await assertFails(updateDoc(doc(ownerDb(), ...path, 'ru2'), { uid: 'other_uid' }));
+  });
+});

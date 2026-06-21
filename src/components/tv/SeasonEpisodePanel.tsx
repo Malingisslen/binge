@@ -25,10 +25,11 @@ interface SeasonEpisodePanelProps {
 // listan vid varje progress-onSnapshot. Nu re-renderar bara rader vars
 // watched/masked-state faktiskt ändrats.
 const PanelEpisodeRow = memo(function PanelEpisodeRow({
-  episode, seasonNumber, episodeCount, watched, spoilerMasked, markEpisodeWatched, markUpTo,
+  episode, seasonNumber, tmdbId, episodeCount, watched, spoilerMasked, markEpisodeWatched, markUpTo,
 }: {
   episode: TMDBEpisode;
   seasonNumber: number;
+  tmdbId: number;
   episodeCount: number;
   watched: boolean;
   spoilerMasked: boolean;
@@ -47,6 +48,7 @@ const PanelEpisodeRow = memo(function PanelEpisodeRow({
     <EpisodeRow
       episode={episode}
       seasonNumber={seasonNumber}
+      tmdbId={tmdbId}
       watched={watched}
       spoilerMasked={spoilerMasked}
       onToggle={handleToggle}
@@ -128,6 +130,7 @@ export default function SeasonEpisodePanel({
               key={ep.id}
               episode={ep}
               seasonNumber={seasonNumber}
+              tmdbId={tmdbId}
               episodeCount={episodes.length}
               watched={isWatched(seasonNumber, ep.episode_number)}
               spoilerMasked={isEpisodeMasked(maskBoundary ?? null, seasonNumber, ep.episode_number)}

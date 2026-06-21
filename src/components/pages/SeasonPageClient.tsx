@@ -65,6 +65,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
             key={ep.id}
             episode={ep}
             seasonNumber={seasonNum}
+            tmdbId={seriesId}
             watched={!progressLoading && isWatched(seasonNum, ep.episode_number)}
             spoilerMasked={isEpisodeMasked(maskBoundary, seasonNum, ep.episode_number)}
             onToggle={w => markEpisodeWatched(seasonNum, ep.episode_number, w)}

@@ -46,6 +46,9 @@ export interface UserDataSnapshots {
   reviewsSnap: QuerySnapshot;
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
+  // Mina avsnitts-reaktioner (BIN-95, collectionGroup 'reactions' where uid==me).
+  // I export + delete-cascade (mina UGC, som reviewComments).
+  episodeReactionsSnap: QuerySnapshot;
   listsSnap: QuerySnapshot;
   sessionsSnap: QuerySnapshot;
   groupsSnap: QuerySnapshot;
@@ -72,6 +75,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
+    episodeReactionsSnap,
     listsSnap,
     sessionsSnap,
     groupsSnap,
@@ -95,6 +99,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     // doc-id = mitt uid (single-field collection-group-index på documentId)
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
     getDocs(query(collectionGroup(db, 'comments'), where('uid', '==', uid))),
+    getDocs(query(collectionGroup(db, 'reactions'), where('uid', '==', uid))),
     getDocs(query(collection(db, 'lists'), where('uid', '==', uid))),
     getDocs(query(collection(db, 'sessions'), where('hostUid', '==', uid))),
     getDocs(
@@ -121,6 +126,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
+    episodeReactionsSnap,
     listsSnap,
     sessionsSnap,
     groupsSnap,

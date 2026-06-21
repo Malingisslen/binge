@@ -5,10 +5,12 @@ import { Lock, Check } from 'lucide-react';
 import type { TMDBEpisode } from '@/types';
 import { stillUrl } from '@/lib/tmdb/client';
 import { todayIso, shortSwedishWeekday } from '@/lib/utils';
+import EpisodeReactions from './EpisodeReactions';
 
 interface EpisodeRowProps {
   episode: TMDBEpisode;
   seasonNumber: number;
+  tmdbId: number;
   watched: boolean;
   onToggle: (watched: boolean) => void;
   onMarkUpTo?: () => void;
@@ -34,7 +36,7 @@ function formatUnairedRunt(iso: string): string {
 // orörda rader över re-rendern (kräver stabila callbacks från föräldern —
 // se PanelEpisodeRow i SeasonEpisodePanel).
 function EpisodeRow({
-  episode, seasonNumber, watched, onToggle, onMarkUpTo, spoilerMasked,
+  episode, seasonNumber, tmdbId, watched, onToggle, onMarkUpTo, spoilerMasked,
 }: EpisodeRowProps) {
   const [revealed, setRevealed] = useState(false);
   const still = stillUrl(episode.still_path, 'w185');
@@ -96,6 +98,16 @@ function EpisodeRow({
           >
             Markera hit
           </button>
+        )}
+        {/* BIN-95: per-episode reactions, spoiler-gated on own progress.
+            Only rendered for aired episodes. */}
+        {!isUnaired && (
+          <EpisodeReactions
+            tmdbId={tmdbId}
+            season={seasonNumber}
+            episode={episode.episode_number}
+            watched={watched}
+          />
         )}
       </div>
       <div className="runt">{runt}</div>

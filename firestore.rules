@@ -57,6 +57,23 @@ service cloud.firestore {
         && matchesOwnIdentity(d);
     }
 
+    // Episode reaction content bounds (BIN-95). Mirrors reviews: own uid +
+    // non-forgeable identity + bounded text + field whitelist.
+    function isValidReaction(d) {
+      return d.uid is string
+        && d.tmdbId is int && d.tmdbId > 0
+        && d.seasonNumber is int && d.seasonNumber >= 0
+        && d.episodeNumber is int && d.episodeNumber > 0
+        && d.text is string && d.text.size() >= 1 && d.text.size() <= 2000
+        && (!('spoiler' in d) || d.spoiler is bool)
+        && d.mediaType == 'tv'
+        && matchesOwnIdentity(d)
+        && d.keys().hasOnly([
+          'uid', 'tmdbId', 'mediaType', 'seasonNumber', 'episodeNumber',
+          'text', 'spoiler', 'displayName', 'username', 'createdAt', 'updatedAt'
+        ]);
+    }
+
     // List content bounds.
     function isValidList(d) {
       return d.uid is string
@@ -319,6 +336,23 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/reviews/$(reviewId)).data.uid == request.auth.uid
         );
       }
+    }
+
+    // ---- episode reactions (BIN-95) ----
+    // Per-episode reaction threads, keyed episodeReactions/{tmdbId_s_e}/reactions/{id}.
+    // Public read (spoiler-gating is client-side against the viewer's own
+    // progress); own create/update/delete with non-forgeable identity, mirroring
+    // reviews. Reportable via the existing reports collection (no new mod surface).
+    match /episodeReactions/{episodeKey}/reactions/{reactionId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && isValidReaction(request.resource.data);
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && isValidReaction(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
     // ---- reports (UGC-moderation) ----
