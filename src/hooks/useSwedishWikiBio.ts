@@ -18,10 +18,10 @@ export function useSwedishWikiBio(
     queryFn: async (ctx) => {
       const ext = await getPersonExternalIds(personId!, { signal: ctx.signal });
       const wd = ext.wikidata_id;
-      if (!wd) return null;
+      if (!wd || !/^Q\d+$/.test(wd)) return null;
 
       const entRes = await fetch(
-        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wd}&props=sitelinks&format=json&origin=*`,
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(wd)}&props=sitelinks&format=json&origin=*`,
         { signal: ctx.signal },
       );
       if (!entRes.ok) return null;

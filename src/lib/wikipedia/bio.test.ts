@@ -30,4 +30,16 @@ describe('cleanWikiExtract', () => {
   it('returns null for malformed input', () => {
     expect(cleanWikiExtract(undefined)).toBeNull();
   });
+  it('rejects non-https page URLs (javascript: scheme)', () => {
+    const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'javascript:alert(1)' } } };
+    expect(cleanWikiExtract(summary)).toBeNull();
+  });
+  it('rejects non-https page URLs (http: scheme)', () => {
+    const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'http://x' } } };
+    expect(cleanWikiExtract(summary)).toBeNull();
+  });
+  it('accepts a valid https page URL', () => {
+    const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'https://sv.wikipedia.org/wiki/Greta_Garbo' } } };
+    expect(cleanWikiExtract(summary)).toEqual({ text: 'Greta Garbo var en svensk skådespelare.', pageUrl: 'https://sv.wikipedia.org/wiki/Greta_Garbo' });
+  });
 });

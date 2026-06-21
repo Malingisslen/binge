@@ -12,6 +12,6 @@ export function cleanWikiExtract(summary: unknown): { text: string; pageUrl: str
   if (s.type === 'disambiguation') return null;
   const text = typeof s.extract === 'string' ? s.extract.trim() : '';
   const pageUrl = s.content_urls?.desktop?.page;
-  if (text.length < 10 || typeof pageUrl !== 'string') return null;
+  if (text.length < 10 || typeof pageUrl !== 'string' || !pageUrl.startsWith('https://')) return null;
   return { text, pageUrl };
 }
