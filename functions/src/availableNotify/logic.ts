@@ -1,0 +1,54 @@
+/**
+ * Pure qualification logic for "available on my services" push (BIN-60).
+ *
+ * No firebase-admin import — runs under the root Vitest suite. The function
+ * detects when a watchlist title NEWLY appears on a flatrate provider the user
+ * subscribes to, and pushes once.
+ *
+ * Design contract:
+ *   - FIRST OBSERVATION ESTABLISHES A BASELINE (last === null → no notify). We
+ *     never push for titles that are already available the first time we see
+ *     them — that would spam every catalogue match on the first run / when a
+ *     title is added. We only push on a *transition* onto a new provider.
+ *   - AT-MOST-ONCE: the per-title marker advances after each run regardless of
+ *     individual push success (same as episodeNotify) — idempotent, no retry.
+ */
+
+export interface WatchlistTitleLite {
+  uid: string;
+  tmdbId: number;
+  mediaType: string;
+  status: string;
+  title: string;
+}
+
+export interface UserNotifSettings {
+  availableOnMyServices: boolean;
+  pushEnabled: boolean;
+}
+
+/**
+ * Provider ids present in `current` that were not in `last`. `last === null`
+ * (no prior observation) yields [] — baseline only, never a first-run blast.
+ */
+export function diffNewProviders(current: number[], last: number[] | null): number[] {
+  if (last === null) return [];
+  const lastSet = new Set(last);
+  return current.filter((p) => !lastSet.has(p));
+}
+
+/**
+ * The newly-available providers the user actually subscribes to — empty means
+ * no push. Gated on both availableOnMyServices and pushEnabled (defensive; the
+ * push layer re-checks pushEnabled too). settings === null (user-doc missing)
+ * → no push.
+ */
+export function qualifyingProviders(
+  settings: UserNotifSettings | null,
+  newProviders: number[],
+  myProviders: number[],
+): number[] {
+  if (!settings || !settings.availableOnMyServices || !settings.pushEnabled) return [];
+  const mine = new Set(myProviders);
+  return newProviders.filter((p) => mine.has(p));
+}
