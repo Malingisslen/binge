@@ -413,13 +413,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // External ratings cache — written/read only by the titleRatings callable
-    // (Admin SDK bypasses rules); clients reach it through the callable, never directly.
+    // External ratings cache — public read (no PII; just IMDb/RT/Metacritic scores).
+    // Written exclusively by the titleRatings callable via Admin SDK (bypasses rules).
+    // Clients read directly on the hot path; the callable is only invoked on cache miss.
     match /titleRatings/{imdbId} {
-      allow read, write: if false;
+      allow read: if true;     // public cached ratings (no PII); written by the callable via Admin SDK
+      allow write: if false;
     }
 
-    // Per-user rate-limit counters for the titleRatings callable.
+    // Global daily OMDb budget counter — replaces per-user rate-limit.
+    // Function-only: Admin SDK writes, no client access.
+    match /omdbBudget/{day} {
+      allow read, write: if false;   // global daily OMDb cap counter — function-only
+    }
+
+    // Per-user rate-limit counters for the titleRatings callable (legacy, kept inert).
     // Written exclusively by the callable via Admin SDK (bypasses rules).
     // Clients have no direct access — fully sealed.
     match /titleRatingsRateLimit/{uid} {
