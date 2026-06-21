@@ -1,15 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWatchlist } from '@/hooks/useWatchlist';
 import { useFriendRequests } from '@/hooks/useFriends';
 import { getRecentSessionPicksAcrossGroups } from '@/lib/firebase/groups';
-import { getWatchProviders } from '@/lib/tmdb/client';
-import { canonicalProviderId } from '@/lib/tmdb/providers';
 
 export interface AppNotification {
   id: string;
@@ -40,10 +37,8 @@ export interface RecentGroupPick {
 
 export function useNotifications() {
   const { uid, user } = useAuth();
-  const { items } = useWatchlist();
   const { data: friendRequests = [] } = useFriendRequests();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const checkedRef = useRef(false);
 
   // Subscribera på provider-availability-notifs (legacy).
   useEffect(() => {
@@ -85,51 +80,13 @@ export function useNotifications() {
     staleTime: 30_000,
   });
 
-  // Check for new availability once per session
-  useEffect(() => {
-    if (!uid || !user || checkedRef.current) return;
-    const myProviders = user.myProviders ?? [];
-    if (myProviders.length === 0) return;
-
-    const candidates = items.filter(i =>
-      i.status === 'mina' && i.mediaType === 'tv' && !i.dropped &&
-      !(i.providers ?? []).some(p => myProviders.includes(canonicalProviderId(p)))
-    );
-    if (candidates.length === 0) return;
-
-    checkedRef.current = true;
-
-    Promise.all(
-      candidates.slice(0, 10).map(async item => {
-        try {
-          const data = await getWatchProviders(item.mediaType, item.tmdbId);
-          const flatrate = data.results?.SE?.flatrate ?? [];
-          const match = flatrate.find(p => myProviders.includes(canonicalProviderId(p.provider_id)));
-          if (match) {
-            const { db, doc, getDoc, setDoc, serverTimestamp } = await fsdb();
-            const canonicalId = canonicalProviderId(match.provider_id);
-            const notifId = `${item.tmdbId}-${canonicalId}`;
-            const notifRef = doc(db, 'users', uid, 'notifications', notifId);
-            const existing = await getDoc(notifRef);
-            if (!existing.exists()) {
-              await setDoc(notifRef, {
-                tmdbId: item.tmdbId,
-                mediaType: item.mediaType,
-                title: item.title,
-                providerId: canonicalId,
-                providerName: match.provider_name,
-                read: false,
-                createdAt: serverTimestamp(),
-              });
-            }
-          }
-        } catch {
-          // Silently skip failed checks
-        }
-      })
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, user?.myProviders?.join(','), items.length]);
+  // BIN-60: provider-availability detection moved server-side to the
+  // `availableNotify` scheduled Function (covers film vill_se + TV mina,
+  // transition-based, with push). The old client-side once-per-session poll
+  // here is superseded — it only covered TV mina, had no push, and re-fetched
+  // watch/providers on every session. The Function writes the same
+  // `provider_available` notif shape + `${tmdbId}-${canonicalId}` doc id, so
+  // the inbox below renders it unchanged.
 
   const markRead = useCallback(async (notifId: string) => {
     if (!uid) return;
