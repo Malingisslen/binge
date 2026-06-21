@@ -155,6 +155,16 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
+    // Följda listor (BIN-96) — ägar-ägt: doc-id = {listId} man följer. Endast
+    // ägaren läser/skriver. create kräver att listan faktiskt finns (kan inte
+    // följa en påhittad/raderad lista). Fältkontrakt hindrar doc-uppblåsning.
+    match /users/{uid}/listFollows/{listId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['listOwnerUid', 'followedAt'])
+        && exists(/databases/$(database)/documents/lists/$(listId));
+    }
+
     // Notifications — owner only
     match /users/{uid}/notifications/{notifId} {
       allow read, write: if isOwner(uid);
@@ -370,6 +380,13 @@ service cloud.firestore {
     // External ratings cache — written/read only by the titleRatings callable
     // (Admin SDK bypasses rules); clients reach it through the callable, never directly.
     match /titleRatings/{imdbId} {
+      allow read, write: if false;
+    }
+
+    // Per-user rate-limit counters for the titleRatings callable.
+    // Written exclusively by the callable via Admin SDK (bypasses rules).
+    // Clients have no direct access — fully sealed.
+    match /titleRatingsRateLimit/{uid} {
       allow read, write: if false;
     }
 

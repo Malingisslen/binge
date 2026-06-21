@@ -607,6 +607,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Sparbeslut-historik (Streamingrådgivaren) — raderas så ingen
     // pause-/resume-data blir kvar efter konto-radering.
     snaps.pauseHistorySnap.docs.forEach(d => refs.push(d.ref));
+    // Följda listor (BIN-96) — ägar-ägda, raderas så de inte orphan:as.
+    snaps.listFollowsSnap.docs.forEach(d => refs.push(d.ref));
     // FCM-tokens raderas så Cloud Functions inte fortsätter försöka skicka
     // push till en raderad användare. Server-side cleanup tar dem bort
     // till slut via 'registration-token-not-registered'-felet, men explicit

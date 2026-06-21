@@ -108,3 +108,58 @@ export function usePublicList(listId: string) {
     staleTime: 60_000,
   });
 }
+
+// BIN-96: list following. The follow record lives on the FOLLOWER
+// (users/{uid}/listFollows/{listId}) so "mina följda listor" is a single
+// own-subcollection read. Lists are already public-read.
+export function useListFollows() {
+  const { uid } = useAuth();
+  const [followedIds, setFollowedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!uid) { setFollowedIds([]); return; }
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'listFollows'), snap => {
+        setFollowedIds(snap.docs.map(d => d.id));
+      }));
+  }, [uid]);
+
+  const followList = useCallback(async (listId: string, listOwnerUid: string) => {
+    if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
+    await setDoc(doc(db, 'users', uid, 'listFollows', listId), {
+      listOwnerUid,
+      followedAt: serverTimestamp(),
+    });
+  }, [uid]);
+
+  const unfollowList = useCallback(async (listId: string) => {
+    if (!uid) return;
+    const { db, doc, deleteDoc } = await fsdb();
+    await deleteDoc(doc(db, 'users', uid, 'listFollows', listId));
+  }, [uid]);
+
+  const isFollowing = useCallback((listId: string) => followedIds.includes(listId), [followedIds]);
+
+  return { followedIds, isFollowing, followList, unfollowList };
+}
+
+// Loads the actual list docs for the user's followed lists (public-read getDocs,
+// cached). Manual surface (/my/lists) — bounded by the follow count.
+export function useFollowedLists() {
+  const { followedIds } = useListFollows();
+  const key = [...followedIds].sort().join(',');
+  const { data } = useQuery({
+    queryKey: ['followed-lists', key],
+    enabled: followedIds.length > 0,
+    staleTime: 60_000,
+    queryFn: async (): Promise<UserList[]> => {
+      const { db, doc, getDoc } = await fsdb();
+      const snaps = await Promise.all(followedIds.map(id => getDoc(doc(db, 'lists', id))));
+      return snaps
+        .filter(s => s.exists())
+        .map(s => docToList(s.id, s.data() as Record<string, unknown>));
+    },
+  });
+  return data ?? [];
+}

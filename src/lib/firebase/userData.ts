@@ -43,6 +43,9 @@ export interface UserDataSnapshots {
   // Sparbeslut-historik (Streamingrådgivaren) — skrivs av resumeProvider.
   // Inkluderas i export + delete-cascade.
   pauseHistorySnap: QuerySnapshot;
+  // Följda listor (BIN-96). Ägar-ägd subcollection → med i export + delete-
+  // cascade (annars orphan:as den efter radering).
+  listFollowsSnap: QuerySnapshot;
   reviewsSnap: QuerySnapshot;
   reviewLikesSnap: QuerySnapshot;
   reviewCommentsSnap: QuerySnapshot;
@@ -69,6 +72,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     fcmTokensSnap,
     reportMetaSnap,
     pauseHistorySnap,
+    listFollowsSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,
@@ -91,6 +95,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
     getDocs(collection(db, 'users', uid, 'reportMeta')),
     getDocs(collection(db, 'users', uid, 'pauseHistory')),
+    getDocs(collection(db, 'users', uid, 'listFollows')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
     // doc-id = mitt uid (single-field collection-group-index på documentId)
     getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
@@ -118,6 +123,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     fcmTokensSnap,
     reportMetaSnap,
     pauseHistorySnap,
+    listFollowsSnap,
     reviewsSnap,
     reviewLikesSnap,
     reviewCommentsSnap,

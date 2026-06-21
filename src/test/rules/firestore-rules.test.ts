@@ -383,3 +383,50 @@ describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
     ));
   });
 });
+
+// BIN-96: list following — users/{uid}/listFollows/{listId}.
+// Seed a real list via the rules-bypass context so the create rule's
+// exists(/lists/{listId}) guard can pass.
+async function seedList(listId: string, ownerUid = 'list_owner') {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'lists', listId), {
+      uid: ownerUid, title: 'Bästa deckarna', description: '', isPublic: true,
+      items: [], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+  });
+}
+function validListFollow() {
+  return { listOwnerUid: 'list_owner', followedAt: serverTimestamp() };
+}
+
+describe('users/{uid}/listFollows/{listId} (BIN-96)', () => {
+  it('owner can follow an existing list', async () => {
+    await seedList('l1');
+    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'l1'), validListFollow()));
+  });
+  it('cannot follow a list that does not exist', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'missing'), validListFollow()));
+  });
+  it('rejects extra fields (field whitelist)', async () => {
+    await seedList('l2');
+    await assertFails(setDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'l2'), { ...validListFollow(), spam: 1 }));
+  });
+  it('non-owner cannot write to another user\'s listFollows', async () => {
+    await seedList('l3');
+    await assertFails(setDoc(doc(otherDb(), 'users', OWNER, 'listFollows', 'l3'), validListFollow()));
+  });
+  it('unauthenticated cannot follow', async () => {
+    await seedList('l4');
+    await assertFails(setDoc(doc(anonDb(), 'users', OWNER, 'listFollows', 'l4'), validListFollow()));
+  });
+  it('owner can unfollow (delete)', async () => {
+    await seedList('l5');
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'l5'), validListFollow());
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'l5')));
+  });
+  it('non-owner cannot unfollow another user\'s follow', async () => {
+    await seedList('l6');
+    await setDoc(doc(ownerDb(), 'users', OWNER, 'listFollows', 'l6'), validListFollow());
+    await assertFails(deleteDoc(doc(otherDb(), 'users', OWNER, 'listFollows', 'l6')));
+  });
+});
