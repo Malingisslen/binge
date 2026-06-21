@@ -10,5 +10,6 @@ export interface CatalogDoc {
   tmdbIds: number[];
   rental: Record<string, { amount: number; currency: string }>; // keyed by tmdbId
   count: number;
+  rawCount: number; // raw Cineasterna title count before TMDB resolution (rot guard)
   updatedAt: number;
 }
