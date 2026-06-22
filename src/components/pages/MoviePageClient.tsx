@@ -198,10 +198,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             {movie.runtime ? (
               <span><span className="k">längd</span><strong>{movie.runtime} min</strong></span>
             ) : null}
-            <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
             <CommunityRating mediaType="movie" tmdbId={movie.id} />
           </div>
-          <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
+          <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} tmdb={movie.vote_average} />
 
           <ClientOnly>
             <div className="actions-row">

@@ -215,10 +215,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             {show.number_of_episodes && (
               <span><span className="k">avsnitt</span><strong>{show.number_of_episodes}</strong></span>
             )}
-            <span><span className="k">tmdb</span><strong>{show.vote_average.toFixed(1)} / 10</strong></span>
             <CommunityRating mediaType="tv" tmdbId={show.id} />
           </div>
-          <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} />
+          <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} tmdb={show.vote_average} />
 
           <ClientOnly>
             <div className="actions-row">
