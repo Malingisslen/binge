@@ -31,6 +31,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
+import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
@@ -218,6 +219,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <CommunityRating mediaType="tv" tmdbId={show.id} />
           </div>
           <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} tmdb={show.vote_average} />
+
+          <ClientOnly>
+            <FriendsWhoSaw tmdbId={show.id} />
+          </ClientOnly>
 
           <ClientOnly>
             <div className="actions-row">

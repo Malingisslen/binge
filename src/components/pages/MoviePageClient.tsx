@@ -23,6 +23,7 @@ import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
 import CollectionSection from '@/components/title/CollectionSection';
+import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
@@ -207,6 +208,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             <CommunityRating mediaType="movie" tmdbId={movie.id} />
           </div>
           <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} tmdb={movie.vote_average} />
+
+          <ClientOnly>
+            <FriendsWhoSaw tmdbId={movie.id} />
+          </ClientOnly>
 
           <ClientOnly>
             <div className="actions-row">
