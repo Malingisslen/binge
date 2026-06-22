@@ -22,6 +22,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
+import CollectionSection from '@/components/title/CollectionSection';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
@@ -47,7 +48,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
   const { getItem, updateRating, updateNotes, updateStatus, setRuntime } = useWatchlist();
-  useAuth();
+  const { user } = useAuth();
   const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch: SSR/initial-render visar inget
@@ -107,6 +108,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
+  // BIN-98 v1 — hyr↔abonnemang-korsreferens. TMDB ger inga priser, så v1 är ren
+  // korsreferens: finns titeln även på abonnemang behöver man oftast inte hyra.
+  // Förstärks när det är en tjänst användaren redan har (ren besparing).
+  const myProviderIds = mounted ? (user?.myProviders ?? []) : [];
+  const subsYouOwn = subscription.filter(p => myProviderIds.includes(canonicalProviderId(p.provider_id)));
   const year = movie.release_date?.substring(0, 4) ?? '—';
   const genres = movie.genres.map(g => g.name).join(', ');
   const cast = movie.credits?.cast?.slice(0, 10) ?? [];
@@ -302,6 +308,13 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
           {showRentBuy && hasRentBuy && (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
+              {subscription.length > 0 && (
+                <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-[12px]" style={{ marginBottom: 8 }}>
+                  {subsYouOwn.length > 0
+                    ? `Du abonnerar redan på ${subsYouOwn.map(p => p.provider_name).join(', ')} — du behöver inte hyra.`
+                    : `Finns även med abonnemang på ${subscription.map(p => p.provider_name).join(', ')} — billigare än att hyra om du ser mer därifrån.`}
+                </div>
+              )}
               {rent.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Hyr:</span>
@@ -382,6 +395,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           <ReviewList tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
         </section>
       </ClientOnly>
+
+      {/* Franchise/samling (BIN-94) — din progress genom serien, ovanför generiska
+          "liknande filmer". Bara när filmen hör till en TMDB-samling. */}
+      {movie.belongs_to_collection && (
+        <ClientOnly>
+          <CollectionSection collectionId={movie.belongs_to_collection.id} currentMovieId={movie.id} />
+        </ClientOnly>
+      )}
 
       {/* Similar films — back to duotone (navigation surface) */}
       {mappedRecs.length > 0 && (

@@ -13,6 +13,7 @@ import {
   discoverTV,
   getPerson,
   getPersonCredits,
+  getCollection,
 } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import type { TMDBMovie, TMDBTVShow, TMDBPerson } from '@/types';
@@ -104,6 +105,15 @@ export function usePerson(id: number | null, initialData?: TMDBPerson) {
     enabled: id !== null,
     staleTime: TMDB_STALE.PERSON,
     initialData,
+  });
+}
+
+export function useCollection(id: number | null) {
+  return useQuery({
+    queryKey: ['collection', id],
+    queryFn: ({ signal }) => getCollection(id!, { signal }),
+    enabled: id !== null,
+    staleTime: TMDB_STALE.COLLECTION,
   });
 }
 

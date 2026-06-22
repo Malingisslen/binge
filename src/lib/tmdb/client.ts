@@ -6,6 +6,7 @@ import type {
   TMDBSearchResult,
   TMDBListResponse,
   TMDBProviderData,
+  TMDBCollection,
   TMDBPerson,
   TMDBPersonCredits,
   TMDBPersonExternalIds,
@@ -166,6 +167,12 @@ export function getMovieLite(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovi
   return tmdbFetch(`/movie/${id}`, {
     append_to_response: 'watch/providers,release_dates',
   }, opts);
+}
+
+// Samling/franchise (LOTR, Bond, MCU…). On-demand, en query per samling —
+// ingen fan-out. Respekterar language=sv-SE via tmdbFetch.
+export function getCollection(id: number, opts?: TmdbFetchOpts): Promise<TMDBCollection> {
+  return tmdbFetch(`/collection/${id}`, {}, opts);
 }
 
 // Recommendations (standalone — lighter than full detail call)

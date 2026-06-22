@@ -40,6 +40,43 @@ export interface TMDBMovie {
   recommendations?: { results: TMDBSearchResult[] };
   'watch/providers'?: { results: { SE?: TMDBProviderData } };
   release_dates?: { results: TMDBReleaseDatesByCountry[] };
+  // Returneras direkt på /movie/{id} (ingen append behövs). null när filmen
+  // inte hör till någon TMDB-samling/franchise.
+  belongs_to_collection?: TMDBCollectionRef | null;
+}
+
+// Lättviktsreferensen som ligger på en film-detalj. Hela samlingen (med parts)
+// hämtas separat via /collection/{id} → TMDBCollection.
+export interface TMDBCollectionRef {
+  id: number;
+  name: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+}
+
+// En film i en samling. Skiljer sig från TMDBSearchResult: /collection/{id}
+// utelämnar `media_type` på parts (de är alltid filmer), så vi typar inte in
+// ett fält som API:t aldrig skickar.
+export interface TMDBCollectionPart {
+  id: number;
+  title?: string;
+  original_title?: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  overview: string;
+  vote_average: number;
+  vote_count?: number;
+  release_date?: string;
+  genre_ids: number[];
+}
+
+export interface TMDBCollection {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  parts: TMDBCollectionPart[];
 }
 
 export interface TMDBReleaseDate {

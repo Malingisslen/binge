@@ -51,4 +51,6 @@ export const TMDB_STALE = {
   TRENDING: 60 * 60 * 1000,
   /** /discover — genre-canon, upcoming, thematic. */
   DISCOVER: 2 * 60 * 60 * 1000,
+  /** /collection/{id} — franchise-listan ändras bara när en ny film tillkommer. */
+  COLLECTION: 24 * 60 * 60 * 1000,
 } as const;
