@@ -17,7 +17,7 @@ export interface ImportRow {
   /** Råttitel som den stod i filen (för att visa i dry-run + TMDB-sökning). */
   title: string;
   year: number | null;
-  /** Betyg normaliserat till Binge-skalan 1–10 (null om inget). */
+  /** Betyg på Binge-skalan 0.5–5 (halvsteg; visas ×2 → /10). null om inget. */
   rating: number | null;
   /** IMDb-id (tt…) om filen hade det — ger exakt matchning utan fuzzy-sök. */
   imdbId: string | null;
@@ -87,14 +87,14 @@ function col(header: string[], row: string[], name: string): string | undefined 
 function parseLetterboxdRow(header: string[], row: string[]): ImportRow | null {
   const title = col(header, row, 'Name');
   if (!title) return null;
-  // Letterboxd-betyg är 0.5–5.0 stjärnor → Binge 1–10 (×2).
+  // Letterboxd-betyg är 0.5–5.0 stjärnor — SAMMA skala som Binge lagrar
+  // (RatingStars 0.5–5, ×2 → /10 vid visning). Lagra som-är, INGEN ×2.
   const ratingRaw = col(header, row, 'Rating');
   const stars = ratingRaw ? parseFloat(ratingRaw) : NaN;
-  const rating = Number.isFinite(stars) ? Math.round(stars * 2) : null;
   return {
     title,
     year: toYear(col(header, row, 'Year')),
-    rating: rating && rating >= 1 && rating <= 10 ? rating : null,
+    rating: Number.isFinite(stars) && stars >= 0.5 && stars <= 5 ? stars : null,
     imdbId: null,
     mediaTypeHint: null, // Letterboxd är film-only.
   };
@@ -103,16 +103,17 @@ function parseLetterboxdRow(header: string[], row: string[]): ImportRow | null {
 function parseImdbRow(header: string[], row: string[]): ImportRow | null {
   const title = col(header, row, 'Title') || col(header, row, 'Original Title');
   if (!title) return null;
-  // IMDb 'Your Rating' är redan 1–10.
+  // IMDb 'Your Rating' är 1–10 → Binge lagrar 0.5–5 (÷2), visas sen ×2 → /10.
   const ratingRaw = col(header, row, 'Your Rating');
   const r = ratingRaw ? parseInt(ratingRaw, 10) : NaN;
+  const rating = Number.isFinite(r) && r >= 1 && r <= 10 ? r / 2 : null;
   const titleType = (col(header, row, 'Title Type') ?? '').toLowerCase();
   const isTv = titleType.includes('series') || titleType.includes('tv');
   const constId = col(header, row, 'Const') ?? '';
   return {
     title,
     year: toYear(col(header, row, 'Year')),
-    rating: Number.isFinite(r) && r >= 1 && r <= 10 ? r : null,
+    rating,
     imdbId: constId.startsWith('tt') ? constId : null,
     mediaTypeHint: isTv ? 'tv' : 'movie',
   };

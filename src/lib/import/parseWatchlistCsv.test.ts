@@ -28,9 +28,9 @@ describe('parseWatchlistCsv — Letterboxd', () => {
     expect(res.rows).toHaveLength(2);
   });
 
-  it('maps 0.5–5 star ratings onto the 1–10 Binge scale (×2)', () => {
+  it('stores Letterboxd 0.5–5 stars as-is (same scale as Binge, no ×2)', () => {
     const res = parseWatchlistCsv(csv);
-    expect(res.rows[0]).toMatchObject({ title: 'Parasite', year: 2019, rating: 9 });
+    expect(res.rows[0]).toMatchObject({ title: 'Parasite', year: 2019, rating: 4.5 });
   });
 
   it('handles a quoted title with a comma and a missing rating', () => {
@@ -55,9 +55,9 @@ describe('parseWatchlistCsv — IMDb', () => {
     const res = parseWatchlistCsv(csv);
     expect(res.format).toBe('imdb');
     expect(res.rows[0]).toMatchObject({
-      title: 'The Shawshank Redemption', year: 1994, rating: 10, imdbId: 'tt0111161', mediaTypeHint: 'movie',
+      title: 'The Shawshank Redemption', year: 1994, rating: 5, imdbId: 'tt0111161', mediaTypeHint: 'movie',
     });
-    expect(res.rows[1]).toMatchObject({ imdbId: 'tt0903747', mediaTypeHint: 'tv', rating: 9 });
+    expect(res.rows[1]).toMatchObject({ imdbId: 'tt0903747', mediaTypeHint: 'tv', rating: 4.5 });
   });
 });
 
@@ -95,6 +95,11 @@ describe('parseWatchlistCsv — edge cases', () => {
   it('detects Letterboxd-ratings export with no URI column (Name+Year+Rating)', () => {
     const res = parseWatchlistCsv('Name,Year,Rating\nDune,2021,5');
     expect(res.format).toBe('letterboxd');
-    expect(res.rows[0]).toMatchObject({ title: 'Dune', year: 2021, rating: 10 });
+    expect(res.rows[0]).toMatchObject({ title: 'Dune', year: 2021, rating: 5 });
+  });
+
+  it('keeps the lower-boundary 0.5-star Letterboxd rating', () => {
+    const res = parseWatchlistCsv('Name,Year,Rating\nTitle,2020,0.5');
+    expect(res.rows[0].rating).toBe(0.5);
   });
 });

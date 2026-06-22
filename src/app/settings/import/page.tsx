@@ -219,7 +219,7 @@ function ImportContent() {
                       <span className="block truncate">{a.match!.title}</span>
                       <span className="text-xs text-ink-3">
                         {a.duplicate ? 'redan i biblioteket' : a.status === 'sedd' ? 'sedd' : a.status === 'mina' ? 'serie' : 'vill se'}
-                        {a.row.rating != null && !a.duplicate ? ` · ${a.row.rating}/10` : ''}
+                        {a.row.rating != null && !a.duplicate ? ` · ${a.row.rating * 2}/10` : ''}
                       </span>
                     </span>
                   </div>
