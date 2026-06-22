@@ -32,9 +32,21 @@ export function scoreCandidate(row: ImportRow, c: TMDBSearchResult): number {
   if (!rt || !ct) return 0;
 
   let score: number;
-  if (rt === ct) score = 1.0;
-  else if (ct.includes(rt) || rt.includes(ct)) score = 0.5;
-  else return 0; // måste åtminstone substring-matcha
+  if (rt === ct) {
+    score = 1.0;
+  } else if (ct.includes(rt) || rt.includes(ct)) {
+    // BIN-144: substring-kredit BARA när den kortare titeln är en betydande
+    // andel av den längre. Annars matchar en kort rad-titel ("Up", "Her", "It")
+    // varje längre samma-års-titel ("Up in the Air") → 0.5 + 0.5 exakt år = 1.0
+    // = fel film importerad. Kräv ratio > 0.5 (kortare måste vara mer än halva
+    // den längre) så delsträng+år ensamt inte klarar tröskeln; korta titlar
+    // tvingas till exakt match.
+    const ratio = Math.min(rt.length, ct.length) / Math.max(rt.length, ct.length);
+    if (ratio <= 0.5) return 0;
+    score = 0.5;
+  } else {
+    return 0; // måste åtminstone substring-matcha
+  }
 
   const cy = yearOf(c);
   if (row.year != null && cy != null) {

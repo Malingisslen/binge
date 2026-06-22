@@ -66,6 +66,28 @@ describe('pickBestMatch', () => {
   it('returns null for an empty candidate list', () => {
     expect(pickBestMatch(row({}), [])).toBeNull();
   });
+
+  it('rejects a short title that is a substring of a longer SAME-YEAR title (BIN-144)', () => {
+    // "Up" (2009) must NOT match "Up in the Air" (2009): without the length-ratio
+    // gate, substring (0.5) + exact year (0.5) = 1.0 would wrongly clear threshold
+    // and import the wrong film. Ratio 2/13 ≈ 0.15 < 0.5 → disqualified.
+    const candidates = [cand({ id: 7, title: 'Up in the Air', release_date: '2009-12-04' })];
+    expect(pickBestMatch(row({ title: 'Up', year: 2009 }), candidates)).toBeNull();
+  });
+
+  it('still accepts a substring that is a meaningful fraction of the candidate', () => {
+    // "The Matrix" (10) vs row "Matrix" (6): ratio 0.6 > 0.5 → substring credit
+    // stands, + exact year clears the threshold.
+    const candidates = [cand({ id: 8, title: 'The Matrix', release_date: '1999-03-31' })];
+    expect(pickBestMatch(row({ title: 'Matrix', year: 1999 }), candidates)?.id).toBe(8);
+  });
+
+  it('rejects exactly-half overlap (ratio == 0.5) — boundary is strictly > 0.5', () => {
+    // "Drive" (5) vs "Drive Hard" (10): ratio 0.5, NOT > 0.5 → disqualified even
+    // with an exact year. Pins the conservative `<= 0.5` reject boundary.
+    const candidates = [cand({ id: 9, title: 'Drive Hard', release_date: '2011-01-01' })];
+    expect(pickBestMatch(row({ title: 'Drive', year: 2011 }), candidates)).toBeNull();
+  });
 });
 
 describe('importStatus', () => {

@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useToast } from '@/contexts/ToastContext';
-import { searchMulti, posterUrl } from '@/lib/tmdb/client';
+import { searchMulti, findByImdbId, posterUrl } from '@/lib/tmdb/client';
 import { parseWatchlistCsv, type ImportRow, type ImportFormat } from '@/lib/import/parseWatchlistCsv';
 import { pickBestMatch, titleOf, importStatus } from '@/lib/import/matchTitle';
 import type { MediaType, WatchStatus } from '@/types';
@@ -64,8 +64,14 @@ function ImportContent() {
     setStage('analyzing');
     const results = await Promise.all(rows.map(async (row): Promise<Analyzed> => {
       try {
-        const res = await searchMulti(row.title);
-        const best = pickBestMatch(row, res.results ?? []);
+        // BIN-144: bär raden ett IMDb-id (IMDb-export) → exakt match via /find,
+        // ingen fuzzy-sök. Faller tillbaka till titel-sök bara om id:t inte ger
+        // träff (sällsynt). Ger IMDb-export den mest exakta matchningen.
+        let best = row.imdbId ? await findByImdbId(row.imdbId) : null;
+        if (!best) {
+          const res = await searchMulti(row.title);
+          best = pickBestMatch(row, res.results ?? []);
+        }
         if (!best || (best.media_type !== 'movie' && best.media_type !== 'tv')) {
           return { row, match: null, duplicate: false, status: null };
         }

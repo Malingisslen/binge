@@ -140,6 +140,20 @@ export function searchMulti(query: string, page = 1, opts?: TmdbFetchOpts): Prom
   return tmdbFetch('/search/multi', { query, region: 'SE', page: String(page) }, opts);
 }
 
+// Exakt-matchning via externt id (BIN-144): IMDb-export bär tt-id → /find ger
+// exakt titel utan fuzzy-sök. Första film-/serie-träffen med media_type satt.
+export function findByImdbId(imdbId: string, opts?: TmdbFetchOpts): Promise<TMDBSearchResult | null> {
+  return tmdbFetch<{ movie_results?: TMDBSearchResult[]; tv_results?: TMDBSearchResult[] }>(
+    `/find/${imdbId}`, { external_source: 'imdb_id' }, opts,
+  ).then(r => {
+    const movie = r.movie_results?.[0];
+    if (movie) return { ...movie, media_type: 'movie' as const };
+    const tv = r.tv_results?.[0];
+    if (tv) return { ...tv, media_type: 'tv' as const };
+    return null;
+  });
+}
+
 // Movie
 export function getMovie(id: number, opts?: TmdbFetchOpts): Promise<TMDBMovie> {
   return tmdbFetch(`/movie/${id}`, {
