@@ -2,6 +2,7 @@
 
 import { PersistQueryClientProvider, removeOldestQuery } from '@tanstack/react-query-persist-client';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { WatchlistProvider } from '@/contexts/WatchlistContext';
 import { NotInterestedProvider } from '@/contexts/NotInterestedContext';
@@ -60,15 +61,17 @@ export default function Providers({ children }: { children: ReactNode }) {
         dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
       }}
     >
-      <AuthProvider>
-        <WatchlistProvider>
-          <NotInterestedProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </NotInterestedProvider>
-        </WatchlistProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <WatchlistProvider>
+            <NotInterestedProvider>
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </NotInterestedProvider>
+          </WatchlistProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </PersistQueryClientProvider>
   );
 }

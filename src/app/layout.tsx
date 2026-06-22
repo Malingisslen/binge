@@ -35,6 +35,14 @@ export const metadata: Metadata = {
   // i sina generateMetadata-hooks; här skyddar vi mot dubletter på catch-all-shellet
   // när Google indexerar /index.html som "/" + diverse query-param-varianter.
   alternates: { canonical: '/' },
+  // BIN-68 — PWA: manifest + add-to-home. Den additiva, ofarliga halvan.
+  // Offline-service-workern är medvetet INTE registrerad här: FCM-SW:en äger
+  // redan scope '/', så en andra SW skulle ersätta den och slå sönder push —
+  // den delen kräver att caching slås ihop i firebase-messaging-sw.js och
+  // preview-testas (se BIN-68-kommentar). PNG-ikoner (192/512 maskable) saknas
+  // ännu (bara SVG finns) → full installerbarhet väntar på ikon-assets.
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, title: 'Binge', statusBarStyle: 'default' },
   openGraph: {
     title: 'Binge.nu',
     description: 'Håll koll på vad du tittar på — se var film och serier finns att streama i Sverige.',
@@ -98,6 +106,14 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `try{if(localStorage.getItem('binge:wasLoggedIn')==='1')document.documentElement.classList.add('returning-user')}catch(_){}`,
+          }}
+        />
+        {/* BIN-67 — mörkt tema före paint. Static export → ingen server, så
+            ett blockerande inline-script sätter data-theme innan första paint
+            och eliminerar ljus-flash. Default 'system' följer OS-preferensen. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var m=localStorage.getItem('binge:theme')||'system';var d=m==='dark'||(m==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.dataset.theme='dark'}catch(_){}`,
           }}
         />
       </head>

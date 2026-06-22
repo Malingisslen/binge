@@ -1,0 +1,22 @@
+{
+  "name": "Binge — håll koll på vad du tittar på",
+  "short_name": "Binge",
+  "description": "Spåra film och TV-serier och se var varje titel finns att streama i Sverige.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "sv-SE",
+  "dir": "ltr",
+  "background_color": "#f9f7f1",
+  "theme_color": "#f9f7f1",
+  "categories": ["entertainment", "lifestyle"],
+  "icons": [
+    {
+      "src": "/og-image.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
