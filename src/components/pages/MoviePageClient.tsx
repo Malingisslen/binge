@@ -200,7 +200,6 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             ) : null}
             <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
             <CommunityRating mediaType="movie" tmdbId={movie.id} />
-            <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
             {movie.imdb_id && (
               <span>
                 <span className="k">imdb</span>
@@ -210,6 +209,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               </span>
             )}
           </div>
+          <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
 
           <ClientOnly>
             <div className="actions-row">
