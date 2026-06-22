@@ -245,7 +245,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
     const current = items.find(i => i.tmdbId === tmdbId);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
-    await setDoc(ref, { rating, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+    // BIN-143: klampa till 0–5 (watchlist-betygsskalan är 0.5–5, ×2 vid visning;
+    // defense-in-depth bakom firestore.rules-gränsen) så ett buggigt anrop aldrig
+    // skickar ett värde reglerna nekar.
+    const safeRating = rating == null ? null : Math.max(0, Math.min(5, rating));
+    await setDoc(ref, { rating: safeRating, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
 
   const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {

@@ -87,6 +87,40 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
   });
 });
 
+// BIN-143: the rating VALUE must be bounded 0–10, not just the key set. An owner
+// can write their own watchlist doc directly, and the value feeds the public
+// community aggregate — an out-of-range write would deface every title page.
+describe('users/{uid}/watchlist/{id} rating value bound (BIN-143)', () => {
+  // Watchlist ratings are the 0.5–5 half-star scale (×2 → /10 on display), NOT
+  // 0–10 like reviews. The bound is 0–5; anything above 5 would render >10/10.
+  it('allows in-range half-star ratings (0.5, 2.5, 5) and null', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 0.5 }));
+    await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 2.5 }));
+    await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 5 }));
+    await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: null }));
+  });
+  it('rejects ratings above the 0.5–5 scale (community-aggregate poisoning)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertFails(setDoc(ref, { ...validWatchlist(), rating: 500 }));
+    await assertFails(setDoc(ref, { ...validWatchlist(), rating: 10 })); // old display-scale value now rejected
+    await assertFails(setDoc(ref, { ...validWatchlist(), rating: 5.5 }));
+  });
+  it('rejects a negative rating', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertFails(setDoc(ref, { ...validWatchlist(), rating: -5 }));
+  });
+  it('rejects a non-numeric rating', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertFails(setDoc(ref, { ...validWatchlist(), rating: '5' as unknown as number }));
+  });
+  it('rejects an over-range rating slipped in via a merge update', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertFails(setDoc(ref, { rating: 999 }, { merge: true }));
+  });
+});
+
 describe('reviews/{id} field whitelist', () => {
   it('allows a valid review write', async () => {
     const ref = doc(ownerDb(), 'reviews', 'r1');

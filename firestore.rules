@@ -99,7 +99,15 @@ service cloud.firestore {
         // nekades merge-skrivningen ({ runtime }) av hasOnly → permission-denied
         // på varje in-library titelvisning, och speltids-filtret fick aldrig data.
         'runtime'
-      ]);
+      ])
+      // BIN-143: bind rating-VÄRDET, inte bara nyckeluppsättningen. En ägd
+      // watchlist-doc skrivs direkt av användaren; utan denna kunde någon skriva
+      // rating: 500 → flödar in i den publika community-aggregaten
+      // (titleRatingsAggregate via communityRatingMaintain) → "73/10" på
+      // titelsidan. VIKTIGT: watchlist-betyg lagras på 0.5–5-skalan (RatingStars
+      // halvsteg; communityRatings/logic.ts; CommunityRating visar ×2 → /10) —
+      // INTE 0–10 som reviews. Därför 0–5 här (ett lagrat 7 skulle bli "14/10").
+      && (!('rating' in d) || d.rating == null || (d.rating is number && d.rating >= 0 && d.rating <= 5));
     }
 
     // ---- users ----
