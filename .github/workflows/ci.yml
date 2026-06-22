@@ -25,7 +25,22 @@ jobs:
         run: npm ci
 
       - name: Audit (high+)
-        run: npm audit --audit-level=high
+        # Blockerar fortfarande på riktiga high-sev-fynd, men ett trasigt/utfasat
+        # audit-endpoint (npm:s "quick"-endpoint svarar 400 Bad Request sedan den
+        # börjat fasas ut) eller en nätverksblipp är INTE ett sårbarhetsfynd och
+        # ska inte fälla grinden. Skilj de två: exit 0 = rent, endpoint-/nätfel =
+        # varna och passera, allt annat (faktiska advisories) = fäll.
+        run: |
+          set +e
+          OUT=$(npm audit --audit-level=high 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ $CODE -eq 0 ]; then exit 0; fi
+          if echo "$OUT" | grep -qiE "audit endpoint returned an error|Bad Request|Invalid package tree|ENOTFOUND|ETIMEDOUT|ECONNRESET|network"; then
+            echo "::warning::npm audit-endpoint otillgängligt — hoppar över audit-grinden (inget sårbarhetsfynd)."
+            exit 0
+          fi
+          exit $CODE
 
       - name: Lint
         run: npm run lint
