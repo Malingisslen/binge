@@ -94,7 +94,11 @@ service cloud.firestore {
         'posterPath', 'releaseYear', 'totalSeasons', 'lastWatchedSeason',
         'lastWatchedEpisode', 'dropped', 'rewatchCount', 'providers',
         'providersCheckedAt', 'visibility', 'genreIds', 'tmdbStatus',
-        'effectiveVisibility', 'isPublic', 'addedAt', 'updatedAt', 'watchedAt'
+        'effectiveVisibility', 'isPublic', 'addedAt', 'updatedAt', 'watchedAt',
+        // BIN-93: lazy runtime-backfill från titelsidor (setRuntime). Utan denna
+        // nekades merge-skrivningen ({ runtime }) av hasOnly → permission-denied
+        // på varje in-library titelvisning, och speltids-filtret fick aldrig data.
+        'runtime'
       ]);
     }
 

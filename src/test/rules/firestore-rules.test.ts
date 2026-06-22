@@ -76,6 +76,15 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
       evilField: 'pwned', addedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     }));
   });
+  // BIN-93 regression: setRuntime() merge-writes { runtime } onto an existing
+  // library item. Before 'runtime' was whitelisted, hasOnly() rejected this on
+  // every in-library title view → permission-denied Sentry noise + a runtime
+  // filter that never received data.
+  it('allows a runtime-only backfill merge write', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, { runtime: 136 }, { merge: true }));
+  });
 });
 
 describe('reviews/{id} field whitelist', () => {
