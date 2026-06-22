@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useDiscoverMovies, useDiscoverTV } from '@/hooks/useTMDB';
-import { getProvider, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
+import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
@@ -13,12 +14,26 @@ import type { TMDBSearchResult } from '@/types';
 
 type Tab = 'new' | 'movies' | 'tv';
 
-export default function ProviderPageClient({ id }: { id: string }) {
+export default function ProviderPageClient({
+  id,
+  initialTab = 'new',
+  initialItems,
+}: {
+  id: string;
+  // SEO-routen (src/app/provider/[id]/page.tsx) seedar populära titlar +
+  // 'movies'-fliken så den pre-renderade HTML:en har riktigt innehåll för
+  // Googlebot; nav-nådda sidor använder defaulten ('new', tom).
+  initialTab?: Tab;
+  initialItems?: TMDBSearchResult[];
+}) {
   const providerId = parseInt(id, 10);
   const provider = getProvider(providerId);
-  const [tab, setTab] = useState<Tab>('new');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [page, setPage] = useState(1);
-  const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
+  const [allResults, setAllResults] = useState<TMDBSearchResult[]>(initialItems ?? []);
+  // Reset-effekten nedan kör på mount också; skippa första varvet så seedade
+  // initialItems inte wipas direkt vid hydrering.
+  const firstReset = useRef(true);
 
   const oneMonthAgo = useMemo(() => {
     const d = new Date();
@@ -55,7 +70,10 @@ export default function ProviderPageClient({ id }: { id: string }) {
   const { data: movies, isLoading: moviesLoading } = useDiscoverMovies(tab !== 'tv' ? movieParams : null);
   const { data: tv, isLoading: tvLoading } = useDiscoverTV(tab !== 'movies' ? tvParams : null);
 
-  useEffect(() => { setPage(1); setAllResults([]); }, [tab, providerId]);
+  useEffect(() => {
+    if (firstReset.current) { firstReset.current = false; return; }
+    setPage(1); setAllResults([]);
+  }, [tab, providerId]);
 
   useEffect(() => {
     if (tab === 'new') {
@@ -81,7 +99,16 @@ export default function ProviderPageClient({ id }: { id: string }) {
   const hasMore = tab !== 'new' && page < 5 && ((tab === 'movies' ? movies : tv)?.total_pages ?? 0) > page;
   const providerName = provider?.name ?? SWEDISH_PROVIDERS.find(p => p.id === providerId)?.name ?? 'Okänd tjänst';
 
-  usePageMeta({ title: providerName });
+  // Bara den kurerade SEO-uppsättningen indexeras; long-tail-providers (nådda
+  // via catch-all) förblir noindex. Måste matcha generateStaticParams-mängden i
+  // src/app/provider/[id]/page.tsx, annars sätter klient-hydreringen noindex på
+  // en sida vars statiska HTML säger index (eller tvärtom).
+  const indexable = SEO_PROVIDER_IDS.includes(canonicalProviderId(providerId));
+  usePageMeta({
+    title: `${providerName} — streama filmer och serier i Sverige`,
+    description: `Vad streamar på ${providerName} i Sverige just nu? Populära filmer och serier, nyheter och var du ser dem — spåra allt med Binge.`,
+    indexable,
+  });
 
   return (
     <div>

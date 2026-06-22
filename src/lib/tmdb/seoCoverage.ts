@@ -96,3 +96,15 @@ export const SEO_FALLBACK_TV_IDS = [
 export const SEO_FALLBACK_PERSON_IDS = [
   287, 6193, 1245, 500, 31, 192, 62, 3223, 1136406, 18918,
 ];
+
+/**
+ * Provider-landningssidor (BIN-62): kurerad delmängd av SWEDISH_PROVIDERS som
+ * pre-renderas som indexerbara /provider/{id}-sidor ("Streama på X i Sverige").
+ * Delas mellan src/app/provider/[id]/page.tsx (generateStaticParams) och
+ * src/app/sitemap.ts, OCH används av ProviderPageClient som indexable-gate så
+ * att bara dessa sidor sätter index,follow (long-tail-providers via catch-all
+ * förblir noindex). Bara mainstream flatrate-tjänster — rent/buy har för tunna
+ * kataloger för en "vad kan jag streama"-sida. ~12 sidor × 2 build-fetches =
+ * försumbar byggtid (jfr. ~25k titlar), så ingen budget/cache-plumbing behövs.
+ */
+export const SEO_PROVIDER_IDS = [8, 119, 337, 384, 76, 520, 489, 350, 531, 510, 431, 323];

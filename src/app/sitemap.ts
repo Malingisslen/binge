@@ -12,6 +12,7 @@ import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
   SEO_PERSON_TARGET_IDS,
+  SEO_PROVIDER_IDS,
   cappedTitleIds,
 } from '@/lib/tmdb/seoCoverage';
 
@@ -158,6 +159,19 @@ async function personEntries(): Promise<MetadataRoute.Sitemap> {
   }));
 }
 
+// Provider-landningssidor (BIN-62) — MÅSTE matcha generateStaticParams i
+// src/app/provider/[id]/page.tsx (samma SEO_PROVIDER_IDS) så sitemap och
+// pre-render adresserar exakt samma URL-mängd. Inga TMDB-calls (statisk lista).
+function providerEntries(): MetadataRoute.Sitemap {
+  const lastModified = new Date();
+  return SEO_PROVIDER_IDS.map(id => ({
+    url: `${SITE_URL}/provider/${id}/`,
+    lastModified,
+    changeFrequency: 'weekly' as const,
+    priority: 0.8,
+  }));
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statics = staticEntries();
   // Titles + persons kan failla oberoende av varandra (separata try-catch)
@@ -172,5 +186,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return [] as MetadataRoute.Sitemap;
     }),
   ]);
-  return [...statics, ...titles, ...persons];
+  return [...statics, ...providerEntries(), ...titles, ...persons];
 }
