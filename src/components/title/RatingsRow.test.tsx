@@ -11,9 +11,11 @@ describe('RatingsRow', () => {
 
   it('renders RT only when present', () => {
     const { rerender } = render(<RatingsRow imdbId="tt1" ratings={{ imdb: { score: 7, votes: 1 }, rottenTomatoes: 91, metacritic: null }} />);
-    expect(screen.getByText(/91%/)).toBeInTheDocument();
+    // The value (91) and scale (%) are in sibling spans, so match the number alone
+    expect(screen.getByText(/91/)).toBeInTheDocument();
     rerender(<RatingsRow imdbId="tt1" ratings={{ imdb: { score: 7, votes: 1 }, rottenTomatoes: null, metacritic: null }} />);
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    // No RT card rendered — no "Rotten" label present
+    expect(screen.queryByText(/Rotten/i)).not.toBeInTheDocument();
   });
 
   it('renders nothing when no ratings at all', () => {

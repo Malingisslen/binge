@@ -1,33 +1,49 @@
 // src/components/title/RatingsRow.tsx
 import type { Ratings } from '@/lib/ratings/types';
 
-// "Betyg"-strip (design B+C): ratings live on their own surface, set apart from
-// the år/längd/tmdb metadata, with the values in saffran (acc) — the
-// "decisive info" accent. Returns null when there are no external ratings.
-export function RatingsRow({ ratings }: { ratings: Ratings | null; imdbId: string }) {
+// External ratings as polished per-source cards: source label + saffron value
+// + muted scale. The IMDb card links to IMDb (so the page can drop its separate
+// "öppna" link). Returns null when there are no external ratings.
+export function RatingsRow({ ratings, imdbId }: { ratings: Ratings | null; imdbId: string }) {
   if (!ratings || (!ratings.imdb && ratings.rottenTomatoes == null && ratings.metacritic == null)) {
     return null;
   }
+  const card = 'flex flex-col gap-0.5 rounded border border-rule bg-surface px-3 py-1.5 min-w-[78px]';
+  const src = 'text-[11px] uppercase tracking-wide text-ink-3';
+  const val = 'text-[17px] font-medium text-acc-deep leading-none';
+  const scale = 'text-[12px] font-normal text-ink-3';
   return (
-    <div className="mt-2 inline-flex items-center gap-3 rounded bg-bg-2 px-3 py-2 text-[13px]">
-      <span className="border-r border-rule pr-3 text-[11px] uppercase tracking-wide text-ink-3">betyg</span>
+    <div className="mt-2 flex flex-wrap gap-2">
       {ratings.imdb && (
-        <span className="inline-flex items-baseline gap-1">
-          <span className="text-[11px] text-ink-3">imdb</span>
-          <strong className="text-[15px] font-medium text-acc-deep">{ratings.imdb.score.toFixed(1)}</strong>
-        </span>
+        imdbId ? (
+          <a
+            href={`https://www.imdb.com/title/${imdbId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={card}
+            style={{ textDecoration: 'none' }}
+          >
+            <span className={src}>IMDb</span>
+            <span className={val}>{ratings.imdb.score.toFixed(1)}<span className={scale}> /10</span></span>
+          </a>
+        ) : (
+          <div className={card}>
+            <span className={src}>IMDb</span>
+            <span className={val}>{ratings.imdb.score.toFixed(1)}<span className={scale}> /10</span></span>
+          </div>
+        )
       )}
       {ratings.rottenTomatoes != null && (
-        <span className="inline-flex items-baseline gap-1">
-          <span className="text-[11px] text-ink-3">rotten</span>
-          <strong className="text-[15px] font-medium text-acc-deep">{ratings.rottenTomatoes}%</strong>
-        </span>
+        <div className={card}>
+          <span className={src}>Rotten</span>
+          <span className={val}>{ratings.rottenTomatoes}<span className={scale}>%</span></span>
+        </div>
       )}
       {ratings.metacritic != null && (
-        <span className="inline-flex items-baseline gap-1">
-          <span className="text-[11px] text-ink-3">metacritic</span>
-          <strong className="text-[15px] font-medium text-acc-deep">{ratings.metacritic}</strong>
-        </span>
+        <div className={card}>
+          <span className={src}>Metacritic</span>
+          <span className={val}>{ratings.metacritic}<span className={scale}> /100</span></span>
+        </div>
       )}
     </div>
   );

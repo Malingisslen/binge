@@ -217,14 +217,6 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             )}
             <span><span className="k">tmdb</span><strong>{show.vote_average.toFixed(1)} / 10</strong></span>
             <CommunityRating mediaType="tv" tmdbId={show.id} />
-            {imdbId && (
-              <span>
-                <span className="k">imdb</span>
-                <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                  öppna →
-                </a>
-              </span>
-            )}
           </div>
           <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} />
 

@@ -200,14 +200,6 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             ) : null}
             <span><span className="k">tmdb</span><strong>{movie.vote_average.toFixed(1)} / 10</strong></span>
             <CommunityRating mediaType="movie" tmdbId={movie.id} />
-            {movie.imdb_id && (
-              <span>
-                <span className="k">imdb</span>
-                <a href={`https://www.imdb.com/title/${movie.imdb_id}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--rule)' }}>
-                  öppna →
-                </a>
-              </span>
-            )}
           </div>
           <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} />
 
