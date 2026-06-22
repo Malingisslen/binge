@@ -305,7 +305,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const current = items.find(i => i.tmdbId === tmdbId);
     if (!current || current.runtime != null) return;
     const { db, doc, setDoc } = await fsdb();
-    await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), { runtime }, { merge: true });
+    // Best-effort denormalisering: anropas fire-and-forget (`void setRuntime`)
+    // från titelsidor. Ett avslag (t.ex. en token som tillfälligt desynkat) får
+    // INTE bubbla upp som en ofångad promise-rejection → Sentry-brus. Sväljs
+    // tyst; nästa titelvisning försöker igen.
+    try {
+      await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), { runtime }, { merge: true });
+    } catch (err) {
+      console.warn('[watchlist] runtime-backfill misslyckades:', err);
+    }
   }, [uid, items]);
 
   const removeItem = useCallback(async (tmdbId: number) => {
