@@ -1,25 +1,55 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Check, Plus } from 'lucide-react';
+import { Check, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCollection } from '@/hooks/useTMDB';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { posterUrl } from '@/lib/tmdb/client';
+import { useAuth } from '@/hooks/useAuth';
+import { getMovieLite, posterUrl } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { getProvider } from '@/lib/tmdb/providers';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { summarizeCollectionStreaming, seFlatrateProviderIds, type CollectionStreamingSummary } from '@/lib/collection/streamingSummary';
 
 /**
- * BIN-94 — franchise/collection completion tracking.
+ * BIN-94 — franchise/collection completion tracking + BIN-135 streaming-summary.
  *
  * När en film hör till en TMDB-samling (belongs_to_collection) listar vi hela
  * samlingen med varje films sett/osett-läge (korsrefererat mot biblioteket) och
- * en "lägg till alla osedda i vill se"-genväg. En query per samling (useCollection),
- * ingen fan-out.
+ * en "lägg till alla osedda i vill se"-genväg. En query per samling (useCollection).
  *
- * Avsiktligt utelämnat i v1: per-film "var streamar den"-sammanfattning. Det
- * kräver ett providers-anrop per osedd film (fan-out) → egen kostnadsbudget,
- * filad som uppföljning på BIN-94.
+ * BIN-135: "var streamar de osedda" är LAT — providers hämtas bara när användaren
+ * expanderar (de flesta vyer = noll extra anrop), bara för osedda, capat till
+ * STREAM_CAP, och via den delade ['movie-lite', id]-cachen (TMDB_STALE.LITE_DETAIL)
+ * så varje titel hämtas högst en gång per session och delas med kalender/rådgivare.
  */
+
+const STREAM_CAP = 12;
+
+function providerLabel(id: number): string {
+  const p = getProvider(id);
+  return p?.shortName ?? p?.name ?? 'okänd tjänst';
+}
+
+function summaryText(s: CollectionStreamingSummary): string {
+  if (s.considered === 0) return '';
+  if (s.commonProviderId != null) {
+    return `${s.considered} osedda — alla på ${providerLabel(s.commonProviderId)}`;
+  }
+  const bits: string[] = [];
+  if (s.onYourServices > 0) bits.push(`${s.onYourServices} på tjänster du har`);
+  // Visa bara topp-tjänsten om den INTE redan ingår i "tjänster du har" —
+  // annars dubbelräknas samma filmer i meningen.
+  if (s.topProviderId != null && s.topProviderCount > 0 && !s.topProviderIsOwned) {
+    bits.push(`${s.topProviderCount} på ${providerLabel(s.topProviderId)}`);
+  }
+  const noProv = s.considered - s.withAnyProvider;
+  if (noProv > 0) bits.push(`${noProv} att hyra eller saknas`);
+  return `${s.considered} osedda — ${bits.join(' · ')}`;
+}
 export default function CollectionSection({
   collectionId,
   currentMovieId,
@@ -29,8 +59,10 @@ export default function CollectionSection({
 }) {
   const { data: collection } = useCollection(collectionId);
   const { getItem, addItem } = useWatchlist();
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [showStreaming, setShowStreaming] = useState(false);
   useEffect(() => setMounted(true), []);
 
   // Sortera kronologiskt — samlingar är nästan alltid en serie man ser i ordning.
@@ -61,6 +93,23 @@ export default function CollectionSection({
     () => (mounted ? unseen.filter(p => !getItem(p.id)) : []),
     [mounted, unseen, getItem],
   );
+
+  // BIN-135: osedda att hämta providers för — capat. Lat: bara när expanderat.
+  const toFetch = useMemo(() => unseen.slice(0, STREAM_CAP), [unseen]);
+  const streamingQueries = useQueries({
+    queries: toFetch.map(p => ({
+      queryKey: ['movie-lite', p.id],
+      queryFn: ({ signal }: { signal?: AbortSignal }) => getMovieLite(p.id, { signal }),
+      enabled: mounted && showStreaming,
+      staleTime: TMDB_STALE.LITE_DETAIL,
+    })),
+  });
+  const streamingLoading = showStreaming && streamingQueries.some(q => q.isLoading);
+  const streamingFilms = streamingQueries
+    .map((q, i) => ({ tmdbId: toFetch[i]?.id ?? 0, providerIds: seFlatrateProviderIds(q.data) }))
+    .filter((_, i) => !!streamingQueries[i].data);
+  const myProviderIds = mounted ? (user?.myProviders ?? []) : [];
+  const streamSummary = summarizeCollectionStreaming(streamingFilms, myProviderIds);
 
   // En enstaka film är ingen "samling" värd en sektion.
   if (!collection || parts.length < 2) return null;
@@ -117,6 +166,38 @@ export default function CollectionSection({
           </button>
         )}
       </div>
+
+      {mounted && unseen.length > 0 && (
+        <div style={{ marginTop: 2, marginBottom: 14 }}>
+          <button
+            onClick={() => setShowStreaming(s => !s)}
+            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+            aria-expanded={showStreaming}
+          >
+            Var streamar de osedda? {showStreaming ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+          {showStreaming && (
+            <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-2)' }}>
+              {streamingLoading ? (
+                <span className="text-ink-3">Hämtar tillgänglighet…</span>
+              ) : streamSummary.considered === 0 ? (
+                <span className="text-ink-3">Ingen abonnemangstillgänglighet hittad i Sverige.</span>
+              ) : (
+                <span>
+                  {summaryText(streamSummary)}
+                  {unseen.length > STREAM_CAP && (
+                    <span className="text-ink-3"> · visar {STREAM_CAP} av {unseen.length}</span>
+                  )}
+                </span>
+              )}
+              {/* TMDB-attribution krävs på varje yta som visar provider-data. */}
+              {!streamingLoading && streamSummary.withAnyProvider > 0 && (
+                <div style={{ marginTop: 6 }}><JustWatchCredit /></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="similar-grid">
         {parts.map(part => {
