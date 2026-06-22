@@ -65,6 +65,57 @@
   --mono: var(--sans);
 }
 
+/* ── Mörkt tema (BIN-67) ──────────────────────────────────────────────────
+   data-theme="dark" sätts före paint av init-scriptet i layout.tsx (static
+   export → ingen server, så ett blockerande inline-script undviker flash).
+   Tvåaccentregeln håller: saffran (acc) = CTA/live, plum (cal) = tid. Soft-
+   tokens blir mörka tinter (de används som bakgrunder bakom deep/ink-text).
+   Duotone-paletten lyfts en aning så posters inte går grumliga mot mörk bg.
+   Not: poster-duotonen renderas via SVG-defs (DuotoneFilters) som inte läser
+   dessa CSS-vars — finjustering av själva filtren är en uppföljning. */
+[data-theme='dark'] {
+  --bg:        oklch(0.17 0.006 80);
+  --bg-2:      oklch(0.215 0.006 80);
+  --surface:   oklch(0.235 0.006 80);
+
+  --ink:       oklch(0.95 0.004 90);
+  --ink-2:     oklch(0.78 0.006 85);
+  --ink-3:     oklch(0.62 0.008 85);
+
+  --rule:      oklch(0.34 0.006 80);
+  --rule-2:    oklch(0.28 0.005 80);
+  --placeholder-fill: oklch(0.30 0.015 80);
+
+  /* saffran — fyllningen kontrasterar mot mörk bg; vit text på acc-deep håller */
+  --acc:       oklch(0.74 0.14 75);
+  --acc-deep:  oklch(0.60 0.14 72);
+  --acc-soft:  oklch(0.32 0.06 72);
+
+  /* plum */
+  --cal-deep:  oklch(0.62 0.12 300);
+  --cal-soft:  oklch(0.30 0.055 300);
+
+  /* warn */
+  --warn-soft: oklch(0.30 0.05 90);
+  --warn-deep: oklch(0.78 0.13 85);
+  --warn-ink:  oklch(0.82 0.10 88);
+
+  /* danger */
+  --danger:      oklch(0.62 0.17 25);
+  --danger-soft: oklch(0.30 0.07 25);
+  --danger-ink:  oklch(0.80 0.15 25);
+
+  /* duotone — lyfta varianter för mörk bakgrund */
+  --duo-terra:   oklch(0.64 0.08 30);
+  --duo-slate:   oklch(0.50 0.06 240);
+  --duo-moss:    oklch(0.56 0.06 150);
+  --duo-clay:    oklch(0.66 0.07 80);
+  --duo-plum:    oklch(0.48 0.07 300);
+  --duo-steel:   oklch(0.52 0.05 200);
+  --duo-olive:   oklch(0.60 0.06 120);
+  --duo-oxblood: oklch(0.46 0.06 20);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
