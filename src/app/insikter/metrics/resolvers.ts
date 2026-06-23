@@ -104,9 +104,13 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   ratingsHistogram: (d) => {
     const hist = d.rollup?.ratingsHistogram;
     if (!hist || hist.length === 0) return emptyBreakdown;
+    // BIN-158: betyg lagras på 0.5–5-skalan (rollup avrundar till heltalsstjärna
+    // → buckets 1–5). 10-bucket-arrayens index 5–9 (betyg 6–10) är alltid tomma
+    // på den riktiga skalan — visa bara 1–5★. (Halvstegs-granularitet kräver en
+    // ändring i rollup-funktionen → separat functions-deploy.)
     return {
       kind: 'breakdown',
-      entries: hist.map((value, i) => ({ label: String(i + 1), value })),
+      entries: hist.slice(0, 5).map((value, i) => ({ label: `${i + 1}★`, value })),
     };
   },
 

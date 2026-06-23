@@ -209,16 +209,17 @@ describe('itemPassesGenreRating (BIN-44)', () => {
     expect(itemPassesGenreRating(item, [28, 18], null)).toBe(true); // matches Drama
   });
   it('minRating excludes lower or unrated', () => {
-    expect(itemPassesGenreRating(makeItem({ rating: 8 }), [], 7)).toBe(true);
-    expect(itemPassesGenreRating(makeItem({ rating: 7 }), [], 7)).toBe(true); // boundary inclusive
-    expect(itemPassesGenreRating(makeItem({ rating: 6 }), [], 7)).toBe(false);
-    expect(itemPassesGenreRating(makeItem({ rating: null }), [], 7)).toBe(false);
+    // 0.5–5 scale (BIN-161): thresholds are star values, not /10.
+    expect(itemPassesGenreRating(makeItem({ rating: 4 }), [], 3)).toBe(true);
+    expect(itemPassesGenreRating(makeItem({ rating: 3 }), [], 3)).toBe(true); // boundary inclusive
+    expect(itemPassesGenreRating(makeItem({ rating: 2.5 }), [], 3)).toBe(false);
+    expect(itemPassesGenreRating(makeItem({ rating: null }), [], 3)).toBe(false);
   });
   it('combines genre AND rating', () => {
-    const item = makeItem({ genreIds: [18], rating: 8 });
-    expect(itemPassesGenreRating(item, [18], 7)).toBe(true);
-    expect(itemPassesGenreRating(item, [18], 9)).toBe(false); // rating too low
-    expect(itemPassesGenreRating(item, [28], 7)).toBe(false); // genre miss
+    const item = makeItem({ genreIds: [18], rating: 4 });
+    expect(itemPassesGenreRating(item, [18], 3)).toBe(true);
+    expect(itemPassesGenreRating(item, [18], 4.5)).toBe(false); // rating too low
+    expect(itemPassesGenreRating(item, [28], 3)).toBe(false); // genre miss
   });
 });
 

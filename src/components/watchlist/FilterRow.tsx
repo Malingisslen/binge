@@ -4,7 +4,9 @@
 // watchlist data (no TMDB cost). Type + provider are handled elsewhere on the
 // page (media chips + ?provider param). Uses the existing .chip primitive.
 
-const RATING_STEPS = [6, 7, 8] as const;
+// BIN-161: betyg lagras på 0.5–5-skalan (RatingStars), inte 1–10. Chips på 6/7/8
+// kunde aldrig matcha ett max-5-betyg. 3/4/4.5★ är meningsfulla trösklar.
+const RATING_STEPS = [3, 4, 4.5] as const;
 
 export default function FilterRow({
   genres,
@@ -48,7 +50,7 @@ export default function FilterRow({
             onClick={() => onSetMinRating(minRating === r ? null : r)}
             className={`chip${minRating === r ? ' is-on' : ''}`}
           >
-            {r}+
+            {r}+★
           </button>
         ))}
       </div>

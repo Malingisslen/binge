@@ -81,25 +81,26 @@ describe('onboardingFunnel builds funnel steps with pctOfStart', () => {
   });
 });
 
-describe('ratingsHistogram resolves to a 10-bucket breakdown labelled 1..10', () => {
-  it('labels each bucket with its rating', () => {
+describe('ratingsHistogram resolves to a 5-star breakdown labelled 1★..5★ (BIN-158)', () => {
+  it('shows only the real 1–5★ buckets and drops the always-empty 6–10 tail', () => {
     const d = emptyData({
       rollup: {
         computedAt: '', readsUsed: 0, partial: false,
         totals: { users: 0, titlesTracked: 0, reviews: 0, activeSessions: 0, groups: 0 },
         statusDistribution: { vill_se: 0, mina: 0, sedd: 0, avbruten: 0 },
         mediaTypeSplit: { movie: 0, tv: 0 },
-        ratingsHistogram: [1, 0, 0, 0, 0, 0, 2, 1, 0, 4],
+        // 10-slot rollup array; slots 5–9 (ratings 6–10) are impossible on the
+        // 0.5–5 scale and must be dropped from the displayed histogram.
+        ratingsHistogram: [3, 1, 2, 5, 4, 0, 0, 0, 0, 0],
         topTitles: [], topProviders: [], topGenres: [],
       },
     });
     const v = DATA_RESOLVERS.ratingsHistogram(d);
     expect(v.kind).toBe('breakdown');
     if (v.kind !== 'breakdown') return;
-    expect(v.entries).toHaveLength(10);
-    expect(v.entries[0]).toEqual({ label: '1', value: 1 });
-    expect(v.entries[6]).toEqual({ label: '7', value: 2 });
-    expect(v.entries[9]).toEqual({ label: '10', value: 4 });
+    expect(v.entries).toHaveLength(5);
+    expect(v.entries[0]).toEqual({ label: '1★', value: 3 });
+    expect(v.entries[4]).toEqual({ label: '5★', value: 4 });
   });
 });
 

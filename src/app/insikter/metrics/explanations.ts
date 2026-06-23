@@ -30,8 +30,8 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
     source: 'Firestore (rollup)',
   },
   ratingsHistogram: {
-    whatIsIt: 'Fördelning av satta betyg 1–10.',
-    howCalculated: 'Betyg avrundas till närmaste heltal och räknas per bucket.',
+    whatIsIt: 'Fördelning av satta betyg (1–5 stjärnor).',
+    howCalculated: 'Betyg på 0.5–5-skalan avrundas till närmaste heltalsstjärna och räknas per bucket (1–5).',
     whyImportant: 'Indikerar om betygsskalan används brett eller klumpas ihop.',
     source: 'Firestore (rollup)',
   },
