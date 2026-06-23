@@ -10,6 +10,7 @@ const VALID_IDS: RowId[] = [
   { kind: 'trending' },
   { kind: 'latest-fav' },
   { kind: 'upcoming' },
+  { kind: 'free-public' },
 ];
 
 describe('rowKey + parseRowKey', () => {

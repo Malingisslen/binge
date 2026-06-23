@@ -10,7 +10,8 @@ export type RowId =
   | { kind: 'thematic'; keywordId: number }
   | { kind: 'trending' }
   | { kind: 'latest-fav' }
-  | { kind: 'upcoming' };
+  | { kind: 'upcoming' }
+  | { kind: 'free-public' };
 
 /** Stable string-key for React + URL query-param.
  *   similar:movie:603, person:140607, genre:18, keyword:9663,
@@ -25,6 +26,7 @@ export function rowKey(id: RowId): string {
     case 'trending':    return 'trending';
     case 'latest-fav':  return 'latest-fav';
     case 'upcoming':    return 'upcoming';
+    case 'free-public': return 'free-public';
     default:            return assertNever(id);
   }
 }
@@ -39,6 +41,7 @@ export function parseRowKey(key: string): RowId | null {
   if (key === 'trending') return { kind: 'trending' };
   if (key === 'latest-fav') return { kind: 'latest-fav' };
   if (key === 'upcoming') return { kind: 'upcoming' };
+  if (key === 'free-public') return { kind: 'free-public' };
   if (key.startsWith('similar:')) {
     const parts = key.split(':');
     if (parts.length !== 3) return null;

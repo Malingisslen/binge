@@ -106,6 +106,20 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
     });
   }
 
+  // BIN-175 — free public-service lane (always). Score 55 = free-first within
+  // discovery: above the generic rows (genre-canon 40, trending 30, upcoming
+  // ≤50). Strongly-scored personalised rows (a recent latest-fav, recurring
+  // people, top seeds) still outrank it; weakly-scored ones may fall below it —
+  // intended. Renders nothing when empty (RecRow drops empty rows), so a user
+  // with no SVT matches loses nothing.
+  out.push({
+    id: { kind: 'free-public' },
+    rowKey: rowKey({ kind: 'free-public' }),
+    label: 'Gratis just nu på SVT Play',
+    score: 55,
+    jtbd: jtbdOf('free-public'),
+  });
+
   // Row 6 — trending (always)
   out.push({
     id: { kind: 'trending' },

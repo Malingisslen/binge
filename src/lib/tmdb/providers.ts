@@ -203,6 +203,18 @@ export function affiliateWrap(providerId: number, url: string): string {
   return applyAffiliate(AFFILIATE_PROGRAMS, providerId, url);
 }
 
+// BIN-175 — alla TMDB provider-ids (inkl. alias) för gratis public-service-
+// tjänster (SVT Play; UR när det katalogiseras). Driver "Gratis just nu"-raden
+// i rekommendationerna (discover with_watch_providers) — det kostnadsfria,
+// skattefinansierade lagret floatas upp framför betaltjänster.
+export const FREE_PUBLIC_PROVIDER_IDS: number[] = (() => {
+  const ids: number[] = [];
+  for (const p of SWEDISH_PROVIDERS) {
+    if (p.isFree) ids.push(p.id, ...(p.aliases ?? []));
+  }
+  return ids;
+})();
+
 // TMDB listar Prime Video-kanaler som egna providers med namn-suffixet
 // " Amazon Channel" (ibland plural). Kända varianter mappas via aliases ovan;
 // suffixet är fallback för framtida variant-ids vi inte hunnit katalogisera.

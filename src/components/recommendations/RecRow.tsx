@@ -51,6 +51,8 @@ function whyForRow(spec: RowSpec): string {
       return 'röd tråd i dina favoriter';
     case 'upcoming':
       return 'kommande på dina tjänster';
+    case 'free-public':
+      return 'gratis via public service · 0 kr';
   }
 }
 

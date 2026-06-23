@@ -26,6 +26,7 @@ import { useRowPerson } from '@/hooks/rows/useRowPerson';
 import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
+import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
 
 interface Props {
   rowKeyParam: string;
@@ -167,6 +168,7 @@ function ExpandedDispatch(props: DispatchProps) {
     case 'genre-canon': return <GenreExpanded {...props} />;
     case 'thematic':    return <ThematicExpanded {...props} />;
     case 'upcoming':    return <UpcomingExpanded {...props} />;
+    case 'free-public': return <FreePublicExpanded {...props} />;
   }
 }
 
@@ -203,5 +205,10 @@ function ThematicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
 
 function UpcomingExpanded({ spec, excludedIds, filters, sort, myProviders, topGenreIds }: DispatchProps) {
   const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+function FreePublicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowFreePublic(spec, excludedIds, filters);
   return gridFromResult(r, sort);
 }

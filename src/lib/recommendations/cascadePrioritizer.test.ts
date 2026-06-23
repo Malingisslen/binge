@@ -16,15 +16,34 @@ function emptyInput(): CascadeInput {
 }
 
 describe('prioritizeRows', () => {
-  it('cold-start: only trending gets emitted', () => {
+  it('cold-start: free-public + trending get emitted (free-first above trending)', () => {
     const rows = prioritizeRows(emptyInput());
-    expect(rows.map(r => r.id.kind)).toEqual(['trending']);
+    // BIN-175: the free public-service lane is always emitted, scored above trending.
+    expect(rows.map(r => r.id.kind)).toEqual(['free-public', 'trending']);
+  });
+
+  it('BIN-175: free-public lane is always emitted, even with full personalisation', () => {
+    const inp: CascadeInput = {
+      ...emptyInput(),
+      latestFiveStar: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', daysSince: 1 },
+      strongSeeds: [{ tmdbId: 603, mediaType: 'movie', rating: 5, title: 'The Matrix', ratedAt: null }],
+      dominantGenres: [{ id: 18, count: 5 }],
+    };
+    const rows = prioritizeRows(inp);
+    const free = rows.find(r => r.id.kind === 'free-public');
+    expect(free).toBeDefined();
+    // Free-first within discovery: above genre-canon + trending...
+    const idx = (k: string) => rows.findIndex(r => r.id.kind === k);
+    expect(idx('free-public')).toBeLessThan(idx('genre-canon'));
+    expect(idx('free-public')).toBeLessThan(idx('trending'));
+    // ...but below the personalised latest-fav row.
+    expect(idx('latest-fav')).toBeLessThan(idx('free-public'));
   });
 
   it('emits genre-canon when dominant genres exist', () => {
     const inp = { ...emptyInput(), dominantGenres: [{ id: 18, count: 5 }] };
     const rows = prioritizeRows(inp);
-    expect(rows.map(r => r.id.kind).sort()).toEqual(['genre-canon', 'trending']);
+    expect(rows.map(r => r.id.kind).sort()).toEqual(['free-public', 'genre-canon', 'trending']);
   });
 
   it('places latest-fav (5★ within 30d) at the top with recency-decayed score', () => {

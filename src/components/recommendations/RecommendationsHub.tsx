@@ -12,6 +12,7 @@ import { useRowPerson } from '@/hooks/rows/useRowPerson';
 import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
+import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
 import RecRow from './RecRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -222,6 +223,7 @@ function RowDispatch(props: DispatchProps) {
     case 'genre-canon': return <GenreCanonRow {...props} />;
     case 'thematic':    return <ThematicRow {...props} />;
     case 'upcoming':    return <UpcomingRow {...props} />;
+    case 'free-public': return <FreePublicRow {...props} />;
   }
 }
 
@@ -258,5 +260,10 @@ function ThematicRow({ spec, index, excludedIds, filters }: DispatchProps) {
 
 function UpcomingRow({ spec, index, excludedIds, filters, myProviders, topGenreIds }: DispatchProps) {
   const r = useRowUpcoming(spec, myProviders, topGenreIds, excludedIds, filters);
+  return <RecRow result={r} index={index} />;
+}
+
+function FreePublicRow({ spec, index, excludedIds, filters }: DispatchProps) {
+  const r = useRowFreePublic(spec, excludedIds, filters);
   return <RecRow result={r} index={index} />;
 }
