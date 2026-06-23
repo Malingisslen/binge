@@ -111,6 +111,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // FreeWatchBadge ("Gratis"/"Gratis med reklam"), inte dubbelt som logotyp här.
   // `subscription` (allt) behålls för StatusButton-lagring + JustWatch-villkoret.
   const onSubscription = dedupeProvidersByCanonicalId(flatrate);
+  // BIN-209: cheapest-path får flatrate+free (riktiga abonnemang/public-service),
+  // INTE ads/AVOD — annars föreslår 'subscribe'/'owned' en gratis-med-reklam-tjänst.
+  const subForVerdict = dedupeProvidersByCanonicalId([...flatrate, ...free]);
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -262,7 +265,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
           {mounted && (
             <CheapestPathVerdict
-              subscriptionProviderIds={subscription.map(p => canonicalProviderId(p.provider_id))}
+              subscriptionProviderIds={subForVerdict.map(p => canonicalProviderId(p.provider_id))}
               ownedProviderIds={myProviderIds}
               offers={offers}
               libraryAvailable={onCineasterna}

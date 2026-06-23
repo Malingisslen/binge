@@ -158,6 +158,10 @@ function SavingsContent() {
   }, [advisor.isLoading, hasAdvisorProviders, advisor.providers.length]);
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // BIN-208: stamp "now" once per mount (lazy useState initializer) so the month
+  // window is stable and useServiceValue's memo doesn't recompute every render
+  // from a fresh Date.now().
+  const [valueNowMs] = useState(() => Date.now());
   const handleShowSubscribeRows = () => {
     const el = detailsRef.current;
     if (!el) return;
@@ -252,8 +256,7 @@ function SavingsContent() {
               activePauses={advisor.activePauses}
             />
 
-            {/* eslint-disable-next-line react-hooks/purity */}
-            <ServiceValueCard nowMs={Date.now()} />
+            <ServiceValueCard nowMs={valueNowMs} />
 
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 

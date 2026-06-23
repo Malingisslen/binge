@@ -131,6 +131,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // BIN-155: "finns på"-raden visar bara flatrate; gratis/AVOD visas i
   // FreeWatchBadge, inte dubbelt. `subscription` (allt) behålls för JustWatch-villkoret.
   const onSubscription = dedupeProvidersByCanonicalId(flatrate);
+  // BIN-209: cheapest-path får flatrate+free (riktiga abonnemang/public-service),
+  // INTE ads/AVOD — annars föreslår 'subscribe'/'owned' en gratis-med-reklam-tjänst.
+  const subForVerdict = dedupeProvidersByCanonicalId([...flatrate, ...free]);
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -258,7 +261,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
 
           {mounted && (
             <CheapestPathVerdict
-              subscriptionProviderIds={subscription.map(p => canonicalProviderId(p.provider_id))}
+              subscriptionProviderIds={subForVerdict.map(p => canonicalProviderId(p.provider_id))}
               ownedProviderIds={user?.myProviders ?? []}
               offers={offers}
               libraryAvailable={false}

@@ -23,7 +23,11 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
     const monthLabel = new Date(startMs).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
 
     const costs = user?.providerCosts ?? {};
-    const watched = watchedForValueFromItems(items, owned, startMs, endMs);
+    // BIN-208: only films currently marked 'sedd' count. watchedAt is set when a
+    // film is marked seen but NOT cleared if it later leaves 'sedd' (merge write),
+    // so gating on watchedAt alone would count un-watched films and skew the verdict.
+    const seenFilms = items.filter(i => i.status === 'sedd');
+    const watched = watchedForValueFromItems(seenFilms, owned, startMs, endMs);
     const rows = rollupServiceValue({
       watched,
       ownedProviderIds: owned,

@@ -107,15 +107,17 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
       <div className="flex gap-[1px] mb-3">
         {MEDIA_TABS.map(t => (
-          <span
+          <button
+            type="button"
             key={t.value}
             onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
-            className={`px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              filters.mediaType === t.value ? 'bg-accent text-white' : 'text-text-muted'
+            aria-pressed={filters.mediaType === t.value}
+            className={`appearance-none border-none px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
+              filters.mediaType === t.value ? 'bg-accent text-white' : 'bg-transparent text-text-muted'
             }`}
           >
             {t.label}
-          </span>
+          </button>
         ))}
       </div>
 
