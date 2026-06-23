@@ -10,9 +10,12 @@
 // separate follow-up — it needs a curated list of *verified* TMDB ids (a one-time
 // build), which can't be hand-authored reliably here without fabricating ids.
 
-// TMDB `original_language` codes for the Nordic languages. Norwegian appears as
-// 'no' and also the Bokmål/Nynorsk variants 'nb'/'nn' in some records.
-export const NORDIC_LANGUAGES = ['sv', 'da', 'no', 'nb', 'nn', 'fi', 'is'] as const;
+// TMDB `original_language` codes for the Nordic languages. TMDB stores Norwegian
+// only as 'no' (ISO-639-1) — the Bokmål/Nynorsk variants 'nb'/'nn' are not valid
+// discover codes and silently no-op, so they're excluded (BIN-202).
+// Note: this is an original-LANGUAGE filter, so English-language Nordic
+// co-productions (a Swedish-made English film) fall outside it by design.
+export const NORDIC_LANGUAGES = ['sv', 'da', 'no', 'fi', 'is'] as const;
 
 // Pipe-joined OR list for TMDB discover's `with_original_language`.
 export function nordicLanguageParam(): string {

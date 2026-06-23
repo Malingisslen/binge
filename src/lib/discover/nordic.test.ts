@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { NORDIC_LANGUAGES, nordicLanguageParam, swedishLanguageParam, NORDIC_NOIR_GENRES } from './nordic';
 
 describe('nordic discovery lens params', () => {
-  it('builds a pipe-joined OR list of Nordic language codes', () => {
+  it('builds a pipe-joined OR list of valid TMDB Nordic language codes', () => {
     const param = nordicLanguageParam();
-    expect(param).toBe('sv|da|no|nb|nn|fi|is');
+    // 'nb'/'nn' dropped (BIN-202): not valid TMDB discover original_language codes.
+    expect(param).toBe('sv|da|no|fi|is');
     // every declared language is present
     for (const lang of NORDIC_LANGUAGES) {
       expect(param.split('|')).toContain(lang);

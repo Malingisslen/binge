@@ -53,6 +53,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         value={filters.genre}
         onChange={e => onChange({ ...filters, genre: e.target.value })}
         className="select"
+        aria-label="Filtrera på genre"
       >
         <option value="">Alla genrer</option>
         {allGenres.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
@@ -61,6 +62,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         value={filters.country}
         onChange={e => onChange({ ...filters, country: e.target.value })}
         className="select"
+        aria-label="Filtrera på land"
       >
         <option value="">Alla länder</option>
         {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -69,6 +71,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         value={filters.decade}
         onChange={e => onChange({ ...filters, decade: e.target.value })}
         className="select"
+        aria-label="Filtrera på decennium"
       >
         <option value="">Alla decennier</option>
         {DECADES.map(d => <option key={d} value={d}>{d}-talet</option>)}

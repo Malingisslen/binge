@@ -33,7 +33,14 @@ export function RatingsRow({
       )}
       {ratings?.imdb && (
         imdbId ? (
-          <a href={`https://www.imdb.com/title/${imdbId}`} target="_blank" rel="noopener noreferrer" className={card} style={{ textDecoration: 'none' }}>
+          <a
+            href={`https://www.imdb.com/title/${imdbId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={card}
+            style={{ textDecoration: 'none' }}
+            aria-label={`IMDb-betyg ${ratings.imdb.score.toFixed(1)} av 10, öppnas på IMDb`}
+          >
             <span className={src}>IMDb</span>
             <span className={val}>{ratings.imdb.score.toFixed(1)}<span className={scale}> /10</span></span>
           </a>
@@ -46,7 +53,7 @@ export function RatingsRow({
       )}
       {ratings?.rottenTomatoes != null && (
         <div className={card}>
-          <span className={src}>Rotten</span>
+          <span className={src}>Rotten<span className="sr-only"> Tomatoes</span></span>
           <span className={val}>{ratings.rottenTomatoes}<span className={scale}>%</span></span>
         </div>
       )}

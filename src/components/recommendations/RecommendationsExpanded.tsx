@@ -120,7 +120,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <RecommendationsFilters filters={filters} onChange={setFilters} hasMyProviders={cascade.hasMyProviders} />
-        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="select">
+        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className="select" aria-label="Sortera rekommendationer">
           <option value="relevance">Relevans</option>
           <option value="rating">Betyg</option>
           <option value="release">Premiärdatum</option>

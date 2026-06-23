@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTrending } from '@/hooks/useTMDB';
 import { discoverMovies, discoverTV, getMovieGenres, getTVGenres, isAddableMediaType } from '@/lib/tmdb/client';
+import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { useAuth } from '@/hooks/useAuth';
 import TitleGrid from '@/components/title/TitleGrid';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
@@ -86,16 +88,16 @@ export default function DiscoverPage() {
     const nextParams = { ...discoverParams, page: String(page + 1) };
     void queryClient.prefetchQuery({
       queryKey: ['discover', tab, nextParams],
-      queryFn: () => (tab === 'movies' ? discoverMovies(nextParams) : discoverTV(nextParams)),
-      staleTime: 5 * 60 * 1000,
+      queryFn: ({ signal }) => (tab === 'movies' ? discoverMovies(nextParams, { signal }) : discoverTV(nextParams, { signal })),
+      staleTime: TMDB_STALE.DISCOVER,
     });
   };
 
   const { data: discoverData, isLoading: discoverLoading } = useQuery({
     queryKey: ['discover', tab, discoverParams],
-    queryFn: () => tab === 'movies' ? discoverMovies(discoverParams) : discoverTV(discoverParams),
+    queryFn: ({ signal }) => tab === 'movies' ? discoverMovies(discoverParams, { signal }) : discoverTV(discoverParams, { signal }),
     enabled: tab !== 'trending',
-    staleTime: 5 * 60 * 1000,
+    staleTime: TMDB_STALE.DISCOVER,
   });
 
   useEffect(() => {
@@ -166,6 +168,7 @@ export default function DiscoverPage() {
             value={genre}
             onChange={e => setGenre(e.target.value)}
             className="select"
+            aria-label="Filtrera på genre"
           >
             <option value="">Alla genrer</option>
             {(genres ?? []).map(g => (
@@ -179,6 +182,7 @@ export default function DiscoverPage() {
               value={sort}
               onChange={e => setSort(e.target.value as SortOption)}
               className="select"
+              aria-label="Sortera efter"
             >
               {Object.entries(SORT_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -213,12 +217,23 @@ export default function DiscoverPage() {
           )}
         </div>
 
-      <div className="bg-surface border border-border-main rounded-sm">
-        <TitleGrid items={items} loading={isLoading && items.length === 0} />
-        <div className="px-3 py-[6px] border-t border-border-light">
-          <JustWatchCredit />
+      {!isLoading && items.length === 0 ? (
+        <EmptyState
+          title="Inga titlar matchar"
+          body={
+            genre || nordic || myServices
+              ? 'Inga titlar för de här filtren. Prova att ta bort något filter.'
+              : 'Hittade inga titlar just nu — försök igen om en stund.'
+          }
+        />
+      ) : (
+        <div className="bg-surface border border-border-main rounded-sm">
+          <TitleGrid items={items} loading={isLoading && items.length === 0} />
+          <div className="px-3 py-[6px] border-t border-border-light">
+            <JustWatchCredit />
+          </div>
         </div>
-      </div>
+      )}
 
       {hasMore && (
         <button

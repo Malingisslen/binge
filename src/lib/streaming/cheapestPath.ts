@@ -69,8 +69,12 @@ export function cheapestPath(input: CheapestPathInput): CheapestPathVerdict {
   const ownedHit = subs.filter((id) => owned.has(id)).sort((a, b) => a - b)[0];
   if (ownedHit !== undefined) return verdict('owned', { providerId: ownedHit });
 
-  // 3 — gratis via bibliotek (kostar ett lån ur kvoten).
-  if (input.library) return verdict('free_library', { loansLeft: input.library.loansLeft });
+  // 3 — gratis via bibliotek (kostar ett lån ur kvoten). loansLeft === 0 =
+  // slut på lån → faller igenom till hyra (en tom kvot är inte en gratis väg);
+  // null = okänd kvot → behandla som tillgänglig.
+  if (input.library && (input.library.loansLeft == null || input.library.loansLeft > 0)) {
+    return verdict('free_library', { loansLeft: input.library.loansLeft });
+  }
 
   // 4 — billigaste hyra (rent). Lägsta pris vinner; oavgjort → lägsta provider-id.
   const rentOffers = input.offers

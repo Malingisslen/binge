@@ -22,7 +22,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const personId = parseInt(id, 10);
   const { data: person, isLoading } = usePerson(personId, initialData);
   const { data: credits } = usePersonCredits(personId);
-  const { getItem } = useWatchlist();
+  const { getItem, loading: watchlistLoading } = useWatchlist();
 
   const svBio = person?.biography || '';
 
@@ -131,7 +131,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
         </div>
       </div>
 
-      {directedMeter.total >= 3 && (
+      {!watchlistLoading && directedMeter.total >= 3 && (
         <div className="mb-4 max-w-sm">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="font-bold text-ink-2">
@@ -139,7 +139,14 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
             </span>
             <span className="text-ink-3">{directedMeter.pct}%</span>
           </div>
-          <div className="h-[3px] bg-rule rounded-full overflow-hidden">
+          <div
+            className="h-[3px] bg-rule rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={directedMeter.pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Regisserade filmer du har sett: ${directedMeter.seen} av ${directedMeter.total}`}
+          >
             <div className="h-full bg-ink rounded-full" style={{ width: `${directedMeter.pct}%` }} />
           </div>
         </div>

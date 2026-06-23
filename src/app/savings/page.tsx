@@ -15,6 +15,7 @@ import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { useSubscriptionAdvisor } from '@/hooks/useSubscriptionAdvisor';
 import { useAuth } from '@/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
@@ -190,14 +191,19 @@ function SavingsContent() {
 
   if (advisor.providers.length === 0) {
     return (
-      <header>
-        <div className="crumb">Streamingrådgivaren</div>
-        <h1 className="page-h1">Streamingrådgivaren</h1>
-        <p className="stand">
-          Lägg till tjänster i <Link href="/settings/" style={{ color: 'var(--ink)', borderBottom: '1px solid var(--rule)' }}>inställningar</Link> för
-          att få rådgivning om vad du kan pausa och spara på.
-        </p>
-      </header>
+      <>
+        <header>
+          <div className="crumb">Streamingrådgivaren</div>
+          <h1 className="page-h1">Streamingrådgivaren</h1>
+        </header>
+        <EmptyState
+          title="Inga tjänster tillagda än"
+          body="Lägg till dina streamingtjänster så räknar vi ut vad du kan pausa och spara på."
+          action={
+            <Link href="/settings/" className="btn btn-ghost btn-sm">Lägg till tjänster</Link>
+          }
+        />
+      </>
     );
   }
 
@@ -206,8 +212,10 @@ function SavingsContent() {
   const allSubscribeRows = advisor.subscribeAdvice
     .flatMap(sa => sa.shows.map(show => ({ show, provider: sa })))
     .sort((a, b) => {
-      const ad = a.show.nextAirDate ?? '￿';
-      const bd = b.show.nextAirDate ?? '￿';
+      // Sort-last sentinel for shows with no next air date. '9999-12-31' sorts
+      // after any real ISO date and survives text round-trips (unlike U+FFFF).
+      const ad = a.show.nextAirDate ?? '9999-12-31';
+      const bd = b.show.nextAirDate ?? '9999-12-31';
       return ad.localeCompare(bd);
     });
   const subscribeRows = allSubscribeRows.filter(r => hasConcreteStatus(r.show));

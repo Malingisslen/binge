@@ -57,6 +57,28 @@ describe('cheapestPath cascade', () => {
     expect(v.loansLeft).toBe(2);
   });
 
+  it('3b — loansLeft:0 (exhausted quota) falls through to rent, not free_library (BIN-201)', () => {
+    const v = cheapestPath({
+      ...base,
+      ownedProviderIds: [76],
+      library: { loansLeft: 0 },
+      offers: [rent(2, 39)],
+    });
+    expect(v.kind).toBe('rent');
+    expect(v.priceAmount).toBe(39);
+  });
+
+  it('3c — loansLeft:null (unknown quota) still shows free_library (BIN-201)', () => {
+    const v = cheapestPath({
+      ...base,
+      ownedProviderIds: [76],
+      library: { loansLeft: null },
+      offers: [rent(2, 39)],
+    });
+    expect(v.kind).toBe('free_library');
+    expect(v.loansLeft).toBeNull();
+  });
+
   it('4 — cheapest rent when no owned/free/library path; ties break on lowest provider id', () => {
     const v = cheapestPath({
       ...base,
