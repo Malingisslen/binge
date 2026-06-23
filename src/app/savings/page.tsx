@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
+import ServiceValueCard from '@/components/savings/ServiceValueCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import RotationPlanner from '@/components/savings/RotationPlanner';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
@@ -250,6 +251,9 @@ function SavingsContent() {
               providers={advisor.providers}
               activePauses={advisor.activePauses}
             />
+
+            {/* eslint-disable-next-line react-hooks/purity */}
+            <ServiceValueCard nowMs={Date.now()} />
 
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 

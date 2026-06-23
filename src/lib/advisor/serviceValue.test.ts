@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rollupServiceValue, attributeProvider } from './serviceValue';
+import { rollupServiceValue, attributeProvider, watchedForValueFromItems } from './serviceValue';
 import type { WatchedForValue } from './serviceValue';
 
 const monthStart = Date.parse('2026-06-01T00:00:00');
@@ -91,5 +91,34 @@ describe('rollupServiceValue', () => {
     });
     expect(rows).toHaveLength(1);
     expect(rows[0].titlesWatched).toBe(0);
+  });
+});
+
+describe('watchedForValueFromItems', () => {
+  const item = (o: Partial<{ providers: number[]; runtime: number | null; watchedAt: Date | null }>) => ({
+    providers: [76], runtime: 100, watchedAt: new Date(inJune), ...o,
+  });
+
+  it('includes films watched in the window, attributed to an owned service', () => {
+    const out = watchedForValueFromItems([item({})], [76], monthStart, monthEnd);
+    expect(out).toEqual([{ providerId: 76, runtimeMinutes: 100, watchedAtMs: inJune }]);
+  });
+
+  it('skips items with no watchedAt', () => {
+    expect(watchedForValueFromItems([item({ watchedAt: null })], [76], monthStart, monthEnd)).toHaveLength(0);
+  });
+
+  it('skips items watched outside the month', () => {
+    const may = new Date(Date.parse('2026-05-20T12:00:00'));
+    expect(watchedForValueFromItems([item({ watchedAt: may })], [76], monthStart, monthEnd)).toHaveLength(0);
+  });
+
+  it('skips items not on an owned service', () => {
+    expect(watchedForValueFromItems([item({ providers: [8] })], [76], monthStart, monthEnd)).toHaveLength(0);
+  });
+
+  it('passes through null runtime', () => {
+    const out = watchedForValueFromItems([item({ runtime: null })], [76], monthStart, monthEnd);
+    expect(out[0].runtimeMinutes).toBeNull();
   });
 });

@@ -44,6 +44,30 @@ export function attributeProvider(titleProviderIds: number[], ownedProviderIds: 
   return candidates.length > 0 ? Math.min(...candidates) : null;
 }
 
+// Build the WatchedForValue list from watchlist items: those watched within the
+// month window and attributable to an owned service. Pure + testable; the hook
+// wraps this + rollupServiceValue. NOTE: keys off `watchedAt`, which films get
+// on 'sedd'. TV items carry no single watchedAt (episode times live in
+// episodeProgress) — so this is a films-this-month lens; TV-episode hours are a
+// separate follow-up aggregation.
+export function watchedForValueFromItems(
+  items: readonly { providers: number[]; runtime?: number | null; watchedAt: Date | null }[],
+  ownedProviderIds: number[],
+  monthStartMs: number,
+  monthEndMs: number, // exclusive
+): WatchedForValue[] {
+  const out: WatchedForValue[] = [];
+  for (const it of items) {
+    if (!it.watchedAt) continue;
+    const ms = it.watchedAt.getTime();
+    if (ms < monthStartMs || ms >= monthEndMs) continue;
+    const providerId = attributeProvider(it.providers, ownedProviderIds);
+    if (providerId == null) continue;
+    out.push({ providerId, runtimeMinutes: it.runtime ?? null, watchedAtMs: ms });
+  }
+  return out;
+}
+
 export function rollupServiceValue(params: {
   watched: WatchedForValue[];
   ownedProviderIds: number[];
