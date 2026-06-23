@@ -127,6 +127,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // Dedup på kanoniskt id — annars visas t.ex. Max + "HBO Max Amazon
   // Channel" som två logotyper för samma tjänst (T1).
   const subscription = dedupeProvidersByCanonicalId([...flatrate, ...free, ...ads]);
+  // BIN-155: "finns på"-raden visar bara flatrate; gratis/AVOD visas i
+  // FreeWatchBadge, inte dubbelt. `subscription` (allt) behålls för JustWatch-villkoret.
+  const onSubscription = dedupeProvidersByCanonicalId(flatrate);
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -252,10 +255,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             </div>
           </ClientOnly>
 
-          {subscription.length > 0 && (
+          {(onSubscription.length > 0 || hasRentBuy) && (
             <div className="providers-row">
-              <span className="lab">finns på</span>
-              {subscription.map(p => {
+              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
                 if (logo) {

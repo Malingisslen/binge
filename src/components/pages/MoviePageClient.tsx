@@ -106,6 +106,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // Dedup på kanoniskt id — annars visas t.ex. Max + "HBO Max Amazon
   // Channel" som två logotyper för samma tjänst (M2).
   const subscription = dedupeProvidersByCanonicalId([...flatrate, ...free, ...ads]);
+  // BIN-155: "finns på"-raden visar BARA flatrate — gratis/AVOD-tjänster visas i
+  // FreeWatchBadge ("Gratis"/"Gratis med reklam"), inte dubbelt som logotyp här.
+  // `subscription` (allt) behålls för StatusButton-lagring + JustWatch-villkoret.
+  const onSubscription = dedupeProvidersByCanonicalId(flatrate);
   const rent = providers?.rent ?? [];
   const buy = providers?.buy ?? [];
   const hasRentBuy = rent.length > 0 || buy.length > 0;
@@ -113,7 +117,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // korsreferens: finns titeln även på abonnemang behöver man oftast inte hyra.
   // Förstärks när det är en tjänst användaren redan har (ren besparing).
   const myProviderIds = mounted ? (user?.myProviders ?? []) : [];
-  const subsYouOwn = subscription.filter(p => myProviderIds.includes(canonicalProviderId(p.provider_id)));
+  const subsYouOwn = onSubscription.filter(p => myProviderIds.includes(canonicalProviderId(p.provider_id)));
   const year = movie.release_date?.substring(0, 4) ?? '—';
   const genres = movie.genres.map(g => g.name).join(', ');
   const cast = movie.credits?.cast?.slice(0, 10) ?? [];
@@ -255,10 +259,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             )}
           </ClientOnly>
 
-          {subscription.length > 0 && (
+          {(onSubscription.length > 0 || hasRentBuy) && (
             <div className="providers-row">
-              <span className="lab">finns på</span>
-              {subscription.map(p => {
+              {onSubscription.length > 0 && <span className="lab">finns på</span>}
+              {onSubscription.map(p => {
                 const logo = logoUrl(p.logo_path);
                 const offer = offerForProvider(offers, canonicalProviderId(p.provider_id));
                 if (logo) {
@@ -313,11 +317,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
           {showRentBuy && hasRentBuy && (
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)' }}>
-              {subscription.length > 0 && (
+              {onSubscription.length > 0 && (
                 <div className="rounded-sm bg-acc-soft text-acc-deep px-2 py-1 text-[12px]" style={{ marginBottom: 8 }}>
                   {subsYouOwn.length > 0
                     ? `Du abonnerar redan på ${subsYouOwn.map(p => p.provider_name).join(', ')} — du behöver inte hyra.`
-                    : `Finns även med abonnemang på ${subscription.map(p => p.provider_name).join(', ')} — billigare än att hyra om du ser mer därifrån.`}
+                    : `Finns även med abonnemang på ${onSubscription.map(p => p.provider_name).join(', ')} — billigare än att hyra om du ser mer därifrån.`}
                 </div>
               )}
               {rent.length > 0 && (

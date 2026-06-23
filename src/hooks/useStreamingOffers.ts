@@ -14,8 +14,22 @@ export function useStreamingOffers(tmdbId: number | undefined): { offers: Offer[
     staleTime: 1000 * 60 * 60, // 1h client cache; source refreshes daily server-side
     queryFn: async () => {
       const { db, doc, getDoc } = await fsdb();
-      const snap = await getDoc(doc(db, 'streamingOffers', String(tmdbId)));
-      return snap.exists() ? (snap.data() as StreamingOffersDoc) : null;
+      // BIN-157: bind läsningen mot en 10s-timeout. getDoc har ingen egen
+      // tidsgräns, så ett hängande nät kunde låta offers-queryn aldrig settla
+      // (titelsidan renderar ändå — offers är komplement — men queryn fastnade).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('streamingOffers timeout')), 10_000);
+      });
+      try {
+        const snap = await Promise.race([
+          getDoc(doc(db, 'streamingOffers', String(tmdbId))),
+          timeout,
+        ]);
+        return snap.exists() ? (snap.data() as StreamingOffersDoc) : null;
+      } finally {
+        clearTimeout(timer);
+      }
     },
   });
   return { offers: data?.offers ?? [], checkedAt: data?.checkedAt ?? null };

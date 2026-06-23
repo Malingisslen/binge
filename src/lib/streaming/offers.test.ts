@@ -39,10 +39,23 @@ describe('daysUntilLeaving', () => {
   it('null when no date', () => {
     expect(daysUntilLeaving(sub({ leaving: null }), now)).toBeNull();
   });
+  it('treats a title leaving TODAY as 0 days all day, not negative (BIN-145)', () => {
+    // Afternoon local time, title leaves today: must be 0 (badge stays), not -1.
+    // The old UTC-midnight parse went negative after ~02:00 in UTC+ zones.
+    const todayAfternoon = Date.parse('2026-06-20T14:00:00'); // local (no Z)
+    expect(daysUntilLeaving(sub({ leaving: '2026-06-20' }), todayAfternoon)).toBe(0);
+    expect(isLeavingSoon(sub({ leaving: '2026-06-20' }), todayAfternoon, 14)).toBe(true);
+  });
+  it('returns null for an unparseable leaving date (epoch-0/NaN guard, BIN-145)', () => {
+    expect(daysUntilLeaving(sub({ leaving: 'not-a-date' }), now)).toBeNull();
+  });
 });
 
 describe('formatLeaving', () => {
   it('formats a Swedish short date', () => {
     expect(formatLeaving(sub({ leaving: '2026-06-30' }))).toMatch(/lämnar/i);
+  });
+  it('returns empty for an unparseable date instead of "lämnar Invalid Date" (BIN-145)', () => {
+    expect(formatLeaving(sub({ leaving: 'not-a-date' }))).toBe('');
   });
 });
