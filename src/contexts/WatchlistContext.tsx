@@ -50,6 +50,7 @@ interface WatchlistState {
   addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
   updateVisibility: (tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
   updateStatus: (tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>;
+  updateWatchedAt: (tmdbId: number, watchedAt: Date) => Promise<void>;
   updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
   updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
@@ -65,6 +66,7 @@ const WatchlistContext = createContext<WatchlistState>({
   loading: true,
   addItem: async () => {},
   updateStatus: async () => {},
+  updateWatchedAt: async () => {},
   updateRating: async () => {},
   updateNotes: async () => {},
   updateProgress: async () => {},
@@ -239,6 +241,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
   }, [uid, items, effectiveVisibilityNow]);
 
+  // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
+  // — det tolkas som en omtitt (isRewatch = sedd→sedd) och räknar upp rewatchCount
+  // varje gång man justerar datumet. Detta rör bara watchedAt + updatedAt.
+  const updateWatchedAt = useCallback(async (tmdbId: number, watchedAt: Date) => {
+    if (!uid) return;
+    const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
+    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const current = items.find(i => i.tmdbId === tmdbId);
+    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    await setDoc(ref, { watchedAt: Timestamp.fromDate(watchedAt), ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+  }, [uid, items, effectiveVisibilityNow]);
+
   const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
@@ -335,8 +349,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const value = useMemo(() => ({
-    items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem,
-  }), [items, loading, addItem, updateStatus, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem]);
+    items, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem,
+  }), [items, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

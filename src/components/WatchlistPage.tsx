@@ -9,6 +9,7 @@ import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { useCalendarEntries } from '@/hooks/useCalendar';
@@ -110,6 +111,10 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     6 + (showTypeCol ? 1 : 0) + (showAddedCol ? 1 : 0) + (showWatchedCol ? 1 : 0);
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // BIN-153: bulk-åtgärder (Ta bort / Flytta) får ALDRIG röra titlar som är
+  // bortfiltrerade av sök/filter. Bekräftelse innan radering (data-loss).
+  const [confirmDelete, setConfirmDelete] = useState<number[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
   // BIN-42: "Välj"-läge togglar kryssrutor i kort/rutnät (tabellen har egna).
   const [selectMode, setSelectMode] = useState(false);
   const toggleSelect = (id: number) => setSelected(prev => {
@@ -222,6 +227,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // aldrig re-renderar hela biblioteket. Markeringslogik (select-all m.m.)
   // jobbar fortfarande mot hela displayItems — bara renderingen kapas.
   const { visible: visibleItems, hasMore, sentinelRef } = useIncrementalList(displayItems);
+
+  // BIN-153: beskär markeringen till det som FAKTISKT syns när filter/sök ändras.
+  // Annars kan en titel markeras, filtreras bort, och sen raderas av bulk-"Ta
+  // bort" trots att den inte är synlig — och "N markerade" skulle överräkna.
+  useEffect(() => {
+    const visibleIds = new Set(displayItems.map(i => i.tmdbId));
+    setSelected(prev => {
+      const next = new Set([...prev].filter(id => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [displayItems]);
 
   const followingSections = useMemo(() => {
     if (status !== 'mina') return null;
@@ -435,10 +451,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             </button>
           )}
           <button
-            onClick={async () => {
-              await Promise.all(Array.from(selected).map(id => removeItem(id)));
-              setSelected(new Set());
-            }}
+            onClick={() => { if (selected.size > 0) setConfirmDelete(Array.from(selected)); }}
             className="px-2 py-[2px] text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"
           >
             Ta bort
@@ -450,6 +463,26 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             Avmarkera
           </button>
         </div>
+      )}
+
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          title={`Ta bort ${pluralSv(confirmDelete.length, 'titel', 'titlar')}?`}
+          body="Titlarna tas bort från ditt bibliotek. Det går inte att ångra."
+          confirmLabel="Ta bort"
+          busy={deleting}
+          onConfirm={async () => {
+            setDeleting(true);
+            try {
+              await Promise.all(confirmDelete.map(id => removeItem(id)));
+              setSelected(new Set());
+            } finally {
+              setDeleting(false);
+              setConfirmDelete(null);
+            }
+          }}
+          onCancel={() => { setDeleting(false); setConfirmDelete(null); }}
+        />
       )}
 
       {view === 'cards' ? (

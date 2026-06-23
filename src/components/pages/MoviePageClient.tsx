@@ -48,7 +48,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
-  const { getItem, updateRating, updateNotes, updateStatus, setRuntime } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateWatchedAt, setRuntime } = useWatchlist();
   const { user } = useAuth();
   const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
@@ -250,7 +250,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             {watchlistItem?.status === 'sedd' && (
               <WatchedDateEditor
                 watchedAt={watchlistItem.watchedAt ?? null}
-                onChange={d => updateStatus(movie.id, 'sedd', d)}
+                onChange={d => updateWatchedAt(movie.id, d)}
               />
             )}
           </ClientOnly>

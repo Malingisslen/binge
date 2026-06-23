@@ -28,6 +28,7 @@ import { summarizeCollectionStreaming, seFlatrateProviderIds, type CollectionStr
  */
 
 const STREAM_CAP = 12;
+const ADD_UNSEEN_CAP = 50;
 
 function providerLabel(id: number): string {
   const p = getProvider(id);
@@ -120,7 +121,10 @@ export default function CollectionSection({
     if (adding || unseenNotInLibrary.length === 0) return;
     setAdding(true);
     try {
-      for (const p of unseenNotInLibrary) {
+      // BIN-159: bunden write-fan-out. Samlingar är normalt <30 filmer, men
+      // cappa ändå så en patologiskt stor samling inte avfyrar hundratals
+      // sekventiella Firestore-skrivningar.
+      for (const p of unseenNotInLibrary.slice(0, ADD_UNSEEN_CAP)) {
         await addItem({
           tmdbId: p.id,
           mediaType: 'movie',

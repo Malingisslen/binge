@@ -16,6 +16,7 @@ interface SeasonListProps {
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+  markSeasonUnwatched: (season: number, episodeNumbers: number[]) => Promise<void>;
   getSeasonProgress: (season: number, episodeCount?: number) => { watched: number; total: number };
   // Spoiler-skydd-grupp (Fas 2b). Sätts via `?fromGroup=` URL-param som
   // GroupWatchlistTable propagerar. När satt: hämta gruppens medlems-progress
@@ -24,7 +25,7 @@ interface SeasonListProps {
 }
 
 export default function SeasonList({
-  tmdbId, seasons, isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress, fromGroup,
+  tmdbId, seasons, isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress, fromGroup,
 }: SeasonListProps) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
 
@@ -63,6 +64,7 @@ export default function SeasonList({
                     isWatched={isWatched}
                     markEpisodeWatched={markEpisodeWatched}
                     markSeasonWatched={markSeasonWatched}
+                    markSeasonUnwatched={markSeasonUnwatched}
                     maskBoundary={boundary}
                   />
                 );
@@ -89,6 +91,7 @@ export default function SeasonList({
                 isWatched={isWatched}
                 markEpisodeWatched={markEpisodeWatched}
                 markSeasonWatched={markSeasonWatched}
+                markSeasonUnwatched={markSeasonUnwatched}
               />
             );
           })}

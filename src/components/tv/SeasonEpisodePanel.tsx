@@ -16,6 +16,7 @@ interface SeasonEpisodePanelProps {
   isWatched: (season: number, episode: number) => boolean;
   markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
   markSeasonWatched: (season: number, episodeCount: number) => Promise<void>;
+  markSeasonUnwatched: (season: number, episodeNumbers: number[]) => Promise<void>;
   maskBoundary?: MaskBoundary | null;
 }
 
@@ -58,7 +59,7 @@ const PanelEpisodeRow = memo(function PanelEpisodeRow({
 });
 
 export default function SeasonEpisodePanel({
-  tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched, maskBoundary,
+  tmdbId, seasonNumber, previousSeasons, isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, maskBoundary,
 }: SeasonEpisodePanelProps) {
   const { data: season, isLoading } = useTVSeason(tmdbId, seasonNumber);
 
@@ -110,13 +111,10 @@ export default function SeasonEpisodePanel({
         )}
         {watchedCount > 0 && (
           <button
-            onClick={async () => {
-              for (const ep of episodes) {
-                if (isWatched(seasonNumber, ep.episode_number)) {
-                  await markEpisodeWatched(seasonNumber, ep.episode_number, false);
-                }
-              }
-            }}
+            onClick={() => markSeasonUnwatched(
+              seasonNumber,
+              episodes.filter(ep => isWatched(seasonNumber, ep.episode_number)).map(ep => ep.episode_number),
+            )}
             className="px-[10px] py-[3px] rounded-sm text-xxs font-semibold border border-rule cursor-pointer bg-surface text-ink-2"
           >
             Avmarkera alla

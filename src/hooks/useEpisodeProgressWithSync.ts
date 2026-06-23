@@ -14,6 +14,7 @@ import type { EpisodeProgress } from '@/types';
 function highestWatchedPosition(
   progress: EpisodeProgress | null,
   exclude?: { season: number; episode: number },
+  excludeSeason?: number,
 ): { season: number; episode: number } | null {
   if (!progress?.seasons) return null;
   let best: { season: number; episode: number } | null = null;
@@ -21,6 +22,9 @@ function highestWatchedPosition(
     if (!seasonData || typeof seasonData !== 'object') continue;
     const season = Number(seasonKey);
     if (!Number.isFinite(season)) continue;
+    // BIN-171: "Avmarkera alla" rensar en hel säsong — exkludera den helt när vi
+    // räknar om högsta kvarvarande position (onSnapshot hinner inte landa).
+    if (excludeSeason !== undefined && season === excludeSeason) continue;
     for (const [episodeKey, ep] of Object.entries(seasonData)) {
       if (!ep || typeof ep !== 'object' || !ep.watched) continue;
       const episode = Number(episodeKey);
@@ -88,9 +92,21 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
     ]);
   }, [markSeason, updateProgress, tmdbId]);
 
+  // BIN-171: avmarkera en hel säsong. Den gamla "loopa markEpisodeWatched(false)"
+  // satte lastWatched per avsnitt mot en STALE progressRef (onSnapshot hann inte
+  // emellan), så lastWatched fastnade på ett avsnitt man just avmarkerade. Här:
+  // avmarkera alla avsnitt, räkna sedan om högsta kvarvarande position EN gång
+  // med hela säsongen exkluderad (0,0 om inget kvar i andra säsonger).
+  const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
+    await Promise.all(episodeNumbers.map(ep => markEpisode(season, ep, false)));
+    const highest = highestWatchedPosition(progressRef.current, undefined, season);
+    await updateProgress(tmdbId, highest?.season ?? 0, highest?.episode ?? 0);
+  }, [markEpisode, updateProgress, tmdbId]);
+
   return {
     ...episodeProgress,
     markEpisodeWatched,
     markSeasonWatched,
+    markSeasonUnwatched,
   };
 }

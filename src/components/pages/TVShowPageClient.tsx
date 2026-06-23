@@ -54,7 +54,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime } = useWatchlist();
   useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
-  const { isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
+  const { isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch — server och initial-render
   // visar inget auth-state, sedan byter via vanlig state-update efter mount.
@@ -358,6 +358,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               isWatched={isWatched}
               markEpisodeWatched={markEpisodeWatched}
               markSeasonWatched={markSeasonWatched}
+              markSeasonUnwatched={markSeasonUnwatched}
               getSeasonProgress={getSeasonProgress}
               fromGroup={fromGroup}
             />
