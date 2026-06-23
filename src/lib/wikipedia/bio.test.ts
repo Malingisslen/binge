@@ -42,4 +42,12 @@ describe('cleanWikiExtract', () => {
     const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'https://sv.wikipedia.org/wiki/Greta_Garbo' } } };
     expect(cleanWikiExtract(summary)).toEqual({ text: 'Greta Garbo var en svensk skådespelare.', pageUrl: 'https://sv.wikipedia.org/wiki/Greta_Garbo' });
   });
+  it('rejects an https URL whose host is NOT wikipedia.org (BIN-152)', () => {
+    const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'https://evil.example.com/wiki/Greta_Garbo' } } };
+    expect(cleanWikiExtract(summary)).toBeNull();
+  });
+  it('rejects a look-alike host (wikipedia.org.evil.com) (BIN-152)', () => {
+    const summary = { type: 'standard', extract: 'Greta Garbo var en svensk skådespelare.', content_urls: { desktop: { page: 'https://sv.wikipedia.org.evil.com/x' } } };
+    expect(cleanWikiExtract(summary)).toBeNull();
+  });
 });

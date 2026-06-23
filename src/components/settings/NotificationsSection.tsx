@@ -20,7 +20,14 @@ import { SettingsSection } from './SettingsSection';
 export function NotificationsSection() {
   const { user, uid, updateNotificationSettings } = useAuth();
   const { show: toast } = useToast();
-  const [busy, setBusy] = useState(false);
+  // BIN-160: per-toggle busy-state (inte en delad boolean) så att en in-flight
+  // skrivning för en toggle inte blockerar/sväljer klick på de andra två.
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
+  const setBusyKey = (key: string, val: boolean) => setBusyKeys(prev => {
+    const next = new Set(prev);
+    if (val) next.add(key); else next.delete(key);
+    return next;
+  });
 
   if (!user || !uid) return null;
   // Servicen-stöd-check kan bara köras klient-sidigt; rendera ändå (med
@@ -32,34 +39,34 @@ export function NotificationsSection() {
   // klick fyra parallella skrivningar och ett offline-fel sväljs tyst (UI:t
   // hamnar ur synk med Firestore tills nästa profil-laddning).
   async function handleEpisodeReleasesToggle(next: boolean) {
-    if (busy) return;
-    setBusy(true);
+    if (busyKeys.has('episodeReleases')) return;
+    setBusyKey('episodeReleases', true);
     try {
       await updateNotificationSettings({ episodeReleases: next });
       toast(next ? 'Avsnittsnotiser på' : 'Avsnittsnotiser av');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
     } finally {
-      setBusy(false);
+      setBusyKey('episodeReleases', false);
     }
   }
 
   async function handleAvailableToggle(next: boolean) {
-    if (busy) return;
-    setBusy(true);
+    if (busyKeys.has('available')) return;
+    setBusyKey('available', true);
     try {
       await updateNotificationSettings({ availableOnMyServices: next });
       toast(next ? 'Tillgänglighetsnotiser på' : 'Tillgänglighetsnotiser av');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
     } finally {
-      setBusy(false);
+      setBusyKey('available', false);
     }
   }
 
   async function handleToggle(next: boolean) {
-    if (busy) return;
-    setBusy(true);
+    if (busyKeys.has('push')) return;
+    setBusyKey('push', true);
     try {
       if (next) {
         // Sätter inte pushEnabled förrän token-registrering lyckats — annars
@@ -76,7 +83,7 @@ export function NotificationsSection() {
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
     } finally {
-      setBusy(false);
+      setBusyKey('push', false);
     }
   }
 
@@ -97,7 +104,7 @@ export function NotificationsSection() {
           <input
             type="checkbox"
             checked={pushEnabled}
-            disabled={busy}
+            disabled={busyKeys.has('push')}
             onChange={(e) => { void handleToggle(e.target.checked); }}
             className="accent-acc-deep w-[14px] h-[14px]"
           />
@@ -106,14 +113,14 @@ export function NotificationsSection() {
       )}
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
-        <input type="checkbox" checked={user.notificationSettings.episodeReleases} disabled={busy}
+        <input type="checkbox" checked={user.notificationSettings.episodeReleases} disabled={busyKeys.has('episodeReleases')}
           onChange={(e) => { void handleEpisodeReleasesToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en serie jag följer släpper ett nytt avsnitt
       </label>
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
-        <input type="checkbox" checked={user.notificationSettings.availableOnMyServices} disabled={busy}
+        <input type="checkbox" checked={user.notificationSettings.availableOnMyServices} disabled={busyKeys.has('available')}
           onChange={(e) => { void handleAvailableToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en titel jag vill se dyker upp på en tjänst jag har

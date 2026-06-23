@@ -46,6 +46,7 @@ function ImportContent() {
   const [truncated, setTruncated] = useState(0);
   const [analyzed, setAnalyzed] = useState<Analyzed[]>([]);
   const [imported, setImported] = useState(0);
+  const [importFailed, setImportFailed] = useState(0);
 
   const onFile = useCallback(async (file: File) => {
     const text = await file.text();
@@ -57,6 +58,7 @@ function ImportContent() {
     setRows(capped);
     setAnalyzed([]);
     setImported(0);
+    setImportFailed(0);
     setStage(res.format === 'unknown' ? 'idle' : 'parsed');
   }, []);
 
@@ -104,29 +106,37 @@ function ImportContent() {
   const runImport = useCallback(async () => {
     setStage('importing');
     let n = 0;
+    let failed = 0;
     for (const a of importable) {
       if (!a.match || !a.status) continue;
-      await addItem({
-        tmdbId: a.match.tmdbId,
-        mediaType: a.match.mediaType,
-        status: a.status,
-        title: a.match.title,
-        posterPath: a.match.posterPath,
-        releaseYear: a.match.year,
-        rating: a.row.rating,
-        notes: null,
-        totalSeasons: null,
-        lastWatchedSeason: null,
-        lastWatchedEpisode: null,
-        providers: [],
-        genreIds: a.match.genreIds,
-        tmdbStatus: null,
-      });
-      n++;
-      setImported(n);
+      // BIN-150: per-titel try/catch — en misslyckad skrivning (offline/regel)
+      // får inte avbryta resten eller sväljas tyst. Räkna + visa misslyckade.
+      try {
+        await addItem({
+          tmdbId: a.match.tmdbId,
+          mediaType: a.match.mediaType,
+          status: a.status,
+          title: a.match.title,
+          posterPath: a.match.posterPath,
+          releaseYear: a.match.year,
+          rating: a.row.rating,
+          notes: null,
+          totalSeasons: null,
+          lastWatchedSeason: null,
+          lastWatchedEpisode: null,
+          providers: [],
+          genreIds: a.match.genreIds,
+          tmdbStatus: null,
+        });
+        n++;
+        setImported(n);
+      } catch {
+        failed++;
+        setImportFailed(failed);
+      }
     }
     setStage('done');
-    toast(`Importerade ${n} titlar`);
+    toast(failed > 0 ? `Importerade ${n} titlar · ${failed} misslyckades` : `Importerade ${n} titlar`);
   }, [importable, addItem, toast]);
 
   const matchedCount = analyzed.filter(a => a.match).length;
@@ -190,7 +200,10 @@ function ImportContent() {
               <p className="text-sm text-ink-3 mb-4">Importerar… {imported}/{importable.length}</p>
             )}
             {stage === 'done' && (
-              <p className="text-sm text-acc-deep mb-4">Klart — {imported} titlar importerade.</p>
+              <p className="text-sm text-acc-deep mb-4">
+                Klart — {imported} titlar importerade.
+                {importFailed > 0 && <span className="text-danger-ink"> {importFailed} misslyckades — försök igen.</span>}
+              </p>
             )}
 
             {unmatchedCount > 0 && (

@@ -17,10 +17,14 @@ const albertSans = Albert_Sans({
   display: 'swap',
 });
 
-// Next 16: themeColor lives in viewport, not metadata. Matches the new
-// off-white page background.
+// Next 16: themeColor lives in viewport, not metadata. BIN-151: dark-aware —
+// matchar sidans bg per tema (off-white ljust, varm nästan-svart mörkt) så
+// browser-kromen inte lyser vit i mörkt läge.
 export const viewport: Viewport = {
-  themeColor: '#f9f7f1',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#191712' },
+    { media: '(prefers-color-scheme: light)', color: '#f9f7f1' },
+  ],
 };
 
 export const metadata: Metadata = {
