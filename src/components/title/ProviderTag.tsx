@@ -7,7 +7,9 @@ interface ProviderTagProps {
   provider: TMDBProvider;
   size?: 'sm' | 'md';
   offer?: Offer;
-  nowMs?: number;
+  // BIN-145: obligatorisk — en default på epoch-0 (1970) dolde tyst "lämnar
+  // snart"-badgen om en anropare glömde proppen. Krävs nu, ingen tyst fallback.
+  nowMs: number;
 }
 
 export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: ProviderTagProps) {
@@ -16,8 +18,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   const isMine = user?.myProviders.includes(canonicalProviderId(provider.provider_id)) ?? false;
   const label = mapped?.shortName ?? provider.provider_name;
 
-  const now = nowMs ?? 0;
-  const leaving = offer && isLeavingSoon(offer, now);
+  const leaving = offer && isLeavingSoon(offer, nowMs);
   const price =
     offer && (offer.type === 'rent' || offer.type === 'buy') && offer.priceAmount != null
       ? `${offer.priceAmount} ${offer.priceCurrency ?? ''}`.trim()

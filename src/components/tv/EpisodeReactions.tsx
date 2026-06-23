@@ -17,7 +17,7 @@ export default function EpisodeReactions({ tmdbId, season, episode, watched }: {
   if (!watched) {
     return (
       <div className="ep-reactions-gate text-xxs text-text-muted mt-1">
-        Reaktioner låses upp när du markerat avsnittet som sett.
+        Reaktioner visas när du markerat avsnittet som sett — så undviker du spoilers.
       </div>
     );
   }
