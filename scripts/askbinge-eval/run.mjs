@@ -10,7 +10,8 @@
 //   --model <id>   Gemini model (default gemini-2.5-flash-lite)
 //   --limit <n>    only run the first n cases (smoke test)
 //   --json         dump raw per-case results as JSON to stdout (for diffing runs)
-//   --concurrency <n>  parallel requests (default 4)
+//   --concurrency <n>  parallel requests (default 2; use 1 on free-tier keys)
+//   --fields a,b,c     score only these fields (default: all)
 //
 // Exit code: 0 if strict exact-match rate >= PASS_BAR, else 1 (CI-friendly).
 // No dependencies — bare `node` (>= 18 for global fetch).
@@ -31,8 +32,15 @@ const getFlag = (name, def) => {
 };
 const MODEL = getFlag('--model', 'gemini-2.5-flash-lite');
 const LIMIT = Number(getFlag('--limit', '0')) || 0;
-const CONCURRENCY = Number(getFlag('--concurrency', '4')) || 4;
+// Free-tier Gemini keys have a low RPM cap; bursting at 4 causes 429s that the
+// retries can't fully absorb. Default to 2 (paid keys can pass --concurrency 8).
+const CONCURRENCY = Number(getFlag('--concurrency', '2')) || 2;
 const EMIT_JSON = argv.includes('--json');
+// Restrict scored fields, e.g. --fields mediaType,genreIds,mood,runtimeMax,providerIds,myProvidersOnly,originalLanguage
+// Use to evaluate a narrower LLM scope (the dimensions worth delegating to the model,
+// with the rest handled as UI controls). Default: all fields.
+const FIELDS_FLAG = getFlag('--fields', '');
+const SCORED = FIELDS_FLAG ? FIELDS_FLAG.split(',').map((s) => s.trim()).filter(Boolean) : SCORED_FIELDS;
 
 const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
@@ -94,6 +102,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isArrayField = (f) => f === 'genreIds' || f === 'providerIds';
 const present = (v) => v !== undefined && v !== null && !(Array.isArray(v) && v.length === 0);
 
+const VALID_RUNTIME = new Set([30, 60, 90, 120]);
+/**
+ * Drop fields whose value means "no constraint" — the production filter mapping
+ * treats these identically to an omitted field, so the grader must too:
+ *   mediaType:'all', voteAverageMin:0, runtimeMax∉{30,60,90,120}, false booleans,
+ *   empty arrays. Without this, a model that emits defaults is unfairly penalised.
+ */
+function normalizeOutput(o) {
+  if (!o || typeof o !== 'object') return o ?? {};
+  const n = { ...o };
+  if (n.mediaType === 'all') delete n.mediaType;
+  if (n.sortBy === 'popularity.desc') delete n.sortBy; // TMDB default sort = no constraint
+  if (n.voteAverageMin === 0) delete n.voteAverageMin;
+  if (typeof n.runtimeMax === 'number' && !VALID_RUNTIME.has(n.runtimeMax)) delete n.runtimeMax;
+  if (n.myProvidersOnly === false) delete n.myProvidersOnly;
+  if (n.excludeSeen === false) delete n.excludeSeen;
+  if (Array.isArray(n.genreIds) && n.genreIds.length === 0) delete n.genreIds;
+  if (Array.isArray(n.providerIds) && n.providerIds.length === 0) delete n.providerIds;
+  return n;
+}
+
 function setsEqual(a = [], b = []) {
   const sa = new Set(a), sb = new Set(b);
   if (sa.size !== sb.size) return false;
@@ -124,7 +153,7 @@ function tolerantCaseMatch(expected, got) {
   };
   reconcileMood(exp, out);
   reconcileMood(out, exp);
-  for (const f of SCORED_FIELDS) {
+  for (const f of SCORED) {
     if (f === 'voteAverageMin' && present(exp[f]) && present(out[f])) {
       if (Math.abs(Number(exp[f]) - Number(out[f])) <= 0.5) continue;
     }
@@ -144,7 +173,7 @@ async function main() {
   console.error(`Ask Binge eval · model=${MODEL} · ${cases.length} cases · concurrency=${CONCURRENCY}\n`);
 
   const results = [];
-  const fieldStats = Object.fromEntries(SCORED_FIELDS.map((f) => [f, { tp: 0, tn: 0, fp: 0, fn: 0, wrong: 0 }]));
+  const fieldStats = Object.fromEntries(SCORED.map((f) => [f, { tp: 0, tn: 0, fp: 0, fn: 0, wrong: 0 }]));
 
   // simple concurrency pool
   let cursor = 0;
@@ -152,13 +181,13 @@ async function main() {
     while (cursor < cases.length) {
       const c = cases[cursor++];
       let got = null, error = null;
-      try { got = await parseQuery(c.query); }
+      try { got = normalizeOutput(await parseQuery(c.query)); }
       catch (e) { error = String(e.message || e); }
 
       const fieldVerdicts = {};
       let allTpTn = true;
       if (!error) {
-        for (const f of SCORED_FIELDS) {
+        for (const f of SCORED) {
           const v = gradeFieldStrict(f, c.expected[f], got[f]);
           fieldStats[f][v]++;
           fieldVerdicts[f] = v;
@@ -185,7 +214,7 @@ async function main() {
     const mark = r.strictMatch ? '✓' : (r.tolerantMatch ? '≈' : '✗');
     let line = `${mark} #${r.id}  "${r.query}"`;
     if (!r.strictMatch) {
-      const bad = SCORED_FIELDS.filter((f) => !['tp', 'tn'].includes(r.fieldVerdicts[f]))
+      const bad = SCORED.filter((f) => !['tp', 'tn'].includes(r.fieldVerdicts[f]))
         .map((f) => `${f}[${r.fieldVerdicts[f]}] gold=${JSON.stringify(r.expected[f] ?? null)} got=${JSON.stringify(r.got[f] ?? null)}`);
       line += `\n      ${bad.join('\n      ')}`;
     }
@@ -193,7 +222,7 @@ async function main() {
   }
 
   console.error('\n── Per-field (precision / recall / F1) ──');
-  for (const f of SCORED_FIELDS) {
+  for (const f of SCORED) {
     const s = fieldStats[f];
     const correct = s.tp;
     const predicted = s.tp + s.fp + s.wrong;

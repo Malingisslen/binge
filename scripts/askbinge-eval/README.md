@@ -15,13 +15,19 @@ You need a Gemini API key (free tier is plenty for 65 calls):
 GEMINI_API_KEY=your_key node scripts/askbinge-eval/run.mjs
 
 # options
-GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --model gemini-2.5-flash-lite
-GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --limit 10        # quick smoke test
-GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --json > run1.json # dump for diffing
+GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --model gemini-2.5-flash
+GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --limit 10            # quick smoke test
+GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --concurrency 1       # free-tier safe (no 429s)
+GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --fields mediaType,genreIds,mood,runtimeMax,providerIds,myProvidersOnly,originalLanguage  # score only a subset
+GEMINI_API_KEY=... node scripts/askbinge-eval/run.mjs --json > run1.json    # dump for diffing
 ```
 
 No npm install — it's plain `node` (≥18). All progress/report prints to **stderr**;
 only `--json` writes machine output to stdout.
+
+> **Free-tier keys:** the default `--concurrency 2` keeps you under the RPM cap. The
+> first run here bursted at 4 and ~38% of calls hit 429s (which tank the score). If you
+> see "API errors" in the summary, drop to `--concurrency 1`.
 
 ## Reading the result
 
@@ -55,5 +61,36 @@ this harness.
 - `queries.json` — 65 gold-labeled cases. Add your own real searches here to grow it.
 - `run.mjs` — the runner + grader.
 
-When the gate passes, the production build follows
+## Results — first run, 2026-06-23
+
+The gate **did not pass.** Best configuration reached 65% strict vs the 85% bar.
+
+| Config | Strict exact-match |
+|---|---|
+| `gemini-2.5-flash-lite` (tuned prompt + schema descriptions) | **30.8%** |
+| `gemini-2.5-flash` (all 11 fields) | **55.4%** |
+| `gemini-2.5-flash` (7 core fields only) | **64.6%** |
+
+What both models get **right** (≥84% F1 on Flash): `mediaType`, `providerIds`, `mood`,
+`runtimeMax`, `genreIds` precision — i.e. the dimensions that most shape the result set.
+
+What they get **wrong**, even after prompt tuning + schema field descriptions:
+- **`voteAverageMin`** — both models *hallucinate* a 7.5 rating floor on queries that ask
+  for no quality bar. Ignored every "sätt ALDRIG 7.5" instruction. The single biggest
+  strict-match killer.
+- **`excludeSeen`** — weak extraction of "jag inte sett / inte börjat" (R≈25%).
+- **`decade`** — Flash-Lite never emits it (0%); Flash barely (25%) even with examples.
+
+**Takeaways for the build decision:**
+1. **Flash-Lite is out** (31%) — the cost argument is moot if it isn't accurate enough.
+2. **Flash** is 2× better but pricier and *still* below bar at 55–65%.
+3. The fields the LLM fails (`voteAverageMin`, `excludeSeen`, `decade`) are exactly the
+   ones that work fine as **UI controls** (a rating slider, an "exclude seen" toggle
+   default-on, a decade picker). Narrowing the LLM to the 7 core dimensions lifts Flash to
+   65% — closer, but genre recall + language over-trigger still need work to clear 85%.
+4. The harness is **model-agnostic** (`--model`). The obvious next experiment is the
+   originally-proposed **Claude Haiku** — it would directly re-test the Claude-vs-Gemini
+   call with data (needs Anthropic-API support added to `run.mjs` + an `ANTHROPIC_API_KEY`).
+
+When the gate eventually passes, the production build follows
 `docs/superpowers/plans/2026-06-23-bin-176-ask-binge.md`.
