@@ -173,6 +173,36 @@ export function hasFreeProvider(ids: number[]): boolean {
   return ids.some(id => PROVIDER_MAP.get(id)?.isFree === true);
 }
 
+// BIN-173 — affiliate-tag the rent/buy deeplinks Binge already renders, so the
+// outbound clicks we already drive (across 25k SEO title pages) earn commission
+// instead of leaking. Table-driven: each entry is keyed by the *canonical*
+// provider id and rewrites the bare MOTN deeplink into the network's tagged URL.
+//
+// AFFILIATE_PROGRAMS is intentionally EMPTY in production until the affiliate
+// accounts exist (Viaplay via Adtraction; Apple/Amazon/SkyShowtime Nordic
+// programs — a manual signup step). Until then affiliateWrap() is a no-op
+// passthrough, so links are unchanged and nothing can break. When an account
+// lands, add one entry here; the render sites already call affiliateWrap().
+export type AffiliateProgram = (url: string) => string;
+
+// applyAffiliate is the pure, injectable core (testable with a fake table);
+// affiliateWrap binds it to the live table. canonicalProviderId routes aliases
+// (e.g. TV4 Play 1944 → 489) to the same program.
+export function applyAffiliate(
+  programs: Record<number, AffiliateProgram>,
+  providerId: number,
+  url: string,
+): string {
+  const fn = programs[canonicalProviderId(providerId)];
+  return fn ? fn(url) : url;
+}
+
+export const AFFILIATE_PROGRAMS: Record<number, AffiliateProgram> = {};
+
+export function affiliateWrap(providerId: number, url: string): string {
+  return applyAffiliate(AFFILIATE_PROGRAMS, providerId, url);
+}
+
 // TMDB listar Prime Video-kanaler som egna providers med namn-suffixet
 // " Amazon Channel" (ibland plural). Kända varianter mappas via aliases ovan;
 // suffixet är fallback för framtida variant-ids vi inte hunnit katalogisera.

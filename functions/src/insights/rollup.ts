@@ -6,9 +6,11 @@
  * /api/insights endpoint then reads only that one document per page load, so the
  * dashboard costs ~1 read per visit instead of a full collection scan.
  *
- * Cost note: the heavy part is the collectionGroup('watchlist') scan. At binge's
- * current volume this is well under the Firestore free tier even at 4 runs/day.
- * Fields are narrowed with .select() to cut egress.
+ * Cost note: the heavy part is the collectionGroup('watchlist') scan — one read
+ * per watchlist doc. /insikter is an internal admin dashboard, so it runs once a
+ * day (BIN-156; was every 6h = 4×/day against the 25 SEK/mån Blaze cap). Fields
+ * are narrowed with .select() to cut egress and the scan is paginated (PAGE_SIZE)
+ * so peak memory stays bounded as the library grows.
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -32,25 +34,40 @@ interface WatchlistLite {
   genreIds: number[];
 }
 
-/** Read every watchlist doc (narrowed fields) across all users. */
+/** Page size for the bounded scan (BIN-156) — mirrors the sibling watchlist
+ *  scanners (streamingOffers/retentionCleanup/reclaimOrphanFollows). Never
+ *  materialize the whole collection-group in one query result. */
+const PAGE_SIZE = 2000;
+
+/** Read every watchlist doc (narrowed fields) across all users, paginated. */
 async function readWatchlist(): Promise<WatchlistLite[]> {
   const db = getFirestore();
-  const snap = await db
-    .collectionGroup('watchlist')
-    .select('status', 'mediaType', 'rating', 'title', 'tmdbId', 'providers', 'genreIds')
-    .get();
-  return snap.docs.map((d) => {
-    const x = d.data();
-    return {
-      status: String(x.status ?? ''),
-      mediaType: String(x.mediaType ?? ''),
-      rating: typeof x.rating === 'number' ? x.rating : null,
-      title: String(x.title ?? ''),
-      tmdbId: Number(x.tmdbId ?? Number(d.id)),
-      providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
-      genreIds: Array.isArray(x.genreIds) ? (x.genreIds as number[]) : [],
-    };
-  });
+  const out: WatchlistLite[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let q = db
+      .collectionGroup('watchlist')
+      .select('status', 'mediaType', 'rating', 'title', 'tmdbId', 'providers', 'genreIds')
+      .orderBy('__name__')
+      .limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    for (const d of snap.docs) {
+      const x = d.data();
+      out.push({
+        status: String(x.status ?? ''),
+        mediaType: String(x.mediaType ?? ''),
+        rating: typeof x.rating === 'number' ? x.rating : null,
+        title: String(x.title ?? ''),
+        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
+        genreIds: Array.isArray(x.genreIds) ? (x.genreIds as number[]) : [],
+      });
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return out;
 }
 
 /** Top tracked titles, keyed by tmdbId so we can carry the denormalized title. */
@@ -150,7 +167,7 @@ export async function computeRollup(): Promise<RollupData> {
  * and insights/{YYYY-MM-DD} (history for Fas 2 trend charts).
  */
 export const rollupInsights = onSchedule(
-  { schedule: 'every 6 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB' },
+  { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '512MiB' },
   async () => {
     const rollup = await computeRollup();
     const db = getFirestore();

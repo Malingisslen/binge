@@ -595,7 +595,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const username = (snaps.profileSnap.data()?.username as string | undefined)
       ?? user?.username ?? null;
 
-    const { db, doc, getDocs, collection, writeBatch } = await fsdb();
+    const { db, doc, getDocs, collection, writeBatch, serverTimestamp } = await fsdb();
     const refs: DocumentReference[] = [];
 
     // 1. Simple per-user subcollections.
@@ -720,6 +720,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // 7. BIN-149: lists I co-edit but don't own — strip my uid from their
+    //    editors[] so a deleted account doesn't linger as a write-authorized
+    //    ghost editor on someone else's list. Rules allow an editor to remove
+    //    ONLY themselves (editors[]+updatedAt, no other field).
+    const editorLeaveUpdates: { ref: DocumentReference; newEditors: string[] }[] = [];
+    // Skip lists I OWN — those are already queued for deletion above (section 5),
+    // and a batch.update on an already-deleted doc throws (Firestore update is not
+    // a no-op on a missing doc), which would abort deletion before deleteUser().
+    const ownedListIds = new Set(snaps.listsSnap.docs.map(d => d.id));
+    snaps.editableListsSnap.docs.forEach(d => {
+      if (ownedListIds.has(d.id)) return;
+      const editors = (d.data().editors as string[]) ?? [];
+      editorLeaveUpdates.push({ ref: d.ref, newEditors: editors.filter(u => u !== id) });
+    });
+
     // 9. User doc + username reservation.
     refs.push(doc(db, 'users', id));
     if (username) refs.push(doc(db, 'usernames', username));
@@ -736,6 +751,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const batch = writeBatch(db);
       memberLeaveUpdates.slice(i, i + CHUNK).forEach(u => {
         batch.update(u.ref, { memberUids: u.newMemberUids });
+      });
+      await batch.commit();
+    }
+    // Editor-leave updates (BIN-149) — strip self from others' lists' editors[].
+    for (let i = 0; i < editorLeaveUpdates.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      editorLeaveUpdates.slice(i, i + CHUNK).forEach(u => {
+        batch.update(u.ref, { editors: u.newEditors, updatedAt: serverTimestamp() });
       });
       await batch.commit();
     }

@@ -5,10 +5,12 @@
  * maintenance, read-time is a single cheap doc.
  *
  * Fires on every watchlist write but no-ops unless the doc's `rating` changed
- * (the common case). Uses FieldValue.increment for atomic, lock-free updates —
- * concurrent rating writes for the same title compose correctly without a
- * transaction. Aggregate doc id is `${mediaType}_${tmdbId}` so a movie and a TV
- * show that share a TMDB numeric id never collide.
+ * (the common case). Uses FieldValue.increment for atomic, lock-free deltas —
+ * concurrent rating writes for distinct events compose correctly. A transaction
+ * + a stored `lastEventId` (BIN-148) makes redelivery of the *same* event
+ * idempotent so the aggregate can't drift. Aggregate doc id is
+ * `${mediaType}_${tmdbId}` so a movie and a TV show that share a TMDB numeric id
+ * never collide.
  *
  * The aggregate collection is Admin-written only (rules: read public, write
  * false). avg is computed on read as sum / count.
@@ -35,12 +37,24 @@ export const communityRatingMaintain = onDocumentWritten(
     }
 
     const docId = `${mediaType}_${event.params.tmdbId}`;
+    const ref = getFirestore().collection('titleRatingsAggregate').doc(docId);
     try {
-      await getFirestore().collection('titleRatingsAggregate').doc(docId).set({
-        count: FieldValue.increment(delta.countDelta),
-        sum: FieldValue.increment(delta.sumDelta),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      // BIN-148: onDocumentWritten is at-least-once — a redelivered event would
+      // apply the same delta twice and drift count/sum permanently. Guard with
+      // the CloudEvent id in a transaction: skip if we already processed it.
+      await getFirestore().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (snap.exists && snap.get('lastEventId') === event.id) {
+          logger.info(`communityRatings: duplicate event ${event.id} for ${docId} — skipping`);
+          return;
+        }
+        tx.set(ref, {
+          count: FieldValue.increment(delta.countDelta),
+          sum: FieldValue.increment(delta.sumDelta),
+          lastEventId: event.id,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
     } catch (err) {
       logger.error(`communityRatings: aggregate update failed for ${docId}`, err);
     }

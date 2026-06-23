@@ -54,9 +54,9 @@ export interface UserDataSnapshots {
   episodeReactionsSnap: QuerySnapshot;
   listsSnap: QuerySnapshot;
   // Lists I co-edit (BIN-100, editors array-contains me). In export (my
-  // editorship is my data). NOT deleted here — the list is owned by someone
-  // else (rules: only the owner writes metadata); my uid lingers in editors[]
-  // until they remove me, same as the followers-snapshot precedent.
+  // editorship is my data). On account deletion (BIN-149) the cascade strips my
+  // uid from each list's editors[] — the list doc itself is owned by someone
+  // else and is NOT deleted, but I no longer linger as a ghost co-editor.
   editableListsSnap: QuerySnapshot;
   sessionsSnap: QuerySnapshot;
   groupsSnap: QuerySnapshot;

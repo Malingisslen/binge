@@ -493,6 +493,17 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.get('editors', [])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt']);
+      // BIN-149: a co-editor may remove ONLY THEMSELVES from editors[] — the
+      // account-deletion cascade strips a leaving user from others' lists so a
+      // deleted account doesn't linger as a write-authorized ghost editor.
+      // Tightly bounded: only editors[]+updatedAt change, the caller must have
+      // been an editor, must NOT remain one, and the new editors[] must equal
+      // the old minus exactly their own uid (can't add or drop anyone else).
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.get('editors', [])
+        && !(request.auth.uid in request.resource.data.get('editors', []))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['editors', 'updatedAt'])
+        && request.resource.data.editors == resource.data.editors.removeAll([request.auth.uid]);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 

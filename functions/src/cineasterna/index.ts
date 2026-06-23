@@ -34,6 +34,7 @@ async function resolveUnknown(
   });
 
   let newlyResolved = 0;
+  let lastCheckpointed = 0;
 
   // Process in chunks of CONCURRENCY (simple batched approach — readable, predictable).
   for (let i = 0; i < unknown.length; i += CONCURRENCY) {
@@ -45,9 +46,14 @@ async function resolveUnknown(
       if (result !== null) newlyResolved++;
     }
 
-    // Checkpoint every CHECKPOINT_INTERVAL newly-resolved titles.
-    if (newlyResolved > 0 && newlyResolved % CHECKPOINT_INTERVAL === 0) {
+    // BIN-146: checkpoint when we've CROSSED another CHECKPOINT_INTERVAL since the
+    // last one. The old `newlyResolved % INTERVAL === 0` test only matched at exact
+    // multiples — but newlyResolved steps by up to CONCURRENCY (6) per chunk, and
+    // 50 isn't a multiple of 6, so it almost never hit and a cold catalog could
+    // burn its whole timeout with nothing persisted.
+    if (newlyResolved - lastCheckpointed >= CHECKPOINT_INTERVAL) {
       await mapRef.set({ map: imdbMap });
+      lastCheckpointed = newlyResolved;
       logger.info('cineasterna: imdbMap checkpoint', { resolved: newlyResolved });
     }
   }
@@ -60,6 +66,25 @@ export const cineasternaCatalogSync = onSchedule(
     const ref = db.collection('cineasternaCatalog').doc('current');
 
     const titles = await fetchCatalog();
+
+    // BIN-146: fetchCatalog returns [] on ANY failure (handshake, non-200, parse).
+    // The rot guard's baseline is 0 on a cold/first run, so an empty scrape would
+    // slip through and write an empty catalog — which then pins the baseline at 0
+    // and lets empty results keep slipping through (a silently-dead badge). Treat
+    // empty as a hard failure regardless of baseline: keep the old catalog + alert.
+    if (titles.length === 0) {
+      logger.error('cineasterna: empty catalog fetch — refusing overwrite');
+      const adminUid = process.env.ADMIN_UID;
+      if (adminUid) {
+        await db.collection('users').doc(adminUid).collection('notifications').add({
+          kind: 'system', title: 'Cineasterna-synk misslyckades',
+          body: 'Hämtade 0 titlar (tomt svar). Behöll gammal katalog — kontrollera API:t.',
+          actionUrl: '/insikter', read: false, createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+      return;
+    }
+
     const prev = (await ref.get()).data() as CatalogDoc | undefined;
 
     // Rot guard on RAW count — a silently-truncated upstream response is caught here

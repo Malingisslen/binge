@@ -524,6 +524,23 @@ describe('lists collaborative editing (BIN-100)', () => {
     await seedCollabList('cl7', { isPublic: false, editors: [] });
     await assertFails(getDoc(doc(otherDb(), 'lists', 'cl7')));
   });
+  it('editor CAN remove ONLY themselves from editors[] (BIN-149 deletion cascade)', async () => {
+    await seedCollabList('cl8', { isPublic: true, editors: ['other_uid', 'third_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'lists', 'cl8'),
+      { editors: ['third_uid'], updatedAt: serverTimestamp() }));
+  });
+  it('editor CANNOT drop another editor while leaving (self-leave is exact, BIN-149)', async () => {
+    await seedCollabList('cl9', { isPublic: true, editors: ['other_uid', 'third_uid'] });
+    // other_uid removes self AND third_uid → not equal to old.removeAll([self]) → denied
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl9'),
+      { editors: [], updatedAt: serverTimestamp() }));
+  });
+  it('non-editor cannot invoke the self-leave branch (BIN-149)', async () => {
+    await seedCollabList('cl10', { isPublic: true, editors: ['third_uid'] });
+    // other_uid is not in editors[] → the `uid in editors` guard blocks the branch
+    await assertFails(updateDoc(doc(otherDb(), 'lists', 'cl10'),
+      { editors: [], updatedAt: serverTimestamp() }));
+  });
 });
 
 // BIN-96: list following — users/{uid}/listFollows/{listId}.

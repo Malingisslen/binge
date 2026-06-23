@@ -20,8 +20,13 @@ export async function fetchOffers(
   // Path confirmed in Step 1. Example v4 form:
   const url = `https://${HOST}/shows/${mediaType}/${tmdbId}?country=se&output_language=sv`;
   try {
+    // BIN-157: Node fetch has no default timeout; one hung MOTN response could
+    // block the sequential refresh loop and burn the whole 300s function budget.
+    // 10s ceiling per request — the catch below already maps a throw to null
+    // (skip + retry next run), so no other handling is needed.
     const res = await fetch(url, {
       headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': HOST },
+      signal: AbortSignal.timeout(10_000),
     });
     if (res.status === 404) return []; // not in MOTN catalogue == no offers
     if (!res.ok) { logger.warn(`streamingOffers: MOTN ${mediaType}/${tmdbId} -> ${res.status}`); return null; }
