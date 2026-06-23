@@ -43,9 +43,17 @@ export const metadata: Metadata = {
   // Offline-service-workern är medvetet INTE registrerad här: FCM-SW:en äger
   // redan scope '/', så en andra SW skulle ersätta den och slå sönder push —
   // den delen kräver att caching slås ihop i firebase-messaging-sw.js och
-  // preview-testas (se BIN-68-kommentar). PNG-ikoner (192/512 maskable) saknas
-  // ännu (bara SVG finns) → full installerbarhet väntar på ikon-assets.
+  // preview-testas (se BIN-68-kommentar). BIN-151: PNG-ikoner (192/512 + maskable
+  // + apple-touch) genererade från brand-marken (saffran-ruta, "b") finns nu i
+  // /public → appen är installerbar med riktig hemskärms-ikon.
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
   appleWebApp: { capable: true, title: 'Binge', statusBarStyle: 'default' },
   openGraph: {
     title: 'Binge.nu',
