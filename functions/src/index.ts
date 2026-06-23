@@ -159,6 +159,13 @@ export { apiInsights } from './insights/api';
 // är ikapp på en serie när TMDB rapporterar ett nytt aireat avsnitt.
 export { episodeReleaseNotify } from './episodeNotify';
 
+// ── "Serien är tillbaka"-push (BIN-188) ──────────────────────────────────────
+// showReturnNotify: daglig collectionGroup-scan (TV i 'mina') → fetchar TMDB
+// next_episode_to_air per unik serie → push:ar followers som var 'ikapp'/
+// 'avslutad' (ikapp) när en SÄSONGSPREMIÄR (avsnitt 1) annonseras. Deduppas mot
+// returnNotifyState/{tmdbId}. Lite queries; Admin SDK → ingen rules-ändring.
+export { showReturnNotify } from './returnNotify';
+
 // ── "Tillgänglig på dina tjänster"-push (BIN-60) ─────────────────────────────
 // availableNotify: daglig collectionGroup-scan (vill_se + mina) → fetchar SE
 // flatrate per unik titel, diffar mot availableNotifyState-markör, push:ar
