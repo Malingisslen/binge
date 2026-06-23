@@ -32,13 +32,24 @@ export function isCaughtUp(item: WatchlistLite, tmdbStatus: string | null, last:
   return s === 'ikapp' || s === 'avslutad';
 }
 
-// Show-level gate: TMDB announced the premiere of a LATER season we haven't
-// notified for yet. season_number > 1 + episode_number === 1 = "the show is
-// coming back" (a return), which excludes a first-ever S1E1 premiere (the show
-// never aired, so it can't "return"). The id-dedupe prevents re-firing every
-// run while the same premiere is pending.
-export function shouldNotifyReturn(next: NextEpisode | null, lastNotifiedNextId: number | null): boolean {
-  if (!next) return false;
-  if (next.episode_number !== 1 || next.season_number <= 1) return false;
-  return next.id !== lastNotifiedNextId;
+// A later-season premiere — "the show is coming back". season_number > 1 +
+// episode_number === 1 excludes a first-ever S1E1 premiere (a never-aired show
+// can't "return").
+export function isSeasonReturnPremiere(next: NextEpisode | null): boolean {
+  return next != null && next.episode_number === 1 && next.season_number > 1;
+}
+
+// Show-level notify gate. firstObservation = no marker doc yet → BASELINE run:
+// record current state, notify nobody (avoids a first-run blast for premieres
+// already pending when the function is first deployed). Otherwise notify on a
+// season-return premiere whose id differs from the last observed next-episode id
+// (so we fire once when a new return is announced, not every run while pending).
+export function shouldNotifyReturn(
+  next: NextEpisode | null,
+  lastObservedNextId: number | null,
+  firstObservation: boolean,
+): boolean {
+  if (firstObservation) return false;
+  if (!isSeasonReturnPremiere(next)) return false;
+  return next!.id !== lastObservedNextId;
 }

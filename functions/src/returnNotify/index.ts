@@ -44,10 +44,12 @@ async function readFollowedSeries(): Promise<WatchlistLite[]> {
   });
 }
 
-async function readLastNotifiedReturn(tmdbId: number): Promise<number | null> {
+// Returns the last observed next-episode id + whether the marker doc exists.
+// exists=false → first observation of this show → baseline (no notify).
+async function readObservedNext(tmdbId: number): Promise<{ lastId: number | null; exists: boolean }> {
   const snap = await getFirestore().collection('returnNotifyState').doc(String(tmdbId)).get();
-  const v = snap.data()?.lastNotifiedNextEpisode;
-  return typeof v === 'number' ? v : null;
+  const v = snap.data()?.lastObservedNextEpisode;
+  return { lastId: typeof v === 'number' ? v : null, exists: snap.exists };
 }
 
 // One read of users/{uid} for both notif flags (reuses episodeReleases — a
@@ -69,41 +71,42 @@ async function readNotificationSettings(
 async function processShow(tmdbId: number, items: WatchlistLite[]): Promise<number> {
   const info = await fetchTvReturnInfo(tmdbId);
   if (!info) return 0;
-  const lastNotified = await readLastNotifiedReturn(tmdbId);
-  if (!shouldNotifyReturn(info.nextEpisode, lastNotified)) return 0;
-  const next = info.nextEpisode!;
   const db = getFirestore();
 
-  const recipients = items.filter((it) => isCaughtUp(it, info.status, info.lastEpisode));
-  if (recipients.length === 0) {
-    await db.collection('returnNotifyState').doc(String(tmdbId))
-      .set({ lastNotifiedNextEpisode: next.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return 0;
+  const marker = await readObservedNext(tmdbId);
+  // State marker: the current next-episode id (0 = no next). Always advanced so
+  // the baseline gets recorded on the first observation and we dedupe after.
+  const observedId = info.nextEpisode ? info.nextEpisode.id : 0;
+  const writeMarker = () => db.collection('returnNotifyState').doc(String(tmdbId))
+    .set({ lastObservedNextEpisode: observedId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+  let notified = 0;
+  if (shouldNotifyReturn(info.nextEpisode, marker.lastId, !marker.exists)) {
+    const next = info.nextEpisode!;
+    const recipients = items.filter((it) => isCaughtUp(it, info.status, info.lastEpisode));
+    const title = recipients[0]?.title || 'En serie du följer';
+    const actionUrl = `/tv/${tmdbId}/`;
+    const seasonBit = `säsong ${next.season_number}`;
+    await Promise.allSettled(recipients.map(async (it) => {
+      const settings = await readNotificationSettings(it.uid);
+      if (!settings || !settings.episodeReleases) return;
+      const notifId = `return-${tmdbId}-${next.id}`;
+      await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
+        tmdbId, mediaType: 'tv', title: it.title || title, kind: 'show_return',
+        seasonNumber: next.season_number, read: false, createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      await sendPushToUser(it.uid, {
+        title: 'Serien är tillbaka',
+        body: `${it.title || title} — ${seasonBit} är på väg, du var ikapp`,
+        actionUrl,
+        tag: `return-${tmdbId}`,
+      }, { pushEnabled: settings.pushEnabled });
+      notified += 1;
+    }));
   }
 
-  const title = recipients[0]?.title || 'En serie du följer';
-  const actionUrl = `/tv/${tmdbId}/`;
-  const seasonBit = `säsong ${next.season_number}`;
-  let notified = 0;
-  await Promise.allSettled(recipients.map(async (it) => {
-    const settings = await readNotificationSettings(it.uid);
-    if (!settings || !settings.episodeReleases) return;
-    const notifId = `return-${tmdbId}-${next.id}`;
-    await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
-      tmdbId, mediaType: 'tv', title: it.title || title, kind: 'show_return',
-      seasonNumber: next.season_number, read: false, createdAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    await sendPushToUser(it.uid, {
-      title: 'Serien är tillbaka',
-      body: `${it.title || title} — ${seasonBit} är på väg, du var ikapp`,
-      actionUrl,
-      tag: `return-${tmdbId}`,
-    }, { pushEnabled: settings.pushEnabled });
-    notified += 1;
-  }));
-
-  await db.collection('returnNotifyState').doc(String(tmdbId))
-    .set({ lastNotifiedNextEpisode: next.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  // Always advance the marker (baseline on first observation; dedupe afterwards).
+  await writeMarker();
   return notified;
 }
 

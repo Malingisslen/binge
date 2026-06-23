@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isCaughtUp, shouldNotifyReturn, type NextEpisode } from './logic';
+import { isCaughtUp, shouldNotifyReturn, isSeasonReturnPremiere, type NextEpisode } from './logic';
 import type { WatchlistLite, LastEpisode } from '../episodeNotify/logic';
 
 const item = (o: Partial<WatchlistLite>): WatchlistLite => ({
@@ -30,23 +30,42 @@ describe('isCaughtUp', () => {
   });
 });
 
+describe('isSeasonReturnPremiere', () => {
+  it('true for a later-season premiere (S2E1)', () => {
+    expect(isSeasonReturnPremiere(next({ season_number: 2, episode_number: 1 }))).toBe(true);
+  });
+  it('false for a mid-season episode', () => {
+    expect(isSeasonReturnPremiere(next({ season_number: 2, episode_number: 5 }))).toBe(false);
+  });
+  it('false for a first-ever S1E1 premiere', () => {
+    expect(isSeasonReturnPremiere(next({ season_number: 1, episode_number: 1 }))).toBe(false);
+  });
+  it('false for no next episode', () => {
+    expect(isSeasonReturnPremiere(null)).toBe(false);
+  });
+});
+
 describe('shouldNotifyReturn', () => {
-  it('true for an unseen season premiere (episode 1)', () => {
-    expect(shouldNotifyReturn(next({ id: 201, episode_number: 1 }), null)).toBe(true);
+  // 3rd arg = firstObservation (baseline run). false in most cases below.
+  it('true for an unseen later-season premiere once past the baseline', () => {
+    expect(shouldNotifyReturn(next({ id: 201, season_number: 2, episode_number: 1 }), 0, false)).toBe(true);
+  });
+  it('FALSE on the first observation (baseline) even for a pending premiere — no first-run blast', () => {
+    expect(shouldNotifyReturn(next({ id: 201, season_number: 2, episode_number: 1 }), null, true)).toBe(false);
   });
   it('false for a mid-season episode (episode > 1) — episodeReleaseNotify handles those', () => {
-    expect(shouldNotifyReturn(next({ id: 205, episode_number: 5 }), null)).toBe(false);
+    expect(shouldNotifyReturn(next({ id: 205, episode_number: 5 }), 0, false)).toBe(false);
   });
   it('false for a first-ever S1E1 premiere — a never-aired show cannot "return"', () => {
-    expect(shouldNotifyReturn(next({ id: 101, season_number: 1, episode_number: 1 }), null)).toBe(false);
+    expect(shouldNotifyReturn(next({ id: 101, season_number: 1, episode_number: 1 }), 0, false)).toBe(false);
   });
-  it('false when this premiere was already notified (id dedupe)', () => {
-    expect(shouldNotifyReturn(next({ id: 201, episode_number: 1 }), 201)).toBe(false);
+  it('false when this premiere was already observed (id dedupe)', () => {
+    expect(shouldNotifyReturn(next({ id: 201, season_number: 2, episode_number: 1 }), 201, false)).toBe(false);
   });
   it('true again when a LATER premiere is announced (new id)', () => {
-    expect(shouldNotifyReturn(next({ id: 301, season_number: 3, episode_number: 1 }), 201)).toBe(true);
+    expect(shouldNotifyReturn(next({ id: 301, season_number: 3, episode_number: 1 }), 201, false)).toBe(true);
   });
   it('false when there is no next episode', () => {
-    expect(shouldNotifyReturn(null, null)).toBe(false);
+    expect(shouldNotifyReturn(null, 0, false)).toBe(false);
   });
 });
