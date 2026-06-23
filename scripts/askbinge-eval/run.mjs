@@ -20,6 +20,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { RESPONSE_SCHEMA, SYSTEM_PROMPT, SCORED_FIELDS, MOODS, GENRES } from './schema.mjs';
+import { parseDeterministic } from './deterministic.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PASS_BAR = 0.85; // strict exact-match rate to consider Gemini Flash-Lite "good enough"
@@ -41,9 +42,11 @@ const EMIT_JSON = argv.includes('--json');
 // with the rest handled as UI controls). Default: all fields.
 const FIELDS_FLAG = getFlag('--fields', '');
 const SCORED = FIELDS_FLAG ? FIELDS_FLAG.split(',').map((s) => s.trim()).filter(Boolean) : SCORED_FIELDS;
+// --engine deterministic: rule-based parser, no API/key. Default: gemini.
+const ENGINE = getFlag('--engine', 'gemini');
 
 const API_KEY = process.env.GEMINI_API_KEY;
-if (!API_KEY) {
+if (ENGINE === 'gemini' && !API_KEY) {
   console.error('✗ GEMINI_API_KEY is not set. Get a key at https://aistudio.google.com/apikey and run:\n  GEMINI_API_KEY=xxx node scripts/askbinge-eval/run.mjs');
   process.exit(2);
 }
@@ -170,7 +173,8 @@ async function main() {
   let cases = raw.cases;
   if (LIMIT > 0) cases = cases.slice(0, LIMIT);
 
-  console.error(`Ask Binge eval · model=${MODEL} · ${cases.length} cases · concurrency=${CONCURRENCY}\n`);
+  const engineHdr = ENGINE === 'deterministic' ? 'deterministic' : `gemini:${MODEL}`;
+  console.error(`Ask Binge eval · engine=${engineHdr} · ${cases.length} cases · concurrency=${CONCURRENCY}\n`);
 
   const results = [];
   const fieldStats = Object.fromEntries(SCORED.map((f) => [f, { tp: 0, tn: 0, fp: 0, fn: 0, wrong: 0 }]));
@@ -181,8 +185,9 @@ async function main() {
     while (cursor < cases.length) {
       const c = cases[cursor++];
       let got = null, error = null;
-      try { got = normalizeOutput(await parseQuery(c.query)); }
-      catch (e) { error = String(e.message || e); }
+      try {
+        got = normalizeOutput(ENGINE === 'deterministic' ? parseDeterministic(c.query) : await parseQuery(c.query));
+      } catch (e) { error = String(e.message || e); }
 
       const fieldVerdicts = {};
       let allTpTn = true;
@@ -238,8 +243,10 @@ async function main() {
   console.error(`  Strict exact-match:   ${strict}/${n}  ${fmtPct(strict / n)}`);
   console.error(`  Tolerant exact-match: ${tolerant}/${n}  ${fmtPct(tolerant / n)}  (mood≈genre, vote ±0.5)`);
   if (errors) console.error(`  API errors:           ${errors}`);
+  const engineLabel = ENGINE === 'deterministic' ? 'deterministic parser' : MODEL;
+  console.error(`  Engine:               ${engineLabel}`);
   console.error(`  Pass bar:             ${fmtPct(PASS_BAR)} strict`);
-  console.error(`  Verdict:              ${strict / n >= PASS_BAR ? 'PASS — Flash-Lite is accurate enough to build on' : 'BELOW BAR — tune prompt / try a larger model before building'}`);
+  console.error(`  Verdict:              ${strict / n >= PASS_BAR ? `PASS — ${engineLabel} clears the bar, build on it` : `BELOW BAR — ${engineLabel} needs work (tune prompt / larger model / more rules) before building`}`);
 
   if (EMIT_JSON) console.log(JSON.stringify({ model: MODEL, n, strict, tolerant, errors, results }, null, 2));
 
