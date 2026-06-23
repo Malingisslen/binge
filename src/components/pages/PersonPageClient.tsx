@@ -9,6 +9,8 @@ import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { translateDepartment } from '@/lib/tmdb/department';
 import { splitSelfCredits } from '@/lib/tmdb/personCredits';
+import { filmographyCompletion } from '@/lib/tmdb/filmographyCompletion';
+import { useWatchlist } from '@/hooks/useWatchlist';
 import TitleGrid from '@/components/title/TitleGrid';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -20,6 +22,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const personId = parseInt(id, 10);
   const { data: person, isLoading } = usePerson(personId, initialData);
   const { data: credits } = usePersonCredits(personId);
+  const { getItem } = useWatchlist();
 
   const svBio = person?.biography || '';
 
@@ -59,6 +62,20 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
       .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
     return splitSelfCredits(unique);
   }, [credits]);
+
+  // BIN-187 — "Samla klart": completion meter over the films this person
+  // directed. "Seen" = the film is in the library as 'sedd' (films have a clean
+  // terminal watched state; TV-creator completion is a separate follow-up).
+  const directedFilmIds = useMemo(() => {
+    const ids = (credits?.crew ?? [])
+      .filter(c => c.job === 'Director' && c.media_type === 'movie' && isAddableMediaType(c))
+      .map(c => c.id);
+    return Array.from(new Set(ids));
+  }, [credits]);
+  const directedMeter = useMemo(
+    () => filmographyCompletion(directedFilmIds, tmdbId => getItem(tmdbId)?.status === 'sedd'),
+    [directedFilmIds, getItem],
+  );
 
   usePageMeta({
     title: person ? person.name : 'Person',
@@ -113,6 +130,20 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
           )}
         </div>
       </div>
+
+      {directedMeter.total >= 3 && (
+        <div className="mb-4 max-w-sm">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-bold text-ink-2">
+              Regisserat — du har sett {directedMeter.seen} av {directedMeter.total}
+            </span>
+            <span className="text-ink-3">{directedMeter.pct}%</span>
+          </div>
+          <div className="h-[3px] bg-rule rounded-full overflow-hidden">
+            <div className="h-full bg-ink rounded-full" style={{ width: `${directedMeter.pct}%` }} />
+          </div>
+        </div>
+      )}
 
       {roles.length > 0 && (
         <div className="mb-4">

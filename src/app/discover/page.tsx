@@ -10,6 +10,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import type { TMDBSearchResult } from '@/types';
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
 import { JsonLd, breadcrumbSchema, collectionPageSchema } from '@/components/title/JsonLd';
+import { nordicLanguageParam } from '@/lib/discover/nordic';
 
 const DISCOVER_DESCRIPTION = 'Trendande, populära och nya filmer och serier på Netflix, Viaplay, HBO Max, Disney+, SVT Play och fler svenska streamingtjänster.';
 
@@ -27,6 +28,7 @@ export default function DiscoverPage() {
   const [genre, setGenre] = useState<string>('');
   const [sort, setSort] = useState<SortOption>('popularity.desc');
   const [myServices, setMyServices] = useState(false);
+  const [nordic, setNordic] = useState(false);
   const [page, setPage] = useState(1);
   const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
   const { user } = useAuth();
@@ -35,7 +37,7 @@ export default function DiscoverPage() {
   useEffect(() => {
     setPage(1);
     setAllResults([]);
-  }, [tab, genre, sort, myServices]);
+  }, [tab, genre, sort, myServices, nordic]);
 
   const { data: movieGenres } = useQuery({
     queryKey: ['genres-movie'],
@@ -70,6 +72,7 @@ export default function DiscoverPage() {
     ...(myServices && user?.myProviders.length
       ? { with_watch_providers: user.myProviders.join('|') }
       : {}),
+    ...(nordic ? { with_original_language: nordicLanguageParam() } : {}),
     ...(hiddenCountries.length
       ? { without_origin_country: hiddenCountries.join(',') }
       : {}),
@@ -193,6 +196,19 @@ export default function DiscoverPage() {
                 className="accent-accent w-[13px] h-[13px]"
               />
               Mina tjänster
+            </label>
+          )}
+
+          {/* Svenskt & nordiskt lens (BIN-192) — filtrerar till nordiska originalspråk */}
+          {tab !== 'trending' && (
+            <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
+              <input
+                type="checkbox"
+                checked={nordic}
+                onChange={e => setNordic(e.target.checked)}
+                className="accent-accent w-[13px] h-[13px]"
+              />
+              Svenskt &amp; nordiskt
             </label>
           )}
         </div>
