@@ -453,6 +453,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Price history (BIN-180) — shared, global cheapest-rent points per title,
+    // appended write-on-change by the streamingOffersRefresh cron (Admin SDK
+    // bypasses rules). Public read (price data, no PII); never client-written.
+    match /priceHistory/{tmdbId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Community rating aggregate (BIN-104) — {count,sum} per title, maintained
     // by the communityRatingMaintain trigger (Admin SDK). Public read for the
     // "Binge-snitt" på titelsidor; never client-written (no vote-stuffing).

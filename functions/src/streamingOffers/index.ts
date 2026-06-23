@@ -5,6 +5,7 @@ import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth } from './logic';
 import { fetchOffers } from './motn';
+import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
 import type { IntentItem, ExistingOffer, Offer } from './types';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
@@ -105,6 +106,17 @@ export const streamingOffersRefresh = onSchedule(
         tmdbId, mediaType, offers, checkedAt: nowMs, source: 'motn',
       });
       written += 1;
+
+      // BIN-180: capture cheapest-rent price history (shared, global, write-on-
+      // change). Builds the price-graph asset that can't be backfilled. One read
+      // + (only on a price change) one write per batched title — bounded by the
+      // daily budget, so negligible cost.
+      const histRef = db.collection('priceHistory').doc(String(tmdbId));
+      const points = ((await histRef.get()).get('points') as PricePoint[] | undefined) ?? [];
+      const nextPoints = appendPricePoint(points, cheapestRent(offers), nowMs);
+      if (nextPoints) {
+        await histRef.set({ tmdbId, mediaType, points: nextPoints, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
     }
 
     const health = computeHealth(workSet.length, DAILY_BUDGET, new Date(nowMs).toISOString());

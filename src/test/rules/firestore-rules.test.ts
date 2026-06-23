@@ -603,3 +603,17 @@ describe('titleRatingsAggregate/{titleId} (BIN-104)', () => {
     await assertFails(setDoc(doc(anonDb(), 'titleRatingsAggregate', 'tv_1399'), { count: 1, sum: 8 }));
   });
 });
+
+// BIN-180: price history — public read, function-only write (Admin SDK).
+describe('priceHistory/{tmdbId} (BIN-180)', () => {
+  it('is publicly readable (price graph på titelsidor)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'priceHistory', '603'), { tmdbId: 603, points: [{ at: 1, amount: 49, currency: 'SEK' }] });
+    });
+    await assertSucceeds(getDoc(doc(anonDb(), 'priceHistory', '603')));
+  });
+  it('cannot be written by clients (cron-only history asset)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'priceHistory', '603'), { points: [] }));
+    await assertFails(setDoc(doc(anonDb(), 'priceHistory', '1399'), { points: [] }));
+  });
+});
