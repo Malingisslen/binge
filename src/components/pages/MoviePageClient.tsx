@@ -36,6 +36,7 @@ import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
+import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
@@ -258,6 +259,15 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               />
             )}
           </ClientOnly>
+
+          {mounted && (
+            <CheapestPathVerdict
+              subscriptionProviderIds={subscription.map(p => canonicalProviderId(p.provider_id))}
+              ownedProviderIds={myProviderIds}
+              offers={offers}
+              libraryAvailable={onCineasterna}
+            />
+          )}
 
           {(onSubscription.length > 0 || hasRentBuy) && (
             <div className="providers-row">
