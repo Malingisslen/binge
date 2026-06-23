@@ -39,6 +39,7 @@ import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
+import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
 
@@ -52,7 +53,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const { data: show, isLoading } = useTVShow(showId, initialData);
   const { offers } = useStreamingOffers(show?.id);
   const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime } = useWatchlist();
-  useAuth();
+  const { user } = useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
   const [showRentBuy, setShowRentBuy] = useState(false);
@@ -254,6 +255,15 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <NotInterestedButton tmdbId={show.id} mediaType="tv" title={displayTitle} />
             </div>
           </ClientOnly>
+
+          {mounted && (
+            <CheapestPathVerdict
+              subscriptionProviderIds={subscription.map(p => canonicalProviderId(p.provider_id))}
+              ownedProviderIds={user?.myProviders ?? []}
+              offers={offers}
+              libraryAvailable={false}
+            />
+          )}
 
           {(onSubscription.length > 0 || hasRentBuy) && (
             <div className="providers-row">
