@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeAskBinge } from './askbinge';
+import { summarizeAskBinge } from './askbingeSummary';
 
 describe('summarizeAskBinge', () => {
   it('sums scalar counters and bucket maps across daily docs', () => {
