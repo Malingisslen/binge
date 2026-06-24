@@ -89,3 +89,87 @@ describe('parseSearch — dimension extraction', () => {
     expect(parseSearch('en rysare på Netflix').originalLanguage).toBeUndefined();
   });
 });
+
+describe('parseSearch — broadened coverage', () => {
+  it('maps more genre synonyms/slang', () => {
+    expect(parseSearch('en bra spökhistoria').genreIds).toEqual([27]);          // spök → horror
+    expect(parseSearch('en slasher').genreIds).toEqual([27]);
+    expect(parseSearch('maffiafilm').genreIds).toEqual([80]);                   // maffia → crime
+    expect(parseSearch('en polisserie').genreIds).toEqual([80]);
+    expect(parseSearch('en spionthriller').genreIds).toEqual([53]);            // spion + thriller → 53 (deduped)
+    expect(new Set(parseSearch('en biopic om en musiker').genreIds)).toEqual(new Set([18, 10402])); // biopic→drama, musiker→musik
+    expect(parseSearch('en musikal').genreIds).toEqual([10402]);
+    expect(parseSearch('superhjältefilm').genreIds).toEqual([28]);             // superhero → action (movie)
+    expect(parseSearch('en dystopisk rymdfilm').genreIds).toEqual([878]);      // dystopi/rymd → sci-fi (movie)
+    expect(parseSearch('en standup-special').genreIds).toEqual([35]);
+  });
+
+  it('combines genres that co-occur', () => {
+    expect(new Set(parseSearch('en actionkomedi').genreIds)).toEqual(new Set([28, 35]));
+    expect(new Set(parseSearch('en romantisk komedi').genreIds)).toEqual(new Set([10749, 35]));
+    expect(new Set(parseSearch('en skräckkomedi').genreIds)).toEqual(new Set([27, 35]));
+  });
+
+  it('recognizes more streaming services + aliases', () => {
+    expect(parseSearch('finns det på C More?').providerIds).toEqual([489]);     // C More → TV4
+    expect(parseSearch('något på dplay').providerIds).toEqual([510]);
+  });
+
+  it('recognizes more languages (and labels exist for them)', () => {
+    expect(parseSearch('en finsk deckare').originalLanguage).toBe('fi');
+    expect(parseSearch('kinesisk actionfilm').originalLanguage).toBe('zh');
+    expect(parseSearch('turkisk dramaserie').originalLanguage).toBe('tr');
+    expect(parseSearch('en brasiliansk film').originalLanguage).toBe('pt');
+    expect(parseSearch('nederländsk thriller').originalLanguage).toBe('nl');
+  });
+
+  it('parses more decade forms', () => {
+    expect(parseSearch('en film från femtiotalet').decade).toBe('1950');
+    expect(parseSearch('serier från 00-talet').decade).toBe('2000');
+    expect(parseSearch('20-talet').decade).toBe('2020');
+  });
+
+  it('parses more runtime phrasings', () => {
+    expect(parseSearch('en halvtimme bara').runtimeMax).toBe(30);
+    expect(parseSearch('en och en halv timme').runtimeMax).toBe(90);
+    expect(parseSearch('ett par timmar').runtimeMax).toBe(120);
+  });
+
+  it('detects more exclude-seen phrasings', () => {
+    expect(parseSearch('en osedd pärla').excludeSeen).toBe(true);
+    expect(parseSearch('något jag aldrig sett').excludeSeen).toBe(true);
+    expect(parseSearch('en film jag missat').excludeSeen).toBe(true);
+  });
+
+  it('sets a rating floor for more quality words', () => {
+    expect(parseSearch('en oscarsbelönad film').voteAverageMin).toBe(8);
+    expect(parseSearch('ett mästerverk').voteAverageMin).toBe(8);
+    expect(parseSearch('kritikerrosad serie').voteAverageMin).toBe(8);
+  });
+
+  it('detects more mood words and still suppresses spanning when a genre is named', () => {
+    expect(parseSearch('något gosigt').mood).toBe('mysig');
+    expect(parseSearch('en rolig kväll').mood).toBe('skratta');
+    expect(parseSearch('något gripande').mood).toBe('tankvard');
+    expect(parseSearch('en nagelbitare').mood).toBe('spanning');
+    expect(parseSearch('en intensiv thriller').mood).toBeUndefined(); // thriller genre → spanning suppressed
+  });
+
+  it('reads säsong/avsnitt as a series signal', () => {
+    expect(parseSearch('en serie med många säsonger').mediaType).toBe('tv');
+    expect(parseSearch('korta avsnitt').mediaType).toBe('tv');
+  });
+
+  it('avoids known false positives from the tightened patterns', () => {
+    // "oscar" as an actor name must NOT impose a rating floor (only "oscars…" does)
+    expect(parseSearch('film med oscar isaac').voteAverageMin).toBeUndefined();
+    expect(parseSearch('en oscarsbelönad film').voteAverageMin).toBe(8);
+    // "alienation" must NOT read as sci-fi (only whole-word alien/aliens)
+    expect(parseSearch('en film om alienation').genreIds).toBeUndefined();
+    expect(parseSearch('en film om aliens').genreIds).toEqual([878]);
+    // "max" as a number cap (incl. higher cardinals) is not the Max service
+    expect(parseSearch('max sju avsnitt').providerIds).toBeUndefined();
+    // "c more" only as the service, not the "c more" substring inside "music more"
+    expect(parseSearch('music more please').providerIds).toBeUndefined();
+  });
+});

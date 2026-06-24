@@ -63,8 +63,24 @@
     { "id": 60, "query": "historiskt drama med högt betyg", "expected": { "genreIds": [36, 18], "voteAverageMin": 7.5 } },
     { "id": 61, "query": "något nytt och spännande på mina tjänster ikväll", "expected": { "mood": "spanning", "excludeSeen": true, "myProvidersOnly": true } },
     { "id": 62, "query": "romantisk dramaserie", "expected": { "mediaType": "tv", "genreIds": [10749, 18] } },
-    { "id": 63, "query": "en kort komedi att skratta åt på Netflix", "expected": { "mood": "skratta", "runtimeMax": 30, "providerIds": [8] } },
+    { "id": 63, "query": "en kort komedi att skratta åt på Netflix", "expected": { "genreIds": [35], "mood": "skratta", "runtimeMax": 30, "providerIds": [8] } },
     { "id": 64, "query": "bästa dokumentärerna på SVT Play", "expected": { "genreIds": [99], "providerIds": [520], "sortBy": "vote_average.desc" } },
-    { "id": 65, "query": "western-serie jag inte sett på Disney+ eller Max", "expected": { "mediaType": "tv", "genreIds": [37], "excludeSeen": true, "providerIds": [337, 384] } }
+    { "id": 65, "query": "western-serie jag inte sett på Disney+ eller Max", "expected": { "mediaType": "tv", "genreIds": [37], "excludeSeen": true, "providerIds": [337, 384] } },
+    { "id": 66, "query": "en mörk maffiaserie jag inte sett", "expected": { "mediaType": "tv", "genreIds": [80], "excludeSeen": true } },
+    { "id": 67, "query": "en oscarsbelönad biopic", "expected": { "genreIds": [18], "voteAverageMin": 8 } },
+    { "id": 68, "query": "superhjältefilm på Netflix", "expected": { "mediaType": "movie", "genreIds": [28], "providerIds": [8] } },
+    { "id": 69, "query": "en dystopisk sci-fi-serie", "expected": { "mediaType": "tv", "genreIds": [10765] } },
+    { "id": 70, "query": "något gosigt och mysigt ikväll", "expected": { "mood": "mysig" } },
+    { "id": 71, "query": "en finsk kriminalserie", "expected": { "mediaType": "tv", "genreIds": [80], "originalLanguage": "fi" } },
+    { "id": 72, "query": "kinesisk kampsportsfilm", "expected": { "mediaType": "movie", "genreIds": [28], "originalLanguage": "zh" } },
+    { "id": 73, "query": "en halvtimme lång komediserie", "expected": { "mediaType": "tv", "genreIds": [35], "runtimeMax": 30 } },
+    { "id": 74, "query": "en film från femtiotalet", "expected": { "mediaType": "movie", "decade": "1950" } },
+    { "id": 75, "query": "ett mästerverk jag aldrig sett", "expected": { "excludeSeen": true, "voteAverageMin": 8 } },
+    { "id": 76, "query": "en spännande nagelbitare", "expected": { "mood": "spanning" } },
+    { "id": 77, "query": "bästa dokumentärerna på C More", "expected": { "genreIds": [99], "providerIds": [489], "sortBy": "vote_average.desc" } },
+    { "id": 78, "query": "turkisk dramaserie jag inte börjat på", "expected": { "mediaType": "tv", "genreIds": [18], "excludeSeen": true, "originalLanguage": "tr" } },
+    { "id": 79, "query": "en standup-special på Netflix", "expected": { "genreIds": [35], "providerIds": [8] } },
+    { "id": 80, "query": "rymdäventyr för hela familjen", "expected": { "genreIds": [10751, 12, 878] } },
+    { "id": 81, "query": "en kort rolig film på mina tjänster", "expected": { "mediaType": "movie", "mood": "skratta", "runtimeMax": 30, "myProvidersOnly": true } }
   ]
 }
