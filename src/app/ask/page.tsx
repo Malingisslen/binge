@@ -245,7 +245,9 @@ export default function AskPage() {
             body="Beskriv genre, känsla, längd, tjänst eller årtionde — Binge översätter det till ett filter och visar bara det du kan spela upp."
           />
         ) : aiLoading ? (
-          <LoadingView label="Tolkar din fråga…" variant="grid" />
+          // Inline "thinking" indicator — NOT a results-grid skeleton, so an empty
+          // AI result doesn't look like titles loading then being yanked away.
+          <LoadingView label="Tolkar din fråga…" />
         ) : lowConfidence ? (
           <EmptyState
             title="Jag förstod inte riktigt"
