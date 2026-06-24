@@ -57,6 +57,18 @@ export interface PlausibleData {
   signinMethodSplit: { google: number; email: number };
 }
 
+/** Fråga Binge usage/error counters aggregated over the requested range. */
+export interface AskBingeData {
+  searches: number;       // completed searches (parsed + ran a query)
+  zeroResults: number;    // of those, how many returned nothing
+  lowConfidence: number;  // submits the parser couldn't extract anything from
+  chipRemovals: number;   // interpreted-chip deletions ("you guessed wrong")
+  resultBuckets: { '0': number; '1-9': number; '10-29': number; '30+': number };
+  topStrandingFilters: { filters: string; searches: number; zero: number }[]; // by zero desc
+  topRemovedChips: { key: string; count: number }[]; // AskFilter key → delete count, desc
+  days: number;           // number of daily docs covered (coverage hint)
+}
+
 /** Net change between today's snapshot and a baseline snapshot (period metrics). */
 export interface WindowDeltas {
   basisDate: string;   // document id of the baseline snapshot (YYYY-MM-DD)
@@ -72,6 +84,7 @@ export interface InsightsData {
   range: RangeInfo;
   rollup: RollupData | null; // null if the rollup doc does not exist yet
   plausible: PlausibleData | null; // null if Plausible is unconfigured/unreachable
+  askBinge: AskBingeData | null; // null if the read failed; zeroed if simply no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   partial: boolean; // true if any source failed (frontend shows a ribbon)
 }

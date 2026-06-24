@@ -54,6 +54,18 @@ export interface PlausibleData {
   signinMethodSplit: { google: number; email: number };
 }
 
+/** Fråga Binge usage/error counters aggregated over the requested range. */
+export interface AskBingeData {
+  searches: number;
+  zeroResults: number;
+  lowConfidence: number;
+  chipRemovals: number;
+  resultBuckets: { '0': number; '1-9': number; '10-29': number; '30+': number };
+  topStrandingFilters: { filters: string; searches: number; zero: number }[];
+  topRemovedChips: { key: string; count: number }[];
+  days: number;
+}
+
 /** Net change between today's snapshot and a baseline snapshot (period metrics). */
 export interface WindowDeltas {
   basisDate: string;   // document id of the baseline snapshot (YYYY-MM-DD)
@@ -69,6 +81,7 @@ export interface InsightsData {
   range: RangeInfo;
   rollup: RollupData | null;
   plausible: PlausibleData | null;
+  askBinge: AskBingeData | null; // null if the read failed; zeroed if no data yet
   window: WindowDeltas | null; // null until at least one prior snapshot exists
   partial: boolean;
 }

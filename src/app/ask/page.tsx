@@ -16,6 +16,7 @@ import { dedupeAndExclude } from '@/lib/recommendations/rowComposition';
 import { parseSearch, isLowConfidence } from '@/lib/askBinge/parseSearch';
 import { rankAskResults } from '@/lib/askBinge/rankResults';
 import { resultBucket, activeFilterSummary, mediaFilterOf } from '@/lib/askBinge/telemetry';
+import { recordAskBinge } from '@/lib/askBinge/record';
 import { askFilterToDiscoverParams, describeFilter } from '@/lib/askBinge/toDiscoverParams';
 import type { AskFilter } from '@/lib/askBinge/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -56,15 +57,17 @@ export default function AskPage() {
     setInput(trimmed);
     setSubmitted(trimmed);
     setFilter(parsed);
-    trackEvent('ask_binge_submitted', {
-      fields: Object.keys(parsed).length,
-      lowConfidence: isLowConfidence(parsed),
-    });
+    const low = isLowConfidence(parsed);
+    trackEvent('ask_binge_submitted', { fields: Object.keys(parsed).length, lowConfidence: low });
+    // A parser-gave-up submit never reaches the settle effect (no query runs), so
+    // record it here; completed searches are recorded once their results settle.
+    if (low) void recordAskBinge({ type: 'low_confidence' });
   }
 
   function removeChip(key: keyof AskFilter) {
     // A chip removal is an explicit "you guessed wrong / I don't want this" signal.
     trackEvent('ask_binge_chip_removed', { key });
+    void recordAskBinge({ type: 'chip_removed', key });
     setFilter((f) => {
       const next = { ...f };
       delete next[key];
@@ -137,11 +140,10 @@ export default function AskPage() {
     const key = `${mKey}|${tKey}`;
     if (lastResultsKey.current === key) return;
     lastResultsKey.current = key;
-    trackEvent('ask_binge_results', {
-      resultBucket: resultBucket(results.length),
-      mediaFilter: mediaFilterOf(filter),
-      filters: activeFilterSummary(filter),
-    });
+    const bucket = resultBucket(results.length);
+    const filters = activeFilterSummary(filter);
+    trackEvent('ask_binge_results', { resultBucket: bucket, mediaFilter: mediaFilterOf(filter), filters });
+    void recordAskBinge({ type: 'search', resultBucket: bucket, filters });
   }, [canQuery, isLoading, mKey, tKey, results, filter]);
 
   return (

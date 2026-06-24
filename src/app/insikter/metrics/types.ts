@@ -13,6 +13,9 @@ export type MetricKey =
   // Produktanvändning
   | 'statusDistribution' | 'mediaTypeSplit' | 'topTitles' | 'topProviders' | 'topGenres'
   | 'ratingsHistogram' | 'advisorPauses' | 'activeSessions' | 'groupsCount'
+  // Fråga Binge (NL-sök, BIN-176)
+  | 'askSearches' | 'askZeroRate' | 'askLowConfidence'
+  | 'askResultBuckets' | 'askStrandingFilters' | 'askRemovedChips'
   // Trafik
   | 'pageViews' | 'visitors' | 'avgSessionDuration' | 'topPages' | 'topReferrers';
 

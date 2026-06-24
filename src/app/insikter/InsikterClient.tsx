@@ -163,6 +163,19 @@ export default function InsikterClient() {
           </div>
         </Section>
 
+        <Section title="Fråga Binge">
+          <MetricGrid>
+            <MetricTile metricKey="askSearches" />
+            <MetricTile metricKey="askZeroRate" />
+            <MetricTile metricKey="askLowConfidence" />
+          </MetricGrid>
+          <div className="grid lg:grid-cols-2 gap-3 mt-3">
+            <Donut metricKey="askResultBuckets" />
+            <TopList metricKey="askStrandingFilters" />
+            <TopList metricKey="askRemovedChips" />
+          </div>
+        </Section>
+
         <Section title="Trafik">
           <MetricGrid>
             <MetricTile metricKey="pageViews" />

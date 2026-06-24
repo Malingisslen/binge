@@ -474,6 +474,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Fråga Binge usage/error counters (BIN-176) — daily aggregate docs written
+    // EXCLUSIVELY by the recordAskBinge callable (Admin SDK bypasses rules) and
+    // read by /api/insights server-side. Sealed: clients can never read or forge
+    // counters directly. Validation/throttling lives in the callable.
+    match /askBingeStats/{day} {
+      allow read, write: if false;
+    }
+
     // Cineasterna availability catalog — written by the cineasternaCatalogSync cron
     // (Admin SDK bypasses rules), public read (it's catalog data, no PII).
     match /cineasternaCatalog/{doc} {

@@ -41,4 +41,22 @@ export const EXPLANATIONS: Partial<Record<MetricKey, Explanation>> = {
     whyImportant: 'Längre sessioner antyder djupare engagemang.',
     source: 'Plausible (live)',
   },
+  askZeroRate: {
+    whatIsIt: 'Andel "Fråga Binge"-sökningar som gav noll träffar.',
+    howCalculated: 'Tomma sökningar delat med antal slutförda sökningar under perioden.',
+    whyImportant: 'Den tystaste misslyckandet — användaren fick inget och lämnar. Hög andel = filter krockar eller katalogen saknar det folk frågar efter.',
+    source: 'Firestore (recordAskBinge-räknare)',
+  },
+  askStrandingFilters: {
+    whatIsIt: 'Vilka filterkombinationer som oftast ger tomma träffar.',
+    howCalculated: 'Per kombination (t.ex. Årtionde + Betyg) räknas hur många sökningar som gav noll, sorterat fallande.',
+    whyImportant: 'Pekar exakt på vilka kombinationer som behöver mjukas upp eller auto-relaxas.',
+    source: 'Firestore (recordAskBinge-räknare)',
+  },
+  askRemovedChips: {
+    whatIsIt: 'Vilka tolkningar användare oftast tar bort.',
+    howCalculated: 'Varje gång en tolknings-chip raderas räknas dess filtertyp; sorterat fallande.',
+    whyImportant: 'En borttagning är ett "du gissade fel"-kvitto — dominerar en filtertyp så övertriggar regeln.',
+    source: 'Firestore (recordAskBinge-räknare)',
+  },
 };

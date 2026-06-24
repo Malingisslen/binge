@@ -198,6 +198,13 @@ export { retentionCleanup } from './retentionCleanup';
 // reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
 export { submitReport } from './submitReport';
 
+// ── Fråga Binge usage/error recorder (BIN-176 learning loop) ─────────────────
+// recordAskBinge: callable som inkrementerar dagliga räknare i askBingeStats/{date}
+// (tom-träff-andel, strandande filterkombos, borttagna tolknings-chips). Enda
+// skrivaren — askBingeStats är låst för klienter i firestore.rules. App Check ELLER
+// inloggad krävs (ingen öppen flod-vektor). /api/insights läser dem per intervall.
+export { recordAskBinge } from './askbinge';
+
 // ── External ratings (OMDb) ──────────────────────────────────────────────────
 // titleRatings: callable med 45-dagars delad Firestore-cache per IMDb-id.
 // Hämtar IMDb-score, Rotten Tomatoes och Metacritic från OMDb API.

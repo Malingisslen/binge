@@ -16,6 +16,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { fetchPlausible } from './plausible';
+import { readAskBingeStats } from './askbinge';
 import { computeWindowDeltas } from './window';
 import type { InsightsData, RangeInfo, RollupData } from './types';
 
@@ -133,10 +134,11 @@ export const apiInsights = onRequest(
 
     const range = parseRange(req.query as Record<string, unknown>);
 
-    const [rollup, plausible, baseline] = await Promise.all([
+    const [rollup, plausible, baseline, askBinge] = await Promise.all([
       readRollup(),
       fetchPlausible(range),
       readBaseline(range.from),
+      readAskBingeStats(range),
     ]);
 
     const window = rollup
@@ -148,6 +150,7 @@ export const apiInsights = onRequest(
       range,
       rollup,
       plausible,
+      askBinge,
       window,
       partial: rollup === null || rollup.partial || plausible === null,
     };

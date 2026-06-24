@@ -14,6 +14,26 @@ const emptyBreakdown: MetricValue = { kind: 'breakdown', entries: [] };
 // with the library filter, BIN-44).
 const providerLabel = (id: number): string => getProvider(id)?.name ?? `Tjänst ${id}`;
 
+// ── Fråga Binge label maps ─────────────────────────────────────────────────────
+// Filter-TYPE names (telemetry.ts) → Swedish. A combo "decade+rating" renders as
+// "Årtionde + Betyg" so the founder can read which combination strands users.
+const ASK_FILTER_LABEL: Record<string, string> = {
+  genre: 'Genre', mood: 'Känsla', runtime: 'Längd', provider: 'Tjänst',
+  myProviders: 'Mina tjänster', excludeSeen: 'Osedda', rating: 'Betyg',
+  decade: 'Årtionde', language: 'Språk', sort: 'Sortering',
+};
+const askComboLabel = (combo: string): string =>
+  combo === 'none'
+    ? 'Inget filter'
+    : combo.split('+').map((t) => ASK_FILTER_LABEL[t] ?? t).join(' + ');
+
+// AskFilter keys (the removable chips) → Swedish.
+const ASK_CHIP_LABEL: Record<string, string> = {
+  mediaType: 'Film/Serie', genreIds: 'Genre', mood: 'Känsla', runtimeMax: 'Längd',
+  providerIds: 'Tjänst', myProvidersOnly: 'Mina tjänster', excludeSeen: 'Osedda',
+  voteAverageMin: 'Betyg', decade: 'Årtionde', originalLanguage: 'Språk', sortBy: 'Sortering',
+};
+
 // ── DATA_RESOLVERS ─────────────────────────────────────────────────────────────
 
 export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricValue> = {
@@ -117,6 +137,46 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
   advisorPauses: (d) => scalar(d.plausible?.goals.advisor_pause_taken ?? NaN),
   activeSessions: (d) => scalar(d.rollup?.totals.activeSessions ?? NaN),
   groupsCount: (d) => scalar(d.rollup?.totals.groups ?? NaN),
+
+  // ── Fråga Binge ───────────────────────────────────────────────────────────
+  askSearches: (d) => scalar(d.askBinge?.searches ?? NaN),
+  askZeroRate: (d) => {
+    const a = d.askBinge;
+    // Share of completed searches that returned nothing — the headline
+    // "are people getting stranded" number. NaN (→ "–") when no searches yet.
+    return scalar(a && a.searches > 0 ? Math.round((a.zeroResults / a.searches) * 100) : NaN);
+  },
+  askLowConfidence: (d) => scalar(d.askBinge?.lowConfidence ?? NaN),
+
+  askResultBuckets: (d) => {
+    const b = d.askBinge?.resultBuckets;
+    if (!b) return emptyBreakdown;
+    return {
+      kind: 'breakdown',
+      entries: [
+        { label: 'Inga', value: b['0'] },
+        { label: '1–9', value: b['1-9'] },
+        { label: '10–29', value: b['10-29'] },
+        { label: '30+', value: b['30+'] },
+      ],
+    };
+  },
+
+  askStrandingFilters: (d) => ({
+    kind: 'breakdown',
+    entries: (d.askBinge?.topStrandingFilters ?? []).map((c) => ({
+      label: askComboLabel(c.filters),
+      value: c.zero,
+    })),
+  }),
+
+  askRemovedChips: (d) => ({
+    kind: 'breakdown',
+    entries: (d.askBinge?.topRemovedChips ?? []).map((c) => ({
+      label: ASK_CHIP_LABEL[c.key] ?? c.key,
+      value: c.count,
+    })),
+  }),
 
   // ── Trafik ──────────────────────────────────────────────────────────────────
   pageViews: (d) => scalar(d.plausible?.pageviews ?? NaN),

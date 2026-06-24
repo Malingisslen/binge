@@ -32,6 +32,14 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   activeSessions: { key: 'activeSessions', label: 'Aktiva sessioner', category: 'product', format: { kind: 'number' } },
   groupsCount: { key: 'groupsCount', label: 'Grupper', category: 'product', format: { kind: 'number' } },
 
+  // ── Fråga Binge (NL-sök, BIN-176) ───────────────────────────────────────────
+  askSearches: { key: 'askSearches', label: 'Sökningar', category: 'product', format: { kind: 'number' } },
+  askZeroRate: { key: 'askZeroRate', label: 'Tom-träff-andel', category: 'product', format: { kind: 'percent' } },
+  askLowConfidence: { key: 'askLowConfidence', label: 'Förstod-inte (antal)', category: 'product', format: { kind: 'number' } },
+  askResultBuckets: { key: 'askResultBuckets', label: 'Antal träffar per sökning', category: 'product', format: { kind: 'number' } },
+  askStrandingFilters: { key: 'askStrandingFilters', label: 'Filter som strandar (tomma träffar)', category: 'product', format: { kind: 'number' } },
+  askRemovedChips: { key: 'askRemovedChips', label: 'Mest borttagna tolkningar', category: 'product', format: { kind: 'number' } },
+
   // ── Trafik ──────────────────────────────────────────────────────────────────
   pageViews: { key: 'pageViews', label: 'Sidvisningar', category: 'traffic', format: { kind: 'number' } },
   visitors: { key: 'visitors', label: 'Besökare', category: 'traffic', format: { kind: 'number' } },

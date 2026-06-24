@@ -8,11 +8,48 @@ function emptyData(over: Partial<InsightsData> = {}): InsightsData {
     range: { preset: '30d', from: '2026-05-03', to: '2026-06-02' },
     rollup: null,
     plausible: null,
+    askBinge: null,
     window: null,
     partial: false,
     ...over,
   };
 }
+
+const askBingeData = (over: Partial<NonNullable<InsightsData['askBinge']>> = {}): InsightsData['askBinge'] => ({
+  searches: 0, zeroResults: 0, lowConfidence: 0, chipRemovals: 0,
+  resultBuckets: { '0': 0, '1-9': 0, '10-29': 0, '30+': 0 },
+  topStrandingFilters: [], topRemovedChips: [], days: 0,
+  ...over,
+});
+
+describe('Fråga Binge resolvers', () => {
+  it('askZeroRate is the zero-result percentage, NaN with no searches', () => {
+    expect(DATA_RESOLVERS.askZeroRate(emptyData())).toEqual({ kind: 'scalar', value: NaN });
+    expect(DATA_RESOLVERS.askZeroRate(emptyData({ askBinge: askBingeData() }))).toEqual({ kind: 'scalar', value: NaN });
+    expect(
+      DATA_RESOLVERS.askZeroRate(emptyData({ askBinge: askBingeData({ searches: 20, zeroResults: 5 }) })),
+    ).toEqual({ kind: 'scalar', value: 25 });
+  });
+
+  it('askStrandingFilters humanizes the filter-combo into Swedish', () => {
+    const d = emptyData({
+      askBinge: askBingeData({ topStrandingFilters: [{ filters: 'decade+rating', searches: 8, zero: 6 }] }),
+    });
+    const v = DATA_RESOLVERS.askStrandingFilters(d);
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Årtionde + Betyg', value: 6 }] });
+  });
+
+  it('askRemovedChips maps AskFilter keys to Swedish chip labels', () => {
+    const d = emptyData({
+      askBinge: askBingeData({ topRemovedChips: [{ key: 'originalLanguage', count: 5 }, { key: 'genreIds', count: 3 }] }),
+    });
+    const v = DATA_RESOLVERS.askRemovedChips(d);
+    expect(v).toEqual({
+      kind: 'breakdown',
+      entries: [{ label: 'Språk', value: 5 }, { label: 'Genre', value: 3 }],
+    });
+  });
+});
 
 describe('scalar resolvers fall back to NaN when their source is missing', () => {
   it('totalUsers is NaN with no rollup, the value with a rollup', () => {
