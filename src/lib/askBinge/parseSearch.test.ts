@@ -66,4 +66,26 @@ describe('parseSearch — dimension extraction', () => {
     expect(isLowConfidence(parseSearch('asdf qwerty'))).toBe(true);
     expect(isLowConfidence(parseSearch('skräckfilm'))).toBe(false);
   });
+
+  it('understands everyday genre synonyms and slang', () => {
+    expect(parseSearch('en rysare').genreIds).toEqual([27]);           // skräck
+    expect(parseSearch('typ en zombiefilm').genreIds).toEqual([27]);   // skräck
+    expect(parseSearch('en kärleksfilm').genreIds).toEqual([10749]);   // romantik
+    expect(parseSearch('mysig kärlekshistoria').genreIds).toEqual([10749]);
+    expect(parseSearch('en bra true crime-serie').genreIds).toEqual([80]); // krim
+  });
+
+  it('recognizes the mainstream non-Nordic languages on Swedish streaming', () => {
+    expect(parseSearch('spansk serie').originalLanguage).toBe('es');
+    expect(parseSearch('en tysk film').originalLanguage).toBe('de');
+    expect(parseSearch('italiensk deckare').originalLanguage).toBe('it');
+    expect(parseSearch('rysk dokumentär').originalLanguage).toBe('ru');
+    expect(parseSearch('indisk film').originalLanguage).toBe('hi');
+    expect(parseSearch('en bollywood-rulle').originalLanguage).toBe('hi');
+  });
+
+  it('does not confuse the new languages with the horror synonym "rysare"', () => {
+    // "rysare" must NOT read as Russian ('ru' is "rysk")
+    expect(parseSearch('en rysare på Netflix').originalLanguage).toBeUndefined();
+  });
 });

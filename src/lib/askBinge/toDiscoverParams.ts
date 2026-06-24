@@ -76,6 +76,7 @@ export interface FilterChip {
 
 const LANG_LABEL: Record<string, string> = {
   sv: 'Svenskt', da: 'Danskt', no: 'Norskt', ko: 'Koreanskt', ja: 'Japanskt', fr: 'Franskt', en: 'Engelskt',
+  es: 'Spanskt', de: 'Tyskt', it: 'Italienskt', ru: 'Ryskt', hi: 'Indiskt',
 };
 
 function decadeLabel(decade: string): string {

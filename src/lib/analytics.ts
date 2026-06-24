@@ -44,7 +44,17 @@ export type AnalyticsEvent =
   | { name: 'search_submitted'; props: { resultCount: number; mediaFilter: 'all' | 'movie' | 'tv' } }
   // "Fråga Binge" NL-sök: hur många filterfält den deterministiska parsern lyckades
   // extrahera ur meningen (0 = low-confidence, kandidat för LLM-fallback).
-  | { name: 'ask_binge_submitted'; props: { fields: number } }
+  // lowConfidence speglar fields===0 explicit — så vi kan mäta hur ofta parsern
+  // missar helt utan att räkna props i Plausible.
+  | { name: 'ask_binge_submitted'; props: { fields: number; lowConfidence: boolean } }
+  // Resultat-utfallet för en sökning. resultBucket=0 är vår vanligaste TYSTA miss
+  // (parsade fint men gav tom lista). filters = vilka filter-TYPER som var aktiva
+  // (sorterat, '+'-joinat) så vi ser vilka KOMBINATIONER som strandar användare.
+  // Inga råa söktermer — bara fasta filternamn + bucketad räkning (ingen PII).
+  | { name: 'ask_binge_results'; props: { resultBucket: '0' | '1-9' | '10-29' | '30+'; mediaFilter: 'all' | 'movie' | 'tv'; filters: string } }
+  // Användaren tog bort en tolknings-chip = explicit "du gissade fel"-signal.
+  // key = AskFilter-fältet (fast uppsättning, ingen fritext).
+  | { name: 'ask_binge_chip_removed'; props: { key: string } }
   | { name: 'status_changed'; props: { mediaType: 'movie' | 'tv'; status: 'vill_se' | 'mina' | 'sedd' | 'avbruten' } }
   // Betyg satt via stjärn-toasten som dyker upp när en titel markeras sedd —
   // mäter om "betygsätt direkt"-nudgen faktiskt höjer betygsfrekvensen.

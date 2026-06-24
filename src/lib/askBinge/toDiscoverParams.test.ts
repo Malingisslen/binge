@@ -67,4 +67,14 @@ describe('describeFilter', () => {
   it('returns no chips for an empty filter', () => {
     expect(describeFilter({})).toEqual([]);
   });
+
+  it('labels the newly supported languages in Swedish', () => {
+    const label = (lang: string) =>
+      describeFilter({ originalLanguage: lang }).find((c) => c.key === 'originalLanguage')?.label;
+    expect(label('es')).toBe('Spanskt');
+    expect(label('de')).toBe('Tyskt');
+    expect(label('it')).toBe('Italienskt');
+    expect(label('ru')).toBe('Ryskt');
+    expect(label('hi')).toBe('Indiskt');
+  });
 });

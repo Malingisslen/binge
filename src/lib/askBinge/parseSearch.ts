@@ -59,6 +59,10 @@ export function parseSearch(raw: string): AskFilter {
   const LANG: [RegExp, string][] = [
     [/svensk|nordisk|nordic/, 'sv'], [/dansk|danish/, 'da'], [/norsk|norwegian/, 'no'],
     [/koreansk|korean/, 'ko'], [/japansk|\banime\b/, 'ja'], [/fransk|french/, 'fr'],
+    [/spansk|spanish/, 'es'], [/tysk|german/, 'de'], [/italiensk|italian/, 'it'],
+    [/rysk|russian/, 'ru'], [/indisk|bollywood|indian/, 'hi'],
+    // NB: no "engelsk → en" row — TMDB's with_original_language=en is ALL
+    // English-language content (US/UK/AU), so it broadens instead of filtering.
   ];
   for (const [re, code] of LANG) if (re.test(q)) { out.originalLanguage = code; break; }
 
@@ -79,18 +83,18 @@ export function parseSearch(raw: string): AskFilter {
   // --- genreIds (lexicon; action/sci-fi depend on media type) ---
   const g = new Set<number>();
   if (/deckare|krim|kriminal|noir|crime/.test(q)) g.add(80);
-  if (/skräck|läskig/.test(q)) g.add(27);
+  if (/skräck|läskig|rysare|zombie/.test(q)) g.add(27);
   if (/komedi/.test(q)) g.add(35);
   if (/\bdram/.test(q)) g.add(18); // drama, dramer, dramaserie, dramatisk
   if (/thriller/.test(q)) g.add(53);
   if (/mysterium|mystik/.test(q)) g.add(9648);
-  if (/romanti/.test(q)) g.add(10749);
+  if (/romanti|kärleksfilm|kärlekshistoria/.test(q)) g.add(10749);
   if (/dokumentär|documentary/.test(q)) g.add(99);
   if (/western|västern/.test(q)) g.add(37);
   if (/fantasy/.test(q)) g.add(14);
   if (/animer|anime|tecknad/.test(q)) g.add(16);
   if (/famil|barn/.test(q)) g.add(10751);
-  if (/histori/.test(q)) g.add(36);
+  if (/\bhistori/.test(q)) g.add(36); // word-start: "historia/historisk", not "kärlekshistoria"
   if (/krig/.test(q)) g.add(10752);
   if (/äventyr/.test(q) && !/actionäventyr/.test(q)) g.add(12); // "actionäventyr" is one concept (10759)
   if (/musik/.test(q)) g.add(10402);

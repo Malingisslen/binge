@@ -6,13 +6,16 @@
 // interpretation), then mapped to TMDB discover queries. No LLM in this path — an
 // LLM fallback for low-confidence parses is a later addition (see the plan).
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
 import { discoverMovies, discoverTV, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { dedupeAndExclude, scorePopularity } from '@/lib/recommendations/rowComposition';
+import { dedupeAndExclude } from '@/lib/recommendations/rowComposition';
 import { parseSearch, isLowConfidence } from '@/lib/askBinge/parseSearch';
+import { rankAskResults } from '@/lib/askBinge/rankResults';
+import { resultBucket, activeFilterSummary, mediaFilterOf } from '@/lib/askBinge/telemetry';
 import { askFilterToDiscoverParams, describeFilter } from '@/lib/askBinge/toDiscoverParams';
 import type { AskFilter } from '@/lib/askBinge/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,10 +56,15 @@ export default function AskPage() {
     setInput(trimmed);
     setSubmitted(trimmed);
     setFilter(parsed);
-    trackEvent('ask_binge_submitted', { fields: Object.keys(parsed).length });
+    trackEvent('ask_binge_submitted', {
+      fields: Object.keys(parsed).length,
+      lowConfidence: isLowConfidence(parsed),
+    });
   }
 
   function removeChip(key: keyof AskFilter) {
+    // A chip removal is an explicit "you guessed wrong / I don't want this" signal.
+    trackEvent('ask_binge_chip_removed', { key });
     setFilter((f) => {
       const next = { ...f };
       delete next[key];
@@ -66,9 +74,15 @@ export default function AskPage() {
 
   const hasQuery = submitted.trim().length > 0;
   const lowConfidence = hasQuery && isLowConfidence(filter);
+  // "På mina tjänster" but the user never picked any → askFilterToDiscoverParams
+  // would silently drop the constraint and return ALL services. For a
+  // streaming-first product that's the most damaging silent failure, so we stop
+  // and nudge to settings instead (and skip the 4 TMDB calls entirely).
+  const needsProviderSetup =
+    hasQuery && !!filter.myProvidersOnly && !filter.providerIds?.length && myProviders.length === 0;
   // Don't spend TMDB discover quota on a parse that yielded nothing — the
   // low-confidence branch shows a help state instead of results.
-  const canQuery = hasQuery && !lowConfidence;
+  const canQuery = hasQuery && !lowConfidence && !needsProviderSetup;
   const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders }), [filter, myProviders]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
@@ -108,10 +122,27 @@ export default function AskPage() {
     push(queries[3]?.data?.results, 'tv');
     const excl = filter.excludeSeen ? excludedIds : EMPTY_SET;
     const deduped = dedupeAndExclude(items, excl).filter(isAddableMediaType);
-    deduped.sort((a, b) => scorePopularity(b) - scorePopularity(a));
-    return deduped.slice(0, VISIBLE_CAP);
+    // Honor an explicit "högst betyg"-request; otherwise rank by popularity blend.
+    return rankAskResults(deduped, filter.sortBy).slice(0, VISIBLE_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.excludeSeen, excludedIds]);
+  }, [queries[0]?.data, queries[1]?.data, queries[2]?.data, queries[3]?.data, filter.excludeSeen, filter.sortBy, excludedIds]);
+
+  // Telemetry: record how each settled search turned out, keyed off the CURRENT
+  // filter (after any chip removals) — a parsed-fine-but-empty grid is our most
+  // common silent failure and was previously invisible. PII-free: bucketed count
+  // + fixed filter-type names only. Deduped per distinct query set so we fire once.
+  const lastResultsKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!canQuery || isLoading) return;
+    const key = `${mKey}|${tKey}`;
+    if (lastResultsKey.current === key) return;
+    lastResultsKey.current = key;
+    trackEvent('ask_binge_results', {
+      resultBucket: resultBucket(results.length),
+      mediaFilter: mediaFilterOf(filter),
+      filters: activeFilterSummary(filter),
+    });
+  }, [canQuery, isLoading, mKey, tKey, results, filter]);
 
   return (
     <>
@@ -181,6 +212,12 @@ export default function AskPage() {
           <EmptyState
             title="Jag förstod inte riktigt"
             body="Prova att nämna en genre (deckare, komedi), en tjänst (Netflix), en längd (under 90 min) eller ett årtionde (80-talet)."
+          />
+        ) : needsProviderSetup ? (
+          <EmptyState
+            title="Du har inte valt dina tjänster än"
+            body="För att visa bara det du kan spela upp behöver Binge veta vilka streamingtjänster du har."
+            action={<Link href="/settings/" className="btn btn-acc btn-sm">Välj dina tjänster</Link>}
           />
         ) : isLoading ? (
           <LoadingView label="Letar fram titlar…" variant="grid" />
