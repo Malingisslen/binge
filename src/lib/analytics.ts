@@ -55,6 +55,8 @@ export type AnalyticsEvent =
   // Användaren tog bort en tolknings-chip = explicit "du gissade fel"-signal.
   // key = AskFilter-fältet (fast uppsättning, ingen fritext).
   | { name: 'ask_binge_chip_removed'; props: { key: string } }
+  // LLM fallback outcome for a low-confidence parse: did the model salvage a filter?
+  | { name: 'ask_binge_ai_fallback'; props: { ok: boolean } }
   | { name: 'status_changed'; props: { mediaType: 'movie' | 'tv'; status: 'vill_se' | 'mina' | 'sedd' | 'avbruten' } }
   // Betyg satt via stjärn-toasten som dyker upp när en titel markeras sedd —
   // mäter om "betygsätt direkt"-nudgen faktiskt höjer betygsfrekvensen.

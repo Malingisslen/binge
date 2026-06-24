@@ -224,6 +224,15 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // Per-user daily rate-limit counter for the askBingeParse (LLM-fallback) callable.
+    // Written exclusively by the callable (Admin SDK, bypasses rules) — clients can't
+    // create/update (else they'd reset their own limit). Delete for the account cascade.
+    match /users/{uid}/askBingeMeta/{docId} {
+      allow read: if isOwner(uid);
+      allow create, update: if false;
+      allow delete: if isOwner(uid);
+    }
+
     // Follow system
     match /users/{uid}/following/{targetUid} {
       allow read, write: if isOwner(uid);
@@ -437,6 +446,15 @@ service cloud.firestore {
     // Function-only: Admin SDK writes, no client access.
     match /omdbBudget/{day} {
       allow read, write: if false;   // global daily OMDb cap counter — function-only
+    }
+
+    // Fråga Binge LLM-fallback: global daily request ceiling + 24h query cache.
+    // Both written/read exclusively by askBingeParse via Admin SDK — fully sealed.
+    match /askBingeBudget/{day} {
+      allow read, write: if false;
+    }
+    match /askBingeCache/{hash} {
+      allow read, write: if false;
     }
 
     // Per-user rate-limit counters for the titleRatings callable (legacy, kept inert).

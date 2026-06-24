@@ -616,6 +616,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     snaps.fcmTokensSnap.docs.forEach(d => refs.push(d.ref));
     // Report-throttle-stämpel (BIN-25) — rensas så ingen orphan blir kvar.
     snaps.reportMetaSnap.docs.forEach(d => refs.push(d.ref));
+    // Fråga Binge LLM-fallback throttle — samma sak.
+    snaps.askBingeMetaSnap.docs.forEach(d => refs.push(d.ref));
 
     // 2. Outbound follows: delete own "following" + mirror "followers" on target.
     snaps.followingSnap.docs.forEach(d => {

@@ -3,8 +3,9 @@
 // BIN-176 — "Fråga Binge": natural-language, streaming-aware search.
 // Deterministic-first: the sentence is parsed by rules (parseSearch) into an
 // AskFilter, shown back as removable chips (so the user sees + can correct the
-// interpretation), then mapped to TMDB discover queries. No LLM in this path — an
-// LLM fallback for low-confidence parses is a later addition (see the plan).
+// interpretation), then mapped to TMDB discover queries. When the rules extract
+// nothing (fuzzy residual), an LLM fallback (askBingeParse) interprets it — for
+// logged-in users only, and degrading silently to the help state if unavailable.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ import { parseSearch, isLowConfidence } from '@/lib/askBinge/parseSearch';
 import { rankAskResults } from '@/lib/askBinge/rankResults';
 import { resultBucket, activeFilterSummary, mediaFilterOf } from '@/lib/askBinge/telemetry';
 import { recordAskBinge } from '@/lib/askBinge/record';
+import { llmParseFallback } from '@/lib/askBinge/llmFallback';
 import { askFilterToDiscoverParams, describeFilter } from '@/lib/askBinge/toDiscoverParams';
 import type { AskFilter } from '@/lib/askBinge/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,7 +43,7 @@ const EMPTY_SET: ReadonlySet<number> = new Set();
 const VISIBLE_CAP = 60;
 
 export default function AskPage() {
-  const { user } = useAuth();
+  const { user, uid } = useAuth();
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
   const { items: watchlist } = useWatchlist();
   const { items: notInterested } = useNotInterested();
@@ -49,6 +51,12 @@ export default function AskPage() {
   const [input, setInput] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [filter, setFilter] = useState<AskFilter>({});
+  // Whether the ORIGINAL parse came back empty — distinguishes "couldn't parse"
+  // from "user removed every chip" (an intentional reset).
+  const [parseEmpty, setParseEmpty] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiUsed, setAiUsed] = useState(false);
+  const aiReqId = useRef(0);
 
   function runSearch(text: string) {
     const trimmed = text.trim();
@@ -57,11 +65,33 @@ export default function AskPage() {
     setInput(trimmed);
     setSubmitted(trimmed);
     setFilter(parsed);
+    setAiUsed(false);
     const low = isLowConfidence(parsed);
+    setParseEmpty(low);
     trackEvent('ask_binge_submitted', { fields: Object.keys(parsed).length, lowConfidence: low });
-    // A parser-gave-up submit never reaches the settle effect (no query runs), so
-    // record it here; completed searches are recorded once their results settle.
-    if (low) void recordAskBinge({ type: 'low_confidence' });
+    if (!low) return;
+    // Rules gave up. Logged-in users get the LLM fallback; anonymous users get the
+    // help state (the LLM is a spend, gated to accounts). recordAskBinge fires only
+    // once we know the final outcome (AI helped, or genuinely low-confidence).
+    if (!uid) { void recordAskBinge({ type: 'low_confidence' }); return; }
+    const reqId = ++aiReqId.current;
+    setAiLoading(true);
+    void llmParseFallback(trimmed).then((aiFilter) => {
+      if (aiReqId.current !== reqId) return; // a newer search superseded this one
+      setAiLoading(false);
+      if (aiFilter) {
+        setFilter(aiFilter);
+        setParseEmpty(false);
+        setAiUsed(true);
+        trackEvent('ask_binge_ai_fallback', { ok: true });
+      } else {
+        void recordAskBinge({ type: 'low_confidence' });
+        trackEvent('ask_binge_ai_fallback', { ok: false });
+      }
+    }).catch(() => {
+      // llmParseFallback never throws, but guard so the spinner can't get stuck.
+      if (aiReqId.current === reqId) setAiLoading(false);
+    });
   }
 
   function removeChip(key: keyof AskFilter) {
@@ -76,7 +106,11 @@ export default function AskPage() {
   }
 
   const hasQuery = submitted.trim().length > 0;
-  const lowConfidence = hasQuery && isLowConfidence(filter);
+  const currentEmpty = isLowConfidence(filter);
+  // "Förstod inte" only when the original parse was empty; a self-cleared filter
+  // shows the idle "alla filter borttagna" state instead.
+  const lowConfidence = hasQuery && parseEmpty;
+  const clearedAll = hasQuery && !parseEmpty && currentEmpty;
   // "På mina tjänster" but the user never picked any → askFilterToDiscoverParams
   // would silently drop the constraint and return ALL services. For a
   // streaming-first product that's the most damaging silent failure, so we stop
@@ -85,7 +119,7 @@ export default function AskPage() {
     hasQuery && !!filter.myProvidersOnly && !filter.providerIds?.length && myProviders.length === 0;
   // Don't spend TMDB discover quota on a parse that yielded nothing — the
   // low-confidence branch shows a help state instead of results.
-  const canQuery = hasQuery && !lowConfidence && !needsProviderSetup;
+  const canQuery = hasQuery && !currentEmpty && !needsProviderSetup;
   const plan = useMemo(() => askFilterToDiscoverParams(filter, { myProviders }), [filter, myProviders]);
   const chips = useMemo(() => describeFilter(filter), [filter]);
 
@@ -186,7 +220,7 @@ export default function AskPage() {
       {/* Interpreted filter as removable chips */}
       {hasQuery && chips.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14, alignItems: 'center' }}>
-          <span className="text-ink-3" style={{ fontSize: 12 }}>Tolkning:</span>
+          <span className="text-ink-3" style={{ fontSize: 12 }}>{aiUsed ? 'Tolkning (AI):' : 'Tolkning:'}</span>
           {chips.map((c) => (
             <button
               key={c.key}
@@ -210,6 +244,8 @@ export default function AskPage() {
             title="Fråga med egna ord"
             body="Beskriv genre, känsla, längd, tjänst eller årtionde — Binge översätter det till ett filter och visar bara det du kan spela upp."
           />
+        ) : aiLoading ? (
+          <LoadingView label="Tolkar din fråga…" variant="grid" />
         ) : lowConfidence ? (
           <EmptyState
             title="Jag förstod inte riktigt"
@@ -220,6 +256,11 @@ export default function AskPage() {
             title="Du har inte valt dina tjänster än"
             body="För att visa bara det du kan spela upp behöver Binge veta vilka streamingtjänster du har."
             action={<Link href="/settings/" className="btn btn-acc btn-sm">Välj dina tjänster</Link>}
+          />
+        ) : clearedAll ? (
+          <EmptyState
+            title="Alla filter borttagna"
+            body="Lägg till ett filter igen, eller sök på något nytt i rutan ovan."
           />
         ) : isLoading ? (
           <LoadingView label="Letar fram titlar…" variant="grid" />

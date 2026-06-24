@@ -40,6 +40,9 @@ export interface UserDataSnapshots {
   // Report-throttle-stämpel (BIN-25). Operationell metadata — med i delete-
   // cascade så den inte orphan:as, men hoppas över i export (som fcmTokens).
   reportMetaSnap: QuerySnapshot;
+  // Fråga Binge LLM-fallback rate-limit throttle. Operationell metadata — med i
+  // delete-cascade så den inte orphan:as, hoppas över i export (som reportMeta).
+  askBingeMetaSnap: QuerySnapshot;
   // Sparbeslut-historik (Streamingrådgivaren) — skrivs av resumeProvider.
   // Inkluderas i export + delete-cascade.
   pauseHistorySnap: QuerySnapshot;
@@ -79,6 +82,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     groupInvitesSnap,
     fcmTokensSnap,
     reportMetaSnap,
+    askBingeMetaSnap,
     pauseHistorySnap,
     listFollowsSnap,
     reviewsSnap,
@@ -104,6 +108,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'groupInvites')),
     getDocs(collection(db, 'users', uid, 'fcmTokens')),
     getDocs(collection(db, 'users', uid, 'reportMeta')),
+    getDocs(collection(db, 'users', uid, 'askBingeMeta')),
     getDocs(collection(db, 'users', uid, 'pauseHistory')),
     getDocs(collection(db, 'users', uid, 'listFollows')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
@@ -134,6 +139,7 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     groupInvitesSnap,
     fcmTokensSnap,
     reportMetaSnap,
+    askBingeMetaSnap,
     pauseHistorySnap,
     listFollowsSnap,
     reviewsSnap,

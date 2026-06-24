@@ -204,6 +204,9 @@ export { submitReport } from './submitReport';
 // skrivaren — askBingeStats är låst för klienter i firestore.rules. App Check ELLER
 // inloggad krävs (ingen öppen flod-vektor). /api/insights läser dem per intervall.
 export { recordAskBinge } from './askbinge';
+// LLM-fallback query parser (runs only on low-confidence deterministic parses).
+// Needs GEMINI_API_KEY secret + a functions deploy; client degrades gracefully.
+export { askBingeParse } from './askbinge/parse';
 
 // ── External ratings (OMDb) ──────────────────────────────────────────────────
 // titleRatings: callable med 45-dagars delad Firestore-cache per IMDb-id.
