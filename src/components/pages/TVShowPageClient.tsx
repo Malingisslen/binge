@@ -23,6 +23,7 @@ import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
+import { seasonCompletion } from '@/lib/tmdb/seasonCompletion';
 import NotesBlock from '@/components/title/NotesBlock';
 import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
@@ -141,6 +142,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
   const genres = show.genres.map(g => g.name).join(', ');
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
+  // BIN-187 — "Samla klart" (seasons leg): how many of this show's seasons the
+  // user has fully completed. Cheap O(seasons) derive, so computed inline (not
+  // memoised) to always reflect the latest episode progress.
+  const seasonMeter = seasonCompletion(show.seasons, (s, ec) => getSeasonProgress(s, ec).watched);
   const nextEp = show.next_episode_to_air;
   const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
   const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
@@ -367,6 +372,26 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <h2>Säsonger</h2>
             <span className="meta">{show.number_of_seasons} säsong{show.number_of_seasons !== 1 ? 'er' : ''}</span>
           </div>
+          {watchlistItem && seasonMeter.total >= 2 && (
+            <div className="mb-3 max-w-sm">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-bold text-ink-2">
+                  Samla klart — du har sett {seasonMeter.seen} av {seasonMeter.total} säsonger
+                </span>
+                <span className="text-ink-3">{seasonMeter.pct}%</span>
+              </div>
+              <div
+                className="h-[3px] bg-rule rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={seasonMeter.pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`Säsonger du har sett klart: ${seasonMeter.seen} av ${seasonMeter.total}`}
+              >
+                <div className="h-full bg-ink rounded-full" style={{ width: `${seasonMeter.pct}%` }} />
+              </div>
+            </div>
+          )}
           <div style={{ border: '1px solid var(--rule)', borderRadius: 8, background: 'var(--surface)' }}>
             <SeasonList
               tmdbId={show.id}
