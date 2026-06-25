@@ -322,7 +322,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-sm bg-bg-2 text-ink-2 px-2 py-1 text-[12px]"
               >
-                Finns på Cineasterna (via ditt bibliotek)
+                Finns på Cineasterna ({user?.hemkommun ? `via biblioteket i ${user.hemkommun}` : 'via ditt bibliotek'})
                 {cineRental && <span className="text-ink-3">· hyr {cineRental.amount} {cineRental.currency}</span>}
               </a>
             </div>

@@ -8,6 +8,7 @@ import { TMDB_ATTRIBUTION_EN } from '@/lib/tmdb/attribution';
 import { ProfileSection } from '@/components/settings/ProfileSection';
 import { UsernameSection } from '@/components/settings/UsernameSection';
 import { ProvidersSection } from '@/components/settings/ProvidersSection';
+import { BibliotekSection } from '@/components/settings/BibliotekSection';
 import { DisplaySection } from '@/components/settings/DisplaySection';
 import { ContentFilterSection } from '@/components/settings/ContentFilterSection';
 import { NotificationsSection } from '@/components/settings/NotificationsSection';
@@ -40,6 +41,7 @@ function SettingsContent() {
         <ProfileSection />
         <UsernameSection />
         <ProvidersSection />
+        <BibliotekSection />
         <DisplaySection />
         <ContentFilterSection />
         <NotificationsSection />

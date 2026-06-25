@@ -12,6 +12,7 @@ import ProvidersByValue from '@/components/savings/ProvidersByValue';
 import ServiceValueCard from '@/components/savings/ServiceValueCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
 import RotationPlanner from '@/components/savings/RotationPlanner';
+import RotationCalendar from '@/components/savings/RotationCalendar';
 import SavingsSidebar from '@/components/savings/SavingsSidebar';
 import UpcomingEpisodes from '@/components/savings/UpcomingEpisodes';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -261,6 +262,8 @@ function SavingsContent() {
             <CoverageOptimizer rows={advisor.willSeeByProvider} />
 
             <RotationPlanner advisor={advisor} />
+
+            <RotationCalendar />
 
             <UpcomingEpisodes />
 

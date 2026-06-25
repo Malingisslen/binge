@@ -111,6 +111,9 @@ export interface UserProfile {
   providerRenewalDays: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;
   calibrationGenres: Record<number, number> | null;
+  // BIN-172: användarens hemkommun (= "jag har ett lånekort"). Gatar
+  // biblioteks-lagret (Cineasterna/Viddla gratis-via-bibliotek). null = ej satt.
+  hemkommun: string | null;
   createdAt: Date;
   updatedAt: Date;
   // Timestamp + version of the Terms/Privacy version the user accepted at

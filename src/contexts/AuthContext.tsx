@@ -45,6 +45,7 @@ interface AuthState {
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
+  updateHomeMunicipality: (kommun: string | null) => Promise<void>;
   // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
   // state så samtidiga blur-skrivningar inte klobbrar varandra (BIN-40).
   setProviderCost: (providerId: number, cost: number | null) => Promise<void>;
@@ -81,6 +82,7 @@ const AuthContext = createContext<AuthState>({
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
+  updateHomeMunicipality: async () => {},
   setProviderCost: async () => {},
   setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
@@ -144,6 +146,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
       providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
       calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
+      hemkommun: (data.hemkommun as string | null) ?? null,
       createdAt: data.createdAt?.toDate() ?? new Date(),
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       termsAcceptedAt: data.termsAcceptedAt?.toDate(),
@@ -187,6 +190,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     providerRenewalDays: {},
     providerPauses: {},
     calibrationGenres: null,
+    hemkommun: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     notificationSettings: {
@@ -337,6 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerRenewalDays: {},
       providerPauses: {},
       calibrationGenres: null,
+      hemkommun: null,
       notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
@@ -395,6 +400,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [updateUserField, uid]);
   const updateDefaultView = useCallback((view: 'table' | 'grid' | 'cards') => updateUserField('defaultView', view), [updateUserField]);
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
+  // BIN-172: hemkommun = "jag har ett lånekort i {kommun}". null rensar fältet.
+  const updateHomeMunicipality = useCallback((kommun: string | null) => updateUserField('hemkommun', kommun), [updateUserField]);
   // Spegel av user.providerCosts som uppdateras SYNKRONT i setProviderCost (före
   // await) så att tabbning från provider A:s kostnad till B:s inte skriver två
   // blur:ar mot samma stale render-snapshot och tappar A:s värde (BIN-40).
@@ -780,7 +787,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -788,7 +795,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
