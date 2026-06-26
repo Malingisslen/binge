@@ -76,6 +76,18 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     () => filmographyCompletion(directedFilmIds, tmdbId => getItem(tmdbId)?.status === 'sedd'),
     [directedFilmIds, getItem],
   );
+  // BIN-206 — gör mätaren aktionerbar: lista de osedda regisserade filmerna
+  // (delmängd av filmografin nedan, men fokuserad på "samla klart"). Varje kort
+  // länkar till titelsidan där man lägger till / markerar sedd. Härleds ur
+  // `roles` (redan TitleGrid-typad) filtrerad på mätarens directed-id-set.
+  const directedIdSet = useMemo(() => new Set(directedFilmIds), [directedFilmIds]);
+  const unseenDirected = useMemo(
+    // media_type-guard: TMDB-id:n är inte unika över medietyper, så en serie
+    // personen spelat i med samma numeriska id som en regisserad film får inte
+    // läcka in i "regisserade filmer" (directedIdSet bär bara numret).
+    () => roles.filter(r => r.media_type === 'movie' && directedIdSet.has(r.id) && getItem(r.id)?.status !== 'sedd'),
+    [roles, directedIdSet, getItem],
+  );
 
   usePageMeta({
     title: person ? person.name : 'Person',
@@ -150,6 +162,21 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
             <div className="h-full bg-ink rounded-full" style={{ width: `${directedMeter.pct}%` }} />
           </div>
         </div>
+      )}
+
+      {/* BIN-206: de osedda regisserade filmerna — gör mätaren aktionerbar.
+          Bakom en stängd <details> (samma idiom som Filmografi/Gästframträdanden)
+          så den inte tränger undan biografin. */}
+      {!watchlistLoading && directedMeter.total >= 3 && unseenDirected.length > 0 && (
+        <details className="mb-4">
+          <summary className="text-sm font-bold text-ink-2 mb-2 cursor-pointer select-none">
+            Osedda att samla klart ({unseenDirected.length})
+            <span className="ml-2 font-normal text-xxs text-ink-3">regisserade filmer du inte sett</span>
+          </summary>
+          <div className="bg-surface border border-rule rounded-sm">
+            <TitleGrid items={unseenDirected} />
+          </div>
+        </details>
       )}
 
       {roles.length > 0 && (

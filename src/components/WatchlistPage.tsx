@@ -450,6 +450,22 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               Flytta till Vill se
             </button>
           )}
+          {/* BIN-168: bulk "Avbryt" på serievyn (/my/series). Avbruten är ett
+              giltigt slutläge för serier man gett upp — tidigare gick bara att
+              massradera dem, inte avbryta. Skopad till 'mina' så den inte dyker
+              upp på sedda filmer (terminalt) eller redan avbrutna. */}
+          {status === 'mina' && (
+            <button
+              onClick={async () => {
+                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'avbruten')));
+                setSelected(new Set());
+              }}
+              className="px-2 py-[2px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-secondary font-[inherit]"
+              title="Markera valda serier som avbrutna"
+            >
+              Avbryt
+            </button>
+          )}
           <button
             onClick={() => { if (selected.size > 0) setConfirmDelete(Array.from(selected)); }}
             className="px-2 py-[2px] text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"

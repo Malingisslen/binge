@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
 import { toneForId } from '@/lib/duotone';
 import { MOODS, filterByMood } from '@/lib/moodLens';
-import { RUNTIME_BUDGETS, runtimeBudgetLabel, filterByRuntime } from '@/lib/runtimeLens';
+import { RUNTIME_BUDGETS, runtimeBudgetLabel, applyRuntimeBudget } from '@/lib/runtimeLens';
 import type { WatchlistItem } from '@/types';
 
 type MediaFilter = 'all' | 'tv' | 'movie';
@@ -59,15 +59,19 @@ export default function VillSePickerPage() {
     );
     const byMedia = mediaFilter === 'all' ? base : base.filter(i => i.mediaType === mediaFilter);
     const byMood = filterByMood(byMedia, mood);
-    const filtered = filterByRuntime(byMood, runtimeMax);
+    // BIN-167: tidsbudgeten gömmer inte titlar med okänd längd — de behålls
+    // nedtonade (unknownRuntime) och sjunker till botten.
+    const lensed = applyRuntimeBudget(byMood, runtimeMax);
     // Valögonblickets sortering: det du kan se direkt (finns på dina
-    // tjänster) överst, därefter senast tillagd.
+    // tjänster) överst, därefter senast tillagd. Nedtonade (okänd längd)
+    // hamnar sist så listan leder med de säkra valen.
     const onMine = (i: WatchlistItem) => i.providers.some(p => myProviders.has(p));
-    return [...filtered].sort((a, b) => {
-      const am = onMine(a) ? 0 : 1;
-      const bm = onMine(b) ? 0 : 1;
+    return [...lensed].sort((a, b) => {
+      if (a.unknownRuntime !== b.unknownRuntime) return a.unknownRuntime ? 1 : -1;
+      const am = onMine(a.item) ? 0 : 1;
+      const bm = onMine(b.item) ? 0 : 1;
       if (am !== bm) return am - bm;
-      return b.addedAt.getTime() - a.addedAt.getTime();
+      return b.item.addedAt.getTime() - a.item.addedAt.getTime();
     });
   }, [items, mediaFilter, mood, runtimeMax, myProviders]);
 
@@ -123,8 +127,9 @@ export default function VillSePickerPage() {
         ))}
       </div>
 
-      {/* BIN-93 — tidsbudget-lins: "vad hinner jag?". Visar bara titlar med känd
-          längd när aktiv (okänd längd kan inte svara på frågan). */}
+      {/* BIN-93 — tidsbudget-lins: "vad hinner jag?". BIN-167: titlar med okänd
+          längd göms inte — de visas nedtonade och sist (kan inte svara på
+          frågan, men ska inte tappas bort på saknad metadata). */}
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         {RUNTIME_BUDGETS.map(max => (
           <button
@@ -144,7 +149,7 @@ export default function VillSePickerPage() {
           {mediaFilter !== 'all' || mood !== null || runtimeMax !== null ? (
             <EmptyState
               title="Inga titlar matchar."
-              body={`Inget i din lista passar de valda filtren just nu.${runtimeMax !== null ? ' Tidsbudgeten visar bara titlar med känd längd — längden fylls i när du öppnar en titelsida.' : ''}`}
+              body="Inget i din lista passar de valda filtren just nu."
               action={
                 <button
                   type="button"
@@ -173,12 +178,16 @@ export default function VillSePickerPage() {
             className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px]"
             style={{ marginTop: 18 }}
           >
-            {picks.map(item => {
+            {picks.map(({ item, unknownRuntime }) => {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
               return (
-                <div key={`${item.mediaType}-${item.tmdbId}`}>
+                <div
+                  key={`${item.mediaType}-${item.tmdbId}`}
+                  style={unknownRuntime ? { opacity: 0.5 } : undefined}
+                  title={unknownRuntime ? 'Okänd längd — kan vara längre än din tidsbudget' : undefined}
+                >
                   <Link href={href} className="no-underline text-text-primary">
                     <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                       {poster ? (
@@ -195,7 +204,7 @@ export default function VillSePickerPage() {
                       {item.title}
                     </div>
                     <div className="text-xxs text-text-muted">
-                      {item.mediaType === 'tv' ? 'Serie' : 'Film'}{item.releaseYear ? ` · ${item.releaseYear}` : ''}
+                      {item.mediaType === 'tv' ? 'Serie' : 'Film'}{item.releaseYear ? ` · ${item.releaseYear}` : ''}{unknownRuntime ? ' · okänd längd' : ''}
                     </div>
                   </Link>
                   {item.mediaType === 'movie' && (
@@ -211,6 +220,11 @@ export default function VillSePickerPage() {
               );
             })}
           </div>
+          {runtimeMax !== null && picks.some(p => p.unknownRuntime) && (
+            <p className="mt-2 text-xxs text-text-muted">
+              Nedtonade titlar har okänd längd — längden fylls i när du öppnar en titelsida.
+            </p>
+          )}
           <p className="mt-2 text-xxs text-text-muted">
             Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har. Titlar på dina tjänster visas först.
           </p>
