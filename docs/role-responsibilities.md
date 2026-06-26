@@ -6,7 +6,7 @@ lawyer, security architect, etc. would each be responsible for._
 
 Binge is built and directed solo (Malin directs; Claude codes), so in practice
 one person + an agent wear all of these hats. The point of this document is that
-the codebase is legible enough to **staff 26 notional roles**, each with its own
+the codebase is legible enough to **staff 28 notional roles**, each with its own
 files, guard tests, budgets, and runbooks. It's useful as an onboarding map
 ("who would own this?"), as a coverage check, and as a way to reason about a
 change's blast radius across concerns.
@@ -14,8 +14,10 @@ change's blast radius across concerns.
 Every responsibility below is grounded in real files. Paths are the source of
 truth; line numbers drift, so they're omitted here.
 
-> Generated from a codebase sweep on 2026-06-26. Refresh when major surfaces are
-> added or removed.
+> Generated from a multi-agent codebase sweep on 2026-06-26 (two descriptive
+> passes, then a third **diagnostic** sweep that added the DBA and
+> scoring-integrity lenses and the [un-owned gaps](#genuinely-un-owned-gaps)
+> section). Refresh when major surfaces are added or removed.
 
 ---
 
@@ -51,7 +53,13 @@ truth; line numbers drift, so they're omitted here.
 25. [Engineering Manager / Release Manager](#25-engineering-manager--release-manager)
 26. [Information Architect](#26-information-architect)
 
-**Notes:** [Roles that deliberately overlap](#roles-that-deliberately-overlap)
+**Tier 3 — added by the diagnostic sweep**
+27. [Database Administrator / Data-layer Engineer](#27-database-administrator--data-layer-engineer)
+28. [Recommendations / Scoring-Integrity Engineer](#28-recommendations--scoring-integrity-engineer)
+
+**Notes:** [Genuinely un-owned gaps](#genuinely-un-owned-gaps) ·
+[Roles that deliberately overlap](#roles-that-deliberately-overlap) ·
+[A role that doesn't exist here: Agent-Ops](#a-role-that-doesnt-exist-here-agent-ops)
 
 ---
 
@@ -377,6 +385,122 @@ Owns wayfinding.
 
 ---
 
+## 27. Database Administrator / Data-layer Engineer
+
+Owns the Firestore layer **as schema** — distinct from the Data/Integrations
+Engineer (#13, external pipelines) and the Software Architect (#14, schema
+_philosophy_). Both sibling projects split this out, and it surfaced their sharpest
+findings here too.
+
+- **Indexes & query contracts** — the 8 composite indexes + collection-group field
+  overrides; the failure mode where a feature ships a query whose index isn't
+  deployed.
+  → `firestore.indexes.json`
+- **Field whitelist enforcement** — the `hasOnly()` field contract (22 allowlisted
+  watchlist fields); a new field omitted from the whitelist silently `permission-denied`s
+  client writes.
+  → `firestore.rules`, `src/test/rules/firestore-rules.test.ts`
+- **Lazy write-on-edit migration** — `migrateStatus()` normalizes legacy schemas at
+  read-time; docs are rewritten only on user edit, never in bulk.
+  → `src/lib/watchStatus.migration.ts`, `src/contexts/WatchlistContext.tsx`
+- **Denormalization & dual-write discipline** — `effectiveVisibility`/`isPublic`
+  mirrors; the community-rating `FieldValue.increment` aggregate with transaction +
+  `lastEventId` idempotency (BIN-148).
+  → `functions/src/communityRatings/index.ts`, `src/hooks/usePublicProfile.ts`
+- **Retention/TTL cleanup** — `retentionCleanup` (sessions/notifications) and
+  `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window).
+  → `functions/src/{retentionCleanup,reclaimOrphanFollows}/`
+- **Account-deletion cascade** — the 450-op chunked `writeBatch` over 25
+  collections; inbound followers are deliberately left for the weekly orphan sweep.
+  → `src/contexts/AuthContext.tsx`, `src/lib/firebase/userData.ts`
+- **Disaster recovery** — PITR + scheduled backups (region `eur3`).
+
+**Watch-items (diagnostic):**
+- 🔴 `retentionCleanup` + `reclaimOrphanFollows` are **code-ready but not in the
+  deploy pipeline** — they need a manual `firebase deploy --only functions`. Until
+  activated, sessions/notifications accumulate past their policy TTLs with no alert.
+- 🔴 **PITR + scheduled backups are not yet enabled** (Blaze-gated); there is no
+  scripted backup-health check, no restore dry-run, and no post-restore validation
+  playbook. Pre-Blaze data loss is effectively irreversible.
+- 🟠 **No `schemaVersion` stamp anywhere.** Indexes, the field whitelist, mutation
+  payloads, and `buildUserExport` must be kept in sync by hand; nothing audits
+  migration completeness or alerts when `migrateStatus()` hits its default case.
+- 🟠 `effectiveVisibility` can go **stale** if a user changes `defaultVisibility`
+  without touching any title; reads fall back, but nothing detects the divergence.
+- 🟡 `collectUserDataSnapshots` reads 25 collections in parallel and **swallows
+  errors without re-throwing** — a partial export/deletion could fail silently.
+
+## 28. Recommendations / Scoring-Integrity Engineer
+
+Owns the **correctness, weighting, thresholds, and drift** of Binge's algorithmic
+surfaces — distinct from PM (#9, owns the _feature_) and Community Manager (#18,
+owns the _social graph_). This is the Binge analog of the sibling projects'
+"Data/ML scoring integrity" lens.
+
+- **Recommendation cascade** — the per-row score ceilings (latest-fav `100−daysSince`,
+  person `min(recurrence×15, 90)`, similar `min(rank×12, 80)`, free-public 55,
+  trending 30) and tie-breaks.
+  → `src/lib/recommendations/cascadePrioritizer.ts`
+- **Seed classification** — strong (rating ≥4) / weak (3) seeds, the 30-day latest-5★
+  window, recurrence thresholds (people 3, keywords 2).
+  → `src/lib/recommendations/seedAnalysis.ts`
+- **Taste vectors** — the two weight systems (`buildTasteVector` for the cascade vs
+  `computeProfileStats` for the profile UI) and the calibration swipe bootstrap.
+  → `src/lib/taste/{vector,stats,backfill}.ts`
+- **Similar-pool flooring** — recs (vote floor 5) vs similar (floor 30), calibrated
+  on one real title.
+  → `src/lib/recommendations/rowComposition.ts`
+- **Advisor logic** — rotation plan (greedy value-density), rotation calendar
+  (pause prorating, dead-zone threshold), service-value attribution + dead-weight
+  detection, the cheapest-path cascade, the 4-state primary-action tree.
+  → `src/lib/advisor/`, `src/lib/streaming/cheapestPath.ts`, `src/hooks/useSubscriptionAdvisor.ts`
+
+**Watch-items (diagnostic):**
+- 🔴 **Mismatched taste weights.** `vector.ts` penalizes `avbruten` (−0.5) and uses
+  `rating×2`; `stats.ts` ignores dropped and uses `rating/1`. Both ship live (vector
+  in the cascade, stats in the profile view) — the divergence is intentional but
+  undocumented, and could show users conflicting taste signals.
+- 🔴 **Zero production monitoring.** ~200 unit tests pin every threshold, but nothing
+  observes real behaviour — no per-row engagement tracking, no drift/anomaly check
+  on score distributions, no A/B framework. Correctness is frozen at launch values.
+- 🟠 **Brittle for small libraries.** Recurrence thresholds (people 3, keywords 2)
+  never fire on a 3-item library; if the 30-day 5★ window empties, the whole
+  latest-fav anchor vanishes with no fallback.
+- 🟠 **Calibration is hard-coded.** Vote floors were tuned on a single title;
+  `catchup`=3 series and `lookAhead`=60d are global constants with no per-user tuning
+  or feedback loop on whether users act on the advice.
+- 🟡 **Dead-weight detection is one-way** — `serviceValue` flags an unused paid
+  service but takes no action; and `cheapestPath`'s free-library verdict trusts a
+  user-self-reported `loansLeft` with no library-API sync.
+
+---
+
+## Genuinely un-owned gaps
+
+The diagnostic sweep's completeness critic looked for concerns with **no clear owner
+in the file structure** — the equivalent of a write-only inbox or an empty backup
+dir. Grounded findings, roughly by severity:
+
+| Gap | What's missing | Touches |
+|---|---|---|
+| **Backup / DR verification** | PITR + backups are documented as setup steps, but nothing confirms a backup landed, alerts on schedule failure, or tests restore. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
+| **Retention cleanup not deployed** | `retentionCleanup` + `reclaimOrphanFollows` are code-ready but absent from `deploy.yml`; no health metric for "last run / docs deleted". Data accrues past policy until manually shipped. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
+| **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
+| **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
+| **Moderation follow-through** | Marking a report `actioned` is a status flag only — no Cloud Function deletes the content, no audit trail confirms the action happened. | Trust & Safety (#12), Eng Manager (#25) |
+| **Ask-Binge LLM fallback ops** | Gemini budget (2000/day + 25/user) is documented but **not enforced in code**; no success SLO, no tested graceful-degradation path when Gemini is down. | DevOps (#8), Vendor Mgr (#23), QA (#7) |
+| **Affiliate infra unverified** | The `AFFILIATE_PROGRAMS` table is intentionally empty and a no-op; nothing alerts if it's wrongly empty or tracks link clicks. "Built but dark." | Monetization (#24), Vendor Mgr (#23), DevOps (#8) |
+| **GDPR export drift** | `collectUserDataSnapshots` adding a collection without updating `buildUserExport` would silently omit user data; `SCHEMA_VERSION` is a hand-bumped literal. | DPO (#6), DBA (#27), QA (#7) |
+| **Follow-graph symmetry** | The `following ↔ followers` mirror is rules-enforced but never audited for asymmetric state; the orphan sweep has no completeness check. | DevOps (#8), DPO (#6), DBA (#27) |
+
+Most of these share a shape: **a policy or contract exists in docs/UI, but the
+machinery that enforces or verifies it is missing or undeployed.** None are
+launch-blockers on their own; together they're the natural backlog for a
+"close the verification gaps" sprint.
+
+---
+
 ## Roles that deliberately overlap
 
 Three pairs share a surface but split by **intent** — worth keeping distinct:
@@ -397,3 +521,29 @@ Other natural adjacencies: Controller (#3) ↔ Vendor Manager (#23) ↔ Monetiza
 suppliers / earn revenue); Legal (#5) ↔ DPO (#6) ↔ Trust & Safety (#12) all touch
 user data and policy; DevOps (#8) ↔ Eng Manager (#25) ↔ Manual QA (#20) all touch
 the release pipeline.
+
+The diagnostic sweep surfaced a few more co-owned surfaces, each split by intent:
+
+| Concern | Contending roles | Split by |
+|---|---|---|
+| Notification settings | Customer Support (#19) / Trust & Safety (#12) | the UI + defaults vs server-side gating & moderation suppression |
+| Taste weighting & calibration | Architect (#14) / PM (#9) / Data Analyst (#22) | the schema vs what counts as taste vs post-launch validation (the last is the gap) |
+| `providers.ts` | Localization (#11) / Monetization (#24) | the canonical Swedish catalog vs affiliate wrapping & economics |
+| Firestore cost & quota | Controller (#3) / Vendor Mgr (#23) / DevOps (#8) | the cap + alerts vs per-service budgets vs enforcement (rate limits, indexes) |
+
+---
+
+## A role that doesn't exist here: Agent-Ops
+
+Both sibling projects make a **Claude AI-Harness Owner / Agent-Ops Lead** their
+flagship role — a commit-gate, a fleet of self-improving reviewer agents, and an
+append-only knowledge contract that govern how Claude ships code. Binge has **none
+of that machinery**: `.claude/` is empty (no agents, hooks, rules, or commit gates),
+and the only meta-artifacts are `CLAUDE.md` (the working agreement) and
+`tasks/lessons.md` (a hand-kept lessons log).
+
+So the role is genuinely absent rather than un-owned — its concerns are absorbed by
+the **Engineering Manager (#25)**, with governance enforced by CI quality gates and
+the deploy drift-guard rather than by a local agent harness. Worth noting as a
+deliberate difference if Binge ever adopts a heavier Claude setup: that's where a
+27th-style "executable role" would land.
