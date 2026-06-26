@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "updated": "2026-06-26",
+  "note": "World-watch state for Binge's virtual role-org MVP. Committed (not in .claude/state, which is gitignored). cadenceDays maps the cadence label to a due-interval. snapshot holds the last-seen marker per source so /world-watch can diff and emit only deltas. lastScan null = never scanned = due. See docs/org/world-watch/DESIGN.md.",
+  "cadenceDays": {
+    "weekly": 7,
+    "monthly": 30,
+    "quarterly": 90
+  },
+  "roles": {
+    "security-architect": {
+      "roleNumber": 4,
+      "title": "Security Architect",
+      "cadence": "weekly",
+      "authority": "auto-ticket",
+      "watchModes": ["compliance", "trend", "tooling-frontier"],
+      "stakes": "high",
+      "ownedPaths": [
+        "firestore.rules",
+        "firestore.indexes.json",
+        "functions/",
+        "src/lib/firebase/",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/passwordStrength.ts",
+        "package-lock.json"
+      ],
+      "watchItems": [
+        "New CVE/GHSA in Next.js, React, Firebase JS SDK, firebase-functions, or any lockfile dependency (esp. RSC/Server-Action RCE, middleware/proxy bypass, SSRF, cache-poisoning hitting App Router)",
+        "Coordinated Next.js security releases forcing a version bump + secret rotation",
+        "Firestore Security Rules language changes affecting what the ~787-line ruleset / hasOnly can express",
+        "reCAPTCHA Enterprise / App Check changes (site-key, provider init, API-key auth)",
+        "Dependabot alert/grouping changes affecting how advisories reach the repo"
+      ],
+      "sources": [
+        { "id": "nextjs-advisories", "title": "Next.js security advisories", "url": "https://github.com/vercel/next.js/security/advisories", "type": "html", "note": "Primary framework CVE surface; no native RSS, poll the page." },
+        { "id": "ghsa-npm", "title": "GitHub Advisory Database (npm)", "url": "https://github.com/advisories?query=ecosystem%3Anpm", "type": "html", "note": "Master surface for any lockfile dependency." },
+        { "id": "firebase-js-sdk-releases", "title": "Firebase JS SDK releases", "url": "https://github.com/firebase/firebase-js-sdk/releases.atom", "type": "atom", "note": "App Check + reCAPTCHA-Enterprise-provider + Auth security changes land here." },
+        { "id": "firestore-rules-relnotes", "title": "Firebase Security Rules release notes", "url": "https://firebase.google.com/support/release-notes/security-rules", "type": "html", "note": "Rules-language changes that gate the field-whitelist + ownership checks." },
+        { "id": "recaptcha-enterprise-relnotes", "title": "reCAPTCHA Enterprise release notes", "url": "https://docs.cloud.google.com/recaptcha/docs/release-notes", "type": "html", "note": "Use docs.cloud.google.com host (301 from cloud.google.com)." },
+        { "id": "gh-changelog-dependabot", "title": "GitHub changelog — Dependabot", "url": "https://github.blog/changelog/label/dependabot/feed/", "type": "rss", "note": "How vuln alerts/grouping reach the repo." }
+      ],
+      "lastScan": null,
+      "snapshot": {}
+    },
+    "legal-gdpr-counsel": {
+      "roleNumber": 5,
+      "title": "Legal / GDPR Counsel",
+      "cadence": "monthly",
+      "authority": "escalate-human",
+      "watchModes": ["compliance", "trend"],
+      "stakes": "high",
+      "ownedPaths": [
+        "src/lib/firebase/dataExport.ts",
+        "src/lib/firebase/userData.ts",
+        "src/contexts/AuthContext.tsx",
+        "src/app/villkor/",
+        "src/app/integritet/",
+        "src/app/community-guidelines/",
+        "src/lib/tmdb/attribution.ts",
+        "src/lib/sentry.ts"
+      ],
+      "watchItems": [
+        "EDPB guidelines on data-subject rights / erasure (Art.17) / portability (Art.20) — Binge ships export + erasure that must track shape changes",
+        "ePrivacy / cookie & analytics rulings (cookie-free Plausible / Swedish LEK)",
+        "EU AI Act milestones, GPAI/transparency duties, AI-generated-content labelling (Gemini 'Ask Binge')",
+        "DSA scope reaching smaller UGC platforms",
+        "IMY enforcement + age-gate interpretation; TMDB/JustWatch attribution ToS changes",
+        "Any of the above forcing a Terms/Privacy re-version + re-acceptance"
+      ],
+      "sources": [
+        { "id": "edpb-news", "title": "EDPB news", "url": "https://www.edpb.europa.eu/news/news_en", "type": "html", "note": "Primary EU DP authority; poll (no clean RSS surfaced)." },
+        { "id": "imy-nyheter", "title": "IMY — Nyheter", "url": "https://www.imy.se/nyheter/", "type": "html", "note": "The Swedish DPA Binge answers to. RSS at /nyheter/rss." },
+        { "id": "ec-ai-act", "title": "EC — AI Act regulatory framework", "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai", "type": "html", "note": "Gemini exposure; tracks Digital Omnibus + deferred dates." },
+        { "id": "ec-dsa-enforcement", "title": "EC — DSA enforcement", "url": "https://digital-strategy.ec.europa.eu/en/policies/dsa-enforcement", "type": "html", "note": "Official DSA enforcement hub." },
+        { "id": "ec-news", "title": "EC — news (filterable)", "url": "https://commission.europa.eu/news_en", "type": "html", "note": "Catch-all with AI/data-protection/digital-services filters." }
+      ],
+      "lastScan": null,
+      "snapshot": {}
+    },
+    "data-protection-officer": {
+      "roleNumber": 6,
+      "title": "Data Protection Officer",
+      "cadence": "monthly",
+      "authority": "escalate-human",
+      "watchModes": ["compliance", "trend"],
+      "stakes": "high",
+      "ownedPaths": [
+        "src/lib/firebase/userData.ts",
+        "firestore.rules",
+        "src/types/domain.ts",
+        "docs/data-retention-policy.md"
+      ],
+      "watchItems": [
+        "IMY enforcement against consumer web/media apps (tracking pixels, push tokens, consent, US-processor transfers)",
+        "EDPB guideline changes (anonymisation, children's data, DPIA template)",
+        "Adequacy/transfer shifts: EU-US Data Privacy Framework status, SCC changes (re-papers Google/TMDB/Sentry transfer bases)",
+        "Sub-processor additions on Firebase/Google Cloud or Sentry (triggers ~30-day objection window + inventory update)",
+        "Processor DPA version bumps altering data-handling commitments"
+      ],
+      "sources": [
+        { "id": "imy-nyheter-rss", "title": "IMY — Nyheter (RSS)", "url": "https://www.imy.se/nyheter/rss", "type": "rss", "note": "Rulings binding Binge directly." },
+        { "id": "edpb-news", "title": "EDPB news", "url": "https://www.edpb.europa.eu/news/news_en", "type": "html", "note": "EU-level guidance IMY applies (shared with Legal)." },
+        { "id": "ec-eu-us-transfers", "title": "EC — EU-US data transfers / DPF", "url": "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/eu-us-data-transfers_en", "type": "html", "note": "Adequacy decision underpinning transfers to Google/TMDB/Sentry." },
+        { "id": "sentry-subprocessors", "title": "Sentry subprocessors (RSS)", "url": "https://sentry.io/legal_subprocessors_rss.xml", "type": "rss", "note": "Versioned, 30-day notice, dedicated RSS — cleanest processor trigger." },
+        { "id": "firebase-subprocessors", "title": "Firebase subprocessors", "url": "https://firebase.google.com/terms/subprocessors/", "type": "html", "note": "Primary processor. Page may be edge-cached with a stale date — cross-check the GCP list." },
+        { "id": "gcp-subprocessors", "title": "Google Cloud subprocessors", "url": "https://cloud.google.com/terms/subprocessors", "type": "html", "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list." }
+      ],
+      "lastScan": null,
+      "snapshot": {}
+    }
+  }
+}

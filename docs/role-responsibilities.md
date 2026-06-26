@@ -19,6 +19,14 @@ truth; line numbers drift, so they're omitted here.
 > scoring-integrity lenses and the [un-owned gaps](#genuinely-un-owned-gaps)
 > section). Refresh when major surfaces are added or removed.
 
+> **World-watch layer.** Each role also carries an external-knowledge posture —
+> what it must watch in the outside world (CVEs, EU law, vendor terms, framework
+> releases) to keep its part of Binge at the frontier. That's folded into
+> [`docs/org/world-watch/ROLE_WORLD_MODEL.md`](org/world-watch/ROLE_WORLD_MODEL.md)
+> (per-role modes · stakes · cadence · authority · verified sources, plus gaps and
+> overlaps). The org's operating rules + the live monitoring MVP are in
+> [`docs/org/world-watch/DESIGN.md`](org/world-watch/DESIGN.md).
+
 ---
 
 ## Index
