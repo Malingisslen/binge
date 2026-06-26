@@ -225,3 +225,20 @@ export { streamingOffersRefresh } from './streamingOffers';
 // (cineasternaCatalog/imdbMap) → skriver cineasternaCatalog/current. Rot-guard
 // vägrar skriva om titlar sjunker >50 % (API-haveri) — admin-notif + bevara gammal katalog.
 export { cineasternaCatalogSync } from './cineasterna';
+
+// ── Prisras-push (BIN-180) ───────────────────────────────────────────────────
+// priceDropNotify: daglig scan av film i 'vill_se' → läser delad priceHistory/
+// {tmdbId}.points → detectPriceDrop (fräscht hyrespris-fall) → push:ar ägare som
+// opt-in:at (notificationSettings.priceDrops + pushEnabled). Deduppas mot
+// priceDropNotifyState/{tmdbId}.lastNotifiedDropAt. Inga TMDB-anrop (läser bara
+// redan fångad prishistorik). Admin SDK → ingen rules-ändring.
+export { priceDropNotify } from './priceDropNotify';
+
+// ── Rotationspåminnelse-push (BIN-181) ───────────────────────────────────────
+// rotationReminderNotify: daglig query av users med opt-in
+// (notificationSettings.rotationReminders) → läser klient-persistad
+// users/{uid}.rotationSchedule → dueRotationEvents → push:ar paus/återkom-events
+// som förfaller inom ~1 dygn. Deduppas mot rotationReminderState/{uid}_{pid}_
+// {kind}_{date}. Indexerad equality-query (bara opt-in-användare). Admin SDK →
+// ingen rules-ändring (rotationSchedule + flaggan är owner-skrivbara user-fält).
+export { rotationReminderNotify } from './rotationReminder';

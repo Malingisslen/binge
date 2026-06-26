@@ -64,6 +64,32 @@ export function NotificationsSection() {
     }
   }
 
+  async function handlePriceDropsToggle(next: boolean) {
+    if (busyKeys.has('priceDrops')) return;
+    setBusyKey('priceDrops', true);
+    try {
+      await updateNotificationSettings({ priceDrops: next });
+      toast(next ? 'Prisrasnotiser på' : 'Prisrasnotiser av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('priceDrops', false);
+    }
+  }
+
+  async function handleRotationToggle(next: boolean) {
+    if (busyKeys.has('rotation')) return;
+    setBusyKey('rotation', true);
+    try {
+      await updateNotificationSettings({ rotationReminders: next });
+      toast(next ? 'Rotationspåminnelser på' : 'Rotationspåminnelser av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('rotation', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -124,6 +150,20 @@ export function NotificationsSection() {
           onChange={(e) => { void handleAvailableToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Notiser när en titel jag vill se dyker upp på en tjänst jag har
+      </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.priceDrops} disabled={busyKeys.has('priceDrops')}
+          onChange={(e) => { void handlePriceDropsToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Notiser när priset rasar på en film jag vill se
+      </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.rotationReminders} disabled={busyKeys.has('rotation')}
+          onChange={(e) => { void handleRotationToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Påminnelser om att pausa/återuppta tjänster (rotationskalendern)
       </label>
     </SettingsSection>
   );

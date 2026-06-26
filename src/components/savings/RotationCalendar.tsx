@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useMemo, useRef } from 'react';
 import ProviderDot from '@/components/ui/ProviderDot';
 import { formatSwedishDate } from '@/lib/utils';
 import { useRotationCalendar, useSavingsLedger } from '@/hooks/useRotationCalendar';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
  * BIN-181 — Rotationskalender + sparat-ledger.
@@ -19,6 +21,31 @@ import { useRotationCalendar, useSavingsLedger } from '@/hooks/useRotationCalend
 export default function RotationCalendar() {
   const calendar = useRotationCalendar();
   const ledger = useSavingsLedger();
+  const { user, updateRotationSchedule } = useAuth();
+
+  // BIN-181: when the user has opted into rotation reminders, keep the persisted
+  // schedule snapshot (which rotationReminderNotify reads) fresh as air dates
+  // move — write-on-change only, so it's at most one write per actual change.
+  const remindersOn = user?.notificationSettings.rotationReminders ?? false;
+  const schedule = useMemo(
+    () => calendar.entries.map(e => ({
+      providerId: e.providerId,
+      shortName: e.shortName,
+      cancelDate: e.cancel.date,
+      resumeDate: e.resume?.date ?? null,
+    })),
+    [calendar.entries],
+  );
+  const scheduleJson = JSON.stringify(schedule);
+  const lastPersistedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!remindersOn || calendar.isLoading) return;
+    if (scheduleJson === lastPersistedRef.current) return;
+    lastPersistedRef.current = scheduleJson;
+    void updateRotationSchedule(schedule);
+    // schedule is captured via scheduleJson (stable across no-op renders)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remindersOn, calendar.isLoading, scheduleJson, updateRotationSchedule]);
 
   if (calendar.isLoading) return null;
 

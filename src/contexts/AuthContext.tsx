@@ -46,6 +46,7 @@ interface AuthState {
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
   updateHomeMunicipality: (kommun: string | null) => Promise<void>;
+  updateRotationSchedule: (schedule: NonNullable<UserProfile['rotationSchedule']>) => Promise<void>;
   // Sätt/ta bort EN providers kostnad (null = ta bort). Slår ihop mot senaste
   // state så samtidiga blur-skrivningar inte klobbrar varandra (BIN-40).
   setProviderCost: (providerId: number, cost: number | null) => Promise<void>;
@@ -83,6 +84,7 @@ const AuthContext = createContext<AuthState>({
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
   updateHomeMunicipality: async () => {},
+  updateRotationSchedule: async () => {},
   setProviderCost: async () => {},
   setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
@@ -159,7 +161,10 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
         availableOnMyServices: data.notificationSettings?.availableOnMyServices ?? true,
         pushEnabled: data.notificationSettings?.pushEnabled ?? false,
         episodeReleases: data.notificationSettings?.episodeReleases ?? true,
+        priceDrops: data.notificationSettings?.priceDrops ?? false,
+        rotationReminders: data.notificationSettings?.rotationReminders ?? false,
       },
+      rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
     };
 
     // Backfill för existing Google-konton som loggade in före auto-suggest:en
@@ -198,6 +203,8 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       availableOnMyServices: true,
       pushEnabled: false,
       episodeReleases: true,
+      priceDrops: false,
+      rotationReminders: false,
     },
   };
 
@@ -342,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
       createdAt: serverTimestamp(),
@@ -402,6 +409,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProviderCosts = useCallback((costs: Record<number, number>) => updateUserField('providerCosts', costs), [updateUserField]);
   // BIN-172: hemkommun = "jag har ett lånekort i {kommun}". null rensar fältet.
   const updateHomeMunicipality = useCallback((kommun: string | null) => updateUserField('hemkommun', kommun), [updateUserField]);
+  // BIN-181: persist the rotation-calendar snapshot the reminder function reads.
+  const updateRotationSchedule = useCallback((schedule: NonNullable<UserProfile['rotationSchedule']>) => updateUserField('rotationSchedule', schedule), [updateUserField]);
   // Spegel av user.providerCosts som uppdateras SYNKRONT i setProviderCost (före
   // await) så att tabbning från provider A:s kostnad till B:s inte skriver två
   // blur:ar mot samma stale render-snapshot och tappar A:s värde (BIN-40).
@@ -787,7 +796,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -795,7 +804,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

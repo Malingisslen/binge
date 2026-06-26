@@ -146,7 +146,25 @@ export interface UserProfile {
     // raderar token-doc:et på den här enheten (andra enheter behåller sina
     // tokens om de toggle:as separat).
     pushEnabled: boolean;
+    // BIN-180 — opt-in (default false): push när priset på en film i 'vill_se'
+    // rasar (priceDropNotify läser delad priceHistory).
+    priceDrops: boolean;
+    // BIN-181 — opt-in (default false): push när ett paus/återkom-datum i din
+    // rotationskalender förfaller (rotationReminderNotify läser rotationSchedule).
+    rotationReminders: boolean;
   };
+  // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
+  // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.
+  rotationSchedule?: RotationScheduleEntry[];
+}
+
+export interface RotationScheduleEntry {
+  providerId: number;
+  shortName: string;
+  /** ISO yyyy-mm-dd. */
+  cancelDate: string;
+  /** ISO yyyy-mm-dd, eller null för öppen paus. */
+  resumeDate: string | null;
 }
 
 export interface UserList {
