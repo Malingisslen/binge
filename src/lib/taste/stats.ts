@@ -12,6 +12,13 @@ export interface ProfileStats {
 
 // Ej påbörjade 'mina'-serier viktas som planerade (vill_se-nivån) — se
 // taste/vector.ts för resonemanget.
+//
+// AVSIKTLIGT olik `buildTasteVector` i taste/vector.ts: detta är en
+// *beskrivande* topp-genre-vy för profilen, så betyg räknas rakt (rating/10,
+// inte ×2) och 'avbruten' är neutral (0) — en topp-5-lista sorterad på vikt
+// kan inte visa "negativ genre-närvaro". vector.ts straffar 'avbruten' (-0.5)
+// för att rekommendationsmotorn ska väga bort övergivna genrer. Skalorna ska
+// förbli olika.
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return item.rating / 10;
   if (item.status === 'avbruten') return 0;
