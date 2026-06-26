@@ -29,21 +29,32 @@ firebase functions:secrets:set TMDB_API_KEY        # NYTT (Fas 6) — episodeRel
 
 ## 2. Deploya functions + rules + index
 
-Allt i ett svep (innehåller både insikter Fas 1 och episod-push Fas 6):
+Deploya **alla** functions i ett svep (inte en namngiven delmängd — den listan
+har glidit isär från koden förut och tappade bl.a. `retentionCleanup` +
+`reclaimOrphanFollows`, så schemalagd städning aldrig gick live):
 
 ```bash
-firebase deploy --only functions:rollupInsights,functions:apiInsights,functions:episodeReleaseNotify,firestore:rules,firestore:indexes
+firebase deploy --only functions,firestore:rules,firestore:indexes
 ```
 
-- **Förväntat:** tre functions deployas till `europe-west1`; rules kompilerar och
-  publiceras; `watchlist`-collectionGroup-indexet (mediaType+status) byggs.
+- **Förväntat:** samtliga exporterade functions (se `functions/src/index.ts`)
+  deployas till `europe-west1`; rules kompilerar och publiceras; collectionGroup-
+  indexen byggs.
 - **Verifiera:**
-  - `firebase functions:list` visar `rollupInsights` (schedule), `apiInsights` (https), `episodeReleaseNotify` (schedule).
-  - Firestore Console → Indexes: `watchlist` COLLECTION_GROUP-index har status **Enabled** (bygget kan ta några minuter).
-  - Cloud Scheduler Console visar två jobb: `rollupInsights` (var 6:e timme) och `episodeReleaseNotify` (var 6:e timme).
-- **Notis:** index-bygget är asynkront — `episodeReleaseNotify` loggar fel om det
-  kör innan indexet är Enabled. Vänta tills indexet är klart (eller kör jobbet
+  - `firebase functions:list` visar alla functions. Kontrollera särskilt de
+    **schemalagda** (annars körs ingen bakgrundsjobb): `rollupInsights`,
+    `episodeReleaseNotify`, `showReturnNotify`, `availableNotify`,
+    `retentionCleanup` (daglig — GDPR-retention), `reclaimOrphanFollows`
+    (veckovis), `streamingOffersRefresh`, `cineasternaCatalogSync`.
+  - Cloud Scheduler Console listar ett jobb per schemalagd function ovan.
+  - Firestore Console → Indexes: collectionGroup-indexen har status **Enabled**
+    (bygget kan ta några minuter).
+- **Notis:** index-bygget är asynkront — schemalagda jobb som läser ett ännu ej
+  Enabled-index loggar fel. Vänta tills indexet är klart (eller kör jobbet
   manuellt en gång efteråt, se steg 11).
+- **Secrets-beroende:** flera av de nyare functions (`streamingOffersRefresh`,
+  `titleRatings`, `askBingeParse`, m.fl.) no-op:ar tyst utan sina secrets — sätt
+  alla i steg 1 / `docs/analysis/EXTERNAL_ACTIONS.md` innan deploy.
 
 ## 3. Plausible — registrera mål (goals)
 

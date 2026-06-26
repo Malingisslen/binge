@@ -5,6 +5,14 @@ import type { TasteVector, WatchlistItem } from '@/types';
 // räknas som en mild positiv signal om användaren har titeln i samlingen.
 // Ej påbörjade 'mina'-serier är planerade (inte bevisad smak) — samma
 // vikt som 'vill_se', där de bodde före mergen (2026-06).
+//
+// AVSIKTLIGT olik `computeProfileStats` i taste/stats.ts: detta är en
+// *preferens*-signal som driver rekommendationer, så betyg amplifieras (×2)
+// för skarpare signal och 'avbruten' får negativ vikt (-0.5) — vi vill
+// aktivt väga BORT genrer du gett upp på. stats.ts är en *beskrivande*
+// topp-genre-vy där 'avbruten' istället är neutral (0). Harmonisera inte de
+// två skalorna — de svarar på olika frågor (vad ska rekommenderas vs vad
+// tittar du på).
 function weightForItem(item: WatchlistItem): number {
   if (item.rating != null) return (item.rating / 10) * 2;
   if (item.status === 'avbruten') return -0.5;
