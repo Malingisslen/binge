@@ -46,3 +46,8 @@ export const FRANCHISES: Franchise[] = [
 export function franchiseBySlug(slug: string): Franchise | undefined {
   return FRANCHISES.find((f) => f.slug === slug);
 }
+
+/** Map a TMDB collection id → franchise (for linking title pages to /billigaste). */
+export function franchiseByCollectionId(collectionId: number): Franchise | undefined {
+  return FRANCHISES.find((f) => f.collectionId === collectionId);
+}

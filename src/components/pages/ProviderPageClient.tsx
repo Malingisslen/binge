@@ -8,6 +8,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import ProviderDot from '@/components/ui/ProviderDot';
 import TitleGrid from '@/components/title/TitleGrid';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { localIsoDate } from '@/lib/utils';
 import type { TMDBSearchResult } from '@/types';
@@ -132,6 +133,14 @@ export default function ProviderPageClient({
           ))}
         </div>
       </div>
+
+      {indexable && (
+        <div className="mb-3">
+          <Link href={`/forsvinner/${canonicalProviderId(providerId)}/`} className="text-sm text-acc-deep hover:underline">
+            Vad försvinner från {providerName} snart? →
+          </Link>
+        </div>
+      )}
 
       <div className="bg-surface border border-rule rounded-sm">
         <TitleGrid items={allResults} loading={isLoading && allResults.length === 0} />

@@ -1,6 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { FRANCHISES } from '@/lib/seo/franchises';
+import { getProvider } from '@/lib/tmdb/providers';
+
+// BIN-178 — a small curated set of the new SEO landing pages, surfaced in the
+// footer so they're linked from every pre-rendered page's static HTML (crawl
+// discovery — orphaned pages index poorly, see project_seo_indexing). Kept short
+// on purpose; not a link farm.
+const FOOTER_FRANCHISES = FRANCHISES.slice(0, 4);
+const FOOTER_PROVIDER_IDS = [8, 76, 337, 384]; // Netflix, Viaplay, Disney+, Max
 
 export default function Footer() {
   return (
@@ -14,6 +23,19 @@ export default function Footer() {
             <li><a href="mailto:hej@binge.nu" className="hover:text-text-primary">Kontakt</a></li>
             {/* "Stötta projektet"-länken är tillfälligt borttagen tills vi har
                 ett eget Ko-fi/Swish-konto. Återinför här när URL:en är klar. */}
+          </ul>
+        </nav>
+        <nav aria-label="Guider">
+          <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
+            <li className="text-text-muted">Billigaste sättet att se:</li>
+            {FOOTER_FRANCHISES.map((f) => (
+              <li key={f.slug}><Link href={`/billigaste/${f.slug}/`} className="hover:text-text-primary">{f.name}</Link></li>
+            ))}
+            <li className="text-text-muted">Lämnar snart:</li>
+            {FOOTER_PROVIDER_IDS.map((pid) => {
+              const p = getProvider(pid);
+              return p ? <li key={pid}><Link href={`/forsvinner/${pid}/`} className="hover:text-text-primary">{p.shortName || p.name}</Link></li> : null;
+            })}
           </ul>
         </nav>
         <div className="flex items-center gap-3 text-xxs">
