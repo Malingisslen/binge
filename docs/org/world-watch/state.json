@@ -39,8 +39,11 @@
         { "id": "recaptcha-enterprise-relnotes", "title": "reCAPTCHA Enterprise release notes", "url": "https://docs.cloud.google.com/recaptcha/docs/release-notes", "type": "html", "note": "Use docs.cloud.google.com host (301 from cloud.google.com)." },
         { "id": "gh-changelog-dependabot", "title": "GitHub changelog — Dependabot", "url": "https://github.blog/changelog/label/dependabot/feed/", "type": "rss", "note": "How vuln alerts/grouping reach the repo." }
       ],
-      "lastScan": null,
-      "snapshot": {}
+      "lastScan": "2026-06-27",
+      "snapshot": {
+        "nextjs-advisories": "newest: GHSA-26hh-7cqf-hhc6 segment-prefetch middleware bypass follow-up (2026-05-07); May-2026 coordinated batch baselined → BIN-213",
+        "firebase-js-sdk-releases": "firebase@12.15.0 (2026-06-16); Auth/App-Check reCAPTCHA-Enterprise conflict fix — N/A to Binge (uses reCAPTCHA v3)"
+      }
     },
     "legal-gdpr-counsel": {
       "roleNumber": 5,
@@ -74,8 +77,11 @@
         { "id": "ec-dsa-enforcement", "title": "EC — DSA enforcement", "url": "https://digital-strategy.ec.europa.eu/en/policies/dsa-enforcement", "type": "html", "note": "Official DSA enforcement hub." },
         { "id": "ec-news", "title": "EC — news (filterable)", "url": "https://commission.europa.eu/news_en", "type": "html", "note": "Catch-all with AI/data-protection/digital-services filters." }
       ],
-      "lastScan": null,
-      "snapshot": {}
+      "lastScan": "2026-06-27",
+      "snapshot": {
+        "edpb-news": "newest: OSS case digest on right to object & erasure updated (2026-06-25) → escalated BIN-214",
+        "imy-nyheter": "newest: IMY marknadskontrollmyndighet för AI-förordningen (2026-06-15) + AI-bolagens ansvarsroller report (2026-06-10) → escalated BIN-215"
+      }
     },
     "data-protection-officer": {
       "roleNumber": 6,
@@ -105,8 +111,11 @@
         { "id": "firebase-subprocessors", "title": "Firebase subprocessors", "url": "https://firebase.google.com/terms/subprocessors/", "type": "html", "note": "Primary processor. Page may be edge-cached with a stale date — cross-check the GCP list." },
         { "id": "gcp-subprocessors", "title": "Google Cloud subprocessors", "url": "https://cloud.google.com/terms/subprocessors", "type": "html", "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list." }
       ],
-      "lastScan": null,
-      "snapshot": {}
+      "lastScan": "2026-06-27",
+      "snapshot": {
+        "sentry-subprocessors": "as of 2026-06-01: Intercom added; Functional Software GmbH addr changed (OpenAI moved to general list 2026-03-02) → escalated BIN-216",
+        "imy-nyheter-rss": "newest: IMY AI Act supervisor (2026-06-15); breach-notification template (2026-06-11)"
+      }
     }
   }
 }
