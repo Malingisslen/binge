@@ -90,6 +90,18 @@ Show Malin: the panel (with anyone dropped), the recommendation + must-haves, th
 conflict table, and any **escalation question**. Then stop — the review never edits app
 code, never commits code, never files tickets on its own.
 
+### 6. Log the review (measurement — required)
+Append one `review` event so the measurement layer can compute the **rubber-stamp rate**
+(a clean approval with no conditions/ADR is the signal that the panel didn't earn its
+cost). `rubber_stamp` is **true** iff there were **no** must-haves, conflicts,
+escalations, or ADRs. Fire-and-forget (the helper fails open):
+```bash
+node docs/org/metrics/log_event.mjs review '{"tier":"top","panel":[3,4,6,8,27],"recommendation":"proceed-with-conditions","must_haves":10,"conflicts":3,"escalations":1,"adrs":["0001"],"rubber_stamp":false,"approx_tokens":355000,"plan":"activate dormant retention cleanup"}'
+```
+Fill the fields from this run (panel = role numbers convened; counts from the synthesis;
+`approx_tokens` ≈ sum of subagent token usage). A **skip** (trivial/doc-only) logs
+`{"tier":"skip","rubber_stamp":false,"plan":"..."}` so skips are visible too.
+
 ## Hard rules
 - **Blind**: critics get no shared context and never see each other. That's the whole
   anti-sycophancy point — round-robin chat is forbidden.

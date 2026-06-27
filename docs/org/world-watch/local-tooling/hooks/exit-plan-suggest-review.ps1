@@ -36,6 +36,20 @@ try {
     if ($hits.Count -eq 0) { exit 0 }   # low-risk plan → stay silent
 
     $uniq = ($hits | Select-Object -Unique) -join ', '
+
+    # Measurement (fail-open, never breaks the hook): log that the trigger fired so
+    # /org-retro can score calibration (suggested vs actually-ran). Best-effort only.
+    try {
+        $repoRoot = (& git rev-parse --show-toplevel 2>$null)
+        if ([string]::IsNullOrWhiteSpace($repoRoot)) { $repoRoot = $env:CLAUDE_PROJECT_DIR }
+        if (-not [string]::IsNullOrWhiteSpace($repoRoot)) {
+            $logger  = Join-Path $repoRoot.Trim() 'docs/org/metrics/log_event.mjs'
+            $sigJson = ($uniq.Split(',') | ForEach-Object { '"' + $_.Trim().Replace('"','') + '"' }) -join ','
+            $payload = '{"signals":[' + $sigJson + '],"suggested":true}'
+            if (Test-Path -LiteralPath $logger) { & node $logger trigger $payload 2>$null | Out-Null }
+        }
+    } catch { }   # logging must never break the hook
+
     $msg = "This plan appears to touch high-stakes surfaces ($uniq). Consider offering the " +
            "user /stakeholder-review before executing — it runs a blind multi-role critique " +
            "(Security / Legal / DPO / DBA / DevOps as relevant) and escalates any legal/privacy " +

@@ -280,6 +280,19 @@ exploration), to cut the ~355k cost. Result, measured honestly:
   the correct price; the savings live in not convening five for medium work. A further $
   lever (not token-count) is running critics on a cheaper model for routine reviews.
 
+### 2.7 Measurement layer (does any of this earn its cost?)
+`docs/org/metrics/` (committed): an append-only `events.jsonl`, a fail-open `log_event.mjs`
+helper, and a README schema. Two gaps the artifacts can't see are instrumented — the
+`/stakeholder-review` skill logs each `review` (so clean no-ADR approvals = the
+**rubber-stamp rate**), and the ExitPlanMode hook logs each `trigger` firing (so
+suggested-vs-ran **calibration** is measurable). World-watch + freshness are left
+documented-optional (`state.json` + markers already cover them). The `/org-retro` skill
+reads it all and scores Phase-2 value/rubber-stamp, trigger calibration, world-watch
+signal-to-noise + source health, freshness accuracy, and cost/review — plus a **manual
+false-negative spot-check** (the logs show what the system *did*, never what it *missed*).
+Cadence: **shakedown** (~3–4 days, qualitative) then **full** (~3–4 weeks, quantitative),
+both run interactively. See `docs/org/metrics/README.md`.
+
 ---
 
 ## 3. Rebuild local tooling (durability) — the most important fix
@@ -305,7 +318,11 @@ silently does not exist on any other checkout.** So everything is split clean:
 | `.claude/skills/world-watch/SKILL.md` | `docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md` |
 | `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
 | `.claude/skills/stakeholder-review/SKILL.md` | `docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md` |
+| `.claude/skills/org-retro/SKILL.md` | `docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md` |
 | `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
+
+The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`, README)
+is committed data + helper, **not** gitignored glue, so it needs no mirror/rebuild.
 
 `state.json` and `ownership-map.json` already live committed under `docs/` — nothing to
 rebuild there.
@@ -319,6 +336,7 @@ cp docs/org/world-watch/local-tooling/hooks/*.ps1 .claude/hooks/
 cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills/world-watch/
 cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
 cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
+mkdir -p .claude/skills/org-retro && cp docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md .claude/skills/org-retro/
 
 # 2. wire the hooks: merge the two entries from settings.hooks.json into
 #    .claude/settings.json -> "hooks". If that file doesn't exist, create it as
