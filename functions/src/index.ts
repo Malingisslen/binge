@@ -242,3 +242,12 @@ export { priceDropNotify } from './priceDropNotify';
 // {kind}_{date}. Indexerad equality-query (bara opt-in-användare). Admin SDK →
 // ingen rules-ändring (rotationSchedule + flaggan är owner-skrivbara user-fält).
 export { rotationReminderNotify } from './rotationReminder';
+
+// ── Veckodigest "lämnar snart + nytt på dina tjänster" (BIN-163) ─────────────
+// weeklyDigestNotify: veckovis (mån 09:00 Europe/Stockholm) query av users med
+// opt-in (notificationSettings.weeklyDigest) → läser deras bibliotek + delade
+// streamingOffers (titlar som lämnar inom 14 dygn på en tjänst de HAR) + räknar
+// veckans provider_available-arrivals (summerar det availableNotify redan
+// pushat) → ETT push + EN inbox-kort (kind 'weekly_digest'). Deduppas mot
+// weeklyDigestState/{uid}.lastSentDate. Inga TMDB-anrop (rena Firestore-läsningar).
+export { weeklyDigestNotify } from './weeklyDigest';

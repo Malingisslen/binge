@@ -15,13 +15,28 @@ export interface AppNotification {
   title: string;
   // Diskriminator: legacy provider-availability-notifs saknar `kind` och
   // defaultas till 'provider_available'. Episod-release-notifs (Fas 6) sätter
-  // 'episode_release' + episodeCode och saknar provider-fälten.
-  kind: 'provider_available' | 'episode_release';
+  // 'episode_release' + episodeCode och saknar provider-fälten. Veckodigest
+  // (BIN-163) sätter 'weekly_digest' + summary/digestItems och är INTE
+  // tmdbId-formad (tmdbId=0) — en rollup över flera titlar.
+  kind: 'provider_available' | 'episode_release' | 'weekly_digest';
   providerId: number | null;
   providerName: string | null;
   episodeCode: string | null;
+  // BIN-163 weekly_digest-fält (undefined för övriga kinds).
+  summary?: string;
+  leavingCount?: number;
+  newCount?: number;
+  digestItems?: DigestCardItem[];
   read: boolean;
   createdAt: Date;
+}
+
+export interface DigestCardItem {
+  tmdbId: number;
+  title: string;
+  mediaType: 'movie' | 'tv';
+  leaving: string;
+  daysLeft: number;
 }
 
 export interface RecentGroupPick {
@@ -51,6 +66,26 @@ export function useNotifications() {
       ), snap => {
         setNotifications(snap.docs.map(d => {
         const data = d.data();
+        if (data.kind === 'weekly_digest') {
+          // Rollup-kort (BIN-163): inte tmdbId-formad. summary är rubriken,
+          // digestItems listan över titlar som lämnar snart.
+          return {
+            id: d.id,
+            tmdbId: 0,
+            mediaType: 'movie',
+            title: data.summary ?? 'Din streamingvecka',
+            kind: 'weekly_digest',
+            providerId: null,
+            providerName: null,
+            episodeCode: null,
+            summary: data.summary ?? '',
+            leavingCount: data.leavingCount ?? 0,
+            newCount: data.newCount ?? 0,
+            digestItems: Array.isArray(data.items) ? (data.items as DigestCardItem[]) : [],
+            read: data.read ?? false,
+            createdAt: toDate(data.createdAt),
+          } as AppNotification;
+        }
         return {
           id: d.id,
           tmdbId: data.tmdbId,

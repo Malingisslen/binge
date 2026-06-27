@@ -163,6 +163,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
         episodeReleases: data.notificationSettings?.episodeReleases ?? true,
         priceDrops: data.notificationSettings?.priceDrops ?? false,
         rotationReminders: data.notificationSettings?.rotationReminders ?? false,
+        weeklyDigest: data.notificationSettings?.weeklyDigest ?? false,
       },
       rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
     };
@@ -205,6 +206,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       episodeReleases: true,
       priceDrops: false,
       rotationReminders: false,
+      weeklyDigest: false,
     },
   };
 
@@ -349,7 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       providerPauses: {},
       calibrationGenres: null,
       hemkommun: null,
-      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false },
+      notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
       createdAt: serverTimestamp(),
@@ -754,6 +756,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // 9. User doc + username reservation.
+    // BIN-163 — veckodigest-dedupmarkör (weeklyDigestState/{uid}, doc-id == uid).
+    // Admin-skriven, men uid-nycklad → sopas här som fcmTokens/reportMeta så
+    // ingen orphan blir kvar. (Övriga notify-markörer är tmdbId-/komposit-nycklade
+    // delade docs, inte ägda av en användare, och rörs därför inte.)
+    refs.push(doc(db, 'weeklyDigestState', id));
     refs.push(doc(db, 'users', id));
     if (username) refs.push(doc(db, 'usernames', username));
 

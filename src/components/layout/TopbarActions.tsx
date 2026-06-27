@@ -190,6 +190,21 @@ export default function TopbarActions() {
                     )}
                   </div>
                   {notifications.slice(0, 10).map(n => {
+                    // BIN-163 veckodigest — rollup-kort, inte tmdbId-formad.
+                    // Länkar till biblioteket istället för en titelsida.
+                    if (n.kind === 'weekly_digest') {
+                      return (
+                        <Link
+                          key={n.id}
+                          href="/my/all"
+                          onClick={() => { markRead(n.id); setBellOpen(false); }}
+                          className={`popover-row${n.read ? '' : ' is-unread'}`}
+                        >
+                          <div className="popover-row-title">Din streamingvecka</div>
+                          <div className="popover-row-meta">{n.summary}</div>
+                        </Link>
+                      );
+                    }
                     const provider = n.providerId != null ? getProvider(n.providerId) : undefined;
                     const href = `/${n.mediaType === 'movie' ? 'movie' : 'tv'}/${n.tmdbId}/`;
                     return (

@@ -90,6 +90,19 @@ export function NotificationsSection() {
     }
   }
 
+  async function handleWeeklyDigestToggle(next: boolean) {
+    if (busyKeys.has('weeklyDigest')) return;
+    setBusyKey('weeklyDigest', true);
+    try {
+      await updateNotificationSettings({ weeklyDigest: next });
+      toast(next ? 'Veckodigest på' : 'Veckodigest av');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunde inte ändra notisinställningar. Försök igen om en stund.');
+    } finally {
+      setBusyKey('weeklyDigest', false);
+    }
+  }
+
   async function handleToggle(next: boolean) {
     if (busyKeys.has('push')) return;
     setBusyKey('push', true);
@@ -164,6 +177,13 @@ export function NotificationsSection() {
           onChange={(e) => { void handleRotationToggle(e.target.checked); }}
           className="accent-acc-deep w-[14px] h-[14px]" />
         Påminnelser om att pausa/återuppta tjänster (rotationskalendern)
+      </label>
+
+      <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
+        <input type="checkbox" checked={user.notificationSettings.weeklyDigest} disabled={busyKeys.has('weeklyDigest')}
+          onChange={(e) => { void handleWeeklyDigestToggle(e.target.checked); }}
+          className="accent-acc-deep w-[14px] h-[14px]" />
+        Veckodigest: titlar som lämnar dina tjänster snart + nytt den här veckan
       </label>
     </SettingsSection>
   );

@@ -152,6 +152,10 @@ export interface UserProfile {
     // BIN-181 — opt-in (default false): push när ett paus/återkom-datum i din
     // rotationskalender förfaller (rotationReminderNotify läser rotationSchedule).
     rotationReminders: boolean;
+    // BIN-163 — opt-in (default false): veckovis digest (mån morgon) som rullar
+    // upp titlar som lämnar dina tjänster snart + nytt på dina tjänster den här
+    // veckan (weeklyDigestNotify). ETT push + ETT inbox-kort, inte per titel.
+    weeklyDigest: boolean;
   };
   // BIN-181 — klient-persistad rotationskalender-snapshot (paus/återkom-datum)
   // som rotationReminderNotify läser. Skrivs när användaren slår på påminnelser.
