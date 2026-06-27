@@ -1,5 +1,5 @@
 {
-  "_comment": "The two .claude/settings.json hook ENTRIES this system adds. Merge these into the `hooks` object of .claude/settings.json (create the file if a fresh checkout has none). If a SessionStart array already exists, append this entry to it rather than replacing it. See ../DESIGN.md → 'Rebuild local tooling'.",
+  "_comment": "The .claude/settings.json hook ENTRIES this system adds (SessionStart world-watch reminder, PostToolUse dossier-freshness, PreToolUse ExitPlanMode review-suggestion). Merge these into the `hooks` object of .claude/settings.json (create the file if a fresh checkout has none). If a SessionStart/PreToolUse array already exists (e.g. the commit-gate uses PreToolUse), APPEND these entries rather than replacing the array. See ../DESIGN.md → 'Rebuild local tooling'.",
   "SessionStart": [
     {
       "matcher": "startup|resume",
@@ -18,6 +18,17 @@
         {
           "type": "command",
           "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\dossier-freshness.ps1\""
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "ExitPlanMode",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\exit-plan-suggest-review.ps1\""
         }
       ]
     }
