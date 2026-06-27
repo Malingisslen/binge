@@ -315,14 +315,17 @@ silently does not exist on any other checkout.** So everything is split clean:
 | `.claude/hooks/world-watch-due.ps1` | `docs/org/world-watch/local-tooling/hooks/world-watch-due.ps1` |
 | `.claude/hooks/dossier-freshness.ps1` | `docs/org/world-watch/local-tooling/hooks/dossier-freshness.ps1` |
 | `.claude/hooks/exit-plan-suggest-review.ps1` | `docs/org/world-watch/local-tooling/hooks/exit-plan-suggest-review.ps1` |
+| `.claude/hooks/org-retro-due-check.mjs` | `docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs` |
 | `.claude/skills/world-watch/SKILL.md` | `docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md` |
 | `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
 | `.claude/skills/stakeholder-review/SKILL.md` | `docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md` |
 | `.claude/skills/org-retro/SKILL.md` | `docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md` |
 | `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
 
-The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`, README)
-is committed data + helper, **not** gitignored glue, so it needs no mirror/rebuild.
+The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`,
+`retro-schedule.json`, README) is committed data + helper, **not** gitignored glue, so it
+needs no mirror/rebuild. Only the `org-retro-due-check.mjs` hook that *reads* the schedule
+is gitignored glue (mirrored above).
 
 `state.json` and `ownership-map.json` already live committed under `docs/` — nothing to
 rebuild there.
@@ -332,7 +335,7 @@ rebuild there.
 ```bash
 # 1. deploy the hooks + skills into the gitignored .claude/ tree
 mkdir -p .claude/hooks .claude/skills/world-watch .claude/skills/refresh-dossiers .claude/skills/stakeholder-review
-cp docs/org/world-watch/local-tooling/hooks/*.ps1 .claude/hooks/
+cp docs/org/world-watch/local-tooling/hooks/* .claude/hooks/   # .ps1 + .mjs (org-retro-due-check)
 cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills/world-watch/
 cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
 cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
@@ -356,7 +359,9 @@ The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
 ```json
 "SessionStart": [
   { "matcher": "startup|resume", "hooks": [ { "type": "command",
-    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\"" } ] }
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\"" } ] },
+  { "matcher": "startup|resume", "hooks": [ { "type": "command",
+    "command": "node \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\org-retro-due-check.mjs\"" } ] }
 ],
 "PostToolUse": [
   { "matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command",

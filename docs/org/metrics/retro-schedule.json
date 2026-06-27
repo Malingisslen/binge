@@ -1,0 +1,8 @@
+{
+  "goLive": "2026-06-27",
+  "note": "Role-org measurement go-live. A retro is DUE when (today - goLive) >= afterDays AND no {\"type\":\"retro\",\"mode\":\"<mode>\"} event exists yet in events.jsonl. Running /org-retro <mode> logs that event, which self-clears the reminder. See docs/org/metrics/README.md.",
+  "retros": [
+    { "mode": "shakedown", "afterDays": 4 },
+    { "mode": "full", "afterDays": 28 }
+  ]
+}

@@ -9,6 +9,15 @@
           "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\""
         }
       ]
+    },
+    {
+      "matcher": "startup|resume",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\org-retro-due-check.mjs\""
+        }
+      ]
     }
   ],
   "PostToolUse": [
