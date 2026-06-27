@@ -8,14 +8,20 @@ import type { TasteVector, WatchlistItem } from '@/types';
 //
 // AVSIKTLIGT olik `computeProfileStats` i taste/stats.ts: detta är en
 // *preferens*-signal som driver rekommendationer, så betyg amplifieras (×2)
-// för skarpare signal och 'avbruten' får negativ vikt (-0.5) — vi vill
-// aktivt väga BORT genrer du gett upp på. stats.ts är en *beskrivande*
-// topp-genre-vy där 'avbruten' istället är neutral (0). Harmonisera inte de
-// två skalorna — de svarar på olika frågor (vad ska rekommenderas vs vad
-// tittar du på).
+// för skarpare signal och 'avbruten' väger bort genrer du gett upp på (-0.5).
+// Undantag (BIN-318): satte du HÖGT betyg (≥4 på 0.5–5-skalan) innan du hoppade
+// av gillade du genren — du bailade bara på just titeln → neutral (0), inte en
+// anti-signal. stats.ts är en *beskrivande* topp-genre-vy där 'avbruten' istället
+// alltid är neutral (0). Harmonisera inte de två skalorna — de svarar på olika
+// frågor (vad ska rekommenderas vs vad tittar du på).
 function weightForItem(item: WatchlistItem): number {
+  // 'avbruten' FÖRST — avhopp är avgörande även när titeln har ett betyg
+  // (annars nådde ett ratat avhopp aldrig penaltyn). Tröskeln 4 matchar
+  // classifySeeds råa strong-seed-gräns (seedAnalysis.ts). (#28-ruling, ADR 0003.)
+  if (item.status === 'avbruten') {
+    return item.rating != null && item.rating >= 4 ? 0 : -0.5;
+  }
   if (item.rating != null) return (item.rating / 10) * 2;
-  if (item.status === 'avbruten') return -0.5;
   if (item.status === 'sedd') return 1;
   if (item.status === 'mina') return item.lastWatchedSeason == null ? 0.25 : 0.75;
   return 0.25;

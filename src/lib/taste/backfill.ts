@@ -1,6 +1,10 @@
 import { fsdb } from '@/lib/firebase/db';
 import { getMovie, getTVShow } from '@/lib/tmdb/client';
 import { extractSEProviders } from '@/lib/tmdb/providers';
+import { buildBackfillUpdate } from './backfill.helpers';
+
+export type { BackfillUpdate } from './backfill.helpers';
+export { buildBackfillUpdate } from './backfill.helpers';
 
 export interface BackfillProgress {
   total: number;
@@ -27,13 +31,6 @@ function timestampToMs(val: unknown): number | null {
     return (val as { toMillis(): number }).toMillis();
   }
   return null;
-}
-
-function arraysEqualAsSets(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const setA = new Set(a);
-  for (const v of b) if (!setA.has(v)) return false;
-  return true;
 }
 
 // Walkar användarens watchlist och fyller i / uppdaterar genreIds + providers
@@ -89,23 +86,9 @@ export async function backfillGenreIds(
         const existingGenres = Array.isArray(data.genreIds) ? data.genreIds as number[] : [];
         const existingProviders = Array.isArray(data.providers) ? data.providers as number[] : null;
 
-        const update: Record<string, unknown> = {
-          updatedAt: serverTimestamp(),
-          providersCheckedAt: serverTimestamp(),
-        };
-        let contentChanged = false;
-        if (existingGenres.length === 0 && genreIds.length > 0) {
-          update.genreIds = genreIds;
-          contentChanged = true;
-        }
-        // Skriv providers när: fältet saknas helt, eller listan skiljer sig
-        // från TMDB:s nuvarande SE-utbud (TV4 lägger till/tar bort, Netflix
-        // tappar titlar etc). Behåll Array.isArray-distinctionen så vi
-        // skriver `providers: []` på en titel som aldrig haft fältet.
-        if (existingProviders === null || !arraysEqualAsSets(existingProviders, uniqueProviders)) {
-          update.providers = uniqueProviders;
-          contentChanged = true;
-        }
+        const { update, contentChanged } = buildBackfillUpdate(
+          existingGenres, existingProviders, genreIds, uniqueProviders, serverTimestamp(),
+        );
 
         await updateDoc(doc(db, 'users', uid, 'watchlist', d.id), update);
         if (contentChanged) state.updated += 1;
