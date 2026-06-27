@@ -59,6 +59,24 @@ describe('parseWatchlistCsv — IMDb', () => {
     });
     expect(res.rows[1]).toMatchObject({ imdbId: 'tt0903747', mediaTypeHint: 'tv', rating: 4.5 });
   });
+
+  // BIN-340: IMDb 'Your Rating' is 1–10 → Binge stores 0.5–5 (÷2). The boundaries
+  // are where the watchlist-vs-review scale conflation (BIN-69/BIN-143) bites — a
+  // mis-handled boundary silently corrupts a whole library on first import.
+  it('maps IMDb rating boundaries to null/0.5 without writing a bad value', () => {
+    const boundary = [
+      'Const,Your Rating,Date Rated,Title,Title Type,IMDb Rating,Year',
+      'tt1,0,2023-05-01,Cleared Rating,movie,9.3,1994',   // IMDb exports 0 for rated-then-cleared
+      'tt2,,2023-05-01,Empty Rating,movie,9.3,1994',       // blank → NaN
+      'tt3,11,2023-05-01,Corrupt Rating,movie,9.3,1994',   // out-of-range / future schema
+      'tt4,1,2023-05-01,Lowest Valid,movie,9.3,1994',      // lower valid boundary → 0.5
+    ].join('\n');
+    const res = parseWatchlistCsv(boundary);
+    expect(res.rows[0].rating).toBeNull(); // 0 → null
+    expect(res.rows[1].rating).toBeNull(); // "" → null
+    expect(res.rows[2].rating).toBeNull(); // 11 → null
+    expect(res.rows[3].rating).toBe(0.5);  // 1 → 0.5
+  });
 });
 
 describe('parseWatchlistCsv — edge cases', () => {
@@ -101,5 +119,20 @@ describe('parseWatchlistCsv — edge cases', () => {
   it('keeps the lower-boundary 0.5-star Letterboxd rating', () => {
     const res = parseWatchlistCsv('Name,Year,Rating\nTitle,2020,0.5');
     expect(res.rows[0].rating).toBe(0.5);
+  });
+
+  // BIN-340: detectFormat is intentionally loose — any header with name+year (and
+  // no Const/Letterboxd marker) is treated as a Letterboxd ratings export. Pin that
+  // boundary so a future tightening is a conscious, reviewed change rather than a
+  // silent regression. (A near-miss like a contacts export with name,year is the
+  // known cost of this looseness.)
+  it('classifies a bare name+year header as Letterboxd (documented loose boundary)', () => {
+    const res = parseWatchlistCsv('Name,Year\nDune,2021');
+    expect(res.format).toBe('letterboxd');
+    expect(res.rows[0]).toMatchObject({ title: 'Dune', year: 2021, rating: null });
+  });
+
+  it('does NOT classify a header lacking both name and const as a known format', () => {
+    expect(parseWatchlistCsv('email,phone\na@b.c,123').format).toBe('unknown');
   });
 });
