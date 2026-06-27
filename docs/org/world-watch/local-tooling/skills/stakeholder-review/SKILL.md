@@ -19,33 +19,52 @@ Router data: `docs/org/ownership-map.json`. Dossiers: `docs/role-responsibilitie
 
 ## Flow
 
-### 1. Route → select stakeholders (blast-radius tier)
-- Determine the **touched paths**: for a fileset, the paths themselves; for a plan,
-  the files/areas it will create or change (infer from the plan text).
-- Match each path against `ownership-map.json` patterns → owning role numbers.
-- Apply the tier:
-  - **Full panel** if it's a *plan*, OR any touched path is **high-stakes**:
+### 1. Route → resolve the blast radius, then pick a tier
+- **Resolve the blast-radius fileset.** For a fileset, the paths themselves; for a plan,
+  the files it will create/change (infer from the plan text) **plus their direct imports**
+  (one hop — the files those touched files import, not the whole graph). This concrete
+  fileset is what scopes critic reading in step 2 — there is no free repo exploration.
+- Match each blast-radius path against `ownership-map.json` patterns → owning role numbers.
+- **Pick the tier from the blast radius (NOT from "is it a plan"):**
+  - **TOP → full panel.** Any blast-radius path is **high-stakes** —
     `firestore.rules`, `firestore.indexes.json`,
     `src/lib/firebase/{groups,userData,dataExport}.ts`, `functions/src/submitReport/`,
-    `src/contexts/AuthContext.tsx`.
-  - **Single stakeholder** if exactly one medium-impact feature area is touched.
-  - **Skip** if trivial / doc-only (no owning role, or only Technical Writer #21) —
-    say so and stop; don't burn tokens on a typo.
-- **Cap the panel** at ~6 roles to keep cost sane: if more match, keep the highest-stakes
-  (security/legal/privacy/data first, then the feature owners). List who you dropped.
+    `src/contexts/AuthContext.tsx` — **or** the change deletes/migrates user data or
+    touches auth/security. Convene the panel, **capped at 3–5 roles** (below).
+  - **MEDIUM → single stakeholder.** One medium-impact feature area, no high-stakes path:
+    review with **just the one most-relevant owning role**. Don't convene five for a
+    one-area change.
+  - **SKIP** if trivial / doc-only (no owning role, or only Technical Writer #21) — say so
+    and stop.
+- **Cap the panel at 3–5 roles with GENUINE stake in the changed files** — not every
+  nominally-adjacent role. A role earns a seat only if a blast-radius file is in its owned
+  paths AND it has a distinct concern (security / legal-privacy / data-integrity / cost /
+  ops). Drop roles whose only link is incidental; **list who you dropped and why.**
 
 ### 2. Parallel BLIND critiques (one subagent per stakeholder)
 Spawn the stakeholders **concurrently**, each blind to the others. Give each agent ONLY:
 - its role dossier (its `## N` section of the role doc + its world-model block),
-- its `ownedPaths` from the ownership map,
+- **the specific blast-radius files it owns** (the intersection of step-1's fileset with
+  this role's owned paths) — an explicit path list,
 - the plan / fileset.
+
+**Scope its reading hard:** instruct each critic *"Read ONLY these listed files (and, if
+strictly needed, a file one of them directly imports). Do NOT grep or explore the rest of
+the repo."* This is for **sharpness and blast-radius hygiene**, not headline cost:
+measured, bounding the reading cut tool-calls ~37% and made critiques *sharper* (close
+reading of the exact files beats broad skimming), but it barely moved token count —
+per-subagent overhead (~55–60k each) dominates when the blast-radius files are small.
+**The real token-cost lever is the number of critics** (the tier + cap in step 1):
+one reviewer for MEDIUM plans, ≤5 for TOP. So right-size the panel first; scope the
+reading for quality. (For LARGE blast-radius filesets, bounded reading also prevents an
+agent from runaway-exploring — that's when it saves real tokens too.)
 
 Each returns structured JSON: `{ role, verdict: approve|approve-with-conditions|object,
 stake: high|medium|low, risks: [...], objections: [...], must_haves: [...],
 one_line: "..." }`. Instruct them: critique from YOUR stake + world-model only; do not
 rubber-stamp; if it's fine from your angle, say so plainly. **No round-robin** — they
-never see each other. (Capped at one round; a second round only if the synthesizer says
-a conflict is reconcilable with more info — default is one.)
+never see each other. (One round by default; a second only if the synthesizer says a
+conflict is reconcilable with more info.)
 
 ### 3. Synthesize
 One synthesizer agent receives all critiques + the plan. It produces:

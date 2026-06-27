@@ -255,6 +255,31 @@ moderation / destructive-data ops) and only then **suggests** `/stakeholder-revi
 non-blocking, never auto-running the panel. Low-risk plans get silence. This keeps the
 expensive panel reserved for the plans where it pays for itself.
 
+#### Cost re-validation (2026-06-27, scoped) — what actually drives the bill
+Re-ran the same plan with critics **bounded to their blast-radius files** (no free repo
+exploration), to cut the ~355k cost. Result, measured honestly:
+- **Findings all survived and got *sharper*.** The three named findings held — the plan's
+  factual error (now caught as *three* mismatched session numbers), the GDPR retention gap
+  (sharpened: privacy policy says 180d, code enforces 90d), and the `followedAt`-null
+  security edge (plus an honest "I can only see the predicate, not the caller" caveat).
+  Close reading of the exact files beat broad skimming.
+- **But scoping reading barely cut token cost: 301k → 299k critics (flat).** It cut
+  *tool-calls* ~37% (27 → 17), but headline tokens are dominated by **fixed per-subagent
+  overhead (~55–60k each)**, and the blast-radius files are small, so reading less of them
+  saves little.
+- **The real token-cost lever is the number of critics, not how much each reads.** The
+  big win is the **tier gate**: a MEDIUM plan now convenes **one** reviewer (~60k) instead
+  of five (~300k) — ~5× on the common case. Within a TOP-tier panel, the **cap** holds it
+  at ≤5. (For this plan, the 3 *named* findings are carried by just DPO + Security ≈ 115k;
+  the other three roles ≈ 185k buy the cost/ops/DR findings — real safety value for a
+  data-deletion deploy, so they stay. Per the rubric, tier-3 data-integrity beats tier-5
+  cost: don't trim a genuine stakeholder to save tokens.)
+- **Conclusion:** keep the blast-radius scoping (sharper + bounds runaway exploration on
+  *large* filesets), but the cost is controlled by **right-sizing the panel** (tier + cap),
+  not by trimming reading. For a genuinely 5-stakeholder destructive-data plan, ~350k is
+  the correct price; the savings live in not convening five for medium work. A further $
+  lever (not token-count) is running critics on a cheaper model for routine reviews.
+
 ---
 
 ## 3. Rebuild local tooling (durability) — the most important fix
