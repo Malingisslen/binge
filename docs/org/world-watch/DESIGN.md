@@ -4,9 +4,29 @@ _How Binge's 28 notional roles (see [`role-responsibilities.md`](../../role-resp
 + the [world-model](./ROLE_WORLD_MODEL.md)) operate as a working org: who decides what,
 when a role's watch fires, and what it's allowed to do about it._
 
-This doc has three parts: the **constitution** (decided org-wide — build to it, don't
-re-litigate), the **world-watch MVP spec** (what's built now), and **Phase 2** (the
-deliberation/stakeholder-review system — specced here but **not built in this pass**).
+> ## STATUS: BUILT & operating — last updated 2026-06-27
+> This is no longer a forward spec; the role-org is live. Operating subsystems:
+> - **World-watch** (§2.1–2.4) — SessionStart due-check + `/world-watch`; baseline ran for
+>   the 3 MVP roles (Security/Legal/DPO) → tickets BIN-213–216.
+> - **Dossier-freshness loop** (§1.6, §2.5) — PostToolUse stale-marker + `/refresh-dossiers`,
+>   off the generated `ownership-map.json`. Verified live.
+> - **Phase-2 stakeholder-review** (§1.1–1.3, §2.6) — path→role router, parallel blind panel,
+>   synthesizer + priority rubric (§1.2), ADRs, and the gated ExitPlanMode suggest-hook.
+>   Validated → ADR-0001.
+> - **Measurement & tuning** (§2.7) — `events.jsonl` + `log_event.mjs`, review/trigger
+>   instrumentation, `/org-retro`, and the self-clearing retro reminder.
+>
+> **Keep this doc current — nothing automates it.** The dossier-freshness loop tracks the
+> role *map* against code, **not this design doc against the system's build state**. So when
+> you add or change a subsystem, update the status line above **and** the relevant section in
+> the same change. This doc is the one system surface nothing watches — that discipline is
+> the fix. (Any hook/skill named below lives in gitignored `.claude/`; its committed copy is
+> under [`local-tooling/`](./local-tooling/) — point fresh-checkout readers there.)
+
+This doc has four parts: the **constitution** (§1, decided org-wide — build to it, don't
+re-litigate), the **built system** (§2 — world-watch, Phase-2 deliberation, and the
+measurement layer, all live), **rebuild-from-docs durability** (§3), and the **genuine
+remainder** (§4).
 
 ---
 
@@ -280,27 +300,47 @@ exploration), to cut the ~355k cost. Result, measured honestly:
   the correct price; the savings live in not convening five for medium work. A further $
   lever (not token-count) is running critics on a cheaper model for routine reviews.
 
-### 2.7 Measurement layer (does any of this earn its cost?)
+### 2.7 Measurement & tuning (BUILT 2026-06-27) — does any of this earn its cost?
 `docs/org/metrics/` (committed): an append-only `events.jsonl`, a fail-open `log_event.mjs`
-helper, and a README schema. Two gaps the artifacts can't see are instrumented — the
-`/stakeholder-review` skill logs each `review` (so clean no-ADR approvals = the
-**rubber-stamp rate**), and the ExitPlanMode hook logs each `trigger` firing (so
-suggested-vs-ran **calibration** is measurable). World-watch + freshness are left
-documented-optional (`state.json` + markers already cover them). The `/org-retro` skill
-reads it all and scores Phase-2 value/rubber-stamp, trigger calibration, world-watch
-signal-to-noise + source health, freshness accuracy, and cost/review — plus a **manual
-false-negative spot-check** (the logs show what the system *did*, never what it *missed*).
-Cadence: **shakedown** (~3–4 days, qualitative) then **full** (~3–4 weeks, quantitative),
-both run interactively. See `docs/org/metrics/README.md`.
+helper, and a README schema (`docs/org/metrics/README.md`).
+
+**Two instrumented gaps** (the only ones the artifacts can't already see):
+- `/stakeholder-review` logs each `review` event → clean no-condition/no-ADR approvals =
+  the **rubber-stamp rate** (is the panel earning its tokens?).
+- the ExitPlanMode suggest-hook logs each `trigger` firing → suggested-vs-actually-ran
+  **calibration**.
+
+World-watch + freshness are left **documented-optional** (`state.json` + the
+`dossier-stale/` markers already record those).
+
+**`/org-retro`** (skill; committed mirror at
+[`local-tooling/skills/org-retro/`](./local-tooling/skills/org-retro/SKILL.md)) reads the
+log + ADRs + world-watch state + freshness markers and scores: Phase-2 value/rubber-stamp,
+trigger calibration, world-watch signal-to-noise + source health, freshness accuracy, and
+cost/review — plus a **manual false-negative spot-check** (the logs show what the system
+*did*, never what it *missed*, so a human verifies one known external change actually
+reached the system). Two modes: **shakedown** (~3–4 days, qualitative) and **full**
+(~3–4 weeks, quantitative). Read-only; advises.
+
+**Self-clearing retro reminder.** `docs/org/metrics/retro-schedule.json` (committed; goLive
+2026-06-27, `shakedown@4d` + `full@28d`) plus a SessionStart hook `org-retro-due-check.mjs`
+(Node — deterministic, fails open, once-per-day lock; committed mirror at
+[`local-tooling/hooks/`](./local-tooling/hooks/org-retro-due-check.mjs)) nudge you to run
+`/org-retro <mode>` once a window passes. It **self-clears**: a retro counts as done when a
+`{"type":"retro","mode":"<mode>"}` event lands in `events.jsonl` (the skill logs it on each
+run), so the reminder stops with no separate done-state — and it **survives a fresh
+checkout** (the schedule is committed; the hook rebuilds via §3). Written in Node, not
+PowerShell, so it runs in any shell rather than silently no-op'ing.
 
 ---
 
 ## 3. Rebuild local tooling (durability) — the most important fix
 
 `.claude/` is gitignored here (all Claude harness config is local-only). That means the
-world-watch + freshness + stakeholder-review glue — **three hooks, three skills**, and the
-`settings.json` wiring — exists only on this machine. **Without this section, the system
-silently does not exist on any other checkout.** So everything is split clean:
+world-watch + freshness + stakeholder-review + measurement glue — **four hooks, four
+skills**, and the `settings.json` wiring — exists only on this machine. **Without this
+section, the system silently does not exist on any other checkout.** So everything is
+split clean:
 
 - **State / data → committed under `docs/`** (survives git): the world-model
   (`ROLE_WORLD_MODEL.md`), `state.json`, `ownership-map.json` + its generator, this
@@ -341,17 +381,18 @@ cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/s
 cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
 mkdir -p .claude/skills/org-retro && cp docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md .claude/skills/org-retro/
 
-# 2. wire the hooks: merge the two entries from settings.hooks.json into
-#    .claude/settings.json -> "hooks". If that file doesn't exist, create it as
-#    { "hooks": { ...the SessionStart + PostToolUse entries... } }. If a SessionStart
-#    array already exists, APPEND the world-watch entry rather than replacing it.
+# 2. wire the hooks: merge ALL entries from settings.hooks.json into
+#    .claude/settings.json -> "hooks" (SessionStart x2 = world-watch + org-retro,
+#    PostToolUse = dossier-freshness, PreToolUse = ExitPlanMode suggest). If that file
+#    doesn't exist, create it as { "hooks": { ...those entries... } }. If an array already
+#    exists (e.g. a commit-gate PreToolUse), APPEND these rather than replacing it.
 cat docs/org/world-watch/local-tooling/settings.hooks.json
 
 # 3. (re)generate the ownership map so it's honest to the current role doc
 node docs/org/gen-ownership-map.mjs
 
-# 4. restart the Claude session so settings.json is reloaded, then the SessionStart
-#    hook will remind you when a world-watch scan is due.
+# 4. restart the Claude session so settings.json is reloaded; the SessionStart hooks then
+#    remind you when a world-watch scan or an /org-retro is due.
 ```
 
 The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
@@ -391,6 +432,8 @@ validated** (§2.6):
 - ✅ **Hybrid authority** (§1.2) — synthesizer + Chief-Architect rubric; unresolved
   high-stakes ties → Malin; every disagreement → an ADR in `docs/org/adr/`.
 - ✅ **Dossier-freshness loop** (§1.6, §2.5) — PostToolUse stale-marker + `/refresh-dossiers`.
+- ✅ **Measurement & tuning** (§2.7) — event log, review/trigger instrumentation,
+  `/org-retro` scorecard + false-negative spot-check, and the self-clearing retro reminder.
 
 **Still open (the genuine remainder):**
 - **World-watch expansion**: grow `state.json` from 3 → 28 roles; the flag-only roles

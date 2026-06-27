@@ -68,7 +68,12 @@ trends are visible across retros.
 | **full** | ~3–4 weeks after launch (**due ~2026-07-18 to 07-25**) | Is it earning its cost? | quantitative — rubber-stamp rate, trigger calibration, world-watch signal-to-noise + source health, freshness accuracy, cost/review |
 
 Both run **interactively** (`/org-retro shakedown` / `/org-retro full`) — never headless
-($0 model). The cadence is a reminder to run them, not a scheduler.
+($0 model). The cadence is **automated as a reminder, not a scheduler**:
+`retro-schedule.json` (goLive + per-mode `afterDays`) drives a SessionStart hook
+(`org-retro-due-check.mjs`) that nudges you once a window passes. It **self-clears** — a
+mode counts as done when a `{"type":"retro","mode":"<mode>"}` event lands here (the skill
+logs it), so the nudge stops until the next window. The hook only reminds; you run the
+retro.
 
 ## What `/org-retro` scores
 - **Phase-2 value + rubber-stamp rate** — share of `review`s that were `rubber_stamp:true`.
