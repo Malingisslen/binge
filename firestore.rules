@@ -471,6 +471,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // "Vad försvinner"-rollup (BIN-178) — streamingLeaving/current.byProvider,
+    // written by the leavingRollup cron (Admin SDK bypasses rules). Public read
+    // (catalog leaving-dates, no PII) for the /forsvinner/[provider] landing
+    // pages; never client-written.
+    match /streamingLeaving/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Price history (BIN-180) — shared, global cheapest-rent points per title,
     // appended write-on-change by the streamingOffersRefresh cron (Admin SDK
     // bypasses rules). Public read (price data, no PII); never client-written.

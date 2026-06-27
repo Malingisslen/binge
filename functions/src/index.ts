@@ -251,3 +251,11 @@ export { rotationReminderNotify } from './rotationReminder';
 // pushat) → ETT push + EN inbox-kort (kind 'weekly_digest'). Deduppas mot
 // weeklyDigestState/{uid}.lastSentDate. Inga TMDB-anrop (rena Firestore-läsningar).
 export { weeklyDigestNotify } from './weeklyDigest';
+
+// ── "Vad försvinner"-rollup (BIN-178 SEO) ────────────────────────────────────
+// leavingRollup: daglig scan av streamingOffers → en liten publik doc
+// streamingLeaving/current.byProvider (titlar vars abonnemangs-offer lämnar inom
+// ~45 dygn, per kanonisk provider). /forsvinner/[provider]-sidan läser EN doc
+// klient-sidigt och berikar titlar via TMDB. Admin SDK; streamingLeaving är
+// publik läs (katalogdata) + klient-aldrig-skriv i firestore.rules.
+export { leavingRollup } from './leavingRollup';

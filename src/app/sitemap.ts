@@ -15,6 +15,7 @@ import {
   SEO_PROVIDER_IDS,
   cappedTitleIds,
 } from '@/lib/tmdb/seoCoverage';
+import { FRANCHISES } from '@/lib/seo/franchises';
 
 // Next 16 + output:'export' kräver explicit static/revalidate-deklaration
 // för Metadata-routes. Vi vill att sitemap:en genereras en gång vid build
@@ -172,6 +173,31 @@ function providerEntries(): MetadataRoute.Sitemap {
   }));
 }
 
+// "Billigaste sättet att se hela [franchise]" (BIN-178) — MÅSTE matcha
+// generateStaticParams i src/app/billigaste/[slug]/page.tsx (samma FRANCHISES).
+function franchiseEntries(): MetadataRoute.Sitemap {
+  const lastModified = new Date();
+  return FRANCHISES.map(f => ({
+    url: `${SITE_URL}/billigaste/${f.slug}/`,
+    lastModified,
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+}
+
+// "Vad försvinner från [provider]" (BIN-178) — MÅSTE matcha generateStaticParams
+// i src/app/forsvinner/[id]/page.tsx (samma SEO_PROVIDER_IDS). Innehållet
+// uppdateras dagligen (klient-läst rollup) → daily changeFrequency.
+function forsvinnerEntries(): MetadataRoute.Sitemap {
+  const lastModified = new Date();
+  return SEO_PROVIDER_IDS.map(id => ({
+    url: `${SITE_URL}/forsvinner/${id}/`,
+    lastModified,
+    changeFrequency: 'daily' as const,
+    priority: 0.7,
+  }));
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statics = staticEntries();
   // Titles + persons kan failla oberoende av varandra (separata try-catch)
@@ -186,5 +212,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return [] as MetadataRoute.Sitemap;
     }),
   ]);
-  return [...statics, ...providerEntries(), ...titles, ...persons];
+  return [...statics, ...providerEntries(), ...franchiseEntries(), ...forsvinnerEntries(), ...titles, ...persons];
 }
