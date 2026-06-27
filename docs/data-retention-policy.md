@@ -91,6 +91,35 @@ men:
   bara via admin). Vi dokumenterar inte detta i UI eftersom "pseudo-
   radering" skulle förvirra GDPR-kraven.
 
+## Export- vs raderingstäckning (BIN-328)
+
+Både GDPR-exporten (Art. 20, `buildUserExport`) och kontoraderingen (Art. 17,
+`deleteAccount`) läser samma kärna: `collectUserDataSnapshots`
+(`src/lib/firebase/userData.ts`). Varje snapshot-nyckel ska vara wired in i
+**båda** flödena. Ett kompileringstidskontrakt
+(`src/lib/firebase/dataExport.coverage.test.ts`) tvingar varje ny nyckel att
+klassificeras — annars failar bygget.
+
+**Tre nycklar är medvetet UNDANTAGNA ur exporten** (men raderas ändå av
+cascaden) — operationell metadata, inte användarens "lämnade" personuppgifter:
+
+- `fcmTokens` — device-push-tokens, system-genererade, meningslösa utanför Firebase.
+- `reportMeta` — rapport-throttle-stämpel (timestamp/räknare), inte rapportinnehåll.
+- `askBingeMeta` — Ask-Binge LLM-fallback-throttle (timestamp/räknare).
+
+**En nyckel är medvetet UNDANTAGEN ur cascaden** (men ingår i exporten):
+
+- `followers` — inkommande följare. Varje doc ägs av följaren (rules:
+  `isOwner(followerUid)`), så kontoinnehavaren kan inte radera dem. Dangling-
+  referenser filtreras lazy på läsning och städas av den veckovisa
+  `reclaimOrphanFollows`-sweepen.
+
+**Täckningsgräns (ärlig):** kontraktet skyddar nycklar som finns i kärnan. En
+helt ny `users/{uid}/<x>`-subcollection som aldrig läggs till i helpern fångas
+INTE (den blir aldrig en `keyof`). Att täcka den klassen kräver ett emulator-
+backat raderingstest + en subcollection-enumeration mot `firestore.rules` —
+spårat som följdticket.
+
 ## Retention-policy för icke-raderad data
 
 Ingen auto-retention idag (v1). Saker som kommer behövas vid tillväxt:
