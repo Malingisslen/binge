@@ -1,27 +1,14 @@
-// BIN-178 — pure logic for the "vad försvinner" rollup. No firebase-admin import
-// → runs under the root Vitest suite.
+// BIN-178 — pure logic for the "vad försvinner" rollup, sourced from MOTN's
+// /changes endpoint (change_type=expiring). No firebase-admin import → runs under
+// the root Vitest suite.
 //
-// Collapses the per-title streamingOffers docs into ONE small doc keyed by
-// provider: streamingLeaving/current.byProvider[providerId] = titles whose
-// SUBSCRIPTION offer leaves that service within the window. The /forsvinner/
-// [provider] page reads this single doc client-side (one read) and enriches
-// titles via TMDB. Only subscription offers count — a rent/buy window expiring
-// is not "leaving the service". Provider ids are canonicalised so an aliased id
-// folds into its primary. Dates compared lexicographically (YYYY-MM-DD).
+// MOTN's Changes endpoint returns what's actually LEAVING each service in a
+// country (independent of which titles we track per-title), which is the right
+// source for this surface. We keep only subscription expirations with a known
+// date, on a service we have a /forsvinner page for, and collapse them into
+// streamingLeaving/current.byProvider keyed by canonical TMDB provider id.
 
 import { canonicalProviderId } from '../availableNotify/logic';
-
-export interface RollupOffer {
-  providerId: number;
-  type: string;
-  leaving: string | null;
-}
-
-export interface RollupDoc {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  offers: RollupOffer[];
-}
 
 export interface LeavingEntry {
   tmdbId: number;
@@ -33,39 +20,87 @@ export interface LeavingRollup {
   byProvider: Record<string, LeavingEntry[]>;
 }
 
-/** YYYY-MM-DD shifted by `days` (UTC), returned as YYYY-MM-DD. */
-export function addDaysIso(iso: string, days: number): string {
-  const ms = Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000;
-  return new Date(ms).toISOString().slice(0, 10);
+/** One expiring change from MOTN, narrowed to what we need. */
+export interface ChangeItem {
+  showId: string;
+  streamingOptionType: string; // "subscription" | "rent" | "buy" | ...
+  serviceId: string;           // MOTN service.id, e.g. "netflix"
+  timestamp: number | null;    // unix seconds; null when MOTN omits the exact date
+}
+
+/** A show entry from MOTN's `shows` map, narrowed to the TMDB id. */
+export interface ShowRef {
+  tmdbId?: string; // "movie/597" | "tv/1396"
+}
+
+// MOTN service.id → canonical TMDB watch-provider id. Only services we ship a
+// /forsvinner page for (SEO_PROVIDER_IDS). A change on any other service is
+// dropped. Aliases (hbo→max, svt/svtplay) hedge MOTN id variants; an unmapped
+// id is logged by the caller so the map can be extended.
+export const MOTN_SERVICE_TO_TMDB: Record<string, number> = {
+  netflix: 8,
+  prime: 119,
+  disney: 337,
+  max: 384,
+  hbo: 384,
+  apple: 350,
+  paramount: 531,
+  viaplay: 76,
+  skyshowtime: 431,
+  crunchyroll: 323,
+  svt: 520,
+  svtplay: 520,
+  tv4: 489,
+  tv4play: 489,
+  discovery: 510,
+  discoveryplus: 510,
+};
+
+/** Parse MOTN's "<type>/<id>" tmdbId into a media type + numeric id. */
+export function parseTmdbRef(tmdbId: string | undefined): { mediaType: 'movie' | 'tv'; id: number } | null {
+  if (!tmdbId) return null;
+  const slash = tmdbId.indexOf('/');
+  if (slash < 0) return null;
+  const type = tmdbId.slice(0, slash);
+  const id = Number(tmdbId.slice(slash + 1));
+  if (!Number.isFinite(id) || id <= 0) return null;
+  if (type === 'movie') return { mediaType: 'movie', id };
+  if (type === 'tv') return { mediaType: 'tv', id };
+  return null;
+}
+
+/** Unix seconds → YYYY-MM-DD (UTC). */
+export function isoFromUnix(sec: number): string {
+  return new Date(sec * 1000).toISOString().slice(0, 10);
 }
 
 /**
- * Build the per-provider leaving rollup. A title appears under a provider when it
- * has a subscription offer on that (canonical) provider leaving within
- * [today, today+withinDays]. Soonest leaving wins per (provider, title); each
- * provider's list is sorted nearest-deadline-first and capped.
+ * Build the per-provider leaving rollup from MOTN expiring changes. Keeps only
+ * subscription expirations with a known timestamp on a mapped service; resolves
+ * the TMDB id via the shows map; soonest leaving wins per (provider, title);
+ * each provider's list is sorted nearest-first and capped.
  */
-export function buildLeavingRollup(
-  docs: readonly RollupDoc[],
-  today: string,
-  withinDays = 45,
+export function buildLeavingRollupFromChanges(
+  changes: readonly ChangeItem[],
+  shows: Readonly<Record<string, ShowRef>>,
   capPerProvider = 80,
 ): LeavingRollup {
-  const upper = addDaysIso(today, withinDays);
-  // providerId -> (tmdbId -> soonest entry)
   const byProviderMap = new Map<number, Map<number, LeavingEntry>>();
 
-  for (const doc of docs) {
-    for (const o of doc.offers) {
-      if (o.type !== 'subscription' || !o.leaving) continue;
-      if (o.leaving < today || o.leaving > upper) continue;
-      const pid = canonicalProviderId(o.providerId);
-      let perTitle = byProviderMap.get(pid);
-      if (!perTitle) byProviderMap.set(pid, (perTitle = new Map()));
-      const existing = perTitle.get(doc.tmdbId);
-      if (!existing || o.leaving < existing.leaving) {
-        perTitle.set(doc.tmdbId, { tmdbId: doc.tmdbId, mediaType: doc.mediaType, leaving: o.leaving });
-      }
+  for (const c of changes) {
+    if (c.streamingOptionType !== 'subscription' || c.timestamp == null) continue;
+    const mapped = MOTN_SERVICE_TO_TMDB[c.serviceId];
+    if (mapped == null) continue;
+    const ref = parseTmdbRef(shows[c.showId]?.tmdbId);
+    if (!ref) continue;
+
+    const pid = canonicalProviderId(mapped);
+    const leaving = isoFromUnix(c.timestamp);
+    let perTitle = byProviderMap.get(pid);
+    if (!perTitle) byProviderMap.set(pid, (perTitle = new Map()));
+    const existing = perTitle.get(ref.id);
+    if (!existing || leaving < existing.leaving) {
+      perTitle.set(ref.id, { tmdbId: ref.id, mediaType: ref.mediaType, leaving });
     }
   }
 
