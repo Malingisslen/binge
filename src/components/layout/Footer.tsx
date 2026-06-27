@@ -3,13 +3,15 @@
 import Link from 'next/link';
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { getProvider } from '@/lib/tmdb/providers';
+import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 
-// BIN-178 — a small curated set of the new SEO landing pages, surfaced in the
-// footer so they're linked from every pre-rendered page's static HTML (crawl
-// discovery — orphaned pages index poorly, see project_seo_indexing). Kept short
-// on purpose; not a link farm.
+// BIN-178 — the SEO landing pages, surfaced in the footer so they're linked from
+// every pre-rendered page's static HTML (crawl discovery — orphaned pages index
+// poorly, see project_seo_indexing). The /provider pages were live but had ~zero
+// internal links → not indexed after 5 days; this de-orphans all 12, plus the
+// franchise + leaving pages. Dense-but-organized fits the Prisjakt-style footer.
 const FOOTER_FRANCHISES = FRANCHISES.slice(0, 4);
-const FOOTER_PROVIDER_IDS = [8, 76, 337, 384]; // Netflix, Viaplay, Disney+, Max
+const FOOTER_PROVIDER_IDS = [8, 76, 337, 384]; // Netflix, Viaplay, Disney+, Max (leaving-data services)
 
 export default function Footer() {
   return (
@@ -23,6 +25,15 @@ export default function Footer() {
             <li><a href="mailto:hej@binge.nu" className="hover:text-text-primary">Kontakt</a></li>
             {/* "Stötta projektet"-länken är tillfälligt borttagen tills vi har
                 ett eget Ko-fi/Swish-konto. Återinför här när URL:en är klar. */}
+          </ul>
+        </nav>
+        <nav aria-label="Streamingtjänster">
+          <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
+            <li className="text-text-muted">Streama på:</li>
+            {SEO_PROVIDER_IDS.map((pid) => {
+              const p = getProvider(pid);
+              return p ? <li key={pid}><Link href={`/provider/${pid}/`} className="hover:text-text-primary">{p.shortName || p.name}</Link></li> : null;
+            })}
           </ul>
         </nav>
         <nav aria-label="Guider">
