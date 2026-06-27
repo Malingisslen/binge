@@ -95,11 +95,11 @@ The existing reviewer routing is the seed:
 - **monthly** — law, pricing, most tooling.
 - **quarterly** — slow drift (design, IA, docs, brand).
 
-### 1.6 Dossier freshness — stamp-on-change + re-sweep
+### 1.6 Dossier freshness — stamp-on-change + re-sweep  ✅ BUILT
 A **PostToolUse hook** stamps a role's dossier *stale* when one of its owned paths is
-edited (the dossier no longer reflects the code). A scheduled (interactive) re-sweep
-revisits stale dossiers. (Phase 2 — not built now; noted so the freshness contract is
-explicit.)
+edited (the dossier no longer reflects the code); an interactive `/refresh-dossiers`
+re-sweep re-audits **only** the flagged roles. Built — see §2.5. The ownership map that
+powers it is generated from the role doc, never hand-maintained.
 
 ---
 
@@ -168,9 +168,97 @@ candidates before writing anything to the tracker.
 - No coverage of the other 25 roles yet — their world-model is documented and
   ready to graft into `state.json` when the MVP proves out.
 
+### 2.5 Dossier-freshness loop (the role map stops drifting)
+Separate from world-watch (which watches the *outside* world), this watches the *code*
+so the role map doesn't silently drift as files change.
+
+| Artifact | Path | Role |
+|---|---|---|
+| Ownership map (generated, committed) | `docs/org/ownership-map.json` | role → owned path patterns |
+| Map generator (committed) | `docs/org/gen-ownership-map.mjs` | parses the role doc; run `node docs/org/gen-ownership-map.mjs` |
+| PostToolUse hook (local) | `.claude/hooks/dossier-freshness.ps1` | edited path → match → stale marker per owning role |
+| `/refresh-dossiers` skill (local) | `.claude/skills/refresh-dossiers/SKILL.md` | re-audit ONLY flagged roles, update their sections, clear markers |
+| Stale markers (gitignored) | `.claude/state/dossier-stale/<roleNumber>.marker` | ships empty (all fresh) |
+
+**Contract.** The hook only ever writes documentation-freshness markers — never touches
+app code, never blocks, fails open. It skips the docs that *define* the system
+(`.claude/`, `docs/org/`, the role doc itself) so the loop can't self-trigger. The
+ownership map is **generated from `docs/role-responsibilities.md`** (28 roles, 149 path
+patterns) so it stays honest to source; FS-validation drops non-paths (e.g. a
+`/`-containing timezone like `Europe/Stockholm`). `/refresh-dossiers` re-audits **only**
+the flagged roles — never all 28 — which is what keeps it cheap and interactive.
+
 ---
 
-## 3. Phase 2 — specced, NOT built in this pass
+## 3. Rebuild local tooling (durability) — the most important fix
+
+`.claude/` is gitignored here (all Claude harness config is local-only). That means the
+world-watch **and** freshness glue — two hooks, two skills, and the `settings.json`
+wiring — exist only on this machine. **Without this section, the system silently does
+not exist on any other checkout.** So everything is split clean:
+
+- **State / data → committed under `docs/`** (survives git): the world-model
+  (`ROLE_WORLD_MODEL.md`), `state.json`, `ownership-map.json` + its generator, this
+  `DESIGN.md`, and the role map. These are the source of truth.
+- **Executable glue → local in `.claude/`** (gitignored), but **mirrored committed** at
+  [`local-tooling/`](./local-tooling/) so it can be redeployed.
+
+### What's gitignored, and where its committed source lives
+
+| Gitignored (runs) | Committed source (survives git) |
+|---|---|
+| `.claude/hooks/world-watch-due.ps1` | `docs/org/world-watch/local-tooling/hooks/world-watch-due.ps1` |
+| `.claude/hooks/dossier-freshness.ps1` | `docs/org/world-watch/local-tooling/hooks/dossier-freshness.ps1` |
+| `.claude/skills/world-watch/SKILL.md` | `docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md` |
+| `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
+| `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
+
+`state.json` and `ownership-map.json` already live committed under `docs/` — nothing to
+rebuild there.
+
+### Rebuild on a fresh checkout (from a Git Bash shell at the repo root)
+
+```bash
+# 1. deploy the hooks + skills into the gitignored .claude/ tree
+mkdir -p .claude/hooks .claude/skills/world-watch .claude/skills/refresh-dossiers
+cp docs/org/world-watch/local-tooling/hooks/*.ps1 .claude/hooks/
+cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills/world-watch/
+cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
+
+# 2. wire the hooks: merge the two entries from settings.hooks.json into
+#    .claude/settings.json -> "hooks". If that file doesn't exist, create it as
+#    { "hooks": { ...the SessionStart + PostToolUse entries... } }. If a SessionStart
+#    array already exists, APPEND the world-watch entry rather than replacing it.
+cat docs/org/world-watch/local-tooling/settings.hooks.json
+
+# 3. (re)generate the ownership map so it's honest to the current role doc
+node docs/org/gen-ownership-map.mjs
+
+# 4. restart the Claude session so settings.json is reloaded, then the SessionStart
+#    hook will remind you when a world-watch scan is due.
+```
+
+The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
+
+```json
+"SessionStart": [
+  { "matcher": "startup|resume", "hooks": [ { "type": "command",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\"" } ] }
+],
+"PostToolUse": [
+  { "matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\dossier-freshness.ps1\"" } ] }
+]
+```
+
+> **Canonical direction:** to *change* the tooling, edit the committed copy under
+> `local-tooling/` and re-run step 1 to redeploy — that keeps the surviving copy
+> authoritative and avoids drift between the two. (These are PowerShell + Windows
+> paths, matching this repo's existing hooks; adapt the shell on another OS.)
+
+---
+
+## 4. Phase 2 — specced, NOT built in this pass
 
 The deliberation + stakeholder-review system. Left intentionally unbuilt; this is the
 spec for when it's picked up.
@@ -182,10 +270,11 @@ spec for when it's picked up.
 - **Hybrid authority** (§1.2): synthesizer rules most; Chief-Architect agent rules by
   the written priority order; unresolved high-stakes ties → Malin; **every
   disagreement → an ADR** in `docs/org/adr/`.
-- **Dossier-freshness PostToolUse hook** (§1.6): stamp a role's dossier stale when its
-  owned paths change; interactive re-sweep of stale dossiers.
 - **World-watch expansion**: grow `state.json` from 3 → 28 roles; the flag-only roles
   feed a weekly **digest** rather than individual tickets.
+
+(The dossier-freshness PostToolUse hook + `/refresh-dossiers` re-sweep, originally
+slated for Phase 2, are now **built** — see §1.6 and §2.5.)
 
 All of Phase 2 stays inside the $0/interactive envelope: panels and deliberation run
 when the owner triggers a review, never headless.

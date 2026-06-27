@@ -1,0 +1,25 @@
+{
+  "_comment": "The two .claude/settings.json hook ENTRIES this system adds. Merge these into the `hooks` object of .claude/settings.json (create the file if a fresh checkout has none). If a SessionStart array already exists, append this entry to it rather than replacing it. See ../DESIGN.md → 'Rebuild local tooling'.",
+  "SessionStart": [
+    {
+      "matcher": "startup|resume",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\""
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\dossier-freshness.ps1\""
+        }
+      ]
+    }
+  ]
+}

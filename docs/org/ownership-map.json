@@ -1,0 +1,326 @@
+{
+  "generatedFrom": "docs/role-responsibilities.md",
+  "generatedBy": "docs/org/gen-ownership-map.mjs",
+  "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
+  "roleCount": 28,
+  "patternCount": 149,
+  "roles": {
+    "1": {
+      "title": "Product Designer / UX",
+      "slug": "product-designer-ux",
+      "patterns": [
+        "src/app/globals.css",
+        "src/components/layout/",
+        "src/components/layout/PageHeader.tsx",
+        "src/components/layout/SegmentError.tsx",
+        "src/components/ui/",
+        "src/components/ui/DuotonePoster.tsx",
+        "src/lib/design/consistency.test.ts",
+        "tailwind.config.ts"
+      ]
+    },
+    "2": {
+      "title": "Accessibility Specialist",
+      "slug": "accessibility-specialist",
+      "patterns": [
+        "docs/analysis/REMEDIATION_PLAN.md",
+        "src/components/layout/AppShell.tsx",
+        "src/components/ui/ConfirmDialog.tsx",
+        "src/contexts/ToastContext.tsx"
+      ]
+    },
+    "3": {
+      "title": "Financial Controller",
+      "slug": "financial-controller",
+      "patterns": [
+        ".github/workflows/deploy.yml",
+        ".tmdb-cache/",
+        "functions/src/episodeNotify/",
+        "functions/src/insights/rollup.ts",
+        "src/lib/queryClient.ts",
+        "src/lib/tmdb/buildCache.ts",
+        "src/lib/tmdb/buildFetch.ts"
+      ]
+    },
+    "4": {
+      "title": "Security Architect",
+      "slug": "security-architect",
+      "patterns": [
+        "firebase.json",
+        "firestore.rules",
+        "src/lib/firebase/appCheck.ts",
+        "src/lib/firebase/db.ts",
+        "src/lib/firebase/groups.ts",
+        "src/lib/firebase/utils.ts"
+      ]
+    },
+    "5": {
+      "title": "Legal / GDPR Counsel",
+      "slug": "legal-gdpr-counsel",
+      "patterns": [
+        "src/app/community-guidelines/page.tsx",
+        "src/app/integritet/page.tsx",
+        "src/app/villkor/page.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/lib/firebase/dataExport.ts",
+        "src/lib/firebase/userData.ts",
+        "src/lib/sentry.ts",
+        "src/lib/tmdb/attribution.ts"
+      ]
+    },
+    "6": {
+      "title": "Data Protection Officer",
+      "slug": "data-protection-officer",
+      "patterns": [
+        "docs/data-retention-policy.md",
+        "firestore.rules",
+        "src/lib/firebase/userData.ts",
+        "src/types/domain.ts"
+      ]
+    },
+    "7": {
+      "title": "QA / Test Engineer (automated)",
+      "slug": "qa-test-engineer-automated",
+      "patterns": [
+        "src/lib/design/consistency.test.ts",
+        "src/test/rules/firestore-rules.test.ts",
+        "vitest.config.ts"
+      ]
+    },
+    "8": {
+      "title": "DevOps / SRE",
+      "slug": "devops-sre",
+      "patterns": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/preview.yml",
+        "firebase.json"
+      ]
+    },
+    "9": {
+      "title": "Product Manager",
+      "slug": "product-manager",
+      "patterns": [
+        "docs/analysis/REMEDIATION_PLAN.md",
+        "docs/tillsammans-roadmap.md",
+        "src/lib/watchStatus.ts",
+        "src/types/advisor.ts",
+        "src/types/domain.ts"
+      ]
+    },
+    "10": {
+      "title": "Performance Engineer",
+      "slug": "performance-engineer",
+      "patterns": [
+        "src/hooks/useCalendar.ts",
+        "src/lib/queryClient.ts",
+        "src/lib/tmdb/cacheTiers.ts",
+        "src/lib/tmdb/client.ts"
+      ]
+    },
+    "11": {
+      "title": "Localization / i18n",
+      "slug": "localization-i18n",
+      "patterns": [
+        "src/lib/askBinge/parseSearch.ts",
+        "src/lib/libraries/municipalities.ts",
+        "src/lib/tmdb/countries.ts",
+        "src/lib/tmdb/genreLabels.ts",
+        "src/lib/tmdb/providers.ts",
+        "src/lib/watchStatus.ts"
+      ]
+    },
+    "12": {
+      "title": "Trust & Safety / Content Moderation",
+      "slug": "trust-safety-content-moderation",
+      "patterns": [
+        "docs/moderation.md",
+        "functions/src/submitReport/",
+        "src/app/admin/reports/",
+        "src/hooks/useBlockedUsers.ts"
+      ]
+    },
+    "13": {
+      "title": "Data / Integrations Engineer",
+      "slug": "data-integrations-engineer",
+      "patterns": [
+        "functions/src/availableNotify/",
+        "functions/src/cineasterna/",
+        "functions/src/communityRatings/",
+        "functions/src/episodeNotify/",
+        "functions/src/returnNotify/",
+        "functions/src/streamingOffers/",
+        "functions/src/titleRatings/",
+        "src/lib/tmdb/providers.ts"
+      ]
+    },
+    "14": {
+      "title": "Software Architect",
+      "slug": "software-architect",
+      "patterns": [
+        "next.config.mjs",
+        "src/contexts/WatchlistContext.tsx",
+        "src/lib/watchStatus.migration.ts"
+      ]
+    },
+    "15": {
+      "title": "Growth Marketer",
+      "slug": "growth-marketer",
+      "patterns": [
+        "public/robots.txt",
+        "src/app/page.tsx",
+        "src/app/sitemap.ts",
+        "src/lib/analytics.ts",
+        "src/lib/tmdb/seoCoverage.ts"
+      ]
+    },
+    "16": {
+      "title": "Creative Director / Brand",
+      "slug": "creative-director-brand",
+      "patterns": [
+        "docs/superpowers/plans/",
+        "docs/voice-and-tone.md",
+        "public/manifest.json",
+        "public/og-image.svg",
+        "src/components/layout/AppTopbar.tsx"
+      ]
+    },
+    "17": {
+      "title": "Content Strategist / Copywriter",
+      "slug": "content-strategist-copywriter",
+      "patterns": [
+        "docs/voice-and-tone.md",
+        "src/app/community-guidelines/",
+        "src/app/integritet/",
+        "src/app/villkor/",
+        "src/lib/calendar/copy.ts",
+        "src/lib/watchStatus.ts"
+      ]
+    },
+    "18": {
+      "title": "Community Manager",
+      "slug": "community-manager",
+      "patterns": [
+        "src/app/feed/page.tsx",
+        "src/hooks/useFollow.ts",
+        "src/hooks/useReviewSocial.ts",
+        "src/hooks/useTasteVector.ts",
+        "src/lib/firebase/friends.ts",
+        "src/lib/taste/"
+      ]
+    },
+    "19": {
+      "title": "Customer Support / Success",
+      "slug": "customer-support-success",
+      "patterns": [
+        "src/app/login/page.tsx",
+        "src/app/settings/import/page.tsx",
+        "src/components/layout/EmailVerificationBanner.tsx",
+        "src/components/layout/Footer.tsx",
+        "src/components/settings/"
+      ]
+    },
+    "20": {
+      "title": "Manual / Release QA Tester",
+      "slug": "manual-release-qa-tester",
+      "patterns": [
+        ".github/workflows/preview.yml",
+        "docs/RUNBOOK.md",
+        "docs/SLO.md"
+      ]
+    },
+    "21": {
+      "title": "Technical Writer / Documentation",
+      "slug": "technical-writer-documentation",
+      "patterns": [
+        "docs/",
+        "docs/advisor-logic.md",
+        "docs/data-export-format.md",
+        "docs/moderation.md",
+        "public/llms.txt"
+      ]
+    },
+    "22": {
+      "title": "Data Analyst / BI",
+      "slug": "data-analyst-bi",
+      "patterns": [
+        "functions/src/askbinge/",
+        "functions/src/insights/",
+        "src/app/insikter/metrics/catalog.ts"
+      ]
+    },
+    "23": {
+      "title": "Vendor / Procurement Manager",
+      "slug": "vendor-procurement-manager",
+      "patterns": [
+        "docs/analysis/EXTERNAL_ACTIONS.md",
+        "functions/src/askbinge/",
+        "functions/src/streamingOffers/",
+        "functions/src/titleRatings/"
+      ]
+    },
+    "24": {
+      "title": "Monetization / Partnerships Lead",
+      "slug": "monetization-partnerships-lead",
+      "patterns": [
+        "docs/superpowers/plans/2026-06-23-bin-172-library-card-layer.md",
+        "src/lib/advisor/serviceValue.ts",
+        "src/lib/streaming/cheapestPath.ts",
+        "src/lib/tmdb/providers.ts"
+      ]
+    },
+    "25": {
+      "title": "Engineering Manager / Release Manager",
+      "slug": "engineering-manager-release-manager",
+      "patterns": [
+        ".github/dependabot.yml",
+        ".github/workflows/deploy.yml",
+        "CLAUDE.md",
+        "docs/analysis/SPRINT_7_PLAN.md"
+      ]
+    },
+    "26": {
+      "title": "Information Architect",
+      "slug": "information-architect",
+      "patterns": [
+        "firebase.json",
+        "src/components/layout/MobileTabBar.tsx",
+        "src/components/layout/Subnav.tsx",
+        "src/components/pages/DynamicRouter.tsx",
+        "src/lib/libraryView.ts"
+      ]
+    },
+    "27": {
+      "title": "Database Administrator / Data-layer Engineer",
+      "slug": "database-administrator-data-layer-engineer",
+      "patterns": [
+        "firestore.indexes.json",
+        "firestore.rules",
+        "functions/src/communityRatings/index.ts",
+        "functions/src/reclaimOrphanFollows/",
+        "functions/src/retentionCleanup/",
+        "src/contexts/AuthContext.tsx",
+        "src/contexts/WatchlistContext.tsx",
+        "src/hooks/usePublicProfile.ts",
+        "src/lib/firebase/userData.ts",
+        "src/lib/watchStatus.migration.ts",
+        "src/test/rules/firestore-rules.test.ts"
+      ]
+    },
+    "28": {
+      "title": "Recommendations / Scoring-Integrity Engineer",
+      "slug": "recommendations-scoring-integrity-engineer",
+      "patterns": [
+        "src/hooks/useSubscriptionAdvisor.ts",
+        "src/lib/advisor/",
+        "src/lib/recommendations/cascadePrioritizer.ts",
+        "src/lib/recommendations/rowComposition.ts",
+        "src/lib/recommendations/seedAnalysis.ts",
+        "src/lib/streaming/cheapestPath.ts",
+        "src/lib/taste/backfill.ts",
+        "src/lib/taste/stats.ts",
+        "src/lib/taste/vector.ts"
+      ]
+    }
+  }
+}
