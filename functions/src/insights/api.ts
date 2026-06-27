@@ -18,6 +18,7 @@ import { logger } from 'firebase-functions/v2';
 import { fetchPlausible } from './plausible';
 import { readAskBingeStats } from './askbinge';
 import { computeWindowDeltas } from './window';
+import { stockholmDayId } from '../askbinge/logic';
 import type { InsightsData, RangeInfo, RollupData } from './types';
 
 const INSIGHTS_TOKEN = defineSecret('INSIGHTS_TOKEN');
@@ -60,7 +61,10 @@ function parseRange(q: Record<string, unknown>): RangeInfo {
     ? (presetRaw as RangeInfo['preset'])
     : '30d';
   const dayMs = 86400000;
-  const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+  // BIN-343: key the dashboard range by Stockholm-local day, in lockstep with the
+  // askBinge writers (stats/throttle/budget) so the "today" boundary matches the doc
+  // the writer just created — otherwise late-night events drop off the dashboard.
+  const isoDay = stockholmDayId;
   const now = new Date();
 
   if (preset === 'custom') {

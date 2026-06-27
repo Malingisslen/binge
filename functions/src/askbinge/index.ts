@@ -19,12 +19,7 @@
 
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { validateRecordInput, buildIncrements } from './logic';
-
-/** Server clock → which daily doc to bump. Avoids trusting a client-sent date. */
-function todayId(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { validateRecordInput, buildIncrements, stockholmDayId } from './logic';
 
 /** Place an increment at a nested path in a plain object (creating maps as needed). */
 function setNested(root: Record<string, unknown>, path: string[], value: unknown): void {
@@ -55,7 +50,7 @@ export const recordAskBinge = onCall({ region: 'europe-west1' }, async (request)
     setNested(payload, inc.path, FieldValue.increment(inc.delta));
   }
 
-  await getFirestore().collection('askBingeStats').doc(todayId()).set(payload, { merge: true });
+  await getFirestore().collection('askBingeStats').doc(stockholmDayId()).set(payload, { merge: true });
 
   return { ok: true };
 });

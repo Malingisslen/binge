@@ -16,6 +16,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { normalizeQuery, buildGeminiBody, extractFilterJson, type AskFilter } from './parseLogic';
+import { stockholmDayId } from './logic';
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
@@ -25,9 +26,6 @@ const PER_USER_DAILY = 25;                  // anti-abuse
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 8000;
 
-function todayId(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 function hashQuery(norm: string): string {
   return createHash('sha256').update(norm).digest('hex').slice(0, 32);
 }
@@ -58,7 +56,7 @@ export const askBingeParse = onCall({ region: 'europe-west1', secrets: [GEMINI_A
   // path per-user exhaustion short-circuits before touching the shared global doc.
   // Edge: if the global cap is hit right after, the user loses one slot for a call
   // that never ran — acceptable at a 2000/day ceiling that rarely fires.)
-  const day = todayId();
+  const day = stockholmDayId();
   const throttleRef = db.collection('users').doc(uid).collection('askBingeMeta').doc('throttle');
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(throttleRef);

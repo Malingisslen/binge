@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { validateRecordInput, buildIncrements, canonicalizeFilters } from './logic';
+import { validateRecordInput, buildIncrements, canonicalizeFilters, stockholmDayId } from './logic';
+
+describe('stockholmDayId — BIN-343: Stockholm-local daily doc keys (DST-safe)', () => {
+  it('winter (CET, UTC+1): 23:30Z falls into the NEXT Stockholm day', () => {
+    // 2026-01-15 23:30 UTC = 2026-01-16 00:30 in Stockholm.
+    expect(stockholmDayId(new Date('2026-01-15T23:30:00Z'))).toBe('2026-01-16');
+  });
+
+  it('summer (CEST, UTC+2): 22:30Z falls into the NEXT Stockholm day', () => {
+    // 2026-07-15 22:30 UTC = 2026-07-16 00:30 in Stockholm (DST → +2h).
+    expect(stockholmDayId(new Date('2026-07-15T22:30:00Z'))).toBe('2026-07-16');
+  });
+
+  it('midday is unambiguous and formats as YYYY-MM-DD', () => {
+    expect(stockholmDayId(new Date('2026-01-15T12:00:00Z'))).toBe('2026-01-15');
+  });
+
+  it('UTC 00:30Z in winter is already 01:30 Stockholm — same day, no false back-roll', () => {
+    // Guards the other direction: a timestamp just after UTC midnight must NOT be
+    // rolled back a day. 2026-01-16 00:30 UTC = 2026-01-16 01:30 Stockholm → 01-16.
+    expect(stockholmDayId(new Date('2026-01-16T00:30:00Z'))).toBe('2026-01-16');
+  });
+});
 
 describe('canonicalizeFilters', () => {
   it('keeps only known filter names, deduped and sorted', () => {
