@@ -24,7 +24,15 @@ Router data: `docs/org/ownership-map.json`. Dossiers: `docs/role-responsibilitie
   the files it will create/change (infer from the plan text) **plus their direct imports**
   (one hop — the files those touched files import, not the whole graph). This concrete
   fileset is what scopes critic reading in step 2 — there is no free repo exploration.
-- Match each blast-radius path against `ownership-map.json` patterns → owning role numbers.
+- **Run the committed router to get the tier + panel** (the single source of truth that
+  `/linear` and `/sprint-execute` also use — don't hand-roll a second risk judgment):
+  ```bash
+  node docs/org/route.mjs <blast-radius paths>
+  ```
+  It returns `{ tier, panel, roles, highStakes, reason }` by matching the paths against
+  `ownership-map.json` + the high-stakes list. Use its `tier` and `panel` directly; the
+  manual rubric below is the explanation of *what it computes* (and your fallback if you're
+  reviewing a pure plan whose paths you had to infer):
 - **Pick the tier from the blast radius (NOT from "is it a plan"):**
   - **TOP → full panel.** Any blast-radius path is **high-stakes** —
     `firestore.rules`, `firestore.indexes.json`,

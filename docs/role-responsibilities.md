@@ -154,6 +154,9 @@ Owns data-protection compliance under Swedish/EU law.
   → `src/lib/tmdb/attribution.ts`
 - Cross-border transfer / SCC documentation; Sentry PII scrubbing.
   → `src/lib/sentry.ts`
+- Lawful basis for UGC report handling + law-enforcement escalation (NCMEC/IMY);
+  retention/disclosure of report records.
+  → `functions/src/submitReport/`
 
 ## 6. Data Protection Officer
 
@@ -167,6 +170,9 @@ Owns the **personal-data inventory** and its hygiene.
 - Data minimization (field-length caps), consent versioning, FCM token
   lifecycle, processor oversight, operational-metadata exclusion from exports.
   → `firestore.rules`, `src/types/domain.ts`, `docs/data-retention-policy.md`
+- UGC report records as personal data in the inventory (reporter identity +
+  reported-content references); their retention + erasure handling.
+  → `functions/src/submitReport/`
 
 ## 7. QA / Test Engineer (automated)
 

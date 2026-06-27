@@ -13,6 +13,12 @@ when a role's watch fires, and what it's allowed to do about it._
 > - **Phase-2 stakeholder-review** (§1.1–1.3, §2.6) — path→role router, parallel blind panel,
 >   synthesizer + priority rubric (§1.2), ADRs, and the gated ExitPlanMode suggest-hook.
 >   Validated → ADR-0001.
+> - **Standalone router** (§1.3, §2.8) — `docs/org/route.mjs`: the deterministic, committed
+>   blast-radius parser (tier + panel) all three surfaces share. Closes the old §4 remainder.
+> - **Default-ON expert review in ticket work** (§2.8) — `/linear` stamps owning specialists
+>   into every created ticket; `/sprint-execute` routes each candidate and runs the blind
+>   panel **before** building (opt out per-run with `--no-review`); the panel is advisory and
+>   non-halting. `/linear backlog` was merged into `/sprint-execute --pick`.
 > - **Measurement & tuning** (§2.7) — `events.jsonl` + `log_event.mjs`, review/trigger
 >   instrumentation, `/org-retro`, and the self-clearing retro reminder.
 >
@@ -98,10 +104,14 @@ it also won't gold-plate past the 25 SEK cap; and **legal sits above security/da
 whereas most security/data issues are fixable defects. Tiers 2 and the user-safety
 tier 1 are the only ones that route to **escalate-human** by default.
 
-### 1.3 Trigger — blast-radius tiered via a path→role router  ✅ BUILT (§2.6)
+### 1.3 Trigger — blast-radius tiered via a path→role router  ✅ BUILT (§2.6, §2.8)
 The router resolves a plan or changed fileset → owning role(s) via the committed
 `docs/org/ownership-map.json` (generated from the role doc), with a **high-stakes path
-list** layered on top:
+list** layered on top. Since 2026-06-27 this logic is a committed, deterministic script —
+**`docs/org/route.mjs`** (§2.8) — so `/stakeholder-review`, `/linear`, and
+`/sprint-execute` all read the *same* tier/panel, with no drifting twin risk formula. The
+high-stakes list + tier rules below are the spec; `route.mjs` is their executable form
+(keep the two in sync):
 - **Full panel** — plans, and any change touching high-stakes paths: `firestore.rules`,
   `firestore.indexes.json`, `src/lib/firebase/{groups,userData,dataExport}.ts`,
   `functions/src/submitReport/`, `src/contexts/AuthContext.tsx` (security rules, GDPR
@@ -334,6 +344,63 @@ PowerShell, so it runs in any shell rather than silently no-op'ing.
 
 ---
 
+### 2.8 Default-ON expert review in ticket work (BUILT 2026-06-27)
+Phase-2 review used to be opt-in (you ran `/stakeholder-review` by hand, or took the
+ExitPlanMode hook's *suggestion*). As of 2026-06-27 the expert layer is the **baseline
+posture for ticket work** — wired into the work-tracker commands so the right specialist
+is assigned from ticket creation and review happens before code, silenced only on explicit
+opt-out.
+
+**The committed router (`docs/org/route.mjs`).** The §1.3 routing logic is now a
+deterministic, committed Node script — no model call, no network, so it runs free inside
+the $0/interactive envelope (§0). Given file paths (args or `git diff --name-only` on
+stdin) it returns `{ tier, panel, roles, highStakes, reason }`. It is the single source of
+truth for the tier; `--selftest` golden-checks it. This closes the §4 "router automation"
+remainder.
+
+**Where it's wired** (`/linear` + `/sprint-execute`, gitignored commands mirrored under
+`local-tooling/commands/`):
+- **`/linear` (ticket creation)** — every `scan` / `scan night` / `ticket` runs the router
+  on the finding's touched paths and stamps a `## Stakeholders` block (tier + owning roles)
+  into the ticket body. The specialist is assigned the moment the ticket exists. `/linear`
+  files only; it never convenes a panel itself.
+- **`/sprint-execute` (build time)** — at selection it routes every candidate (tier +
+  panel), then for each non-`skip` ticket runs the **blind panel before implementing**
+  (§1.1/§2.6); the panel's must-haves fold into that ticket's acceptance criteria (or its
+  parked plan) and are graded by the outcome verifier. The router tier is **the** risk
+  signal — the old hand-rolled "blast radius × reversibility" score was removed.
+
+**Why always-on is affordable.** Review depth is bounded by blast radius (§1.3): `skip`
+(trivial/doc-only) runs no panel; `medium` draws **one** owning specialist (~60k tokens);
+only `top` (high-stakes paths) convenes the capped 3–5 panel (~300k). The expensive case is
+reserved for the changes where it pays for itself (§2.6 cost re-validation). Free under
+$0/interactive; even in API terms the common case is one reviewer, not five.
+
+**Opt-out — explicit and per-run.** `/sprint-execute --no-review` (or "skip the panel" in
+natural language) skips convening the panel for that run only. Tickets are still routed and
+tier-tagged; only the critique is suppressed. Caution is the default; lowering it is a
+deliberate act, never the resting state.
+
+**Non-halt rule (the autonomous loop never blocks).** The panel **advises; it never
+auto-acts and never blocks the loop.** An unresolved high-stakes conflict (a hard objection
+from Security #4 / DPO #6 / Legal #5, or any tier-1/2 tie the synthesizer can't reconcile)
+does **not** call AskUserQuestion and does **not** halt — it **parks that ticket in
+`In Review`** with the conflict + open question written out, notifies Malin, and the batch
+moves on. **Exception:** in interactive `/sprint-execute --pick` mode Malin is present, so
+the conflict **escalates to her live** instead of parking. This is the §1.2 authority rule
+expressed for autonomous runs: high-stakes ties go to the human — synchronously when she's
+here, as a parked ticket + notification when she's not.
+
+**Command consolidation.** The old `/linear backlog` (browse → pick one → build) was merged
+into **`/sprint-execute --pick`**, so interactive single-pick and autonomous batch share one
+door and one route→review→verify→commit→close ceremony.
+
+**Horizon-scan protection.** `/linear clean`'s stale sweep **excludes `[world-watch]`-titled
+tickets** — they're filed by `/world-watch` on its own weekly/monthly/quarterly cadence and
+may sit open legitimately; age is not drift for them.
+
+---
+
 ## 3. Rebuild local tooling (durability) — the most important fix
 
 `.claude/` is gitignored here (all Claude harness config is local-only). That means the
@@ -360,6 +427,9 @@ split clean:
 | `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
 | `.claude/skills/stakeholder-review/SKILL.md` | `docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md` |
 | `.claude/skills/org-retro/SKILL.md` | `docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md` |
+| `.claude/commands/linear.md` | `docs/org/world-watch/local-tooling/commands/linear.md` |
+| `.claude/commands/sprint-execute.md` | `docs/org/world-watch/local-tooling/commands/sprint-execute.md` |
+| `.claude/commands/sprint-parallel.md` | `docs/org/world-watch/local-tooling/commands/sprint-parallel.md` |
 | `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
 
 The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`,
@@ -367,8 +437,11 @@ The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mj
 needs no mirror/rebuild. Only the `org-retro-due-check.mjs` hook that *reads* the schedule
 is gitignored glue (mirrored above).
 
-`state.json` and `ownership-map.json` already live committed under `docs/` — nothing to
-rebuild there.
+`state.json`, `ownership-map.json`, and **`route.mjs`** (the §2.8 router) already live
+committed under `docs/` — nothing to rebuild there. (The `/linear` + `/sprint-execute`
+commands now *depend* on `route.mjs`, so they were brought under the mirror above — without
+that, default-ON review would silently not exist on a fresh checkout, which is exactly what
+§3 protects against.)
 
 ### Rebuild on a fresh checkout (from a Git Bash shell at the repo root)
 
@@ -380,6 +453,9 @@ cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills
 cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
 cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
 mkdir -p .claude/skills/org-retro && cp docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md .claude/skills/org-retro/
+
+# 1b. deploy the work-tracker commands (they depend on docs/org/route.mjs, committed)
+mkdir -p .claude/commands && cp docs/org/world-watch/local-tooling/commands/*.md .claude/commands/
 
 # 2. wire the hooks: merge ALL entries from settings.hooks.json into
 #    .claude/settings.json -> "hooks" (SessionStart x2 = world-watch + org-retro,
@@ -435,13 +511,18 @@ validated** (§2.6):
 - ✅ **Measurement & tuning** (§2.7) — event log, review/trigger instrumentation,
   `/org-retro` scorecard + false-negative spot-check, and the self-clearing retro reminder.
 
+- ✅ **Router automation** (§2.8) — the router is now a standalone committed parser,
+  `docs/org/route.mjs`, shared by `/stakeholder-review`, `/linear`, and `/sprint-execute`.
+- ✅ **Default-ON ticket-work review** (§2.8) — routing + the blind panel are wired into
+  the work-tracker commands as the baseline, opt-out via `--no-review`, non-halting.
+
 **Still open (the genuine remainder):**
 - **World-watch expansion**: grow `state.json` from 3 → 28 roles; the flag-only roles
   feed a weekly **digest** rather than individual tickets.
 - **Capped second round**: the panel currently runs one blind round; a second
   (reconcile-with-more-info) round is specced (§2.6 step 2) but not yet exercised.
-- **Router automation**: the router logic lives in the skill; it is not yet a
-  standalone committed parser (the ExitPlanMode hook only *suggests*, it doesn't route).
+- **ExitPlanMode hook routing**: the suggest-hook still only *suggests* `/stakeholder-review`
+  on high-stakes signals; it could now call `route.mjs` to name the tier/panel in its hint.
 
 Everything stays inside the $0/interactive envelope: panels and deliberation run when the
 owner triggers a review, never headless.

@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 149,
+  "patternCount": 151,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -58,6 +58,7 @@
       "title": "Legal / GDPR Counsel",
       "slug": "legal-gdpr-counsel",
       "patterns": [
+        "functions/src/submitReport/",
         "src/app/community-guidelines/page.tsx",
         "src/app/integritet/page.tsx",
         "src/app/villkor/page.tsx",
@@ -74,6 +75,7 @@
       "patterns": [
         "docs/data-retention-policy.md",
         "firestore.rules",
+        "functions/src/submitReport/",
         "src/lib/firebase/userData.ts",
         "src/types/domain.ts"
       ]
