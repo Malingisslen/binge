@@ -36,41 +36,61 @@ Concretely, the machinery is split:
 
 ## 1. Constitution
 
-### 1.1 Deliberation — blind critique, not chat (Phase 2)
+### 1.1 Deliberation — blind critique, not chat  ✅ BUILT (§2.6)
 When a decision needs multiple roles, they do **parallel BLIND critique → synthesis**,
 in capped rounds. No round-robin conversation: round-robin drifts toward sycophancy
 (each agent softens to agree with the last) and costs more tokens for less signal.
 Each stakeholder critiques independently without seeing the others; a synthesizer
 merges. Rounds are capped (default 2) so it always terminates.
 
-### 1.2 Authority — hybrid, with everything on the record (Phase 2)
+### 1.2 Authority — hybrid, with everything on the record  ✅ BUILT (§2.6)
 - The **synthesizer** resolves most disagreements.
-- Genuinely unresolved **high-stakes ties** escalate to the **human owner** (Malin).
-- Everything else is ruled by a **"Chief Architect" agent** against a written
-  priority order (below).
+- Genuinely unresolved **high-stakes ties** escalate to the **human owner** (Malin) as
+  a clear yes/no question with the tradeoff + each role's stake.
+- Everything else is ruled by a **"Chief Architect" agent** against the written
+  priority order below.
 - **Every disagreement is filed as an ADR** (`docs/org/adr/`, MADR-style), so the
-  reasoning is durable and auditable, not lost in a transcript.
+  reasoning is durable and auditable, not lost in a transcript. The review **advises**;
+  it never auto-acts.
 
-**Written priority order** (ties broken top-down):
-1. **Legal / privacy / security** — compliance is non-negotiable; a legal or security
-   objection wins by default.
-2. **Data integrity & user trust** — don't corrupt or leak user data; don't break the
-   GDPR export/erasure contract.
-3. **Cost ceiling** — stay under 25 SEK/mån; never silently add a paid service.
-4. **Accessibility & correctness** — EAA conformance; tests prove intended behavior.
-5. **Product value** — the streaming-availability killer feature and the advisor.
-6. **Velocity / simplicity** — solo-maintainable; push-to-main; minimal surface.
+#### The priority-order rubric — *this IS the politics, made explicit and revisable*
 
-### 1.3 Trigger — blast-radius tiered via a path→role router (Phase 2)
-Reuse the commit-gate's path patterns
-([`require-review-before-commit.ps1`](../../../.claude/hooks/require-review-before-commit.ps1))
-as the router that maps a changed path → the owning role(s):
-- **Full panel** — plans and high-stakes paths (`firestore.rules`, `functions/`,
-  `src/lib/firebase/`, `AuthContext`, status-model files, anything legal/privacy).
-- **One stakeholder** — medium-impact paths (a single `src/` feature area).
-- **Skip** — trivial (docs typo, comment, test-only tweak in an isolated file).
+Ties are broken top-down. A higher tier beats every tier below it; the Chief-Architect
+agent cites the **deciding tier** in the ADR. This order is a deliberate value
+statement for Binge (a solo-built, GDPR-bound Swedish consumer app) — **edit it when
+the priorities change**; the whole point is that it's written down rather than implicit
+in whoever argues loudest.
 
-The existing reviewer routing is the seed:
+| # | Tier | What it means for Binge | Beats… |
+|---|---|---|---|
+| 1 | **User safety & trust** | Don't harm or mislead users: moderation/abuse handling, spoiler safety, no dark patterns, honest UI. | everything |
+| 2 | **Legal / privacy compliance** | GDPR (export/erasure/consent), DSA, EAA, TMDB/JustWatch terms. **Non-negotiable; always escalate-human.** | 3–7 |
+| 3 | **Data integrity & security** | Don't corrupt or leak data; `firestore.rules` ownership + field whitelist; auth; no secret exposure. | 4–7 |
+| 4 | **Correctness & accessibility** | Tests prove intended behavior (never weakened to go green); EAA AA conformance; no silent regressions. | 5–7 |
+| 5 | **Cost ceiling** | Stay under 25 SEK/mån; respect cache tiers + lite queries; never silently add a paid service. | 6–7 |
+| 6 | **Velocity & simplicity** | Solo-maintainable; push-to-main; minimal surface; ship the smallest thing that works. | 7 |
+| 7 | **Aesthetics & polish** | Design-system niceties, nice-to-haves, refinements with no functional stake. | — |
+
+Rationale for the ordering choices most likely to be questioned: **cost sits below
+correctness** (tier 5 < 4) — Binge won't ship a *wrong* result to save a few öre, but
+it also won't gold-plate past the 25 SEK cap; and **legal sits above security/data**
+(tier 2 > 3) because a compliance breach is existential for a consumer app in the EU,
+whereas most security/data issues are fixable defects. Tiers 2 and the user-safety
+tier 1 are the only ones that route to **escalate-human** by default.
+
+### 1.3 Trigger — blast-radius tiered via a path→role router  ✅ BUILT (§2.6)
+The router resolves a plan or changed fileset → owning role(s) via the committed
+`docs/org/ownership-map.json` (generated from the role doc), with a **high-stakes path
+list** layered on top:
+- **Full panel** — plans, and any change touching high-stakes paths: `firestore.rules`,
+  `firestore.indexes.json`, `src/lib/firebase/{groups,userData,dataExport}.ts`,
+  `functions/src/submitReport/`, `src/contexts/AuthContext.tsx` (security rules, GDPR
+  data, moderation, auth).
+- **One stakeholder** — a single medium-impact feature area (one owning role).
+- **Skip** — trivial / doc-only (no owning role, or only Technical Writer).
+
+The role→path mapping (seeded from the reviewer routing, now generalized to all 28
+roles via the ownership map):
 
 | Path pattern | Owning role(s) |
 |---|---|
@@ -190,12 +210,59 @@ the flagged roles — never all 28 — which is what keeps it cheap and interact
 
 ---
 
+### 2.6 Stakeholder-review pipeline (Phase 2 deliberation — built + validated)
+The blind-critique panel from §1.1–1.3, now built and validated.
+
+| Artifact | Path | Role |
+|---|---|---|
+| `/stakeholder-review` skill (local) | `.claude/skills/stakeholder-review/SKILL.md` | router → parallel blind critics → synthesizer → escalate/decide → ADR |
+| Router data (committed) | `docs/org/ownership-map.json` | plan/fileset → stakeholder roles |
+| Priority rubric (committed) | this doc §1.2 | Chief-Architect tiebreak |
+| ADRs (committed, append-only) | `docs/org/adr/NNNN-*.md` | one per disagreement |
+| ExitPlanMode suggest-hook (local) | `.claude/hooks/exit-plan-suggest-review.ps1` | non-blocking suggestion on high-stakes plans |
+
+**Pipeline:** route to stakeholders (blast-radius tiered, panel capped ~6) → spawn one
+subagent per role that critiques **blind** from its own dossier + world-model (never
+seeing the others — this is the anti-sycophancy core) → a synthesizer reconciles into one
+recommendation, resolving conflicts by the rubric and **escalating unresolved
+high-stakes (tier-1/2) ties to Malin** → an ADR records every disagreement. **It advises;
+it never auto-acts** (no code edits, no commits, no tickets).
+
+#### Validation result (2026-06-27) — recorded in [ADR-0001](../adr/0001-deploy-retention-cleanup.md)
+Ran the full pipeline on one genuine plan: *activate the dormant `retentionCleanup` +
+`reclaimOrphanFollows` functions*. Five blind critics (DPO, Controller, DevOps, DBA,
+Security) + a synthesizer.
+
+- **Did debate beat a solo plan? Yes.** The blind panel surfaced things a single planner
+  would likely miss: a **factual error in the plan itself** (it said sessions reap at
+  `expiresAt + 7d`; the code reaps at `expiresAt`), a **GDPR transparency gap** (privacy
+  policy silent on the 90-day notification retention) that became a clean human
+  escalation, the **cost mechanism** (full-collection scans bill per-doc-scanned + Cloud
+  Scheduler billable-job count against the 25 SEK cap), the **drift-recurrence history**
+  (these exact functions were orphaned by deploy-drift once before), and a **security
+  edge case** (`followedAt`-less follows aren't grace-protected). A "deploy as-is" plan
+  became a 10-condition safe-activation plan + 1 escalation + 6 follow-ups.
+- **Was it expensive *agreement*? No — it was productive *convergence*.** All five landed
+  on "approve-with-conditions" (no hard veto), but the conditions materially changed the
+  plan. Expensive agreement would be "approve, no notes" ×5; this was not that.
+- **Cost:** ~355k tokens (5 source-reading critics + synthesizer). Free under
+  $0/interactive; in API terms, justified *for a plan that deletes user data on a
+  schedule*, but **wasteful if fired on every plan**. → the trigger must be **tiered**.
+
+**Decision on the auto-trigger:** wired, but **gated**. `exit-plan-suggest-review.ps1`
+scans a finalized plan for high-stakes signals (rules / GDPR-data / auth / functions /
+moderation / destructive-data ops) and only then **suggests** `/stakeholder-review` —
+non-blocking, never auto-running the panel. Low-risk plans get silence. This keeps the
+expensive panel reserved for the plans where it pays for itself.
+
+---
+
 ## 3. Rebuild local tooling (durability) — the most important fix
 
 `.claude/` is gitignored here (all Claude harness config is local-only). That means the
-world-watch **and** freshness glue — two hooks, two skills, and the `settings.json`
-wiring — exist only on this machine. **Without this section, the system silently does
-not exist on any other checkout.** So everything is split clean:
+world-watch + freshness + stakeholder-review glue — **three hooks, three skills**, and the
+`settings.json` wiring — exists only on this machine. **Without this section, the system
+silently does not exist on any other checkout.** So everything is split clean:
 
 - **State / data → committed under `docs/`** (survives git): the world-model
   (`ROLE_WORLD_MODEL.md`), `state.json`, `ownership-map.json` + its generator, this
@@ -209,8 +276,10 @@ not exist on any other checkout.** So everything is split clean:
 |---|---|
 | `.claude/hooks/world-watch-due.ps1` | `docs/org/world-watch/local-tooling/hooks/world-watch-due.ps1` |
 | `.claude/hooks/dossier-freshness.ps1` | `docs/org/world-watch/local-tooling/hooks/dossier-freshness.ps1` |
+| `.claude/hooks/exit-plan-suggest-review.ps1` | `docs/org/world-watch/local-tooling/hooks/exit-plan-suggest-review.ps1` |
 | `.claude/skills/world-watch/SKILL.md` | `docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md` |
 | `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
+| `.claude/skills/stakeholder-review/SKILL.md` | `docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md` |
 | `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
 
 `state.json` and `ownership-map.json` already live committed under `docs/` — nothing to
@@ -220,10 +289,11 @@ rebuild there.
 
 ```bash
 # 1. deploy the hooks + skills into the gitignored .claude/ tree
-mkdir -p .claude/hooks .claude/skills/world-watch .claude/skills/refresh-dossiers
+mkdir -p .claude/hooks .claude/skills/world-watch .claude/skills/refresh-dossiers .claude/skills/stakeholder-review
 cp docs/org/world-watch/local-tooling/hooks/*.ps1 .claude/hooks/
 cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills/world-watch/
 cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
+cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
 
 # 2. wire the hooks: merge the two entries from settings.hooks.json into
 #    .claude/settings.json -> "hooks". If that file doesn't exist, create it as
@@ -248,8 +318,14 @@ The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
 "PostToolUse": [
   { "matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command",
     "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\dossier-freshness.ps1\"" } ] }
+],
+"PreToolUse": [
+  { "matcher": "ExitPlanMode", "hooks": [ { "type": "command",
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\exit-plan-suggest-review.ps1\"" } ] }
 ]
 ```
+(If `.claude/settings.json` already has a `PreToolUse` array — e.g. the commit-gate —
+**append** this entry rather than replacing it.)
 
 > **Canonical direction:** to *change* the tooling, edit the committed copy under
 > `local-tooling/` and re-run step 1 to redeploy — that keeps the surviving copy
@@ -258,23 +334,23 @@ The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
 
 ---
 
-## 4. Phase 2 — specced, NOT built in this pass
+## 4. Phase 2 — what was specced, and what's now built
 
-The deliberation + stakeholder-review system. Left intentionally unbuilt; this is the
-spec for when it's picked up.
+The deliberation/stakeholder-review system that was specced here is now **built and
+validated** (§2.6):
+- ✅ **Path→role router** (§1.3) — via the committed `ownership-map.json` + high-stakes list.
+- ✅ **Blind-critique deliberation** (§1.1) — parallel blind critics → synthesizer.
+- ✅ **Hybrid authority** (§1.2) — synthesizer + Chief-Architect rubric; unresolved
+  high-stakes ties → Malin; every disagreement → an ADR in `docs/org/adr/`.
+- ✅ **Dossier-freshness loop** (§1.6, §2.5) — PostToolUse stale-marker + `/refresh-dossiers`.
 
-- **Path→role router** (§1.3) as a PreToolUse/commit-time component that, on a staged
-  diff or a written plan, assembles the right panel (full / single / skip).
-- **Blind-critique deliberation** (§1.1): N stakeholders critique in parallel without
-  seeing each other → synthesizer merges → capped rounds.
-- **Hybrid authority** (§1.2): synthesizer rules most; Chief-Architect agent rules by
-  the written priority order; unresolved high-stakes ties → Malin; **every
-  disagreement → an ADR** in `docs/org/adr/`.
+**Still open (the genuine remainder):**
 - **World-watch expansion**: grow `state.json` from 3 → 28 roles; the flag-only roles
   feed a weekly **digest** rather than individual tickets.
+- **Capped second round**: the panel currently runs one blind round; a second
+  (reconcile-with-more-info) round is specced (§2.6 step 2) but not yet exercised.
+- **Router automation**: the router logic lives in the skill; it is not yet a
+  standalone committed parser (the ExitPlanMode hook only *suggests*, it doesn't route).
 
-(The dossier-freshness PostToolUse hook + `/refresh-dossiers` re-sweep, originally
-slated for Phase 2, are now **built** — see §1.6 and §2.5.)
-
-All of Phase 2 stays inside the $0/interactive envelope: panels and deliberation run
-when the owner triggers a review, never headless.
+Everything stays inside the $0/interactive envelope: panels and deliberation run when the
+owner triggers a review, never headless.
