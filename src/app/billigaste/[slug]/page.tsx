@@ -55,6 +55,23 @@ function jsonLd(data: Record<string, unknown>): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
+// Build-time TMDB fetches flake intermittently ("fetch failed") under the 25k-page
+// export's concurrency. A single collection-fetch miss would empty the whole page
+// (notFound), so retry with small backoff — fetchForBuild caches on first success,
+// so a retried success is also persisted for later builds.
+async function withRetry<T>(fn: () => Promise<T>, attempts: number): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 interface FilmRow extends FranchiseFilm {
   posterPath: string | null;
   /** canonical sub provider ids the film is on (for display). */
@@ -81,9 +98,10 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
 
   let parts: TMDBCollectionPart[] = [];
   try {
-    const collection = await fetchForBuild('collection', getCollection, franchise.collectionId);
+    const collection = await withRetry(() => fetchForBuild('collection', getCollection, franchise.collectionId), 4);
     parts = collection.parts ?? [];
-  } catch {
+  } catch (e) {
+    console.warn(`[billigaste] ${franchise.slug}: collection fetch failed after retries — ${e instanceof Error ? e.message : e}`);
     parts = [];
   }
 
@@ -96,7 +114,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
   for (const p of released) {
     let se;
     try {
-      const movie = await fetchForBuild('movie-lite', getMovieLite, p.id);
+      const movie = await withRetry(() => fetchForBuild('movie-lite', getMovieLite, p.id), 2);
       se = movie['watch/providers']?.results?.SE;
     } catch {
       se = undefined;

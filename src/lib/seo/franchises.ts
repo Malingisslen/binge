@@ -17,7 +17,7 @@ export interface Franchise {
 }
 
 export const FRANCHISES: Franchise[] = [
-  { collectionId: 86311, slug: 'marvel', name: 'Marvel Cinematic Universe' },
+  { collectionId: 86311, slug: 'avengers', name: 'Avengers' },
   { collectionId: 1241, slug: 'harry-potter', name: 'Harry Potter' },
   { collectionId: 10, slug: 'star-wars', name: 'Star Wars' },
   { collectionId: 119, slug: 'sagan-om-ringen', name: 'Sagan om ringen' },
