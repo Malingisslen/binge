@@ -75,6 +75,30 @@ jobs:
       - name: Test
         run: npm test
 
+      # Audit (high+) — körs på deploy-vägen (push→main) eftersom ci.yml hoppar
+      # över main, så den enda prod-vägen saknade annars audit helt (BIN-344).
+      # ADVISORY, inte blockerande: Binge är solo push-direct-to-main, så detta
+      # är den enda prod-deploy-vägen — en nyligen avslöjad transitiv CVE som
+      # den deployade committen inte ens rör ska inte kunna frysa en akut hotfix.
+      # Riktiga high+-fynd surfas som ::warning:: (syns i deploy-loggen, åtgärda
+      # via npm audit fix / dependabot); endpoint-/nätfel sväljs precis som i
+      # ci.yml. Den BLOCKERANDE grinden bor i ci.yml (PR/non-main-vägen). Vill man
+      # härda detta till blockerande: byt sista `exit 0` mot `exit $CODE` och lägg
+      # `if: github.event_name == 'push'` så workflow_dispatch blir nöd-bypass.
+      - name: Audit (high+, advisory)
+        run: |
+          set +e
+          OUT=$(npm audit --audit-level=high 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ $CODE -eq 0 ]; then exit 0; fi
+          if echo "$OUT" | grep -qiE "audit endpoint returned an error|Bad Request|Invalid package tree|ENOTFOUND|ETIMEDOUT|ECONNRESET|network"; then
+            echo "::warning::npm audit-endpoint otillgängligt — hoppar över audit (inget sårbarhetsfynd)."
+            exit 0
+          fi
+          echo "::warning::npm audit hittade high+ sårbarheter — surfat men blockerar INTE prod-deployen (advisory, BIN-344). Åtgärda via npm audit fix / dependabot."
+          exit 0
+
       - name: Restore .next build cache
         uses: actions/cache@v4
         with:
