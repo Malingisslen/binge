@@ -6,6 +6,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { fetchCatalog } from './api';
 import { resolveTmdbId } from './resolve';
 import { detectRot } from './parse';
+import { resolveBatch } from './resolveBatch';
 import type { CatalogDoc, CineasternaTitle } from './types';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
@@ -26,37 +27,20 @@ async function resolveUnknown(
   imdbMap: Record<string, number | 'NOT_FOUND' | null>,
   mapRef: FirebaseFirestore.DocumentReference,
 ): Promise<void> {
-  // Only titles we haven't yet cached a terminal result for need resolution.
-  const unknown = titles.filter((t) => {
-    const cached = imdbMap[t.imdbId];
-    return cached === undefined || cached === null;
-    // cached === number or === 'NOT_FOUND' → skip (terminal result already stored)
-  });
-
-  let newlyResolved = 0;
-  let lastCheckpointed = 0;
-
-  // Process in chunks of CONCURRENCY (simple batched approach — readable, predictable).
-  for (let i = 0; i < unknown.length; i += CONCURRENCY) {
-    const chunk = unknown.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(chunk.map((t) => resolveTmdbId(t.imdbId)));
-    for (let j = 0; j < chunk.length; j++) {
-      const result = results[j];
-      imdbMap[chunk[j].imdbId] = result ?? null;
-      if (result !== null) newlyResolved++;
-    }
-
-    // BIN-146: checkpoint when we've CROSSED another CHECKPOINT_INTERVAL since the
-    // last one. The old `newlyResolved % INTERVAL === 0` test only matched at exact
-    // multiples — but newlyResolved steps by up to CONCURRENCY (6) per chunk, and
-    // 50 isn't a multiple of 6, so it almost never hit and a cold catalog could
-    // burn its whole timeout with nothing persisted.
-    if (newlyResolved - lastCheckpointed >= CHECKPOINT_INTERVAL) {
+  // Loop + checkpoint logic (incl. the BIN-146 cross-vs-exact-multiple guard) lives in
+  // the pure, tested resolveBatch helper. This wrapper injects the real resolver and
+  // the Firestore checkpoint write.
+  await resolveBatch({
+    titles,
+    imdbMap,
+    resolve: (imdbId) => resolveTmdbId(imdbId),
+    checkpoint: async (newlyResolved) => {
       await mapRef.set({ map: imdbMap });
-      lastCheckpointed = newlyResolved;
       logger.info('cineasterna: imdbMap checkpoint', { resolved: newlyResolved });
-    }
-  }
+    },
+    concurrency: CONCURRENCY,
+    checkpointInterval: CHECKPOINT_INTERVAL,
+  });
 }
 
 export const cineasternaCatalogSync = onSchedule(
