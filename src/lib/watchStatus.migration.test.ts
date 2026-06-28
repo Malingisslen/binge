@@ -41,6 +41,11 @@ describe('migrateStatus', () => {
     it('watched (film) → sedd', () => {
       expect(migrateStatus('watched', 'movie')).toEqual({ status: 'sedd', dropped: false });
     });
+    it('watched (TV) → mina — en real legacy Firestore-shape (BIN-332)', () => {
+      // v1-docs kan bära {status:'watched', mediaType:'tv'}; TV har inget 'sedd'-
+      // slutläge, så detta måste landa i 'mina' (sub-state härleds vid läsning).
+      expect(migrateStatus('watched', 'tv')).toEqual({ status: 'mina', dropped: false });
+    });
     it('want_to_watch (TV) → mina, (film) → vill_se', () => {
       expect(migrateStatus('want_to_watch', 'tv')).toEqual({ status: 'mina', dropped: false });
       expect(migrateStatus('want_to_watch', 'movie')).toEqual({ status: 'vill_se', dropped: false });

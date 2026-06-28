@@ -32,7 +32,7 @@ export interface CheapestPathVerdict {
   priceAmount: number | null;
   priceCurrency: string | null;
   // Nivå-etikett för subscribe-rungen när billigaste nivån ligger UNDER listpriset
-  // (t.ex. "Standard med reklam" / "Basic") — annars null. Caveat:t ÄR ärligheten.
+  // (t.ex. "Standard med reklam" / "Basic") — annars null. Etiketten ÄR ärligheten.
   tierLabel: string | null;
   // Återstående lån för free_library-rungen (self-reported budget); null annars.
   loansLeft: number | null;

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { cheapestPath } from './cheapestPath';
 import type { CheapestPathInput } from './cheapestPath';
 import type { Offer } from './offers';
-import { cheapestEntertainmentTier } from '@/lib/tmdb/providers';
+import { cheapestEntertainmentTier, cheapestEntertainmentTierFrom } from '@/lib/tmdb/providers';
+import type { SwedishProvider } from '@/lib/tmdb/providers';
 
 const rent = (providerId: number, priceAmount: number): Offer => ({
   providerId, type: 'rent', link: 'x', priceAmount, priceCurrency: 'SEK', leaving: null,
@@ -120,6 +121,7 @@ describe('cheapestPath cascade', () => {
   it('5c — BIN-322: surfaces the ad-tier price + label for a sub-list-price tier', () => {
     // Disney+ (337) list 109, ads tier 69 → "från 69 kr (Standard med reklam)".
     const v = cheapestPath({ ...base, subscriptionProviderIds: [337] });
+    expect(v.kind).toBe('subscribe'); // self-documenting: no owned/free/rent path
     expect(v.providerId).toBe(337);
     expect(v.priceAmount).toBe(69);
     expect(v.tierLabel).toBe('Standard med reklam');
@@ -149,5 +151,38 @@ describe('cheapestEntertainmentTier — excludes sport/bundle tiers (BIN-322)', 
 
   it('returns Infinity for an unknown provider so it sorts last', () => {
     expect(cheapestEntertainmentTier(999999).cost).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe('cheapestEntertainmentTierFrom — falsifiable sport exclusion (BIN-353)', () => {
+  const synthetic = (tiers: SwedishProvider['tiers']): SwedishProvider => ({
+    id: 999001, name: 'Synthetic', shortName: 'SYN', color: '#000',
+    type: 'flatrate', defaultMonthlyCost: 200, tiers,
+  });
+
+  it('skips a sport tier even when it is the CHEAPEST tier (guard would be invisible otherwise)', () => {
+    // The 50-kr sport tier is the cheapest of the lot; the entertainment pick
+    // must still return the 120-kr non-sport tier. Delete the kind!=='sport'
+    // filter and this returns 50 → the test fails. That's the whole point.
+    const { cost, tier } = cheapestEntertainmentTierFrom(synthetic([
+      { id: 'sport', name: 'Sport', cost: 50, kind: 'sport' },
+      { id: 'std', name: 'Standard', cost: 120 },
+    ]));
+    expect(cost).toBe(120);
+    expect(tier?.id).toBe('std');
+    expect(tier?.kind).not.toBe('sport');
+  });
+
+  it('falls back to defaultMonthlyCost when every tier is sport', () => {
+    const { cost, tier } = cheapestEntertainmentTierFrom(synthetic([
+      { id: 'sport', name: 'Sport', cost: 50, kind: 'sport' },
+      { id: 'total', name: 'Total', cost: 80, kind: 'sport' },
+    ]));
+    expect(cost).toBe(200); // no usable entertainment tier → list price
+    expect(tier).toBeNull();
+  });
+
+  it('falls back to defaultMonthlyCost when the provider has no tiers at all', () => {
+    expect(cheapestEntertainmentTierFrom(synthetic(undefined))).toEqual({ cost: 200, tier: null });
   });
 });

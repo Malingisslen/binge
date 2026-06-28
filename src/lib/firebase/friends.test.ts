@@ -104,6 +104,13 @@ describe('declineFriendRequest', () => {
     await declineFriendRequest('me', 'jonatan');
     expect(setMock).not.toHaveBeenCalled();
     expect(deleteMock).toHaveBeenCalledTimes(2);
+    // Pinna exakt VILKA paths som raderas (BIN-339): incoming-request på MIN nod
+    // + outgoing-spegel på sändarens nod. Utan detta skulle en path-swap (radera
+    // fel användares nod → kvarvarande spök-request synlig för sändaren) passera
+    // odetekterad — precis som syskon-testerna cancel/accept redan pinnar.
+    expect(deleteMock.mock.calls[0][0]._path).toBe('users/me/friendRequests/jonatan');
+    expect(deleteMock.mock.calls[1][0]._path).toBe('users/jonatan/friendRequestsSent/me');
+    expect(commitMock).toHaveBeenCalledTimes(1);
   });
 });
 

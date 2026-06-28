@@ -169,6 +169,17 @@ export function cheapestEntertainmentTier(
 ): { cost: number; tier: ProviderTier | null } {
   const p = getProvider(id);
   if (!p) return { cost: Number.POSITIVE_INFINITY, tier: null };
+  return cheapestEntertainmentTierFrom(p);
+}
+
+// Pure core of the above, split out so the sport-exclusion guard is independently
+// falsifiable (BIN-353): with a synthetic provider whose CHEAPEST tier is sport,
+// a test can prove this skips it — the id-based wrapper can't, since real sport
+// tiers are always the most expensive (min would dodge them even without the
+// filter). Same extract-then-test pattern used across the codebase.
+export function cheapestEntertainmentTierFrom(
+  p: SwedishProvider,
+): { cost: number; tier: ProviderTier | null } {
   const usable = (p.tiers ?? []).filter(t => t.kind !== 'sport');
   if (usable.length === 0) {
     return { cost: p.defaultMonthlyCost ?? Number.POSITIVE_INFINITY, tier: null };

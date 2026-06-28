@@ -11,6 +11,7 @@ import type {
   TMDBPersonCredits,
   TMDBPersonExternalIds,
 } from '@/types';
+import { createSemaphore } from './semaphore';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
@@ -29,27 +30,7 @@ function getApiKey(): string {
 // minskar risken för 429.
 
 const MAX_CONCURRENT = 8;
-let inFlight = 0;
-const waitQueue: Array<() => void> = [];
-
-function acquireSlot(): Promise<void> {
-  if (inFlight < MAX_CONCURRENT) {
-    inFlight++;
-    return Promise.resolve();
-  }
-  return new Promise(resolve => {
-    waitQueue.push(() => {
-      inFlight++;
-      resolve();
-    });
-  });
-}
-
-function releaseSlot(): void {
-  inFlight--;
-  const next = waitQueue.shift();
-  if (next) next();
-}
+const tmdbSemaphore = createSemaphore(MAX_CONCURRENT);
 
 export interface TmdbFetchOpts {
   signal?: AbortSignal;
@@ -70,7 +51,9 @@ async function tmdbFetch<T>(
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  await acquireSlot();
+  // Queued waiters reject promptly on abort (BIN-291); if this throws, no slot
+  // was reserved, so we deliberately skip the try/finally and never release.
+  await tmdbSemaphore.acquire(opts.signal);
   try {
     // Retry bara en gång på 429 — Retry-After respekteras om satt, annars
     // 1 s backoff. Ger ingen retry-stormvirvel i tight loops.
@@ -98,7 +81,7 @@ async function tmdbFetch<T>(
       return (await res.json()) as T;
     }
   } finally {
-    releaseSlot();
+    tmdbSemaphore.release();
   }
 }
 

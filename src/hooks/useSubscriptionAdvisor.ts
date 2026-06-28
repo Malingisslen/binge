@@ -78,7 +78,11 @@ export function useSubscriptionAdvisor(
       queryKey: ['tv-lite', id],
       queryFn: ({ signal }: { signal: AbortSignal }) => getTVShowLite(id, { signal }),
       staleTime: TMDB_STALE.LITE_DETAIL,
-      enabled: true,
+      // Gated mounts pass enabled=false. advisorTmdbIds already returns [] then,
+      // so no query is even constructed today — but mirror the flag here so the
+      // two guards can't drift and a future change to advisorTmdbIds can't
+      // silently re-open the per-library-title fan-out (BIN-290).
+      enabled,
     })),
   });
 
