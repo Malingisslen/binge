@@ -30,6 +30,27 @@ describe('parseSearch — dimension extraction', () => {
     expect(parseSearch('vad kan jag se på Max ikväll').providerIds).toEqual([384]);
   });
 
+  // BIN-295 fix 1: "max <noun>" collocations must not emit the HBO Max provider.
+  it('does not read "max poäng/antal/nivå/betyg/gräns" as the Max service', () => {
+    expect(parseSearch('ge mig det med max poäng').providerIds).toBeUndefined();
+    expect(parseSearch('filmer med max betyg').providerIds).toBeUndefined();
+    expect(parseSearch('max antal avsnitt').providerIds).toBeUndefined();
+    expect(parseSearch('max nivå av spänning').providerIds).toBeUndefined();
+    expect(parseSearch('inom max gräns').providerIds).toBeUndefined();
+    // Regression guard: the real provider still resolves.
+    expect(parseSearch('vad finns på hbo max').providerIds).toEqual([384]);
+    expect(parseSearch('serier på Max').providerIds).toEqual([384]);
+  });
+
+  // BIN-295 fix 2: "nordisk"/"nordic" is a region, not a language — it must NOT
+  // narrow to a single with_original_language (that drops da/no/fi/is titles).
+  it('does not map "nordisk"/"nordic" to a single language, but keeps "svensk" → sv', () => {
+    expect(parseSearch('nordisk film').originalLanguage).toBeUndefined();
+    expect(parseSearch('nordic noir').originalLanguage).toBeUndefined();
+    expect(parseSearch('svensk deckare').originalLanguage).toBe('sv');
+    expect(parseSearch('dansk serie').originalLanguage).toBe('da'); // neighbor untouched
+  });
+
   it('does not read "animerad" as Japanese, but does read "anime"', () => {
     const animerad = parseSearch('en mysig animerad film');
     expect(animerad.originalLanguage).toBeUndefined();

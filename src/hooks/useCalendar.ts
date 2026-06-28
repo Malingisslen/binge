@@ -34,7 +34,9 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   // Kalendern visar avsnitt för alla serier du följer ('mina') — inklusive
   // ej påbörjade (premiärbevakning är ett kärnvärde). Filmer i 'vill_se'
   // bidrar med digitala släppdatum längre ner.
-  const minaTV = getByStatus('mina', 'tv');
+  // useMemo so the .filter() traversal runs only when items change (getByStatus is
+  // useCallback([items])), not on every render of a parent owning this hook (BIN-336).
+  const minaTV = useMemo(() => getByStatus('mina', 'tv'), [getByStatus]);
   const tmdbIds = useMemo(
     () => minaTV.map(i => i.tmdbId),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,7 +119,7 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   // via useMovie) är 5-10× större och ska inte fan-out:as här. getMovieLite
   // hämtar release_dates + watch/providers via append_to_response — allt
   // kalendern behöver.
-  const villSeMovies = getByStatus('vill_se', 'movie');
+  const villSeMovies = useMemo(() => getByStatus('vill_se', 'movie'), [getByStatus]);
   const movieIds = useMemo(
     () => villSeMovies.map(i => i.tmdbId),
     // eslint-disable-next-line react-hooks/exhaustive-deps

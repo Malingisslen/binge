@@ -48,7 +48,7 @@ export function parseSearch(raw: string): AskFilter {
   // --- providerIds ("max" only as the service, not "max två timmar"/"max 30 min") ---
   const PROV: [RegExp, number][] = [
     [/netflix/, 8], [/viaplay/, 76], [/disney/, 337],
-    [/\bhbo\b|hbo max|\bmax\b(?!\s*(?:\d|två|tva|tre|fyra|fem|sex|sju|åtta|nio|tio|en\s|minut|min\b|timm))/, 384],
+    [/\bhbo\b|hbo max|\bmax\b(?!\s*(?:\d|två|tva|tre|fyra|fem|sex|sju|åtta|nio|tio|en\s|minut|min\b|timm|poäng|antal|nivå|betyg|gräns))/, 384],
     [/svt/, 520], [/tv4|cmore|\bc more\b/, 489], [/apple/, 350], [/paramount/, 531],
     [/discovery|dplay/, 510], [/skyshowtime/, 431], [/prime|amazon/, 119], [/crunchyroll/, 323],
   ];
@@ -62,7 +62,11 @@ export function parseSearch(raw: string): AskFilter {
   // --- originalLanguage (\banime\b so "animerad" doesn't read as Japanese; no "en"
   //     row — TMDB with_original_language=en is ALL English content, too broad) ---
   const LANG: [RegExp, string][] = [
-    [/svensk|nordisk|nordic/, 'sv'], [/dansk|danish/, 'da'], [/norsk|norwegian/, 'no'],
+    // 'nordisk'/'nordic' deliberately NOT mapped to a language: with_original_language
+    // is single-value, so mapping it to 'sv' silently drops da/no/fi/is Nordic titles
+    // (Borgen, Skam). Region/provider (watch_region=SE) surfaces Nordic content instead.
+    // (#11 ruling, BIN-295.) 'svensk' stays — it IS Swedish-language-specific.
+    [/svensk/, 'sv'], [/dansk|danish/, 'da'], [/norsk|norwegian/, 'no'],
     [/finsk|finnish/, 'fi'], [/isländsk|icelandic/, 'is'],
     [/koreansk|korean/, 'ko'], [/japansk|\banime\b/, 'ja'], [/kinesisk|mandarin|chinese/, 'zh'],
     [/thailändsk|\bthai\b/, 'th'], [/fransk|french/, 'fr'], [/spansk|spanish|mexikansk/, 'es'],
