@@ -201,7 +201,7 @@ kräver alla 4 (lint, typecheck, test, build) före merge.
 
 - `NODE_OPTIONS=--max-old-space-size=4096` finns redan i deploy.yml — ska
   räcka för vår nuvarande bundle
-- Om OOM: gör `npx @next/bundle-analyzer` och prunera stora deps
+- Om OOM: kör `npm run analyze` (bundle-analyzer) och prunera stora deps
 
 ### 6c. Preview-channel timeout
 
@@ -262,7 +262,8 @@ dom i tid och evighet.
 
 Efter en deploy men användare ser gammal version.
 
-**Fix:** `npm run purge` om skriptet finns, annars:
+**Fix:** kör `/purge`-skillen (eller `/commit` som purgar sist), annars
+manuellt — det finns inget `npm run purge`-skript:
 
 ```bash
 source .env.local && curl -s -X POST \
