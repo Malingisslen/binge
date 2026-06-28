@@ -126,12 +126,45 @@ jobs:
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
           TMDB_BUILD_REFRESH_BUDGET: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1000000' || '' }}
 
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
-          projectId: binge-nu
+      # Deploy hosting via a direct, pinned firebase-tools call instead of the
+      # floating FirebaseExtended/action-hosting-deploy@v0. This is a faithful
+      # inline replacement of what that action did (write the service-account
+      # key to a temp file, point GOOGLE_APPLICATION_CREDENTIALS at it, run
+      # `firebase deploy`) — but it lets us tolerate ONE specific error.
+      #
+      # BIN-331: when the built out/ is byte-identical to the currently-live
+      # version (a scheduled metadata-refresh that changed no assets, or a
+      # re-run), Firebase Hosting's release API returns HTTP 400 "is the current
+      # active version". Content is already live and correct, so that error is a
+      # no-op success — but the action treated it as a hard failure, turning
+      # every no-op deploy RED and eroding trust in the deploy signal. Here we
+      # treat that one message as success and still fail on anything else (bad
+      # creds, quota, network). firebase-tools is pinned to match rules-tests.
+      - name: Deploy to Firebase Hosting (tolerate idempotent-release 400)
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          SA="$RUNNER_TEMP/firebase-sa.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          trap 'rm -f "$SA"' EXIT
+          # GitHub's bash runs with `set -eo pipefail`, so disable it around the
+          # capture or the step dies before we can read the exit code.
+          set +e
+          OUT=$(npx --yes firebase-tools@14.27.0 deploy --only hosting --project binge-nu --non-interactive 2>&1)
+          CODE=$?
+          set -e
+          echo "$OUT"
+          if [ "$CODE" -eq 0 ]; then
+            echo "Hosting deploy succeeded."
+            exit 0
+          fi
+          if printf '%s\n' "$OUT" | grep -qiF "is the current active version"; then
+            echo "::notice::Hosting already serving this exact build — idempotent no-op release (HTTP 400, BIN-331). Treating as success."
+            exit 0
+          fi
+          echo "::error::Firebase Hosting deploy failed for a non-idempotent reason — see log above."
+          exit "$CODE"
 
   # Firestore security-rules tests run against the Firestore emulator (needs a
   # JVM). Mirrors ci.yml's rules-tests job so the suite executes on push-to-main
