@@ -4,16 +4,10 @@ import { notFound } from 'next/navigation';
 import PersonPageClient from '@/components/pages/PersonPageClient';
 import {
   getPerson,
-  getMovie,
-  getPopularMovies,
   profileUrl,
 } from '@/lib/tmdb/client';
-import {
-  SEO_PERSON_SOURCE_MOVIE_PAGES,
-  SEO_PERSON_CAST_PER_MOVIE,
-  SEO_PERSON_TARGET_IDS,
-  SEO_FALLBACK_PERSON_IDS,
-} from '@/lib/tmdb/seoCoverage';
+import { SEO_FALLBACK_PERSON_IDS } from '@/lib/tmdb/seoCoverage';
+import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
 
 export const dynamic = 'force-static';
@@ -36,30 +30,9 @@ const cachedGetPerson = cache((id: number) => fetchForBuild('person', getPerson,
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
   try {
-    // Hämta populära filmer, sen credits per film, sen samla cast-ids.
-    const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
-    const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p, { signal: buildSignal() })));
-    const movieIds = new Set<number>();
-    for (const r of popularResults) {
-      if (r.status === 'fulfilled') {
-        for (const m of r.value.results) movieIds.add(m.id);
-      }
-    }
-
-    const movieDetails = await Promise.allSettled(
-      Array.from(movieIds).map(id => getMovie(id, { signal: buildSignal() })),
-    );
-    const peopleIds = new Set<number>();
-    for (const r of movieDetails) {
-      if (r.status === 'fulfilled') {
-        const cast = r.value.credits?.cast ?? [];
-        for (const c of cast.slice(0, SEO_PERSON_CAST_PER_MOVIE)) {
-          if (c.id) peopleIds.add(c.id);
-        }
-      }
-    }
-
-    const ids = Array.from(peopleIds).slice(0, SEO_PERSON_TARGET_IDS);
+    // Delad pipeline med src/app/sitemap.ts (collectPersonIds) — buildSignal
+    // injiceras per fetch så ingen byggtids-hämtning når Next 60s-taket.
+    const ids = await collectPersonIds({ signal: buildSignal });
     // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
     // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
     const safe = ids.length > 0 ? ids : SEO_FALLBACK_PERSON_IDS;

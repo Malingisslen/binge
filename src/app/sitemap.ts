@@ -4,17 +4,14 @@ import {
   getPopularTV,
   getTopRatedMovies,
   getTopRatedTV,
-  getMovie,
 } from '@/lib/tmdb/client';
 import {
   SEO_TITLE_PAGES,
   SEO_TOP_RATED_PAGES,
-  SEO_PERSON_SOURCE_MOVIE_PAGES,
-  SEO_PERSON_CAST_PER_MOVIE,
-  SEO_PERSON_TARGET_IDS,
   SEO_PROVIDER_IDS,
   cappedTitleIds,
 } from '@/lib/tmdb/seoCoverage';
+import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { FRANCHISES } from '@/lib/seo/franchises';
 
 // Next 16 + output:'export' kräver explicit static/revalidate-deklaration
@@ -121,37 +118,15 @@ async function titleEntries(): Promise<MetadataRoute.Sitemap> {
 }
 
 /**
- * Person-URLs — speglar logiken i src/app/person/[id]/page.tsx.
- * Vi måste duplicera collectIds-pipelinen här (istället för att importera
- * generateStaticParams) eftersom Next inte exporterar generateStaticParams-
- * resultatet på ett sätt vi kan återanvända server-side i en annan route.
+ * Person-URLs — delar EXAKT samma pipeline som src/app/person/[id]/page.tsx
+ * via collectPersonIds (@/lib/tmdb/seoPersonIds), så sitemap och pre-render
+ * adresserar samma person-URL-mängd. Sitemap:en hoppar över buildSignal +
+ * ≥1-fallbacken (en tom person-lista är ok i en sitemap; fallbacken behövs
+ * bara för Next static-export-kravet i generateStaticParams).
  */
 async function personEntries(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
-
-  const pages = Array.from({ length: SEO_PERSON_SOURCE_MOVIE_PAGES }, (_, i) => i + 1);
-  const popularResults = await Promise.allSettled(pages.map(p => getPopularMovies(p)));
-  const movieIds = new Set<number>();
-  for (const r of popularResults) {
-    if (r.status === 'fulfilled') {
-      for (const m of r.value.results) movieIds.add(m.id);
-    }
-  }
-
-  const movieDetails = await Promise.allSettled(
-    Array.from(movieIds).map(id => getMovie(id)),
-  );
-  const peopleIds = new Set<number>();
-  for (const r of movieDetails) {
-    if (r.status === 'fulfilled') {
-      const cast = r.value.credits?.cast ?? [];
-      for (const c of cast.slice(0, SEO_PERSON_CAST_PER_MOVIE)) {
-        if (c.id) peopleIds.add(c.id);
-      }
-    }
-  }
-
-  const ids = Array.from(peopleIds).slice(0, SEO_PERSON_TARGET_IDS);
+  const ids = await collectPersonIds();
   return ids.map(id => ({
     url: `${SITE_URL}/person/${id}/`,
     lastModified,
