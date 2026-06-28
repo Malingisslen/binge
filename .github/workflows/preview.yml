@@ -42,7 +42,12 @@ jobs:
           NEXT_PUBLIC_GIT_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Deploy preview channel
-        uses: FirebaseExtended/action-hosting-deploy@v0
+        # Pinned to the v0.11.0 commit SHA instead of the floating @v0 tag so a
+        # maintainer push to v0 can't silently change what runs here (BIN-355).
+        # This is the exact commit @v0 resolved to as of 2026-06-28, so it's a
+        # behaviour-identical freeze. The preview path keeps using the action
+        # (not a raw firebase deploy) for its PR-comment + channel-URL output.
+        uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0.11.0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
