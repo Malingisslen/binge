@@ -3,17 +3,39 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { parseOmdbRatings, isFresh } from './parse';
+import { evaluateOmdbBudget } from './budget';
 import type { RatingsDoc } from './types';
 
 const OMDB_API_KEY = defineSecret('OMDB_API_KEY');
+const ADMIN_UID = defineSecret('ADMIN_UID'); // BIN-346: cap-alert recipient
 const TTL_DAYS = 45;
 const IMDB_RE = /^tt\d{6,}$/;
 const DAILY_CAP = 900; // global OMDb calls/day ceiling (free tier is 1000/day)
+// BIN-346: alert the operator at ~80% so there's time to act (raise the cap,
+// investigate abuse) BEFORE users start getting stale/exhausted at the cap.
+const ALERT_THRESHOLD = Math.floor(DAILY_CAP * 0.8); // 720
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
 
+// BIN-346: once-per-day admin notification when OMDb usage approaches the cap.
+// Best-effort + mirrors streamingOffers' notifyAdmin shape (same inbox/channel);
+// never blocks or fails the rating backfill.
+async function notifyOmdbBudgetApproaching(): Promise<void> {
+  const adminUid = process.env.ADMIN_UID;
+  if (!adminUid) return;
+  const db = getFirestore();
+  await db.collection('users').doc(adminUid).collection('notifications').add({
+    kind: 'system',
+    title: 'Betygskvot (OMDb) närmar sig taket',
+    body: `~${ALERT_THRESHOLD}/${DAILY_CAP} OMDb-anrop använda idag. Vid taket serveras äldre betyg. Höj kvoten eller utred onormal trafik.`,
+    actionUrl: '/insikter',
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
 export const titleRatings = onCall(
-  { region: 'europe-west1', secrets: [OMDB_API_KEY] },
+  { region: 'europe-west1', secrets: [OMDB_API_KEY, ADMIN_UID] },
   async (request): Promise<RatingsDoc> => {
     // Public backfill: no auth. Clients read the cached doc directly; this runs
     // only on a cache miss to populate it, behind a hard global daily cap.
@@ -34,22 +56,46 @@ export const titleRatings = onCall(
     if (!key) throw new HttpsError('internal', 'OMDB_API_KEY saknas.');
 
     // Reserve a slot in the global daily budget BEFORE spending an OMDb call.
+    // BIN-346: the same transaction also decides (once/day, via persisted flags)
+    // whether to fire the approaching-cap admin alert or the hard-cap forensic
+    // log — pure logic in evaluateOmdbBudget, signals emitted after commit.
     const budgetRef = db.collection('omdbBudget').doc(today());
-    const allowed = await db.runTransaction(async (tx) => {
+    const decision = await db.runTransaction(async (tx) => {
       const b = await tx.get(budgetRef);
-      const count = b.exists ? Number(b.get('count') ?? 0) : 0;
-      if (count >= DAILY_CAP) return false;
-      tx.set(budgetRef, { count: count + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      return true;
+      const d = evaluateOmdbBudget(
+        {
+          count: b.exists ? Number(b.get('count') ?? 0) : 0,
+          alerted: b.exists ? Boolean(b.get('alertedAt')) : false,
+          capLogged: b.exists ? Boolean(b.get('capLoggedAt')) : false,
+        },
+        DAILY_CAP,
+        ALERT_THRESHOLD,
+      );
+      const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+      if (d.allowed) patch.count = d.newCount;
+      if (d.setAlerted) patch.alertedAt = FieldValue.serverTimestamp();
+      if (d.setCapLogged) patch.capLoggedAt = FieldValue.serverTimestamp();
+      tx.set(budgetRef, patch, { merge: true });
+      return d;
     });
-    if (!allowed) {
+
+    if (decision.fireAlert) {
+      logger.warn(`titleRatings: OMDb dygnskvot ~80% (${ALERT_THRESHOLD}/${DAILY_CAP}) nådd för ${today()}.`);
+      await notifyOmdbBudgetApproaching().catch((e) => logger.error('titleRatings: admin-notis misslyckades', e));
+    }
+    if (decision.fireCapLog) {
+      logger.error(`titleRatings: OMDb dygnskvot SLUT (${DAILY_CAP}/${DAILY_CAP}) för ${today()} — serverar stale/avvisar tills imorgon.`);
+    }
+    if (!decision.allowed) {
       if (snap.exists) return snap.data() as RatingsDoc; // serve stale rather than nothing
       throw new HttpsError('resource-exhausted', 'Betygskvoten för dagen är slut.');
     }
 
     let ratings;
     try {
-      const res = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${key}`);
+      // BIN-293: 8s ceiling — a hung OMDb connection would otherwise keep the
+      // callable open to its budget; the catch below degrades to stale/throw.
+      const res = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${key}`, { signal: AbortSignal.timeout(8_000) });
       if (!res.ok) throw new Error(`OMDb HTTP ${res.status}`);
       const json = (await res.json()) as Record<string, unknown>;
       if (json.Response !== 'True') {

@@ -15,7 +15,9 @@ export async function fetchSeFlatrate(tmdbId: number, mediaType: string): Promis
   if (!key) { logger.error('availableNotify: TMDB_API_KEY not set'); return null; }
   const type = mediaType === 'movie' ? 'movie' : 'tv';
   try {
-    const res = await fetch(`${BASE_URL}/${type}/${tmdbId}/watch/providers?api_key=${key}`);
+    // BIN-293: 10s ceiling so one hung TMDB call can't block the per-title
+    // fan-out loop to the function's hard timeout; the catch degrades to null.
+    const res = await fetch(`${BASE_URL}/${type}/${tmdbId}/watch/providers?api_key=${key}`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) { logger.warn(`availableNotify: TMDB /${type}/${tmdbId}/watch/providers → ${res.status}`); return null; }
     const json = (await res.json()) as {
       results?: { SE?: { flatrate?: { provider_id: number; provider_name: string }[] } };

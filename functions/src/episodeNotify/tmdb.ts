@@ -14,7 +14,9 @@ export async function fetchTvAiringInfo(tmdbId: number): Promise<TvAiringInfo | 
   const key = process.env.TMDB_API_KEY;
   if (!key) { logger.error('episodeNotify: TMDB_API_KEY not set'); return null; }
   try {
-    const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`);
+    // BIN-293: 10s ceiling so one hung TMDB call can't block the per-title
+    // fan-out loop to the function's hard timeout; the catch degrades to null.
+    const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) { logger.warn(`episodeNotify: TMDB /tv/${tmdbId} → ${res.status}`); return null; }
     const json = (await res.json()) as { status?: string; last_episode_to_air?: { id: number; season_number: number; episode_number: number } | null };
     const last = json.last_episode_to_air ?? null;

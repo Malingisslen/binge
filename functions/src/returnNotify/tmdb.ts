@@ -20,7 +20,9 @@ export async function fetchTvReturnInfo(tmdbId: number): Promise<TvReturnInfo | 
   const key = process.env.TMDB_API_KEY;
   if (!key) { logger.error('returnNotify: TMDB_API_KEY not set'); return null; }
   try {
-    const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`);
+    // BIN-293: 10s ceiling so one hung TMDB call can't block the per-title
+    // fan-out loop to the function's hard timeout; the catch degrades to null.
+    const res = await fetch(`${BASE_URL}/tv/${tmdbId}?api_key=${key}&language=sv-SE`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) { logger.warn(`returnNotify: TMDB /tv/${tmdbId} → ${res.status}`); return null; }
     const json = (await res.json()) as {
       status?: string;
