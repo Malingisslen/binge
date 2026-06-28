@@ -25,9 +25,18 @@ Firestore-collection.
 | `status` | string | `open` (default), `reviewed`, `actioned`, `dismissed` |
 | `createdAt` | Timestamp | Serverklocka |
 
-Firestore-reglerna tillåter **bara create** från klienter (se
-`firestore.rules` → `match /reports/{reportId}`). Admin-läsning sker via
-Firebase Console med din ägar-inloggning.
+Klienter kan **inte** skriva till `reports` direkt — regeln är
+`allow create: if false` (se `firestore.rules` → `match /reports/{reportId}`).
+Rapporter skapas enbart via den server-auktoritativa callablen
+`submitReport` (`functions/src/submitReport/`), som med Admin SDK kringgår
+reglerna och enforce:ar en cooldown per uid (10 s) i en transaktion — ett
+anti-abuse-skydd mot rapport-spam/mass-flaggning (BIN-49, ersatte den gamla
+batch-baserade rate-limiten i BIN-25). Servern stämplar `createdAt`/
+`targetOwnerUid` m.m., inte klienten, så fält kan inte förfalskas.
+
+Läsning är admin-only (`allow read: if isAdmin()`) — vanliga användare kan
+aldrig läsa sina egna eller andras rapporter (sekretess mot den rapporterade).
+Admin-triage sker via Firebase Console med din ägar-inloggning.
 
 ---
 

@@ -28,6 +28,20 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # Kvalitetsgrind FÖRE bygg/deploy (BIN-341): en PR som inte klarar
+      # lint/typecheck/test ska inte få en live preview-URL. Bygget körs ändå
+      # redan i ci.yml på samma PR, så vi duplicerar BARA de snabba grindarna
+      # här (inte ett andra bygg) — ett rött test fäller jobbet innan Build, så
+      # Deploy-steget aldrig nås. Tester varnar aldrig, de blockerar.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
         env:

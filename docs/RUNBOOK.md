@@ -304,13 +304,12 @@ Sista kända fungerande commit:
 # Identifiera
 git log --oneline main | head -20
 
-# Rollback till tidigare commit
-git checkout <sha> -- out/  # bara build-output
-firebase deploy --only hosting --project binge-nu
-
-# Eller full revert-commit
-git revert <bad-sha> -m 1  # om merge-commit
-git push origin main  # trigger redeploy via CI
+# Rollback = revert + push (deploy.yml bygger om och deployar hosting).
+# OBS: `git checkout <sha> -- out/` funkar INTE — out/ är gitignorerad
+# build-output, inte incheckad, så det blir en no-op. Reverta källan istället:
+git revert <bad-sha>          # enskild commit
+git revert <bad-sha> -m 1     # om det var en merge-commit
+git push origin main          # trigger redeploy via CI (deploy.yml)
 ```
 
 Glöm inte cache-purge efter rollback (§8).

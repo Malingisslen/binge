@@ -40,7 +40,7 @@ npm run build             # Production build (static export → out/)
 npm run start             # Serve production build
 npm run lint              # ESLint
 npm run typecheck         # tsc --noEmit
-npm test                  # Vitest run (81+ tests — pure-logic + hook scenarios)
+npm test                  # Vitest run (1000+ tests — pure-logic + hook scenarios)
 npm run test:watch        # Vitest in watch mode
 npm run emulators         # Firebase Auth (9099) + Firestore (8080) emulators
 firebase deploy --only hosting            # Deploy static site
@@ -368,7 +368,8 @@ TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
 - **Fil-cache `.tmdb-cache/`** (TTL 7 dagar) persistas mellan CI-körningar via
   `actions/cache`. Kod-deployer hämtar därför nästan inga titlar (cache-träff)
   → ingen strypning, snabb deploy. Veckovis schemalagd deploy (cron i
-  `deploy.yml`) sätter `TMDB_CACHE_BUST=1` och hämtar färsk metadata.
+  `deploy.yml`) sätter en stor `TMDB_BUILD_REFRESH_BUDGET` (+ längre timeout)
+  och hämtar färsk metadata för alla stale titlar.
 
 Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
 `noindex` by default, så en icke-pre-renderad titel indexeras opålitligt
@@ -381,7 +382,7 @@ GitHub Actions-workflows:
 
 ## Testing
 
-Vitest kör 93+ tester. Pure-logic helpers är extracted från hooks för att
+Vitest kör 1000+ tester. Pure-logic helpers är extracted från hooks för att
 kunna testas utan Firebase-imports i test-miljön (se
 `useSubscriptionAdvisor.helpers.ts` och `sessionTiming.ts`-mönstret).
 

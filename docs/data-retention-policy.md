@@ -19,6 +19,28 @@ Allt som bara användaren själv ser tas bort helt:
 - `users/{uid}/blocked/*`
 - `users/{uid}/following/*` (ensidig)
 - `users/{uid}/followers/*` (matchande följ-relationer på andra håll)
+- `users/{uid}/friends/*` (+ speglad radering på vännens sida)
+- `users/{uid}/friendRequests/*` (inkommande, + speglad sent-sida)
+- `users/{uid}/friendRequestsSent/*` (utgående, + speglad in-sida)
+- `users/{uid}/groupInvites/*` (inkomna grupp-inbjudningar)
+- `users/{uid}/listFollows/*` (följda listor, BIN-96)
+- `users/{uid}/pauseHistory/*` (paus-/återupptag-historik från Sparande)
+
+#### Operationell metadata → Hård radering
+
+Teknisk metadata som användaren aldrig ser men som ändå raderas helt vid
+kontoradering (samlas via samma `collectUserDataSnapshots`-helper):
+
+- `users/{uid}/fcmTokens/*` — push-enhetstokens; raderas så Cloud Functions
+  slutar försöka skicka push till ett raderat konto
+- `users/{uid}/reportMeta/*` — rapport-throttle-stämpel (anti-abuse, BIN-25/49)
+- `users/{uid}/askBingeMeta/*` — Fråga Binge LLM-throttle-stämpel (kostnadstak)
+
+Dessa tre är medvetet UNDANTAGNA ur GDPR-exporten (Art. 20) — de är
+drift-/säkerhetsmetadata, inte användarens egna data — men raderas ändå helt
+vid kontoradering. Export och radering läser samma helper
+(`src/lib/firebase/userData.ts`), så listorna hålls i synk: lägger man till en
+ny user-owned subcollection måste helpern uppdateras så båda flödena får med den.
 
 Inga återhämtningsbara referenser till datan finns efter radering,
 förutom Firestore PITR inom 7 dagar (administrativt bara).

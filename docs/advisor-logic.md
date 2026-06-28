@@ -85,9 +85,9 @@ Firebase-import):
 
 - `findTopPausable(providers, userPausedSet)` — dyraste pause-kandidat,
   exkluderar redan-pausade
-- `findCatchupCandidate(providers, followingById, userPausedSet)` — betald
-  provider med mest påbörjade men oavslutade serier; exkluderar redan-pausade
-  (BIN-51)
+- `findCatchupCandidate(providers, unfinishedIds, userPausedSet)` — betald
+  provider med mest påbörjade men oavslutade serier (räknar shows vars tmdbId
+  finns i `unfinishedIds`); exkluderar redan-pausade (BIN-51)
 - `findIdleNextCheckDate(providers, activePauses)` — earliest av alla
   nextAirDate + resumeAt
 - `getNextAirInfo(show)` — next_episode_to_air eller nästa framtida säsong

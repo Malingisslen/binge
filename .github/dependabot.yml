@@ -81,6 +81,42 @@ updates:
       - dependency-name: "tailwindcss"
         update-types: ["version-update:semver-major"]
 
+  # npm — Cloud Functions (egen package.json, scannas inte av root-blocket /).
+  # Liten dep-tree → lågt PR-tak. firebase-admin + firebase-functions är
+  # runtime-kopplade (en ensam funktions-bump som springer ifrån admin är just
+  # den split-version-risk som landar på en yta utan preview-deploy) → grupperas.
+  # Major-bumps kan ändra Node-runtime-kontraktet och bryta den manuella
+  # functions-deployen → bara patch/minor automatiskt, majors granskas för hand.
+  - package-ecosystem: "npm"
+    directory: "/functions"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Stockholm"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps(functions)"
+      include: "scope"
+    groups:
+      firebase-functions:
+        patterns:
+          - "firebase-admin"
+          - "firebase-functions"
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Major-bumps kräver eftertanke (Node-runtime + manuell deploy).
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-functions"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions — håll CI-workflows färska
   - package-ecosystem: "github-actions"
     directory: "/"
