@@ -121,6 +121,9 @@ export interface UserProfile {
   // shipped won't have it set.
   termsAcceptedAt?: Date;
   termsVersion?: string;
+  // Timestamp the user confirmed they meet the 13-year minimum age (BIN-348).
+  // Recorded at account creation on both the email/password and Google-SSO paths.
+  ageConfirmedAt?: Date;
   // Onboarding-flödet satts när /onboarding/-sekvensen är klar. Undefined
   // = användaren kom in före feature:n landade ELLER hoppat över onboarding.
   // Vi gate:ar bara redirect-logiken på detta — ingen funktionalitet låses.

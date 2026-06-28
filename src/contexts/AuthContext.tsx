@@ -19,6 +19,7 @@ import { auth } from '@/lib/firebase/config';
 import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider } from '@/lib/tmdb/providers';
 import { daysBetween, todayIso } from '@/lib/utils';
 import type { ItemVisibility, UserProfile } from '@/types';
@@ -153,6 +154,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       updatedAt: data.updatedAt?.toDate() ?? new Date(),
       termsAcceptedAt: data.termsAcceptedAt?.toDate(),
       termsVersion: data.termsVersion as string | undefined,
+      ageConfirmedAt: data.ageConfirmedAt?.toDate(),
       onboardingCompletedAt: data.onboardingCompletedAt?.toDate(),
       lastNotificationsSeenAt: data.lastNotificationsSeenAt?.toDate(),
       isAdmin: (data.isAdmin as boolean) ?? false,
@@ -199,6 +201,12 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     hemkommun: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    // BIN-275/348: first sign-in via Google is browse-wrap consent — the login
+    // page shows a terms + 13+-age notice at the Google button, so creating the
+    // doc records acceptance + age confirmation, mirroring the register() path.
+    termsAcceptedAt: new Date(),
+    termsVersion: CURRENT_TERMS_VERSION,
+    ageConfirmedAt: new Date(),
     notificationSettings: {
       newEpisodes: true,
       availableOnMyServices: true,
@@ -214,6 +222,8 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     ...profile,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    termsAcceptedAt: serverTimestamp(),
+    ageConfirmedAt: serverTimestamp(),
   });
 
   // Auto-föreslå username från Google displayName / email-localpart. Triggar
@@ -354,6 +364,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
       termsAcceptedAt: serverTimestamp(),
       termsVersion,
+      ageConfirmedAt: serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }, { merge: true });

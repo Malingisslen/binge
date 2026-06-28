@@ -7,12 +7,7 @@ import { useEffect, useState } from 'react';
 import { trackEvent } from '@/lib/analytics';
 import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
-
-// Version identifier for the Terms of Service + Privacy Policy a user
-// accepts at sign-up. Bump this (e.g. to '2026-07-01') when either legal
-// document changes materially; the user's recorded version lets us
-// prompt for re-acceptance on change.
-const TERMS_VERSION = '2026-06-04';
+import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
 
 export default function LoginPage() {
   const { user, signIn, signInEmail, register, loading } = useAuth();
@@ -64,7 +59,7 @@ export default function LoginPage() {
           setSubmitting(false);
           return;
         }
-        await register(email, password, name, TERMS_VERSION);
+        await register(email, password, name, CURRENT_TERMS_VERSION);
         trackEvent('signed_up');
       } else {
         await signInEmail(email, password);
@@ -105,10 +100,21 @@ export default function LoginPage() {
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-3"
+          className="w-full px-4 py-2 bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
         >
           Logga in med Google
         </button>
+
+        {/* BIN-275/348: browse-wrap consent + 13+ age notice at the Google entry
+            point. Continuing past this records terms acceptance + age confirmation
+            at account creation (AuthContext.ensureUserProfile). */}
+        <p className="text-xxs text-text-muted text-center leading-snug mb-3">
+          Genom att fortsätta godkänner du Binges{' '}
+          <Link href="/villkor" target="_blank" className="text-accent underline">användarvillkor</Link>
+          {' '}och{' '}
+          <Link href="/integritet" target="_blank" className="text-accent underline">integritetspolicy</Link>
+          {' '}och intygar att du är minst {MIN_AGE} år.
+        </p>
 
         <div className="flex items-center gap-2 mb-3">
           <div className="flex-1 h-px bg-border-main" />
@@ -158,7 +164,7 @@ export default function LoginPage() {
                   onChange={e => setAgeConfirmed(e.target.checked)}
                   className="mt-[2px] cursor-pointer"
                 />
-                <span>Jag är minst 13 år gammal.</span>
+                <span>Jag är minst {MIN_AGE} år gammal.</span>
               </label>
               <label className="flex items-start gap-2 cursor-pointer">
                 <input
