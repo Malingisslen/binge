@@ -66,7 +66,11 @@ export function UsernameSection() {
           <textarea
             value={bioInput}
             onChange={e => setBioInput(e.target.value)}
-            onBlur={() => { if (bioInput !== user.bio) { updateBio(bioInput); toast('Bio sparad'); } }}
+            onBlur={async () => {
+              if (bioInput === user.bio) return;
+              try { await updateBio(bioInput); toast('Bio sparad'); }
+              catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+            }}
             placeholder="Berätta lite om dig…"
             maxLength={160}
             rows={2}
@@ -83,9 +87,11 @@ export function UsernameSection() {
                   name="defaultVisibility"
                   value={opt.value}
                   checked={user.defaultVisibility === opt.value}
-                  onChange={() => {
-                    updateDefaultVisibility(opt.value);
-                    toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
+                  onChange={async () => {
+                    try {
+                      await updateDefaultVisibility(opt.value);
+                      toast(`Standardsynlighet: ${opt.label.toLowerCase()}`);
+                    } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
                   }}
                   className="accent-acc-deep mt-[2px] w-[13px] h-[13px] shrink-0"
                 />

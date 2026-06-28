@@ -69,6 +69,11 @@ describe('tvShowStatusLabel', () => {
     expect(tvShowStatusLabel('In Production')).toBe('Under produktion');
   });
 
+  it('translates Planned/Pilot to Swedish (BIN-335 — no English fall-through)', () => {
+    expect(tvShowStatusLabel('Planned')).toBe('Planerad');
+    expect(tvShowStatusLabel('Pilot')).toBe('Pilot');
+  });
+
   it('returns the input verbatim for unknown TMDB statuses', () => {
     expect(tvShowStatusLabel('Rumored')).toBe('Rumored');
   });
@@ -142,6 +147,23 @@ describe('tvSubState', () => {
     // (Specials). Tidigare föll detta tillbaka till "aktiv" trots Ended-status.
     const item = makeItem({ lastWatchedSeason: 0, lastWatchedEpisode: 2, tmdbStatus: 'Ended' });
     expect(tvSubState(item, undefined)).toBe('avslutad');
+  });
+
+  // BIN-335: en följd serie MED progress men där TMDB rapporterar noll aireade
+  // avsnitt (last_episode_to_air === null) — t.ex. en serie som depublicerats
+  // eller ännu inte fått sitt första avsnitt registrerat hos TMDB. Man kan inte
+  // "ligga efter" på noll aireade avsnitt, så detta är ikapp (väntar) / avslutad
+  // — aldrig "aktiv". Pinnar att isUserBehindOnAired korrekt ger false här.
+  it('returns "ikapp" with TMDB show present but no aired episode + returning + progress', () => {
+    const item = makeItem({ lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: null, status: 'Returning Series' });
+    expect(tvSubState(item, show)).toBe('ikapp');
+  });
+
+  it('returns "avslutad" with TMDB show present but no aired episode + ended + progress', () => {
+    const item = makeItem({ lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    const show = makeShow({ last_episode_to_air: null, status: 'Ended' });
+    expect(tvSubState(item, show)).toBe('avslutad');
   });
 
   it('returns "ej_paborjad" when no progress at all, regardless of TMDB data', () => {

@@ -13,6 +13,13 @@ export function useReviewLikes(reviewId: string | null) {
   // Skydd mot dubbelräkning vid snabba dubbelklick — släpp inte in en ny
   // toggle förrän den föregående skrivningen är klar.
   const inFlight = useRef(false);
+  // BIN-307: när användaren hunnit toggla innan mount-räkningen landat får den
+  // sena getCountFromServer-svaret INTE skriva över den optimistiska siffran
+  // (annars studsar likeCount tillbaka till pre-toggle-värdet → "mitt klick
+  // räknades inte"). dirty pinnar att en lokal toggle skett; mount-fetchen
+  // applicerar då inte sitt resultat. Skyddar bara likeCount — iLike rättas
+  // alltid av onSnapshot.
+  const dirty = useRef(false);
 
   // Likes skalar med review-popularitet — en viral recension kan få tusentals.
   // Vi lyssnar bara på inloggad användares eget like-dokument för iLike-state,
@@ -23,11 +30,12 @@ export function useReviewLikes(reviewId: string | null) {
 
     // Hämta likeCount en gång vid mount — uppdateras vid toggle via optimism.
     let cancelled = false;
+    dirty.current = false;
     fsdb()
       .then(({ db, collection, getCountFromServer }) =>
         getCountFromServer(collection(db, 'reviews', reviewId, 'likes')))
-      .then(snap => { if (!cancelled) setLikeCount(snap.data().count); })
-      .catch(() => { if (!cancelled) setLikeCount(0); });
+      .then(snap => { if (!cancelled && !dirty.current) setLikeCount(snap.data().count); })
+      .catch(() => { if (!cancelled && !dirty.current) setLikeCount(0); });
 
     if (!uid) { return () => { cancelled = true; }; }
     // Lyssna bara på mitt eget like-dokument — 1 read istället för N.
@@ -47,6 +55,10 @@ export function useReviewLikes(reviewId: string | null) {
     // likeCount vid snabba dubbelklick.
     if (inFlight.current) return;
     inFlight.current = true;
+    // BIN-307: markera dirty FÖRE den optimistiska skrivningen så ett sent
+    // mount-count-svar inte hinner skriva över siffran i fönstret mellan
+    // optimism och skrivningens slut.
+    dirty.current = true;
     const { db, doc, setDoc, deleteDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'reviews', reviewId, 'likes', uid);
     const wasLiked = iLike;

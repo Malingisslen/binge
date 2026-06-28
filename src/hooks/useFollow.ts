@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -12,6 +12,7 @@ const FOLLOWING_LIMIT = 500;
 
 export function useFollowing() {
   const { uid } = useAuth();
+  const queryClient = useQueryClient();
   const [followingUids, setFollowingUids] = useState<string[]>([]);
 
   useEffect(() => {
@@ -24,6 +25,17 @@ export function useFollowing() {
 
   const isFollowing = useCallback((targetUid: string) => followingUids.includes(targetUid), [followingUids]);
 
+  // BIN-307: en följ/avfölj ändrar TVÅ aggregat-räknare — målets followers och
+  // den egna following. Båda läses via getCountFromServer med 60s staleTime, så
+  // utan invalidering släpar siffrorna upp till en minut efter handlingen (man
+  // följer någon men räknaren rör sig inte → ser ut som att det inte funkade).
+  // Invalidera båda ovillkorligt efter commit; getCountFromServer kör då om mot
+  // den redan committade spegel-skrivningen.
+  const invalidateCounts = useCallback((targetUid: string) => {
+    queryClient.invalidateQueries({ queryKey: ['follower-count', targetUid] });
+    queryClient.invalidateQueries({ queryKey: ['following-count', uid] });
+  }, [queryClient, uid]);
+
   const followUser = useCallback(async (targetUid: string) => {
     if (!uid) return;
     const { db, doc, writeBatch, serverTimestamp } = await fsdb();
@@ -31,7 +43,8 @@ export function useFollowing() {
     batch.set(doc(db, 'users', uid, 'following', targetUid), { followedAt: serverTimestamp() });
     batch.set(doc(db, 'users', targetUid, 'followers', uid), { followedAt: serverTimestamp() });
     await batch.commit();
-  }, [uid]);
+    invalidateCounts(targetUid);
+  }, [uid, invalidateCounts]);
 
   const unfollowUser = useCallback(async (targetUid: string) => {
     if (!uid) return;
@@ -40,7 +53,8 @@ export function useFollowing() {
     batch.delete(doc(db, 'users', uid, 'following', targetUid));
     batch.delete(doc(db, 'users', targetUid, 'followers', uid));
     await batch.commit();
-  }, [uid]);
+    invalidateCounts(targetUid);
+  }, [uid, invalidateCounts]);
 
   return { followingUids, isFollowing, followUser, unfollowUser };
 }

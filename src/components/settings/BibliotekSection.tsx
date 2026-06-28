@@ -31,10 +31,12 @@ export function BibliotekSection() {
           className="select"
           aria-label="Välj hemkommun"
           value={user.hemkommun ?? ''}
-          onChange={e => {
+          onChange={async e => {
             const value = e.target.value || null;
-            updateHomeMunicipality(value);
-            toast(value ? `Hemkommun: ${value}` : 'Hemkommun rensad');
+            try {
+              await updateHomeMunicipality(value);
+              toast(value ? `Hemkommun: ${value}` : 'Hemkommun rensad');
+            } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
           }}
         >
           <option value="">Ingen vald</option>
@@ -45,7 +47,10 @@ export function BibliotekSection() {
         {user.hemkommun && (
           <button
             type="button"
-            onClick={() => { updateHomeMunicipality(null); toast('Hemkommun rensad'); }}
+            onClick={async () => {
+              try { await updateHomeMunicipality(null); toast('Hemkommun rensad'); }
+              catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+            }}
             className="btn btn-ghost btn-sm"
           >
             Rensa

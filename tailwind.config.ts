@@ -73,7 +73,7 @@ const config: Config = {
         'border-light': 'var(--rule-2)',
         'border-table': 'var(--rule-2)',
         'cal-header': 'var(--bg-2)',
-        'season-done': 'oklch(0.55 0.13 145)',
+        'season-done': 'var(--season-done)',
         // sidebar-bg kept — still used in src/app/page.tsx (landing hero section).
         'sidebar-bg': 'var(--ink)',
       },

@@ -20,7 +20,10 @@ export function DisplaySection() {
         {(['table', 'cards', 'grid'] as const).map(v => (
           <button
             key={v}
-            onClick={() => { updateDefaultView(v); toast('Inställning sparad'); }}
+            onClick={async () => {
+              try { await updateDefaultView(v); toast('Inställning sparad'); }
+              catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+            }}
             className={`btn btn-sm ${user.defaultView === v ? 'btn-acc' : 'btn-ghost'}`}
           >
             {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}

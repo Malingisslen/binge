@@ -23,8 +23,14 @@ export const dynamic = 'force-static';
  * Dynamisk sitemap som genereras vid `next build`.
  *
  * Inkluderar:
- * - Statiska offentliga routes (start, discover, films, series, savings,
+ * - Statiska offentliga routes (start, discover, films, series,
  *   integritet, villkor, community-guidelines)
+ *
+ * /savings/ är INTE med (BIN-305): den är auth-gated — crawlers får bara en
+ * spinner (tunt/soft-404-innehåll). Den bär istället robots:noindex via sin
+ * layout.tsx. Vi Disallow:ar den dock INTE i robots.txt — en blockerad URL kan
+ * aldrig crawlas för att SE noindex-direktivet, så noindex + crawlbar är rätt
+ * kombination för att hålla den ur indexet.
  * - Topp-N populära + topp-rankade filmer/serier från TMDB
  * - Topp-N personer (top-billed cast från populära filmer)
  *
@@ -54,7 +60,6 @@ function staticEntries(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/discover/`, lastModified, changeFrequency: 'daily', priority: 0.9 },
     { url: `${SITE_URL}/films/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/series/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
-    { url: `${SITE_URL}/savings/`, lastModified, changeFrequency: 'weekly', priority: 0.5 },
     { url: `${SITE_URL}/integritet/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${SITE_URL}/villkor/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${SITE_URL}/community-guidelines/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },

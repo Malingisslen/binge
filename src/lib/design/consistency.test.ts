@@ -52,6 +52,40 @@ describe('design consistency — dynamic route headers', () => {
   });
 });
 
+// BIN-324: --season-done is the single source of truth for the green
+// "avslutad / sett avsnitt" status color. The raw oklch literal must never
+// reappear outside its one :root declaration — every consumer references
+// var(--season-done) (globals.css) or the season-done Tailwind token.
+const SEASON_DONE_LITERAL = 'oklch(0.55 0.13 145)';
+const SEASON_DONE_DECL = '--season-done:';
+
+describe('design consistency — season-done token (BIN-324)', () => {
+  it('the raw season-done oklch literal appears only in its :root declaration', () => {
+    const files = [
+      join(process.cwd(), 'src', 'app', 'globals.css'),
+      join(process.cwd(), 'tailwind.config.ts'),
+    ];
+    const offenders: string[] = [];
+    for (const file of files) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        // Exempt the canonical declaration line itself; anchor on the token,
+        // not a brittle line number.
+        if (line.includes(SEASON_DONE_DECL)) return;
+        if (line.includes(SEASON_DONE_LITERAL)) {
+          offenders.push(`${file.replace(process.cwd(), '')}:${i + 1}`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the :root declaration of --season-done exists (guard is not vacuous)', () => {
+    const globals = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+    expect(globals).toContain(`${SEASON_DONE_DECL} ${SEASON_DONE_LITERAL};`);
+  });
+});
+
 describe('design consistency — settings vocabulary', () => {
   it('no settings component uses raw Tailwind red-* (use the danger token)', () => {
     const offenders = tsxFilesIn(SETTINGS_DIR).filter(f => RAW_RED.test(readFileSync(f, 'utf8')));

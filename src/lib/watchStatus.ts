@@ -78,6 +78,8 @@ const TV_STATUS_MAP: Record<string, string> = {
   'Returning Series': 'Pågår',
   'Canceled': 'Inställd',
   'In Production': 'Under produktion',
+  'Planned': 'Planerad',
+  'Pilot': 'Pilot',
 };
 
 export function tvShowStatusLabel(status: string): string {

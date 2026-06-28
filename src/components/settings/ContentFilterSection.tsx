@@ -29,14 +29,19 @@ export function ContentFilterSection() {
 
   if (!user) return null;
 
-  const toggleCountry = (code: string) => {
-    const next = hiddenSet.has(code)
+  // BIN-308: vänta in skrivningen innan "sparad"-toast; visa fel-toast om den
+  // misslyckas (annars ser användaren "dolt" trots tappad skrivning).
+  const toggleCountry = async (code: string) => {
+    const wasHidden = hiddenSet.has(code);
+    const next = wasHidden
       ? user.hiddenCountries.filter(c => c !== code)
       : [...user.hiddenCountries, code];
-    updateHiddenCountries(next);
-    toast(hiddenSet.has(code)
-      ? `${getCountryName(code)} visas igen`
-      : `${getCountryName(code)} dolt`);
+    try {
+      await updateHiddenCountries(next);
+      toast(wasHidden ? `${getCountryName(code)} visas igen` : `${getCountryName(code)} dolt`);
+    } catch {
+      toast('Kunde inte spara. Försök igen om en stund.');
+    }
   };
 
   return (
@@ -45,7 +50,13 @@ export function ContentFilterSection() {
           <input
             type="checkbox"
             checked={user.hideNonLatinTitles}
-            onChange={e => { updateHideNonLatinTitles(e.target.checked); toast(e.target.checked ? 'Filter aktiverat' : 'Filter avaktiverat'); }}
+            onChange={async e => {
+              const checked = e.target.checked;
+              try {
+                await updateHideNonLatinTitles(checked);
+                toast(checked ? 'Filter aktiverat' : 'Filter avaktiverat');
+              } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+            }}
             className="accent-acc-deep w-[14px] h-[14px]"
           />
           Dölj titlar med icke-latinska alfabet
@@ -65,7 +76,7 @@ export function ContentFilterSection() {
               <input
                 type="checkbox"
                 checked={hiddenSet.has(code)}
-                onChange={() => toggleCountry(code)}
+                onChange={() => void toggleCountry(code)}
                 className="accent-acc-deep w-[14px] h-[14px]"
               />
               {getCountryName(code)}
@@ -90,7 +101,7 @@ export function ContentFilterSection() {
                 <input
                   type="checkbox"
                   checked={hiddenSet.has(c.code)}
-                  onChange={() => toggleCountry(c.code)}
+                  onChange={() => void toggleCountry(c.code)}
                   className="accent-acc-deep w-[14px] h-[14px]"
                 />
                 {c.name}
