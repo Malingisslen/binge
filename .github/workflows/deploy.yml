@@ -139,7 +139,15 @@ jobs:
       # no-op success — but the action treated it as a hard failure, turning
       # every no-op deploy RED and eroding trust in the deploy signal. Here we
       # treat that one message as success and still fail on anything else (bad
-      # creds, quota, network). firebase-tools is pinned to match rules-tests.
+      # creds, quota, network).
+      #
+      # firebase-tools is pinned to 15.22.3 — the version the old action
+      # resolved to and which we observed authenticating via the service-account
+      # ADC path (GOOGLE_APPLICATION_CREDENTIALS). NOTE: this intentionally
+      # DIFFERS from the rules-tests job's 14.27.0 pin — 14.x fails hosting auth
+      # with "have you run firebase login?" because service-account ADC for
+      # `deploy` only works reliably in the 15.x series; rules-tests keeps 14.27.0
+      # for emulator-JAR compatibility. Two pins, two concerns.
       - name: Deploy to Firebase Hosting (tolerate idempotent-release 400)
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -151,7 +159,7 @@ jobs:
           # GitHub's bash runs with `set -eo pipefail`, so disable it around the
           # capture or the step dies before we can read the exit code.
           set +e
-          OUT=$(npx --yes firebase-tools@14.27.0 deploy --only hosting --project binge-nu --non-interactive 2>&1)
+          OUT=$(npx --yes firebase-tools@15.22.3 deploy --only hosting --project binge-nu --non-interactive 2>&1)
           CODE=$?
           set -e
           echo "$OUT"
