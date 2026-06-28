@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { resolveRoute } from './resolveRoute';
 
 /**
  * Alla page-clients laddas via next/dynamic så varje route bara drar in
@@ -48,35 +49,35 @@ export default function DynamicRouter({ fallback }: { fallback: React.ReactNode 
   // (sista return nedan).
   if (!mounted) return <LoadingView variant="detail" label="Laddar…" />;
 
-  const segments = pathname.split('/').filter(Boolean);
+  // Dispatch logic lives in the pure resolveRoute (tested in resolveRoute.test.ts).
+  // This switch only maps the matched route → its lazy page-client, preserving the
+  // exact key + prop names the old if-chain used. The `never` default makes adding
+  // a RouteMatch kind without a render branch a compile error.
+  const match = resolveRoute(pathname);
+  if (!match) return <>{fallback}</>;
 
-  if (segments[0] === 'tillsammans' && segments[1] && segments[1] !== 'ny') {
-    return <TillsammansSessionPageClient key={segments[1]} id={segments[1]} />;
+  switch (match.kind) {
+    case 'tillsammans':
+      return <TillsammansSessionPageClient key={match.id} id={match.id} />;
+    case 'grupper':
+      return <GroupPageClient key={match.id} id={match.id} />;
+    case 'user':
+      return <UserProfilePageClient key={match.username} username={match.username} />;
+    case 'list':
+      return <ListPageClient key={match.listId} listId={match.listId} />;
+    case 'provider':
+      return <ProviderPageClient key={match.id} id={match.id} />;
+    case 'person':
+      return <PersonPageClient key={match.id} id={match.id} />;
+    case 'movie':
+      return <MoviePageClient key={match.id} id={match.id} />;
+    case 'season':
+      return <SeasonPageClient key={`${match.id}-${match.num}`} id={match.id} num={match.num} />;
+    case 'tv':
+      return <TVShowPageClient key={match.id} id={match.id} />;
+    default: {
+      const _exhaustive: never = match;
+      return _exhaustive;
+    }
   }
-  if (segments[0] === 'grupper' && segments[1] && segments[1] !== 'ny') {
-    return <GroupPageClient key={segments[1]} id={segments[1]} />;
-  }
-  if (segments[0] === 'user' && segments[1]) {
-    return <UserProfilePageClient key={segments[1]} username={segments[1]} />;
-  }
-  if (segments[0] === 'list' && segments[1]) {
-    return <ListPageClient key={segments[1]} listId={segments[1]} />;
-  }
-  if (segments[0] === 'provider' && segments[1]) {
-    return <ProviderPageClient key={segments[1]} id={segments[1]} />;
-  }
-  if (segments[0] === 'person' && segments[1]) {
-    return <PersonPageClient key={segments[1]} id={segments[1]} />;
-  }
-  if (segments[0] === 'movie' && segments[1]) {
-    return <MoviePageClient key={segments[1]} id={segments[1]} />;
-  }
-  if (segments[0] === 'tv' && segments[1] && segments[2] === 'season' && segments[3]) {
-    return <SeasonPageClient key={`${segments[1]}-${segments[3]}`} id={segments[1]} num={segments[3]} />;
-  }
-  if (segments[0] === 'tv' && segments[1]) {
-    return <TVShowPageClient key={segments[1]} id={segments[1]} />;
-  }
-
-  return <>{fallback}</>;
 }
