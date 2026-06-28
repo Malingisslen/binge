@@ -13,7 +13,7 @@
 //   6. unavailable  — varken stream, hyra eller bibliotek i SE
 
 import type { Offer } from './offers';
-import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, getProvider, cheapestEntertainmentTier } from '@/lib/tmdb/providers';
 
 export type CheapestPathKind =
   | 'free_public'
@@ -27,9 +27,13 @@ export interface CheapestPathVerdict {
   kind: CheapestPathKind;
   // Provider the verdict points at (canonical id). null for library/unavailable.
   providerId: number | null;
-  // Pris för rent-rungen (kr); null för övriga.
+  // Pris (kr): rent-rungen = hyrespris; subscribe-rungen = billigaste icke-sport-
+  // nivåns månadspris (BIN-322); null för övriga.
   priceAmount: number | null;
   priceCurrency: string | null;
+  // Nivå-etikett för subscribe-rungen när billigaste nivån ligger UNDER listpriset
+  // (t.ex. "Standard med reklam" / "Basic") — annars null. Caveat:t ÄR ärligheten.
+  tierLabel: string | null;
   // Återstående lån för free_library-rungen (self-reported budget); null annars.
   loansLeft: number | null;
 }
@@ -54,6 +58,7 @@ const verdict = (
   providerId: extra.providerId ?? null,
   priceAmount: extra.priceAmount ?? null,
   priceCurrency: extra.priceCurrency ?? null,
+  tierLabel: extra.tierLabel ?? null,
   loansLeft: extra.loansLeft ?? null,
 });
 
@@ -93,16 +98,28 @@ export function cheapestPath(input: CheapestPathInput): CheapestPathVerdict {
   }
 
   // 5 — titeln streamas men användaren äger ingen av tjänsterna → föreslå den
-  // billigaste (lägsta defaultMonthlyCost; okänd kostnad → lägsta provider-id).
+  // billigaste. Rankas på cheapestEntertainmentTier (billigaste icke-sport-nivå),
+  // INTE defaultMonthlyCost — annars förlorar en tjänst med en billig reklam-nivå
+  // mot en med lägre listpris men dyrare ingång, och vi skulle visa ett högre pris
+  // än användaren behöver betala (BIN-322). Oavgjort → lägsta provider-id.
   if (subs.length > 0) {
     const cheapestSub = subs
       .slice()
       .sort((a, b) =>
-        (getProvider(a)?.defaultMonthlyCost ?? Number.POSITIVE_INFINITY)
-        - (getProvider(b)?.defaultMonthlyCost ?? Number.POSITIVE_INFINITY)
+        cheapestEntertainmentTier(a).cost - cheapestEntertainmentTier(b).cost
         || a - b,
       )[0];
-    return verdict('subscribe', { providerId: cheapestSub });
+    const { cost, tier } = cheapestEntertainmentTier(cheapestSub);
+    const def = getProvider(cheapestSub)?.defaultMonthlyCost;
+    // Etikettera nivån bara när den ligger UNDER listpriset (en ads/rabatt-ingång
+    // värd att flagga); annars plain pris.
+    const isSubDefault = tier != null && def != null && cost < def;
+    return verdict('subscribe', {
+      providerId: cheapestSub,
+      priceAmount: Number.isFinite(cost) ? cost : null,
+      priceCurrency: Number.isFinite(cost) ? 'SEK' : null,
+      tierLabel: isSubDefault ? tier!.name : null,
+    });
   }
 
   // 6 — ingen väg alls i SE.

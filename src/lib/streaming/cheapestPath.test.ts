@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { cheapestPath } from './cheapestPath';
 import type { CheapestPathInput } from './cheapestPath';
 import type { Offer } from './offers';
+import { cheapestEntertainmentTier } from '@/lib/tmdb/providers';
 
 const rent = (providerId: number, priceAmount: number): Offer => ({
   providerId, type: 'rent', link: 'x', priceAmount, priceCurrency: 'SEK', leaving: null,
@@ -97,13 +98,56 @@ describe('cheapestPath cascade', () => {
   });
 
   it('5 — suggest the cheapest subscription when streamable but none owned/free', () => {
-    // Prime (119, 69 kr) vs Netflix (8, 149 kr) → Prime is cheaper.
+    // Prime (119, 69 kr) vs Netflix (8, cheapest tier 109 kr) → Prime is cheaper.
     const v = cheapestPath({ ...base, subscriptionProviderIds: [8, 119] });
     expect(v.kind).toBe('subscribe');
     expect(v.providerId).toBe(119);
+    expect(v.priceAmount).toBe(69);
+    expect(v.tierLabel).toBeNull(); // Prime has no tiers → no label
+  });
+
+  it('5b — BIN-322: ranks by cheapest ad-tier, flipping the winner vs list price', () => {
+    // Paramount+ (531) list 99, no tiers → 99. Max (384) list 149 but ads tier 89.
+    // Old defaultMonthlyCost ranking would pick Paramount (99 < 149); the tier-aware
+    // ranking correctly picks Max (89 < 99) and surfaces the ad-tier price + label.
+    const v = cheapestPath({ ...base, subscriptionProviderIds: [531, 384] });
+    expect(v.kind).toBe('subscribe');
+    expect(v.providerId).toBe(384);
+    expect(v.priceAmount).toBe(89);
+    expect(v.tierLabel).toBe('Basic med reklam');
+  });
+
+  it('5c — BIN-322: surfaces the ad-tier price + label for a sub-list-price tier', () => {
+    // Disney+ (337) list 109, ads tier 69 → "från 69 kr (Standard med reklam)".
+    const v = cheapestPath({ ...base, subscriptionProviderIds: [337] });
+    expect(v.providerId).toBe(337);
+    expect(v.priceAmount).toBe(69);
+    expect(v.tierLabel).toBe('Standard med reklam');
   });
 
   it('6 — unavailable when there is no path at all', () => {
     expect(cheapestPath(base).kind).toBe('unavailable');
+  });
+});
+
+describe('cheapestEntertainmentTier — excludes sport/bundle tiers (BIN-322)', () => {
+  it('picks the cheapest NON-sport tier for Viaplay (reklam 79, not sport 399/699)', () => {
+    const { cost, tier } = cheapestEntertainmentTier(76);
+    expect(cost).toBe(79);
+    expect(tier?.kind).not.toBe('sport');
+  });
+
+  it('picks TV4 plus-ads (69), never the 699 Sport Total tier', () => {
+    const { cost, tier } = cheapestEntertainmentTier(489);
+    expect(cost).toBe(69);
+    expect(tier?.kind).not.toBe('sport');
+  });
+
+  it('falls back to defaultMonthlyCost for a provider with no tiers (Prime)', () => {
+    expect(cheapestEntertainmentTier(119)).toEqual({ cost: 69, tier: null });
+  });
+
+  it('returns Infinity for an unknown provider so it sorts last', () => {
+    expect(cheapestEntertainmentTier(999999).cost).toBe(Number.POSITIVE_INFINITY);
   });
 });

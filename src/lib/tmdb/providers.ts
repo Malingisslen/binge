@@ -2,6 +2,11 @@ export interface ProviderTier {
   id: string;
   name: string;
   cost: number;
+  // 'sport' = a sport/bundle upsell tier. Excluded from the cheapest-path price
+  // (cheapestEntertainmentTier) — these grant catalog access but are never the
+  // cheapest way to watch a film/series, and the guard keeps a future mis-priced
+  // sport tier from ever surfacing as "billigast". (BIN-322)
+  kind?: 'sport';
 }
 
 export interface SwedishProvider {
@@ -60,8 +65,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     tiers: [
       { id: 'reklam', name: 'Film & Serier med reklam', cost: 79 },
       { id: 'standard', name: 'Film & Serier', cost: 169 },
-      { id: 'medium', name: 'Medium (inkl. sport)', cost: 399 },
-      { id: 'total', name: 'Total (all sport)', cost: 699 },
+      { id: 'medium', name: 'Medium (inkl. sport)', cost: 399, kind: 'sport' },
+      { id: 'total', name: 'Total (all sport)', cost: 699, kind: 'sport' },
     ],
   },
   // 493 = TMDB:s nuvarande SE-id för SVT (katalog-endpoint 2026-06-20); 520 var
@@ -79,7 +84,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     tiers: [
       { id: 'plus-ads', name: 'Plus med reklam', cost: 69 },
       { id: 'plus', name: 'Plus utan reklam', cost: 169 },
-      { id: 'sport', name: 'Sport Total utan reklam', cost: 699 },
+      { id: 'sport', name: 'Sport Total utan reklam', cost: 699, kind: 'sport' },
     ],
   },
   {
@@ -94,7 +99,7 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
       { id: 'entry', name: 'Entry (1 enhet, reklam)', cost: 49 },
       { id: 'ads', name: 'Med reklam (Full HD)', cost: 89 },
       { id: 'premium', name: 'Premium (4K)', cost: 189 },
-      { id: 'sport', name: 'Sport Premium', cost: 349 },
+      { id: 'sport', name: 'Sport Premium', cost: 349, kind: 'sport' },
     ],
   },
   {
@@ -152,6 +157,24 @@ export const PROVIDER_MAP: Map<number, SwedishProvider> = (() => {
 
 export function getProvider(id: number): SwedishProvider | undefined {
   return PROVIDER_MAP.get(id);
+}
+
+// The cheapest tier a viewer can actually use to watch general-catalog content,
+// for the "billigaste vägen" verdict (BIN-322). Excludes sport/bundle tiers
+// (kind: 'sport'). Returns the chosen tier (for an honest "(Basic / med reklam)"
+// label) and its cost; falls back to defaultMonthlyCost when the provider has no
+// tier breakdown. Cost is Infinity for an unknown provider so it sorts last.
+export function cheapestEntertainmentTier(
+  id: number,
+): { cost: number; tier: ProviderTier | null } {
+  const p = getProvider(id);
+  if (!p) return { cost: Number.POSITIVE_INFINITY, tier: null };
+  const usable = (p.tiers ?? []).filter(t => t.kind !== 'sport');
+  if (usable.length === 0) {
+    return { cost: p.defaultMonthlyCost ?? Number.POSITIVE_INFINITY, tier: null };
+  }
+  const cheapest = usable.reduce((a, b) => (b.cost < a.cost ? b : a));
+  return { cost: cheapest.cost, tier: cheapest };
 }
 
 // Returnerar den kanoniska provider_id för alla varianter (t.ex. både 489

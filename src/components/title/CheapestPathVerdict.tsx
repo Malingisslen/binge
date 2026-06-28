@@ -52,8 +52,17 @@ export function CheapestPathVerdict({
       text = `Billigast: hyr för ${v.priceAmount} kr på ${name}`;
       break;
     case 'subscribe': {
-      const cost = v.providerId != null ? getProvider(v.providerId)?.defaultMonthlyCost : undefined;
-      text = cost ? `Billigaste väg: ${name} (${cost} kr/mån)` : `Finns på ${name}`;
+      // Render the price FROM the verdict (BIN-322): priceAmount is the cheapest
+      // non-sport tier; tierLabel flags a sub-listpris entry (ads/Basic). Do NOT
+      // recompute from defaultMonthlyCost — that printed a higher price than the
+      // title actually needs (the bug this fixed).
+      if (v.priceAmount != null) {
+        text = v.tierLabel
+          ? `Billigaste väg: ${name} från ${v.priceAmount} kr/mån (${v.tierLabel})`
+          : `Billigaste väg: ${name} ${v.priceAmount} kr/mån`;
+      } else {
+        text = `Finns på ${name}`;
+      }
       break;
     }
     default:
