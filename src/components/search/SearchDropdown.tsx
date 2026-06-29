@@ -12,6 +12,10 @@ import type { ResolvedUser } from '@/lib/firebase/username';
 interface SearchDropdownProps {
   query: string;
   onSelect: () => void;
+  // BIN-338: report the keyboard-highlighted option's DOM id up to the input so
+  // it can set aria-activedescendant (real focus stays in the input). null when
+  // nothing is highlighted (activeIndex === -1, the "Visa alla"-fallback).
+  onActiveOptionChange?: (id: string | null) => void;
 }
 
 // Sökdropdownen visar både användar- och titelträffar. Pilar går genom alla
@@ -20,7 +24,7 @@ type Row =
   | { kind: 'user'; user: ResolvedUser }
   | { kind: 'title'; item: { media_type: 'movie' | 'tv'; id: number } };
 
-export default function SearchDropdown({ query, onSelect }: SearchDropdownProps) {
+export default function SearchDropdown({ query, onSelect, onActiveOptionChange }: SearchDropdownProps) {
   const { data: titleData, isLoading: titlesLoading } = useSearch(query);
   const { data: userData, isLoading: usersLoading } = useUserSearch(query);
   const router = useRouter();
@@ -41,6 +45,16 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
   ], [userResults, titleResults]);
 
   useEffect(() => { setActiveIndex(-1); }, [query]);
+
+  // BIN-338: keep aria-activedescendant (on the input) in sync with the live,
+  // rendered option. id points to a real option only when activeIndex is in
+  // range of the current rows; otherwise null (cleared).
+  useEffect(() => {
+    const id = activeIndex >= 0 && activeIndex < rows.length ? `search-opt-${activeIndex}` : null;
+    onActiveOptionChange?.(id);
+  }, [activeIndex, rows.length, onActiveOptionChange]);
+
+  useEffect(() => () => onActiveOptionChange?.(null), [onActiveOptionChange]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -73,17 +87,22 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
   const hasAny = userResults.length > 0 || titleResults.length > 0;
 
   return (
-    <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-rule rounded-sm shadow-pop z-50 max-h-[400px] overflow-y-auto">
+    <div
+      id="search-listbox"
+      role="listbox"
+      aria-label="Sökresultat"
+      className="absolute top-full left-0 right-0 mt-1 bg-surface border border-rule rounded-sm shadow-pop z-50 max-h-[400px] overflow-y-auto"
+    >
       {isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-ink-3">Söker…</div>
+        <div role="presentation" className="px-3 py-2 text-sm text-ink-3">Söker…</div>
       )}
       {!isLoading && !hasAny && (
-        <div className="px-3 py-2 text-sm text-ink-3">Inga träffar.</div>
+        <div role="presentation" className="px-3 py-2 text-sm text-ink-3">Inga träffar.</div>
       )}
 
       {userResults.length > 0 && (
         <>
-          <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold">
+          <div role="presentation" className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold">
             Användare
           </div>
           {userResults.map((user, i) => {
@@ -93,6 +112,9 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
                 key={`user-${user.uid}`}
                 href={`/user/${user.username}/`}
                 onClick={onSelect}
+                role="option"
+                id={`search-opt-${rowIndex}`}
+                aria-selected={rowIndex === activeIndex}
                 className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
                   rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
@@ -111,7 +133,7 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
       {titleResults.length > 0 && (
         <>
           {userResults.length > 0 && (
-            <div className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold border-t border-rule-2">
+            <div role="presentation" className="px-3 pt-2 pb-[2px] text-xxs uppercase tracking-[1px] text-ink-3 font-semibold border-t border-rule-2">
               Titlar
             </div>
           )}
@@ -127,6 +149,9 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
                 key={`${item.media_type}-${item.id}`}
                 href={href}
                 onClick={onSelect}
+                role="option"
+                id={`search-opt-${rowIndex}`}
+                aria-selected={rowIndex === activeIndex}
                 className={`flex items-center gap-2 px-3 py-[6px] no-underline text-ink-2 ${
                   rowIndex === activeIndex ? 'bg-bg-2' : 'hover:bg-rule-2'
                 }`}
@@ -150,6 +175,10 @@ export default function SearchDropdown({ query, onSelect }: SearchDropdownProps)
         </>
       )}
 
+      {/* BIN-338: a plain focusable link, NOT a role="option" — it's a footer
+          action, not an arrow-reachable result, so it must not claim to be a
+          listbox option (an unreachable option breaks the combobox pattern).
+          Enter at activeIndex=-1 still routes here via the keydown handler. */}
       {titleResults.length > 0 && (
         <Link
           href={`/search/?q=${encodeURIComponent(query)}`}

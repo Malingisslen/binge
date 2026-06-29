@@ -37,6 +37,23 @@ describe('ToastProvider', () => {
     expect(screen.getByText('Testtoast')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Rensa helt' })).toBeNull();
   });
+
+  // BIN-325: the live region must announce only the NEW toast, not re-read the
+  // whole stack on every change — so aria-atomic must be "false" (not "true"),
+  // with a polite live region.
+  it('live-regionen är polite och icke-atomic (annonserar bara nya toasts)', () => {
+    render(
+      <ToastProvider>
+        <Trigger />
+      </ToastProvider>,
+    );
+    const region = screen.getByRole('region', { name: 'Aviseringar' });
+    expect(region.getAttribute('aria-live')).toBe('polite');
+    expect(region.getAttribute('aria-atomic')).toBe('false');
+    // and a shown toast renders inside that region
+    fireEvent.click(screen.getByText('visa'));
+    expect(region.textContent).toContain('Testtoast');
+  });
 });
 
 describe('ToastProvider showRating (betyg-vid-sedd)', () => {

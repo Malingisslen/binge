@@ -30,6 +30,14 @@ export default function AppTopbar() {
     setIsMac(detectMacLike());
   }, []);
 
+  // BIN-338: combobox a11y. The dropdown is open under exactly this condition
+  // (same as the render gate below), so aria-expanded tracks reality. The id of
+  // the keyboard-highlighted option lives in SearchDropdown (where activeIndex
+  // is); it reports it up here so aria-activedescendant can sit on the input
+  // while real focus stays in the input.
+  const [activeDescId, setActiveDescId] = useState<string | null>(null);
+  const dropdownOpen = searchFocused && debouncedQuery.length >= 2;
+
   return (
     <header className="app-topbar" role="banner">
       <Link href="/" className="brand" aria-label="binge.nu">
@@ -50,7 +58,19 @@ export default function AppTopbar() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
+              onKeyDown={e => {
+                if (e.key === 'Escape' && dropdownOpen) {
+                  setSearchFocused(false);
+                  inputRef.current?.blur();
+                }
+              }}
               aria-label="Sök"
+              role="combobox"
+              aria-expanded={dropdownOpen}
+              aria-controls="search-listbox"
+              aria-activedescendant={dropdownOpen && activeDescId ? activeDescId : undefined}
+              aria-autocomplete="list"
+              aria-haspopup="listbox"
               spellCheck={false}
               autoComplete="off"
               autoCorrect="off"
@@ -58,9 +78,13 @@ export default function AppTopbar() {
             />
             <span className="k" aria-hidden="true">{shortcutHint(isMac)}</span>
           </div>
-          {searchFocused && debouncedQuery.length >= 2 && (
+          {dropdownOpen && (
             <div className="search-dropdown-wrap">
-              <SearchDropdown query={debouncedQuery} onSelect={clearSearch} />
+              <SearchDropdown
+                query={debouncedQuery}
+                onSelect={clearSearch}
+                onActiveOptionChange={setActiveDescId}
+              />
             </div>
           )}
         </div>

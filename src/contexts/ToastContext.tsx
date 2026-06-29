@@ -78,8 +78,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
         role="region"
+        aria-label="Aviseringar"
         aria-live="polite"
-        aria-atomic="true"
+        // BIN-325: false (not true) so screen readers announce only the newly
+        // added toast, not a re-read of the whole stack on every add/remove.
+        aria-atomic="false"
       >
         {toasts.map(t => (
           <div
