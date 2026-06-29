@@ -712,6 +712,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     //    only removing the leaving member.
     const memberLeaveUpdates: { ref: DocumentReference; newMemberUids: string[] }[] = [];
     for (const groupDoc of snaps.groupsSnap.docs) {
+      // BIN-329: a leftover joinAttempts/{myUid} in this group holds the plaintext
+      // invite token I once submitted. Erase it on account deletion (Art. 17). The
+      // rule allows self-delete (uid == request.auth.uid) and a delete on a missing
+      // doc is a safe no-op, so this is fine for groups I joined by invite/own. The
+      // scheduled retentionCleanup sweep is the backstop for attempts in groups I
+      // never became a member of (abandoned join) and for Console-deleted accounts.
+      refs.push(doc(db, 'groups', groupDoc.id, 'joinAttempts', id));
       const data = groupDoc.data();
       const ownerUid = data.ownerUid as string | undefined;
       if (ownerUid === id) {

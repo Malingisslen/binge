@@ -73,6 +73,10 @@ Så vid radering:
 - `reviews/{reviewId}` där `uid == me` → **delete**
 - `reviews/*/comments/{commentId}` där `uid == me` → **delete**
 - `reviews/*/likes/{uid}` där doc-id == me → **delete**
+- `*/reactions/{reactionId}` (avsnitts-reaktioner, BIN-95) där `uid == me` →
+  **delete** (collection-group). Ingen TTL-sweep — reaktioner behandlas som
+  innehåll (likt reviews) och raderas bara vid kontoradering, inte på ålder.
+  Se Console-bypass nedan för konton som raderas utanför app-cascaden.
 - `lists/{listId}` där `uid == me` → **delete**
 - `sessions/{sessionId}` där `hostUid == me` → **delete**
 
@@ -82,6 +86,14 @@ När användaren raderas:
 
 - I `groups/{groupId}` där `memberUids` innehåller mig → **ta bort mig
   ur array:en**
+- `groups/{groupId}/joinAttempts/{myUid}` (BIN-329) → **delete**. Doc:et
+  innehåller plaintext-invite-tokenet jag en gång skickade vid en token-join.
+  `deleteAccount` raderar det per grupp jag är medlem i (omedelbar radering);
+  den schemalagda `retentionCleanup`-sweepen tar resten — attempts i grupper jag
+  aldrig blev medlem i (avbruten join) och konton raderade via Firebase Console
+  (som inte kör klient-cascaden alls) — efter 1 timme. Ett lyckat join raderar
+  sitt eget attempt på sekunder, så allt äldre är en spent-token-orphan.
+  UNDANTAGET ur exporten (gruppens delade hemlighet, inte personuppgift).
 - Om jag är owner (`ownerUid == me`) och det finns andra medlemmar →
   transferera ownership till första andra medlemmen (kommande sprint —
   TODO). För nuvarande: om owner raderar sig lämnas gruppen ägarlös och
@@ -141,6 +153,17 @@ helt ny `users/{uid}/<x>`-subcollection som aldrig läggs till i helpern fångas
 INTE (den blir aldrig en `keyof`). Att täcka den klassen kräver ett emulator-
 backat raderingstest + en subcollection-enumeration mot `firestore.rules` —
 spårat som följdticket.
+
+**Console-bypass (känd begränsning):** `deleteAccount`-cascaden körs bara vid
+självservice-radering i appen. Raderar en admin ett konto direkt i Firebase
+Auth Console körs INGEN klient-cascade (det finns ingen Auth-`onDelete`-trigger),
+så cascade-bara-data (avsnitts-reaktioner, fcmTokens m.fl.) blir kvar. För den
+**säkerhetskänsliga** delen — plaintext-invite-tokenet i `joinAttempts` (BIN-329)
+— är detta nu täppt: den schemalagda `retentionCleanup`-sweepen raderar varje
+joinAttempt äldre än 1 timme oavsett hur kontot försvann (admin SDK kringgår
+reglerna). Reaktioner/övrig cascade-bara-data efter en Console-radering är
+fortfarande en öppen, bredare lucka (låg känslighet — inget hemligt) som ägs av
+en framtida server-side reaper för konton vars ägar-uid inte längre finns.
 
 ## Retention-policy för icke-raderad data
 

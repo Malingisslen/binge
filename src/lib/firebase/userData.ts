@@ -13,6 +13,14 @@ import { fsdb } from './db';
  * per-group-followups (members/watchlist för grupper jag äger) är INTE
  * med här — de gör vi bara vid radering och kräver snapshots vi redan
  * har. Den här helpern hämtar bara "top-level"-datan.
+ *
+ * BIN-329: `groups/{id}/joinAttempts/{myUid}` hör också till radering-bara-
+ * klassen — det raderas inline i `deleteAccount`s grupp-loop (per grupp jag är
+ * medlem i) och sopas dessutom av den schemalagda `retentionCleanup`-sweepen
+ * (orphans + Console-raderade konton). Det är medvetet INTE en `UserDataSnapshots`-
+ * nyckel och UNDANTAGET ur exporten: payloaden är gruppens delade invite-token
+ * (en hemlighet), inte användarens egna personuppgifter — samma resonemang som
+ * `fcmTokens`. Lägg därför inte till det här.
  */
 export interface UserDataSnapshots {
   profileSnap: DocumentSnapshot;

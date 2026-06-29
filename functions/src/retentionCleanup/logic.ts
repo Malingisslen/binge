@@ -12,6 +12,19 @@
 export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 /** Notifications are reaped once older than this. */
 export const NOTIFICATION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+/**
+ * joinAttempts (BIN-329) are reaped once older than this — 1 hour. A token-join
+ * is a single synchronous two-step flow (write `joinAttempts/{uid}` with the
+ * plaintext token, then immediately update the group); a successful join deletes
+ * its own attempt within seconds (groups.ts), and a retry rewrites a fresh one.
+ * So ANY attempt older than an hour is an abandoned/failed-cleanup orphan whose
+ * only content is a now-spent plaintext invite token. Sweeping them is the
+ * permanent backstop that closes the Art. 17 gap regardless of how the account
+ * was deleted (self-service cascade, abandoned join, or Firebase Console — which
+ * runs no client cascade). 1h is orders of magnitude beyond any legitimate
+ * two-step window, so this can never reap an in-flight join.
+ */
+export const JOIN_ATTEMPT_MAX_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Normalize a Firestore Timestamp field to epoch ms. Duck-typed on `toMillis()`
@@ -50,4 +63,14 @@ export function isExpiredSession(
  */
 export function isStaleNotification(createdAtMs: number | null, nowMs: number): boolean {
   return createdAtMs !== null && createdAtMs < nowMs - NOTIFICATION_MAX_AGE_MS;
+}
+
+/**
+ * A joinAttempt is reapable once older than JOIN_ATTEMPT_MAX_AGE_MS. An
+ * undateable attempt (no `createdAt`) is kept — same conservative stance as the
+ * other predicates (never delete data we can't date; the create rule always
+ * stamps `createdAt`, so an undateable doc would be anomalous).
+ */
+export function isStaleJoinAttempt(createdAtMs: number | null, nowMs: number): boolean {
+  return createdAtMs !== null && createdAtMs < nowMs - JOIN_ATTEMPT_MAX_AGE_MS;
 }

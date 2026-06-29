@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   isExpiredSession,
   isStaleNotification,
+  isStaleJoinAttempt,
   tsToMillis,
   SESSION_MAX_AGE_MS,
   NOTIFICATION_MAX_AGE_MS,
+  JOIN_ATTEMPT_MAX_AGE_MS,
 } from './logic';
 
 const now = 1_000_000_000_000; // fixed "now" for deterministic boundaries
@@ -67,5 +69,25 @@ describe('isStaleNotification', () => {
 
   it('never reaps an undateable notification (no createdAt)', () => {
     expect(isStaleNotification(null, now)).toBe(false);
+  });
+});
+
+describe('isStaleJoinAttempt (BIN-329)', () => {
+  it('reaps an orphan attempt older than 1 hour (spent plaintext token)', () => {
+    expect(isStaleJoinAttempt(now - JOIN_ATTEMPT_MAX_AGE_MS - 1, now)).toBe(true);
+  });
+
+  it('keeps a fresh attempt within the hour (boundary inclusive of "exactly 1h" = kept)', () => {
+    expect(isStaleJoinAttempt(now - JOIN_ATTEMPT_MAX_AGE_MS + 1, now)).toBe(false);
+    expect(isStaleJoinAttempt(now - JOIN_ATTEMPT_MAX_AGE_MS, now)).toBe(false);
+    expect(isStaleJoinAttempt(now, now)).toBe(false);
+  });
+
+  it('never reaps an undateable attempt (no createdAt)', () => {
+    expect(isStaleJoinAttempt(null, now)).toBe(false);
+  });
+
+  it('TTL is exactly one hour', () => {
+    expect(JOIN_ATTEMPT_MAX_AGE_MS).toBe(60 * 60 * 1000);
   });
 });

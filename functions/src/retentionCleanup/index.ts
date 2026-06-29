@@ -7,6 +7,10 @@
  * than the policy allows:
  *   - sessions/{id}        — past `expiresAt`, or (legacy, no expiresAt) >30 days
  *   - users/{uid}/notifications/{id} — older than 90 days
+ *   - groups/{id}/joinAttempts/{uid} — older than 1 hour (BIN-329): a spent
+ *     plaintext invite token left by an abandoned/failed-cleanup token-join, or
+ *     by an account deleted via the Firebase Console (which runs no client
+ *     cascade). This is the permanent erasure backstop for that secret.
  *
  * Sessions own subcollections (participants/*, swipes/*), so a plain doc delete
  * would orphan them — we use recursiveDelete() to reap the whole session tree.
@@ -22,7 +26,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import type { DocumentReference, QueryDocumentSnapshot } from 'firebase-admin/firestore';
-import { isExpiredSession, isStaleNotification, tsToMillis } from './logic';
+import { isExpiredSession, isStaleNotification, isStaleJoinAttempt, tsToMillis } from './logic';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -78,6 +82,28 @@ async function collectStaleNotifications(nowMs: number): Promise<DocumentReferen
   return refs;
 }
 
+/** joinAttempts older than the TTL, across all groups (collection group). */
+async function collectStaleJoinAttempts(nowMs: number): Promise<DocumentReference[]> {
+  const db = getFirestore();
+  const refs: DocumentReference[] = [];
+  let cursor: QueryDocumentSnapshot | undefined;
+  for (;;) {
+    // Same bounded, index-free pattern as collectStaleNotifications: select only
+    // createdAt and page by __name__ (automatic collection-group index — no
+    // firestore.indexes.json entry needed). joinAttempts are leaf docs.
+    let q = db.collectionGroup('joinAttempts').select('createdAt').orderBy('__name__').limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      if (isStaleJoinAttempt(tsToMillis(d.get('createdAt')), nowMs)) refs.push(d.ref);
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return refs;
+}
+
 /**
  * recursiveDelete each session (doc + participants/* + swipes/*); never throw.
  * Serial on purpose — steady-state is tiny (sessions TTL at 7 days, this runs
@@ -121,7 +147,7 @@ export const retentionCleanup = onSchedule(
   async () => {
     const nowMs = Date.now();
 
-    const [expiredSessions, staleNotifications] = await Promise.all([
+    const [expiredSessions, staleNotifications, staleJoinAttempts] = await Promise.all([
       collectExpiredSessions(nowMs).catch((err) => {
         logger.error('retentionCleanup: sessions scan failed', err);
         return [] as DocumentReference[];
@@ -130,16 +156,23 @@ export const retentionCleanup = onSchedule(
         logger.error('retentionCleanup: notifications scan failed', err);
         return [] as DocumentReference[];
       }),
+      collectStaleJoinAttempts(nowMs).catch((err) => {
+        logger.error('retentionCleanup: joinAttempts scan failed', err);
+        return [] as DocumentReference[];
+      }),
     ]);
 
     const deletedSessions = await deleteSessions(expiredSessions);
     const deletedNotifications = await deleteInBatches(staleNotifications);
+    const deletedJoinAttempts = await deleteInBatches(staleJoinAttempts);
 
     logger.info('retentionCleanup done', {
       expiredSessions: expiredSessions.length,
       deletedSessions,
       staleNotifications: staleNotifications.length,
       deletedNotifications,
+      staleJoinAttempts: staleJoinAttempts.length,
+      deletedJoinAttempts,
     });
   },
 );
