@@ -19,30 +19,12 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { sendPushToUser } from '../push';
+import { readFollowedSeries } from '../shared/followedSeries';
 import type { WatchlistLite } from '../episodeNotify/logic';
 import { fetchTvReturnInfo } from './tmdb';
 import { isCaughtUp, shouldNotifyReturn } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
-
-async function readFollowedSeries(): Promise<WatchlistLite[]> {
-  const db = getFirestore();
-  const snap = await db.collectionGroup('watchlist')
-    .where('mediaType', '==', 'tv').where('status', '==', 'mina')
-    .select('mediaType', 'status', 'title', 'tmdbId', 'lastWatchedSeason', 'lastWatchedEpisode', 'tmdbStatus')
-    .get();
-  return snap.docs.map((d) => {
-    const x = d.data();
-    const uid = d.ref.parent.parent?.id ?? '';
-    return {
-      uid, tmdbId: Number(x.tmdbId ?? Number(d.id)), mediaType: String(x.mediaType ?? ''),
-      status: String(x.status ?? ''), title: String(x.title ?? ''),
-      lastWatchedSeason: typeof x.lastWatchedSeason === 'number' ? x.lastWatchedSeason : null,
-      lastWatchedEpisode: typeof x.lastWatchedEpisode === 'number' ? x.lastWatchedEpisode : null,
-      tmdbStatus: typeof x.tmdbStatus === 'string' ? x.tmdbStatus : null,
-    };
-  });
-}
 
 // Returns the last observed next-episode id + whether the marker doc exists.
 // exists=false → first observation of this show → baseline (no notify).

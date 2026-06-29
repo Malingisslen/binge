@@ -16,29 +16,11 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { sendPushToUser } from '../push';
+import { readFollowedSeries } from '../shared/followedSeries';
 import { fetchTvAiringInfo } from './tmdb';
 import { deriveSubState, shouldNotify, type WatchlistLite, type LastEpisode } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
-
-async function readFollowedSeries(): Promise<WatchlistLite[]> {
-  const db = getFirestore();
-  const snap = await db.collectionGroup('watchlist')
-    .where('mediaType', '==', 'tv').where('status', '==', 'mina')
-    .select('mediaType', 'status', 'title', 'tmdbId', 'lastWatchedSeason', 'lastWatchedEpisode', 'tmdbStatus')
-    .get();
-  return snap.docs.map((d) => {
-    const x = d.data();
-    const uid = d.ref.parent.parent?.id ?? '';
-    return {
-      uid, tmdbId: Number(x.tmdbId ?? Number(d.id)), mediaType: String(x.mediaType ?? ''),
-      status: String(x.status ?? ''), title: String(x.title ?? ''),
-      lastWatchedSeason: typeof x.lastWatchedSeason === 'number' ? x.lastWatchedSeason : null,
-      lastWatchedEpisode: typeof x.lastWatchedEpisode === 'number' ? x.lastWatchedEpisode : null,
-      tmdbStatus: typeof x.tmdbStatus === 'string' ? x.tmdbStatus : null,
-    };
-  });
-}
 async function readLastNotified(tmdbId: number): Promise<number | null> {
   const snap = await getFirestore().collection('episodeNotifyState').doc(String(tmdbId)).get();
   const v = snap.data()?.lastNotifiedEpisode;
