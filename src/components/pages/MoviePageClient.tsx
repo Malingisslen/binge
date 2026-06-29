@@ -37,6 +37,10 @@ import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
+import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
+import PriceHistoryStatRow from '@/components/title/PriceHistoryStatRow';
+import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
+import { useToast } from '@/contexts/ToastContext';
 import type { TMDBMovie } from '@/types';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
@@ -49,8 +53,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
-  const { getItem, updateRating, updateNotes, updateWatchedAt, setRuntime } = useWatchlist();
+  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime } = useWatchlist();
   const { user } = useAuth();
+  const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
   // mounted-flag förhindrar hydration mismatch: SSR/initial-render visar inget
@@ -133,6 +138,31 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
+  // BIN-193: cinema→streaming countdown. todayStr derives from `now` (pure —
+  // no argless Date) so no extra purity-disable. Null unless the film is in
+  // Swedish cinemas with a known future digital date.
+  const todayStr = new Date(now).toISOString().slice(0, 10);
+  const cinemaInfo = cinemaToStreaming(movie, todayStr);
+  const handleBevaka = () => {
+    void addItem({
+      tmdbId: movie.id,
+      mediaType: 'movie',
+      status: 'vill_se',
+      rating: null,
+      notes: null,
+      title: displayTitle,
+      posterPath: movie.poster_path,
+      releaseYear: parseInt(year, 10) || null,
+      totalSeasons: null,
+      lastWatchedSeason: null,
+      lastWatchedEpisode: null,
+      providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
+      genreIds: movie.genres.map(g => g.id),
+      tmdbStatus: null,
+    });
+    toast(`Bevakar släppet av ${displayTitle}`);
+  };
+
   return (
     <>
       {/* Schema.org structured data — rich snippets + knowledge panel i Google */}
@@ -208,6 +238,15 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             </div>
           )}
           {movie.overview && <p className="syn">{movie.overview}</p>}
+
+          {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
+              library state (inLibrary) and isn't core SEO content. */}
+          {cinemaInfo && (
+            <ClientOnly>
+              <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
+            </ClientOnly>
+          )}
+
           <div className="stats">
             <span><span className="k">år</span><strong>{year}</strong></span>
             {movie.runtime ? (
@@ -343,6 +382,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   {rent.map(p => <ProviderTag key={p.provider_id} provider={p} size="md" offer={offerForProvider(offers, canonicalProviderId(p.provider_id))} nowMs={now} />)}
                 </div>
               )}
+              {/* BIN-354: rent price-history stat row (option C). Lazy — only
+                  fetches priceHistory/{id} when this disclosure is expanded. */}
+              <PriceHistoryStatRow tmdbId={movie.id} nowMs={now} />
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
