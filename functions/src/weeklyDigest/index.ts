@@ -17,8 +17,8 @@
  * because the signal moves slowly and it keeps this the cheapest function in the
  * set (pure Firestore reads, once a week, only over opted-in users).
  *
- * Dedup: weeklyDigestState/{uid}.lastSentDate (the run's UTC date). Cloud
- * Scheduler is at-least-once; a same-day retry sees the marker and skips, so a
+ * Dedup: weeklyDigestState/{uid}.lastSentDate (the run's Stockholm date, BIN-350).
+ * Cloud Scheduler is at-least-once; a same-day retry sees the marker and skips, so a
  * user never gets two digests for one Monday. Admin SDK bypasses firestore.rules
  * → the state collection needs no rule; the inbox doc is the user's own.
  */
@@ -27,6 +27,7 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
+import { stockholmDayId } from '../util/dayId';
 import {
   buildLeavingDigest,
   digestPushBody,
@@ -140,7 +141,10 @@ export const weeklyDigestNotify = onSchedule(
   async () => {
     const db = getFirestore();
     const nowMs = Date.now();
-    const runDate = new Date(nowMs).toISOString().slice(0, 10);
+    // BIN-350: Stockholm day-id for the once-per-day dedup bucket. The job already
+    // fires at 09:00 Europe/Stockholm (UTC date == Stockholm date at that hour), so
+    // this is a consistency alignment with the shared helper, not a behavior change.
+    const runDate = stockholmDayId(new Date(nowMs));
 
     let snap;
     try {

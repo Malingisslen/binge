@@ -21,10 +21,10 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
 import { dueRotationEvents, type RotationScheduleItem } from './logic';
-
-function todayIsoUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// BIN-350: the "due today" window compares against user-set cancel/resume dates,
+// which are Stockholm wall-clock dates — so today must be the Stockholm day too,
+// not UTC (a 01:00 local reminder would otherwise fire against yesterday's window).
+import { stockholmDayId } from '../util/dayId';
 
 function parseSchedule(raw: unknown): RotationScheduleItem[] {
   if (!Array.isArray(raw)) return [];
@@ -49,7 +49,7 @@ export const rotationReminderNotify = onSchedule(
   { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '256MiB' },
   async () => {
     const db = getFirestore();
-    const today = todayIsoUtc();
+    const today = stockholmDayId();
 
     let snap;
     try {

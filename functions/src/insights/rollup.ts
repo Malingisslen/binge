@@ -26,6 +26,10 @@ import type { RollupData } from './types';
 // BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
 // they unit-test under the root vitest toolchain — see that file's header.
 import { topTitles, expiredInsightDocIds, type WatchlistLite } from './rollup.helpers';
+// BIN-350: dated history doc-id keys on the Stockholm wall-clock day so it agrees
+// with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
+// the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
+import { stockholmDayId } from '../util/dayId';
 
 /** Page size for the bounded scan (BIN-156) — mirrors the sibling watchlist
  *  scanners (streamingOffers/retentionCleanup/reclaimOrphanFollows). Never
@@ -147,7 +151,13 @@ export const rollupInsights = onSchedule(
   async () => {
     const rollup = await computeRollup();
     const db = getFirestore();
-    const dateId = rollup.computedAt.slice(0, 10);
+    // Stockholm day-id (BIN-350). The same dateId flows into expiredInsightDocIds
+    // below, so the history write + retention sweep stay on one timezone basis.
+    // One-time cutover blip: the day this flips UTC→Stockholm, a single history
+    // doc may land under an adjacent date-id. Harmless — each rollup is a full
+    // current-state snapshot (idempotent), never an additive per-day counter, so
+    // no reporting day is double-counted or dropped.
+    const dateId = stockholmDayId(new Date(rollup.computedAt));
     await Promise.all([
       db.collection('insights').doc('daily').set(rollup),
       db.collection('insights').doc(dateId).set(rollup),

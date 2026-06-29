@@ -9,16 +9,12 @@
  * reaches Firestore: only bucketed counts and fixed filter-type names.
  */
 
-// Stockholm-local YYYY-MM-DD doc-id (BIN-343). Functions run in europe-west1 for
-// Swedish users; a UTC `toISOString().slice(0,10)` misfiles late-night events into
-// the previous day and resets the per-user LLM throttle + global daily budget at
-// 01:00/02:00 local instead of midnight. `sv-SE` is the locale that natively formats
-// as YYYY-MM-DD, and `timeZone` resolves the wall-clock date including DST (CET/CEST).
-// Pure (no firebase-admin) so it unit-tests; the ONE source of truth — stats writer,
-// per-user throttle, daily budget, and the /insikter dashboard range all key off this.
-export function stockholmDayId(date: Date = new Date()): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' }).format(date);
-}
+// Stockholm-local YYYY-MM-DD doc-id (BIN-343). Canonical impl now lives in the
+// shared util so other scheduled functions can key off the same source of truth
+// without importing from askbinge (BIN-350). Re-exported here so this module's
+// callers + tests keep their import path. Keys the stats writer, per-user throttle,
+// daily budget, and the /insikter dashboard range.
+export { stockholmDayId } from '../util/dayId';
 
 // Filter-TYPE names, mirrors src/lib/askBinge/telemetry.ts FILTER_TYPES.
 const FILTER_NAMES = new Set([

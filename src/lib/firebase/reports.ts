@@ -80,7 +80,9 @@ export async function createReport(params: {
   reporterUid: string;
   targetType: ReportTargetType;
   targetId: string;
-  targetOwnerUid: string;
+  // BIN-358: targetOwnerUid skickas INTE längre — submitReport-callablen härleder
+  // det auktoritativt från target-doc:et server-side (BIN-292). Klienten kände
+  // bara till en denormaliserad gissning; ett dött wire som vilseledde läsaren.
   reason: ReportReason;
   note?: string;
 }): Promise<void> {
@@ -112,7 +114,6 @@ export async function createReport(params: {
   await submitReport({
     targetType: params.targetType,
     targetId: params.targetId,
-    targetOwnerUid: params.targetOwnerUid,
     reason: params.reason,
     ...(trimmedNote ? { note: trimmedNote } : {}),
   });

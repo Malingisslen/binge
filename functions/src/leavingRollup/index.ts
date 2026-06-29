@@ -14,6 +14,7 @@ import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { fetchExpiringChanges } from './motnChanges';
 import { buildLeavingRollupFromChanges } from './logic';
+import { stockholmDayId } from '../util/dayId';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
 
@@ -25,7 +26,10 @@ export const leavingRollup = onSchedule(
     const db = getFirestore();
     const nowSec = Math.floor(Date.now() / 1000);
     const toSec = nowSec + WINDOW_DAYS * 24 * 60 * 60;
-    const today = new Date().toISOString().slice(0, 10);
+    // BIN-350: "generated on" label shown to Swedish users → Stockholm wall-clock
+    // day. (The per-title leaving dates inside byProvider come from MOTN's own
+    // timestamps via isoFromUnix and stay UTC — those are data-dates, not a bucket.)
+    const today = stockholmDayId();
 
     const result = await fetchExpiringChanges(nowSec, toSec);
     if (!result) {

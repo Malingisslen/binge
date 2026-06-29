@@ -110,7 +110,6 @@ export function UgcActionsMenu({
         <ReportDialog
           targetType={targetType}
           targetId={targetId}
-          targetOwnerUid={targetOwnerUid}
           onClose={() => setReporting(false)}
         />
       )}
@@ -121,12 +120,10 @@ export function UgcActionsMenu({
 function ReportDialog({
   targetType,
   targetId,
-  targetOwnerUid,
   onClose,
 }: {
   targetType: ReportTargetType;
   targetId: string;
-  targetOwnerUid: string;
   onClose: () => void;
 }) {
   const { uid } = useAuth();
@@ -152,7 +149,6 @@ function ReportDialog({
         reporterUid: uid,
         targetType,
         targetId,
-        targetOwnerUid,
         reason,
         note: note.trim() || undefined,
       });

@@ -15,6 +15,12 @@ const DAILY_CAP = 900; // global OMDb calls/day ceiling (free tier is 1000/day)
 // investigate abuse) BEFORE users start getting stale/exhausted at the cap.
 const ALERT_THRESHOLD = Math.floor(DAILY_CAP * 0.8); // 720
 
+// BIN-350: stays UTC by design — this keys the OMDb daily-budget doc (omdbBudget/{day})
+// that caps us under OMDb's free 1000/day. OMDb resets that quota on its own UTC clock,
+// so the budget bucket MUST mirror the vendor's UTC reset window (same rationale as
+// streamingOffers' motnDay). Migrating it to Stockholm would misalign our counter
+// against OMDb's reset and risk double-spending the cap across the cutover. Do NOT
+// route this through stockholmDayId.
 function today(): string { return new Date().toISOString().slice(0, 10); }
 
 // BIN-346: once-per-day admin notification when OMDb usage approaches the cap.
