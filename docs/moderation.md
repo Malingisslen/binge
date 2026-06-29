@@ -19,10 +19,12 @@ Firestore-collection.
 | `reporterUid` | string | Uid för användaren som rapporterade |
 | `targetType` | string | `review` / `comment` / `user` / `list` |
 | `targetId` | string | Review-id eller `reviews/{reviewId}/comments/{commentId}` för kommentarer |
-| `targetOwnerUid` | string | Uid för ägaren av det rapporterade innehållet |
+| `targetOwnerUid` | string \| null | Ägarens uid — **härleds server-side** från måldokumentet (aldrig klient-skickat, BIN-292). `null` när målet redan raderats/inte kan slås upp |
+| `ownerResolved` | boolean | `true` om ägaren kunde verifieras mot måldokumentet; `false` = ägare okänd (innehållet borttaget) → dashboarden visar "ägare okänd" istället för en `/user`-länk |
 | `reason` | string | `spam` / `hate` / `harassment` / `illegal` / `pii` / `other` |
 | `note` | string \| undefined | Valfri kontext från rapportören (max 500 tecken) |
 | `status` | string | `open` (default), `reviewed`, `actioned`, `dismissed` |
+| `actionedByUid` | string \| undefined | Vilken admin som senast ändrade status (BIN-334) |
 | `createdAt` | Timestamp | Serverklocka |
 
 Klienter kan **inte** skriva till `reports` direkt — regeln är

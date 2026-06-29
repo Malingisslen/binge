@@ -40,7 +40,10 @@ export interface Report {
   reporterUid: string;
   targetType: ReportTargetType;
   targetId: string;
-  targetOwnerUid: string;
+  // BIN-292: server-derived from the real target doc; null when the target was
+  // deleted/unresolvable (ownerResolved=false) rather than a forged client value.
+  targetOwnerUid: string | null;
+  ownerResolved?: boolean;
   reason: ReportReason;
   note?: string;
   status: ReportStatus;
@@ -143,7 +146,8 @@ export async function listReports(options: {
       reporterUid: data.reporterUid as string,
       targetType: data.targetType as ReportTargetType,
       targetId: data.targetId as string,
-      targetOwnerUid: data.targetOwnerUid as string,
+      targetOwnerUid: (data.targetOwnerUid as string | null) ?? null,
+      ownerResolved: data.ownerResolved as boolean | undefined,
       reason: data.reason as ReportReason,
       note: data.note as string | undefined,
       status: data.status as ReportStatus,

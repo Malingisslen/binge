@@ -1,19 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { validateReportInput, isWithinCooldown, REPORT_NOTE_MAX, REPORT_ID_MAX } from './logic';
+import { validateReportInput, isWithinCooldown, resolveTargetRef, REPORT_NOTE_MAX, REPORT_ID_MAX } from './logic';
 
 const base = {
   targetType: 'review',
   targetId: 'rev1',
-  targetOwnerUid: 'owner_uid',
   reason: 'spam',
 };
 
 describe('validateReportInput', () => {
-  it('accepts a well-formed report and strips unknown fields', () => {
-    const r = validateReportInput({ ...base, reporterUid: 'forged', extra: 1 });
+  it('accepts a well-formed report and strips unknown/untrusted fields incl. targetOwnerUid', () => {
+    // BIN-292: a client-sent targetOwnerUid must NOT survive into the validated
+    // value — the callable derives the owner server-side. It's dropped like any
+    // unknown field (alongside the forged reporterUid).
+    const r = validateReportInput({ ...base, reporterUid: 'forged', targetOwnerUid: 'forged_owner', extra: 1 });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value).toEqual(base); // reporterUid + extra dropped — server is authoritative
+      expect(r.value).toEqual(base); // reporterUid + targetOwnerUid + extra all dropped
     }
   });
 
@@ -32,16 +34,13 @@ describe('validateReportInput', () => {
     expect(validateReportInput({ ...base, targetType: 'episode' }).ok).toBe(false);
   });
 
-  it('rejects missing/empty targetId or targetOwnerUid', () => {
+  it('rejects missing/empty targetId', () => {
     expect(validateReportInput({ ...base, targetId: '' }).ok).toBe(false);
     expect(validateReportInput({ ...base, targetId: undefined }).ok).toBe(false);
-    expect(validateReportInput({ ...base, targetOwnerUid: '' }).ok).toBe(false);
   });
 
-  it('rejects oversized id fields (doc-bloat guard)', () => {
+  it('rejects an oversized targetId (doc-bloat guard); exactly at the cap is accepted', () => {
     expect(validateReportInput({ ...base, targetId: 'x'.repeat(REPORT_ID_MAX + 1) }).ok).toBe(false);
-    expect(validateReportInput({ ...base, targetOwnerUid: 'x'.repeat(REPORT_ID_MAX + 1) }).ok).toBe(false);
-    // exactly at the cap is still accepted
     expect(validateReportInput({ ...base, targetId: 'x'.repeat(REPORT_ID_MAX) }).ok).toBe(true);
   });
 
@@ -60,6 +59,28 @@ describe('validateReportInput', () => {
 
   it('rejects a non-string note', () => {
     expect(validateReportInput({ ...base, note: 42 }).ok).toBe(false);
+  });
+});
+
+describe('resolveTargetRef (BIN-292 — server-side owner derivation)', () => {
+  it('user → targetId IS the owner uid (no doc read needed)', () => {
+    expect(resolveTargetRef('user', 'uid123')).toEqual({ kind: 'user', uid: 'uid123' });
+  });
+  it('review → reviews/{id} doc path', () => {
+    expect(resolveTargetRef('review', 'rev1')).toEqual({ kind: 'doc', path: ['reviews', 'rev1'] });
+  });
+  it('list → lists/{id} doc path', () => {
+    expect(resolveTargetRef('list', 'list1')).toEqual({ kind: 'doc', path: ['lists', 'list1'] });
+  });
+  it('comment → parses the packed reviews/{rid}/comments/{cid} path', () => {
+    expect(resolveTargetRef('comment', 'reviews/r1/comments/c1'))
+      .toEqual({ kind: 'doc', path: ['reviews', 'r1', 'comments', 'c1'] });
+  });
+  it('comment with a malformed path → invalid (unresolved, never a crash/wrong-doc read)', () => {
+    expect(resolveTargetRef('comment', 'c1')).toEqual({ kind: 'invalid' });
+    expect(resolveTargetRef('comment', 'reviews/r1/comments/c1/extra')).toEqual({ kind: 'invalid' });
+    expect(resolveTargetRef('comment', 'reviews//comments/c1')).toEqual({ kind: 'invalid' }); // empty reviewId
+    expect(resolveTargetRef('comment', 'users/u1')).toEqual({ kind: 'invalid' }); // wrong collection — can't redirect a read elsewhere
   });
 });
 

@@ -162,7 +162,7 @@ function ReportRow({
           )}
           <div className="text-xxs text-text-muted mt-1">
             Rapporterad av {report.reporterUid.slice(0, 8)} •
-            Target ägare: {report.targetOwnerUid.slice(0, 8)}
+            Target ägare: {report.targetOwnerUid ? report.targetOwnerUid.slice(0, 8) : 'okänd (innehållet borttaget)'}
             {report.actionedByUid && <> • Åtgärdad av {report.actionedByUid.slice(0, 8)}</>}
           </div>
         </div>
@@ -225,7 +225,8 @@ function ReportRow({
 function buildTargetLink(report: Report): string | null {
   switch (report.targetType) {
     case 'user':
-      return `/user/${report.targetOwnerUid}`;
+      // BIN-292: targetOwnerUid can be null (reported account since deleted).
+      return report.targetOwnerUid ? `/user/${report.targetOwnerUid}` : null;
     case 'list':
       return `/list/${report.targetId}`;
     case 'review':
