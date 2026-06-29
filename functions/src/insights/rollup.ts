@@ -22,17 +22,10 @@ import {
   ratingsHistogram,
   tallyTop,
 } from './aggregate';
-import type { RollupData, MediaType } from './types';
-
-interface WatchlistLite {
-  status: string;
-  mediaType: string;
-  rating: number | null;
-  title: string;
-  tmdbId: number;
-  providers: number[];
-  genreIds: number[];
-}
+import type { RollupData } from './types';
+// BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
+// they unit-test under the root vitest toolchain — see that file's header.
+import { topTitles, expiredInsightDocIds, type WatchlistLite } from './rollup.helpers';
 
 /** Page size for the bounded scan (BIN-156) — mirrors the sibling watchlist
  *  scanners (streamingOffers/retentionCleanup/reclaimOrphanFollows). Never
@@ -43,18 +36,6 @@ const PAGE_SIZE = 2000;
 // run; without a sweep it grows one doc/day forever against the 25 SEK cap.
 // 90 days is plenty for the Fas-2 trend charts.
 const RETENTION_DAYS = 90;
-
-/**
- * Of a set of insights doc-ids, which dated-history docs are older than the
- * retention window and should be deleted. Pure (testable): keeps `daily` and any
- * non-date id, and only flags `YYYY-MM-DD` ids strictly before the cutoff
- * (lexicographic compare is chronological for ISO dates). `todayIso` is yyyy-mm-dd.
- */
-export function expiredInsightDocIds(ids: string[], todayIso: string, retentionDays: number): string[] {
-  const cutoffMs = Date.parse(`${todayIso}T00:00:00Z`) - retentionDays * 86_400_000;
-  const cutoff = new Date(cutoffMs).toISOString().slice(0, 10);
-  return ids.filter((id) => /^\d{4}-\d{2}-\d{2}$/.test(id) && id < cutoff);
-}
 
 /** Read every watchlist doc (narrowed fields) across all users, paginated. */
 async function readWatchlist(): Promise<WatchlistLite[]> {
@@ -85,28 +66,6 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
     cursor = snap.docs[snap.docs.length - 1];
   }
   return out;
-}
-
-/** Top tracked titles, keyed by tmdbId so we can carry the denormalized title. */
-export function topTitles(
-  items: WatchlistLite[],
-  limit: number,
-): RollupData['topTitles'] {
-  const byId = new Map<number, { tmdbId: number; mediaType: MediaType; title: string; count: number }>();
-  for (const it of items) {
-    const existing = byId.get(it.tmdbId);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      byId.set(it.tmdbId, {
-        tmdbId: it.tmdbId,
-        mediaType: (it.mediaType === 'tv' ? 'tv' : 'movie') as MediaType,
-        title: it.title,
-        count: 1,
-      });
-    }
-  }
-  return [...byId.values()].sort((a, b) => b.count - a.count).slice(0, limit);
 }
 
 /** Count a collection cheaply with the aggregation API (1 read). */

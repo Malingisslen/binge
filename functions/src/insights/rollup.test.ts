@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { topTitles, expiredInsightDocIds } from './rollup';
+import { topTitles, expiredInsightDocIds } from './rollup.helpers';
 
 // topTitles takes the WatchlistLite shape; only tmdbId/mediaType/title matter here.
 const wl = (tmdbId: number, title: string, mediaType = 'movie') =>
