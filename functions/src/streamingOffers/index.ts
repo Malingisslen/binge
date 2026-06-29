@@ -4,14 +4,21 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth } from './logic';
-import { fetchOffers } from './motn';
+import { fetchOffers, RATE_LIMITED } from './motn';
+import { reserveSlot } from './budget';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
 import type { IntentItem, ExistingOffer, Offer } from './types';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
 const ADMIN_UID = defineSecret('ADMIN_UID');
 
-const DAILY_BUDGET = 95;
+// BIN-320: MOTN free tier is 100 calls/day. DAILY_BUDGET caps a single run's
+// batch; HARD_DAILY_CAP is the absolute ceiling across runs/retries within one
+// UTC day (enforced by the persisted motnBudget/{utcDay} counter). 10-call
+// buffer under 100 absorbs the UTC-midnight straddle + the crash-retry path
+// (failed calls still burn vendor quota, so they count against the cap too).
+const DAILY_BUDGET = 85;
+const HARD_DAILY_CAP = 90;
 const PAGE_SIZE = 2000;
 
 /** Scan all watchlist docs, narrowed, and keep only intent titles, deduped. */
@@ -92,6 +99,18 @@ export const streamingOffersRefresh = onSchedule(
       return;
     }
 
+    // BIN-320: daily MOTN-quota counter keyed by UTC day. MOTN's 100/day resets
+    // on RapidAPI's clock = UTC, so this MUST be a UTC day-id — deliberately
+    // NOT the Stockholm day-id askbinge uses (that's a product-facing per-day
+    // budget; this mirrors the vendor's UTC reset window). Don't "harmonize".
+    const motnDay = new Date(nowMs).toISOString().slice(0, 10);
+    const budgetRef = db.collection('motnBudget').doc(motnDay);
+    const usedToday = ((await budgetRef.get()).get('count') as number | undefined) ?? 0;
+    if (usedToday >= HARD_DAILY_CAP) {
+      logger.warn('streamingOffersRefresh: MOTN daily cap already reached — skipping run', { motnDay, usedToday });
+      return;
+    }
+
     const workSet = await readWorkSet();
     const existing = await readExisting();
     const batch = selectRefreshBatch(workSet, existing, nowMs, DAILY_BUDGET);
@@ -99,9 +118,30 @@ export const streamingOffersRefresh = onSchedule(
     const mediaById = new Map(workSet.map((w) => [w.tmdbId, w.mediaType]));
     let written = 0;
     for (const tmdbId of batch) {
+      // Reserve a MOTN slot for the UTC day BEFORE spending the call (a crash +
+      // Scheduler retry can't overshoot 100). Never refunded on failure — the
+      // vendor counts the request, not the success.
+      const granted = await db.runTransaction(async (tx) => {
+        const used = ((await tx.get(budgetRef)).get('count') as number | undefined) ?? 0;
+        const d = reserveSlot(used, HARD_DAILY_CAP);
+        if (d.granted) tx.set(budgetRef, { count: d.next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return d.granted;
+      });
+      if (!granted) {
+        logger.warn('streamingOffersRefresh: MOTN daily cap reached mid-run — stopping', { motnDay });
+        break;
+      }
       const mediaType = mediaById.get(tmdbId)!;
-      const offers = await fetchOffers(tmdbId, mediaType);
-      if (offers === null) continue; // failure -> retry next run
+      const result = await fetchOffers(tmdbId, mediaType);
+      if (result === RATE_LIMITED) {
+        // 429: quota/rate gone for the day. Burn the bucket to the cap so a
+        // Scheduler retry won't resume hammering into the rate limit.
+        await budgetRef.set({ count: HARD_DAILY_CAP, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        logger.warn('streamingOffersRefresh: MOTN 429 — bucket burned, stopping run', { motnDay });
+        break;
+      }
+      if (result === null) continue; // per-title failure -> retry next run
+      const offers = result;
       await db.collection('streamingOffers').doc(String(tmdbId)).set({
         tmdbId, mediaType, offers, checkedAt: nowMs, source: 'motn',
       });
