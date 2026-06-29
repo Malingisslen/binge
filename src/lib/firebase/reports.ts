@@ -46,6 +46,9 @@ export interface Report {
   status: ReportStatus;
   createdAt: Date;
   updatedAt?: Date;
+  // BIN-334: which admin last changed the status (audit trail). Absent on
+  // reports created before this shipped / never actioned.
+  actionedByUid?: string;
 }
 
 // Matchar cooldownen i submitReport-callablen (BIN-49). Klient-checken är bara
@@ -146,17 +149,23 @@ export async function listReports(options: {
       status: data.status as ReportStatus,
       createdAt: toDate(data.createdAt),
       updatedAt: data.updatedAt ? toDate(data.updatedAt) : undefined,
+      actionedByUid: data.actionedByUid as string | undefined,
     };
   });
 }
 
+// BIN-334: record which admin actioned the report. actionedByUid is the
+// acting admin's uid (passed from auth by the caller) — the reports update
+// rule already permits adding audit fields like this. updatedAt is the when.
 export async function updateReportStatus(
   reportId: string,
   status: ReportStatus,
+  actionedByUid: string,
 ): Promise<void> {
   const { db, doc, updateDoc, serverTimestamp } = await fsdb();
   await updateDoc(doc(db, 'reports', reportId), {
     status,
+    actionedByUid,
     updatedAt: serverTimestamp(),
   });
 }

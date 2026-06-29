@@ -50,6 +50,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
 }
 
 function ReportsDashboard() {
+  const { uid } = useAuth(); // only rendered inside AdminGate → an authed admin
   const { show: toast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportStatus>('open');
   const [reports, setReports] = useState<Report[]>([]);
@@ -76,8 +77,9 @@ function ReportsDashboard() {
   }, [activeTab]);
 
   const handleAction = async (reportId: string, newStatus: ReportStatus) => {
+    if (!uid) return; // admin UI only renders for an authed admin; guard for the audit uid
     try {
-      await updateReportStatus(reportId, newStatus);
+      await updateReportStatus(reportId, newStatus, uid);
       toast(`Rapport markerad som ${REPORT_STATUS_LABELS[newStatus].toLowerCase()}`);
       void load(activeTab);
     } catch {
@@ -161,6 +163,7 @@ function ReportRow({
           <div className="text-xxs text-text-muted mt-1">
             Rapporterad av {report.reporterUid.slice(0, 8)} •
             Target ägare: {report.targetOwnerUid.slice(0, 8)}
+            {report.actionedByUid && <> • Åtgärdad av {report.actionedByUid.slice(0, 8)}</>}
           </div>
         </div>
         <div className="flex flex-col gap-1 shrink-0">
