@@ -25,11 +25,11 @@ describe('resolveBatch — BIN-146 checkpoint crosses the interval (not exact mu
       checkpoint: cp.fn, concurrency: CONCURRENCY, checkpointInterval: INTERVAL,
     });
     expect(res.newlyResolved).toBe(60);
-    expect(res.checkpoints).toBe(1);
-    expect(cp.at).toEqual([54]); // 6,12,…,48,54 → first chunk to cross 50 is 54
+    expect(res.checkpoints).toBe(2); // in-loop cross at 54 + BIN-351 final flush at 60
+    expect(cp.at).toEqual([54, 60]); // first chunk to cross 50 is 54; flush the 54→60 remainder
   });
 
-  it('re-arms the interval for a second cross (two checkpoints over 120)', async () => {
+  it('re-arms the interval for a second cross (two crosses + final flush over 120)', async () => {
     const imdbMap: ImdbMap = {};
     const cp = recordingCheckpoint();
     const res = await resolveBatch({
@@ -37,8 +37,8 @@ describe('resolveBatch — BIN-146 checkpoint crosses the interval (not exact mu
       resolve: async () => 1, checkpoint: cp.fn,
       concurrency: CONCURRENCY, checkpointInterval: INTERVAL,
     });
-    expect(res.checkpoints).toBe(2);
-    expect(cp.at).toEqual([54, 108]); // cross 1 at 54, then 54+≥50 → 108
+    expect(res.checkpoints).toBe(3);
+    expect(cp.at).toEqual([54, 108, 120]); // crosses at 54, 108; BIN-351 final flush at 120
   });
 });
 
@@ -52,8 +52,8 @@ describe('resolveBatch — terminal-value semantics', () => {
       concurrency: CONCURRENCY, checkpointInterval: INTERVAL,
     });
     expect(res.newlyResolved).toBe(60);
-    expect(res.checkpoints).toBe(1);
-    expect(cp.at).toEqual([54]);
+    expect(res.checkpoints).toBe(2); // cross at 54 + BIN-351 final flush at 60
+    expect(cp.at).toEqual([54, 60]);
     expect(Object.values(imdbMap).every(v => v === 'NOT_FOUND')).toBe(true);
   });
 
@@ -67,7 +67,7 @@ describe('resolveBatch — terminal-value semantics', () => {
     });
     expect(res.newlyResolved).toBe(2); // a, c counted; b (null) not
     expect(imdbMap).toEqual({ a: 7, b: null, c: 7 });
-    expect(cp.at).toEqual([]); // 2 < 50 → no checkpoint
+    expect(cp.at).toEqual([2]); // BIN-351: no in-loop cross (2<50), but final flush at 2
   });
 });
 
@@ -86,17 +86,32 @@ describe('resolveBatch — only unresolved titles are retried', () => {
   });
 });
 
-describe('resolveBatch — final partial batch is not lost in memory', () => {
-  it('leaves every resolved entry in imdbMap even when the last batch never crosses', async () => {
+describe('resolveBatch — BIN-351 final flush of a sub-interval remainder', () => {
+  it('a sub-interval batch (7 resolved, interval 50) writes exactly 1 final checkpoint (was 0)', async () => {
     const imdbMap: ImdbMap = {};
+    const cp = recordingCheckpoint();
     const res = await resolveBatch({
       titles: titles(7), imdbMap,
-      resolve: async () => 3, checkpoint: async () => {},
+      resolve: async () => 3, checkpoint: cp.fn,
       concurrency: CONCURRENCY, checkpointInterval: INTERVAL,
     });
     expect(res.newlyResolved).toBe(7);
-    expect(res.checkpoints).toBe(0); // 7 < 50 → never checkpointed...
-    expect(Object.keys(imdbMap)).toHaveLength(7); // ...but all 7 are in the in-memory map
+    expect(res.checkpoints).toBe(1); // BIN-351: final flush persists the remainder (was 0)
+    expect(cp.at).toEqual([7]);      // flushed at the final resolved count
+    expect(Object.keys(imdbMap)).toHaveLength(7);
+  });
+
+  it('writes NO final checkpoint when nothing newly resolves (all cached terminal)', async () => {
+    const imdbMap: ImdbMap = { a: 5, b: 'NOT_FOUND' };
+    const cp = recordingCheckpoint();
+    const res = await resolveBatch({
+      titles: [{ imdbId: 'a' }, { imdbId: 'b' }], imdbMap,
+      resolve: async () => 9, checkpoint: cp.fn,
+      concurrency: CONCURRENCY, checkpointInterval: INTERVAL,
+    });
+    expect(res.newlyResolved).toBe(0);
+    expect(res.checkpoints).toBe(0); // newlyResolved === lastCheckpointed (0) → guard skips flush
+    expect(cp.at).toEqual([]);
   });
 });
 

@@ -39,6 +39,23 @@ interface WatchlistLite {
  *  materialize the whole collection-group in one query result. */
 const PAGE_SIZE = 2000;
 
+// BIN-326: keep dated history bounded. insights/{YYYY-MM-DD} is written every
+// run; without a sweep it grows one doc/day forever against the 25 SEK cap.
+// 90 days is plenty for the Fas-2 trend charts.
+const RETENTION_DAYS = 90;
+
+/**
+ * Of a set of insights doc-ids, which dated-history docs are older than the
+ * retention window and should be deleted. Pure (testable): keeps `daily` and any
+ * non-date id, and only flags `YYYY-MM-DD` ids strictly before the cutoff
+ * (lexicographic compare is chronological for ISO dates). `todayIso` is yyyy-mm-dd.
+ */
+export function expiredInsightDocIds(ids: string[], todayIso: string, retentionDays: number): string[] {
+  const cutoffMs = Date.parse(`${todayIso}T00:00:00Z`) - retentionDays * 86_400_000;
+  const cutoff = new Date(cutoffMs).toISOString().slice(0, 10);
+  return ids.filter((id) => /^\d{4}-\d{2}-\d{2}$/.test(id) && id < cutoff);
+}
+
 /** Read every watchlist doc (narrowed fields) across all users, paginated. */
 async function readWatchlist(): Promise<WatchlistLite[]> {
   const db = getFirestore();
@@ -71,7 +88,7 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
 }
 
 /** Top tracked titles, keyed by tmdbId so we can carry the denormalized title. */
-function topTitles(
+export function topTitles(
   items: WatchlistLite[],
   limit: number,
 ): RollupData['topTitles'] {
@@ -176,11 +193,31 @@ export const rollupInsights = onSchedule(
       db.collection('insights').doc('daily').set(rollup),
       db.collection('insights').doc(dateId).set(rollup),
     ]);
+
+    // BIN-326: sweep dated history older than the retention window so the
+    // collection can't grow unbounded. listDocuments() returns refs without
+    // per-doc reads; best-effort (a failed sweep never blocks the rollup write).
+    let pruned = 0;
+    try {
+      const refs = await db.collection('insights').listDocuments();
+      const expired = new Set(expiredInsightDocIds(refs.map((r) => r.id), dateId, RETENTION_DAYS));
+      const toDelete = refs.filter((r) => expired.has(r.id));
+      if (toDelete.length > 0) {
+        const batch = db.batch();
+        for (const ref of toDelete) batch.delete(ref);
+        await batch.commit();
+        pruned = toDelete.length;
+      }
+    } catch (err) {
+      logger.error('rollup: history retention sweep failed', err);
+    }
+
     logger.info('rollup written', {
       titlesTracked: rollup.totals.titlesTracked,
       users: rollup.totals.users,
       readsUsed: rollup.readsUsed,
       partial: rollup.partial,
+      prunedHistoryDocs: pruned,
     });
   },
 );

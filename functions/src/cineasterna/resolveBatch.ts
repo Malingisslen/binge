@@ -23,9 +23,10 @@ export interface ResolveBatchResult {
  *  - BIN-146: checkpoint when CROSSING another `checkpointInterval` since the last —
  *    NOT on exact multiples (newlyResolved steps by up to `concurrency`, so it rarely
  *    lands on a multiple; the old `% interval === 0` guard almost never fired).
- *  - no final checkpoint after the loop (preserved): the caller builds the catalog
- *    from the in-memory imdbMap; checkpoints are only a cross-run cache + timeout
- *    survival. (The missing final write is tracked as a separate follow-up.)
+ *  - BIN-351: a FINAL checkpoint after the loop flushes any sub-interval remainder
+ *    (newlyResolved advanced but didn't cross another checkpointInterval). Without
+ *    it, a timeout before the caller persists the catalog re-resolves that remainder
+ *    next run — the cross-run cache gap this checkpoint exists to close.
  *
  * `Promise.all` per chunk is fail-fast: if a `resolve` rejects, the whole batch
  * rejects (the scheduled run fails and retries next week). resolveTmdbId never throws
@@ -63,6 +64,16 @@ export async function resolveBatch(opts: {
       lastCheckpointed = newlyResolved;
       checkpoints++;
     }
+  }
+
+  // BIN-351: final flush of any sub-interval remainder (e.g. 7 resolved with a
+  // 50 interval → 0 in-loop checkpoints → this writes 1). Guarded on a real
+  // advance so an empty/all-cached batch (newlyResolved === lastCheckpointed)
+  // writes nothing.
+  if (newlyResolved > lastCheckpointed) {
+    await checkpoint(newlyResolved);
+    lastCheckpointed = newlyResolved;
+    checkpoints++;
   }
 
   return { newlyResolved, checkpoints };
