@@ -42,6 +42,14 @@ export const titleRatings = onCall(
     const imdbId = String((request.data as { imdbId?: unknown })?.imdbId ?? '');
     if (!IMDB_RE.test(imdbId)) throw new HttpsError('invalid-argument', 'Ogiltigt IMDb-id.');
 
+    // BIN-361: App Check MONITORING (not enforcement). request.app is populated
+    // when a valid App Check token rode along, undefined otherwise — logging it
+    // lets us measure the verified rate of REAL titleRatings calls before ever
+    // flipping enforceAppCheck. A callable is invoked after the client has minted
+    // its token, so this rate should be high (unlike cold-load Firestore reads).
+    // Rejects nothing; safe to ship.
+    logger.info('titleRatings: appcheck-coverage', { appCheckVerified: !!request.app });
+
     const db = getFirestore();
     const ref = db.collection('titleRatings').doc(imdbId);
     const now = Date.now();
