@@ -479,6 +479,99 @@ describe('episodeReactions/{key}/reactions/{id} (BIN-95)', () => {
   });
 });
 
+// BIN-279 — deny-path coverage for two guards that fail SILENTLY if a future
+// rules edit breaks them: matchesOwnIdentity (a user must not author a review or
+// reaction wearing another user's displayName/username) and reports read
+// (admin-only). Each deny is paired with a positive twin so a rejection can only
+// come from the guard under test, never from schema drift / a whitelist failure.
+describe('BIN-279 — review/reaction identity forgery (matchesOwnIdentity)', () => {
+  // matchesOwnIdentity reads users/{auth.uid}; seed the writer's OWN profile with
+  // a known identity so a mismatching displayName/username on the doc is the only
+  // thing that can fail the write. Without this seed both sides are null and the
+  // guard short-circuits — the test would pass for the wrong reason.
+  async function seedOwnerIdentity() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), {
+        displayName: 'Äkta Ägaren', username: 'owner',
+        isPublic: true, defaultVisibility: 'public',
+      });
+    });
+  }
+
+  it('rejects a review carrying a displayName that is not the writer’s own', async () => {
+    await seedOwnerIdentity();
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r1'), {
+      ...validReview(OWNER), displayName: 'Någon Annan',
+    }));
+  });
+  it('rejects a review carrying a username that is not the writer’s own', async () => {
+    await seedOwnerIdentity();
+    await assertFails(setDoc(doc(ownerDb(), 'reviews', 'r1'), {
+      ...validReview(OWNER), username: 'impostor',
+    }));
+  });
+  it('allows a review whose displayName/username match the writer’s profile (positive control)', async () => {
+    await seedOwnerIdentity();
+    await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r1'), {
+      ...validReview(OWNER), displayName: 'Äkta Ägaren', username: 'owner',
+    }));
+  });
+  it('rejects a reaction carrying a forged displayName', async () => {
+    await seedOwnerIdentity();
+    await assertFails(setDoc(doc(ownerDb(), 'episodeReactions', '1399_1_3', 'reactions', 'rx1'), {
+      ...validReaction(OWNER), displayName: 'Någon Annan',
+    }));
+  });
+  it('rejects a reaction carrying a username that is not the writer’s own', async () => {
+    // isValidReaction calls matchesOwnIdentity independently of isValidReview, so
+    // a rules fork that patched only the reaction path would slip past the review
+    // username test — keep the reaction block's coverage symmetric.
+    await seedOwnerIdentity();
+    await assertFails(setDoc(doc(ownerDb(), 'episodeReactions', '1399_1_3', 'reactions', 'rx3'), {
+      ...validReaction(OWNER), username: 'impostor',
+    }));
+  });
+  it('allows a reaction whose identity matches the writer’s profile (positive control)', async () => {
+    await seedOwnerIdentity();
+    await assertSucceeds(setDoc(doc(ownerDb(), 'episodeReactions', '1399_1_3', 'reactions', 'rx2'), {
+      ...validReaction(OWNER), displayName: 'Äkta Ägaren', username: 'owner',
+    }));
+  });
+});
+
+describe('BIN-279 — reports read is admin-only', () => {
+  const ADMIN = 'admin_uid';
+  function adminDb() { return testEnv.authenticatedContext(ADMIN).firestore(); }
+  async function seedReport() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reports', 'rep1'), {
+        reporterUid: 'someone_uid', targetType: 'review', targetId: 'rev1',
+        targetOwnerUid: 'victim_uid', reason: 'spam', status: 'open',
+        createdAt: serverTimestamp(),
+      });
+    });
+  }
+  async function makeAdmin() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', ADMIN), { isAdmin: true });
+    });
+  }
+
+  it('denies a signed-in non-admin reading a report', async () => {
+    await seedReport();
+    await assertFails(getDoc(doc(ownerDb(), 'reports', 'rep1')));
+  });
+  it('denies an unauthenticated user reading a report', async () => {
+    await seedReport();
+    await assertFails(getDoc(doc(anonDb(), 'reports', 'rep1')));
+  });
+  it('allows an admin (users/{uid}.isAdmin == true) to read a report', async () => {
+    await seedReport();
+    await makeAdmin();
+    await assertSucceeds(getDoc(doc(adminDb(), 'reports', 'rep1')));
+  });
+});
+
 // BIN-100: collaborative lists — owner manages editors[], editors edit items only.
 async function seedCollabList(listId: string, opts: { isPublic: boolean; editors: string[] }) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {

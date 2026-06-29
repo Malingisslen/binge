@@ -126,7 +126,7 @@ export default function VillkorPage() {
           bevakningslista, avsnittsframsteg, betyg och anteckningar,
           notifikationer, dina recensioner (inklusive likes och kommentarer),
           dina kommentarer och likes på andras recensioner, dina listor, dina
-          Tillsammans-sessioner, grupper du äger, dina vän- och
+          Tillsammans-sessioner, grupper du äger, blockeringar, dina vän- och
           följar-relationer, push-notistoken och din användarnamns-reservation.
           Grupper du bara är medlem i lämnar du automatiskt. Även publikt
           innehåll raderas helt — det anonymiseras inte. Se{' '}
