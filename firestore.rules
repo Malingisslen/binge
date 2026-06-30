@@ -647,11 +647,40 @@ service cloud.firestore {
         (
           resource.data.ownerUid == request.auth.uid
           && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          // BIN-276: the owner branch is the ONLY legit rename path (updateGroup
+          // patches name/defaults), so name/defaults stay mutable here — but pin
+          // identity + invite-token fields so a member-remove write can't also
+          // force-transfer ownerUid onto a victim or silently swap the invite
+          // hash. Mirrors the pins on the leave/join/accept branches.
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && (!('inviteTokenHash' in request.resource.data)
+            || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
+          && (!('inviteTokenRotatedAt' in resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+        )
+        || (
+          // Token-rotation / disable (rotateInviteToken + disableInviteToken in
+          // groups.ts). The owner branch above PINS inviteTokenHash so a
+          // membership edit can't silently swap it — but these legit owner flows
+          // DO change the hash, so they get their own branch. Everything except
+          // the token fields stays pinned, so this can't double as a membership/
+          // ownership/settings edit (a member-remove + hash-swap changes
+          // memberUids → fails the pin here AND the hash pin on the owner branch).
+          resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.memberUids == resource.data.memberUids
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.defaults == resource.data.defaults
         )
         || (
           // Medlem lämnar — tar bort sig själv
           request.auth.uid in resource.data.memberUids
           && !(request.auth.uid in request.resource.data.memberUids)
+          // BIN-327: leave may only SHRINK memberUids. Without this a leaving
+          // member could set memberUids to a superset — injecting an arbitrary
+          // uid as they exit, an uncapped growth path that bypasses the join/
+          // accept size cap. hasAll(new ⊆ old) confines this branch to removal.
+          && resource.data.memberUids.hasAll(request.resource.data.memberUids)
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
@@ -667,6 +696,10 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/groups/$(groupId)/joinAttempts/$(request.auth.uid))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
+          // BIN-327: bound the only two growth paths (join + accept) so memberUids
+          // can't be inflated toward the 1 MiB doc limit / read-amplified on every
+          // membership get(). size() is an in-payload check — zero extra get() cost.
+          && request.resource.data.memberUids.size() <= 100
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
@@ -683,6 +716,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/users/$(request.auth.uid)/groupInvites/$(groupId))
           && !(request.auth.uid in resource.data.memberUids)
           && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.memberUids.size() <= 100   // BIN-327 (see join branch)
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults

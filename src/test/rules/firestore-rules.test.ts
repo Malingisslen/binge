@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
@@ -569,6 +570,159 @@ describe('BIN-279 — reports read is admin-only', () => {
     await seedReport();
     await makeAdmin();
     await assertSucceeds(getDoc(doc(adminDb(), 'reports', 'rep1')));
+  });
+});
+
+// BIN-276 / BIN-327 — groups owner-update hardening + memberUids growth caps.
+// The group permission block (two-step hash-verified token join, consent-based
+// invite-accept, owner-can-only-shrink guard, self-leave, sessionHistory
+// anti-forge) is the highest-complexity surface in the file and previously had
+// ZERO rule tests. Each deny is paired with a positive twin. sha256Hex mirrors
+// the rules' hashing.sha256(token).toHexString().lower() exactly.
+const GROUP = 'grp1';
+const sha256Hex = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
+
+async function seedGroup(over: Record<string, unknown> = {}) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+      ownerUid: OWNER, memberUids: [OWNER], name: 'Filmklubben',
+      defaults: { region: 'SE' }, inviteTokenHash: null, inviteTokenRotatedAt: null,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...over,
+    });
+  });
+}
+// The group-update join branch only checks that joinAttempts/{uid} EXISTS — the
+// hash gate lives on the joinAttempts CREATE rule (tested separately). Seal one
+// directly so the membership-add tests isolate the group-update branch.
+async function sealJoinAttempt(uid: string) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'joinAttempts', uid), {
+      token: 'plain', createdAt: serverTimestamp(),
+    });
+  });
+}
+async function seedInvite(uid: string) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users', uid, 'groupInvites', GROUP), {
+      groupId: GROUP, createdAt: serverTimestamp(),
+    });
+  });
+}
+
+describe('groups/{id} owner-update hardening (BIN-276)', () => {
+  it('owner can remove a member (shrink memberUids)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+  });
+  it('owner can still rename — name/defaults stay mutable (carve-out)', async () => {
+    await seedGroup();
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { name: 'Nya namnet', defaults: { region: 'NO' } }));
+  });
+  it('owner cannot force-transfer ownership onto another uid', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2'] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { ownerUid: 'victim_uid' }));
+  });
+  it('owner cannot rewrite inviteTokenHash on a member-edit write', async () => {
+    await seedGroup({ inviteTokenHash: 'aaa', memberUids: [OWNER, 'm2'] });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [OWNER], inviteTokenHash: 'bbb' }));
+  });
+  it('owner cannot add an arbitrary member uid (hasAll = shrink-only)', async () => {
+    await seedGroup();
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [OWNER, 'stranger'] }));
+  });
+  // The owner branch pins inviteTokenHash, so rotation/disable need their own
+  // branch — these prove the legit owner flows (rotateInviteToken/disableInviteToken)
+  // still work while membership/ownership stay pinned.
+  it('owner can rotate the invite token (hash + rotatedAt change)', async () => {
+    await seedGroup({ inviteTokenHash: 'oldhash' });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      inviteTokenHash: 'newhash', inviteTokenRotatedAt: serverTimestamp(),
+    }));
+  });
+  it('owner can disable the invite token (hash → null)', async () => {
+    await seedGroup({ inviteTokenHash: 'oldhash' });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { inviteTokenHash: null }));
+  });
+  it('a non-owner member cannot rotate the invite token', async () => {
+    await seedGroup({ inviteTokenHash: 'oldhash', memberUids: [OWNER, 'other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { inviteTokenHash: 'newhash' }));
+  });
+});
+
+describe('groups/{id} leave branch — shrink-only (BIN-327)', () => {
+  it('a member can leave (removes only themselves)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+  });
+  it('a leaving member cannot inject a new uid as they exit (cap-bypass guard)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'stranger'] }));
+  });
+});
+
+describe('groups joinAttempts hash gate (BIN-327)', () => {
+  const TOKEN = 'secret-token-123';
+  it('accepts a joinAttempt whose token hashes to inviteTokenHash', async () => {
+    await seedGroup({ inviteTokenHash: sha256Hex(TOKEN) });
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN, createdAt: serverTimestamp(),
+    }));
+  });
+  it('rejects a joinAttempt with the wrong token', async () => {
+    await seedGroup({ inviteTokenHash: sha256Hex(TOKEN) });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: 'wrong-token', createdAt: serverTimestamp(),
+    }));
+  });
+});
+
+describe('groups token-join membership add + size cap (BIN-327)', () => {
+  it('a joiner with a sealed joinAttempt can add themselves', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+  it('the 100th member can join', async () => {
+    const base99 = [OWNER, ...Array.from({ length: 98 }, (_, i) => `u${i}`)];
+    await seedGroup({ memberUids: base99 });
+    await sealJoinAttempt('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [...base99, 'other_uid'] }));
+  });
+  it('a join that would make memberUids exceed 100 is denied', async () => {
+    const base100 = [OWNER, ...Array.from({ length: 99 }, (_, i) => `v${i}`)];
+    await seedGroup({ memberUids: base100 });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [...base100, 'other_uid'] }));
+  });
+});
+
+describe('groups invite-accept (BIN-327)', () => {
+  it('an invitee with a groupInvite can accept (add self)', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+  it('without a groupInvite, accept is denied', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+  });
+});
+
+describe('groups sessionHistory pickedByUid anti-forge', () => {
+  const validPick = {
+    sessionId: 's1', pickedByUid: 'other_uid', pickedTmdbId: 603, mediaType: 'movie',
+    mediaTitle: 'The Matrix', posterPath: null, participantUids: ['owner_uid', 'other_uid'],
+    pickedAt: serverTimestamp(),
+  };
+  it('a member can log a pick attributed to themselves', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertSucceeds(setDoc(doc(otherDb(), 'groups', GROUP, 'sessionHistory', 's1'), validPick));
+  });
+  it('a member cannot forge a pick as another user', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'] });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'sessionHistory', 's2'), {
+      ...validPick, sessionId: 's2', pickedByUid: OWNER,
+    }));
   });
 });
 
