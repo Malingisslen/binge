@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-06-01"
-      version="1.0"
+      lastUpdated="2026-06-30"
+      version="1.1"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -107,6 +107,15 @@ export default function IntegritetPage() {
             anonymiseras inte — det raderas helt. Återställning är inte möjlig
             efter 7 dagar (Firestore Point-in-Time Recovery-fönstret).
           </li>
+          <li>
+            <strong>Ett undantag från raderingen:</strong> om du har anmält
+            innehåll för moderering kan själva anmälan sparas i moderationssyfte
+            även efter att du raderat ditt konto — det vill säga ditt interna
+            användar-id, vilket skäl du angav och en eventuell kommentar du
+            skrev. Det gör vi för att kunna hantera missbruk och försvara
+            moderationsbeslut (GDPR art. 17.3). Anmälan är aldrig publik och
+            syns bara för administratörer.
+          </li>
         </ul>
       </section>
 
@@ -118,7 +127,7 @@ export default function IntegritetPage() {
         <ul>
           <li>Få tillgång till de personuppgifter vi har om dig (art. 15) — ladda ner via <em>Inställningar → Exportera min data</em>, eller kontakta oss.</li>
           <li>Få felaktiga uppgifter rättade (art. 16) — de flesta fält kan du ändra själv i inställningarna.</li>
-          <li>Få dina uppgifter raderade (art. 17) — <em>Inställningar → Ta bort konto</em> raderar allt omedelbart.</li>
+          <li>Få dina uppgifter raderade (art. 17) — <em>Inställningar → Ta bort konto</em> raderar allt omedelbart (med ett undantag för anmälningar du gjort, se §6).</li>
           <li>Få en kopia i maskinläsbart JSON-format (art. 20) — <em>Inställningar → Exportera min data</em>.</li>
           <li>Invända mot behandling som stöds av berättigat intresse (art. 21).</li>
           <li>Lämna klagomål till Integritetsskyddsmyndigheten (IMY, <a href="https://www.imy.se" target="_blank" rel="noopener noreferrer">imy.se</a>).</li>

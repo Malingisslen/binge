@@ -73,6 +73,43 @@ export interface UserDataSnapshots {
   groupsSnap: QuerySnapshot;
 }
 
+/**
+ * The owner-owned `users/{uid}/<name>` subcollections this helper reads — the
+ * single source of truth for the GDPR subcollection-enumeration guard
+ * (`userData.subcollections.test.ts`, BIN-347).
+ *
+ * The guard asserts this list is set-EQUAL to the `users/{uid}/*` paths
+ * declared in `firestore.rules` AND to the `collection(db, 'users', uid, …)`
+ * reads below. That closes the BIN-277/joinAttempts *whole-collection-miss*:
+ * a new `users/{uid}/<x>` collection added to rules but never wired into this
+ * helper never becomes a `keyof UserDataSnapshots`, so the compile-time
+ * coverage gate (`dataExport.coverage.test.ts`) can't see it — but the rules↔
+ * list equality check goes red. Keeping the list HERE (next to the reads it
+ * mirrors) means it can't drift into a third hand-maintained mirror.
+ *
+ * Known, deliberately-NOT-closed gap: a subcollection created only via the
+ * Firebase Console (never declared in rules) is invisible to both checks; the
+ * scheduled `retentionCleanup` sweep is the reaper-owned backstop for that.
+ */
+export const KNOWN_USER_SUBCOLLECTIONS = [
+  'watchlist',
+  'episodeProgress',
+  'notInterested',
+  'pauseHistory',
+  'blocked',
+  'listFollows',
+  'notifications',
+  'fcmTokens',
+  'reportMeta',
+  'askBingeMeta',
+  'following',
+  'followers',
+  'friends',
+  'friendRequests',
+  'friendRequestsSent',
+  'groupInvites',
+] as const;
+
 export async function collectUserDataSnapshots(uid: string): Promise<UserDataSnapshots> {
   const { db, collection, collectionGroup, doc, documentId, getDoc, getDocs, query, where } = await fsdb();
   const [
