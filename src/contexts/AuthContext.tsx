@@ -706,6 +706,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refs.push(sessionDoc.ref);
     }
 
+    // INTENTIONALLY NOT cascaded: reports/{reportId}. Moderation reports store
+    // reporterUid but are deliberately retained on account deletion under GDPR
+    // Art. 17(3) (legitimate interest in abuse-handling / legal claims). Rules
+    // set `allow delete: if false`, so a client cascade is impossible anyway.
+    // Decision + retention basis documented in docs/data-retention-policy.md
+    // ("Moderationsrapporter → Retention", BIN-277) — do not "fix" this as a
+    // missing-cascade bug.
+
     // 6. Groups: if I'm owner, delete the whole group + subcollections.
     //    If I'm a member, just remove myself from memberUids and delete my member doc.
     //    Rules update-branch forces us to keep other fields unchanged when

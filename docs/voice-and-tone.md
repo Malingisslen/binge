@@ -124,11 +124,16 @@ En term per koncept. Använd dessa, inga synonymer.
 | Återuppta tjänst | **återuppta** | starta igen |
 | Användarens lista | **bibliotek** | watchlist, samling, kollektion |
 | Veckans nya avsnitt | **avsnittkalender** eller bara **kalender** | schedule, programplan |
-| Streamingrådgivare-feature | **Sparande** (alltid) | Streamingrådgivare, Sparrådgivare, Advisor |
+| Streamingrådgivar-feature | **Streamingrådgivaren** (alltid) | Sparande (endast kodnamn), Sparrådgivare, Advisor |
 | Rekommendationer | **rekommendationer** | förslag, tips, vad ska jag se |
 | Sökning i app | **sök** (verb) / **sökning** (substantiv) | utforska (för det är en separat sida) |
 
 `tracka` förekommer i kod och kommentarer — bra. I användarvänd copy: använd `lägga till` eller `följa`.
+
+`Sparande` lever bara i kod-/komponentnamn (`SparandeTile`, `SpendSnapshotTile`) —
+aldrig i användarvänd copy. Där heter featuren **Streamingrådgivaren**, vilket matchar
+hela det shippade UI:t + integritetspolicyn (BIN-363). Den tidigare `Sparande`-regeln
+här motsade produkten och är därför struken.
 
 ---
 

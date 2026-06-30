@@ -80,6 +80,32 @@ Så vid radering:
 - `lists/{listId}` där `uid == me` → **delete**
 - `sessions/{sessionId}` där `hostUid == me` → **delete**
 
+### Moderationsrapporter → Retention (Art. 17(3))
+
+`reports/{reportId}` (UGC-rapporter, skapas via `submitReport`,
+`src/lib/firebase/reports.ts`) är det medvetna UNDANTAGET från
+raderingscascaden: `deleteAccount` rör dem aldrig, och `firestore.rules`
+sätter `allow delete: if false` så klienten kan aldrig radera dem. Varje
+rapport lagrar `reporterUid` (härlett från auth vid inskick), så en raderad
+användares uid lever kvar i `reports/`.
+
+**Beslut (BIN-277): behåll, anonymisera inte.** Rättslig grund: GDPR
+Art. 17(3) — rätten till radering väger inte över när behandlingen behövs för
+(b) att fullgöra en rättslig förpliktelse respektive (e) att fastställa, göra
+gällande eller försvara rättsliga anspråk, samt det berättigade intresset av
+abuse-hantering. Att anonymisera rapportören skulle bryta moderations-
+spårbarheten: vi kunde inte längre upptäcka serie-falskanmälare, knyta en
+anmälan till god tro, eller försvara ett moderationsbeslut i efterhand.
+
+**Retention-fönster:** ingen auto-utgång idag (v1) — rapporter behålls så
+länge moderationsbehovet finns; omvärderas vid skala (se Re-visit triggers).
+Detta är en smal, dokumenterad PII-retention och rapportinnehållet är aldrig
+publikt (klienten kan bara `create`, aldrig `read` — admin läser via Console).
+
+**Transparens:** integritetspolicyn bör nämna att en anmälares uid kan behållas
+i moderationssyfte efter kontoradering (Art. 13/14). Spåras som copy-följdpunkt
+— ingen brådska nu när grunden är dokumenterad här.
+
 ### Grupp-medlemskap → Självborttag
 
 När användaren raderas:
@@ -181,6 +207,9 @@ Dessa är dokumenterade i FUTURE_ROADMAP.md sprint 6 (B34).
 
 Policy ska omvärderas om:
 - Rapporter om imitation via frigjorda usernames ökar
+- `reports/`-volymen växer så att kvarhållen `reporterUid` motiverar ett
+  auto-utgångsfönster eller en anonymiserings-/tombstone-väg (Admin-SDK) — då
+  revisas BIN-277-beslutet
 - Threading blir djupare (kommentarer på kommentarer) och breakage
   blir användarfientligt
 - Cloud Functions finns — då kan vi göra "mjuk radering" med 30-dagars
