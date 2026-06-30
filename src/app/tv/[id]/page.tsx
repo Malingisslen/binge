@@ -87,7 +87,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     const overview = show.overview?.slice(0, 180) ?? '';
     const description = `${displayTitle}${yearSuffix}. ${overview}`.trim();
     const url = `https://binge.nu/tv/${showId}/`;
-    const image = show.poster_path ? posterUrl(show.poster_path, 'w500') : 'https://binge.nu/og-image.svg';
+    const image = show.poster_path ? posterUrl(show.poster_path, 'w500') : 'https://binge.nu/og-image.png';
 
     return {
       title: `${displayTitle}${yearSuffix} — var streamar jag?`,

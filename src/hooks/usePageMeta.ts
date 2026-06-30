@@ -42,7 +42,7 @@ const DEFAULT_TITLE = 'Binge.nu — Håll koll på vad du tittar på';
 const DEFAULT_DESCRIPTION = 'Svensk mediatracker för film och TV-serier. Se var titlar finns att streama i Sverige.';
 // Matchar layout.tsx OG-default — återställs vid unmount så en titelsidas poster
 // inte läcker till nästa sidas share-preview (BIN-30).
-const DEFAULT_OG_IMAGE = 'https://binge.nu/og-image.svg';
+const DEFAULT_OG_IMAGE = 'https://binge.nu/og-image.png';
 
 /**
  * Märker element som hooken själv skapat. Element UTAN attributet ägs av

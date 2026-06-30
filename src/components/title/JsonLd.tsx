@@ -198,7 +198,7 @@ export function organizationSchema(siteUrl = 'https://binge.nu'): Record<string,
     '@type': 'Organization',
     name: 'Binge.nu',
     url: siteUrl,
-    logo: `${siteUrl}/og-image.svg`,
+    logo: `${siteUrl}/og-image.png`,
     description: 'Svensk mediatracker för film och TV-serier.',
   };
 }

@@ -92,7 +92,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     const overview = movie.overview?.slice(0, 180) ?? '';
     const description = `${displayTitle}${yearSuffix}. ${overview}`.trim();
     const url = `https://binge.nu/movie/${movieId}/`;
-    const image = movie.poster_path ? posterUrl(movie.poster_path, 'w500') : 'https://binge.nu/og-image.svg';
+    const image = movie.poster_path ? posterUrl(movie.poster_path, 'w500') : 'https://binge.nu/og-image.png';
 
     return {
       // Root-layout har title-template '%s — Binge.nu', så inget eget suffix här.

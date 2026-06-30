@@ -6,7 +6,10 @@ import Providers from '@/components/Providers';
 import AppShell from '@/components/layout/AppShell';
 
 const SITE_URL = 'https://binge.nu';
-const OG_IMAGE = `${SITE_URL}/og-image.svg`;
+// PNG, inte SVG: Twitter/X-card-validatorn och LinkedIn avvisar SVG og:image
+// och renderar då ingen förhandsvisning alls (BIN-306). og-image.svg är kvar
+// som källkonst; PNG:n rastreras från den (1200×630).
+const OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 // Albert Sans är den enda typografin i designen. --mono-tokenen finns kvar i
 // globals.css som alias mot --sans tills alla callsites är städade.

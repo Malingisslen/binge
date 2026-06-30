@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     const bio = person.biography?.slice(0, 180) ?? '';
     const description = `${person.name}. ${bio || 'Skådespelare och filmskapare.'}`.trim();
     const url = `https://binge.nu/person/${personId}/`;
-    const image = person.profile_path ? profileUrl(person.profile_path) ?? undefined : 'https://binge.nu/og-image.svg';
+    const image = person.profile_path ? profileUrl(person.profile_path) ?? undefined : 'https://binge.nu/og-image.png';
 
     return {
       title: `${person.name} — filmografi`,
