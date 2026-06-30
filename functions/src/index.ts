@@ -198,12 +198,6 @@ export { retentionCleanup } from './retentionCleanup';
 // reports-create-regeln är låst till `if false` så bara denna funktion får skapa.
 export { submitReport } from './submitReport';
 
-// ── GDPR likes-backfill (BIN-347) ────────────────────────────────────────────
-// backfillLikeUids: one-shot admin callable that sets uid := doc-id on review
-// likes that predate the `uid` field, so the export/erasure path's
-// collectionGroup('likes').where('uid','==',uid) query can find them. Idempotent.
-export { backfillLikeUids } from './backfillLikeUids';
-
 // ── Fråga Binge usage/error recorder (BIN-176 learning loop) ─────────────────
 // recordAskBinge: callable som inkrementerar dagliga räknare i askBingeStats/{date}
 // (tom-träff-andel, strandande filterkombos, borttagna tolknings-chips). Enda
