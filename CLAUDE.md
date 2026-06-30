@@ -17,6 +17,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Testing honesty.** Tests prove intended behavior. Never weaken, skip, or rewrite
   an assertion just to go green — if a test fails, the production code is the suspect.
 
+### Plan before large changes — and cast the role-org first
+
+These two rules apply to **ad-hoc conversational requests**, not just `/sprint-execute`.
+The sprint command already routes + convenes the panel before building (§1.5 + §2b);
+this extends the same discipline to direct chat, closing the gap where the role-org only
+joined planning inside a sprint.
+
+**Always plan before a large change — no exceptions.** A change is "large" if it hits ANY
+of: 3+ files; a new core module / service / hook / lib; an architectural or base-class
+change; a "refactor" / "migrate" request; a multi-file codemod; or a **sensitive domain** —
+for binge that means Firestore rules / indexes / schema or the watch-status model
+(`firestore.rules`, `firestore.indexes.json`, `src/lib/watchStatus*`); auth
+(`src/contexts/AuthContext.tsx`, Firebase Auth, `passwordStrength`); user data / GDPR /
+privacy (account deletion, data export, retention, `src/lib/firebase/{userData,dataExport,groups}.ts`);
+Cloud Functions / FCM / moderation (`functions/**`, `submitReport`); deploy / hosting /
+Cloudflare-CDN config (`deploy.yml`, `firebase.json`); anything legal / privacy; or anything
+that adds a paid service or moves Firebase cost (Blaze 25 SEK/mån cap). Large changes ALWAYS
+get a written plan + approval before any Edit/Write — in ad-hoc chat, not just
+`/sprint-execute`. Small, obvious, single-file fixes ship without ceremony — don't gold-plate.
+
+**Cast stakeholders BEFORE planning (ad-hoc work, not just sprints).** The role-org must be
+cast into planning the same way `/sprint-execute` Phase 1 (§1.5 route) + §2b (panel) does it
+— not only inside the sprint command. For any large change OR any request touching a
+sensitive domain, BEFORE writing the plan:
+1. **Cast the panel** — run the committed router on the likely-touched paths to get the tier
+   and owning role(s) + high-stakes core: `node docs/org/route.mjs <paths>` → `{ tier, panel,
+   roles, highStakes, reason }` with `tier` ∈ `skip` / `medium` / `top`. Deterministic, cheap,
+   no agents. (Same router `/linear` stamps with and `/stakeholder-review` convenes from — do
+   not hand-roll a second risk judgment.)
+2. **Convene the cast roles** — `medium` → one blind critique from the owning role; `top` →
+   the full panel concurrently, each grounded in its dossier section of the role map
+   (`docs/role-responsibilities.md §N` + `docs/org/world-watch/ROLE_WORLD_MODEL.md`), blind to
+   the others (per the `/stakeholder-review` skill). Run critiques on **sonnet at low effort**;
+   keep the commit-gate reviewers (`binge-code-reviewer` / `binge-security-reviewer` /
+   `binge-test-reviewer`) on **opus** (see the global "Subagent model selection" rule).
+3. **Fold their conditions into the plan as binding acceptance criteria**, then present it. An
+   unresolved high-stakes conflict — a block from a high-stakes-core role (Security #4 / DPO #6
+   / Legal #5), or anything legal / privacy / interpretive — gets surfaced to Malin IN the
+   plan, never buried.
+
+`skip` tier (doc-only / trivial) → no panel, plan normally. This closes the only gap: the
+diff-review half already runs via the commit-gate specialists, and the `ExitPlanMode` hook
+already *suggests* the panel on high-stakes plans; this adds the **cast + plan** halves to
+direct requests.
+
 ## Project Overview
 
 Binge (binge.nu) is a Swedish media tracker for movies and TV shows. Users track what they're watching, want to watch, and have watched — with the killer feature being where each title is available on Swedish streaming services. Think Prisjakt for media: dense, functional, data-forward. The UI is in Swedish.
