@@ -355,7 +355,18 @@ service cloud.firestore {
       // Likes — each signed-in user owns their own like doc (doc-id = uid).
       match /likes/{uid} {
         allow read: if true;
-        allow create, delete: if isOwner(uid);
+        // BIN-347: like docs now carry a `uid` field (== doc-id) so a user's likes
+        // are enumerable across the collection group (GDPR export/erasure). Validate
+        // it on create + lock the field set so the doc can't be bloated.
+        allow create: if isOwner(uid)
+          && request.resource.data.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'createdAt']);
+        // The liker may remove their own like; the review author may also clear
+        // likes on their review (symmetric with comments) — needed so account
+        // deletion can erase a review's whole subtree (BIN-347).
+        allow delete: if isOwner(uid)
+          || (isSignedIn()
+            && get(/databases/$(database)/documents/reviews/$(reviewId)).data.uid == request.auth.uid);
       }
 
       // Comments — any signed-in user may comment; author or review-author may delete.
@@ -386,6 +397,24 @@ service cloud.firestore {
         && request.resource.data.uid == resource.data.uid
         && isValidReaction(request.resource.data);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---- Collection-group READ access (BIN-347) ----
+    // A collection-group query (used only by collectUserDataSnapshots, for the
+    // GDPR export + Art. 17 erasure path) is NOT granted by the nested per-doc
+    // rules above — Firestore requires a recursive-wildcard rule for the group,
+    // or the query is rejected ("No matching allow statements"). Scope to the
+    // OWNER so a user can only enumerate THEIR OWN docs across the group; the
+    // per-doc public reads stay governed by the nested rules (rules are additive).
+    // Requires the matching uid field + COLLECTION_GROUP index (firestore.indexes.json).
+    match /{path=**}/likes/{likeId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /{path=**}/comments/{commentId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /{path=**}/reactions/{reactionId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
     // ---- reports (UGC-moderation) ----
@@ -432,6 +461,14 @@ service cloud.firestore {
     // bakom admin/token-auth. Neka därför all klient-åtkomst rakt av.
     match /insights/{doc=**} {
       allow read, write: if false;
+    }
+
+    // Weekly-digest dedup marker (doc-id = uid). Written exclusively by the
+    // weekly-digest function via Admin SDK (bypasses rules). The owner may read
+    // + delete their own marker so account deletion can erase it (BIN-347) —
+    // without this rule the cascade's delete is denied and deletion aborts.
+    match /weeklyDigestState/{uid} {
+      allow read, delete: if isOwner(uid);
     }
 
     // External ratings cache — public read (no PII; just IMDb/RT/Metacritic scores).

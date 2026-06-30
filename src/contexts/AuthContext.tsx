@@ -14,11 +14,11 @@ import {
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
-import type { DocumentReference } from 'firebase/firestore';
 import { auth } from '@/lib/firebase/config';
 import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
+import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider } from '@/lib/tmdb/providers';
 import { daysBetween, todayIso } from '@/lib/utils';
@@ -616,203 +616,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Delad läsning med buildUserExport — om nya user-owned collections
     // läggs till ska de uppdateras i collectUserDataSnapshots.
     const snaps = await collectUserDataSnapshots(id);
+    const kit = await fsdb();
 
-    // BIN-22: läs username AUKTORITATIVT från profil-doc:en, inte React-state.
-    // `user` kan vara null i fönstret efter att auth resolvat men innan profilen
-    // laddats (eller om ensureUserProfile failade) → då skulle usernames/
-    // {username}-reservationen aldrig raderas och blockera återanvändning.
-    const username = (snaps.profileSnap.data()?.username as string | undefined)
-      ?? user?.username ?? null;
-
-    const { db, doc, getDocs, collection, writeBatch, serverTimestamp } = await fsdb();
-    const refs: DocumentReference[] = [];
-
-    // 1. Simple per-user subcollections.
-    snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.episodeProgressSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.blockedSnap.docs.forEach(d => refs.push(d.ref));
-    // Sparbeslut-historik (Streamingrådgivaren) — raderas så ingen
-    // pause-/resume-data blir kvar efter konto-radering.
-    snaps.pauseHistorySnap.docs.forEach(d => refs.push(d.ref));
-    // Följda listor (BIN-96) — ägar-ägda, raderas så de inte orphan:as.
-    snaps.listFollowsSnap.docs.forEach(d => refs.push(d.ref));
-    // FCM-tokens raderas så Cloud Functions inte fortsätter försöka skicka
-    // push till en raderad användare. Server-side cleanup tar dem bort
-    // till slut via 'registration-token-not-registered'-felet, men explicit
-    // rensning här är säkrare och snabbare.
-    snaps.fcmTokensSnap.docs.forEach(d => refs.push(d.ref));
-    // Report-throttle-stämpel (BIN-25) — rensas så ingen orphan blir kvar.
-    snaps.reportMetaSnap.docs.forEach(d => refs.push(d.ref));
-    // Fråga Binge LLM-fallback throttle — samma sak.
-    snaps.askBingeMetaSnap.docs.forEach(d => refs.push(d.ref));
-
-    // 2. Outbound follows: delete own "following" + mirror "followers" on target.
-    snaps.followingSnap.docs.forEach(d => {
-      refs.push(d.ref);
-      refs.push(doc(db, 'users', d.id, 'followers', id));
-    });
-
-    // 2b. Friends — radera båda hållen av relation. snaps.friendsSnap har
-    // mina friend-docs (id = vännens uid). Spegla raderingen på deras sida.
-    snaps.friendsSnap.docs.forEach(d => {
-      refs.push(d.ref);
-      refs.push(doc(db, 'users', d.id, 'friends', id));
-    });
-    // 2c. Pending requests (incoming + outgoing) — rensa båda hållen så
-    // ingen kan accepta/cancel:a en request mot ett raderat konto.
-    snaps.friendRequestsSnap.docs.forEach(d => {
-      refs.push(d.ref);
-      refs.push(doc(db, 'users', d.id, 'friendRequestsSent', id));
-    });
-    snaps.friendRequestsSentSnap.docs.forEach(d => {
-      refs.push(d.ref);
-      refs.push(doc(db, 'users', d.id, 'friendRequests', id));
-    });
-    // 2d. Inkomna grupp-inbjudningar — rensa så inga pending invites blir kvar.
-    snaps.groupInvitesSnap.docs.forEach(d => refs.push(d.ref));
-
-    // 3. My reviews + all their subcollections (likes + comments on my reviews).
-    for (const reviewDoc of snaps.reviewsSnap.docs) {
-      const [likesSnap, commentsSnap] = await Promise.all([
-        getDocs(collection(db, 'reviews', reviewDoc.id, 'likes')),
-        getDocs(collection(db, 'reviews', reviewDoc.id, 'comments')),
-      ]);
-      likesSnap.docs.forEach(d => refs.push(d.ref));
-      commentsSnap.docs.forEach(d => refs.push(d.ref));
-      refs.push(reviewDoc.ref);
-    }
-
-    // 4. My comments + likes on OTHERS' reviews (collection-group).
-    snaps.reviewCommentsSnap.docs.forEach(d => refs.push(d.ref));
-    snaps.reviewLikesSnap.docs.forEach(d => refs.push(d.ref));
-    // My episode reactions (BIN-95, collection-group 'reactions').
-    snaps.episodeReactionsSnap.docs.forEach(d => refs.push(d.ref));
-
-    // 5. My lists + hosted Tillsammans-sessions.
-    snaps.listsSnap.docs.forEach(d => refs.push(d.ref));
-    // För varje hostad session: radera participants- + swipes-subcollections
-    // innan session-doc. Server-side TTL (Sprint 10) städar visserligen bort
-    // utgångna sessioner, men defensiv radering här lämnar inga zombie-
-    // subcollections kvar efter konto-radering.
-    for (const sessionDoc of snaps.sessionsSnap.docs) {
-      const [participantsSnap, swipesSnap] = await Promise.all([
-        getDocs(collection(db, 'sessions', sessionDoc.id, 'participants')),
-        getDocs(collection(db, 'sessions', sessionDoc.id, 'swipes')),
-      ]);
-      participantsSnap.docs.forEach(d => refs.push(d.ref));
-      swipesSnap.docs.forEach(d => refs.push(d.ref));
-      refs.push(sessionDoc.ref);
-    }
-
-    // INTENTIONALLY NOT cascaded: reports/{reportId}. Moderation reports store
-    // reporterUid but are deliberately retained on account deletion under GDPR
-    // Art. 17(3) (legitimate interest in abuse-handling / legal claims). Rules
-    // set `allow delete: if false`, so a client cascade is impossible anyway.
-    // Decision + retention basis documented in docs/data-retention-policy.md
-    // ("Moderationsrapporter → Retention", BIN-277) — do not "fix" this as a
-    // missing-cascade bug.
-
-    // 6. Groups: if I'm owner, delete the whole group + subcollections.
-    //    If I'm a member, just remove myself from memberUids and delete my member doc.
-    //    Rules update-branch forces us to keep other fields unchanged when
-    //    only removing the leaving member.
-    const memberLeaveUpdates: { ref: DocumentReference; newMemberUids: string[] }[] = [];
-    for (const groupDoc of snaps.groupsSnap.docs) {
-      // BIN-329: a leftover joinAttempts/{myUid} in this group holds the plaintext
-      // invite token I once submitted. Erase it on account deletion (Art. 17). The
-      // rule allows self-delete (uid == request.auth.uid) and a delete on a missing
-      // doc is a safe no-op, so this is fine for groups I joined by invite/own. The
-      // scheduled retentionCleanup sweep is the backstop for attempts in groups I
-      // never became a member of (abandoned join) and for Console-deleted accounts.
-      refs.push(doc(db, 'groups', groupDoc.id, 'joinAttempts', id));
-      const data = groupDoc.data();
-      const ownerUid = data.ownerUid as string | undefined;
-      if (ownerUid === id) {
-        const [membersSnap, groupWatchlistSnap, sessionHistorySnap] = await Promise.all([
-          getDocs(collection(db, 'groups', groupDoc.id, 'members')),
-          getDocs(collection(db, 'groups', groupDoc.id, 'watchlist')),
-          getDocs(collection(db, 'groups', groupDoc.id, 'sessionHistory')),
-        ]);
-        membersSnap.docs.forEach(d => refs.push(d.ref));
-        sessionHistorySnap.docs.forEach(d => refs.push(d.ref));
-        // För varje watchlist-item: ta också med progress-subcollection.
-        // Sub-cleanup måste ske INNAN parent watchlist-doc raderas, men
-        // eftersom vi committar i 450-batch kommer queue-ordning räcka.
-        for (const wDoc of groupWatchlistSnap.docs) {
-          const progSnap = await getDocs(
-            collection(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress'),
-          );
-          progSnap.docs.forEach(d => refs.push(d.ref));
-          refs.push(wDoc.ref);
-        }
-        refs.push(groupDoc.ref);
-      } else {
-        const current = (data.memberUids as string[]) ?? [];
-        memberLeaveUpdates.push({
-          ref: groupDoc.ref,
-          newMemberUids: current.filter(u => u !== id),
-        });
-        // Ta också bort min progress på alla titlar i den här gruppen så
-        // jag inte lämnar zombie-progress för andra medlemmar att se.
-        const groupWatchlistSnap = await getDocs(
-          collection(db, 'groups', groupDoc.id, 'watchlist'),
-        );
-        for (const wDoc of groupWatchlistSnap.docs) {
-          refs.push(doc(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress', id));
-        }
-        refs.push(doc(db, 'groups', groupDoc.id, 'members', id));
-      }
-    }
-
-    // 7. BIN-149: lists I co-edit but don't own — strip my uid from their
-    //    editors[] so a deleted account doesn't linger as a write-authorized
-    //    ghost editor on someone else's list. Rules allow an editor to remove
-    //    ONLY themselves (editors[]+updatedAt, no other field).
-    const editorLeaveUpdates: { ref: DocumentReference; newEditors: string[] }[] = [];
-    // Skip lists I OWN — those are already queued for deletion above (section 5),
-    // and a batch.update on an already-deleted doc throws (Firestore update is not
-    // a no-op on a missing doc), which would abort deletion before deleteUser().
-    const ownedListIds = new Set(snaps.listsSnap.docs.map(d => d.id));
-    snaps.editableListsSnap.docs.forEach(d => {
-      if (ownedListIds.has(d.id)) return;
-      const editors = (d.data().editors as string[]) ?? [];
-      editorLeaveUpdates.push({ ref: d.ref, newEditors: editors.filter(u => u !== id) });
-    });
-
-    // 9. User doc + username reservation.
-    // BIN-163 — veckodigest-dedupmarkör (weeklyDigestState/{uid}, doc-id == uid).
-    // Admin-skriven, men uid-nycklad → sopas här som fcmTokens/reportMeta så
-    // ingen orphan blir kvar. (Övriga notify-markörer är tmdbId-/komposit-nycklade
-    // delade docs, inte ägda av en användare, och rörs därför inte.)
-    refs.push(doc(db, 'weeklyDigestState', id));
-    refs.push(doc(db, 'users', id));
-    if (username) refs.push(doc(db, 'usernames', username));
-
-    // Commit in ≤ 450-op chunks (Firestore limit is 500; leave headroom).
-    const CHUNK = 450;
-    for (let i = 0; i < refs.length; i += CHUNK) {
-      const batch = writeBatch(db);
-      refs.slice(i, i + CHUNK).forEach(r => batch.delete(r));
-      await batch.commit();
-    }
-    // Member-leave updates in their own chunks (separate from deletes for clarity).
-    for (let i = 0; i < memberLeaveUpdates.length; i += CHUNK) {
-      const batch = writeBatch(db);
-      memberLeaveUpdates.slice(i, i + CHUNK).forEach(u => {
-        batch.update(u.ref, { memberUids: u.newMemberUids });
-      });
-      await batch.commit();
-    }
-    // Editor-leave updates (BIN-149) — strip self from others' lists' editors[].
-    for (let i = 0; i < editorLeaveUpdates.length; i += CHUNK) {
-      const batch = writeBatch(db);
-      editorLeaveUpdates.slice(i, i + CHUNK).forEach(u => {
-        batch.update(u.ref, { editors: u.newEditors, updatedAt: serverTimestamp() });
-      });
-      await batch.commit();
-    }
+    // Cascade-plan + commit are extracted (BIN-347) into pure, db-injectable
+    // helpers so the Art. 17 erasure path can be run end-to-end against the
+    // Firestore emulator (src/test/rules/account-deletion.test.ts). Behaviour is
+    // identical to the former inline version. BIN-22: username resolves
+    // AUKTORITATIVT from the profile-doc inside collectDeletionRefs (React-state
+    // `user?.username` is only the fallback when the profile hasn't loaded).
+    const plan = await collectDeletionRefs(kit, id, snaps, user?.username);
+    await applyDeletionPlan(kit, plan);
 
     // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen:
     // failar deleteUser (vanligast auth/requires-recent-login) finns kontot

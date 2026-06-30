@@ -70,7 +70,11 @@ export function useReviewLikes(reviewId: string | null) {
       if (wasLiked) {
         await deleteDoc(ref);
       } else {
-        await setDoc(ref, { createdAt: serverTimestamp() });
+        // BIN-347: store `uid` as a field (doc-id alone can't be queried across
+        // the collection group — `where(documentId(), '==', uid)` is invalid in
+        // Firestore v12). `collectUserDataSnapshots` enumerates my likes via
+        // `where('uid', '==', uid)`, matching the comments/reactions pattern.
+        await setDoc(ref, { uid, createdAt: serverTimestamp() });
       }
     } catch {
       // Rulla tillbaka optimismen om skrivningen misslyckas.

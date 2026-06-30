@@ -190,7 +190,13 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
   });
 
   it('every delete-cascaded snap is referenced in the deleteAccount cascade', () => {
-    const src = readFileSync(join(process.cwd(), 'src', 'contexts', 'AuthContext.tsx'), 'utf8');
+    // The cascade was extracted from AuthContext.deleteAccount into the pure,
+    // db-injectable collectDeletionRefs (BIN-347 Part 2) so it can be exercised
+    // against the emulator — so the `snaps.<key>` references now live there.
+    const src = readFileSync(
+      join(process.cwd(), 'src', 'lib', 'firebase', 'accountDeletion.ts'),
+      'utf8',
+    );
     for (const key of coverageKeys) {
       if (!COVERAGE[key].deleteCascade) continue;
       expect(src.includes(`snaps.${key}`), `${key} is not referenced in deleteAccount cascade`).toBe(true);

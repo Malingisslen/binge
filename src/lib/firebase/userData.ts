@@ -1,5 +1,16 @@
 import type { DocumentSnapshot, QuerySnapshot } from 'firebase/firestore';
-import { fsdb } from './db';
+import { fsdb, type FirestoreKit } from './db';
+
+/**
+ * The Firestore surface `collectUserDataSnapshots` reads through. Injectable so
+ * the GDPR erasure emulator test (BIN-347 Part 2) can run the REAL read path —
+ * including the collection-group + array-contains queries — against a seeded
+ * emulator instead of the live `fsdb()` singleton.
+ */
+export type SnapshotReadKit = Pick<
+  FirestoreKit,
+  'db' | 'collection' | 'collectionGroup' | 'doc' | 'getDoc' | 'getDocs' | 'query' | 'where'
+>;
 
 /**
  * Gemensam läsning av allt som tillhör en användare — används av både
@@ -110,8 +121,11 @@ export const KNOWN_USER_SUBCOLLECTIONS = [
   'groupInvites',
 ] as const;
 
-export async function collectUserDataSnapshots(uid: string): Promise<UserDataSnapshots> {
-  const { db, collection, collectionGroup, doc, documentId, getDoc, getDocs, query, where } = await fsdb();
+export async function collectUserDataSnapshots(
+  uid: string,
+  fs?: SnapshotReadKit,
+): Promise<UserDataSnapshots> {
+  const { db, collection, collectionGroup, doc, getDoc, getDocs, query, where } = fs ?? await fsdb();
   const [
     profileSnap,
     watchlistSnap,
@@ -157,8 +171,10 @@ export async function collectUserDataSnapshots(uid: string): Promise<UserDataSna
     getDocs(collection(db, 'users', uid, 'pauseHistory')),
     getDocs(collection(db, 'users', uid, 'listFollows')),
     getDocs(query(collection(db, 'reviews'), where('uid', '==', uid))),
-    // doc-id = mitt uid (single-field collection-group-index på documentId)
-    getDocs(query(collectionGroup(db, 'likes'), where(documentId(), '==', uid))),
+    // BIN-347: query by the `uid` FIELD (doc-id == uid, but a collection-group
+    // query can't filter by documentId() with a bare id — Firestore v12 rejects
+    // it). Needs a likes.uid COLLECTION_GROUP index (firestore.indexes.json).
+    getDocs(query(collectionGroup(db, 'likes'), where('uid', '==', uid))),
     getDocs(query(collectionGroup(db, 'comments'), where('uid', '==', uid))),
     getDocs(query(collectionGroup(db, 'reactions'), where('uid', '==', uid))),
     getDocs(query(collection(db, 'lists'), where('uid', '==', uid))),
