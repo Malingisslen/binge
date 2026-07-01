@@ -106,4 +106,9 @@ describe('design consistency — token vocabulary (app-wide, BIN-356)', () => {
       .filter(f => LEGACY_TOKENS.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
   });
+
+  it('scans a non-empty set of files (guard is not vacuous)', () => {
+    // An empty-path misconfig would make the sweeps above pass trivially.
+    expect(roots.flatMap(tsxFilesRecursive).length).toBeGreaterThan(0);
+  });
 });

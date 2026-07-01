@@ -48,6 +48,11 @@
   --danger-soft: oklch(0.955 0.04 25);
   --danger-ink:  oklch(0.48 0.16 25);
 
+  /* success — positiv "stark / bra"-bekräftelse (t.ex. stark lösenordsstyrka).
+     Medvetet skild från --season-done (avsnitts-grön, BIN-324): ljusare och
+     kallare hue så de två grönorna aldrig läses som samma färg. */
+  --success:     oklch(0.62 0.16 165);
+
   /* season-done — grön "avslutad / sett avsnitt"-status (ev-toggle on,
      avsnitts-bock). Enda definitionskällan (BIN-324): var tidigare en rå
      oklch-literal hårdkodad på flera ställen + i tailwind.config.ts. Speglas
@@ -110,6 +115,9 @@
   --danger:      oklch(0.62 0.17 25);
   --danger-soft: oklch(0.30 0.07 25);
   --danger-ink:  oklch(0.80 0.15 25);
+
+  /* success — lyft för mörk bakgrund (jfr --season-done som är enkeldefinierad) */
+  --success:     oklch(0.72 0.16 165);
 
   /* duotone — lyfta varianter för mörk bakgrund */
   --duo-terra:   oklch(0.64 0.08 30);

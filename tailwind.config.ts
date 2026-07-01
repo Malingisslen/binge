@@ -51,6 +51,11 @@ const config: Config = {
         'danger-soft': 'var(--danger-soft)',
         'danger-ink': 'var(--danger-ink)',
 
+        // Success — positive / "strong" affirmation (not part of the two-accent
+        // rule, and deliberately NOT --season-done, which owns episode-watched
+        // green as its single source of truth per BIN-324).
+        success: 'var(--success)',
+
         // Duotone — for use in legends, swatches, pill bars (the duotone
         // image filters themselves are SVG <filter>s, see DuotoneFilters).
         'duo-terra': 'var(--duo-terra)',
@@ -62,15 +67,11 @@ const config: Config = {
         'duo-olive': 'var(--duo-olive)',
         'duo-oxblood': 'var(--duo-oxblood)',
 
-        // ─── Legacy bridge — remapped to Direction-H tokens ───
-        page: 'var(--bg)',
-        'surface-hover': 'var(--bg-2)',
-        accent: 'var(--acc-deep)',
-        'text-primary': 'var(--ink)',
-        'text-secondary': 'var(--ink-2)',
-        'text-muted': 'var(--ink-3)',
-        'border-main': 'var(--rule)',
-        'border-light': 'var(--rule-2)',
+        // ─── Legacy bridge — remaining still-used mappings ───
+        // The bulk of the aliases (page, surface-hover, accent, text-primary|
+        // secondary|muted, border-main|light) were retired in BIN-370 after a
+        // full-repo zero-usage sweep. These four are separate bridges still in
+        // use and are NOT part of the LEGACY_TOKENS guard.
         'border-table': 'var(--rule-2)',
         'cal-header': 'var(--bg-2)',
         'season-done': 'var(--season-done)',
