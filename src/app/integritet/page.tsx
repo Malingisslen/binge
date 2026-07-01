@@ -67,6 +67,8 @@ export default function IntegritetPage() {
           <li><strong>Plausible Analytics</strong> (besöksstatistik) — cookiefri och IP-anonymiserad statistik över sidvisningar. Sätter inga cookies och lagrar varken din IP-adress eller andra personuppgifter.</li>
           <li><strong>Cloudflare</strong> (CDN, DNS, brandvägg) — behandlar trafikdata under Cloudflares DPA.</li>
           <li><strong>The Movie Database (TMDB)</strong> — vi hämtar film- och serieinformation från TMDB. Dina personuppgifter överförs <em>inte</em> till TMDB; endast titel-ID:n och sökfrågor skickas.</li>
+          <li><strong>Sentry</strong> (felövervakning) — tar emot teknisk information när något går fel i appen, så vi kan hitta och rätta buggar. Personuppgifter som e-post, användarnamn och användar-id rensas bort innan felrapporten skickas. Sentry är amerikanskt och anlitar i sin tur egna underleverantörer (bl.a. Intercom och OpenAI); aktuell lista finns hos <a href="https://sentry.io/legal/subprocessors/" target="_blank" rel="noopener noreferrer">Sentry</a>.</li>
+          <li><strong>Google Gemini</strong> (används av &quot;Fråga Binge&quot;) — om vår vanliga sökning inte lyckas tolka din fritextfråga skickas själva frågetexten till Googles Gemini-modell, som tolkar den till en sökning. Ingen profil- eller tittardata skickas med, bara din formulering. Frågetexten skickas i stunden för tolkningen; hur Google lagrar och använder den styrs av Googles villkor för Gemini API. Google Gemini är amerikanskt.</li>
         </ul>
         <p>
           Vi använder inga reklamnätverk eller marknadsföringsverktyg, och
@@ -78,7 +80,8 @@ export default function IntegritetPage() {
         <h2>5. Överföringar utanför EU/EES</h2>
         <p>
           Vissa leverantörer är amerikanska eller kan vid enskilda operationer
-          överföra data till USA: Google (inklusive reCAPTCHA) och Cloudflare.
+          överföra data till USA: Google (inklusive reCAPTCHA och Gemini),
+          Sentry och Cloudflare.
           För dessa överföringar gäller EU-kommissionens
           standardavtalsklausuler (SCC) och, där det är tillämpligt, EU–US Data
           Privacy Framework, med kompletterande skyddsåtgärder. TMDB är
@@ -104,8 +107,12 @@ export default function IntegritetPage() {
             Tillsammans-sessioner du är värd för, samt grupper du äger (grupper
             du bara är medlem i lämnar du automatiskt). Slutligen raderas ditt
             inloggningskonto och din användarnamns-reservation. Publikt innehåll
-            anonymiseras inte — det raderas helt. Återställning är inte möjlig
-            efter 7 dagar (Firestore Point-in-Time Recovery-fönstret).
+            anonymiseras inte — det raderas helt. De följar-länkar som andra
+            användare har till ditt konto kan vi av tekniska skäl inte radera i
+            samma stund (de ägs av respektive följare) — de städas bort
+            automatiskt av en återkommande rutin, normalt en gång i veckan.
+            Återställning är inte möjlig efter 7 dagar (Firestore
+            Point-in-Time Recovery-fönstret).
           </li>
           <li>
             <strong>Ett undantag från raderingen:</strong> om du har anmält
@@ -127,7 +134,7 @@ export default function IntegritetPage() {
         <ul>
           <li>Få tillgång till de personuppgifter vi har om dig (art. 15) — ladda ner via <em>Inställningar → Exportera min data</em>, eller kontakta oss.</li>
           <li>Få felaktiga uppgifter rättade (art. 16) — de flesta fält kan du ändra själv i inställningarna.</li>
-          <li>Få dina uppgifter raderade (art. 17) — <em>Inställningar → Ta bort konto</em> raderar allt omedelbart (med ett undantag för anmälningar du gjort, se §6).</li>
+          <li>Få dina uppgifter raderade (art. 17) — <em>Inställningar → Ta bort konto</em> raderar all din data (med de undantag och tidsramar som beskrivs i §6).</li>
           <li>Få en kopia i maskinläsbart JSON-format (art. 20) — <em>Inställningar → Exportera min data</em>.</li>
           <li>Invända mot behandling som stöds av berättigat intresse (art. 21).</li>
           <li>Lämna klagomål till Integritetsskyddsmyndigheten (IMY, <a href="https://www.imy.se" target="_blank" rel="noopener noreferrer">imy.se</a>).</li>

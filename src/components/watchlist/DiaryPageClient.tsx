@@ -62,7 +62,7 @@ export default function DiaryPageClient() {
           <EmptyState
             icon={<BookOpen size={28} />}
             title="Inga daterade visningar än"
-            body="När du markerar en film som sedd eller bockar av ett avsnitt sparas datumet här. Du kan backdatera filmers datum, så även gamla titlar hamnar rätt i tidslinjen."
+            body="När du markerar en film som sedd eller bockar av ett avsnitt sparas datumet här. Filmers datum kan du backdatera i efterhand — avsnitt stämplas med dagens datum när du bockar av dem."
             action={<Link href="/my/films/" className="btn btn-sm">Till dina filmer</Link>}
           />
         </div>
