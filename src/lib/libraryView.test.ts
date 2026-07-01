@@ -6,6 +6,8 @@ import {
   buildStandfirst,
   itemPassesGenreRating,
   genresInLibrary,
+  itemPassesTags,
+  tagsInLibrary,
   LIBRARY_SUB_STATE_ORDER,
   LIBRARY_SECTION_LABELS,
 } from './libraryView';
@@ -238,5 +240,47 @@ describe('genresInLibrary (BIN-44)', () => {
   });
   it('returns [] for empty library', () => {
     expect(genresInLibrary([])).toEqual([]);
+  });
+});
+
+// === Taggfilter (BIN-164) ===
+describe('itemPassesTags', () => {
+  it('passes everything when no tags are selected', () => {
+    expect(itemPassesTags(makeItem({ tags: [] }), [])).toBe(true);
+    expect(itemPassesTags(makeItem({ tags: undefined }), [])).toBe(true);
+  });
+
+  it('OR-matches (title has at least one selected tag), like genre chips', () => {
+    const item = makeItem({ tags: ['mysrys', 'med mamma'] });
+    expect(itemPassesTags(item, ['mysrys'])).toBe(true);
+    expect(itemPassesTags(item, ['oscar-bait', 'med mamma'])).toBe(true);
+    expect(itemPassesTags(item, ['oscar-bait'])).toBe(false);
+  });
+
+  it('matches case-insensitively (sv-SE)', () => {
+    const item = makeItem({ tags: ['Mysrys', 'Återkommande'] });
+    expect(itemPassesTags(item, ['MYSRYS'])).toBe(true);
+    expect(itemPassesTags(item, ['återkommande'])).toBe(true);
+  });
+
+  it('does not pass an untagged title when tags are selected', () => {
+    expect(itemPassesTags(makeItem({ tags: undefined }), ['mysrys'])).toBe(false);
+    expect(itemPassesTags(makeItem({ tags: [] }), ['mysrys'])).toBe(false);
+  });
+});
+
+describe('tagsInLibrary', () => {
+  it('dedups case-insensitively, keeps first-seen casing, sorts sv-SE', () => {
+    const items = [
+      makeItem({ tags: ['Mysrys', 'action'] }),
+      makeItem({ tags: ['mysrys', 'Bra'] }),
+      makeItem({ tags: undefined }),
+    ];
+    // "Åter" would sort after latin letters in Swedish collation.
+    expect(tagsInLibrary(items)).toEqual(['action', 'Bra', 'Mysrys']);
+  });
+
+  it('returns [] for a library with no tags', () => {
+    expect(tagsInLibrary([makeItem({}), makeItem({ tags: [] })])).toEqual([]);
   });
 });

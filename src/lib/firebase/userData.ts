@@ -36,6 +36,9 @@ export type SnapshotReadKit = Pick<
 export interface UserDataSnapshots {
   profileSnap: DocumentSnapshot;
   watchlistSnap: QuerySnapshot;
+  // BIN-164: per-title tags (owner-only). Own subcollection so free-text tags
+  // never ride the publicly-readable watchlist doc. In export + delete-cascade.
+  watchlistTagsSnap: QuerySnapshot;
   episodeProgressSnap: QuerySnapshot;
   notInterestedSnap: QuerySnapshot;
   notificationsSnap: QuerySnapshot;
@@ -104,6 +107,7 @@ export interface UserDataSnapshots {
  */
 export const KNOWN_USER_SUBCOLLECTIONS = [
   'watchlist',
+  'watchlistTags',
   'episodeProgress',
   'notInterested',
   'pauseHistory',
@@ -129,6 +133,7 @@ export async function collectUserDataSnapshots(
   const [
     profileSnap,
     watchlistSnap,
+    watchlistTagsSnap,
     episodeProgressSnap,
     notInterestedSnap,
     notificationsSnap,
@@ -155,6 +160,7 @@ export async function collectUserDataSnapshots(
   ] = await Promise.all([
     getDoc(doc(db, 'users', uid)),
     getDocs(collection(db, 'users', uid, 'watchlist')),
+    getDocs(collection(db, 'users', uid, 'watchlistTags')),
     getDocs(collection(db, 'users', uid, 'episodeProgress')),
     getDocs(collection(db, 'users', uid, 'notInterested')),
     getDocs(collection(db, 'users', uid, 'notifications')),
@@ -188,6 +194,7 @@ export async function collectUserDataSnapshots(
   return {
     profileSnap,
     watchlistSnap,
+    watchlistTagsSnap,
     episodeProgressSnap,
     notInterestedSnap,
     notificationsSnap,

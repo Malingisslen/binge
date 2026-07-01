@@ -60,6 +60,12 @@ export interface WatchlistItem {
   // runtime; TV: episode_run_time[0]); never bulk-migrated. null/undefined =
   // unknown (the filter never hides unknown-length titles).
   runtime?: number | null;
+  // BIN-164: user-authored free-text tags. IN-MEMORY ONLY — hydrated from the
+  // owner-only `users/{uid}/watchlistTags/{tmdbId}` subcollection, NEVER written
+  // onto this (publicly-readable) watchlist doc. Kept private-to-owner because
+  // free text captures third-party personal data ("med mamma"). Default [] when
+  // a title has no tags. Consumers read item.tags; writes go via updateTags.
+  tags?: string[];
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;

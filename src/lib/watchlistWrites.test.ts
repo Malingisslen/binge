@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStatusUpdate } from './watchlistWrites';
+import { buildStatusUpdate, normalizeTags, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH } from './watchlistWrites';
 
 // A stand-in for the serverTimestamp() sentinel — the helper just passes it
 // through, so any recognisable value works.
@@ -64,5 +64,41 @@ describe('buildStatusUpdate', () => {
     const p = buildStatusUpdate('mina', { ...base, visFields: { isPublic: true, effectiveVisibility: 'public' } });
     expect(p.isPublic).toBe(true);
     expect(p.effectiveVisibility).toBe('public');
+  });
+});
+
+// BIN-164 — tag normalization (owner-only watchlistTags store).
+describe('normalizeTags', () => {
+  it('trims, collapses internal whitespace, and drops empties', () => {
+    expect(normalizeTags(['  mysrys  ', 'med   mamma', '   ', ''])).toEqual(['mysrys', 'med mamma']);
+  });
+
+  it('dedups case-insensitively (sv-SE) keeping first-seen display casing', () => {
+    expect(normalizeTags(['Mysrys', 'mysrys', 'MYSRYS'])).toEqual(['Mysrys']);
+    // sv-SE folding: Å/å collapse to one tag.
+    expect(normalizeTags(['Åter', 'åter'])).toEqual(['Åter']);
+  });
+
+  it('truncates each tag to MAX_TAG_LENGTH chars (and re-trims the cut edge)', () => {
+    const long = 'a'.repeat(MAX_TAG_LENGTH + 10);
+    expect(normalizeTags([long])).toEqual(['a'.repeat(MAX_TAG_LENGTH)]);
+    // A truncation that lands on a space must not leave a trailing space.
+    const cut = 'a'.repeat(MAX_TAG_LENGTH - 1) + ' extra';
+    expect(normalizeTags([cut])).toEqual(['a'.repeat(MAX_TAG_LENGTH - 1)]);
+  });
+
+  it('rejects tags whose folded form collides with a reserved label', () => {
+    const reserved = new Set(['drama', 'komedi']);
+    expect(normalizeTags(['Drama', 'mysig', 'KOMEDI'], reserved)).toEqual(['mysig']);
+  });
+
+  it('caps the list at MAX_TAGS_PER_ITEM', () => {
+    const many = Array.from({ length: MAX_TAGS_PER_ITEM + 5 }, (_, i) => `t${i}`);
+    expect(normalizeTags(many)).toHaveLength(MAX_TAGS_PER_ITEM);
+    expect(normalizeTags(many)[0]).toBe('t0');
+  });
+
+  it('returns [] for all-empty input', () => {
+    expect(normalizeTags(['', '   ', '\t'])).toEqual([]);
   });
 });

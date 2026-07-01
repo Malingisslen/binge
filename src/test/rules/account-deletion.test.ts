@@ -107,6 +107,7 @@ async function seedFullAccount() {
 
     // Every users/{me}/<subcol> — one doc each.
     await set(['users', ME, 'watchlist', '603'], { tmdbId: 603 });
+    await set(['users', ME, 'watchlistTags', '603'], { tags: ['mysrys'] });
     await set(['users', ME, 'episodeProgress', '1399'], { tmdbId: 1399 });
     await set(['users', ME, 'notInterested', '500'], { tmdbId: 500 });
     await set(['users', ME, 'notifications', 'n1'], { kind: 'x' });

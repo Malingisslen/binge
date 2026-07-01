@@ -88,6 +88,45 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
   });
 });
 
+// BIN-164: per-title tags — owner-only, no public/friends read clause (free-text
+// tags can name third parties, so they must NEVER leak like public watchlist items).
+describe('users/{uid}/watchlistTags/{id} (BIN-164)', () => {
+  it('allows the owner to write, read, and delete their own tags', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', '603');
+    await assertSucceeds(setDoc(ref, { tags: ['mysrys', 'med mamma'] }));
+    await assertSucceeds(getDoc(ref));
+    await assertSucceeds(deleteDoc(ref));
+  });
+  it('rejects an unknown field (only `tags` allowed)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', '603');
+    await assertFails(setDoc(ref, { tags: ['ok'], evil: 'pwned' }));
+  });
+  it('rejects a non-list tags value', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', '603');
+    await assertFails(setDoc(ref, { tags: 'notalist' }));
+  });
+  it('rejects more than 15 tags (server-side cap)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', '603');
+    const many = Array.from({ length: 16 }, (_, i) => `t${i}`);
+    await assertFails(setDoc(ref, { tags: many }));
+    await assertSucceeds(setDoc(ref, { tags: many.slice(0, 15) }));
+  });
+  it('never lets another user read or write the tags (private-to-owner)', async () => {
+    // Seed as owner via the privileged context (bypasses rules).
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlistTags', '603'), { tags: ['hemlig'] });
+    });
+    const otherRef = doc(otherDb(), 'users', OWNER, 'watchlistTags', '603');
+    await assertFails(getDoc(otherRef));
+    await assertFails(setDoc(otherRef, { tags: ['hijack'] }));
+    // Even on a public profile: tags have no public read clause, unlike watchlist.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), { isPublic: true, defaultVisibility: 'public' });
+    });
+    await assertFails(getDoc(otherRef));
+  });
+});
+
 // BIN-143: the rating VALUE must be bounded 0–10, not just the key set. An owner
 // can write their own watchlist doc directly, and the value feeds the public
 // community aggregate — an out-of-range write would deface every title page.

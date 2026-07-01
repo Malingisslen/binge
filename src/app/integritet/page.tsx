@@ -33,7 +33,7 @@ export default function IntegritetPage() {
           <li><strong>Visningsnamn</strong> — det namn du valt eller som följt med från Google-inloggning.</li>
           <li><strong>Användarnamn</strong> — om du valt ett publikt användarnamn för din profil.</li>
           <li><strong>Dina streamingtjänster</strong> — vilka tjänster du har, vilket abonnemang (nivå), pris, och eventuella pauser.</li>
-          <li><strong>Din bevakningslista</strong> — titlar du följer, vill se eller har sett; betyg; anteckningar; avsnitts-framsteg.</li>
+          <li><strong>Din bevakningslista</strong> — titlar du följer, vill se eller har sett; betyg; anteckningar; egna taggar (fritext du själv anger); avsnitts-framsteg.</li>
           <li><strong>Recensioner, listor och sociala kopplingar</strong> — recensioner, kommentarer och listor du skapat, samt vänner, följare och grupp-medlemskap.</li>
           <li><strong>Streamingrådgivaren-historik</strong> — dina pausa- och återuppta-beslut (sparbeslut) som rådgivaren sparar.</li>
           <li><strong>&quot;Inte intresserad&quot;-markeringar</strong> — titlar du gömt från rekommendationer.</li>
@@ -99,7 +99,7 @@ export default function IntegritetPage() {
           <li>
             <strong>Om du tar bort ditt konto</strong> raderar vi all din data
             permanent och omedelbart: profil, bevakningslista, avsnittsframsteg,
-            betyg och anteckningar, notifikationer, &quot;inte intresserad&quot;-
+            betyg, anteckningar och egna taggar, notifikationer, &quot;inte intresserad&quot;-
             markeringar, Streamingrådgivaren-historik, push-notistoken,
             blockeringar, vän- och följar-relationer (även de speglade hos
             motparten), dina recensioner inklusive likes och kommentarer på dem,

@@ -30,6 +30,8 @@ import {
   buildStandfirst,
   itemPassesGenreRating,
   genresInLibrary,
+  itemPassesTags,
+  tagsInLibrary,
   LIBRARY_SUB_STATE_ORDER,
 } from '@/lib/libraryView';
 import FilterRow from '@/components/watchlist/FilterRow';
@@ -126,6 +128,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // BIN-44: library filter row (genre OR-match + min-rating), client-side.
   const [genreFilter, setGenreFilter] = useState<number[]>([]);
   const [minRating, setMinRating] = useState<number | null>(null);
+  // BIN-164: taggfilter (OR-match, som genre), klient-sidigt.
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
     const m = new Map<number, string>();
@@ -161,6 +165,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     if (genreFilter.length > 0 || minRating != null) {
       result = result.filter(i => itemPassesGenreRating(i, genreFilter, minRating));
     }
+    if (tagFilter.length > 0) {
+      result = result.filter(i => itemPassesTags(i, tagFilter));
+    }
     if (behindIds) {
       result = result.filter(i => behindIds.has(i.tmdbId));
     }
@@ -179,12 +186,19 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       }
     });
     return result;
-  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, genreFilter, minRating, behindIds]);
+  }, [items, status, mediaFilter, sort, searchQuery, providerFilterId, genreFilter, minRating, tagFilter, behindIds]);
 
   // Genrer som finns i denna lista (base-filtrerad på status) → filterchips
   // visar bara relevanta val och försvinner inte när man filtrerar (BIN-44).
   const availableGenres = useMemo(
     () => genresInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
+    [items, status],
+  );
+
+  // BIN-164: taggarna som faktiskt finns i denna lista → filterchips (döljs helt
+  // när inga taggar finns, samma mönster som genre).
+  const availableTags = useMemo(
+    () => tagsInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
     [items, status],
   );
 
@@ -434,6 +448,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         }}
         minRating={minRating}
         onSetMinRating={r => { setMinRating(r); setSelected(new Set()); }}
+        tags={availableTags}
+        tagFilter={tagFilter}
+        onToggleTag={t => {
+          setTagFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+          setSelected(new Set());
+        }}
       />
 
       {selected.size > 0 && (

@@ -21,6 +21,8 @@ import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
+import TagEditor from '@/components/title/TagEditor';
+import { tagsInLibrary } from '@/lib/libraryView';
 import RecCard from '@/components/recommendations/RecCard';
 import CollectionSection from '@/components/title/CollectionSection';
 import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
@@ -53,7 +55,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(movieId, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
-  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime } = useWatchlist();
+  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, updateTags, items } = useWatchlist();
   const { user } = useAuth();
   const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -453,6 +455,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               <h2>Din anteckning</h2>
             </div>
             <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />
+            <TagEditor
+              tags={watchlistItem.tags ?? []}
+              onChange={t => updateTags(movie.id, t)}
+              suggestions={tagsInLibrary(items)}
+            />
           </section>
         )}
         <section className="detail-section">

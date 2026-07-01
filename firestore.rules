@@ -110,6 +110,17 @@ service cloud.firestore {
       && (!('rating' in d) || d.rating == null || (d.rating is number && d.rating >= 0 && d.rating <= 5));
     }
 
+    // BIN-164: owner-only per-title tags. Free-text tags capture third-party
+    // personal data ("med mamma") so they must NEVER be readable by other users
+    // — they live in this separate subcollection (NOT on the publicly-readable
+    // watchlist doc). Cap the array server-side (mirrors isValidList's
+    // editors.size() bound); per-tag string length is enforced client-side
+    // (normalizeTags) since rules can't iterate list elements.
+    function isValidTagDoc(d) {
+      return d.keys().hasOnly(['tags'])
+        && d.tags is list && d.tags.size() <= 15;
+    }
+
     // ---- users ----
     // User profile — owner only (public read handled by isPublic check in app).
     // VIKTIGT: write-regeln förbjuder owner att själv sätta isAdmin-flaggan.
@@ -161,6 +172,12 @@ service cloud.firestore {
       allow read: if !('effectiveVisibility' in resource.data)
         && !('isPublic' in resource.data)
         && get(/databases/$(database)/documents/users/$(uid)).data.get('isPublic', false) == true;
+    }
+    // BIN-164: per-title tags — OWNER ONLY, no public/friends read clause by
+    // design (see isValidTagDoc). Doc id = tmdbId, shape { tags: string[] }.
+    match /users/{uid}/watchlistTags/{tmdbId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isValidTagDoc(request.resource.data);
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, delete: if isOwner(uid);

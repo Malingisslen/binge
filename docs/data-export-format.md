@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -15,6 +15,7 @@ Filen är en JSON med följande top-level-struktur (se
   "justwatchAttribution": "…",
   "profile": { /* users/{uid} */ },
   "watchlist":      [{ "id": "…", "data": { /* … */ } }],
+  "watchlistTags":  [{ "id": "tmdbId", "data": { "tags": ["…"] } }],
   "episodeProgress": [ … ],
   "notInterested":   [ … ],
   "notifications":   [ … ],
@@ -44,6 +45,7 @@ Filen är en JSON med följande top-level-struktur (se
 |------|-------|----------|
 | `profile` | `users/{uid}` | displayName, email, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerTiers, providerPauses, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt |
 | `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, notes, progress (TV), rewatchCount, providers, genreIds, tmdbStatus |
+| `watchlistTags` | `users/{uid}/watchlistTags/{tmdbId}` | Dina egna fritext-taggar per titel (privata; egen ägar-skyddad subcollection) |
 | `episodeProgress` | `users/{uid}/episodeProgress/{tmdbId}` | Watched-flagga per avsnitt |
 | `notInterested` | `users/{uid}/notInterested/{tmdbId}` | Gömda titlar från rekommendationer |
 | `notifications` | `users/{uid}/notifications/{notifId}` | Notifikations-inbox |
@@ -113,3 +115,6 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   tappades i exporten: `friends`, `friendRequests`, `friendRequestsSent`,
   `groupInvites`, `pauseHistory`. Rent additivt (inga befintliga fält
   ändrade), därför hålls `schemaVersion` på `1.0`.
+- **1.1 (2026-07-01, BIN-164)** — Lade till `watchlistTags` (dina privata
+  fritext-taggar per titel, egen ägar-skyddad subcollection). Additivt fält →
+  minor-bump 1.0 → 1.1.

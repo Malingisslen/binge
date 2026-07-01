@@ -189,6 +189,22 @@ export function WatchlistCard({
             </span>
           </div>
         ) : null}
+        {/* BIN-164: privata taggar — max 2 + "+N" så de inte tränger ut annan info. */}
+        {(item.tags?.length ?? 0) > 0 && (
+          <div className="mt-[4px] flex flex-wrap items-center gap-[2px]">
+            {item.tags!.slice(0, 2).map(t => (
+              <span
+                key={t}
+                className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3 rounded-sm inline-block max-w-[110px] truncate"
+              >
+                {t}
+              </span>
+            ))}
+            {item.tags!.length > 2 && (
+              <span className="text-xxs text-ink-3">+{item.tags!.length - 2}</span>
+            )}
+          </div>
+        )}
         {item.mediaType === 'tv' && (
           <div className="mt-[5px] flex items-center gap-[6px]">
             <div className="flex-1 h-[4px] bg-rule rounded-full overflow-hidden relative">

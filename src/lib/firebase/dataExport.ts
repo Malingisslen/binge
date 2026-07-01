@@ -10,7 +10,8 @@ import type { QuerySnapshot } from 'firebase/firestore';
  * changes — framtida consumers ska kunna tolka äldre exports.
  */
 
-export const SCHEMA_VERSION = '1.0' as const;
+// 1.1 (BIN-164): additive — new `watchlistTags` array (your private per-title tags).
+export const SCHEMA_VERSION = '1.1' as const;
 
 export interface ExportDoc {
   id: string;
@@ -26,6 +27,7 @@ export interface BingeExport {
   justwatchAttribution: string;
   profile: Record<string, unknown> | null;
   watchlist: ExportDoc[];
+  watchlistTags: ExportDoc[];
   episodeProgress: ExportDoc[];
   notInterested: ExportDoc[];
   notifications: ExportDoc[];
@@ -53,6 +55,7 @@ const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personupp
 Filen innehåller:
 - Din profil (profile)
 - Alla titlar i din watchlist, inklusive status och betyg (watchlist)
+- Dina egna taggar per titel (watchlistTags)
 - Episode-progress för serier (episodeProgress)
 - "Inte intresserad"-listan (notInterested)
 - Notifikationer (notifications)
@@ -100,6 +103,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     justwatchAttribution: JUSTWATCH_ATTRIBUTION_EN,
     profile: s.profileSnap.exists() ? (s.profileSnap.data() as Record<string, unknown>) : null,
     watchlist: toExportDocs(s.watchlistSnap),
+    watchlistTags: toExportDocs(s.watchlistTagsSnap),
     episodeProgress: toExportDocs(s.episodeProgressSnap),
     notInterested: toExportDocs(s.notInterestedSnap),
     notifications: toExportDocs(s.notificationsSnap),

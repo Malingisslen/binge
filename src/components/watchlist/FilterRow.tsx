@@ -14,32 +14,42 @@ export default function FilterRow({
   onToggleGenre,
   minRating,
   onSetMinRating,
+  // BIN-164: taggfilter — samma chip-mönster som genre. tags = de taggar som
+  // faktiskt finns i listan (tagsInLibrary); tom → gruppen renderas inte.
+  tags = [],
+  tagFilter = [],
+  onToggleTag,
 }: {
   genres: { id: number; name: string }[];
   genreFilter: number[];
   onToggleGenre: (id: number) => void;
   minRating: number | null;
   onSetMinRating: (r: number | null) => void;
+  tags?: string[];
+  tagFilter?: string[];
+  onToggleTag?: (t: string) => void;
 }) {
-  if (genres.length === 0) return null;
+  if (genres.length === 0 && tags.length === 0) return null;
 
   const groupLabel = 'text-[11px] uppercase tracking-[0.5px] text-ink-3 mr-1 shrink-0';
 
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, flexWrap: 'wrap' }}>
-      <div className="flex items-center gap-[6px] flex-wrap">
-        <span className={groupLabel}>Genre</span>
-        {genres.map(g => (
-          <button
-            key={g.id}
-            type="button"
-            onClick={() => onToggleGenre(g.id)}
-            className={`chip${genreFilter.includes(g.id) ? ' is-on' : ''}`}
-          >
-            {g.name}
-          </button>
-        ))}
-      </div>
+      {genres.length > 0 && (
+        <div className="flex items-center gap-[6px] flex-wrap">
+          <span className={groupLabel}>Genre</span>
+          {genres.map(g => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => onToggleGenre(g.id)}
+              className={`chip${genreFilter.includes(g.id) ? ' is-on' : ''}`}
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-[6px]">
         <span className={groupLabel}>Betyg</span>
         {RATING_STEPS.map(r => (
@@ -54,6 +64,21 @@ export default function FilterRow({
           </button>
         ))}
       </div>
+      {tags.length > 0 && onToggleTag && (
+        <div className="flex items-center gap-[6px] flex-wrap">
+          <span className={groupLabel}>Taggar</span>
+          {tags.map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onToggleTag(t)}
+              className={`chip${tagFilter.includes(t) ? ' is-on' : ''}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

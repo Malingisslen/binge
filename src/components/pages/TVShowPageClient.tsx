@@ -25,6 +25,8 @@ import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
 import { seasonCompletion } from '@/lib/tmdb/seasonCompletion';
 import NotesBlock from '@/components/title/NotesBlock';
+import TagEditor from '@/components/title/TagEditor';
+import { tagsInLibrary } from '@/lib/libraryView';
 import RecCard from '@/components/recommendations/RecCard';
 import ReviewList from '@/components/title/ReviewList';
 import { toneForGenreIds } from '@/lib/duotone';
@@ -54,7 +56,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const fromGroup = searchParams?.get('fromGroup') ?? null;
   const { data: show, isLoading } = useTVShow(showId, initialData);
   const { offers } = useStreamingOffers(show?.id);
-  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, updateTags, items } = useWatchlist();
   const { user } = useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
@@ -461,6 +463,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               <h2>Din anteckning</h2>
             </div>
             <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />
+            <TagEditor
+              tags={watchlistItem.tags ?? []}
+              onChange={t => updateTags(show.id, t)}
+              suggestions={tagsInLibrary(items)}
+            />
           </section>
         )}
         <section className="detail-section">

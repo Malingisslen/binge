@@ -6,7 +6,7 @@ import { toDate } from '@/lib/firebase/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
-import { buildStatusUpdate } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
@@ -56,6 +56,7 @@ interface WatchlistState {
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
   updateTmdbStatus: (tmdbId: number, tmdbStatus: string | null) => Promise<void>;
   setRuntime: (tmdbId: number, runtime: number | null) => Promise<void>;
+  updateTags: (tmdbId: number, tags: string[]) => Promise<void>;
   removeItem: (tmdbId: number) => Promise<void>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
   getItem: (tmdbId: number) => WatchlistItem | null;
@@ -72,6 +73,7 @@ const WatchlistContext = createContext<WatchlistState>({
   updateProgress: async () => {},
   updateTmdbStatus: async () => {},
   setRuntime: async () => {},
+  updateTags: async () => {},
   updateVisibility: async () => {},
   removeItem: async () => {},
   getByStatus: () => [],
@@ -82,6 +84,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { uid, user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // BIN-164: tags live in a SEPARATE owner-only subcollection (never on the
+  // publicly-readable watchlist doc), so they arrive on their own subscription
+  // and are joined onto items in-memory below. Map keyed by tmdbId.
+  const [tagsByTmdbId, setTagsByTmdbId] = useState<Record<number, string[]>>({});
 
   // first_title_added-grindning (BIN-56 + BIN-38). Den gamla grinden
   // `items.length === 0 && !loading` hade två motstridiga krav:
@@ -153,6 +159,30 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }));
   }, [uid]);
+
+  // BIN-164: parallel owner-only subscription for per-title tags. Kept separate
+  // from the watchlist listener (own collection, own rules) — doc id = tmdbId,
+  // shape { tags: string[] }. Empty/absent → no entry (join defaults to []).
+  useEffect(() => {
+    if (!uid) { setTagsByTmdbId({}); return; }
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'watchlistTags'), (snap) => {
+        const map: Record<number, string[]> = {};
+        snap.docs.forEach(d => {
+          const tags = (d.data().tags as string[] | undefined) ?? [];
+          if (tags.length > 0) map[Number(d.id)] = tags;
+        });
+        setTagsByTmdbId(map);
+      }));
+  }, [uid]);
+
+  // Join tags onto items in-memory. Consumers read `item.tags` (default []);
+  // the raw `items` state (used by the mutators' current-item lookups) stays
+  // tag-free since mutators never need tags.
+  const itemsWithTags = useMemo(
+    () => items.map(i => ({ ...i, tags: tagsByTmdbId[i.tmdbId] ?? [] })),
+    [items, tagsByTmdbId],
+  );
 
   // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
   // (effectiveVisibility + legacy isPublic-mirror) vid VARJE mutation. Gamla
@@ -338,19 +368,37 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)));
+    // Best-effort: drop the sibling tags doc so it never orphans (its own
+    // owner-only collection isn't cascaded by the watchlist delete).
+    try {
+      await deleteDoc(doc(db, 'users', uid, 'watchlistTags', String(tmdbId)));
+    } catch { /* no tags doc for this title — fine */ }
+  }, [uid]);
+
+  // BIN-164: write the owner-only tags doc. normalizeTags enforces the per-tag
+  // length + dedup + count caps (the rules bound the array size server-side but
+  // can't iterate elements). Empty result → delete the doc rather than store [].
+  const updateTags = useCallback(async (tmdbId: number, tags: string[]) => {
+    if (!uid) return;
+    const clean = normalizeTags(tags);
+    const { db, doc, setDoc, deleteDoc } = await fsdb();
+    const ref = doc(db, 'users', uid, 'watchlistTags', String(tmdbId));
+    if (clean.length === 0) { await deleteDoc(ref); return; }
+    // Full replace (the doc's only field is `tags`) — not a merge.
+    await setDoc(ref, { tags: clean });
   }, [uid]);
 
   const getByStatus = useCallback((status: WatchStatus, mediaType?: MediaType) => {
-    return items.filter(i => i.status === status && (!mediaType || i.mediaType === mediaType));
-  }, [items]);
+    return itemsWithTags.filter(i => i.status === status && (!mediaType || i.mediaType === mediaType));
+  }, [itemsWithTags]);
 
   const getItem = useCallback((tmdbId: number) => {
-    return items.find(i => i.tmdbId === tmdbId) ?? null;
-  }, [items]);
+    return itemsWithTags.find(i => i.tmdbId === tmdbId) ?? null;
+  }, [itemsWithTags]);
 
   const value = useMemo(() => ({
-    items, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem,
-  }), [items, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateTags, updateVisibility, removeItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

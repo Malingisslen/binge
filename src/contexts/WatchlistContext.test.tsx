@@ -25,9 +25,15 @@ vi.mock('@/lib/watchStatus.migration', () => ({
 // Själva payload-logiken (dropped:false, rewatch-uppräkning) bor i
 // watchlistWrites och testas där — här bryr vi oss bara om forwarding.
 const buildStatusUpdate = vi.fn((..._args: unknown[]) => ({}) as Record<string, unknown>);
-vi.mock('@/lib/watchlistWrites', () => ({
-  buildStatusUpdate: (...args: unknown[]) => buildStatusUpdate(...args),
-}));
+// Spy buildStatusUpdate but keep the REAL normalizeTags (BIN-164) so the
+// updateTags test verifies genuine normalization, not a stub.
+vi.mock('@/lib/watchlistWrites', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/watchlistWrites')>();
+  return {
+    ...actual,
+    buildStatusUpdate: (...args: unknown[]) => buildStatusUpdate(...args),
+  };
+});
 
 // syncProgressToGroups: fire-and-forget grupp-synk som updateProgress kör via
 // dynamisk import — mockad så vi kan verifiera att rätt status forwardas (BIN-332).
@@ -43,8 +49,11 @@ vi.mock('@/lib/firebase/utils', () => ({
 
 // --- Firestore-mock --------------------------------------------------------
 // lazySubscribe: kör attach() synkront och exponerar onSnapshot-callbacken
-// så testet kan driva snapshot-sekvensen manuellt.
+// så testet kan driva snapshot-sekvensen manuellt. BIN-164: contexten har nu
+// TVÅ subscriptions (watchlist + watchlistTags) — routa på collection-path så
+// `snapshotCallback` fortsatt driver watchlist-items (tags-callbacken separat).
 let snapshotCallback: ((snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void) | null = null;
+let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
 
 const setDoc = vi.fn(async (..._args: unknown[]) => {});
 const deleteDoc = vi.fn(async (..._args: unknown[]) => {});
@@ -53,12 +62,16 @@ vi.mock('@/lib/firebase/db', () => ({
   lazySubscribe: (attach: (kit: unknown) => () => void) => {
     const kit = {
       db: {},
-      collection: () => ({}),
+      collection: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
       onSnapshot: (
-        _ref: unknown,
+        ref: { _path?: string },
         cb: (snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void,
       ) => {
-        snapshotCallback = cb;
+        if ((ref?._path ?? '').endsWith('watchlistTags')) {
+          tagsSnapshotCallback = cb as typeof tagsSnapshotCallback;
+        } else {
+          snapshotCallback = cb;
+        }
         return () => {};
       },
     };
@@ -111,6 +124,7 @@ let updateStatusRef: ((tmdbId: number, status: WatchStatus, watchedAt?: Date) =>
 let updateProgressRef: ((tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
 let setRuntimeRef: ((tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
 let removeItemRef: ((tmdbId: number) => Promise<void>) | null = null;
+let updateTagsRef: ((tmdbId: number, tags: string[]) => Promise<void>) | null = null;
 
 function Harness() {
   const wl = useWatchlist();
@@ -120,6 +134,7 @@ function Harness() {
     updateProgressRef = wl.updateProgress;
     setRuntimeRef = wl.setRuntime;
     removeItemRef = wl.removeItem;
+    updateTagsRef = wl.updateTags;
   }, [wl]);
   return <div>ready</div>;
 }
@@ -154,6 +169,7 @@ beforeEach(() => {
   buildStatusUpdate.mockClear();
   syncProgressToGroups.mockClear();
   snapshotCallback = null;
+  tagsSnapshotCallback = null;
   authState.uid = 'u1';
   authState.user = { defaultVisibility: 'private' };
 });
@@ -420,15 +436,44 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     );
   });
 
-  it('removeItem deletes the watchlist doc at the correct path', async () => {
+  it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
     await act(async () => {
       await removeItemRef!(9);
     });
 
-    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    // Both the watchlist doc and the owner-only tags doc are removed so tags
+    // never orphan (their own collection isn't cascaded by the watchlist delete).
+    expect(deleteDoc).toHaveBeenCalledTimes(2);
     expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlist/9');
+    expect((deleteDoc.mock.calls[1][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
     expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('updateTags writes normalized tags to the owner-only tags doc (BIN-164)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+
+    await act(async () => {
+      // Duplicate + whitespace → normalizeTags collapses to one clean tag.
+      await updateTagsRef!(9, ['  Mysrys ', 'mysrys']);
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('users/u1/watchlistTags/9');
+    expect(payload).toEqual({ tags: ['Mysrys'] });
+  });
+
+  it('updateTags deletes the tags doc when cleared to empty (BIN-164)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+
+    await act(async () => {
+      await updateTagsRef!(9, ['   ']); // normalizes to []
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
   });
 });

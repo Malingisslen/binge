@@ -150,3 +150,27 @@ export function genresInLibrary(items: WatchlistItem[]): { id: number; name: str
     .map(id => ({ id, name: genreLabel(id) }))
     .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 }
+
+// === Taggfilter (BIN-164) — samma klient-sidiga, noll-TMDB-mönster som genre ===
+// item.tags är in-memory-hydrerad från den ägar-skyddade watchlistTags-
+// subcollectionen (se WatchlistItem-typen) — aldrig från watchlist-doc:t.
+
+/** OR-match på taggar (case-insensitiv, sv-SE), speglar genre-chipsens semantik:
+ *  titeln passerar om den har MINST en av de valda taggarna. Tom lista = allt. */
+export function itemPassesTags(item: WatchlistItem, selectedTags: string[]): boolean {
+  if (selectedTags.length === 0) return true;
+  const owned = new Set((item.tags ?? []).map(t => t.toLocaleLowerCase('sv-SE')));
+  return selectedTags.some(t => owned.has(t.toLocaleLowerCase('sv-SE')));
+}
+
+/** De taggar som faktiskt finns i listan, deduplicerade (sv-SE-fold, första
+ *  visnings-casing behålls), sorterade på svenska — driver filterchipsen så
+ *  bara verkligt använda taggar visas (och raden döljs helt när listan är tom). */
+export function tagsInLibrary(items: WatchlistItem[]): string[] {
+  const seen = new Map<string, string>(); // fold → display
+  for (const i of items) for (const t of i.tags ?? []) {
+    const fold = t.toLocaleLowerCase('sv-SE');
+    if (!seen.has(fold)) seen.set(fold, t);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'sv'));
+}

@@ -55,6 +55,19 @@ function StatsContent() {
       i => (i.providers?.length ?? 0) > 0 || i.providersCheckedAt != null
     ).length;
 
+    // BIN-164: dina mest använda taggar (från redan inlästa items, ingen extra
+    // läsning). Taggar är privata — de här räknas bara över DIN egen data.
+    const tagStats: Record<string, number> = {};
+    for (const item of items) {
+      for (const t of item.tags ?? []) {
+        tagStats[t] = (tagStats[t] ?? 0) + 1;
+      }
+    }
+    const topTags = Object.entries(tagStats)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+
     const totalRewatches = items.reduce((sum, i) => sum + (i.rewatchCount ?? 0), 0);
 
     const monthlyActivity: Record<string, number> = {};
@@ -68,7 +81,7 @@ function StatsContent() {
 
     const moviePct = items.length > 0 ? Math.round((movies.length / items.length) * 100) : 0;
 
-    return { following, watched, movies, tvShows, rated, avgRating, ratingDist, topProviders, withProviderData, totalRewatches, activityMonths, moviePct, total: items.length };
+    return { following, watched, movies, tvShows, rated, avgRating, ratingDist, topProviders, withProviderData, totalRewatches, activityMonths, moviePct, topTags, total: items.length };
   }, [items]);
 
   if (stats.total === 0) {
@@ -196,6 +209,23 @@ function StatsContent() {
                 </div>
                 <span className="text-xxs text-ink-3 w-[40px] text-right">{p.count} {p.count === 1 ? 'titel' : 'titlar'}</span>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* BIN-164: dina taggar — privata, räknas bara över din egen data */}
+      {stats.topTags.length > 0 && (
+        <div className="bg-surface border border-rule rounded-sm mb-4">
+          <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
+            <span className="text-sm font-bold text-ink-2">Dina taggar</span>
+            <span className="text-xxs text-ink-3">Bara synliga för dig</span>
+          </div>
+          <div className="px-3 py-2 flex flex-wrap gap-[6px]">
+            {stats.topTags.map(t => (
+              <span key={t.tag} className="chip is-on">
+                {t.tag} · {t.count}
+              </span>
             ))}
           </div>
         </div>

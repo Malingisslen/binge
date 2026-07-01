@@ -51,6 +51,7 @@ interface CoverageSpec {
 const COVERAGE: Record<keyof UserDataSnapshots, CoverageSpec> = {
   profileSnap: { export: 'profile', deleteCascade: true },
   watchlistSnap: { export: 'watchlist', deleteCascade: true },
+  watchlistTagsSnap: { export: 'watchlistTags', deleteCascade: true },
   episodeProgressSnap: { export: 'episodeProgress', deleteCascade: true },
   notInterestedSnap: { export: 'notInterested', deleteCascade: true },
   notificationsSnap: { export: 'notifications', deleteCascade: true },

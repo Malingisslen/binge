@@ -57,6 +57,8 @@ export async function collectDeletionRefs(
 
   // 1. Simple per-user subcollections.
   snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref));
+  // BIN-164: owner-only per-title tags — deleted with the account (never orphaned).
+  snaps.watchlistTagsSnap.docs.forEach(d => refs.push(d.ref));
   snaps.episodeProgressSnap.docs.forEach(d => refs.push(d.ref));
   snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
   snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
