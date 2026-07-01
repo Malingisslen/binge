@@ -17,7 +17,7 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
   return (
     <section className="mt-[18px] mb-[14px]">
       <div className="flex items-baseline justify-between mb-[8px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
           Fortsätt titta
         </h2>
       </div>
@@ -31,7 +31,7 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
             <Link
               key={item.tmdbId}
               href={titleHref('tv', item.tmdbId)}
-              className="no-underline flex gap-[10px] items-center bg-surface border border-border-main rounded-sm p-[8px] hover:shadow-lift transition-shadow"
+              className="no-underline flex gap-[10px] items-center bg-surface border border-rule rounded-sm p-[8px] hover:shadow-lift transition-shadow"
               style={{ color: 'var(--ink)' }}
             >
               <span className="shrink-0 w-[40px]">
@@ -40,9 +40,9 @@ export default function ContinueWatchingTile({ entries }: { entries: ContinueWat
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block text-xs font-semibold text-text-primary truncate">{item.title}</span>
-                <span className="block text-xxs text-text-muted mt-[3px]">
-                  {behind && <span className="text-accent font-semibold">Ligger efter · </span>}
+                <span className="block text-xs font-semibold text-ink truncate">{item.title}</span>
+                <span className="block text-xxs text-ink-3 mt-[3px]">
+                  {behind && <span className="text-acc-deep font-semibold">Ligger efter · </span>}
                   {seen ? `senast ${seen}` : 'påbörjad'}
                 </span>
               </span>

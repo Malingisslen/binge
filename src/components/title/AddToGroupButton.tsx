@@ -53,13 +53,13 @@ export default function AddToGroupButton({
     <div className="relative inline-block" ref={ref}>
       <button
         onClick={onOpen}
-        className="px-[7px] py-[3px] border border-border-main rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-text-secondary hover:bg-surface-hover flex items-center gap-1"
+        className="px-[7px] py-[3px] border border-rule rounded-sm text-xs font-[inherit] cursor-pointer bg-surface text-ink-2 hover:bg-bg-2 flex items-center gap-1"
       >
         <UsersRound size={12} />
         Grupp
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-[220px] bg-surface border border-border-main rounded-sm z-50 max-h-[260px] overflow-y-auto">
+        <div className="absolute left-0 top-full mt-1 w-[220px] bg-surface border border-rule rounded-sm z-50 max-h-[260px] overflow-y-auto">
           {groups.map(g => {
             const isIn = presence[g.id] ?? false;
             const busy = working === g.id;
@@ -83,12 +83,12 @@ export default function AddToGroupButton({
                     setWorking(null);
                   }
                 }}
-                className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-surface-hover flex items-center gap-2 disabled:opacity-50"
+                className="w-full text-left px-2 py-[5px] text-xs border-none bg-transparent font-[inherit] cursor-pointer hover:bg-bg-2 flex items-center gap-2 disabled:opacity-50"
               >
-                <span className={`w-[14px] inline-flex items-center justify-center ${isIn ? 'text-accent' : 'text-text-muted'}`}>
+                <span className={`w-[14px] inline-flex items-center justify-center ${isIn ? 'text-acc-deep' : 'text-ink-3'}`}>
                   {isIn ? <Check size={11} /> : null}
                 </span>
-                <span className="truncate text-text-primary">{g.name}</span>
+                <span className="truncate text-ink">{g.name}</span>
               </button>
             );
           })}

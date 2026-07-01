@@ -67,7 +67,7 @@ export function OnboardingFlow() {
   return (
     <div className="max-w-[640px] mx-auto py-8 px-4">
       <StepIndicator current={step} total={4} />
-      <div className="mt-6 bg-surface border border-border-main rounded-sm p-6">
+      <div className="mt-6 bg-surface border border-rule rounded-sm p-6">
         {step === 1 && <StepWelcome onNext={() => setStep(2)} />}
         {step === 2 && <StepProviders onBack={() => setStep(1)} onNext={() => setStep(3)} />}
         {step === 3 && <StepFirstTitle onBack={() => setStep(2)} onNext={() => setStep(4)} />}
@@ -77,7 +77,7 @@ export function OnboardingFlow() {
         <button
           onClick={skip}
           disabled={saving}
-          className="text-xxs text-text-muted hover:text-text-secondary bg-transparent border-none cursor-pointer disabled:opacity-50"
+          className="text-xxs text-ink-3 hover:text-ink-2 bg-transparent border-none cursor-pointer disabled:opacity-50"
         >
           Hoppa över
         </button>
@@ -93,7 +93,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
         <div
           key={i}
           className={`h-[3px] flex-1 rounded-sm ${
-            i + 1 <= current ? 'bg-accent' : 'bg-border-light'
+            i + 1 <= current ? 'bg-acc-deep' : 'bg-rule-2'
           }`}
         />
       ))}
@@ -109,27 +109,27 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Välkommen till Binge.nu
       </h1>
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-ink-2 mb-4">
         Håll koll på vad du tittar på och se var filmer och serier streamas i
         Sverige. Tre steg.
       </p>
-      <ul className="space-y-2 mb-6 text-sm text-text-secondary">
+      <ul className="space-y-2 mb-6 text-sm text-ink-2">
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-accent mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
           <span>Välj vilka streamingtjänster du har</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-accent mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
           <span>Lägg till något du vill se eller redan följer</span>
         </li>
         <li className="flex items-start gap-2">
-          <Check size={14} className="text-accent mt-[3px] shrink-0" />
+          <Check size={14} className="text-acc-deep mt-[3px] shrink-0" />
           <span>Få rekommendationer baserat på din smak</span>
         </li>
       </ul>
       <button
         onClick={onNext}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer"
       >
         Börja <ArrowRight size={14} />
       </button>
@@ -168,7 +168,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Vilka tjänster har du?
       </h1>
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-ink-2 mb-4">
         Används för att visa var dina titlar kan streamas — och för att räkna
         ut om du kan pausa någon tjänst. Kryssa alla du prenumererar på.
       </p>
@@ -182,8 +182,8 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
               onClick={() => toggle(p.id)}
               className={`flex items-center gap-2 px-3 py-2 border rounded-sm cursor-pointer text-left ${
                 isSelected
-                  ? 'border-accent bg-accent/[0.05] text-text-primary'
-                  : 'border-border-main bg-white text-text-secondary'
+                  ? 'border-acc-deep bg-acc-deep/[0.05] text-ink'
+                  : 'border-rule bg-white text-ink-2'
               }`}
             >
               <span
@@ -191,7 +191,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
                 style={{ background: p.color }}
               />
               <span className="text-sm flex-1 truncate">{p.shortName}</span>
-              {isSelected && <Check size={12} className="text-accent shrink-0" />}
+              {isSelected && <Check size={12} className="text-acc-deep shrink-0" />}
             </button>
           );
         })}
@@ -199,14 +199,14 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-border-main rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Nästa'} <ArrowRight size={14} />
         </button>
@@ -258,12 +258,12 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Lägg till din första titel
       </h1>
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-ink-2 mb-4">
         Sök efter en film eller serie. Serier följer du; filmer markerar du
         som vill se eller sedda.
       </p>
-      <div className="flex items-center gap-2 mb-3 border border-border-main rounded-sm bg-white px-2">
-        <Search size={13} className="text-text-muted" />
+      <div className="flex items-center gap-2 mb-3 border border-rule rounded-sm bg-white px-2">
+        <Search size={13} className="text-ink-3" />
         <input
           type="search"
           value={query}
@@ -275,7 +275,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       </div>
 
       {isLoading && query.length >= 2 && (
-        <div className="text-xs text-text-muted py-2">Söker…</div>
+        <div className="text-xs text-ink-3 py-2">Söker…</div>
       )}
 
       {searchData && searchData.results.length > 0 && (
@@ -289,7 +289,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
               return (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-2 py-[5px] bg-white border border-border-main rounded-sm"
+                  className="flex items-center gap-2 px-2 py-[5px] bg-white border border-rule rounded-sm"
                 >
                   {poster && (
                     <div className={`poster duo-${r.genre_ids?.length ? toneForGenreIds(r.genre_ids) : toneForId(r.id)} w-[28px] h-[42px] shrink-0`}>
@@ -304,22 +304,22 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-text-primary truncate">
+                    <div className="text-xs font-semibold text-ink truncate">
                       {getDisplayTitle(r)}
                     </div>
-                    <div className="text-xxs text-text-muted">
+                    <div className="text-xxs text-ink-3">
                       {r.media_type === 'movie' ? 'Film' : 'Serie'}
                       {getReleaseYear(r) ? ` · ${getReleaseYear(r)}` : ''}
                     </div>
                   </div>
                   {alreadyAdded ? (
-                    <span className="text-xxs text-accent inline-flex items-center gap-1">
+                    <span className="text-xxs text-acc-deep inline-flex items-center gap-1">
                       <Check size={11} /> Tillagd
                     </span>
                   ) : r.media_type === 'tv' ? (
                     <button
                       onClick={() => handleAdd(r, 'engage')}
-                      className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
+                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer"
                     >
                       Följ
                     </button>
@@ -327,13 +327,13 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     <div className="flex gap-1">
                       <button
                         onClick={() => handleAdd(r, 'plan')}
-                        className="text-xxs px-2 py-[3px] border border-border-main rounded-sm bg-white cursor-pointer"
+                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer"
                       >
                         Vill se
                       </button>
                       <button
                         onClick={() => handleAdd(r, 'engage')}
-                        className="text-xxs px-2 py-[3px] bg-accent text-white rounded-sm cursor-pointer"
+                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer"
                       >
                         Sedd
                       </button>
@@ -346,7 +346,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       )}
 
       {items.length > 0 && (
-        <div className="text-xs text-accent mb-3">
+        <div className="text-xs text-acc-deep mb-3">
           <Check size={11} className="inline mb-[2px] mr-1" />
           {items.length} titel{items.length === 1 ? '' : 'ar'} tillagd{items.length === 1 ? '' : 'a'}.
         </div>
@@ -355,21 +355,21 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-border-main rounded-sm text-sm bg-white cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={onNext}
           disabled={!canContinue}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           Nästa <ArrowRight size={14} />
         </button>
         {!canContinue && (
           <button
             onClick={onNext}
-            className="text-xxs text-text-muted hover:text-text-secondary bg-transparent border-none cursor-pointer ml-auto"
+            className="text-xxs text-ink-3 hover:text-ink-2 bg-transparent border-none cursor-pointer ml-auto"
           >
             Hoppa över
           </button>
@@ -395,19 +395,19 @@ function StepDone({
       <h1 className="page-h1" style={{ marginBottom: 12 }}>
         Klar.
       </h1>
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-ink-2 mb-4">
         Lägg till fler titlar, utforska rekommendationer eller se var dina
         serier streamas.
       </p>
 
-      <div className="bg-accent/[0.06] border border-accent/30 rounded-sm p-3 mb-4">
+      <div className="bg-acc-deep/[0.06] border border-acc-deep/30 rounded-sm p-3 mb-4">
         <div className="flex items-start gap-2 mb-2">
-          <Target size={14} className="text-accent mt-[2px] shrink-0" />
+          <Target size={14} className="text-acc-deep mt-[2px] shrink-0" />
           <div className="flex-1">
-            <div className="text-sm font-bold text-text-primary">
+            <div className="text-sm font-bold text-ink">
               Kalibrera smaken
             </div>
-            <p className="text-xxs text-text-muted mt-1">
+            <p className="text-xxs text-ink-3 mt-1">
               Ranka 10 genrer du gillar så blir rekommendationerna skarpare.
               Cirka 2 minuter — kan göras senare från inställningarna.
             </p>
@@ -417,14 +417,14 @@ function StepDone({
           <button
             onClick={() => onFinish('/kalibrera/')}
             disabled={saving}
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Target size={11} /> Kalibrera smak
           </button>
           <button
             onClick={() => onFinish()}
             disabled={saving}
-            className="px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer disabled:opacity-50"
           >
             Senare
           </button>
@@ -435,14 +435,14 @@ function StepDone({
         <button
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-2 border border-border-main rounded-sm text-sm bg-white cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-3 py-2 border border-rule rounded-sm text-sm bg-white cursor-pointer disabled:opacity-50"
         >
           <ArrowLeft size={14} /> Tillbaka
         </button>
         <button
           onClick={() => onFinish()}
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-acc-deep text-white rounded-sm text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Sparar…' : 'Klar'} <ArrowRight size={14} />
         </button>

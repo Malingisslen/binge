@@ -28,10 +28,10 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Behåll eller säg upp?</h2>
-        <span className="text-xxs text-text-muted">Värde i {monthLabel} · film du sett</span>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Behåll eller säg upp?</h2>
+        <span className="text-xxs text-ink-3">Värde i {monthLabel} · film du sett</span>
       </div>
-      <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Sett', 'Månadskostnad', 'Värde']} />
           <tbody>
@@ -45,20 +45,20 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
                     ? `${r.krPerTitle} kr/film`
                     : '—';
               return (
-                <tr key={r.providerId} className="border-b border-border-light last:border-b-0">
+                <tr key={r.providerId} className="border-b border-rule-2 last:border-b-0">
                   <td className="px-3 py-[6px] whitespace-nowrap">
                     <span className="inline-flex items-center gap-[6px]">
                       <ProviderDot color={getProviderColor(r.providerId)} size={7} />
-                      <span className="text-xs font-semibold text-text-primary">{name}</span>
+                      <span className="text-xs font-semibold text-ink">{name}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-text-secondary tabular-nums">
+                  <td className="px-3 py-[6px] text-xs text-ink-2 tabular-nums">
                     {pluralSv(r.titlesWatched, 'film', 'filmer')}
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-text-secondary text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-[6px] text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
                     {r.monthlyCost} kr/mån
                   </td>
-                  <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${r.isDeadWeight ? 'text-danger font-semibold' : 'text-text-secondary'}`}>
+                  <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${r.isDeadWeight ? 'text-danger font-semibold' : 'text-ink-2'}`}>
                     {valueText}
                   </td>
                 </tr>

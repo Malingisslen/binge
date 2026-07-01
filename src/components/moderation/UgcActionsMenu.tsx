@@ -83,23 +83,23 @@ export function UgcActionsMenu({
     <div ref={menuRef} className={`relative inline-block ${className}`}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="text-text-muted hover:text-text-secondary p-1 cursor-pointer"
+        className="text-ink-3 hover:text-ink-2 p-1 cursor-pointer"
         aria-label="Åtgärder"
         title="Åtgärder"
       >
         <MoreHorizontal size={14} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-[2px] bg-surface border border-border-main rounded-sm min-w-[160px] z-20">
+        <div className="absolute right-0 top-full mt-[2px] bg-surface border border-rule rounded-sm min-w-[160px] z-20">
           <button
             onClick={() => { setOpen(false); setReporting(true); }}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-text-secondary hover:bg-surface-hover cursor-pointer"
+            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer"
           >
             <Flag size={11} /> Rapportera
           </button>
           <button
             onClick={handleBlock}
-            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-text-secondary hover:bg-surface-hover cursor-pointer border-t border-border-light"
+            className="w-full flex items-center gap-2 px-3 py-[6px] text-xs text-ink-2 hover:bg-bg-2 cursor-pointer border-t border-rule-2"
           >
             {blocked ? <UserCheck size={11} /> : <UserX size={11} />}
             {blocked ? 'Avblockera' : 'Blockera användare'}
@@ -171,17 +171,17 @@ function ReportDialog({
       <form
         onSubmit={submit}
         onClick={e => e.stopPropagation()}
-        className="bg-surface border border-border-main rounded-sm max-w-[440px] w-full"
+        className="bg-surface border border-rule rounded-sm max-w-[440px] w-full"
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-dialog-title"
       >
-        <div className="px-3 py-2 border-b border-border-light">
+        <div className="px-3 py-2 border-b border-rule-2">
           <h2 id="report-dialog-title" className="text-sm font-bold">Rapportera innehåll</h2>
         </div>
         <div className="px-3 py-3 space-y-3">
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">
+            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
               Anledning
             </label>
             <select
@@ -195,7 +195,7 @@ function ReportDialog({
             </select>
           </div>
           <div>
-            <label className="block text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">
+            <label className="block text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">
               Kommentar (valfritt)
             </label>
             <textarea
@@ -204,26 +204,26 @@ function ReportDialog({
               maxLength={500}
               rows={3}
               placeholder="Extra kontext för moderationen…"
-              className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white font-[inherit] resize-none"
+              className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none"
             />
-            <div className="text-xxs text-text-muted mt-[2px] text-right">
+            <div className="text-xxs text-ink-3 mt-[2px] text-right">
               {note.length}/500
             </div>
           </div>
           {error && <div className="text-xxs text-danger-ink">{error}</div>}
         </div>
-        <div className="px-3 py-2 border-t border-border-light flex items-center gap-2">
+        <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Skickar…' : 'Skicka rapport'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
           >
             Avbryt
           </button>

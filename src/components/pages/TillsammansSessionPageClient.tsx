@@ -148,24 +148,24 @@ function JoinSessionForm({
 
   return (
     <div>
-      <PageHeader crumb="Tillsammans" title="Gå med i sessionen" icon={<Users size={20} className="text-accent" />} />
-      <p className="text-xs text-text-muted mb-4 mt-3 leading-relaxed">
+      <PageHeader crumb="Tillsammans" title="Gå med i sessionen" icon={<Users size={20} className="text-acc-deep" />} />
+      <p className="text-xs text-ink-3 mb-4 mt-3 leading-relaxed">
         Någon har bjudit in dig att välja film tillsammans. Skriv ditt namn och kryssa för vilka streamingtjänster du har — bara titlar ni delar visas.
       </p>
 
-      <form onSubmit={submit} className="bg-surface border border-border-main rounded-sm">
-        <div className="px-3 py-[10px] border-b border-border-light">
-          <label className="block text-xs text-text-muted mb-1">Ditt namn</label>
+      <form onSubmit={submit} className="bg-surface border border-rule rounded-sm">
+        <div className="px-3 py-[10px] border-b border-rule-2">
+          <label className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Erik"
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-border-main rounded-sm bg-white"
+            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
         </div>
         <div className="px-3 py-[10px]">
-          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-[6px]">Dina streamingtjänster</div>
+          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[6px]">Dina streamingtjänster</div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
@@ -173,14 +173,14 @@ function JoinSessionForm({
                 <label
                   key={p.id}
                   className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
-                    selected ? 'border-accent bg-accent/[0.08]' : 'border-border-main bg-white'
+                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-white'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={selected}
                     onChange={() => toggleProvider(p.id)}
-                    className="accent-accent w-[12px] h-[12px]"
+                    className="accent-acc-deep w-[12px] h-[12px]"
                   />
                   <span className="w-[6px] h-[6px] rounded-full" style={{ background: p.color }} />
                   {p.name}
@@ -192,11 +192,11 @@ function JoinSessionForm({
         {error && (
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger">{error}</div>
         )}
-        <div className="px-3 py-2 border-t border-border-light">
+        <div className="px-3 py-2 border-t border-rule-2">
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Går med…' : 'Gå med'}
           </button>
@@ -341,21 +341,21 @@ function SessionMain({
         </div>
       </header>
 
-      <div className="bg-surface border border-border-main rounded-sm mb-[8px]">
-        <div className="flex items-center gap-2 px-3 py-[6px] border-b border-border-light text-xs">
-          <Share2 size={12} className="text-text-muted" />
-          <code className="text-xxs flex-1 truncate text-text-secondary">{shareUrl || 'Hämtar länk…'}</code>
+      <div className="bg-surface border border-rule rounded-sm mb-[8px]">
+        <div className="flex items-center gap-2 px-3 py-[6px] border-b border-rule-2 text-xs">
+          <Share2 size={12} className="text-ink-3" />
+          <code className="text-xxs flex-1 truncate text-ink-2">{shareUrl || 'Hämtar länk…'}</code>
           <button
             type="button"
             onClick={copyShare}
-            className="px-2 py-[2px] border border-border-main rounded-sm text-xxs bg-white cursor-pointer flex items-center gap-1"
+            className="px-2 py-[2px] border border-rule rounded-sm text-xxs bg-white cursor-pointer flex items-center gap-1"
           >
             <Copy size={10} />
             {shareCopied ? 'Kopierad!' : 'Kopiera'}
           </button>
         </div>
         <div className="px-3 py-[6px] flex items-center gap-2 flex-wrap text-xs">
-          <span className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">Deltagare:</span>
+          <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Deltagare:</span>
           {participants.map(p => {
             const prog = participantSwipeProgress(swipes, filteredCandidates, p.id);
             const isMe = p.id === me.id;
@@ -364,17 +364,17 @@ function SessionMain({
               <span
                 key={p.id}
                 className={`inline-flex items-center gap-[4px] px-[6px] py-[1px] border rounded-sm text-xxs ${
-                  isMe ? 'border-accent text-accent font-semibold' : 'border-border-main text-text-secondary'
+                  isMe ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-2'
                 }`}
                 title={`${prog.done}/${prog.total} svepningar${isLive ? ' · aktiv nu' : ''}`}
               >
                 {isLive && <span className="w-[5px] h-[5px] rounded-full bg-season-done" />}
-                {p.displayName}{p.isHost ? ' ★' : ''} <span className="text-text-muted">({prog.done}/{prog.total})</span>
+                {p.displayName}{p.isHost ? ' ★' : ''} <span className="text-ink-3">({prog.done}/{prog.total})</span>
               </span>
             );
           })}
         </div>
-        <div className="px-3 py-[5px] border-t border-border-light flex items-center justify-between text-xxs text-text-muted">
+        <div className="px-3 py-[5px] border-t border-rule-2 flex items-center justify-between text-xxs text-ink-3">
           <span>
             Läge: {session.config.providerMode === 'intersect' ? 'Alla har' : 'Någon har'} ·
             {' '}{session.config.mediaType === 'movie' ? 'Filmer' : session.config.mediaType === 'tv' ? 'Serier' : 'Blandat'}
@@ -383,13 +383,13 @@ function SessionMain({
           <div className="flex gap-[2px]">
             <button
               onClick={() => setView('card')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-accent/[0.1] border-accent text-accent' : 'bg-white border-border-main text-text-secondary'}`}
+              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'card' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-white border-rule text-ink-2'}`}
             >
               <LayoutGrid size={10} /> Kort
             </button>
             <button
               onClick={() => setView('table')}
-              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-accent/[0.1] border-accent text-accent' : 'bg-white border-border-main text-text-secondary'}`}
+              className={`px-2 py-[2px] rounded-sm border text-xxs flex items-center gap-1 ${view === 'table' ? 'bg-acc-deep/[0.1] border-acc-deep text-acc-deep' : 'bg-white border-rule text-ink-2'}`}
             >
               <Table2 size={10} /> Tabell
             </button>
@@ -406,7 +406,7 @@ function SessionMain({
       )}
 
       {filteredCandidates.length === 0 ? (
-        <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-xs text-text-muted">
+        <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-xs text-ink-3">
           Inga titlar matchar era gemensamma tjänster just nu.
           {session.config.providerMode === 'intersect' && effectiveProviders.length === 0 && (
             <div className="mt-2">Prova att byta till &quot;Någon har&quot;-läge i en ny session.</div>
@@ -423,9 +423,9 @@ function SessionMain({
             onCancelVeto={() => setVetoConfirm(null)}
           />
         ) : (
-          <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-center">
+          <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-center">
             <div className="text-sm font-semibold mb-1">Du har röstat på alla.</div>
-            <div className="text-xxs text-text-muted">Vänta på övriga så sammanställs matcherna automatiskt.</div>
+            <div className="text-xxs text-ink-3">Vänta på övriga så sammanställs matcherna automatiskt.</div>
           </div>
         )
       ) : (
@@ -451,34 +451,34 @@ function SwipeCard({
 }) {
   const poster = posterUrl(cand.posterPath, 'w342');
   return (
-    <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
       <div className="flex gap-3 p-3">
         {poster ? (
           <div className={`poster duo-${toneForId(cand.tmdbId)} w-[140px] h-[210px] shrink-0`}>
             <img src={poster} alt="" loading="eager" decoding="async" width={140} height={210} />
           </div>
         ) : (
-          <div className="w-[140px] h-[210px] bg-border-light rounded-sm shrink-0" />
+          <div className="w-[140px] h-[210px] bg-rule-2 rounded-sm shrink-0" />
         )}
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-bold leading-tight">{cand.title}</div>
-          <div className="text-xxs text-text-muted mt-[2px]">
+          <div className="text-xxs text-ink-3 mt-[2px]">
             {cand.year ?? '—'} · {cand.mediaType === 'movie' ? 'Film' : 'Serie'}
-            {cand.voteAverage > 0 && <> · <span className="text-accent">★ {cand.voteAverage.toFixed(1)}</span></>}
+            {cand.voteAverage > 0 && <> · <span className="text-acc-deep">★ {cand.voteAverage.toFixed(1)}</span></>}
           </div>
-          <p className="text-xs text-text-secondary mt-2 leading-relaxed line-clamp-6">
+          <p className="text-xs text-ink-2 mt-2 leading-relaxed line-clamp-6">
             {cand.overview || 'Ingen beskrivning på svenska.'}
           </p>
         </div>
       </div>
-      <div className="px-3 py-[6px] border-t border-border-light text-xxs text-text-muted flex items-center justify-between">
-        <span>Svept: <b className="text-text-primary">{progress.done}</b> / {progress.total}</span>
-        <span>Veto kvar: <b className={me.vetoRemaining > 0 ? 'text-text-primary' : 'text-text-muted'}>{me.vetoRemaining}</b></span>
+      <div className="px-3 py-[6px] border-t border-rule-2 text-xxs text-ink-3 flex items-center justify-between">
+        <span>Svept: <b className="text-ink">{progress.done}</b> / {progress.total}</span>
+        <span>Veto kvar: <b className={me.vetoRemaining > 0 ? 'text-ink' : 'text-ink-3'}>{me.vetoRemaining}</b></span>
       </div>
       {vetoConfirm ? (
         <div className="px-3 py-3 border-t border-danger bg-danger-soft text-xs">
           <div className="font-semibold text-danger-ink mb-1">Lägg ett veto?</div>
-          <div className="text-text-secondary mb-2">Veto dödar den här titeln definitivt. Du kan använda det bara en gång per session.</div>
+          <div className="text-ink-2 mb-2">Veto dödar den här titeln definitivt. Du kan använda det bara en gång per session.</div>
           <div className="flex gap-2">
             <button
               onClick={() => onVote(cand, 'veto')}
@@ -488,23 +488,23 @@ function SwipeCard({
             </button>
             <button
               onClick={onCancelVeto}
-              className="px-3 py-1 border border-border-main bg-white rounded-sm text-xs cursor-pointer"
+              className="px-3 py-1 border border-rule bg-white rounded-sm text-xs cursor-pointer"
             >
               Avbryt
             </button>
           </div>
         </div>
       ) : (
-        <div className="px-3 py-2 border-t border-border-light flex gap-2">
+        <div className="px-3 py-2 border-t border-rule-2 flex gap-2">
           <button
             onClick={() => onVote(cand, 'no')}
-            className="flex-1 px-3 py-2 border border-border-main bg-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            className="flex-1 px-3 py-2 border border-rule bg-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
           >
             <X size={14} /> Nej
           </button>
           <button
             onClick={() => onVote(cand, 'yes')}
-            className="flex-1 px-3 py-2 bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+            className="flex-1 px-3 py-2 bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
           >
             <Check size={14} /> Ja
           </button>
@@ -531,10 +531,10 @@ function CandidateTable({
   onVote: (c: SessionCandidate, v: VoteKind) => void;
 }) {
   return (
-    <div className="bg-surface border border-border-main rounded-sm overflow-x-auto">
+    <div className="bg-surface border border-rule rounded-sm overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-xxs uppercase tracking-[0.5px] text-text-muted border-b border-border-light">
+          <tr className="text-xxs uppercase tracking-[0.5px] text-ink-3 border-b border-rule-2">
             <th className="text-left px-2 py-[5px] font-semibold">Titel</th>
             <th className="text-left px-2 py-[5px] font-semibold">År</th>
             <th className="text-left px-2 py-[5px] font-semibold">Typ</th>
@@ -550,28 +550,28 @@ function CandidateTable({
             return (
               <tr key={r.candidate.tmdbId} className={`border-b border-border-table last:border-b-0 ${r.vetoed ? 'opacity-40' : ''}`}>
                 <td className="px-2 py-[4px] font-semibold truncate max-w-[260px]">{r.candidate.title}</td>
-                <td className="px-2 py-[4px] text-text-muted">{r.candidate.year ?? '—'}</td>
-                <td className="px-2 py-[4px] text-text-muted">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
-                <td className="px-2 py-[4px] text-accent">{r.candidate.voteAverage > 0 ? r.candidate.voteAverage.toFixed(1) : '—'}</td>
-                <td className="px-2 py-[4px] text-text-muted whitespace-nowrap">{summary}</td>
+                <td className="px-2 py-[4px] text-ink-3">{r.candidate.year ?? '—'}</td>
+                <td className="px-2 py-[4px] text-ink-3">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
+                <td className="px-2 py-[4px] text-acc-deep">{r.candidate.voteAverage > 0 ? r.candidate.voteAverage.toFixed(1) : '—'}</td>
+                <td className="px-2 py-[4px] text-ink-3 whitespace-nowrap">{summary}</td>
                 <td className="px-2 py-[4px] text-right">
                   <div className="inline-flex gap-[2px]">
                     <button
                       onClick={() => onVote(r.candidate, 'no')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-accent bg-accent/[0.1] text-accent' : 'border-border-main bg-white text-text-secondary'}`}
+                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'no' ? 'border-acc-deep bg-acc-deep/[0.1] text-acc-deep' : 'border-rule bg-white text-ink-2'}`}
                     >
                       Nej
                     </button>
                     <button
                       onClick={() => onVote(r.candidate, 'yes')}
-                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-accent bg-accent text-white' : 'border-border-main bg-white text-text-secondary'}`}
+                      className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'yes' ? 'border-acc-deep bg-acc-deep text-white' : 'border-rule bg-white text-ink-2'}`}
                     >
                       Ja
                     </button>
                     {(me.vetoRemaining > 0 || myVote === 'veto') && (
                       <button
                         onClick={() => onVote(r.candidate, 'veto')}
-                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-border-main bg-white text-text-muted'}`}
+                        className={`px-[6px] py-[1px] rounded-sm border text-xxs cursor-pointer ${myVote === 'veto' ? 'border-danger bg-danger-soft text-danger-ink' : 'border-rule bg-white text-ink-3'}`}
                       >
                         Veto
                       </button>
@@ -627,48 +627,48 @@ function MatchList({
   };
 
   return (
-    <div className="bg-surface border border-accent rounded-sm mb-[8px]">
-      <div className="px-3 py-[5px] border-b border-accent/30 bg-accent/[0.06] text-xxs uppercase tracking-[0.5px] text-accent font-semibold">
+    <div className="bg-surface border border-acc-deep rounded-sm mb-[8px]">
+      <div className="px-3 py-[5px] border-b border-acc-deep/30 bg-acc-deep/[0.06] text-xxs uppercase tracking-[0.5px] text-acc-deep font-semibold">
         Matcher ({matches.length})
       </div>
-      <div className="divide-y divide-border-light">
+      <div className="divide-y divide-rule-2">
         {matches.map(m => {
           const href = `/${m.candidate.mediaType === 'movie' ? 'movie' : 'tv'}/${m.candidate.tmdbId}/`;
           const poster = posterUrl(m.candidate.posterPath, 'w92');
           const isPicked = pickedTmdbId === m.candidate.tmdbId;
           return (
-            <div key={m.candidate.tmdbId} className="flex items-center gap-2 px-3 py-[5px] hover:bg-surface-hover">
+            <div key={m.candidate.tmdbId} className="flex items-center gap-2 px-3 py-[5px] hover:bg-bg-2">
               <Link
                 href={href}
-                className="flex items-center gap-2 flex-1 min-w-0 no-underline text-text-primary"
+                className="flex items-center gap-2 flex-1 min-w-0 no-underline text-ink"
               >
                 {poster ? (
                   <div className={`poster duo-${toneForId(m.candidate.tmdbId)} w-[28px] h-[42px]`}>
                     <img src={poster} alt="" loading="lazy" decoding="async" width={28} height={42} />
                   </div>
                 ) : (
-                  <div className="w-[28px] h-[42px] bg-border-light rounded-sm" />
+                  <div className="w-[28px] h-[42px] bg-rule-2 rounded-sm" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold truncate">{m.candidate.title}</div>
-                  <div className="text-xxs text-text-muted">
+                  <div className="text-xxs text-ink-3">
                     {m.candidate.year ?? '—'} · {m.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}
-                    {m.candidate.voteAverage > 0 && <> · <span className="text-accent">★ {m.candidate.voteAverage.toFixed(1)}</span></>}
+                    {m.candidate.voteAverage > 0 && <> · <span className="text-acc-deep">★ {m.candidate.voteAverage.toFixed(1)}</span></>}
                   </div>
                 </div>
               </Link>
-              <div className="text-xxs text-text-muted text-right shrink-0">
+              <div className="text-xxs text-ink-3 text-right shrink-0">
                 {m.yesCount} ja / {m.noCount} nej
-                {!m.allVoted && <div className="text-accent">{m.missing.length} kvar</div>}
+                {!m.allVoted && <div className="text-acc-deep">{m.missing.length} kvar</div>}
               </div>
               {isGroupSession && (
                 isPicked ? (
-                  <span className="text-xxs text-accent font-semibold inline-flex items-center gap-1"><Check size={11} /> Vald</span>
+                  <span className="text-xxs text-acc-deep font-semibold inline-flex items-center gap-1"><Check size={11} /> Vald</span>
                 ) : (
                   <button
                     onClick={() => recordPick(m)}
                     disabled={picking === m.candidate.tmdbId}
-                    className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
+                    className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
                     {picking === m.candidate.tmdbId ? 'Sparar…' : 'Den här tar vi'}

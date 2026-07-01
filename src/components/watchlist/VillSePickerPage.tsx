@@ -188,7 +188,7 @@ export default function VillSePickerPage() {
                   style={unknownRuntime ? { opacity: 0.5 } : undefined}
                   title={unknownRuntime ? 'Okänd längd — kan vara längre än din tidsbudget' : undefined}
                 >
-                  <Link href={href} className="no-underline text-text-primary">
+                  <Link href={href} className="no-underline text-ink">
                     <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                       {poster ? (
                         <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
@@ -203,7 +203,7 @@ export default function VillSePickerPage() {
                     <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
                       {item.title}
                     </div>
-                    <div className="text-xxs text-text-muted">
+                    <div className="text-xxs text-ink-3">
                       {item.mediaType === 'tv' ? 'Serie' : 'Film'}{item.releaseYear ? ` · ${item.releaseYear}` : ''}{unknownRuntime ? ' · okänd längd' : ''}
                     </div>
                   </Link>
@@ -221,11 +221,11 @@ export default function VillSePickerPage() {
             })}
           </div>
           {runtimeMax !== null && picks.some(p => p.unknownRuntime) && (
-            <p className="mt-2 text-xxs text-text-muted">
+            <p className="mt-2 text-xxs text-ink-3">
               Nedtonade titlar har okänd längd — längden fylls i när du öppnar en titelsida.
             </p>
           )}
-          <p className="mt-2 text-xxs text-text-muted">
+          <p className="mt-2 text-xxs text-ink-3">
             Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har. Titlar på dina tjänster visas först.
           </p>
           <div style={{ marginTop: 16 }}>

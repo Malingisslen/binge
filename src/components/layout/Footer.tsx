@@ -15,37 +15,37 @@ const FOOTER_PROVIDER_IDS = [8, 76, 337, 384]; // Netflix, Viaplay, Disney+, Max
 
 export default function Footer() {
   return (
-    <footer className="border-t border-border-light mt-12 py-6 px-4 text-text-muted">
+    <footer className="border-t border-rule-2 mt-12 py-6 px-4 text-ink-3">
       <div className="max-w-[1024px] mx-auto flex flex-col gap-4">
         <nav aria-label="Juridisk information">
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
-            <li><Link href="/integritet" className="hover:text-text-primary">Integritetspolicy</Link></li>
-            <li><Link href="/villkor" className="hover:text-text-primary">Villkor</Link></li>
-            <li><Link href="/community-guidelines" className="hover:text-text-primary">Community-regler</Link></li>
-            <li><a href="mailto:hej@binge.nu" className="hover:text-text-primary">Kontakt</a></li>
+            <li><Link href="/integritet" className="hover:text-ink">Integritetspolicy</Link></li>
+            <li><Link href="/villkor" className="hover:text-ink">Villkor</Link></li>
+            <li><Link href="/community-guidelines" className="hover:text-ink">Community-regler</Link></li>
+            <li><a href="mailto:hej@binge.nu" className="hover:text-ink">Kontakt</a></li>
             {/* "Stötta projektet"-länken är tillfälligt borttagen tills vi har
                 ett eget Ko-fi/Swish-konto. Återinför här när URL:en är klar. */}
           </ul>
         </nav>
         <nav aria-label="Streamingtjänster">
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
-            <li className="text-text-muted">Streama på:</li>
+            <li className="text-ink-3">Streama på:</li>
             {SEO_PROVIDER_IDS.map((pid) => {
               const p = getProvider(pid);
-              return p ? <li key={pid}><Link href={`/provider/${pid}/`} className="hover:text-text-primary">{p.shortName || p.name}</Link></li> : null;
+              return p ? <li key={pid}><Link href={`/provider/${pid}/`} className="hover:text-ink">{p.shortName || p.name}</Link></li> : null;
             })}
           </ul>
         </nav>
         <nav aria-label="Guider">
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
-            <li className="text-text-muted">Billigaste sättet att se:</li>
+            <li className="text-ink-3">Billigaste sättet att se:</li>
             {FOOTER_FRANCHISES.map((f) => (
-              <li key={f.slug}><Link href={`/billigaste/${f.slug}/`} className="hover:text-text-primary">{f.name}</Link></li>
+              <li key={f.slug}><Link href={`/billigaste/${f.slug}/`} className="hover:text-ink">{f.name}</Link></li>
             ))}
-            <li className="text-text-muted">Lämnar snart:</li>
+            <li className="text-ink-3">Lämnar snart:</li>
             {FOOTER_PROVIDER_IDS.map((pid) => {
               const p = getProvider(pid);
-              return p ? <li key={pid}><Link href={`/forsvinner/${pid}/`} className="hover:text-text-primary">{p.shortName || p.name}</Link></li> : null;
+              return p ? <li key={pid}><Link href={`/forsvinner/${pid}/`} className="hover:text-ink">{p.shortName || p.name}</Link></li> : null;
             })}
           </ul>
         </nav>
@@ -61,7 +61,7 @@ export default function Footer() {
           <p>
             Binge använder TMDB:s API men är inte godkänd eller certifierad av
             TMDB. Filmdata från{' '}
-            <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="hover:text-text-primary underline">
+            <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="hover:text-ink underline">
               themoviedb.org
             </a>.
           </p>

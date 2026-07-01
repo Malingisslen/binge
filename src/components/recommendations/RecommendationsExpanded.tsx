@@ -82,11 +82,11 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
       <div>
         <button
           onClick={goBack}
-          className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-border-main rounded-sm bg-surface text-text-secondary hover:bg-surface-hover cursor-pointer"
+          className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-rule rounded-sm bg-surface text-ink-2 hover:bg-bg-2 cursor-pointer"
         >
           <ChevronLeft size={14} /> Tillbaka till rekommendationer
         </button>
-        <p className="text-sm text-text-muted">Raden hittades inte. Den kan ha försvunnit när dina betyg ändrades.</p>
+        <p className="text-sm text-ink-3">Raden hittades inte. Den kan ha försvunnit när dina betyg ändrades.</p>
       </div>
     );
   }
@@ -95,7 +95,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
     <>
       <button
         onClick={goBack}
-        className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-border-main rounded-sm bg-surface text-text-secondary hover:bg-surface-hover cursor-pointer"
+        className="inline-flex items-center gap-1 text-xs px-3 py-[6px] mb-3 border border-rule rounded-sm bg-surface text-ink-2 hover:bg-bg-2 cursor-pointer"
       >
         <ChevronLeft size={14} /> Tillbaka till rekommendationer
       </button>
@@ -113,7 +113,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
             onClick={() => setFilters(f => ({ ...f, mediaType: t.value }))}
             aria-pressed={filters.mediaType === t.value}
             className={`appearance-none border-none px-[7px] py-[2px] text-xs rounded-sm cursor-pointer ${
-              filters.mediaType === t.value ? 'bg-accent text-white' : 'bg-transparent text-text-muted'
+              filters.mediaType === t.value ? 'bg-acc-deep text-white' : 'bg-transparent text-ink-3'
             }`}
           >
             {t.label}

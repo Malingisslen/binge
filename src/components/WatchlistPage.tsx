@@ -437,15 +437,15 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
       />
 
       {selected.size > 0 && (
-        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-accent/10 border border-accent/20 rounded-sm">
-          <span className="text-xs text-text-secondary">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
+        <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-acc-deep/10 border border-acc-deep/20 rounded-sm">
+          <span className="text-xs text-ink-2">{pluralSv(selected.size, 'markerad', 'markerade')}</span>
           {status === 'sedd' && (
             <button
               onClick={async () => {
                 await Promise.all(Array.from(selected).map(id => updateStatus(id, 'vill_se')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]"
+              className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]"
             >
               Flytta till Vill se
             </button>
@@ -460,7 +460,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 await Promise.all(Array.from(selected).map(id => updateStatus(id, 'avbruten')));
                 setSelected(new Set());
               }}
-              className="px-2 py-[2px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-secondary font-[inherit]"
+              className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-2 font-[inherit]"
               title="Markera valda serier som avbrutna"
             >
               Avbryt
@@ -474,7 +474,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </button>
           <button
             onClick={() => setSelected(new Set())}
-            className="px-2 py-[2px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-muted font-[inherit] ml-auto"
+            className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit] ml-auto"
           >
             Avmarkera
           </button>
@@ -524,7 +524,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             ))}
             {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
             {displayItems.length === 0 && (
-              <div className="col-span-full bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
+              <div className="col-span-full bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
                 {emptyMessage}
               </div>
             )}
@@ -532,11 +532,11 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         )
       ) : view === 'table' ? (
         <>
-        <div className="bg-surface border border-border-main rounded-sm overflow-x-auto">
+        <div className="bg-surface border border-rule rounded-sm overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="px-2 py-[6px] border-b border-border-light bg-cal-header w-[28px]">
+                <th className="px-2 py-[6px] border-b border-rule-2 bg-cal-header w-[28px]">
                   <input
                     type="checkbox"
                     aria-label="Välj alla"
@@ -545,17 +545,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       if (e.target.checked) setSelected(new Set(displayItems.map(i => i.tmdbId)));
                       else setSelected(new Set());
                     }}
-                    className="accent-accent w-[13px] h-[13px] cursor-pointer"
+                    className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
                   />
                 </th>
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header w-[44px]"></th>
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Titel</th>
-                {showTypeCol && <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Typ</th>}
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">År</th>
-                {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tillagd</th>}
-                {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Sedd</th>}
-                <th className="hidden lg:table-cell text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Tjänster</th>
-                <th className="text-left px-2 py-[6px] text-xxs text-text-muted font-semibold uppercase tracking-[0.5px] border-b border-border-light bg-cal-header">Betyg</th>
+                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header w-[44px]"></th>
+                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Titel</th>
+                {showTypeCol && <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Typ</th>}
+                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">År</th>
+                {showAddedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tillagd</th>}
+                {showWatchedCol && <th className="hidden md:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Sedd</th>}
+                <th className="hidden lg:table-cell text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Tjänster</th>
+                <th className="text-left px-2 py-[6px] text-xxs text-ink-3 font-semibold uppercase tracking-[0.5px] border-b border-rule-2 bg-cal-header">Betyg</th>
               </tr>
             </thead>
             <tbody>
@@ -564,7 +564,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 const href = titleHref(item.mediaType, item.tmdbId);
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
                 return (
-                  <tr key={item.tmdbId} className={`cursor-pointer hover:[&>td]:bg-surface-hover ${idx % 2 === 1 ? 'bg-surface-hover/40' : ''}`}>
+                  <tr key={item.tmdbId} className={`cursor-pointer hover:[&>td]:bg-bg-2 ${idx % 2 === 1 ? 'bg-bg-2/40' : ''}`}>
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
@@ -576,7 +576,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                           else next.add(item.tmdbId);
                           return next;
                         })}
-                        className="accent-accent w-[13px] h-[13px] cursor-pointer"
+                        className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
                       />
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table">
@@ -593,25 +593,25 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       </Link>
                     </td>
                     <td className="px-2 py-[5px] border-b border-border-table">
-                      <Link href={href} className="no-underline text-text-primary">
+                      <Link href={href} className="no-underline text-ink">
                         <div className="font-semibold text-base">
                           {item.title}
                           {item.rewatchCount > 0 && (
-                            <span className="ml-1 text-xxs text-text-muted font-normal">x{item.rewatchCount + 1}</span>
+                            <span className="ml-1 text-xxs text-ink-3 font-normal">x{item.rewatchCount + 1}</span>
                           )}
                         </div>
                       </Link>
                     </td>
-                    {showTypeCol && <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    {showTypeCol && <td className="px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
                       {item.mediaType === 'movie' ? 'Film' : 'Serie'}
                     </td>}
-                    <td className="px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    <td className="px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
                       {item.releaseYear ?? '—'}
                     </td>
-                    {showAddedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    {showAddedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
                       {fmtDate(item.addedAt)}
                     </td>}
-                    {showWatchedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-text-muted">
+                    {showWatchedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
                       {fmtDate(item.watchedAt)}
                     </td>}
                     <td className="hidden lg:table-cell px-2 py-[5px] border-b border-border-table">
@@ -626,7 +626,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                           dim={item.rating === null}
                         />
                         {item.rating !== null && (
-                          <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+                          <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
                         )}
                       </span>
                     </td>
@@ -635,7 +635,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               })}
               {displayItems.length === 0 && (
                 <tr>
-                  <td colSpan={tableColCount} className="px-3 py-4 text-center text-sm text-text-muted">
+                  <td colSpan={tableColCount} className="px-3 py-4 text-center text-sm text-ink-3">
                     {emptyMessage}
                   </td>
                 </tr>
@@ -646,7 +646,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
         </>
       ) : (
-        <div className="bg-surface border border-border-main rounded-sm">
+        <div className="bg-surface border border-rule rounded-sm">
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[10px] md:gap-[7px] px-3 py-2">
             {visibleItems.map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
@@ -655,7 +655,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               const isSel = selected.has(item.tmdbId);
               const inner = (
                 <>
-                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-accent' : ''}`}>
+                  <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-acc-deep' : ''}`}>
                     {poster ? (
                       <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
                     ) : (
@@ -667,7 +667,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
                     {selectMode && (
                       <span className={`absolute top-1 left-1 z-[1] inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
-                        isSel ? 'bg-accent border-accent text-white' : 'border-rule bg-surface'
+                        isSel ? 'bg-acc-deep border-acc-deep text-white' : 'border-rule bg-surface'
                       }`}>
                         {isSel && <Check size={11} />}
                       </span>
@@ -676,7 +676,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                   <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
                     {item.title}
                   </div>
-                  <div className="text-xxs text-text-muted">{item.releaseYear ?? '—'}</div>
+                  <div className="text-xxs text-ink-3">{item.releaseYear ?? '—'}</div>
                 </>
               );
               return selectMode ? (
@@ -687,12 +687,12 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                   aria-label={`Välj ${item.title}`}
                   tabIndex={0}
                   onClick={() => toggleSelect(item.tmdbId)}
-                  className="cursor-pointer text-text-primary"
+                  className="cursor-pointer text-ink"
                 >
                   {inner}
                 </div>
               ) : (
-                <Link key={item.tmdbId} href={href} className="no-underline text-text-primary">
+                <Link key={item.tmdbId} href={href} className="no-underline text-ink">
                   {inner}
                 </Link>
               );
@@ -703,7 +703,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               färg per tjänst, hover visar namnet) — utan legend lästes de
               som oförklarade statusprickar. */}
           {displayItems.length > 0 && (
-            <p className="px-3 pb-2 mt-0 text-xxs text-text-muted">
+            <p className="px-3 pb-2 mt-0 text-xxs text-ink-3">
               Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har.
             </p>
           )}

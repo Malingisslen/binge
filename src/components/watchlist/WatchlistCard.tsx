@@ -117,7 +117,7 @@ export function WatchlistCard({
     <div
       className={`bg-surface border rounded-sm p-[10px] flex gap-[10px] transition-colors ${
         selectMode
-          ? `cursor-pointer ${selected ? 'border-accent' : 'border-rule hover:border-rule-2'}`
+          ? `cursor-pointer ${selected ? 'border-acc-deep' : 'border-rule hover:border-rule-2'}`
           : 'border-rule hover:border-rule-2'
       }`}
       {...(selectMode
@@ -127,7 +127,7 @@ export function WatchlistCard({
       {selectMode && (
         <span className="shrink-0 self-center" aria-hidden="true">
           <span className={`inline-flex items-center justify-center w-[16px] h-[16px] rounded-sm border ${
-            selected ? 'bg-accent border-accent text-white' : 'border-rule bg-surface'
+            selected ? 'bg-acc-deep border-acc-deep text-white' : 'border-rule bg-surface'
           }`}>
             {selected && <Check size={11} />}
           </span>
@@ -141,11 +141,11 @@ export function WatchlistCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           {selectMode ? (
-            <span className="text-text-primary min-w-0">
+            <span className="text-ink min-w-0">
               <div className="text-xs font-semibold truncate">{item.title}</div>
             </span>
           ) : (
-            <Link href={href} className="no-underline text-text-primary min-w-0">
+            <Link href={href} className="no-underline text-ink min-w-0">
               <div className="text-xs font-semibold truncate">{item.title}</div>
             </Link>
           )}
@@ -155,12 +155,12 @@ export function WatchlistCard({
             <span className="inline-flex items-center gap-[3px]">
               <RatingStars rating={item.rating} readonly size="sm" dim={item.rating === null} />
               {item.rating !== null && (
-                <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+                <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
               )}
             </span>
           </span>
         </div>
-        <div className="text-xxs text-text-muted mt-[1px]">
+        <div className="text-xxs text-ink-3 mt-[1px]">
           {item.releaseYear ?? '—'}
           {item.mediaType === 'tv' && item.totalSeasons ? ` · ${item.totalSeasons} säsong${item.totalSeasons === 1 ? '' : 'er'}` : ''}
         </div>
@@ -174,7 +174,7 @@ export function WatchlistCard({
                 <span
                   key={id}
                   className={`text-xxs px-1 py-[1px] border rounded-sm inline-block ${
-                    isMine ? 'border-accent text-accent' : 'border-border-main text-text-muted'
+                    isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
                   }`}
                 >
                   {p.shortName}
@@ -184,7 +184,7 @@ export function WatchlistCard({
           </div>
         ) : item.providersCheckedAt != null ? (
           <div className="mt-[4px] flex flex-wrap gap-[2px]">
-            <span className="text-xxs px-1 py-[1px] border border-border-light text-text-muted/70 rounded-sm inline-block">
+            <span className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3/70 rounded-sm inline-block">
               Ej på SE
             </span>
           </div>

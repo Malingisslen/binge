@@ -19,10 +19,10 @@ function TimelineTooltip({ x, y, heading, lines }: TooltipState) {
       className="fixed z-50 bg-surface border border-rule rounded-md shadow-pop px-[10px] py-[7px] pointer-events-none"
       style={{ left: x, top: y, transform: 'translate(-50%, calc(-100% - 8px))', maxWidth: 240 }}
     >
-      <div className="text-xxs font-semibold text-text-primary mb-[3px] whitespace-nowrap">{heading}</div>
+      <div className="text-xxs font-semibold text-ink mb-[3px] whitespace-nowrap">{heading}</div>
       <ul className="m-0 p-0 list-none flex flex-col gap-[1px]">
         {lines.map((line, i) => (
-          <li key={i} className="text-xxs text-text-secondary leading-snug">{line}</li>
+          <li key={i} className="text-xxs text-ink-2 leading-snug">{line}</li>
         ))}
       </ul>
     </div>
@@ -79,11 +79,11 @@ export default function AdvisorTimeline() {
 
   if (!hasAirings) {
     return (
-      <div className="bg-surface border border-border-main rounded-sm mb-[14px] px-3 py-[10px]">
+      <div className="bg-surface border border-rule rounded-sm mb-[14px] px-3 py-[10px]">
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kommande 6 månader</h2>
+          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-ink-3">Kommande 6 månader</h2>
         </div>
-        <p className="text-xs text-text-muted">
+        <p className="text-xs text-ink-3">
           Inga avsnitt på 6 månader hos dina tjänster — bra läge att pausa något du inte använder.
         </p>
       </div>
@@ -94,11 +94,11 @@ export default function AdvisorTimeline() {
   const totalWidth = LABEL_WIDTH + totalCellsWidth + FOOTER_WIDTH;
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm mb-[14px] overflow-x-auto">
+    <div className="bg-surface border border-rule rounded-sm mb-[14px] overflow-x-auto">
       <div className="px-3 py-[10px]" style={{ minWidth: totalWidth + 24 }}>
         <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-text-muted">Kommande 6 månader</h2>
-          <span className="text-xxs text-text-muted">Varje ruta = en vecka</span>
+          <h2 className="text-xxs uppercase tracking-[0.5px] font-semibold text-ink-3">Kommande 6 månader</h2>
+          <span className="text-xxs text-ink-3">Varje ruta = en vecka</span>
         </div>
         <Legend />
 
@@ -114,7 +114,7 @@ export default function AdvisorTimeline() {
 
           {unsubscribedLanes.length > 0 && (
             <>
-              <div className="text-[9px] text-text-muted uppercase tracking-[0.5px] pt-3 pb-[3px] border-t border-dashed border-border-light mt-3">
+              <div className="text-[9px] text-ink-3 uppercase tracking-[0.5px] pt-3 pb-[3px] border-t border-dashed border-rule-2 mt-3">
                 Tjänster du inte har
               </div>
               <div className="flex flex-col" style={{ gap: ROW_GAP }}>
@@ -133,13 +133,13 @@ export default function AdvisorTimeline() {
 
 function Legend() {
   return (
-    <div className="flex items-center gap-3 flex-wrap text-xxs text-text-muted mb-2">
+    <div className="flex items-center gap-3 flex-wrap text-xxs text-ink-3 mb-2">
       <span className="inline-flex items-center gap-1">
         <span className="inline-block w-[10px] h-[10px] rounded-[1px]" style={{ background: 'var(--acc-deep)', opacity: 0.65 }} />
         Vecka med avsnitt
       </span>
       <span className="inline-flex items-center gap-1">
-        <span className="inline-block w-[10px] h-[10px] rounded-[1px] border border-border-main bg-bg-2" />
+        <span className="inline-block w-[10px] h-[10px] rounded-[1px] border border-rule bg-bg-2" />
         Tom vecka
       </span>
       <span className="inline-flex items-center gap-1">
@@ -161,12 +161,12 @@ function MonthHeader({ weeks }: { weeks: TimelineWeek[] }) {
                 className="absolute flex items-start"
                 style={{ left: i * COL_STRIDE, top: MONTH_LABEL_TOP }}
               >
-                <span className="text-[9px] text-text-secondary uppercase tracking-[0.5px] font-semibold whitespace-nowrap">
+                <span className="text-[9px] text-ink-2 uppercase tracking-[0.5px] font-semibold whitespace-nowrap">
                   {w.monthLabel}
                 </span>
               </div>
               <div
-                className="absolute bottom-0 w-[1px] h-[5px] bg-border-main"
+                className="absolute bottom-0 w-[1px] h-[5px] bg-rule"
                 style={{ left: i * COL_STRIDE }}
               />
             </>
@@ -177,14 +177,14 @@ function MonthHeader({ weeks }: { weeks: TimelineWeek[] }) {
               style={{ left: i * COL_STRIDE + CELL_WIDTH / 2, top: WEEK_LABEL_TOP, transform: 'translateX(-50%)' }}
               title={w.rangeLabel}
             >
-              <span className="text-[8px] text-text-muted whitespace-nowrap">
+              <span className="text-[8px] text-ink-3 whitespace-nowrap">
                 v.{w.weekOfYear}
               </span>
             </div>
           )}
         </Fragment>
       ))}
-      <div className="absolute left-0 right-0 bottom-0 h-[1px] bg-border-light" />
+      <div className="absolute left-0 right-0 bottom-0 h-[1px] bg-rule-2" />
     </div>
   );
 }
@@ -195,12 +195,12 @@ function TodayMarker({ todayWeekIndex }: { todayWeekIndex: number }) {
     <>
       <div
         aria-hidden
-        className="absolute bg-accent pointer-events-none z-20"
+        className="absolute bg-acc-deep pointer-events-none z-20"
         style={{ left: lineLeft - 1, width: 2, top: HEADER_HEIGHT - 2, bottom: 0 }}
       />
       <div
         aria-hidden
-        className="absolute px-[6px] py-[2px] bg-accent text-white rounded-[2px] text-[9px] font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
+        className="absolute px-[6px] py-[2px] bg-acc-deep text-white rounded-[2px] text-[9px] font-bold uppercase tracking-[0.5px] pointer-events-none z-30 whitespace-nowrap"
         style={{ left: lineLeft, top: 0, transform: 'translateX(-50%)' }}
       >
         Idag ↓
@@ -222,10 +222,10 @@ function Lane({ lane, weeks, onShow, onHide }: {
   const emptyStyle = isUserPaused ? USER_PAUSED_CELL_STYLE : EMPTY_CELL_STYLE;
 
   const labelClasses = isUnsubscribed
-    ? 'text-text-muted'
+    ? 'text-ink-3'
     : isUserPaused
-      ? 'text-text-muted font-semibold'
-      : 'text-text-primary font-semibold';
+      ? 'text-ink-3 font-semibold'
+      : 'text-ink font-semibold';
 
   return (
     <div className="flex items-center" style={{ height: CELL_HEIGHT }}>
@@ -276,17 +276,17 @@ function LaneFooter({ lane }: { lane: TimelineLane }) {
   switch (lane.kind) {
     case 'unsubscribed': {
       const serier = lane.followingShowCount === 1 ? 'serie' : 'serier';
-      return <span className="text-text-muted">{lane.followingShowCount} {serier}</span>;
+      return <span className="text-ink-3">{lane.followingShowCount} {serier}</span>;
     }
     case 'user-paused':
-      return <span className="text-text-muted">Pausad</span>;
+      return <span className="text-ink-3">Pausad</span>;
     case 'pause':
       return <span className="text-season-done">Kan pausas</span>;
     case 'free':
-      return <span className="text-text-muted">Gratis</span>;
+      return <span className="text-ink-3">Gratis</span>;
     default:
       return lane.monthlyCost != null && lane.monthlyCost > 0
-        ? <span className="text-text-muted">{lane.monthlyCost} kr/mån</span>
+        ? <span className="text-ink-3">{lane.monthlyCost} kr/mån</span>
         : null;
   }
 }

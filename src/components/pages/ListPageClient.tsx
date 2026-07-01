@@ -86,7 +86,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
         actions={canEdit && !showPicker ? (
           <button
             onClick={() => setShowPicker(true)}
-            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white shrink-0"
+            className="inline-flex items-center gap-1 px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white shrink-0"
           >
             <Plus size={12} /> Lägg till titel
           </button>
@@ -104,11 +104,11 @@ export default function ListPageClient({ listId }: { listId: string }) {
         ) : undefined}
       />
       {list.description && (
-        <p className="text-xs text-text-muted mb-2">{list.description}</p>
+        <p className="text-xs text-ink-3 mb-2">{list.description}</p>
       )}
-      <span className="text-xxs text-text-muted">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
+      <span className="text-xxs text-ink-3">{list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}</span>
       {!isOwner && canEdit && (
-        <span className="text-xxs text-accent ml-2">· du är medredigerare</span>
+        <span className="text-xxs text-acc-deep ml-2">· du är medredigerare</span>
       )}
 
       {isOwner && (
@@ -140,7 +140,7 @@ export default function ListPageClient({ listId }: { listId: string }) {
             const href = titleHref(item.mediaType, item.tmdbId);
             return (
               <div key={item.tmdbId} className="relative">
-                <Link href={href} className="no-underline text-text-primary block">
+                <Link href={href} className="no-underline text-ink block">
                   <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                     {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
@@ -186,9 +186,9 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
     .slice(0, 8);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm p-2 mt-3">
-      <div className="flex items-center gap-2 mb-2 border border-border-main rounded-sm bg-white px-2">
-        <Search size={12} className="text-text-muted" />
+    <div className="bg-surface border border-rule rounded-sm p-2 mt-3">
+      <div className="flex items-center gap-2 mb-2 border border-rule rounded-sm bg-white px-2">
+        <Search size={12} className="text-ink-3" />
         <input
           type="search"
           value={query}
@@ -200,18 +200,18 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
         <button
           onClick={onClose}
           aria-label="Stäng"
-          className="bg-transparent border-none cursor-pointer p-0 text-text-muted hover:text-text-primary"
+          className="bg-transparent border-none cursor-pointer p-0 text-ink-3 hover:text-ink"
         >
           <X size={12} />
         </button>
       </div>
 
       {query.length >= 2 && isLoading && (
-        <div className="text-xxs text-text-muted py-1">Söker…</div>
+        <div className="text-xxs text-ink-3 py-1">Söker…</div>
       )}
 
       {query.length >= 2 && !isLoading && results.length === 0 && (
-        <div className="text-xxs text-text-muted py-1">Inga träffar.</div>
+        <div className="text-xxs text-ink-3 py-1">Inga träffar.</div>
       )}
 
       {results.length > 0 && (
@@ -224,7 +224,7 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                 <button
                   onClick={() => !alreadyAdded && onAdd(r)}
                   disabled={alreadyAdded}
-                  className="w-full flex items-center gap-2 px-1 py-[3px] bg-transparent border-none cursor-pointer text-left hover:bg-surface-hover rounded-sm disabled:cursor-default disabled:opacity-60"
+                  className="w-full flex items-center gap-2 px-1 py-[3px] bg-transparent border-none cursor-pointer text-left hover:bg-bg-2 rounded-sm disabled:cursor-default disabled:opacity-60"
                 >
                   {poster ? (
                     <div className={`poster duo-${toneForId(r.id)} w-[24px] h-[36px] shrink-0`}>
@@ -241,16 +241,16 @@ function TitlePicker({ existingIds, onAdd, onClose }: TitlePickerProps) {
                     <div className="w-[24px] h-[36px] bg-rule-2 rounded-sm shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-text-primary truncate">
+                    <div className="text-xs font-semibold text-ink truncate">
                       {getDisplayTitle(r)}
                     </div>
-                    <div className="text-xxs text-text-muted">
+                    <div className="text-xxs text-ink-3">
                       {r.media_type === 'movie' ? 'Film' : 'Serie'}
                       {getReleaseYear(r) ? ` · ${getReleaseYear(r)}` : ''}
                     </div>
                   </div>
                   {alreadyAdded && (
-                    <span className="text-xxs text-accent shrink-0">Tillagd</span>
+                    <span className="text-xxs text-acc-deep shrink-0">Tillagd</span>
                   )}
                 </button>
               </li>
@@ -288,8 +288,8 @@ function EditorsManager({ editors, onAdd, onRemove }: {
   };
   return (
     <div className="bg-surface border border-rule rounded-md px-3 py-[10px] mt-3 max-w-[420px]">
-      <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-1">Medredigerare</div>
-      <p className="text-xxs text-text-muted mb-2">
+      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-1">Medredigerare</div>
+      <p className="text-xxs text-ink-3 mb-2">
         De du lägger till kan lägga till och ta bort titlar — men inte ändra listans namn eller synlighet.
       </p>
       <div className="flex gap-[6px] items-center mb-1">
@@ -302,7 +302,7 @@ function EditorsManager({ editors, onAdd, onRemove }: {
         />
         <button type="button" onClick={() => void submit()} disabled={busy} className="chip">Lägg till</button>
       </div>
-      {msg && <div className="text-xxs text-text-muted mb-2">{msg}</div>}
+      {msg && <div className="text-xxs text-ink-3 mb-2">{msg}</div>}
       {editors.length > 0 && (
         <div className="flex flex-col gap-[4px] mt-2">
           {editors.map(uid => <EditorRow key={uid} uid={uid} onRemove={() => handleRemove(uid)} />)}
@@ -328,7 +328,7 @@ function EditorRow({ uid, onRemove }: { uid: string; onRemove: () => void }) {
   }, [uid]);
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-text-primary truncate">{name ?? '…'}</span>
+      <span className="text-ink truncate">{name ?? '…'}</span>
       <button
         type="button"
         onClick={onRemove}

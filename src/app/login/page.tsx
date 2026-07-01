@@ -87,12 +87,12 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="bg-surface border border-border-main rounded-sm px-8 py-6 max-w-[340px] w-full">
+      <div className="bg-surface border border-rule rounded-sm px-8 py-6 max-w-[340px] w-full">
         <div className="text-center mb-4">
-          <div className="text-[20px] font-extrabold text-accent">
-            binge<span className="font-normal text-text-muted text-sm">.nu</span>
+          <div className="text-[20px] font-extrabold text-acc-deep">
+            binge<span className="font-normal text-ink-3 text-sm">.nu</span>
           </div>
-          <p className="text-sm text-text-muted mt-1">
+          <p className="text-sm text-ink-3 mt-1">
             Håll koll på vad du tittar på och var det finns att streama i Sverige.
           </p>
         </div>
@@ -100,7 +100,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full px-4 py-2 bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
+          className="w-full px-4 py-2 bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50 mb-2"
         >
           Logga in med Google
         </button>
@@ -108,18 +108,18 @@ export default function LoginPage() {
         {/* BIN-275/348: browse-wrap consent + 13+ age notice at the Google entry
             point. Continuing past this records terms acceptance + age confirmation
             at account creation (AuthContext.ensureUserProfile). */}
-        <p className="text-xxs text-text-muted text-center leading-snug mb-3">
+        <p className="text-xxs text-ink-3 text-center leading-snug mb-3">
           Genom att fortsätta godkänner du Binges{' '}
-          <Link href="/villkor" target="_blank" className="text-accent underline">användarvillkor</Link>
+          <Link href="/villkor" target="_blank" className="text-acc-deep underline">användarvillkor</Link>
           {' '}och{' '}
-          <Link href="/integritet" target="_blank" className="text-accent underline">integritetspolicy</Link>
+          <Link href="/integritet" target="_blank" className="text-acc-deep underline">integritetspolicy</Link>
           {' '}och intygar att du är minst {MIN_AGE} år.
         </p>
 
         <div className="flex items-center gap-2 mb-3">
-          <div className="flex-1 h-px bg-border-main" />
-          <span className="text-xxs text-text-muted">eller</span>
-          <div className="flex-1 h-px bg-border-main" />
+          <div className="flex-1 h-px bg-rule" />
+          <span className="text-xxs text-ink-3">eller</span>
+          <div className="flex-1 h-px bg-rule" />
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -130,7 +130,7 @@ export default function LoginPage() {
               aria-label="Namn"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
+              className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
             />
           )}
           <input
@@ -140,7 +140,7 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
+            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
           />
           <input
             type="password"
@@ -150,13 +150,13 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             required
             minLength={mode === 'register' ? 8 : 6}
-            className="w-full px-2 py-[6px] mb-2 text-base border border-border-main rounded-sm bg-white font-[inherit] outline-none focus:border-accent"
+            className="w-full px-2 py-[6px] mb-2 text-base border border-rule rounded-sm bg-white font-[inherit] outline-none focus:border-acc-deep"
           />
           {mode === 'register' && passwordStrength && (
             <PasswordStrengthMeter strength={passwordStrength} />
           )}
           {mode === 'register' && (
-            <div className="mt-3 mb-2 space-y-2 text-xs text-text-secondary">
+            <div className="mt-3 mb-2 space-y-2 text-xs text-ink-2">
               <label className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -175,9 +175,9 @@ export default function LoginPage() {
                 />
                 <span>
                   Jag godkänner Binges{' '}
-                  <Link href="/villkor" target="_blank" className="text-accent underline">användarvillkor</Link>
+                  <Link href="/villkor" target="_blank" className="text-acc-deep underline">användarvillkor</Link>
                   {' '}och{' '}
-                  <Link href="/integritet" target="_blank" className="text-accent underline">integritetspolicy</Link>.
+                  <Link href="/integritet" target="_blank" className="text-acc-deep underline">integritetspolicy</Link>.
                 </span>
               </label>
             </div>
@@ -186,7 +186,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={registerDisabled}
-            className="w-full px-4 py-[6px] bg-text-primary text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full px-4 py-[6px] bg-ink text-white border-none rounded-sm cursor-pointer font-[inherit] text-base font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? (mode === 'register' ? 'Skapar…' : 'Loggar in…') : mode === 'register' ? 'Skapa konto' : 'Logga in'}
           </button>
@@ -195,7 +195,7 @@ export default function LoginPage() {
         <div className="text-center mt-3">
           <button
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            className="text-xs text-accent bg-transparent border-none cursor-pointer font-[inherit]"
+            className="text-xs text-acc-deep bg-transparent border-none cursor-pointer font-[inherit]"
           >
             {mode === 'login' ? 'Har du inget konto? Skapa ett' : 'Har du redan konto? Logga in'}
           </button>

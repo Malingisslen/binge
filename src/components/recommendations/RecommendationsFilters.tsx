@@ -76,22 +76,22 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         <option value="">Alla decennier</option>
         {DECADES.map(d => <option key={d} value={d}>{d}-talet</option>)}
       </select>
-      <label className="flex items-center gap-1 text-xs text-text-secondary">
+      <label className="flex items-center gap-1 text-xs text-ink-2">
         Betyg ≥
         <input
           type="number" min={0} max={9} step={0.5}
           value={filters.voteAverageMin}
           onChange={e => onChange({ ...filters, voteAverageMin: Number(e.target.value) })}
-          className="w-12 text-xs border border-border-main rounded-sm px-1 py-[2px] bg-surface"
+          className="w-12 text-xs border border-rule rounded-sm px-1 py-[2px] bg-surface"
         />
       </label>
       {hasMyProviders && (
-        <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
+        <label className="flex items-center gap-1 text-xs text-ink-2 cursor-pointer">
           <input
             type="checkbox"
             checked={filters.myProvidersOnly}
             onChange={e => onChange({ ...filters, myProvidersOnly: e.target.checked })}
-            className="accent-accent w-[13px] h-[13px]"
+            className="accent-acc-deep w-[13px] h-[13px]"
           />
           Mina tjänster
         </label>
@@ -101,7 +101,7 @@ export default function RecommendationsFilters({ filters, onChange, hasMyProvide
         placeholder="Sök i rekommendationer…"
         value={searchInput}
         onChange={e => setSearchInput(e.target.value)}
-        className="text-xs border border-border-main rounded-sm px-2 py-[2px] bg-surface text-text-secondary outline-none flex-1 min-w-[160px]"
+        className="text-xs border border-rule rounded-sm px-2 py-[2px] bg-surface text-ink-2 outline-none flex-1 min-w-[160px]"
       />
     </div>
   );

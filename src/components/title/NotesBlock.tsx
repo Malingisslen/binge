@@ -15,7 +15,7 @@ export default function NotesBlock({ notes, onChange }: NotesBlockProps) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-text-muted bg-transparent border-none cursor-pointer font-[inherit] p-0 mb-2 hover:text-accent"
+        className="text-xs text-ink-3 bg-transparent border-none cursor-pointer font-[inherit] p-0 mb-2 hover:text-acc-deep"
       >
         + Anteckning
       </button>

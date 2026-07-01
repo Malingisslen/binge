@@ -91,14 +91,14 @@ const PILL_BASE = 'text-xxs font-semibold px-[7px] py-[2px] rounded-sm whitespac
 
 function pillClass(pill: DatePill): string {
   if (pill.isToday) {
-    return `${PILL_BASE} bg-accent text-white border border-accent hover:bg-accent-deep`;
+    return `${PILL_BASE} bg-acc-deep text-white border border-acc-deep hover:bg-acc-deep`;
   }
   if (pill.isFinale) {
     // Finale-pill: utlinad i accent så slutavsnitt sticker ut utan att
     // konkurrera med "Idag" som är den enda fyllda orange pillen.
-    return `${PILL_BASE} bg-surface text-accent border border-accent hover:bg-accent hover:text-white`;
+    return `${PILL_BASE} bg-surface text-acc-deep border border-acc-deep hover:bg-acc-deep hover:text-white`;
   }
-  return `${PILL_BASE} bg-bg-2 text-text-secondary border border-border-main hover:border-accent hover:text-accent`;
+  return `${PILL_BASE} bg-bg-2 text-ink-2 border border-rule hover:border-acc-deep hover:text-acc-deep`;
 }
 
 export default function UpcomingEpisodes() {
@@ -117,31 +117,31 @@ export default function UpcomingEpisodes() {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Närmaste avsnitt</h2>
-        <span className="text-xxs text-text-muted">{totalEpisodes} avsnitt · {weeks} veckor</span>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Närmaste avsnitt</h2>
+        <span className="text-xxs text-ink-3">{totalEpisodes} avsnitt · {weeks} veckor</span>
       </div>
 
-      <div className="bg-surface border border-border-main border-l-[3px] border-l-season-done rounded-sm px-3 py-[10px] mb-[6px]">
-        <p className="text-xs text-text-secondary leading-[1.5]">{summaryText}</p>
+      <div className="bg-surface border border-rule border-l-[3px] border-l-season-done rounded-sm px-3 py-[10px] mb-[6px]">
+        <p className="text-xs text-ink-2 leading-[1.5]">{summaryText}</p>
       </div>
 
-      <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         {shows.map(show => {
           const pills = bundleEpisodes(show.episodes);
           return (
             <div
               key={show.tmdbId}
-              className="grid grid-cols-[1fr_auto] gap-3 px-3 py-[8px] items-center border-b border-border-light last:border-b-0"
+              className="grid grid-cols-[1fr_auto] gap-3 px-3 py-[8px] items-center border-b border-rule-2 last:border-b-0"
             >
               <div className="flex items-center gap-[6px] min-w-0">
                 <ProviderDot color={show.providerColor} size={7} />
                 <Link
                   href={titleHref('tv', show.tmdbId)}
-                  className="text-xs font-semibold text-text-primary truncate hover:text-accent no-underline"
+                  className="text-xs font-semibold text-ink truncate hover:text-acc-deep no-underline"
                 >
                   {show.title}
                 </Link>
-                <span className="text-xxs text-text-muted font-medium truncate">{show.providerShortName}</span>
+                <span className="text-xxs text-ink-3 font-medium truncate">{show.providerShortName}</span>
               </div>
               <div className="flex gap-[3px] flex-wrap justify-end">
                 {pills.map(pill => (
@@ -161,9 +161,9 @@ export default function UpcomingEpisodes() {
       </div>
 
       {trailingQuietWeeks >= 3 && (
-        <div className="bg-surface border border-border-main border-l-[3px] border-l-border-main rounded-sm px-3 py-[8px] mt-[6px]">
-          <p className="text-xs text-text-secondary">
-            <strong className="text-text-primary">
+        <div className="bg-surface border border-rule border-l-[3px] border-l-rule rounded-sm px-3 py-[8px] mt-[6px]">
+          <p className="text-xs text-ink-2">
+            <strong className="text-ink">
               {pluralSv(trailingQuietWeeks, 'lugn vecka', 'lugna veckor')} framöver
             </strong>
             {' — bra läge att överväga en pausning när du är ikapp.'}
@@ -172,7 +172,7 @@ export default function UpcomingEpisodes() {
       )}
 
       <div className="text-center mt-2">
-        <Link href="/calendar/" className="text-xxs text-accent font-semibold no-underline hover:underline">
+        <Link href="/calendar/" className="text-xxs text-acc-deep font-semibold no-underline hover:underline">
           Visa full kalender →
         </Link>
       </div>

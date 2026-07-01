@@ -95,7 +95,7 @@ export function FollowingCardSections({
 
   if (total === 0) {
     return (
-      <div className="bg-surface border border-border-main rounded-sm px-3 py-4 text-center text-sm text-text-muted">
+      <div className="bg-surface border border-rule rounded-sm px-3 py-4 text-center text-sm text-ink-3">
         Inga serier i Följer än. Lägg till en serie via Rekommendationer eller sök.
       </div>
     );
@@ -120,13 +120,13 @@ export function FollowingCardSections({
                 onClick={() => setAvslutadOpen(!avslutadOpen)}
                 className="w-full flex items-center justify-between mb-2 bg-transparent border-none p-0 cursor-pointer text-left"
               >
-                <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold flex items-center gap-1">
+                <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold flex items-center gap-1">
                   {heading}
-                  <span className="text-[9px] text-text-muted/70">
+                  <span className="text-[9px] text-ink-3/70">
                     {avslutadOpen ? '▾' : '▸'}
                   </span>
                 </h2>
-                <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
+                <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
               </button>
               {avslutadOpen && (
                 <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />
@@ -138,10 +138,10 @@ export function FollowingCardSections({
         return (
           <section key={key}>
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">
+              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">
                 {heading}
               </h2>
-              <span className="text-xxs text-text-muted">{countLabel(items.length)}</span>
+              <span className="text-xxs text-ink-3">{countLabel(items.length)}</span>
             </div>
             <SectionGrid items={items} nextAirByTmdbId={nextAirByTmdbId} subState={key} selectMode={selectMode} isSelected={isSelected} onToggleSelect={onToggleSelect} />
           </section>

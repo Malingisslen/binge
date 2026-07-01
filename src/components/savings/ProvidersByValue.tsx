@@ -69,37 +69,37 @@ export default function ProvidersByValue({ providers, activePauses }: Props) {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Dina tjänster</h2>
-        <span className="text-xxs text-text-muted">Sorterat efter kostnad per aktiv serie</span>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina tjänster</h2>
+        <span className="text-xxs text-ink-3">Sorterat efter kostnad per aktiv serie</span>
       </div>
-      <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Aktiva serier', 'Månadskostnad', 'Kostnad per aktiv serie']} />
           <tbody>
             {rows.map(row => {
               const renewalDay = renewalDays[row.providerId];
               const krCellClass = row.isFree
-                ? 'text-text-muted'
+                ? 'text-ink-3'
                 : row.krPerShow != null && row.krPerShow >= RED_THRESHOLD
                   ? 'text-danger font-semibold'
                   : row.krPerShow != null && row.krPerShow <= GREEN_THRESHOLD
                     ? 'text-season-done font-semibold'
-                    : 'text-text-secondary font-semibold';
+                    : 'text-ink-2 font-semibold';
               return (
-                <tr key={row.providerId} className="border-b border-border-light last:border-b-0">
+                <tr key={row.providerId} className="border-b border-rule-2 last:border-b-0">
                   <td className="px-3 py-[6px] whitespace-nowrap">
                     <span className="inline-flex items-center gap-[6px]">
                       <ProviderDot color={row.color} size={7} />
-                      <span className="text-xs font-semibold text-text-primary">{row.providerShortName}</span>
+                      <span className="text-xs font-semibold text-ink">{row.providerShortName}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-text-secondary tabular-nums">
+                  <td className="px-3 py-[6px] text-xs text-ink-2 tabular-nums">
                     {pluralSv(row.activeCount, 'aktiv', 'aktiva')}
                   </td>
-                  <td className="px-3 py-[6px] text-xs text-text-secondary text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-[6px] text-xs text-ink-2 text-right whitespace-nowrap tabular-nums">
                     {row.isFree ? '0 kr' : `${row.monthlyCost} kr/mån`}
                     {renewalDay != null && !row.isFree && (
-                      <span className="block text-xxs text-text-muted">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
+                      <span className="block text-xxs text-ink-3">förnyas om {daysUntilRenewal(renewalDay, new Date())} d</span>
                     )}
                   </td>
                   <td className={`px-3 py-[6px] text-xs text-right whitespace-nowrap tabular-nums ${krCellClass}`}>

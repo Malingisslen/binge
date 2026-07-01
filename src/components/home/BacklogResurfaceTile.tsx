@@ -30,7 +30,7 @@ export default function BacklogResurfaceTile({
   return (
     <section className="mt-[18px] mb-[14px]">
       <div className="flex items-baseline justify-between mb-[8px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
           Ville se — finns nu på din tjänst
         </h2>
       </div>
@@ -45,7 +45,7 @@ export default function BacklogResurfaceTile({
             <Link
               key={item.tmdbId}
               href={titleHref(item.mediaType, item.tmdbId)}
-              className="no-underline flex gap-[10px] items-center bg-surface border border-border-main rounded-sm p-[8px] hover:shadow-lift transition-shadow"
+              className="no-underline flex gap-[10px] items-center bg-surface border border-rule rounded-sm p-[8px] hover:shadow-lift transition-shadow"
               style={{ color: 'var(--ink)' }}
             >
               <span className="shrink-0 w-[40px]">
@@ -54,11 +54,11 @@ export default function BacklogResurfaceTile({
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block text-xs font-semibold text-text-primary truncate">{item.title}</span>
+                <span className="block text-xs font-semibold text-ink truncate">{item.title}</span>
                 {prov && (
                   <span className="inline-flex items-center gap-[5px] mt-[3px]">
                     <ProviderDot color={prov.color} size={6} />
-                    <span className="text-xxs text-text-muted">finns på {prov.shortName}</span>
+                    <span className="text-xxs text-ink-3">finns på {prov.shortName}</span>
                   </span>
                 )}
               </span>

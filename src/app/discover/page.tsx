@@ -162,7 +162,7 @@ export default function DiscoverPage() {
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-          {tab === 'trending' && <span className="text-xs text-text-muted">Filtrera:</span>}
+          {tab === 'trending' && <span className="text-xs text-ink-3">Filtrera:</span>}
           {/* Genre filter */}
           <select
             value={genre}
@@ -192,12 +192,12 @@ export default function DiscoverPage() {
 
           {/* My services toggle */}
           {tab !== 'trending' && user && user.myProviders.length > 0 && (
-            <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
+            <label className="flex items-center gap-1 text-xs text-ink-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={myServices}
                 onChange={e => setMyServices(e.target.checked)}
-                className="accent-accent w-[13px] h-[13px]"
+                className="accent-acc-deep w-[13px] h-[13px]"
               />
               Mina tjänster
             </label>
@@ -205,12 +205,12 @@ export default function DiscoverPage() {
 
           {/* Svenskt & nordiskt lens (BIN-192) — filtrerar till nordiska originalspråk */}
           {tab !== 'trending' && (
-            <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
+            <label className="flex items-center gap-1 text-xs text-ink-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={nordic}
                 onChange={e => setNordic(e.target.checked)}
-                className="accent-accent w-[13px] h-[13px]"
+                className="accent-acc-deep w-[13px] h-[13px]"
               />
               Svenskt &amp; nordiskt
             </label>
@@ -227,9 +227,9 @@ export default function DiscoverPage() {
           }
         />
       ) : (
-        <div className="bg-surface border border-border-main rounded-sm">
+        <div className="bg-surface border border-rule rounded-sm">
           <TitleGrid items={items} loading={isLoading && items.length === 0} />
-          <div className="px-3 py-[6px] border-t border-border-light">
+          <div className="px-3 py-[6px] border-t border-rule-2">
             <JustWatchCredit />
           </div>
         </div>

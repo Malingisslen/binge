@@ -97,21 +97,21 @@ export default function QuickAddButton({
         }}
         className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer ${
           current
-            ? 'bg-accent text-white'
-            : 'bg-black/60 text-white hover:bg-accent'
+            ? 'bg-acc-deep text-white'
+            : 'bg-black/60 text-white hover:bg-acc-deep'
         }`}
         title={current ? labelFor(current.status) : 'Lägg till'}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-border-main rounded-sm z-50 min-w-[110px] shadow-lg">
+        <div className="absolute top-full right-0 mt-1 bg-surface border border-rule rounded-sm z-50 min-w-[110px] shadow-lg">
           {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover ${
-                current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
+              className={`block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+                current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
               {statusMenuLabel(status, mediaType)}
@@ -119,10 +119,10 @@ export default function QuickAddButton({
           ))}
           {current && (
             <>
-              <div className="border-t border-border-light" />
+              <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover text-danger-ink bg-transparent"
+                className="block w-full text-left px-2 py-[4px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

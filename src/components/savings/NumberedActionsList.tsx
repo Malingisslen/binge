@@ -32,10 +32,10 @@ interface BuildStepsContext {
   onPauseActive: (providerId: number, resumeAt: string | null) => void;
 }
 
-const CARD_BASE = 'bg-surface border border-border-main rounded-sm grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-[12px] items-center mb-[6px]';
+const CARD_BASE = 'bg-surface border border-rule rounded-sm grid grid-cols-[36px_1fr_auto] gap-3 px-4 py-[12px] items-center mb-[6px]';
 const NUM_BASE = 'text-[22px] leading-none text-center font-light';
-const CTA_PRIMARY = 'bg-accent text-white border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-accent-deep';
-const CTA_GHOST = 'bg-transparent text-accent border border-accent rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-accent hover:text-white';
+const CTA_PRIMARY = 'bg-acc-deep text-white border-none rounded-sm px-3 py-[6px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep';
+const CTA_GHOST = 'bg-transparent text-acc-deep border border-acc-deep rounded-sm px-3 py-[5px] text-xs font-semibold no-underline whitespace-nowrap hover:bg-acc-deep hover:text-white';
 const BADGE_GREEN = 'inline-block px-[7px] py-[2px] text-[10px] uppercase tracking-[0.4px] font-bold rounded-sm border border-season-done text-season-done whitespace-nowrap';
 
 function buildSteps(advisor: AdvisorResult, ctx: BuildStepsContext): Step[] {
@@ -142,13 +142,13 @@ export default function NumberedActionsList({ advisor, onPauseProvider, onShowSu
           key={`${step.number}-${idx}`}
           className={`${CARD_BASE} ${step.active ? '' : 'opacity-65'}`}
         >
-          <div className={`${NUM_BASE} ${step.active ? 'text-accent font-semibold' : 'text-text-muted'}`}>
+          <div className={`${NUM_BASE} ${step.active ? 'text-acc-deep font-semibold' : 'text-ink-3'}`}>
             {step.number}
           </div>
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-text-primary">{step.title}</div>
+            <div className="text-[13px] font-semibold text-ink">{step.title}</div>
             {step.desc && (
-              <div className="text-[11px] text-text-muted mt-[2px] truncate">{step.desc}</div>
+              <div className="text-[11px] text-ink-3 mt-[2px] truncate">{step.desc}</div>
             )}
           </div>
           <div className="shrink-0">

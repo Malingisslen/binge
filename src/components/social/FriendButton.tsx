@@ -26,7 +26,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
     return (
       <button
         onClick={() => removeFriend(targetUid)}
-        className={`${baseClass} bg-surface text-text-secondary border-border-main hover:bg-surface-hover inline-flex items-center gap-1`}
+        className={`${baseClass} bg-surface text-ink-2 border-rule hover:bg-bg-2 inline-flex items-center gap-1`}
         title="Ta bort vänskap"
       >
         <Check size={11} /> Vän
@@ -38,7 +38,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
     return (
       <button
         onClick={() => cancelFriendRequest(targetUid)}
-        className={`${baseClass} bg-surface text-text-muted border-border-light hover:text-text-secondary`}
+        className={`${baseClass} bg-surface text-ink-3 border-rule-2 hover:text-ink-2`}
         title="Avbryt förfrågan"
       >
         Förfrågan skickad
@@ -50,7 +50,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
     return (
       <button
         onClick={() => acceptFriendRequest(targetUid)}
-        className={`${baseClass} bg-accent text-white border-accent`}
+        className={`${baseClass} bg-acc-deep text-white border-acc-deep`}
         title="De skickade en vänskapsförfrågan"
       >
         Acceptera vän
@@ -62,7 +62,7 @@ export default function FriendButton({ targetUid }: { targetUid: string }) {
   return (
     <button
       onClick={() => sendFriendRequest(targetUid)}
-      className={`${baseClass} bg-surface text-accent border-accent hover:bg-accent hover:text-white`}
+      className={`${baseClass} bg-surface text-acc-deep border-acc-deep hover:bg-acc-deep hover:text-white`}
     >
       Lägg till vän
     </button>

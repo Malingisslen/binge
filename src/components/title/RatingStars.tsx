@@ -18,7 +18,7 @@ export default function RatingStars({ rating, onChange, size = 'sm', readonly = 
 
   return (
     <span
-      className={`${starSize} ${dim ? 'text-text-muted' : 'text-accent'} font-semibold inline-flex select-none ${readonly ? 'opacity-40 cursor-not-allowed' : ''}`}
+      className={`${starSize} ${dim ? 'text-ink-3' : 'text-acc-deep'} font-semibold inline-flex select-none ${readonly ? 'opacity-40 cursor-not-allowed' : ''}`}
       onMouseLeave={() => !readonly && setHover(null)}
     >
       {[1, 2, 3, 4, 5].map(star => {

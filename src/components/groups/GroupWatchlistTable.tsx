@@ -37,30 +37,30 @@ export function GroupWatchlistTable({
   const [itemToRemove, setItemToRemove] = useState<GroupWatchlistItem | null>(null);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
-      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm">
+      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
         Gemensamt bibliotek ({watchlist.length})
       </div>
 
       {sorted.length === 0 ? (
-        <div className="px-3 py-6 text-center text-xs text-text-muted">
+        <div className="px-3 py-6 text-center text-xs text-ink-3">
           Inga titlar än. Öppna en film eller serie och tryck på <span className="font-semibold">Grupp</span>-knappen för att spara hit.
         </div>
       ) : (
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-border-light/40">
-              <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Titel</th>
+            <tr className="bg-rule-2/40">
+              <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Titel</th>
               {members.map(m => (
                 <th
                   key={m.uid}
-                  className="text-center px-2 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold"
+                  className="text-center px-2 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold"
                   title={m.displayName}
                 >
                   {abbrev(m.displayName)}
                 </th>
               ))}
-              <th className="text-right px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Snitt</th>
+              <th className="text-right px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Snitt</th>
               <th className="px-2 py-[6px]"></th>
             </tr>
           </thead>
@@ -74,7 +74,7 @@ export function GroupWatchlistTable({
               // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.
               const href = titleHref(item.mediaType, item.tmdbId, { fromGroup: groupId });
               return (
-                <tr key={item.tmdbId} className="border-t border-border-light hover:bg-border-light/30">
+                <tr key={item.tmdbId} className="border-t border-rule-2 hover:bg-rule-2/30">
                   <td className="px-3 py-[6px]">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
@@ -93,11 +93,11 @@ export function GroupWatchlistTable({
                       <div className="min-w-0">
                         <Link
                           href={href}
-                          className="text-text-primary font-semibold no-underline hover:text-accent block truncate"
+                          className="text-ink font-semibold no-underline hover:text-acc-deep block truncate"
                         >
                           {item.title}
                         </Link>
-                        <div className="text-xxs text-text-muted">
+                        <div className="text-xxs text-ink-3">
                           {item.mediaType === 'movie' ? 'Film' : 'Serie'}
                           {item.releaseYear ? ` · ${item.releaseYear}` : ''}
                         </div>
@@ -124,21 +124,21 @@ export function GroupWatchlistTable({
                             }}
                           />
                         ) : (
-                          <span className={r != null ? 'text-text-secondary' : 'text-text-muted'}>
+                          <span className={r != null ? 'text-ink-2' : 'text-ink-3'}>
                             {r != null ? r : '—'}
                           </span>
                         )}
                       </td>
                     );
                   })}
-                  <td className="text-right px-3 py-[6px] text-text-secondary">
+                  <td className="text-right px-3 py-[6px] text-ink-2">
                     {avg != null ? avg.toFixed(1) : '—'}
                   </td>
                   <td className="text-right px-2 py-[6px]">
                     {canDelete && (
                       <button
                         onClick={() => setItemToRemove(item)}
-                        className="text-text-muted hover:text-danger-ink cursor-pointer"
+                        className="text-ink-3 hover:text-danger-ink cursor-pointer"
                         title="Ta bort"
                       >
                         <Trash2 size={11} />
@@ -201,10 +201,10 @@ function TvAsymmetryRow({
   points.sort((a, b) => b.sortKey - a.sortKey);
 
   return (
-    <div className="text-xxs text-text-muted mt-[2px] flex flex-wrap gap-[6px]">
+    <div className="text-xxs text-ink-3 mt-[2px] flex flex-wrap gap-[6px]">
       {points.map(p => (
         <span key={p.uid} title={`${p.initial} har sett t.o.m. ${p.code}`}>
-          <span className="font-semibold text-text-secondary">{p.initial}</span>:{p.code}
+          <span className="font-semibold text-ink-2">{p.initial}</span>:{p.code}
         </span>
       ))}
     </div>
@@ -222,24 +222,24 @@ function RatingPicker({
     <div className="relative inline-block">
       <button
         onClick={() => setOpen(v => !v)}
-        className="px-[5px] py-[1px] border border-border-main rounded-sm text-xxs bg-white cursor-pointer"
+        className="px-[5px] py-[1px] border border-rule rounded-sm text-xxs bg-white cursor-pointer"
       >
         {value != null ? value : '+'}
       </button>
       {open && (
-        <div className="absolute z-10 right-0 mt-[2px] bg-white border border-border-main rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
+        <div className="absolute z-10 right-0 mt-[2px] bg-white border border-rule rounded-sm shadow-none flex flex-wrap gap-[2px] p-1 w-[120px]">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
             <button
               key={n}
               onClick={() => { onChange(n); setOpen(false); }}
-              className="w-[20px] h-[20px] text-xxs border border-border-light rounded-sm hover:border-accent hover:text-accent cursor-pointer bg-white"
+              className="w-[20px] h-[20px] text-xxs border border-rule-2 rounded-sm hover:border-acc-deep hover:text-acc-deep cursor-pointer bg-white"
             >
               {n}
             </button>
           ))}
           <button
             onClick={() => { onChange(null); setOpen(false); }}
-            className="w-full text-xxs text-text-muted hover:text-danger-ink mt-1 cursor-pointer"
+            className="w-full text-xxs text-ink-3 hover:text-danger-ink mt-1 cursor-pointer"
           >
             Rensa
           </button>

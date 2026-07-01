@@ -82,21 +82,21 @@ function KalibreraContent() {
           title="Inga fler titlar att kalibrera"
           standfirst="Kunde inte hämta titlar just nu. Försök igen om en stund."
         />
-        <Link href="/" className="text-accent no-underline text-xs">← Tillbaka till startsidan</Link>
+        <Link href="/" className="text-acc-deep no-underline text-xs">← Tillbaka till startsidan</Link>
       </div>
     );
   }
 
   return (
     <div className="max-w-[520px]">
-      <Link href="/" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary no-underline mb-2">
+      <Link href="/" className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2 no-underline mb-2">
         <ChevronLeft size={12} /> Startsidan
       </Link>
 
       <PageHeader
         crumb="Inställningar"
         title="Kalibrera din smak"
-        icon={<Sparkles size={18} className="text-accent" />}
+        icon={<Sparkles size={18} className="text-acc-deep" />}
         standfirst="Svara på 10 populära titlar. Tumme upp om du är intresserad, ner om inte. Påverkar dina rekommendationer och smak-match."
       />
 
@@ -105,15 +105,15 @@ function KalibreraContent() {
       )}
 
       {done && (
-        <div className="bg-surface border border-border-main rounded-sm p-4">
+        <div className="bg-surface border border-rule rounded-sm p-4">
           <div className="text-sm font-semibold mb-1">Klar.</div>
-          <div className="text-xs text-text-muted mb-3">
+          <div className="text-xs text-ink-3 mb-3">
             {Object.keys(votes).length} av {pool.length} svar — resten räknades som &quot;vet inte&quot;.
           </div>
           <button
             onClick={submit}
             disabled={saving}
-            className="px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold cursor-pointer border-none disabled:opacity-50"
           >
             {saving ? 'Sparar…' : 'Spara och gå till startsidan'}
           </button>
@@ -139,8 +139,8 @@ function CalibrationCard({
   const year = (item.release_date ?? item.first_air_date ?? '').slice(0, 4);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
-      <div className="text-xxs text-text-muted px-3 py-[4px] border-b border-border-light">
+    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
+      <div className="text-xxs text-ink-3 px-3 py-[4px] border-b border-rule-2">
         {progress.current}/{progress.total}
       </div>
       <div className="relative h-[180px] bg-ink overflow-hidden">
@@ -155,33 +155,33 @@ function CalibrationCard({
             <img src={poster} alt={title} className="w-[70px] rounded-sm relative z-10" loading="eager" decoding="async" width={70} height={105} />
           )}
           <div className="relative z-10 pb-1 min-w-0">
-            <div className="text-sm font-bold text-text-primary leading-tight truncate">{title}</div>
-            <div className="text-xxs text-text-muted">
+            <div className="text-sm font-bold text-ink leading-tight truncate">{title}</div>
+            <div className="text-xxs text-ink-3">
               {item.media_type === 'movie' ? 'Film' : 'Serie'}{year ? ` · ${year}` : ''}
             </div>
           </div>
         </div>
       </div>
-      <p className="text-xs text-text-secondary leading-relaxed px-3 py-2 m-0 min-h-[50px]">
-        {item.overview || <span className="text-text-muted italic">Ingen beskrivning.</span>}
+      <p className="text-xs text-ink-2 leading-relaxed px-3 py-2 m-0 min-h-[50px]">
+        {item.overview || <span className="text-ink-3 italic">Ingen beskrivning.</span>}
       </p>
-      <div className="flex gap-1 px-3 py-2 border-t border-border-light">
+      <div className="flex gap-1 px-3 py-2 border-t border-rule-2">
         <button
           onClick={() => onVote('down')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-border-main rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-rule rounded-sm text-xs font-semibold bg-white cursor-pointer hover:bg-danger-soft hover:border-danger/30"
         >
           <ThumbsDown size={12} /> Inte min grej
         </button>
         <button
           onClick={onSkip}
-          className="px-3 py-[6px] border border-border-main rounded-sm text-xs bg-white cursor-pointer text-text-muted"
+          className="px-3 py-[6px] border border-rule rounded-sm text-xs bg-white cursor-pointer text-ink-3"
           title="Hoppa över"
         >
           Hoppa
         </button>
         <button
           onClick={() => onVote('up')}
-          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-accent rounded-sm text-xs font-semibold bg-accent text-white cursor-pointer hover:bg-accent/90"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-[6px] border border-acc-deep rounded-sm text-xs font-semibold bg-acc-deep text-white cursor-pointer hover:bg-acc-deep/90"
         >
           <ThumbsUp size={12} /> Gillar
         </button>

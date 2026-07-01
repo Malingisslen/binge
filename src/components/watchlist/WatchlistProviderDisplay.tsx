@@ -28,7 +28,7 @@ export function ProviderChips({
     if (providersCheckedAt == null) return null;
     return (
       <div className="flex flex-wrap gap-[2px]">
-        <span className="text-xxs px-1 py-[1px] border border-border-light text-text-muted/70 rounded-sm inline-block">
+        <span className="text-xxs px-1 py-[1px] border border-rule-2 text-ink-3/70 rounded-sm inline-block">
           Ej på SE
         </span>
       </div>
@@ -44,7 +44,7 @@ export function ProviderChips({
           <span
             key={id}
             className={`text-xxs px-1 py-[1px] border rounded-sm inline-block ${
-              isMine ? 'border-accent text-accent' : 'border-border-main text-text-muted'
+              isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
             }`}
           >
             {p.shortName}

@@ -60,29 +60,29 @@ interface SubscribeRow {
 
 function SubscribeRowTable({ rows }: { rows: SubscribeRow[] }) {
   return (
-    <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+    <div className="bg-surface border border-rule rounded-sm overflow-hidden">
       <table className="w-full border-collapse">
         <SrOnlyTableHeader columns={['Titel', 'Typ', 'Tjänst', 'Status']} />
         <tbody>
           {rows.map(({ show, provider }) => {
             const href = titleHref(show.mediaType, show.tmdbId);
             return (
-              <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-border-light last:border-b-0">
+              <tr key={`${provider.providerId}-${show.tmdbId}`} className="border-b border-rule-2 last:border-b-0">
                 <td className="px-3 py-[6px] text-xs font-semibold">
-                  <Link href={href} className="no-underline text-text-primary hover:text-accent">
+                  <Link href={href} className="no-underline text-ink hover:text-acc-deep">
                     {show.title}
                   </Link>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-text-muted whitespace-nowrap">
+                <td className="px-3 py-[6px] text-xxs text-ink-3 whitespace-nowrap">
                   {show.mediaType === 'movie' ? 'Film' : 'Serie'}
                 </td>
                 <td className="px-3 py-[6px] whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
                     <ProviderDot color={provider.color} size={7} />
-                    <span className="text-xs text-text-secondary">{provider.shortName}</span>
+                    <span className="text-xs text-ink-2">{provider.shortName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-text-muted text-right whitespace-nowrap">
+                <td className="px-3 py-[6px] text-xxs text-ink-3 text-right whitespace-nowrap">
                   {subscribeRowStatusText(show)}
                 </td>
               </tr>
@@ -102,24 +102,24 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Dina pausade tjänster</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Dina pausade tjänster</h2>
         {totalSaved > 0 && (
           <span className="text-xxs text-season-done font-semibold">Sparat hittills: {totalSaved} kr</span>
         )}
       </div>
-      <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Pausad sedan', 'Sparat', 'Åtgärd']} />
           <tbody>
             {pauses.map(p => (
-              <tr key={p.providerId} className="border-b border-border-light last:border-b-0">
+              <tr key={p.providerId} className="border-b border-rule-2 last:border-b-0">
                 <td className="px-3 py-[6px] whitespace-nowrap">
                   <span className="inline-flex items-center gap-[6px]">
                     <ProviderDot color={p.color} size={7} />
-                    <span className="text-xs font-semibold text-text-primary">{p.providerName}</span>
+                    <span className="text-xs font-semibold text-ink">{p.providerName}</span>
                   </span>
                 </td>
-                <td className="px-3 py-[6px] text-xxs text-text-muted">
+                <td className="px-3 py-[6px] text-xxs text-ink-3">
                   Pausad {formatSwedishDate(p.pausedAt)}
                   {p.resumeAt ? ` · återuppta ${formatSwedishDate(p.resumeAt)}` : ''}
                 </td>
@@ -129,7 +129,7 @@ function ActivePausesSection({ pauses, onResume }: { pauses: ActivePause[]; onRe
                 <td className="px-3 py-[6px] text-right">
                   <button
                     onClick={() => onResume(p.providerId)}
-                    className="text-xxs text-accent no-underline font-[inherit] bg-transparent border-none cursor-pointer"
+                    className="text-xxs text-acc-deep no-underline font-[inherit] bg-transparent border-none cursor-pointer"
                   >
                     Återuppta
                   </button>
@@ -272,7 +272,7 @@ function SavingsContent() {
               className="mb-3 scroll-mt-3 mt-3"
               onToggle={e => setDetailsOpen((e.currentTarget as HTMLDetailsElement).open)}
             >
-              <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted cursor-pointer select-none list-none">
+              <summary className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3 cursor-pointer select-none list-none">
                 Mer detaljer ›
               </summary>
               <div className="mt-3 flex flex-col gap-3">
@@ -281,17 +281,17 @@ function SavingsContent() {
                 {hasSubscribeDetails && (
                   <div>
                     <div className="flex items-baseline justify-between mb-[6px]">
-                      <h3 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">
+                      <h3 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
                         Titlar på tjänster du inte har
                       </h3>
-                      <span className="text-xxs text-text-muted">
+                      <span className="text-xxs text-ink-3">
                         {subscribeRows.length + datelessSubscribeRows.length} totalt
                       </span>
                     </div>
                     {subscribeRows.length > 0 && <SubscribeRowTable rows={subscribeRows} />}
                     {datelessSubscribeRows.length > 0 && (
                       <details className="mt-2">
-                        <summary className="text-xxs text-text-muted cursor-pointer select-none list-none">
+                        <summary className="text-xxs text-ink-3 cursor-pointer select-none list-none">
                           +{datelessSubscribeRows.length} utan spikat datum (avslutade / okänt) ›
                         </summary>
                         <div className="mt-1">

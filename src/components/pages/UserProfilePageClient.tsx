@@ -94,7 +94,7 @@ export default function UserProfilePageClient({ username }: { username: string }
             {!isOwnProfile && <FollowButton targetUid={uid} />}
             {!isOwnProfile && <FriendButton targetUid={uid} />}
             {isOwnProfile && (
-              <Link href="/settings" className="text-xs text-accent no-underline">Redigera profil</Link>
+              <Link href="/settings" className="text-xs text-acc-deep no-underline">Redigera profil</Link>
             )}
             <span className="text-xs text-ink-3">{followerCount ?? 0} följare · {followingCount ?? 0} följer</span>
           </>
@@ -111,19 +111,19 @@ export default function UserProfilePageClient({ username }: { username: string }
       <ProfileStatsPanel items={watchlist ?? []} />
 
       {!isOwnProfile && (
-        <div className="bg-surface border border-border-main rounded-sm px-3 py-2 mb-4">
-          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-[2px]">
+        <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-4">
+          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[2px]">
             Smak-match med dig
           </div>
           {taste.percent != null ? (
             <div className="flex items-baseline gap-2">
-              <span className="text-[22px] font-bold text-accent leading-none">{taste.percent}%</span>
-              <span className="text-xxs text-text-muted">
+              <span className="text-[22px] font-bold text-acc-deep leading-none">{taste.percent}%</span>
+              <span className="text-xxs text-ink-3">
                 baserat på {taste.mySampleSize} titlar från dig och {taste.theirSampleSize} från {profile.displayName}
               </span>
             </div>
           ) : (
-            <div className="text-xs text-text-muted">
+            <div className="text-xs text-ink-3">
               {taste.mySampleSize < 5
                 ? 'Lägg till och betygsätt fler titlar för att se smak-match.'
                 : `${profile.displayName} har för få betygsatta titlar för att räkna ut matchning.`}
@@ -133,13 +133,13 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {following.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Följer just nu</span>
+        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+          <div className="px-3 py-[6px] border-b border-rule-2">
+            <span className="text-sm font-bold text-ink-2">Följer just nu</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
             {following.slice(0, 10).map(item => (
-              <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
+              <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-ink">
                 <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />
@@ -153,13 +153,13 @@ export default function UserProfilePageClient({ username }: { username: string }
       )}
 
       {recentlyWatched.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Senast sedd</span>
+        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+          <div className="px-3 py-[6px] border-b border-rule-2">
+            <span className="text-sm font-bold text-ink-2">Senast sedd</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-[7px] px-3 py-2">
             {recentlyWatched.map(item => (
-              <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-text-primary">
+              <Link key={item.tmdbId} href={`/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/`} className="no-underline text-ink">
                 <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                   {posterUrl(item.posterPath, 'w342') && (
                     <img src={posterUrl(item.posterPath, 'w342')!} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />

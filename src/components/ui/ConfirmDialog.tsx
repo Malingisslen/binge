@@ -110,7 +110,7 @@ export function ConfirmDialog({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-surface border border-border-main rounded-sm max-w-[380px] w-full outline-none"
+        className="bg-surface border border-rule rounded-sm max-w-[380px] w-full outline-none"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -118,12 +118,12 @@ export function ConfirmDialog({
         aria-describedby={body ? 'confirm-dialog-desc' : undefined}
       >
         <div className="px-3 py-3">
-          <h2 id="confirm-dialog-title" className="text-sm font-bold text-text-primary">
+          <h2 id="confirm-dialog-title" className="text-sm font-bold text-ink">
             {title}
           </h2>
-          {body && <p id="confirm-dialog-desc" className="text-xs text-text-muted mt-1 leading-relaxed">{body}</p>}
+          {body && <p id="confirm-dialog-desc" className="text-xs text-ink-3 mt-1 leading-relaxed">{body}</p>}
         </div>
-        <div className="px-3 py-2 border-t border-border-light flex items-center justify-end gap-2">
+        <div className="px-3 py-2 border-t border-rule-2 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}

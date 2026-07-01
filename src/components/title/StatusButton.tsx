@@ -104,20 +104,20 @@ export default function StatusButton({
         onClick={() => setOpen(!open)}
         className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold ${
           current
-            ? 'bg-accent text-white border-accent'
-            : 'bg-accent text-white border-accent hover:bg-accent/90'
+            ? 'bg-acc-deep text-white border-acc-deep'
+            : 'bg-acc-deep text-white border-acc-deep hover:bg-acc-deep/90'
         }`}
       >
         {current ? labelFor(current.status) : '+ Lägg till'}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-surface border border-border-main rounded-sm z-40 min-w-[130px]">
+        <div className="absolute top-full left-0 mt-1 bg-surface border border-rule rounded-sm z-40 min-w-[130px]">
           {options.map(status => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover ${
-                current?.status === status ? 'text-accent font-semibold' : 'text-text-primary'
+              className={`block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 ${
+                current?.status === status ? 'text-acc-deep font-semibold' : 'text-ink'
               } bg-transparent`}
             >
               {statusMenuLabel(status, mediaType)}
@@ -125,10 +125,10 @@ export default function StatusButton({
           ))}
           {current && (
             <>
-              <div className="border-t border-border-light" />
+              <div className="border-t border-rule-2" />
               <button
                 onClick={handleRemove}
-                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-surface-hover text-danger-ink bg-transparent"
+                className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-danger-ink bg-transparent"
               >
                 Ta bort
               </button>

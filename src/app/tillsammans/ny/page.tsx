@@ -91,24 +91,24 @@ function NyContent() {
       <PageHeader
         crumb="Tillsammans"
         title="Tillsammans ikväll"
-        icon={<Users size={18} className="text-accent" />}
+        icon={<Users size={18} className="text-acc-deep" />}
         standfirst="Skapa en delad session. Alla röstar ja eller nej — bland titlar ni faktiskt kan streama just nu. Dela länken efter sessionen är skapad; de som får länken behöver inget konto."
       />
 
-      <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
+      <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
         <FormSection title="Du">
-          <label className="block text-xs text-text-muted mb-1">Ditt namn</label>
+          <label className="block text-xs text-ink-3 mb-1">Ditt namn</label>
           <input
             type="text"
             value={hostName}
             onChange={e => setHostName(e.target.value)}
             placeholder="T.ex. Lisa"
-            className="w-full max-w-[260px] px-2 py-1 text-base border border-border-main rounded-sm bg-white"
+            className="w-full max-w-[260px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
         </FormSection>
 
         <FormSection title="Dina streamingtjänster">
-          <p className="text-xs text-text-muted mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
+          <p className="text-xs text-ink-3 mb-2">Bara titlar från de här tjänsterna (plus deltagarnas, beroende på läge nedan) visas.</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-[3px]">
             {flatrate.map(p => {
               const selected = providers.includes(p.id);
@@ -116,14 +116,14 @@ function NyContent() {
                 <label
                   key={p.id}
                   className={`flex items-center gap-[6px] px-2 py-[3px] border rounded-sm cursor-pointer text-xs ${
-                    selected ? 'border-accent bg-accent/[0.08]' : 'border-border-main bg-white'
+                    selected ? 'border-acc-deep bg-acc-deep/[0.08]' : 'border-rule bg-white'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={selected}
                     onChange={() => toggleProvider(p.id)}
-                    className="accent-accent w-[12px] h-[12px]"
+                    className="accent-acc-deep w-[12px] h-[12px]"
                   />
                   <span className="w-[6px] h-[6px] rounded-full" style={{ background: p.color }} />
                   {p.name}
@@ -179,9 +179,9 @@ function NyContent() {
             placeholder="T.ex. 120 (lämna tomt för ingen gräns)"
             min="30"
             max="400"
-            className="w-full max-w-[220px] px-2 py-1 text-base border border-border-main rounded-sm bg-white"
+            className="w-full max-w-[220px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
-          <p className="text-xxs text-text-muted mt-1">Gäller bara filmer.</p>
+          <p className="text-xxs text-ink-3 mt-1">Gäller bara filmer.</p>
         </FormSection>
 
         {mediaType !== 'movie' && (
@@ -191,7 +191,7 @@ function NyContent() {
                 type="checkbox"
                 checked={allowAsymmetry}
                 onChange={e => setAllowAsymmetry(e.target.checked)}
-                className="accent-accent w-[12px] h-[12px]"
+                className="accent-acc-deep w-[12px] h-[12px]"
               />
               Tillåt serier med olika avsnittslägen (varning visas)
             </label>
@@ -202,11 +202,11 @@ function NyContent() {
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger/30">{error}</div>
         )}
 
-        <div className="px-3 py-2 border-t border-border-light flex items-center gap-2">
+        <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             <Share2 size={11} className="inline mr-1" />
             {submitting ? 'Skapar…' : 'Skapa session och få länk'}
@@ -214,7 +214,7 @@ function NyContent() {
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
           >
             Avbryt
           </button>

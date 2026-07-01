@@ -39,23 +39,23 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
   const onlySome = useMemo(() => union.filter(id => !intersectSet.has(id)), [union, intersectSet]);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
-      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm">
+      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
         Streamingöverlapp
       </div>
       <div className="px-3 py-2 space-y-2">
         <div>
-          <div className="text-xxs text-text-muted mb-1">Alla har ({intersect.length})</div>
+          <div className="text-xxs text-ink-3 mb-1">Alla har ({intersect.length})</div>
           <ProviderPills ids={intersect} highlight />
         </div>
         <div>
           {/* Räknaren matchar pill-listan (union minus gemensamma) — inte
               hela unionen (G2). Tom diff förklaras ärligt istället för "—". */}
-          <div className="text-xxs text-text-muted mb-1">Bara någon har ({onlySome.length})</div>
+          <div className="text-xxs text-ink-3 mb-1">Bara någon har ({onlySome.length})</div>
           {onlySome.length > 0 ? (
             <ProviderPills ids={onlySome} />
           ) : (
-            <div className="text-xxs text-text-muted">
+            <div className="text-xxs text-ink-3">
               {union.length > 0 ? 'Alla har samma tjänster.' : 'Inga tjänster angivna ännu.'}
             </div>
           )}
@@ -68,7 +68,7 @@ export function ProviderOverlapPanel({ intersect, union }: { intersect: number[]
 
 export function ProviderPills({ ids, highlight = false }: { ids: number[]; highlight?: boolean }) {
   if (ids.length === 0) {
-    return <div className="text-xxs text-text-muted">—</div>;
+    return <div className="text-xxs text-ink-3">—</div>;
   }
   return (
     <div className="flex flex-wrap gap-1">
@@ -79,7 +79,7 @@ export function ProviderPills({ ids, highlight = false }: { ids: number[]; highl
           <span
             key={id}
             className={`inline-flex items-center gap-1 px-[5px] py-[1px] text-xxs border rounded-sm ${
-              highlight ? 'border-accent text-accent' : 'border-border-main text-text-muted'
+              highlight ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
             }`}
           >
             <span className="w-[5px] h-[5px] rounded-full" style={{ background: p.color }} />
@@ -173,8 +173,8 @@ export function InvitePanel({
   };
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
-      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm">
+      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
         Inbjudningslänk
       </div>
       <div className="px-3 py-2 space-y-2">
@@ -184,18 +184,18 @@ export function InvitePanel({
               <input
                 readOnly
                 value={inviteUrl}
-                className="flex-1 px-2 py-1 text-xxs border border-border-main rounded-sm bg-white truncate"
+                className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-white truncate"
                 onFocus={e => e.currentTarget.select()}
               />
               <button
                 onClick={copy}
-                className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer"
                 title="Kopiera"
               >
                 <Copy size={11} />
               </button>
             </div>
-            {copied && <div className="text-xxs text-accent">Kopierad.</div>}
+            {copied && <div className="text-xxs text-acc-deep">Kopierad.</div>}
             {isStale && ageLabel && (
               <div className="text-xxs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-1">
                 {ageLabel}. Generera en ny om du misstänker att den läckt.
@@ -205,14 +205,14 @@ export function InvitePanel({
               <button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
                 Inaktivera
               </button>
@@ -220,7 +220,7 @@ export function InvitePanel({
           </>
         ) : tokenIsActive ? (
           <>
-            <p className="text-xxs text-text-muted leading-relaxed">
+            <p className="text-xxs text-ink-3 leading-relaxed">
               En aktiv inbjudningslänk finns men plaintext-värdet är inte sparat på den
               här enheten — av säkerhetsskäl lagras det bara client-side. Generera en ny
               för att få en synlig länk att kopiera. Den gamla länken slutar då fungera.
@@ -229,14 +229,14 @@ export function InvitePanel({
               <button
                 onClick={handleRotate}
                 disabled={working}
-                className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={10} /> Generera ny
               </button>
               <button
                 onClick={() => setConfirmingDisable(true)}
                 disabled={working}
-                className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+                className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
               >
                 Inaktivera
               </button>
@@ -244,11 +244,11 @@ export function InvitePanel({
           </>
         ) : (
           <>
-            <p className="text-xxs text-text-muted">Ingen aktiv inbjudningslänk.</p>
+            <p className="text-xxs text-ink-3">Ingen aktiv inbjudningslänk.</p>
             <button
               onClick={handleRotate}
               disabled={working}
-              className="inline-flex items-center gap-1 px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1 px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer disabled:opacity-50"
             >
               <RefreshCw size={10} /> Skapa länk
             </button>
@@ -278,7 +278,7 @@ export function LeavePanel({
   const [working, setWorking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
+    <div className="bg-surface border border-rule rounded-sm">
       <div className="px-3 py-2">
         <button
           onClick={() => setConfirming(true)}

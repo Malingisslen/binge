@@ -17,7 +17,7 @@ export default function CommunityRating({ mediaType, tmdbId }: { mediaType: 'mov
     <span>
       <span className="k">binge-snitt</span>
       <strong>{outOfTen.toFixed(1)} / 10</strong>
-      <span className="text-text-muted"> · {cr.count} betyg</span>
+      <span className="text-ink-3"> · {cr.count} betyg</span>
     </span>
   );
 }

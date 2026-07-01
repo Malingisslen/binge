@@ -38,7 +38,7 @@ export function EmailVerificationBanner() {
   return (
     <div
       role="status"
-      className="bg-accent/[0.08] border-b border-accent/30 px-3 py-[5px] text-xs text-text-secondary flex items-center gap-3 flex-wrap"
+      className="bg-acc-deep/[0.08] border-b border-acc-deep/30 px-3 py-[5px] text-xs text-ink-2 flex items-center gap-3 flex-wrap"
     >
       <span>
         Bekräfta din e-postadress.
@@ -46,13 +46,13 @@ export function EmailVerificationBanner() {
       <button
         onClick={resend}
         disabled={sending}
-        className="text-xs text-accent bg-transparent border-none cursor-pointer font-semibold disabled:opacity-50 underline"
+        className="text-xs text-acc-deep bg-transparent border-none cursor-pointer font-semibold disabled:opacity-50 underline"
       >
         {sending ? 'Skickar…' : 'Skicka igen'}
       </button>
       <button
         onClick={() => setDismissed(true)}
-        className="ml-auto text-xxs text-text-muted bg-transparent border-none cursor-pointer"
+        className="ml-auto text-xxs text-ink-3 bg-transparent border-none cursor-pointer"
         aria-label="Stäng"
       >
         Dölj

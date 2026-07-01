@@ -41,7 +41,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
   return (
     <div>
       <PageHeader
-        crumb={<Link href={`/tv/${seriesId}/`} className="text-accent no-underline">← Tillbaka till serien</Link>}
+        crumb={<Link href={`/tv/${seriesId}/`} className="text-acc-deep no-underline">← Tillbaka till serien</Link>}
         title={season.name}
         standfirst={`${progressLoading ? '—' : watchedCount}/${episodes.length} avsnitt sedda`}
         actions={!progressLoading && watchedCount < episodes.length && airedCount > 0 ? (
@@ -50,7 +50,7 @@ export default function SeasonPageClient({ id, num }: { id: string; num: string 
       />
 
       <div className="bg-surface border border-rule rounded-sm px-3 py-1 mt-3">
-        <div className="flex items-center gap-2 py-2 border-b border-border-light">
+        <div className="flex items-center gap-2 py-2 border-b border-rule-2">
           <div className="flex-1 h-[3px] bg-rule rounded-full overflow-hidden">
             <div
               className="h-full bg-ink rounded-full transition-all"

@@ -153,34 +153,34 @@ function FeedContent() {
       {!isLoading && trending.length > 0 && <TrendingRow titles={trending} />}
 
       {!isLoading && followingUids.length === 0 && (
-        <div className="bg-surface border border-border-main rounded-sm px-4 py-4">
-          <p className="text-xs text-text-secondary mb-3 leading-relaxed">
+        <div className="bg-surface border border-rule rounded-sm px-4 py-4">
+          <p className="text-xs text-ink-2 mb-3 leading-relaxed">
             Se vad dina vänner tittar på, betygsätter och lägger till. Följ andra användare för att se deras aktivitet här.
           </p>
-          <div className="border border-dashed border-border-main rounded-sm p-[10px] mb-3">
-            <div className="text-xxs uppercase tracking-[0.5px] text-text-muted mb-[6px]">Så här ser det ut</div>
+          <div className="border border-dashed border-rule rounded-sm p-[10px] mb-3">
+            <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 mb-[6px]">Så här ser det ut</div>
             <div className="flex gap-2 items-center py-[3px] opacity-50">
-              <div className="w-[20px] h-[20px] rounded-full bg-accent shrink-0" />
+              <div className="w-[20px] h-[20px] rounded-full bg-acc-deep shrink-0" />
               <div>
-                <div className="text-xxs"><b>Anna</b> <span className="text-text-muted">betygsatte</span> <b>The Bear</b> <span className="text-accent">★★★★★</span></div>
-                <div className="text-xxs text-text-muted">2 timmar sedan</div>
+                <div className="text-xxs"><b>Anna</b> <span className="text-ink-3">betygsatte</span> <b>The Bear</b> <span className="text-acc-deep">★★★★★</span></div>
+                <div className="text-xxs text-ink-3">2 timmar sedan</div>
               </div>
             </div>
             <div className="flex gap-2 items-center py-[3px] opacity-50">
               <div className="w-[20px] h-[20px] rounded-full bg-duo-moss shrink-0" />
               <div>
-                <div className="text-xxs"><b>Erik</b> <span className="text-text-muted">började följa</span> <b>Severance</b></div>
-                <div className="text-xxs text-text-muted">5 timmar sedan</div>
+                <div className="text-xxs"><b>Erik</b> <span className="text-ink-3">började följa</span> <b>Severance</b></div>
+                <div className="text-xxs text-ink-3">5 timmar sedan</div>
               </div>
             </div>
           </div>
           <div className="text-center">
-            <Link href="/search" className="inline-block px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold no-underline">
+            <Link href="/search" className="inline-block px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold no-underline">
               Sök användare att följa
             </Link>
             {user?.username && (
-              <div className="text-xxs text-text-muted mt-[4px]">
-                eller dela din profillänk: <span className="text-text-secondary">binge.nu/u/{user.username}</span>
+              <div className="text-xxs text-ink-3 mt-[4px]">
+                eller dela din profillänk: <span className="text-ink-2">binge.nu/u/{user.username}</span>
               </div>
             )}
           </div>
@@ -188,8 +188,8 @@ function FeedContent() {
       )}
 
       {feedItems && feedItems.length === 0 && followingUids.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm px-4 py-6 text-center">
-          <p className="text-sm text-text-muted">Ingen aktivitet de senaste 2 veckorna.</p>
+        <div className="bg-surface border border-rule rounded-sm px-4 py-6 text-center">
+          <p className="text-sm text-ink-3">Ingen aktivitet de senaste 2 veckorna.</p>
         </div>
       )}
 
@@ -211,7 +211,7 @@ function TrendingRow({ titles }: { titles: TrendingTitle[] }) {
     `${t.followerCount} du följer har den`;
   return (
     <section className="mb-4">
-      <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2 flex items-center gap-1">
+      <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2 flex items-center gap-1">
         <TrendingUp size={12} aria-hidden /> Trendar bland personer du följer
       </h2>
       <div className="flex gap-[8px] overflow-x-auto pb-1">
@@ -228,10 +228,10 @@ function TrendingRow({ titles }: { titles: TrendingTitle[] }) {
                   <img src={poster} alt="" className="w-[34px] h-[51px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={34} height={51} />
                 )}
                 <div className="min-w-0">
-                  <div className="text-xxs font-semibold text-text-primary leading-snug line-clamp-3">{t.title}</div>
+                  <div className="text-xxs font-semibold text-ink leading-snug line-clamp-3">{t.title}</div>
                 </div>
               </div>
-              <div className="text-xxs text-accent font-semibold mt-[6px]">{followerLabel(t)}</div>
+              <div className="text-xxs text-acc-deep font-semibold mt-[6px]">{followerLabel(t)}</div>
             </Link>
           );
         })}
@@ -251,19 +251,19 @@ function FeedWatchlistCard({ item }: { item: FeedWatchlistItem }) {
     : item.status === 'vill_se' ? 'vill se'
     : 'uppdaterade';
   return (
-    <div className="bg-surface border border-border-main rounded-sm px-3 py-2 flex gap-2 items-center">
+    <div className="bg-surface border border-rule rounded-sm px-3 py-2 flex gap-2 items-center">
       {poster && <img src={poster} alt="" className="w-[30px] h-[45px] rounded-sm object-cover shrink-0" loading="lazy" decoding="async" width={30} height={45} />}
       <div className="flex-1 min-w-0">
         <div className="text-xs">
           {item.username ? (
-            <Link href={`/user/${item.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">{item.displayName}</Link>
+            <Link href={`/user/${item.username}/`} className="font-semibold text-ink no-underline hover:text-acc-deep">{item.displayName}</Link>
           ) : (
             <span className="font-semibold">{item.displayName}</span>
           )}
-          <span className="text-text-muted"> {statusLabel} </span>
-          <Link href={href} className="font-semibold text-text-primary no-underline hover:text-accent">{item.title}</Link>
+          <span className="text-ink-3"> {statusLabel} </span>
+          <Link href={href} className="font-semibold text-ink no-underline hover:text-acc-deep">{item.title}</Link>
         </div>
-        <div className="text-xxs text-text-muted mt-[1px]">
+        <div className="text-xxs text-ink-3 mt-[1px]">
           {item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}
         </div>
       </div>
@@ -284,24 +284,24 @@ function FeedReviewCard({ item }: { item: FeedReviewItem }) {
   const href = `/${item.mediaType === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}/#review-${item.reviewId}`;
   const preview = item.text.length > 160 ? item.text.slice(0, 160) + '…' : item.text;
   return (
-    <div className="bg-surface border border-border-main rounded-sm px-3 py-2">
+    <div className="bg-surface border border-rule rounded-sm px-3 py-2">
       <div className="text-xs mb-1">
         {item.username ? (
-          <Link href={`/user/${item.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">{item.displayName}</Link>
+          <Link href={`/user/${item.username}/`} className="font-semibold text-ink no-underline hover:text-acc-deep">{item.displayName}</Link>
         ) : (
           <span className="font-semibold">{item.displayName}</span>
         )}
-        <span className="text-text-muted"> recenserade </span>
-        <Link href={href} className="font-semibold text-text-primary no-underline hover:text-accent">{item.title}</Link>
+        <span className="text-ink-3"> recenserade </span>
+        <Link href={href} className="font-semibold text-ink no-underline hover:text-acc-deep">{item.title}</Link>
       </div>
       {item.spoiler ? (
-        <div className="text-xxs text-text-muted italic">Spoiler — öppna recensionen för att läsa.</div>
+        <div className="text-xxs text-ink-3 italic">Spoiler — öppna recensionen för att läsa.</div>
       ) : (
-        <p className="text-xs text-text-secondary leading-relaxed m-0 mb-[4px]">{preview}</p>
+        <p className="text-xs text-ink-2 leading-relaxed m-0 mb-[4px]">{preview}</p>
       )}
-      <div className="flex items-center gap-3 text-xxs text-text-muted pt-[4px] border-t border-border-light">
+      <div className="flex items-center gap-3 text-xxs text-ink-3 pt-[4px] border-t border-rule-2">
         <span>{item.updatedAt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}</span>
-        <Link href={href} className="inline-flex items-center gap-[3px] text-text-muted hover:text-accent no-underline">
+        <Link href={href} className="inline-flex items-center gap-[3px] text-ink-3 hover:text-acc-deep no-underline">
           <Heart size={10} /> <MessageCircle size={10} /> Läs och svara
         </Link>
       </div>

@@ -28,37 +28,37 @@ export default function CoverageOptimizer({ rows }: { rows: WillSeePerProviderRo
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">
           Lås upp mest av din Vill se
         </h2>
-        <span className="text-xxs text-text-muted">ej tecknade tjänster</span>
+        <span className="text-xxs text-ink-3">ej tecknade tjänster</span>
       </div>
-      <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+      <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Låser upp', 'Månadskostnad', 'Pris per titel']} />
           <tbody>
             {options.map((o, i) => {
               const detail = breakdown(o.tvCount, o.movieCount);
               return (
-                <tr key={o.providerId} className="border-b border-border-light last:border-b-0">
+                <tr key={o.providerId} className="border-b border-rule-2 last:border-b-0">
                   {/* Accent-stripe på första cellen, inte <tr> — border-collapse
                       ignorerar border-left på rader. */}
-                  <td className={`px-3 py-[7px] whitespace-nowrap ${i === 0 ? 'border-l-[3px] border-l-accent' : ''}`}>
+                  <td className={`px-3 py-[7px] whitespace-nowrap ${i === 0 ? 'border-l-[3px] border-l-acc-deep' : ''}`}>
                     <span className="inline-flex items-center gap-[6px]">
                       <ProviderDot color={o.color} size={7} />
-                      <span className={`text-xs ${i === 0 ? 'font-semibold text-text-primary' : 'text-text-secondary'}`}>
+                      <span className={`text-xs ${i === 0 ? 'font-semibold text-ink' : 'text-ink-2'}`}>
                         Skaffa {o.providerName}
                       </span>
                     </span>
                   </td>
-                  <td className="px-3 py-[7px] text-xs text-text-secondary">
+                  <td className="px-3 py-[7px] text-xs text-ink-2">
                     lås upp {pluralSv(o.titleCount, 'titel', 'titlar')}
-                    {detail ? <span className="text-text-muted"> ({detail})</span> : null}
+                    {detail ? <span className="text-ink-3"> ({detail})</span> : null}
                   </td>
-                  <td className="px-3 py-[7px] text-xxs text-text-muted text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
                     {o.monthlyCost} kr/mån
                   </td>
-                  <td className="px-3 py-[7px] text-xxs text-text-muted text-right whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-[7px] text-xxs text-ink-3 text-right whitespace-nowrap tabular-nums">
                     ≈{o.krPerTitle} kr/titel
                   </td>
                 </tr>

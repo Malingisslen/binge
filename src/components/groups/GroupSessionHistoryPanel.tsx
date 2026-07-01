@@ -29,11 +29,11 @@ export function GroupSessionHistoryPanel({
   const memberByUid = new Map(members.map(m => [m.uid, m] as const));
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
-      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm">
+      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
         Senaste filmkvällar
       </div>
-      <ul className="divide-y divide-border-light">
+      <ul className="divide-y divide-rule-2">
         {history.map(entry => {
           const poster = posterUrl(entry.posterPath, 'w92');
           const href = titleHref(entry.mediaType, entry.pickedTmdbId);
@@ -55,13 +55,13 @@ export function GroupSessionHistoryPanel({
                   height={42}
                 />
               ) : (
-                <div className="w-[28px] h-[42px] bg-border-light rounded-sm shrink-0" />
+                <div className="w-[28px] h-[42px] bg-rule-2 rounded-sm shrink-0" />
               )}
               <div className="min-w-0 flex-1">
-                <Link href={href} className="text-xs font-semibold text-text-primary no-underline hover:text-accent block truncate">
+                <Link href={href} className="text-xs font-semibold text-ink no-underline hover:text-acc-deep block truncate">
                   {entry.mediaTitle}
                 </Link>
-                <div className="text-xxs text-text-muted">
+                <div className="text-xxs text-ink-3">
                   {fmtDate(entry.pickedAt)}
                   {initials.length > 0 && ` · ${initials.join(' + ')}`}
                 </div>

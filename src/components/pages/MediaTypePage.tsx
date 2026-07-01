@@ -78,10 +78,10 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
       <PageHeader crumb={cfg.title} title={cfg.title} standfirst={cfg.standfirst} />
 
       {following.length > 0 ? (
-        <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-          <div className="flex items-center justify-between px-3 py-[6px] border-b border-border-light">
-            <h2 className="text-sm font-bold text-text-secondary m-0">Följer</h2>
-            <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-accent no-underline">
+        <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+          <div className="flex items-center justify-between px-3 py-[6px] border-b border-rule-2">
+            <h2 className="text-sm font-bold text-ink-2 m-0">Följer</h2>
+            <Link href={mediaType === 'tv' ? '/my/series/' : '/my/films/'} className="text-xs text-acc-deep no-underline">
               Alla {following.length} →
             </Link>
           </div>
@@ -89,7 +89,7 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
             {following.slice(0, 10).map(item => {
               const poster = posterUrl(item.posterPath, 'w342');
               return (
-                <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-text-primary">
+                <Link key={item.tmdbId} href={`${cfg.hrefPrefix}${item.tmdbId}/`} className="no-underline text-ink">
                   <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px]`}>
                     {poster && <img src={poster} alt={item.title} loading="lazy" decoding="async" width={342} height={513} />}
                   </div>
@@ -100,14 +100,14 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
           </div>
         </div>
       ) : (
-        <div className="bg-surface border border-border-main rounded-sm mb-[14px] px-3 py-4 text-center text-sm text-text-muted">
+        <div className="bg-surface border border-rule rounded-sm mb-[14px] px-3 py-4 text-center text-sm text-ink-3">
           {cfg.emptyText}
         </div>
       )}
 
-      <div className="bg-surface border border-border-main rounded-sm">
-        <div className="px-3 py-[6px] border-b border-border-light">
-          <h2 className="text-sm font-bold text-text-secondary m-0">{cfg.popularLabel}</h2>
+      <div className="bg-surface border border-rule rounded-sm">
+        <div className="px-3 py-[6px] border-b border-rule-2">
+          <h2 className="text-sm font-bold text-ink-2 m-0">{cfg.popularLabel}</h2>
         </div>
         <TitleGrid
           items={allResults.filter(r =>

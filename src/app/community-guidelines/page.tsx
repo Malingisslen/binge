@@ -14,7 +14,7 @@ export default function CommunityGuidelinesPage() {
       version="1.0"
     >
       <section>
-        <p className="text-text-secondary">
+        <p className="text-ink-2">
           Binge ska vara ett trovärdigt och trevligt verktyg. Dessa
           regler gäller allt publikt innehåll du lägger upp: recensioner,
           kommentarer, listor, gruppnamn och användarnamn.

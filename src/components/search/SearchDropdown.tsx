@@ -210,7 +210,7 @@ function UserAvatar({ name, photoURL }: { name: string; photoURL: string | null 
   }
   const initial = (name?.[0] ?? '?').toUpperCase();
   return (
-    <div className="w-[26px] h-[26px] rounded-full bg-accent/30 text-accent text-xs flex items-center justify-center font-semibold shrink-0">
+    <div className="w-[26px] h-[26px] rounded-full bg-acc-deep/30 text-acc-deep text-xs flex items-center justify-center font-semibold shrink-0">
       {initial}
     </div>
   );

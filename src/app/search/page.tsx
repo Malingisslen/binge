@@ -108,9 +108,9 @@ function SearchResults() {
       ) : results.length === 0 ? (
         <EmptyState title="Inga träffar" body="Prova ett annat sökord." />
       ) : (
-        <div className="bg-surface border border-border-main rounded-sm">
+        <div className="bg-surface border border-rule rounded-sm">
           <TitleGrid items={results} providerMap={providerMap} />
-          <div className="px-3 py-[6px] border-t border-border-light">
+          <div className="px-3 py-[6px] border-t border-rule-2">
             <JustWatchCredit />
           </div>
         </div>

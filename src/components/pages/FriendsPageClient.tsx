@@ -67,7 +67,7 @@ export default function FriendsPageClient() {
         standfirst="Hitta personer att följa via sökfältet i toppraden — eller dela din profillänk."
       />
 
-      <div className="flex border-b border-border-main mb-3">
+      <div className="flex border-b border-rule mb-3">
         <TabButton active={tab === 'friends'} onClick={() => setTab('friends')}>
           Vänner ({friends.length})
         </TabButton>
@@ -110,19 +110,19 @@ export default function FriendsPageClient() {
       )}
 
       {!empty && tab === 'friends' && (
-        <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
+        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
           {friends.map(f => <FriendRow key={f.uid} friend={f} />)}
         </ul>
       )}
 
       {!empty && tab === 'requests' && (
-        <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
+        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
           {requests.map(r => <RequestRow key={r.fromUid} request={r} />)}
         </ul>
       )}
 
       {!empty && (tab === 'following' || tab === 'followers') && (
-        <ul className="bg-surface border border-border-main rounded-sm divide-y divide-border-light">
+        <ul className="bg-surface border border-rule rounded-sm divide-y divide-rule-2">
           {list.map(u => <Row key={u.uid} user={u} tab={tab} />)}
         </ul>
       )}
@@ -136,8 +136,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       onClick={onClick}
       className={`px-3 py-[6px] text-xs cursor-pointer border-b-[2px] bg-transparent font-[inherit] ${
         active
-          ? 'border-accent text-accent font-semibold'
-          : 'border-transparent text-text-muted hover:text-text-primary'
+          ? 'border-acc-deep text-acc-deep font-semibold'
+          : 'border-transparent text-ink-3 hover:text-ink'
       }`}
     >
       {children}
@@ -155,18 +155,18 @@ function FriendRow({ friend }: { friend: FriendUser }) {
       <Avatar name={friend.displayName} photoURL={friend.photoURL} />
       <div className="flex-1 min-w-0">
         {profileLink ? (
-          <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
+          <Link href={profileLink} className="text-xs font-semibold text-ink no-underline hover:text-acc-deep truncate block">
             {friend.displayName}
           </Link>
         ) : (
-          <div className="text-xs font-semibold text-text-muted truncate">{friend.displayName}</div>
+          <div className="text-xs font-semibold text-ink-3 truncate">{friend.displayName}</div>
         )}
-        {friend.username && <div className="text-xxs text-text-muted">@{friend.username}</div>}
+        {friend.username && <div className="text-xxs text-ink-3">@{friend.username}</div>}
       </div>
       {!isMe && (
         <button
           onClick={() => removeFriend(friend.uid)}
-          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
+          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
         >
           Ta bort
         </button>
@@ -188,24 +188,24 @@ function RequestRow({ request }: { request: FriendRequest }) {
       <Avatar name={displayName} photoURL={request.fromPhotoURL} />
       <div className="flex-1 min-w-0">
         {profileLink ? (
-          <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
+          <Link href={profileLink} className="text-xs font-semibold text-ink no-underline hover:text-acc-deep truncate block">
             {displayName}
           </Link>
         ) : (
-          <div className="text-xs font-semibold text-text-muted truncate">{displayName}</div>
+          <div className="text-xs font-semibold text-ink-3 truncate">{displayName}</div>
         )}
-        {username && <div className="text-xxs text-text-muted">@{username}</div>}
+        {username && <div className="text-xxs text-ink-3">@{username}</div>}
       </div>
       <div className="flex gap-1">
         <button
           onClick={() => acceptFriendRequest(request.fromUid)}
-          className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit]"
+          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit]"
         >
           Acceptera
         </button>
         <button
           onClick={() => declineFriendRequest(request.fromUid)}
-          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
+          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
         >
           Avböj
         </button>
@@ -227,21 +227,21 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
       <Avatar name={user.displayName} photoURL={user.photoURL} />
       <div className="flex-1 min-w-0">
         {profileLink ? (
-          <Link href={profileLink} className="text-xs font-semibold text-text-primary no-underline hover:text-accent truncate block">
+          <Link href={profileLink} className="text-xs font-semibold text-ink no-underline hover:text-acc-deep truncate block">
             {user.displayName}
           </Link>
         ) : (
-          <div className="text-xs font-semibold text-text-muted truncate">{user.displayName}</div>
+          <div className="text-xs font-semibold text-ink-3 truncate">{user.displayName}</div>
         )}
-        {user.username && <div className="text-xxs text-text-muted">@{user.username}</div>}
+        {user.username && <div className="text-xxs text-ink-3">@{user.username}</div>}
       </div>
       {!isMe && (
         <button
           onClick={() => iAmFollowing ? unfollowUser(user.uid) : followUser(user.uid)}
           className={`px-2 py-[2px] text-xxs border rounded-sm cursor-pointer font-[inherit] ${
             iAmFollowing
-              ? 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
-              : 'bg-accent text-white border-accent'
+              ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
+              : 'bg-acc-deep text-white border-acc-deep'
           }`}
         >
           {iAmFollowing
@@ -255,10 +255,10 @@ function Row({ user, tab }: { user: FollowListUser; tab: Tab }) {
 
 function EmptyState({ headline, body }: { headline: string; body: string }) {
   return (
-    <div className="bg-surface border border-border-main rounded-sm px-4 py-6 text-center">
-      <Search size={18} className="mx-auto text-text-muted mb-2" />
-      <div className="text-sm font-semibold text-text-primary mb-1">{headline}</div>
-      <p className="text-xs text-text-muted leading-relaxed">{body}</p>
+    <div className="bg-surface border border-rule rounded-sm px-4 py-6 text-center">
+      <Search size={18} className="mx-auto text-ink-3 mb-2" />
+      <div className="text-sm font-semibold text-ink mb-1">{headline}</div>
+      <p className="text-xs text-ink-3 leading-relaxed">{body}</p>
     </div>
   );
 }
@@ -279,7 +279,7 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
   }
   const initial = (name?.[0] ?? '?').toUpperCase();
   return (
-    <div className="w-7 h-7 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-semibold shrink-0">
+    <div className="w-7 h-7 rounded-full bg-acc-deep/20 text-acc-deep text-xs flex items-center justify-center font-semibold shrink-0">
       {initial}
     </div>
   );

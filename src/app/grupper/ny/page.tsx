@@ -66,11 +66,11 @@ function NyGruppContent() {
       <PageHeader
         crumb="Grupper"
         title="Ny grupp"
-        icon={<Users size={18} className="text-accent" />}
+        icon={<Users size={18} className="text-acc-deep" />}
         standfirst="Skapa en permanent konstellation — bjud in via länk eller @handle. Era streamingtjänster och inställningar lever vidare mellan kvällar, så ni kan starta en ny session utan att ställa in allt på nytt."
       />
 
-      <form onSubmit={onSubmit} className="bg-surface border border-border-main rounded-sm">
+      <form onSubmit={onSubmit} className="bg-surface border border-rule rounded-sm">
         <FormSection title="Gruppnamn">
           <input
             type="text"
@@ -78,7 +78,7 @@ function NyGruppContent() {
             onChange={e => setName(e.target.value)}
             placeholder="T.ex. Fredagsgänget, Familjen, Filmklubben"
             maxLength={48}
-            className="w-full max-w-[360px] px-2 py-1 text-base border border-border-main rounded-sm bg-white"
+            className="w-full max-w-[360px] px-2 py-1 text-base border border-rule rounded-sm bg-white"
           />
         </FormSection>
 
@@ -120,7 +120,7 @@ function NyGruppContent() {
           />
         </FormSection>
 
-        <p className="px-3 py-2 text-xxs text-text-muted border-t border-border-light">
+        <p className="px-3 py-2 text-xxs text-ink-3 border-t border-rule-2">
           Defaults används när du startar en ny session med gruppen — du kan
           alltid ändra per session.
         </p>
@@ -129,18 +129,18 @@ function NyGruppContent() {
           <div className="px-3 py-2 text-xs text-danger-ink bg-danger-soft border-t border-danger/30">{error}</div>
         )}
 
-        <div className="px-3 py-2 border-t border-border-light flex items-center gap-2">
+        <div className="px-3 py-2 border-t border-rule-2 flex items-center gap-2">
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-[5px] bg-accent text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
+            className="px-3 py-[5px] bg-acc-deep text-white border-none rounded-sm text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
             {submitting ? 'Skapar…' : 'Skapa grupp'}
           </button>
           <button
             type="button"
             onClick={() => router.push('/grupper')}
-            className="px-3 py-[5px] border border-border-main rounded-sm text-xs bg-white cursor-pointer"
+            className="px-3 py-[5px] border border-rule rounded-sm text-xs bg-white cursor-pointer"
           >
             Avbryt
           </button>

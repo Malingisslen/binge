@@ -204,7 +204,7 @@ function GroupView({
           </Link>
         }
         title={group.name}
-        icon={<Users size={20} className="text-accent shrink-0" />}
+        icon={<Users size={20} className="text-acc-deep shrink-0" />}
         actions={
           <>
             <button

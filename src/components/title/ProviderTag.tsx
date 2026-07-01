@@ -28,7 +28,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
     size === 'sm' ? (
       <span
         className={`text-xxs px-1 py-[1px] border rounded-sm inline-block mr-[2px] ${
-          isMine ? 'border-accent text-accent' : 'border-border-main text-text-muted'
+          isMine ? 'border-acc-deep text-acc-deep' : 'border-rule text-ink-3'
         }`}
       >
         {label}
@@ -36,7 +36,7 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
     ) : (
       <span
         className={`text-xs px-2 py-[2px] border rounded-sm inline-block mr-1 ${
-          isMine ? 'border-accent text-accent font-semibold' : 'border-border-main text-text-muted'
+          isMine ? 'border-acc-deep text-acc-deep font-semibold' : 'border-rule text-ink-3'
         }`}
       >
         {label}

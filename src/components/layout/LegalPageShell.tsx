@@ -17,9 +17,9 @@ export default function LegalPageShell({
 }: LegalPageShellProps) {
   return (
     <article className="max-w-[720px] mx-auto py-6 px-2">
-      <header className="mb-6 pb-4 border-b border-border-light">
-        <h1 className="text-[22px] font-bold text-text-primary mb-2">{title}</h1>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xxs text-text-muted">
+      <header className="mb-6 pb-4 border-b border-rule-2">
+        <h1 className="text-[22px] font-bold text-ink mb-2">{title}</h1>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xxs text-ink-3">
           <span>Senast uppdaterad: {lastUpdated}</span>
           <span>Version: {version}</span>
         </div>
@@ -31,7 +31,7 @@ export default function LegalPageShell({
           </div>
         )}
       </header>
-      <div className="prose-like text-sm leading-relaxed text-text-primary space-y-4 [&>h2]:text-md [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-2 [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:mt-4 [&>h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-1 [&_a]:text-accent [&_a]:underline [&_a:hover]:no-underline">
+      <div className="prose-like text-sm leading-relaxed text-ink space-y-4 [&>h2]:text-md [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-2 [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:mt-4 [&>h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-1 [&_a]:text-acc-deep [&_a]:underline [&_a:hover]:no-underline">
         {children}
       </div>
     </article>

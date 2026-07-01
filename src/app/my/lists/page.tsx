@@ -40,7 +40,7 @@ function ListsContent() {
         actions={
           <button
             onClick={() => setShowForm(true)}
-            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-accent text-white"
+            className="px-3 py-[3px] border-none rounded-sm text-xs font-[inherit] cursor-pointer bg-acc-deep text-white"
           >
             Skapa ny lista
           </button>
@@ -48,13 +48,13 @@ function ListsContent() {
       />
 
       {showForm && (
-        <div className="bg-surface border border-border-main rounded-sm p-3 mb-3">
+        <div className="bg-surface border border-rule rounded-sm p-3 mb-3">
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder="Listans namn"
             maxLength={100}
-            className="w-full px-2 py-[3px] text-xs border border-border-main rounded-sm bg-white font-[inherit] outline-none mb-2"
+            className="w-full px-2 py-[3px] text-xs border border-rule rounded-sm bg-white font-[inherit] outline-none mb-2"
           />
           <textarea
             value={description}
@@ -62,17 +62,17 @@ function ListsContent() {
             placeholder="Beskrivning (valfritt)"
             maxLength={300}
             rows={2}
-            className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
           />
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-xs text-text-muted cursor-pointer">
-              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-accent" />
+            <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
+              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-acc-deep" />
               Publik
             </label>
-            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]">
+            <button onClick={handleCreate} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
               Skapa
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-muted font-[inherit]">
+            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
               Avbryt
             </button>
           </div>
@@ -93,18 +93,18 @@ function ListsContent() {
 
       <div className="space-y-[6px]">
         {lists.map(list => (
-          <div key={list.id} className="bg-surface border border-border-main rounded-sm px-3 py-2 flex items-center justify-between">
+          <div key={list.id} className="bg-surface border border-rule rounded-sm px-3 py-2 flex items-center justify-between">
             <div>
-              <Link href={`/list/${list.id}/`} className="text-base font-semibold text-text-primary no-underline hover:text-accent">
+              <Link href={`/list/${list.id}/`} className="text-base font-semibold text-ink no-underline hover:text-acc-deep">
                 {list.title}
               </Link>
-              <div className="text-xs text-text-muted">
+              <div className="text-xs text-ink-3">
                 {list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'} · {list.isPublic ? 'Publik' : 'Privat'}
               </div>
             </div>
             <button
               onClick={() => { deleteList(list.id); toast('Lista borttagen'); }}
-              className="px-2 py-[2px] text-xxs text-danger-ink border border-border-main bg-surface rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover"
+              className="px-2 py-[2px] text-xxs text-danger-ink border border-rule bg-surface rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2"
             >
               Ta bort
             </button>
@@ -114,7 +114,7 @@ function ListsContent() {
 
       {followed.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+          <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
             Följda listor
           </h2>
           <div className="space-y-[6px]">
@@ -122,10 +122,10 @@ function ListsContent() {
               <Link
                 key={list.id}
                 href={`/list/${list.id}/`}
-                className="block bg-surface border border-border-main rounded-sm px-3 py-2 no-underline hover:border-rule-2 transition-colors"
+                className="block bg-surface border border-rule rounded-sm px-3 py-2 no-underline hover:border-rule-2 transition-colors"
               >
-                <div className="text-base font-semibold text-text-primary">{list.title}</div>
-                <div className="text-xs text-text-muted">
+                <div className="text-base font-semibold text-ink">{list.title}</div>
+                <div className="text-xs text-ink-3">
                   {list.items.length} {list.items.length === 1 ? 'titel' : 'titlar'}
                 </div>
               </Link>

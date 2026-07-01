@@ -11,8 +11,8 @@ export function PasswordStrengthMeter({ strength }: { strength: PasswordStrength
 
   const barColor =
     strength.score >= 3 ? 'bg-green-600' :
-    strength.score === 2 ? 'bg-accent' :
-    'bg-red-400';
+    strength.score === 2 ? 'bg-acc-deep' :
+    'bg-danger';
 
   return (
     <div className="mb-2 -mt-1">
@@ -21,13 +21,13 @@ export function PasswordStrengthMeter({ strength }: { strength: PasswordStrength
           <div
             key={i}
             className={`h-[3px] flex-1 rounded-sm ${
-              i <= strength.score ? barColor : 'bg-border-main'
+              i <= strength.score ? barColor : 'bg-rule'
             }`}
           />
         ))}
       </div>
       <div className={`text-xxs ${
-        strength.acceptable ? 'text-text-muted' : 'text-danger-ink'
+        strength.acceptable ? 'text-ink-3' : 'text-danger-ink'
       }`}>
         {strength.label}
         {strength.feedback ? ` — ${strength.feedback}` : ''}

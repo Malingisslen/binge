@@ -3,7 +3,6 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const PAGES_DIR = join(process.cwd(), 'src', 'components', 'pages');
-const SETTINGS_DIR = join(process.cwd(), 'src', 'components', 'settings');
 const BANNED = /text-\[18px\]\s+font-bold/;
 
 // Raw Tailwind reds — design rules require the danger token instead.
@@ -86,14 +85,25 @@ describe('design consistency — season-done token (BIN-324)', () => {
   });
 });
 
-describe('design consistency — settings vocabulary', () => {
-  it('no settings component uses raw Tailwind red-* (use the danger token)', () => {
-    const offenders = tsxFilesIn(SETTINGS_DIR).filter(f => RAW_RED.test(readFileSync(f, 'utf8')));
+// BIN-356: broadened from settings/ only to all of src/components + src/app,
+// landed together with the ~1034-site legacy-alias → Direction-H token migration
+// (guard + migration must ship together — a guard we know fails is an anti-pattern).
+describe('design consistency — token vocabulary (app-wide, BIN-356)', () => {
+  const roots = [
+    join(process.cwd(), 'src', 'components'),
+    join(process.cwd(), 'src', 'app'),
+  ];
+  it('no component or page uses raw Tailwind red-* (use the danger token)', () => {
+    const offenders = roots
+      .flatMap(tsxFilesRecursive)
+      .filter(f => RAW_RED.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
   });
 
-  it('no settings component uses legacy token aliases (use Direction-H tokens)', () => {
-    const offenders = tsxFilesIn(SETTINGS_DIR).filter(f => LEGACY_TOKENS.test(readFileSync(f, 'utf8')));
+  it('no component or page uses legacy token aliases (use Direction-H tokens)', () => {
+    const offenders = roots
+      .flatMap(tsxFilesRecursive)
+      .filter(f => LEGACY_TOKENS.test(readFileSync(f, 'utf8')));
     expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
   });
 });

@@ -16,18 +16,18 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
   const maxWeight = stats.topGenres[0]?.weight ?? 1;
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm mb-[14px]">
-      <div className="px-3 py-[6px] border-b border-border-light">
-        <span className="text-sm font-bold text-text-secondary">Profil</span>
+    <div className="bg-surface border border-rule rounded-sm mb-[14px]">
+      <div className="px-3 py-[6px] border-b border-rule-2">
+        <span className="text-sm font-bold text-ink-2">Profil</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-3 py-3">
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
             Topp-genrer
           </div>
           {stats.topGenres.length === 0 ? (
-            <div className="text-xs text-text-muted">—</div>
+            <div className="text-xs text-ink-3">—</div>
           ) : (
             <ul className="space-y-[4px]">
               {stats.topGenres.map(g => {
@@ -36,11 +36,11 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
                 return (
                   <li key={g.genreId} className="text-xs">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-text-primary">{name}</span>
-                      <span className="text-xxs text-text-muted">{g.count}</span>
+                      <span className="text-ink">{name}</span>
+                      <span className="text-xxs text-ink-3">{g.count}</span>
                     </div>
-                    <div className="h-[3px] bg-border-light rounded-sm mt-[2px] overflow-hidden">
-                      <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+                    <div className="h-[3px] bg-rule-2 rounded-sm mt-[2px] overflow-hidden">
+                      <div className="h-full bg-acc-deep" style={{ width: `${pct}%` }} />
                     </div>
                   </li>
                 );
@@ -50,11 +50,11 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
         </div>
 
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
             Topp-tjänster
           </div>
           {stats.topProviders.length === 0 ? (
-            <div className="text-xs text-text-muted">—</div>
+            <div className="text-xs text-ink-3">—</div>
           ) : (
             <ul className="space-y-[4px]">
               {stats.topProviders.map(p => {
@@ -63,10 +63,10 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
                 return (
                   <li key={p.providerId} className="text-xs flex items-center gap-[6px]">
                     <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: provider.color }} />
-                    <Link href={`/provider/${p.providerId}/`} className="text-text-primary no-underline hover:text-accent flex-1 truncate">
+                    <Link href={`/provider/${p.providerId}/`} className="text-ink no-underline hover:text-acc-deep flex-1 truncate">
                       {provider.name}
                     </Link>
-                    <span className="text-xxs text-text-muted">{p.count}</span>
+                    <span className="text-xxs text-ink-3">{p.count}</span>
                   </li>
                 );
               })}
@@ -75,21 +75,21 @@ export default function ProfileStatsPanel({ items }: { items: WatchlistItem[] })
         </div>
 
         <div>
-          <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+          <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
             Senaste 30 dagarna
           </div>
           <ul className="space-y-[4px] text-xs">
             <li className="flex justify-between">
-              <span className="text-text-primary">Sedd</span>
-              <span className="text-text-secondary font-semibold">{stats.recent30.watched}</span>
+              <span className="text-ink">Sedd</span>
+              <span className="text-ink-2 font-semibold">{stats.recent30.watched}</span>
             </li>
             <li className="flex justify-between">
-              <span className="text-text-primary">Tillagda</span>
-              <span className="text-text-secondary font-semibold">{stats.recent30.added}</span>
+              <span className="text-ink">Tillagda</span>
+              <span className="text-ink-2 font-semibold">{stats.recent30.added}</span>
             </li>
             <li className="flex justify-between">
-              <span className="text-text-primary">Betygsatta</span>
-              <span className="text-text-secondary font-semibold">{stats.recent30.rated}</span>
+              <span className="text-ink">Betygsatta</span>
+              <span className="text-ink-2 font-semibold">{stats.recent30.rated}</span>
             </li>
           </ul>
         </div>

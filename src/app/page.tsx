@@ -91,10 +91,10 @@ function LandingPage({ withTrending = true }: { withTrending?: boolean }) {
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (
-    <div className="min-h-screen bg-page">
+    <div className="min-h-screen bg-bg">
       <section className="bg-sidebar-bg text-white">
         <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
-          <h1 className="text-[32px] font-extrabold text-accent mb-2">
+          <h1 className="text-[32px] font-extrabold text-acc-deep mb-2">
             binge<span className="font-normal text-white/60 text-[22px]">.nu</span>
           </h1>
           <p className="text-[17px] font-semibold mb-2 max-w-[520px] mx-auto">
@@ -124,21 +124,21 @@ function LandingPage({ withTrending = true }: { withTrending?: boolean }) {
           </div>
           <button
             onClick={signIn}
-            className="px-5 py-[7px] bg-accent text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
+            className="px-5 py-[7px] bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
           >
             Logga in med Google
           </button>
           <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
             <div className="text-center">
-              <div className="text-xs font-bold text-accent mb-[3px]">Streaming-koll</div>
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streaming-koll</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-accent mb-[3px]">Avsnittkalender</div>
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Avsnittkalender</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
             </div>
             <div className="text-center">
-              <div className="text-xs font-bold text-accent mb-[3px]">Streamingrådgivaren</div>
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streamingrådgivaren</div>
               <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
             </div>
           </div>
@@ -164,9 +164,9 @@ function LandingPageTrending() {
 
   return (
     <section className="max-w-[1000px] mx-auto px-4 py-8">
-      <div className="bg-surface border border-border-main rounded-sm">
-        <div className="px-3 py-[6px] border-b border-border-light">
-          <h2 className="text-sm font-bold text-text-secondary m-0">Trendande just nu</h2>
+      <div className="bg-surface border border-rule rounded-sm">
+        <div className="px-3 py-[6px] border-b border-rule-2">
+          <h2 className="text-sm font-bold text-ink-2 m-0">Trendande just nu</h2>
         </div>
         <TitleGrid items={items} />
       </div>

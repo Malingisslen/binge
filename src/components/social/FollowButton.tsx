@@ -16,8 +16,8 @@ export default function FollowButton({ targetUid }: { targetUid: string }) {
       onClick={() => following ? unfollowUser(targetUid) : followUser(targetUid)}
       className={`px-3 py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer ${
         following
-          ? 'bg-surface text-text-secondary border-border-main hover:bg-surface-hover'
-          : 'bg-accent text-white border-accent'
+          ? 'bg-surface text-ink-2 border-rule hover:bg-bg-2'
+          : 'bg-acc-deep text-white border-acc-deep'
       }`}
     >
       {following ? 'Slutar följa' : 'Följ'}

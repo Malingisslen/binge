@@ -27,15 +27,15 @@ export function GroupMembersPanel({
   const [adding, setAdding] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   return (
-    <div className="bg-surface border border-border-main rounded-sm">
-      <div className="px-3 py-[6px] border-b border-border-light flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm">
+      <div className="px-3 py-[6px] border-b border-rule-2 flex items-center justify-between">
+        <div className="text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
           Medlemmar ({members.length})
         </div>
         {isOwner && (
           <button
             onClick={() => setAdding(v => !v)}
-            className="text-xxs text-accent hover:underline cursor-pointer"
+            className="text-xxs text-acc-deep hover:underline cursor-pointer"
           >
             {adding ? 'Stäng' : '+ Lägg till'}
           </button>
@@ -49,25 +49,25 @@ export function GroupMembersPanel({
           onDone={() => setAdding(false)}
         />
       )}
-      <ul className="divide-y divide-border-light">
+      <ul className="divide-y divide-rule-2">
         {members.map(m => (
           <li key={m.uid} className="px-3 py-2 flex items-center gap-2">
             <Avatar name={m.displayName} photoURL={m.photoURL} />
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-text-primary truncate">
+              <div className="text-xs text-ink truncate">
                 {m.username
-                  ? <Link href={`/user/${m.username}`} className="no-underline text-text-primary hover:text-accent">{m.displayName}</Link>
+                  ? <Link href={`/user/${m.username}`} className="no-underline text-ink hover:text-acc-deep">{m.displayName}</Link>
                   : m.displayName}
-                {m.uid === myUid && <span className="text-xxs text-text-muted ml-1">(du)</span>}
+                {m.uid === myUid && <span className="text-xxs text-ink-3 ml-1">(du)</span>}
               </div>
-              <div className="text-xxs text-text-muted">
+              <div className="text-xxs text-ink-3">
                 {m.uid === ownerUid ? 'Ägare' : 'Medlem'} · {m.providers.length} tjänster
               </div>
             </div>
             {isOwner && m.uid !== ownerUid && (
               <button
                 onClick={() => setMemberToRemove(m)}
-                className="text-xxs text-text-muted hover:text-danger-ink cursor-pointer"
+                className="text-xxs text-ink-3 hover:text-danger-ink cursor-pointer"
                 title="Ta bort"
               >
                 <X size={12} />
@@ -99,7 +99,7 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
   }
   const initial = (name?.[0] ?? '?').toUpperCase();
   return (
-    <div className="w-6 h-6 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-semibold shrink-0">
+    <div className="w-6 h-6 rounded-full bg-acc-deep/20 text-acc-deep text-xs flex items-center justify-center font-semibold shrink-0">
       {initial}
     </div>
   );
@@ -153,25 +153,25 @@ function AddMemberSearch({
   };
 
   return (
-    <div className="px-3 py-2 border-b border-border-light bg-white/50 space-y-1">
+    <div className="px-3 py-2 border-b border-rule-2 bg-white/50 space-y-1">
       <input
         type="text"
         value={q}
         onChange={e => { setQ(e.target.value); setErr(null); }}
         placeholder="Sök efter @användarnamn eller namn…"
-        className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white outline-none"
+        className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white outline-none"
         autoFocus
       />
       {q.trim().length >= 2 && isLoading && (
-        <div className="text-xxs text-text-muted">Söker…</div>
+        <div className="text-xxs text-ink-3">Söker…</div>
       )}
       {q.trim().length >= 2 && !isLoading && filtered.length === 0 && (
-        <div className="text-xxs text-text-muted">
+        <div className="text-xxs text-ink-3">
           Hittade ingen publik profil som matchar.
         </div>
       )}
       {filtered.length > 0 && (
-        <ul className="bg-white border border-border-main rounded-sm divide-y divide-border-light">
+        <ul className="bg-white border border-rule rounded-sm divide-y divide-rule-2">
           {filtered.map(u => {
             const already = existingUids.includes(u.uid);
             const isInvited = invited.has(u.uid);
@@ -180,13 +180,13 @@ function AddMemberSearch({
               <li key={u.uid} className="px-2 py-[5px] flex items-center gap-2">
                 <SmallAvatar name={u.displayName} photoURL={u.photoURL} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-text-primary truncate">{u.displayName}</div>
-                  <div className="text-xxs text-text-muted truncate">@{u.username}</div>
+                  <div className="text-xs text-ink truncate">{u.displayName}</div>
+                  <div className="text-xxs text-ink-3 truncate">@{u.username}</div>
                 </div>
                 <button
                   onClick={() => handleInvite(u)}
                   disabled={already || busy || isInvited}
-                  className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-accent text-white disabled:bg-border-main disabled:text-text-muted disabled:cursor-default"
+                  className="px-2 py-[2px] text-xxs border-none rounded-sm cursor-pointer font-[inherit] bg-acc-deep text-white disabled:bg-rule disabled:text-ink-3 disabled:cursor-default"
                 >
                   {already ? 'Medlem' : isInvited ? 'Inbjuden' : busy ? 'Bjuder in…' : 'Bjud in'}
                 </button>
@@ -215,7 +215,7 @@ function SmallAvatar({ name, photoURL }: { name: string; photoURL: string | null
     );
   }
   return (
-    <div className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xxs flex items-center justify-center font-semibold shrink-0">
+    <div className="w-5 h-5 rounded-full bg-acc-deep/20 text-acc-deep text-xxs flex items-center justify-center font-semibold shrink-0">
       {(name?.[0] ?? '?').toUpperCase()}
     </div>
   );

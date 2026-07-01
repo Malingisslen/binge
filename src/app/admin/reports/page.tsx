@@ -39,9 +39,9 @@ function AdminGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="max-w-[480px]">
         <PageHeader title="Åtkomst nekad" />
-        <p className="text-xs text-text-muted">
+        <p className="text-xs text-ink-3">
           Den här sidan är bara för administratörer. Om du tror att detta är fel,
-          kontakta <a href="mailto:hej@binge.nu" className="text-accent">hej@binge.nu</a>.
+          kontakta <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>.
         </p>
       </div>
     );
@@ -97,7 +97,7 @@ function ReportsDashboard() {
             key={s}
             onClick={() => setActiveTab(s)}
             className={`px-3 py-[4px] text-xs rounded-sm cursor-pointer ${
-              activeTab === s ? 'bg-accent text-white' : 'bg-surface text-text-secondary hover:bg-surface-hover'
+              activeTab === s ? 'bg-acc-deep text-white' : 'bg-surface text-ink-2 hover:bg-bg-2'
             }`}
           >
             {REPORT_STATUS_LABELS[s]}
@@ -116,7 +116,7 @@ function ReportsDashboard() {
       )}
 
       {!loading && reports.length === 0 && !error && (
-        <div className="bg-surface border border-border-main rounded-sm px-3 py-6 text-center text-sm text-text-muted">
+        <div className="bg-surface border border-rule rounded-sm px-3 py-6 text-center text-sm text-ink-3">
           Inga {REPORT_STATUS_LABELS[activeTab].toLowerCase()} rapporter.
         </div>
       )}
@@ -127,8 +127,8 @@ function ReportsDashboard() {
         ))}
       </ul>
 
-      <div className="mt-4 text-xxs text-text-muted">
-        Se <Link href="https://github.com/Malingisslen/binge/blob/main/docs/moderation.md" className="text-accent underline" target="_blank">docs/moderation.md</Link> för beslutsträd per rapport-typ.
+      <div className="mt-4 text-xxs text-ink-3">
+        Se <Link href="https://github.com/Malingisslen/binge/blob/main/docs/moderation.md" className="text-acc-deep underline" target="_blank">docs/moderation.md</Link> för beslutsträd per rapport-typ.
       </div>
     </div>
   );
@@ -143,24 +143,24 @@ function ReportRow({
   const targetLink = buildTargetLink(report);
 
   return (
-    <li className="bg-surface border border-border-main rounded-sm p-3">
+    <li className="bg-surface border border-rule rounded-sm p-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
-          <div className="text-xs text-text-muted mb-1">
+          <div className="text-xs text-ink-3 mb-1">
             {report.createdAt.toLocaleString('sv-SE')}
           </div>
-          <div className="text-sm font-semibold text-text-primary">
+          <div className="text-sm font-semibold text-ink">
             {REPORT_REASON_LABELS[report.reason]}
-            <span className="text-text-muted font-normal ml-2">
+            <span className="text-ink-3 font-normal ml-2">
               · {report.targetType} · {report.targetId}
             </span>
           </div>
           {report.note && (
-            <div className="text-xs text-text-secondary mt-1 px-2 py-1 bg-page rounded-sm">
+            <div className="text-xs text-ink-2 mt-1 px-2 py-1 bg-bg rounded-sm">
               &ldquo;{report.note}&rdquo;
             </div>
           )}
-          <div className="text-xxs text-text-muted mt-1">
+          <div className="text-xxs text-ink-3 mt-1">
             Rapporterad av {report.reporterUid.slice(0, 8)} •
             Target ägare: {report.targetOwnerUid ? report.targetOwnerUid.slice(0, 8) : 'okänd (innehållet borttaget)'}
             {report.actionedByUid && <> • Åtgärdad av {report.actionedByUid.slice(0, 8)}</>}
@@ -171,7 +171,7 @@ function ReportRow({
             <Link
               href={targetLink}
               target="_blank"
-              className="px-3 py-[3px] text-xs text-accent no-underline hover:underline text-right"
+              className="px-3 py-[3px] text-xs text-acc-deep no-underline hover:underline text-right"
             >
               Öppna target →
             </Link>
@@ -180,19 +180,19 @@ function ReportRow({
             <>
               <button
                 onClick={() => onAction(report.id, 'reviewed')}
-                className="px-3 py-[3px] text-xs border border-border-main rounded-sm bg-white cursor-pointer hover:bg-surface-hover"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
               >
                 Granskad
               </button>
               <button
                 onClick={() => onAction(report.id, 'actioned')}
-                className="px-3 py-[3px] text-xs bg-accent text-white border-none rounded-sm cursor-pointer"
+                className="px-3 py-[3px] text-xs bg-acc-deep text-white border-none rounded-sm cursor-pointer"
               >
                 Åtgärda
               </button>
               <button
                 onClick={() => onAction(report.id, 'dismissed')}
-                className="px-3 py-[3px] text-xs border border-border-main rounded-sm bg-white text-text-muted cursor-pointer hover:bg-surface-hover"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white text-ink-3 cursor-pointer hover:bg-bg-2"
               >
                 Avfärda
               </button>
@@ -200,12 +200,12 @@ function ReportRow({
           )}
           {report.status !== 'open' && (
             <>
-              <span className="px-3 py-[3px] text-xxs text-text-muted text-right">
+              <span className="px-3 py-[3px] text-xxs text-ink-3 text-right">
                 {REPORT_STATUS_LABELS[report.status]}
               </span>
               <button
                 onClick={() => onAction(report.id, 'open')}
-                className="px-3 py-[3px] text-xs border border-border-main rounded-sm bg-white cursor-pointer hover:bg-surface-hover"
+                className="px-3 py-[3px] text-xs border border-rule rounded-sm bg-white cursor-pointer hover:bg-bg-2"
               >
                 Öppna igen
               </button>

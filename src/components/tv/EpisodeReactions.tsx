@@ -16,7 +16,7 @@ export default function EpisodeReactions({ tmdbId, season, episode, watched }: {
 
   if (!watched) {
     return (
-      <div className="ep-reactions-gate text-xxs text-text-muted mt-1">
+      <div className="ep-reactions-gate text-xxs text-ink-3 mt-1">
         Reaktioner visas när du markerat avsnittet som sett — så undviker du spoilers.
       </div>
     );
@@ -26,7 +26,7 @@ export default function EpisodeReactions({ tmdbId, season, episode, watched }: {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xxs text-accent mt-1 bg-transparent border-none p-0 cursor-pointer"
+        className="text-xxs text-acc-deep mt-1 bg-transparent border-none p-0 cursor-pointer"
       >
         Visa reaktioner
       </button>
@@ -57,8 +57,8 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
   return (
     <div className="ep-reactions bg-surface border border-rule rounded-md p-2 mt-1">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold">Reaktioner</span>
-        <button type="button" onClick={onClose} className="text-xxs text-text-muted bg-transparent border-none cursor-pointer">Dölj</button>
+        <span className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold">Reaktioner</span>
+        <button type="button" onClick={onClose} className="text-xxs text-ink-3 bg-transparent border-none cursor-pointer">Dölj</button>
       </div>
 
       {currentUid && (
@@ -72,7 +72,7 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
             className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-surface font-[inherit] resize-none outline-none"
           />
           <div className="flex items-center justify-between mt-1">
-            <label className="flex items-center gap-1 text-xxs text-text-muted cursor-pointer">
+            <label className="flex items-center gap-1 text-xxs text-ink-3 cursor-pointer">
               <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Innehåller spoiler (senare händelser)
             </label>
@@ -85,7 +85,7 @@ function ReactionsThread({ tmdbId, season, episode, onClose }: {
       {loading ? (
         <LoadingView label="Laddar reaktioner…" />
       ) : reactions.length === 0 ? (
-        <div className="text-xxs text-text-muted py-1">Inga reaktioner än — bli först.</div>
+        <div className="text-xxs text-ink-3 py-1">Inga reaktioner än — bli först.</div>
       ) : (
         <div className="flex flex-col gap-2">
           {reactions.map(r => (
@@ -106,9 +106,9 @@ function ReactionItem({ reaction, canDelete, onDelete }: {
   return (
     <div className="text-xs">
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-text-primary">{name}</span>
+        <span className="font-semibold text-ink">{name}</span>
         {canDelete && (
-          <button type="button" onClick={onDelete} className="text-xxs text-text-muted bg-transparent border-none cursor-pointer">Ta bort</button>
+          <button type="button" onClick={onDelete} className="text-xxs text-ink-3 bg-transparent border-none cursor-pointer">Ta bort</button>
         )}
       </div>
       {masked ? (
@@ -120,7 +120,7 @@ function ReactionItem({ reaction, canDelete, onDelete }: {
           Spoiler — klicka för att visa
         </button>
       ) : (
-        <p className="text-xs text-text-secondary leading-snug m-0 whitespace-pre-wrap">{reaction.text}</p>
+        <p className="text-xs text-ink-2 leading-snug m-0 whitespace-pre-wrap">{reaction.text}</p>
       )}
     </div>
   );

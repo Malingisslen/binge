@@ -18,8 +18,8 @@ import { computeBingeStats } from '@/lib/bingeStats';
 function StatBox({ value, label }: { value: number; label: string }) {
   return (
     <div className="bg-surface border border-rule rounded-md px-[12px] py-[8px] min-w-[92px]">
-      <div className="text-[20px] font-bold text-text-primary leading-none tabular-nums">{value}</div>
-      <div className="text-xxs text-text-muted mt-[3px]">{label}</div>
+      <div className="text-[20px] font-bold text-ink leading-none tabular-nums">{value}</div>
+      <div className="text-xxs text-ink-3 mt-[3px]">{label}</div>
     </div>
   );
 }
@@ -83,7 +83,7 @@ export default function DiaryPageClient() {
           )}
           {months.map(month => (
             <section key={month.key}>
-              <h2 className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-2">
+              <h2 className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-2">
                 {month.label}
               </h2>
               <div className="flex flex-col gap-[6px]">
@@ -104,8 +104,8 @@ export default function DiaryPageClient() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-text-primary truncate">{item.title}</div>
-                        <div className="text-xxs text-text-muted">
+                        <div className="text-xs font-semibold text-ink truncate">{item.title}</div>
+                        <div className="text-xxs text-ink-3">
                           {date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long' })}
                           {episodeCode ? ` · ${episodeCode}` : item.releaseYear ? ` · ${item.releaseYear}` : ''}
                         </div>
@@ -113,7 +113,7 @@ export default function DiaryPageClient() {
                       {!episodeCode && item.rating !== null && (
                         <span className="shrink-0 inline-flex items-center gap-[3px]">
                           <RatingStars rating={item.rating} readonly size="sm" />
-                          <span className="text-xxs text-text-muted">{item.rating.toFixed(1)}</span>
+                          <span className="text-xxs text-ink-3">{item.rating.toFixed(1)}</span>
                         </span>
                       )}
                     </Link>

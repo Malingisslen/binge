@@ -31,7 +31,7 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
           <span className="text-[10px] uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
             Gratis
           </span>
-          <span className="text-xs text-text-secondary">{providerNames(free)}</span>
+          <span className="text-xs text-ink-2">{providerNames(free)}</span>
         </span>
       )}
       {ads.length > 0 && (
@@ -39,7 +39,7 @@ export default function FreeWatchBadge({ free, ads }: { free: ProviderEntry[]; a
           <span className="text-[10px] uppercase font-bold tracking-[0.4px] rounded-sm border border-season-done text-season-done px-[6px] py-[1px]">
             Gratis med reklam
           </span>
-          <span className="text-xs text-text-secondary">{providerNames(ads)}</span>
+          <span className="text-xs text-ink-2">{providerNames(ads)}</span>
         </span>
       )}
     </div>

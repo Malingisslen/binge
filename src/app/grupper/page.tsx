@@ -42,11 +42,11 @@ function GrupperList() {
       {loading && <LoadingView label="Laddar grupper…" />}
 
       {!loading && groups.length === 0 && (
-        <div className="bg-surface border border-border-main rounded-sm p-6 text-center">
-          <p className="text-sm text-text-secondary mb-3">Du är inte med i några grupper än.</p>
+        <div className="bg-surface border border-rule rounded-sm p-6 text-center">
+          <p className="text-sm text-ink-2 mb-3">Du är inte med i några grupper än.</p>
           <Link
             href="/grupper/ny"
-            className="inline-flex items-center gap-1 px-3 py-[5px] bg-accent text-white rounded-sm text-xs font-semibold no-underline"
+            className="inline-flex items-center gap-1 px-3 py-[5px] bg-acc-deep text-white rounded-sm text-xs font-semibold no-underline"
           >
             <Plus size={11} />
             Skapa din första grupp
@@ -55,36 +55,36 @@ function GrupperList() {
       )}
 
       {!loading && groups.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm overflow-hidden">
+        <div className="bg-surface border border-rule rounded-sm overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-border-light/40">
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Namn</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Medlemmar</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Provider-läge</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Roll</th>
-                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">Uppdaterad</th>
+              <tr className="bg-rule-2/40">
+                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Namn</th>
+                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Medlemmar</th>
+                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Provider-läge</th>
+                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Roll</th>
+                <th className="text-left px-3 py-[6px] text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">Uppdaterad</th>
               </tr>
             </thead>
             <tbody>
               {groups.map(g => (
-                <tr key={g.id} className="border-t border-border-light hover:bg-border-light/30">
+                <tr key={g.id} className="border-t border-rule-2 hover:bg-rule-2/30">
                   <td className="px-3 py-2">
                     <Link
                       href={`/grupper/${g.id}`}
-                      className="text-text-primary font-semibold no-underline hover:text-accent"
+                      className="text-ink font-semibold no-underline hover:text-acc-deep"
                     >
                       {g.name}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-text-secondary">{g.memberUids.length}</td>
-                  <td className="px-3 py-2 text-text-muted">
+                  <td className="px-3 py-2 text-ink-2">{g.memberUids.length}</td>
+                  <td className="px-3 py-2 text-ink-3">
                     {g.defaults.providerMode === 'intersect' ? 'Alla har' : 'Någon har'}
                   </td>
-                  <td className="px-3 py-2 text-text-muted">
+                  <td className="px-3 py-2 text-ink-3">
                     {g.ownerUid === uid ? 'Ägare' : 'Medlem'}
                   </td>
-                  <td className="px-3 py-2 text-text-muted">
+                  <td className="px-3 py-2 text-ink-3">
                     {formatRelative(g.updatedAt)}
                   </td>
                 </tr>
@@ -115,11 +115,11 @@ function PendingInvites() {
   };
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm mb-4 overflow-hidden">
-      <div className="px-3 py-[6px] border-b border-border-light text-[10px] uppercase tracking-[0.5px] text-text-muted font-semibold">
+    <div className="bg-surface border border-rule rounded-sm mb-4 overflow-hidden">
+      <div className="px-3 py-[6px] border-b border-rule-2 text-[10px] uppercase tracking-[0.5px] text-ink-3 font-semibold">
         Inbjudningar ({invites.length})
       </div>
-      <ul className="divide-y divide-border-light">
+      <ul className="divide-y divide-rule-2">
         {invites.map(inv => (
           <InviteRow
             key={inv.groupId}
@@ -190,21 +190,21 @@ function InviteRow({
   return (
     <li className="px-3 py-2 flex items-center gap-2">
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-semibold text-text-primary truncate">{groupName}</div>
-        <div className="text-xxs text-text-muted truncate">{fromDisplayName} bjöd in dig</div>
+        <div className="text-xs font-semibold text-ink truncate">{groupName}</div>
+        <div className="text-xxs text-ink-3 truncate">{fromDisplayName} bjöd in dig</div>
       </div>
       <div className="flex gap-1">
         <button
           onClick={onAccept}
           disabled={busy}
-          className="px-2 py-[2px] text-xxs border border-accent bg-accent text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
+          className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-60"
         >
           Acceptera
         </button>
         <button
           onClick={onDecline}
           disabled={busy}
-          className="px-2 py-[2px] text-xxs border border-border-main bg-surface text-text-secondary rounded-sm cursor-pointer font-[inherit] hover:bg-surface-hover disabled:opacity-60"
+          className="px-2 py-[2px] text-xxs border border-rule bg-surface text-ink-2 rounded-sm cursor-pointer font-[inherit] hover:bg-bg-2 disabled:opacity-60"
         >
           Avböj
         </button>

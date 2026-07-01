@@ -31,8 +31,8 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
   if (isLoading) return null;
   if (!reviews) return (
     <div className="mb-4">
-      <h2 className="text-sm font-bold text-text-secondary mb-2">Recensioner</h2>
-      <p className="text-xs text-text-muted">Kunde inte ladda recensioner.</p>
+      <h2 className="text-sm font-bold text-ink-2 mb-2">Recensioner</h2>
+      <p className="text-xs text-ink-3">Kunde inte ladda recensioner.</p>
     </div>
   );
 
@@ -65,11 +65,11 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
         })} />
       ))}
       <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-sm font-bold text-text-secondary">Recensioner ({reviews.length})</h2>
+        <h2 className="text-sm font-bold text-ink-2">Recensioner ({reviews.length})</h2>
         {uid && !myReview && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-accent text-white border-none font-[inherit]"
+            className="px-[7px] py-[2px] text-xs rounded-sm cursor-pointer bg-acc-deep text-white border-none font-[inherit]"
           >
             Skriv
           </button>
@@ -77,24 +77,24 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       </div>
 
       {showForm && (
-        <div className="bg-surface border border-border-main rounded-sm p-3 mb-2">
+        <div className="bg-surface border border-rule rounded-sm p-3 mb-2">
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="Skriv din recension…"
             maxLength={2000}
             rows={3}
-            className="w-full px-2 py-1 text-xs border border-border-main rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
+            className="w-full px-2 py-1 text-xs border border-rule rounded-sm bg-white font-[inherit] resize-none outline-none mb-2"
           />
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-xs text-text-muted cursor-pointer">
-              <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-accent" />
+            <label className="flex items-center gap-1 text-xs text-ink-3 cursor-pointer">
+              <input type="checkbox" checked={spoiler} onChange={e => setSpoiler(e.target.checked)} className="accent-acc-deep" />
               Spoiler
             </label>
-            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-accent text-white font-[inherit]">
+            <button onClick={handleSubmit} className="px-3 py-[3px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]">
               Publicera
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-border-main rounded-sm cursor-pointer bg-surface text-text-muted font-[inherit]">
+            <button onClick={() => setShowForm(false)} className="px-3 py-[3px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-3 font-[inherit]">
               Avbryt
             </button>
           </div>
@@ -120,7 +120,7 @@ export default function ReviewList({ tmdbId, mediaType, title, posterPath }: Rev
       )}
 
       {reviews.length === 0 && !showForm && (
-        <p className="text-xs text-text-muted">Inga recensioner ännu.</p>
+        <p className="text-xs text-ink-3">Inga recensioner ännu.</p>
       )}
     </div>
   );
@@ -134,17 +134,17 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
   const { comments } = useReviewComments(showComments ? review.id : null);
 
   return (
-    <div className="bg-surface border border-border-main rounded-sm px-3 py-2 mb-[6px]">
+    <div className="bg-surface border border-rule rounded-sm px-3 py-2 mb-[6px]">
       <div className="flex items-center justify-between mb-1">
         <div className="text-xs">
           {review.username ? (
-            <Link href={`/user/${review.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">
+            <Link href={`/user/${review.username}/`} className="font-semibold text-ink no-underline hover:text-acc-deep">
               {review.displayName}
             </Link>
           ) : (
-            <span className="font-semibold text-text-primary">{review.displayName}</span>
+            <span className="font-semibold text-ink">{review.displayName}</span>
           )}
-          <span className="text-text-muted ml-2">{review.createdAt.toLocaleDateString('sv-SE')}</span>
+          <span className="text-ink-3 ml-2">{review.createdAt.toLocaleDateString('sv-SE')}</span>
         </div>
         <div className="flex items-center gap-1">
           {isOwn && onDelete && (
@@ -162,21 +162,21 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
       </div>
       {review.spoiler && !revealed ? (
         <div>
-          <span className="text-xs text-text-muted blur-sm select-none">{review.text.slice(0, 100)}</span>
-          <button onClick={() => setRevealed(true)} className="text-xxs text-accent ml-1 bg-transparent border-none cursor-pointer font-[inherit]">
+          <span className="text-xs text-ink-3 blur-sm select-none">{review.text.slice(0, 100)}</span>
+          <button onClick={() => setRevealed(true)} className="text-xxs text-acc-deep ml-1 bg-transparent border-none cursor-pointer font-[inherit]">
             Visa spoiler
           </button>
         </div>
       ) : (
-        <p className="text-xs text-text-secondary leading-relaxed m-0">{review.text}</p>
+        <p className="text-xs text-ink-2 leading-relaxed m-0">{review.text}</p>
       )}
 
-      <div className="flex items-center gap-3 mt-[6px] pt-[5px] border-t border-border-light">
+      <div className="flex items-center gap-3 mt-[6px] pt-[5px] border-t border-rule-2">
         <button
           onClick={toggle}
           disabled={!uid}
           className={`inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs ${
-            iLike ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
+            iLike ? 'text-acc-deep' : 'text-ink-3 hover:text-ink-2'
           } disabled:opacity-50 disabled:cursor-default`}
           title={uid ? (iLike ? 'Ångra gillning' : 'Gilla') : 'Logga in för att gilla'}
           aria-label={uid ? (iLike ? `Ångra gillning${likeCount > 0 ? ` (${likeCount} gillar)` : ''}` : `Gilla${likeCount > 0 ? ` (${likeCount} gillar)` : ''}`) : 'Logga in för att gilla'}
@@ -187,7 +187,7 @@ function ReviewCard({ review, isOwn, onDelete }: { review: Review; isOwn?: boole
         </button>
         <button
           onClick={() => setShowComments(v => !v)}
-          className="inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-text-muted hover:text-text-secondary"
+          className="inline-flex items-center gap-[4px] bg-transparent border-none cursor-pointer p-0 font-[inherit] text-xxs text-ink-3 hover:text-ink-2"
         >
           <MessageCircle size={11} />
           Kommentera
@@ -235,9 +235,9 @@ function ReviewComments({
   };
 
   return (
-    <div className="mt-2 pt-2 border-t border-border-light">
+    <div className="mt-2 pt-2 border-t border-rule-2">
       {visibleComments.length === 0 ? (
-        <div className="text-xxs text-text-muted italic">Inga kommentarer än.</div>
+        <div className="text-xxs text-ink-3 italic">Inga kommentarer än.</div>
       ) : (
         <ul className="space-y-[4px] mb-2">
           {visibleComments.map(c => {
@@ -246,19 +246,19 @@ function ReviewComments({
               <li key={c.id} className="text-xxs flex items-start gap-2">
                 <div className="flex-1">
                   {c.username ? (
-                    <Link href={`/user/${c.username}/`} className="font-semibold text-text-primary no-underline hover:text-accent">
+                    <Link href={`/user/${c.username}/`} className="font-semibold text-ink no-underline hover:text-acc-deep">
                       {c.displayName}
                     </Link>
                   ) : (
-                    <span className="font-semibold text-text-primary">{c.displayName}</span>
+                    <span className="font-semibold text-ink">{c.displayName}</span>
                   )}
-                  <span className="text-text-secondary ml-[4px]">{c.text}</span>
-                  <span className="text-text-muted ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
+                  <span className="text-ink-2 ml-[4px]">{c.text}</span>
+                  <span className="text-ink-3 ml-[4px]">· {c.createdAt.toLocaleDateString('sv-SE')}</span>
                 </div>
                 {canDelete ? (
                   <button
                     onClick={() => deleteComment(c.id)}
-                    className="text-text-muted hover:text-danger-ink bg-transparent border-none cursor-pointer p-0"
+                    className="text-ink-3 hover:text-danger-ink bg-transparent border-none cursor-pointer p-0"
                     title="Ta bort"
                     aria-label="Ta bort kommentar"
                   >
@@ -287,24 +287,24 @@ function ReviewComments({
             onKeyDown={e => { if (e.key === 'Enter') void submit(); }}
             placeholder="Skriv en kommentar…"
             maxLength={500}
-            className="flex-1 px-2 py-1 text-xxs border border-border-main rounded-sm bg-white"
+            className="flex-1 px-2 py-1 text-xxs border border-rule rounded-sm bg-white"
           />
           <button
             onClick={submit}
             disabled={posting || !text.trim()}
-            className="px-2 py-1 bg-accent text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
+            className="px-2 py-1 bg-acc-deep text-white rounded-sm text-xxs cursor-pointer disabled:opacity-50"
           >
             <Send size={10} />
           </button>
           <button
             onClick={onClose}
-            className="px-2 py-1 border border-border-main rounded-sm text-xxs bg-white cursor-pointer text-text-muted"
+            className="px-2 py-1 border border-rule rounded-sm text-xxs bg-white cursor-pointer text-ink-3"
           >
             Stäng
           </button>
         </div>
       ) : (
-        <div className="text-xxs text-text-muted">Logga in för att kommentera.</div>
+        <div className="text-xxs text-ink-3">Logga in för att kommentera.</div>
       )}
     </div>
   );

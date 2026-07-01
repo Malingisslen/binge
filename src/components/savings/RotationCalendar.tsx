@@ -56,7 +56,7 @@ export default function RotationCalendar() {
   return (
     <div className="mb-[14px]">
       <div className="flex items-baseline justify-between mb-[6px]">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-text-muted">Rotationskalender</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Rotationskalender</h2>
         {calendar.totalProjectedSavings > 0 && (
           <span className="text-xxs text-season-done font-semibold">
             Spara ~{calendar.totalProjectedSavings} kr
@@ -75,43 +75,43 @@ export default function RotationCalendar() {
               >
                 <div className="flex items-center gap-[6px] mb-[4px]">
                   <ProviderDot color={e.color} size={8} />
-                  <span className="text-xs font-semibold text-text-primary">{e.shortName}</span>
+                  <span className="text-xs font-semibold text-ink">{e.shortName}</span>
                   {e.resume == null ? (
-                    <span className="text-xxs text-text-muted">· öppen paus</span>
+                    <span className="text-xxs text-ink-3">· öppen paus</span>
                   ) : (
                     <span className="text-xxs text-season-done font-semibold ml-auto">
                       spara ~{e.projectedSavings} kr
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-text-secondary">
-                  Pausa <strong className="text-text-primary">{formatSwedishDate(e.cancel.date)}</strong>
+                <div className="text-xs text-ink-2">
+                  Pausa <strong className="text-ink">{formatSwedishDate(e.cancel.date)}</strong>
                   {e.resume != null ? (
                     <>
-                      {' · '}återkom <strong className="text-text-primary">{formatSwedishDate(e.resume.date)}</strong>
-                      {' '}<span className="text-text-muted">({e.daysPaused} dagar)</span>
+                      {' · '}återkom <strong className="text-ink">{formatSwedishDate(e.resume.date)}</strong>
+                      {' '}<span className="text-ink-3">({e.daysPaused} dagar)</span>
                     </>
                   ) : (
-                    <> · inget planerat — <span className="text-text-muted">~{e.cancel.monthlyCost} kr/mån sparat</span></>
+                    <> · inget planerat — <span className="text-ink-3">~{e.cancel.monthlyCost} kr/mån sparat</span></>
                   )}
                 </div>
-                <div className="text-xxs text-text-muted mt-[3px]">{e.cancel.reason}</div>
+                <div className="text-xxs text-ink-3 mt-[3px]">{e.cancel.reason}</div>
               </div>
             ))}
           </div>
-          <p className="text-xxs text-text-muted mt-[6px]">
+          <p className="text-xxs text-ink-3 mt-[6px]">
             Binge kan inte säga upp åt dig — vi påminner, du klickar.
           </p>
         </>
       )}
 
       {hasLedger && (
-        <div className="bg-surface border border-border-main rounded-sm px-3 py-[10px] mt-2">
-          <div className="text-xs text-text-secondary">
+        <div className="bg-surface border border-rule rounded-sm px-3 py-[10px] mt-2">
+          <div className="text-xs text-ink-2">
             Du har sparat{' '}
             <strong className="text-season-done">{ledger.savedThisYear} kr</strong> i år genom rotation
             {ledger.rotationCount > 0 && (
-              <span className="text-text-muted">
+              <span className="text-ink-3">
                 {' '}· {ledger.rotationCount} {ledger.rotationCount === 1 ? 'rotation' : 'rotationer'}
               </span>
             )}
@@ -119,7 +119,7 @@ export default function RotationCalendar() {
           {ledger.byProvider.length > 0 && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 mt-[6px]">
               {ledger.byProvider.map(p => (
-                <span key={p.providerId} className="inline-flex items-center gap-1 text-xxs text-text-muted">
+                <span key={p.providerId} className="inline-flex items-center gap-1 text-xxs text-ink-3">
                   {p.shortName} <span className="text-season-done font-semibold">{p.saved} kr</span>
                 </span>
               ))}

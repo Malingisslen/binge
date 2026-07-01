@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="px-3 py-[10px] border-b border-border-light last:border-b-0">
-      <div className="text-xxs uppercase tracking-[0.5px] text-text-muted font-semibold mb-[6px]">{title}</div>
+    <div className="px-3 py-[10px] border-b border-rule-2 last:border-b-0">
+      <div className="text-xxs uppercase tracking-[0.5px] text-ink-3 font-semibold mb-[6px]">{title}</div>
       {children}
     </div>
   );
@@ -29,11 +29,11 @@ export function FormRadioGroup<T extends string>({
             value={opt.value}
             checked={value === opt.value}
             onChange={() => onChange(opt.value)}
-            className="accent-accent w-[12px] h-[12px] mt-[2px]"
+            className="accent-acc-deep w-[12px] h-[12px] mt-[2px]"
           />
           <div>
-            <div className="text-text-primary">{opt.label}</div>
-            {opt.desc && <div className="text-xxs text-text-muted">{opt.desc}</div>}
+            <div className="text-ink">{opt.label}</div>
+            {opt.desc && <div className="text-xxs text-ink-3">{opt.desc}</div>}
           </div>
         </label>
       ))}

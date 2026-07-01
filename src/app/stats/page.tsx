@@ -105,15 +105,15 @@ function StatsContent() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px] mb-4">
         {/* Film vs Serier — stacked bar */}
-        <div className="bg-surface border border-border-main rounded-sm">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Film vs Serier</span>
+        <div className="bg-surface border border-rule rounded-sm">
+          <div className="px-3 py-[6px] border-b border-rule-2">
+            <span className="text-sm font-bold text-ink-2">Film vs Serier</span>
           </div>
           <div className="px-3 py-3">
             <div className="flex h-[24px] rounded-sm overflow-hidden mb-2">
               {stats.movies.length > 0 && (
                 <div
-                  className="bg-accent flex items-center justify-center text-white text-xxs font-semibold"
+                  className="bg-acc-deep flex items-center justify-center text-white text-xxs font-semibold"
                   style={{ width: `${stats.moviePct}%` }}
                 >
                   {stats.moviePct > 15 && `${stats.moviePct}%`}
@@ -121,27 +121,27 @@ function StatsContent() {
               )}
               {stats.tvShows.length > 0 && (
                 <div
-                  className="bg-text-secondary flex items-center justify-center text-white text-xxs font-semibold"
+                  className="bg-ink-2 flex items-center justify-center text-white text-xxs font-semibold"
                   style={{ width: `${100 - stats.moviePct}%` }}
                 >
                   {(100 - stats.moviePct) > 15 && `${100 - stats.moviePct}%`}
                 </div>
               )}
             </div>
-            <div className="flex justify-between text-xs text-text-muted">
-              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-accent mr-1 align-middle" /> {stats.movies.length} filmer</span>
-              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-text-secondary mr-1 align-middle" /> {stats.tvShows.length} serier</span>
+            <div className="flex justify-between text-xs text-ink-3">
+              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-acc-deep mr-1 align-middle" /> {stats.movies.length} filmer</span>
+              <span><span className="inline-block w-[8px] h-[8px] rounded-[1px] bg-ink-2 mr-1 align-middle" /> {stats.tvShows.length} serier</span>
               {stats.totalRewatches > 0 && (
-                <span className="text-text-muted">{stats.totalRewatches} omtittningar</span>
+                <span className="text-ink-3">{stats.totalRewatches} omtittningar</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Betygsfördelning */}
-        <div className="bg-surface border border-border-main rounded-sm">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Betygsfördelning</span>
+        <div className="bg-surface border border-rule rounded-sm">
+          <div className="px-3 py-[6px] border-b border-rule-2">
+            <span className="text-sm font-bold text-ink-2">Betygsfördelning</span>
           </div>
           <div className="px-3 py-2">
             {[5, 4, 3, 2, 1].map(n => {
@@ -149,11 +149,11 @@ function StatsContent() {
               const maxCount = Math.max(...Object.values(stats.ratingDist), 1);
               return (
                 <div key={n} className="flex items-center gap-2 mb-[2px]">
-                  <span className="text-xs text-text-muted w-[16px]">{n}</span>
+                  <span className="text-xs text-ink-3 w-[16px]">{n}</span>
                   <div className="flex-1 h-[6px] bg-rule rounded-full overflow-hidden">
                     <div className="h-full bg-ink rounded-full" style={{ width: `${(count / maxCount) * 100}%` }} />
                   </div>
-                  <span className="text-xxs text-text-muted w-[20px] text-right">{count}</span>
+                  <span className="text-xxs text-ink-3 w-[20px] text-right">{count}</span>
                 </div>
               );
             })}
@@ -163,15 +163,15 @@ function StatsContent() {
 
       {/* Streamingtjänster — horizontal colored bars */}
       {stats.topProviders.length > 0 && (
-        <div className="bg-surface border border-border-main rounded-sm mb-4">
-          <div className="px-3 py-[6px] border-b border-border-light flex items-baseline justify-between gap-2">
-            <span className="text-sm font-bold text-text-secondary">Streamingtjänster</span>
-            <span className="text-xxs text-text-muted">
+        <div className="bg-surface border border-rule rounded-sm mb-4">
+          <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
+            <span className="text-sm font-bold text-ink-2">Streamingtjänster</span>
+            <span className="text-xxs text-ink-3">
               Baserat på {stats.withProviderData} av {stats.total} titlar med streaming-data
               {stats.withProviderData < stats.total - 5 && (
                 <>
                   {' — '}
-                  <Link href="/settings" className="text-accent hover:underline">
+                  <Link href="/settings" className="text-acc-deep hover:underline">
                     uppdatera smakdata
                   </Link>
                 </>
@@ -194,7 +194,7 @@ function StatsContent() {
                     }}
                   />
                 </div>
-                <span className="text-xxs text-text-muted w-[40px] text-right">{p.count} {p.count === 1 ? 'titel' : 'titlar'}</span>
+                <span className="text-xxs text-ink-3 w-[40px] text-right">{p.count} {p.count === 1 ? 'titel' : 'titlar'}</span>
               </div>
             ))}
           </div>
@@ -203,9 +203,9 @@ function StatsContent() {
 
       {/* Aktivitet per månad — proper bar chart */}
       {stats.activityMonths.length > 1 && (
-        <div className="bg-surface border border-border-main rounded-sm mb-4">
-          <div className="px-3 py-[6px] border-b border-border-light">
-            <span className="text-sm font-bold text-text-secondary">Aktivitet per månad</span>
+        <div className="bg-surface border border-rule rounded-sm mb-4">
+          <div className="px-3 py-[6px] border-b border-rule-2">
+            <span className="text-sm font-bold text-ink-2">Aktivitet per månad</span>
           </div>
           <div className="px-3 py-2">
             <div className="flex items-end gap-[4px]" style={{ height: '100px' }}>
@@ -215,12 +215,12 @@ function StatsContent() {
                 const label = MONTH_NAMES[monthIdx] ?? month.slice(5);
                 return (
                   <div key={month} className="flex-1 flex flex-col items-center justify-end h-full group">
-                    <div className="text-xxs text-text-muted mb-[2px] opacity-0 group-hover:opacity-100 transition-opacity">{count}</div>
+                    <div className="text-xxs text-ink-3 mb-[2px] opacity-0 group-hover:opacity-100 transition-opacity">{count}</div>
                     <div
-                      className="w-full bg-accent rounded-t-[2px] min-h-[2px] transition-all"
+                      className="w-full bg-acc-deep rounded-t-[2px] min-h-[2px] transition-all"
                       style={{ height: `${(count / maxCount) * 80}%` }}
                     />
-                    <div className="text-[8px] text-text-muted mt-[3px]">{label}</div>
+                    <div className="text-[8px] text-ink-3 mt-[3px]">{label}</div>
                   </div>
                 );
               })}
