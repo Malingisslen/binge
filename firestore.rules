@@ -449,7 +449,12 @@ service cloud.firestore {
         && request.resource.data.targetId == resource.data.targetId
         && request.resource.data.targetOwnerUid == resource.data.targetOwnerUid
         && request.resource.data.reason == resource.data.reason
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        // BIN-357: an admin may only attribute an action to THEIR OWN uid. The sole
+        // update path (updateReportStatus) always stamps actionedByUid from the
+        // acting admin's auth uid, so this holds for every legit update; it blocks
+        // a (future multi-admin) actor from framing another admin in the audit trail.
+        && request.resource.data.actionedByUid == request.auth.uid;
 
       allow delete: if false;
     }
@@ -692,8 +697,8 @@ service cloud.firestore {
           && request.resource.data.ownerUid == resource.data.ownerUid
           && (!('inviteTokenHash' in request.resource.data)
             || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
-          && (!('inviteTokenRotatedAt' in resource.data)
-            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+          && (!('inviteTokenRotatedAt' in request.resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.get('inviteTokenRotatedAt', null))
         )
         || (
           // Token-rotation / disable (rotateInviteToken + disableInviteToken in
@@ -718,13 +723,19 @@ service cloud.firestore {
           // uid as they exit, an uncapped growth path that bypasses the join/
           // accept size cap. hasAll(new ⊆ old) confines this branch to removal.
           && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          // BIN-365: leave removes EXACTLY the caller. hasAll confines to a subset
+          // (shrink-only), but a subset still lets a leaving member drop a third
+          // party. size()==old-1, combined with the self-absence check above,
+          // means the one removed element is the caller and no bystander. size()
+          // needs no null guard: `create` guarantees memberUids exists on every doc.
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.name == resource.data.name
           && request.resource.data.defaults == resource.data.defaults
           && (!('inviteTokenHash' in request.resource.data)
             || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
-          && (!('inviteTokenRotatedAt' in resource.data)
-            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+          && (!('inviteTokenRotatedAt' in request.resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.get('inviteTokenRotatedAt', null))
         )
         || (
           // Token-join — bevisad genom att joinAttempts/{auth.uid} existerar
@@ -742,8 +753,8 @@ service cloud.firestore {
           && request.resource.data.defaults == resource.data.defaults
           && (!('inviteTokenHash' in request.resource.data)
             || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
-          && (!('inviteTokenRotatedAt' in resource.data)
-            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+          && (!('inviteTokenRotatedAt' in request.resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.get('inviteTokenRotatedAt', null))
         )
         || (
           // Invite-accept — bevisad genom att en inbjudan finns på
@@ -759,8 +770,8 @@ service cloud.firestore {
           && request.resource.data.defaults == resource.data.defaults
           && (!('inviteTokenHash' in request.resource.data)
             || request.resource.data.inviteTokenHash == resource.data.get('inviteTokenHash', null))
-          && (!('inviteTokenRotatedAt' in resource.data)
-            || request.resource.data.inviteTokenRotatedAt == resource.data.inviteTokenRotatedAt)
+          && (!('inviteTokenRotatedAt' in request.resource.data)
+            || request.resource.data.inviteTokenRotatedAt == resource.data.get('inviteTokenRotatedAt', null))
         )
       );
 

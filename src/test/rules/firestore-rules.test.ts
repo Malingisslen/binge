@@ -573,6 +573,44 @@ describe('BIN-279 — reports read is admin-only', () => {
   });
 });
 
+// BIN-357: an admin updating a report may only stamp actionedByUid with THEIR
+// OWN uid. The sole update path (updateReportStatus) always writes the acting
+// admin's auth uid, so legit updates pass; this blocks a (future multi-admin)
+// actor from framing another admin in the audit trail.
+describe('reports admin-update actionedByUid pin (BIN-357)', () => {
+  const ADMIN = 'admin_uid';
+  function adminDb() { return testEnv.authenticatedContext(ADMIN).firestore(); }
+  async function seedOpenReport() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'reports', 'rep1'), {
+        reporterUid: 'someone_uid', targetType: 'review', targetId: 'rev1',
+        targetOwnerUid: 'victim_uid', reason: 'spam', status: 'open',
+        createdAt: serverTimestamp(),
+      });
+    });
+  }
+  async function makeAdmin() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', ADMIN), { isAdmin: true });
+    });
+  }
+
+  it('admin can action a report stamping their OWN uid (the real updateReportStatus flow)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertSucceeds(updateDoc(doc(adminDb(), 'reports', 'rep1'), {
+      status: 'actioned', actionedByUid: ADMIN, updatedAt: serverTimestamp(),
+    }));
+  });
+  it('admin cannot attribute an action to a DIFFERENT admin uid (anti-framing)', async () => {
+    await seedOpenReport();
+    await makeAdmin();
+    await assertFails(updateDoc(doc(adminDb(), 'reports', 'rep1'), {
+      status: 'actioned', actionedByUid: 'other_admin_uid', updatedAt: serverTimestamp(),
+    }));
+  });
+});
+
 // BIN-276 / BIN-327 — groups owner-update hardening + memberUids growth caps.
 // The group permission block (two-step hash-verified token join, consent-based
 // invite-accept, owner-can-only-shrink guard, self-leave, sessionHistory
@@ -657,6 +695,80 @@ describe('groups/{id} leave branch — shrink-only (BIN-327)', () => {
   it('a leaving member cannot inject a new uid as they exit (cap-bypass guard)', async () => {
     await seedGroup({ memberUids: [OWNER, 'other_uid'] });
     await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'stranger'] }));
+  });
+});
+
+// BIN-365: exact-self-leave + inviteTokenRotatedAt forge-pin. hasAll (BIN-327)
+// confines a leave to a subset; these add "exactly one removed" so a leaving
+// member cannot also drop a bystander, and switch the rotatedAt pin to the
+// request-doc idiom so it cannot be forged on a group where it was never set.
+describe('groups/{id} exact-self-leave + rotatedAt forge-pin (BIN-365)', () => {
+  it('a leaving member cannot ALSO remove a third party in the same write', async () => {
+    // Pre-BIN-365 this PASSED: [OWNER,other,third] → [OWNER] satisfies hasAll +
+    // self-absence, silently removing the bystander. size()==old-1 now denies it.
+    await seedGroup({ memberUids: [OWNER, 'other_uid', 'third_uid'] });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+  });
+  it('exact self-leave with a bystander present succeeds (also the erasure write shape)', async () => {
+    // accountDeletion writes a LITERAL filtered array (size-1) as the leaving
+    // user — identical shape to this; proves erasure still passes the predicate.
+    await seedGroup({ memberUids: [OWNER, 'other_uid', 'third_uid'] });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER, 'third_uid'] }));
+  });
+  it('owner can bulk-remove several members in one write (owner branch, no size cap)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'm2', 'm3'] });
+    await assertSucceeds(updateDoc(doc(ownerDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+  });
+  it('a leave write that OMITS inviteTokenRotatedAt succeeds (delta-write safety)', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'], inviteTokenRotatedAt: serverTimestamp() });
+    await assertSucceeds(updateDoc(doc(otherDb(), 'groups', GROUP), { memberUids: [OWNER] }));
+  });
+  it('a leave write cannot CHANGE inviteTokenRotatedAt', async () => {
+    await seedGroup({ memberUids: [OWNER, 'other_uid'], inviteTokenRotatedAt: new Date('2020-01-01') });
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER], inviteTokenRotatedAt: new Date('2099-01-01'),
+    }));
+  });
+  it('owner cannot FORGE inviteTokenRotatedAt on a group where it was never set', async () => {
+    // Custom seed omitting the field entirely (seedGroup always sets it to null).
+    // Pre-BIN-365 the stored-doc idiom short-circuited true here → forgeable.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+        ownerUid: OWNER, memberUids: [OWNER, 'm2'], name: 'Filmklubben',
+        defaults: { region: 'SE' }, inviteTokenHash: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+    });
+    await assertFails(updateDoc(doc(ownerDb(), 'groups', GROUP), {
+      memberUids: [OWNER], inviteTokenRotatedAt: serverTimestamp(),
+    }));
+  });
+  it('a join write cannot FORGE inviteTokenRotatedAt on a group where it was never set', async () => {
+    // Same forge vector on the join branch (the idiom fix touches all 4 branches).
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+        ownerUid: OWNER, memberUids: [OWNER], name: 'Filmklubben',
+        defaults: { region: 'SE' }, inviteTokenHash: sha256Hex('secret'),
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+    });
+    await sealJoinAttempt('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], inviteTokenRotatedAt: serverTimestamp(),
+    }));
+  });
+  it('an accept write cannot FORGE inviteTokenRotatedAt on a group where it was never set', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP), {
+        ownerUid: OWNER, memberUids: [OWNER], name: 'Filmklubben',
+        defaults: { region: 'SE' }, inviteTokenHash: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+    });
+    await seedInvite('other_uid');
+    await assertFails(updateDoc(doc(otherDb(), 'groups', GROUP), {
+      memberUids: [OWNER, 'other_uid'], inviteTokenRotatedAt: serverTimestamp(),
+    }));
   });
 });
 
