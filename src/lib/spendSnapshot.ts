@@ -1,4 +1,4 @@
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
 
 // BIN-99 — whole-watchlist streaming spend snapshot. One headline number:
@@ -15,14 +15,19 @@ export interface SpendSnapshot {
   idleProviders: { id: number; name: string; cost: number }[];
 }
 
-function costOf(id: number, providerCosts: Record<number, number>): number {
-  return providerCosts[id] ?? getProvider(id)?.defaultMonthlyCost ?? 0;
+function costOf(
+  id: number,
+  providerCosts: Record<number, number>,
+  providerTiers: Record<number, string>,
+): number {
+  return resolveProviderMonthlyCost(id, { providerTiers, providerCosts }) ?? 0;
 }
 
 export function computeSpendSnapshot(
   myProviders: number[],
   items: WatchlistItem[],
   providerCosts: Record<number, number>,
+  providerTiers: Record<number, string> = {},
 ): SpendSnapshot {
   // Providers that carry backlog you'd actually watch: vill_se (film) + 'mina'
   // (followed series). sedd/avbruten don't count as a reason to keep paying.
@@ -36,7 +41,7 @@ export function computeSpendSnapshot(
   let activeKr = 0;
   const idleProviders: { id: number; name: string; cost: number }[] = [];
   for (const id of myProviders) {
-    const cost = costOf(id, providerCosts);
+    const cost = costOf(id, providerCosts, providerTiers);
     if (cost <= 0) continue; // free services (SVT Play) aren't "spend"
     totalKr += cost;
     if (activeProviderIds.has(id)) {

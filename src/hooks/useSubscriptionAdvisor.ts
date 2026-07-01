@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite } from '@/lib/tmdb/client';
-import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -71,6 +71,7 @@ export function useSubscriptionAdvisor(
 
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
   const providerCosts = useMemo(() => user?.providerCosts ?? {}, [user?.providerCosts]);
+  const providerTiers = useMemo(() => user?.providerTiers ?? {}, [user?.providerTiers]);
   const providerPauses = useMemo(() => user?.providerPauses ?? {}, [user?.providerPauses]);
 
   const showQueries = useQueries({
@@ -238,7 +239,7 @@ export function useSubscriptionAdvisor(
         providerName: provider.name,
         shortName: provider.shortName,
         color: provider.color,
-        monthlyCost: providerCosts[pid] ?? provider.defaultMonthlyCost ?? null,
+        monthlyCost: resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }),
         status,
         shows: followingAnchors,
         nextAirDate: dates[0] ?? null,
@@ -309,7 +310,7 @@ export function useSubscriptionAdvisor(
           shortName: provider.shortName,
           color: provider.color,
           isSubscribed: myProviderSet.has(pid),
-          monthlyCost: providerCosts[pid] ?? provider.defaultMonthlyCost ?? null,
+          monthlyCost: resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }),
           tvCount: c.tv,
           movieCount: c.movie,
         });
@@ -328,7 +329,7 @@ export function useSubscriptionAdvisor(
       const provider = getProvider(pid);
       if (!provider) continue;
       const state = providerPauses[pid];
-      const monthlyCost = providerCosts[pid] ?? provider.defaultMonthlyCost ?? 0;
+      const monthlyCost = resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }) ?? 0;
       const days = daysBetween(state.pausedAt);
       activePauses.push({
         providerId: pid,
@@ -405,7 +406,11 @@ export function useSubscriptionAdvisor(
       color: topSubscribe.color,
       showCount: topSubscribe.shows.length,
       nearestAirDate: topSubscribe.nearestAirDate,
-      monthlyCost: getProvider(topSubscribe.providerId)?.defaultMonthlyCost ?? 0,
+      // Route through the shared resolver even here (a not-yet-subscribed provider
+      // normally has no tier/custom entry, so this equals defaultMonthlyCost today)
+      // — keeps the "one source of truth" invariant airtight against a stale
+      // providerTiers/providerCosts entry left behind after un-subscribing.
+      monthlyCost: resolveProviderMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts }) ?? 0,
     } : null;
 
     const primaryAction: PrimaryAction =
@@ -461,7 +466,7 @@ export function useSubscriptionAdvisor(
       unfinishedTmdbIds,
       endedCaughtUpTmdbIds,
     };
-  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerPauses, lookAheadDays, hasError]);
+  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerPauses, lookAheadDays, hasError]);
 
   return { ...computed, isLoading, hasError };
 }

@@ -52,7 +52,7 @@ export function ProvidersSection() {
   };
 
   const { selected: selectedProviders, available } = splitProviders(FLATRATE, selected);
-  const total = totalMonthlyCost(selected, user.providerCosts ?? {});
+  const total = totalMonthlyCost(selected, user.providerCosts ?? {}, user.providerTiers ?? {});
 
   const tile = (p: SwedishProvider, isSelected: boolean) => {
     const fg = readableTextColor(p.color);
@@ -114,6 +114,10 @@ export function ProvidersSection() {
       {selectedProviders.length > 0 && (
         <div className="border-t border-rule-2 pt-3">
           <div className="text-[10px] uppercase tracking-[0.14em] text-ink-3 mb-2">Nivå &amp; kostnad</div>
+          <p className="text-[11px] text-ink-3 mb-2 leading-snug">
+            Väljer du en nivå följer priset tjänstens aktuella listpris — det uppdateras automatiskt när tjänsten
+            ändrar sitt. Väljer du <span className="whitespace-nowrap">&quot;Egen kostnad…&quot;</span> gäller beloppet du själv skriver in.
+          </p>
           <div className="space-y-[2px]">
             {selectedProviders.map(provider => {
               const selectedTierId = user.providerTiers?.[provider.id];

@@ -60,8 +60,16 @@ describe('totalMonthlyCost', () => {
   it('sums costs for selected ids only', () => {
     expect(totalMonthlyCost([8, 489], { 8: 109, 489: 69, 337: 159 })).toBe(178);
   });
-  it('treats missing costs as 0', () => {
-    expect(totalMonthlyCost([8, 489], { 8: 109 })).toBe(109);
+  it('falls back to the catalog default for a selected provider with no entered cost', () => {
+    // Tier-first resolution: a selected provider the user hasn't priced still costs
+    // money, so it contributes its defaultMonthlyCost — matching what the advisor
+    // sums (they must never disagree). Here 8→109 (custom) + 489→169 (TV4 default).
+    expect(totalMonthlyCost([8, 489], { 8: 109 })).toBe(278);
+  });
+  it('uses the live tier price for a chosen tier, ignoring a stale providerCosts entry', () => {
+    // A tier user's frozen providerCosts is migrated away; even if a stale 999
+    // lingered, the total tracks the current catalog tier price (Netflix Standard 149).
+    expect(totalMonthlyCost([8], { 8: 999 }, { 8: 'standard' })).toBe(149);
   });
   it('is 0 for empty selection', () => {
     expect(totalMonthlyCost([], { 8: 109 })).toBe(0);

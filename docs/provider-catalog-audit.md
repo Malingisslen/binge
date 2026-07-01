@@ -88,23 +88,32 @@ Ordning matchar ungefär marknadsandel per 2026-04. Revisit årligen
 eftersom marknadsläget ändras snabbt (t.ex. Viaplay-prishöjningar, Disney+
 tier-omstruktureringar).
 
-## Tier-priser — senast uppdaterade 2026-04
+## Tier-priser — agent-uppdaterade (var det manuellt, 2026-04)
 
-Samtliga tier-priser är listade i SWEDISH_PROVIDERS och behöver manuell
-uppdatering när tjänsten byter pris. Det finns ingen API som exponerar
-aktuella priser per land.
+Samtliga tier-priser är listade i SWEDISH_PROVIDERS. Det finns ingen API som
+exponerar aktuella priser per land. **Sedan 2026-07** hålls de färska av en
+schemalagd Claude-prisagent (månadsvis) som *läser* tjänsternas svenska
+prissidor — se [`price-agent-runbook.md`](price-agent-runbook.md). Detta är
+inte den selektor-skrapa som avfärdades nedan: en läsande agent bedömer
+osäkerhet (kampanjpris, ny nivå, icke-SEK) och eskalerar då till ett
+Linear-ärende istället för att auto-ändra.
 
-**Cadence:** manuell review var 6:e månad eller när en användare flaggar
-att siffrorna är fel.
+**Cadence:** agent-driven månadsvis. Endast **numeriska prisfält** ändras
+automatiskt; identiteter (id/namn/`kind`/alias) är låsta av en mekanisk vakt
+(`src/lib/tmdb/providers.identityGuard.test.ts`) och kan bara ändras av en
+människa via ärende. Manuell review kvarstår som fallback när en användare
+flaggar fel.
 
 ## Icke-lösningar diskuterade
 
-- **Scrape tjänsternas prissidor** — tekniskt möjligt men bräckligt, TOS-
-  känsligt, och gör vår katalog svårare att auditer. Skip.
+- **Selektor-baserad scrape av prissidor** — bräckligt, TOS-känsligt, går tyst
+  sönder. Skippat. (Den agent-lästa varianten ovan är medvetet något annat: den
+  läser sidan som text, bedömer osäkerhet och eskalerar hellre än auto-ändrar.)
 - **Crowdsource från användare** — kommer kanske i Sprint 11+ (trust-system
   + audit-log), men inte värt nu.
 - **TMDB:s `display_priority`-fält för ranking** — tillgängligt men vi har
-  redan manuell ordning som bättre speglar svensk marknad.
+  redan manuell ordning som bättre speglar svensk marknad. (Används som
+  triage-tröskel för agentens "saknad tjänst"-förslag.)
 
 ## Sign-off
 

@@ -20,7 +20,7 @@ import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { daysBetween, todayIso } from '@/lib/utils';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -458,7 +458,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (tierId && tier) {
       nextTiers[providerId] = tierId;
-      nextCosts[providerId] = tier.cost;
+      // Live tier pricing: the cost derives from the chosen tier at read time
+      // (resolveProviderMonthlyCost), so we no longer freeze tier.cost into
+      // providerCosts. Deleting any stale frozen snapshot here IS the lazy
+      // migration — providerCosts now means "egen inskriven kostnad" only, so a
+      // tier user + a providerCosts entry is a leftover we clean on next touch.
+      delete nextCosts[providerId];
     } else {
       delete nextTiers[providerId];
     }
@@ -485,11 +490,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pause = current[providerId];
     if (!pause) return;
 
-    // Snapshot kostnaden vid resume — medvetet val, eftersom användaren kan
-    // ha justerat priset under pausen och vi vill ärligt redovisa det
-    // belopp som faktiskt sparades. Fallback till tjänstens default-pris.
+    // Snapshot the RESOLVED cost at resume — deliberate timing (the pause is over,
+    // so this is the price that actually applied). We freeze the resolved price
+    // (live tier price if a tier is chosen, else the user's custom cost, else
+    // default) rather than raw providerCosts, so a tier user whose frozen snapshot
+    // was migrated away still records the right saved amount instead of falling to
+    // defaultMonthlyCost. Historic pauseHistory rows are never rewritten.
     const provider = getProvider(providerId);
-    const monthlyCost = user?.providerCosts?.[providerId] ?? provider?.defaultMonthlyCost ?? 0;
+    const monthlyCost = resolveProviderMonthlyCost(providerId, {
+      providerTiers: user?.providerTiers,
+      providerCosts: user?.providerCosts,
+    }) ?? 0;
     // Minst 1 dag — annars hamnar pause-then-instant-resume-test som 0 kr.
     const durationDays = Math.max(1, daysBetween(pause.pausedAt));
     const savedAmount = Math.round((monthlyCost * durationDays) / 30);

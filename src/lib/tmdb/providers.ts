@@ -195,6 +195,44 @@ export function canonicalProviderId(id: number): number {
   return PROVIDER_MAP.get(id)?.id ?? id;
 }
 
+// The single source of truth for "what does THIS user pay per month for this
+// provider" (BIN — automatisk prisuppdatering). Every personal-cost surface
+// (Streamingrådgivaren, spend-snapshot, service-value, Settings-totalen,
+// resumeProvider) resolves through here so they can never disagree.
+//
+// Resolution order — tier first, so a chosen tier tracks the LIVE catalog price
+// instead of a value frozen at selection time:
+//   1. A chosen tier that still exists in the catalog → its CURRENT `cost`
+//      (this is the whole point: when the catalog price moves, the user follows).
+//   2. A custom user-entered cost (providerCosts) — only ever set when NO tier is
+//      chosen (the "Egen kostnad…" path), or as an orphan fallback below.
+//   3. The catalog `defaultMonthlyCost`.
+//
+// A tier id that no longer exists (the monthly agent removed/renamed it — only
+// ever via a human ticket) is an ORPHAN: we fall through to custom/default rather
+// than returning null, so the user is never pinned to a broken lookup. Maps are
+// keyed by the CANONICAL provider id (what updateProviderTier/setProviderCost
+// write), so we canonicalise the lookup — an alias id resolves the same.
+// Returns null only for an unknown provider or when no cost is known anywhere;
+// callers that need a number use `?? 0`.
+export function resolveProviderMonthlyCost(
+  providerId: number,
+  user: { providerTiers?: Record<number, string>; providerCosts?: Record<number, number> },
+): number | null {
+  const provider = getProvider(providerId);
+  if (!provider) return null;
+  const key = provider.id; // canonical — matches how the user's maps are keyed
+  const tierId = user.providerTiers?.[key];
+  if (tierId) {
+    const tier = provider.tiers?.find(t => t.id === tierId);
+    if (tier) return tier.cost; // live catalog price for the chosen tier
+    // else: orphan tier id → fall through to custom/default
+  }
+  const custom = user.providerCosts?.[key];
+  if (custom != null) return custom;
+  return provider.defaultMonthlyCost ?? null;
+}
+
 export function getProviderColor(id: number): string {
   return PROVIDER_MAP.get(id)?.color ?? '#888';
 }

@@ -1,4 +1,4 @@
-import { canonicalProviderId, type SwedishProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, resolveProviderMonthlyCost, type SwedishProvider } from '@/lib/tmdb/providers';
 
 /** WCAG relative luminance → pick legible foreground for a hex background. */
 export function readableTextColor(hex: string): 'white' | 'ink' {
@@ -33,13 +33,19 @@ export function splitProviders(
   return { selected, available };
 }
 
-/** Sum monthly cost across the selected provider ids. */
+/**
+ * Sum the monthly cost across the selected provider ids, tier-first via the shared
+ * resolver — so a chosen tier contributes its LIVE catalog price and the total can't
+ * drift below what the advisor shows. (A tier user's frozen providerCosts entry is
+ * migrated away, so summing providerCosts alone would drop them to 0.)
+ */
 export function totalMonthlyCost(
   selectedIds: number[],
   providerCosts: Record<number, number>,
+  providerTiers: Record<number, string> = {},
 ): number {
   return selectedIds.reduce(
-    (sum, id) => sum + (providerCosts[canonicalProviderId(id)] ?? 0),
+    (sum, id) => sum + (resolveProviderMonthlyCost(id, { providerTiers, providerCosts }) ?? 0),
     0,
   );
 }
