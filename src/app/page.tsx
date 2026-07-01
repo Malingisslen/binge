@@ -250,18 +250,44 @@ function Dashboard() {
   // och items är tomt. Annars skulle vi blinka "Välkommen, lägg till
   // titlar" mot en användare som faktiskt har 100 serier på laddning.
   const showEmptyLibrary = !watchlistLoading && !hasLibrary;
-  // Loading-state till hero: täcker hela vattenfallet (watchlist → calendar).
-  // Hero visar "Hämtar din vecka…" så fort något av stegen är pågående.
-  const isLoading = watchlistLoading || calendarLoading;
-  const focalKey = focal ? focalEntryKey(focal) : undefined;
+
+  // Skydd mot att MÅLA GENOM en inaktuell focal: vid ett direkt konto-byte
+  // (uid A → uid B utan mellansteg via null) hinner `items`/`calendarEntries`
+  // vara kvar från förra kontot medan watchlistLoading flippar tillbaka till
+  // true. `focal` renderas därför bara när watchlisten är avgjord — annars
+  // skulle hero + HemFocal kunna visa förra kontots avsnitt ett ögonblick.
+  const shownFocal = watchlistLoading ? null : focal;
+  const focalKey = shownFocal ? focalEntryKey(shownFocal) : undefined;
+
+  // Progressiv hero (prestanda): `focal` (nästa avsnitt) seedas från tv-lite:s
+  // next_episode_to_air och dyker upp i calendarEntries så fort den relevanta
+  // serien resolverat — vi behöver INTE vänta på HELA vattenfallet (alla ~200
+  // tv-lite + säsonger + sista strular, tidigare ~7,5 s till innehåll). Visa
+  // focal-kortet så fort det finns; visa hero-skelettet bara när vi ännu inte
+  // har en focal OCH något fortfarande laddar. `calendarLoading` (strikt "allt
+  // löst") lämnas ORÖRD i useCalendar för rådgivar-konsumenterna
+  // (useUpcomingShowsForAdvisor) som förlitar sig på dess strikta betydelse.
+  const heroLoading = watchlistLoading || (!shownFocal && calendarLoading);
+  // Detaljraderna (senare i veckan / fortsätt titta / backlog) behöver KOMPLETT
+  // kalenderdata (fasta datum + aireade avsnitt) — de fylls i när hela
+  // vattenfallet landat, medan focal-kortet redan syns ovanför.
+  const detailLoading = watchlistLoading || calendarLoading;
+
+  const detailBlock = (
+    <>
+      <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
+      <ContinueWatchingTile entries={continueWatching} />
+      <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
+    </>
+  );
 
   return (
     <>
       <HemHero
-        focal={focal}
+        focal={shownFocal}
         totalThisWeek={totalThisWeek}
         hasLibrary={hasLibrary || watchlistLoading}
-        isLoading={isLoading}
+        isLoading={heroLoading}
       />
 
       {showEmptyLibrary ? (
@@ -269,22 +295,29 @@ function Dashboard() {
       ) : (
         <div className="hem-grid">
           <div>
-            {isLoading ? (
-              // Reservera utrymme för BÅDA focal + filmstrip så hela
-              // main-column-höjden är stabil under loading. Annars växer
-              // sektion plötsligt med ~370px när entries resolveras
-              // (focal-skeleton 530 → focal + 44px gap + filmstrip 330).
+            {shownFocal ? (
+              // Vi har nästa avsnitt → visa focal-kortet direkt. Detaljraderna
+              // under fylls i när resten av vattenfallet landat; tills dess en
+              // filmstrip-skeleton så höjden hålls stabil (ingen CLS-hopp).
+              <>
+                <HemFocal entry={shownFocal} />
+                {detailLoading ? (
+                  <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+                ) : (
+                  detailBlock
+                )}
+              </>
+            ) : detailLoading ? (
+              // Ingen focal än + fortfarande laddning: reservera utrymme för
+              // BÅDA focal + filmstrip så main-column-höjden är stabil.
               <>
                 <div className="hem-focal-skeleton" aria-hidden="true" />
                 <div className="hem-filmstrip-skeleton" aria-hidden="true" />
               </>
             ) : (
-              <>
-                {focal && <HemFocal entry={focal} />}
-                <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
-                <ContinueWatchingTile entries={continueWatching} />
-                <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
-              </>
+              // Allt löst, ingen focal → lugn vecka: detaljraderna (troligen tom
+              // senare-i-veckan) utan focal-kort.
+              detailBlock
             )}
           </div>
           <aside className="rail" aria-label="Sidostatistik">
@@ -296,7 +329,7 @@ function Dashboard() {
         </div>
       )}
 
-      {hasLibrary && !isLoading && (
+      {hasLibrary && !detailLoading && (
         <div style={{ marginTop: 16 }}>
           <JustWatchCredit />
         </div>
