@@ -60,6 +60,15 @@ export interface WatchlistItem {
   // runtime; TV: episode_run_time[0]); never bulk-migrated. null/undefined =
   // unknown (the filter never hides unknown-length titles).
   runtime?: number | null;
+  // Instant week (2026-07): denormaliserad next-air-data, skriven av
+  // nextAirReadRepair (tyst read-repair — bumpar ALDRIG updatedAt). Hem-heron
+  // seedas härifrån innan TMDB-fan-outen löst. null = "TMDB säger inget
+  // kommande"; undefined = aldrig reparerad (fall tillbaka på live-datat).
+  nextAirDate?: string | null;
+  nextAirCode?: string | null;
+  nextAirProvider?: string | null;
+  nextAirUpdatedAt?: Date | null;
+  digitalReleaseDate?: string | null;
   // BIN-164: user-authored free-text tags. IN-MEMORY ONLY — hydrated from the
   // owner-only `users/{uid}/watchlistTags/{tmdbId}` subcollection, NEVER written
   // onto this (publicly-readable) watchlist doc. Kept private-to-owner because
