@@ -25,6 +25,7 @@ import VannerTile from '@/components/home/VannerTile';
 import GrupperTile from '@/components/home/GrupperTile';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
+import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 
 const FAQ_JSON_LD = {
   '@context': 'https://schema.org',
@@ -231,18 +232,29 @@ function Dashboard() {
     [items, user?.myProviders],
   );
 
+  // Instant week: medan fan-outen löser unioneras tunna seeds (denormaliserad
+  // next-air-data från watchlisten) med live-entries — live vinner per titel.
+  // Efter full load används ENBART live-datat. Samma pickFocalEntry-väg —
+  // en render-väg, två datakällor.
+  const effectiveEntries = useMemo(() => {
+    if (!calendarLoading) return calendarEntries;
+    const liveIds = new Set(calendarEntries.map(e => e.tmdbId));
+    const seeds = seedCalendarEntries(items).filter(s => !liveIds.has(s.tmdbId));
+    return [...calendarEntries, ...seeds];
+  }, [calendarLoading, calendarEntries, items]);
+
   const { focal, totalThisWeek } = useMemo(() => {
-    const focal = pickFocalEntry(calendarEntries);
+    const focal = pickFocalEntry(effectiveEntries);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekAhead = new Date(today);
     weekAhead.setDate(today.getDate() + 7);
-    const totalThisWeek = calendarEntries.filter(e => {
+    const totalThisWeek = effectiveEntries.filter(e => {
       const d = new Date(e.airDate + 'T00:00:00');
       return d >= today && d < weekAhead;
     }).length;
     return { focal, totalThisWeek };
-  }, [calendarEntries]);
+  }, [effectiveEntries]);
 
   const hasLibrary = items.length > 0;
   // EmptyLibrary får bara renderas när vi *vet* att biblioteket är tomt —
@@ -331,7 +343,10 @@ function Dashboard() {
         </div>
       )}
 
-      {hasLibrary && !detailLoading && (
+      {/* JustWatch-crediten måste vara synlig så fort provider-data visas —
+          inkl. seed-focalen som kan rendera långt före detaljraderna (TMDB:s
+          attribution-krav för JustWatch-licensierad provider-data). */}
+      {hasLibrary && (shownFocal != null || !detailLoading) && (
         <div style={{ marginTop: 16 }}>
           <JustWatchCredit />
         </div>
