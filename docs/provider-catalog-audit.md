@@ -14,14 +14,14 @@ watch-providers-katalog för region SE._
 - **520** SVT Play — 0 kr/mån (isFree: true)
 - **489** TV4 Play — 169 kr/mån, 3 tiers (alias 1944)
 - **350** Apple TV+ — 119 kr/mån
-- **531** Paramount+ — 99 kr/mån
-- **510** Discovery+ — 89 kr/mån, 4 tiers (inkl. sport)
+- ~~**531** Paramount+~~ — nedlagd i SE 2022, aliasas → SkyShowtime (431) (prisagent 2026-07)
+- **510** Discovery+ — 109 kr/mån, 3 tiers (inkl. sport) (omstrukturerad 2026-07)
 - **1899** Max — 149 kr/mån, 3 tiers (ersätter HBO Max globalt 2024+)
 - **323** Crunchyroll — 89 kr/mån, 2 tiers
-- **431** SkyShowtime — 99 kr/mån, 3 tiers
+- **431** SkyShowtime — 109 kr/mån, 3 tiers (2026-07)
 - **335** YouTube Premium — 149 kr/mån, 3 tiers (student/solo/family)
-- **521** Tele2 Play — 99 kr/mån
-- **578** TriArt Play — 79 kr/mån
+- **521** Tele2 Play — 199 kr/mån (ordinarie; 99 var kampanj) (2026-07)
+- **578** TriArt Play — hyr-tjänst (type: rent), ej längre flatrate (2026-07)
 
 ### Rent/buy
 - **35** Rakuten TV

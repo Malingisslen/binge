@@ -58,8 +58,8 @@ const BASELINE: Record<number, ProviderIdentity> = {
   } },
   350: { name: 'Apple TV+', shortName: 'Apple', aliases: [2243], isFree: false, isAds: false, tiers: {} },
   510: { name: 'Discovery+', shortName: 'Disc+', aliases: [], isFree: false, isAds: false, tiers: {
-    entry: { name: 'Entry (1 enhet, reklam)', kind: null }, ads: { name: 'Med reklam (Full HD)', kind: null },
-    premium: { name: 'Premium (4K)', kind: null }, sport: { name: 'Sport Premium', kind: 'sport' },
+    ads: { name: 'Underhållning (med reklam)', kind: null }, standard: { name: 'Underhållning', kind: null },
+    sport: { name: 'Underhållning + Sport', kind: 'sport' },
   } },
   323: { name: 'Crunchyroll', shortName: 'CR', aliases: [1968, 283], isFree: false, isAds: false, tiers: {
     fan: { name: 'Fan', kind: null }, megafan: { name: 'Mega Fan', kind: null },

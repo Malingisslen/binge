@@ -63,11 +63,13 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   {
     id: 76, name: 'Viaplay', shortName: 'Viaplay', color: '#FF6B00', type: 'flatrate', defaultMonthlyCost: 169,
+    // live-verifierat 2026-07-02 — https://viaplay.se — reklam = 99 ORDINARIE utan bindning
+    // (79 var reklam + 6 mån bindning); total = 749 ordinarie reklamfritt (699 = Total med reklam) (BIN-406)
     tiers: [
-      { id: 'reklam', name: 'Film & Serier med reklam', cost: 79 },
+      { id: 'reklam', name: 'Film & Serier med reklam', cost: 99 },
       { id: 'standard', name: 'Film & Serier', cost: 169 },
       { id: 'medium', name: 'Medium (inkl. sport)', cost: 399, kind: 'sport' },
-      { id: 'total', name: 'Total (all sport)', cost: 699, kind: 'sport' },
+      { id: 'total', name: 'Total (all sport)', cost: 749, kind: 'sport' },
     ],
   },
   // 493 = TMDB:s nuvarande SE-id för SVT (katalog-endpoint 2026-06-20); 520 var
@@ -94,12 +96,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     aliases: [2243],
   },
   {
-    id: 510, name: 'Discovery+', shortName: 'Disc+', color: '#1E3264', type: 'flatrate', defaultMonthlyCost: 89,
+    // live-verifierat 2026-07-02 — https://www.discoveryplus.com/se/sv (nivåstruktur omgjord till 3 nivåer; 'Premium (4K)'/'Entry' finns inte längre som egna SKU:er)
+    id: 510, name: 'Discovery+', shortName: 'Disc+', color: '#1E3264', type: 'flatrate', defaultMonthlyCost: 109,
     tiers: [
-      { id: 'entry', name: 'Entry (1 enhet, reklam)', cost: 49 },
-      { id: 'ads', name: 'Med reklam (Full HD)', cost: 89 },
-      { id: 'premium', name: 'Premium (4K)', cost: 189 },
-      { id: 'sport', name: 'Sport Premium', cost: 349, kind: 'sport' },
+      { id: 'ads', name: 'Underhållning (med reklam)', cost: 59 },
+      { id: 'standard', name: 'Underhållning', cost: 109 },
+      { id: 'sport', name: 'Underhållning + Sport', cost: 179, kind: 'sport' },
     ],
   },
   {
@@ -141,7 +143,9 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // (katalog-endpoint 2026-06-20); 521 / 578 var de gamla. Aliasa de nya (BIN-64).
   // live-verifierat 2026-07-02 — https://www.tele2.se/tv — 99 kr var KAMPANJ (6 mån); ordinarie Streaming Flex = 199 (BIN-406)
   { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497] },
-  { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'flatrate', defaultMonthlyCost: 79, aliases: [517] },
+  // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
+  // numera en hyr-tjänst med medlemsklubb ("Klubben" 49 kr/mån = en gratisfilm + hyrrabatter). (BIN-406)
+  { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'rent', aliases: [517] },
   { id: 35, name: 'Rakuten TV', shortName: 'Rakuten', color: '#BF0000', type: 'rent' },
   { id: 3, name: 'Google Play Movies', shortName: 'Google', color: '#4285F4', type: 'rent' },
   { id: 2, name: 'Apple TV', shortName: 'Apple', color: '#555555', type: 'rent' },

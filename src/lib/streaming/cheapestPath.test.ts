@@ -133,9 +133,9 @@ describe('cheapestPath cascade', () => {
 });
 
 describe('cheapestEntertainmentTier — excludes sport/bundle tiers (BIN-322)', () => {
-  it('picks the cheapest NON-sport tier for Viaplay (reklam 79, not sport 399/699)', () => {
+  it('picks the cheapest NON-sport tier for Viaplay (reklam 99, not sport 399/749)', () => {
     const { cost, tier } = cheapestEntertainmentTier(76);
-    expect(cost).toBe(79);
+    expect(cost).toBe(99);
     expect(tier?.kind).not.toBe('sport');
   });
 
