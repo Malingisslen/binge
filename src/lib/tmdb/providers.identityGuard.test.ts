@@ -57,7 +57,6 @@ const BASELINE: Record<number, ProviderIdentity> = {
     sport: { name: 'Sport Total utan reklam', kind: 'sport' },
   } },
   350: { name: 'Apple TV+', shortName: 'Apple', aliases: [2243], isFree: false, isAds: false, tiers: {} },
-  531: { name: 'Paramount+', shortName: 'P+', aliases: [], isFree: false, isAds: false, tiers: {} },
   510: { name: 'Discovery+', shortName: 'Disc+', aliases: [], isFree: false, isAds: false, tiers: {
     entry: { name: 'Entry (1 enhet, reklam)', kind: null }, ads: { name: 'Med reklam (Full HD)', kind: null },
     premium: { name: 'Premium (4K)', kind: null }, sport: { name: 'Sport Premium', kind: 'sport' },
@@ -65,7 +64,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
   323: { name: 'Crunchyroll', shortName: 'CR', aliases: [1968, 283], isFree: false, isAds: false, tiers: {
     fan: { name: 'Fan', kind: null }, megafan: { name: 'Mega Fan', kind: null },
   } },
-  431: { name: 'SkyShowtime', shortName: 'Sky', aliases: [1773], isFree: false, isAds: false, tiers: {
+  431: { name: 'SkyShowtime', shortName: 'Sky', aliases: [1773, 531], isFree: false, isAds: false, tiers: {
     ads: { name: 'Standard med annonser', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   335: { name: 'YouTube Premium', shortName: 'YT', aliases: [188], isFree: false, isAds: false, tiers: {

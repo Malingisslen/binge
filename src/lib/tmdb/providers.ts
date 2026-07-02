@@ -33,11 +33,12 @@ export interface SwedishProvider {
 
 export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   {
-    id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 149,
+    // live-verifierat 2026-07-02 — https://help.netflix.com/en/node/24926 (SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj)
+    id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
     tiers: [
-      { id: 'basic', name: 'Basic', cost: 109 },
-      { id: 'standard', name: 'Standard', cost: 149 },
-      { id: 'premium', name: 'Premium', cost: 199 },
+      { id: 'basic', name: 'Basic', cost: 129 },
+      { id: 'standard', name: 'Standard', cost: 169 },
+      { id: 'premium', name: 'Premium', cost: 219 },
     ],
   },
   { id: 119, name: 'Amazon Prime Video', shortName: 'Prime', color: '#00A8E1', type: 'flatrate', defaultMonthlyCost: 69 },
@@ -92,7 +93,6 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // 2243 = "Apple TV Amazon Channel" (live-verifierat SE-id 2026-06-10).
     aliases: [2243],
   },
-  { id: 531, name: 'Paramount+', shortName: 'P+', color: '#0064FF', type: 'flatrate', defaultMonthlyCost: 99 },
   {
     id: 510, name: 'Discovery+', shortName: 'Disc+', color: '#1E3264', type: 'flatrate', defaultMonthlyCost: 89,
     tiers: [
@@ -115,13 +115,16 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
-    id: 431, name: 'SkyShowtime', shortName: 'Sky', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 99,
+    // live-verifierat 2026-07-02 — https://www.skyshowtime.com/se (höjning bekräftad feb 2026)
+    id: 431, name: 'SkyShowtime', shortName: 'Sky', color: '#0D1D40', type: 'flatrate', defaultMonthlyCost: 109,
     // 1773 = TMDB:s nuvarande SE-id för SkyShowtime (katalog-endpoint 2026-06-20). (BIN-64)
-    aliases: [1773],
+    // 531 = nedlagda Paramount+ (SE-nedläggning 2022-10-01, uppgick i SkyShowtime — BIN-404);
+    // aliasa hit så gammal sparad Paramount+-data + ev. TMDB-titlar mappar till efterträdaren.
+    aliases: [1773, 531],
     tiers: [
       { id: 'ads', name: 'Standard med annonser', cost: 59 },
-      { id: 'standard', name: 'Standard', cost: 99 },
-      { id: 'premium', name: 'Premium', cost: 149 },
+      { id: 'standard', name: 'Standard', cost: 109 },
+      { id: 'premium', name: 'Premium', cost: 159 },
     ],
   },
   {
@@ -136,7 +139,8 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   },
   // 497 / 517 = TMDB:s nuvarande SE-id:n för Tele2 Play / TriArt Play
   // (katalog-endpoint 2026-06-20); 521 / 578 var de gamla. Aliasa de nya (BIN-64).
-  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 99, aliases: [497] },
+  // live-verifierat 2026-07-02 — https://www.tele2.se/tv — 99 kr var KAMPANJ (6 mån); ordinarie Streaming Flex = 199 (BIN-406)
+  { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497] },
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'flatrate', defaultMonthlyCost: 79, aliases: [517] },
   { id: 35, name: 'Rakuten TV', shortName: 'Rakuten', color: '#BF0000', type: 'rent' },
   { id: 3, name: 'Google Play Movies', shortName: 'Google', color: '#4285F4', type: 'rent' },

@@ -108,10 +108,10 @@ describe('cheapestPath cascade', () => {
   });
 
   it('5b — BIN-322: ranks by cheapest ad-tier, flipping the winner vs list price', () => {
-    // Paramount+ (531) list 99, no tiers → 99. Max (384) list 149 but ads tier 89.
-    // Old defaultMonthlyCost ranking would pick Paramount (99 < 149); the tier-aware
-    // ranking correctly picks Max (89 < 99) and surfaces the ad-tier price + label.
-    const v = cheapestPath({ ...base, subscriptionProviderIds: [531, 384] });
+    // Apple TV+ (350) list 119, no tiers → 119. Max (384) list 149 but ads tier 89.
+    // Old defaultMonthlyCost ranking would pick Apple TV+ (119 < 149); the tier-aware
+    // ranking correctly picks Max (89 < 119) and surfaces the ad-tier price + label.
+    const v = cheapestPath({ ...base, subscriptionProviderIds: [350, 384] });
     expect(v.kind).toBe('subscribe');
     expect(v.providerId).toBe(384);
     expect(v.priceAmount).toBe(89);

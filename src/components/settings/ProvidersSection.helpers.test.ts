@@ -68,8 +68,8 @@ describe('totalMonthlyCost', () => {
   });
   it('uses the live tier price for a chosen tier, ignoring a stale providerCosts entry', () => {
     // A tier user's frozen providerCosts is migrated away; even if a stale 999
-    // lingered, the total tracks the current catalog tier price (Netflix Standard 149).
-    expect(totalMonthlyCost([8], { 8: 999 }, { 8: 'standard' })).toBe(149);
+    // lingered, the total tracks the current catalog tier price (Netflix Standard 169).
+    expect(totalMonthlyCost([8], { 8: 999 }, { 8: 'standard' })).toBe(169);
   });
   it('is 0 for empty selection', () => {
     expect(totalMonthlyCost([], { 8: 109 })).toBe(0);

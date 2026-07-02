@@ -49,7 +49,7 @@ export function parseSearch(raw: string): AskFilter {
   const PROV: [RegExp, number][] = [
     [/netflix/, 8], [/viaplay/, 76], [/disney/, 337],
     [/\bhbo\b|hbo max|\bmax\b(?!\s*(?:\d|två|tva|tre|fyra|fem|sex|sju|åtta|nio|tio|en\s|minut|min\b|timm|poäng|antal|nivå|betyg|gräns))/, 384],
-    [/svt/, 520], [/tv4|cmore|\bc more\b/, 489], [/apple/, 350], [/paramount/, 531],
+    [/svt/, 520], [/tv4|cmore|\bc more\b/, 489], [/apple/, 350],
     [/discovery|dplay/, 510], [/skyshowtime/, 431], [/prime|amazon/, 119], [/crunchyroll/, 323],
   ];
   const pids: number[] = [];

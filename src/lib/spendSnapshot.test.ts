@@ -14,11 +14,11 @@ const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
 
 describe('computeSpendSnapshot (BIN-99)', () => {
   it('splits owned spend into active vs idle by backlog availability', () => {
-    // Netflix(8)=149 has a vill_se title; Viaplay(76)=169 has none → idle.
+    // Netflix(8)=169 has a vill_se title; Viaplay(76)=169 has none → idle.
     const items = [mk({ tmdbId: 1, status: 'vill_se', providers: [8] })];
     const snap = computeSpendSnapshot([8, 76], items, {});
-    expect(snap.totalKr).toBe(149 + 169);
-    expect(snap.activeKr).toBe(149);
+    expect(snap.totalKr).toBe(169 + 169);
+    expect(snap.activeKr).toBe(169);
     expect(snap.idleKr).toBe(169);
     expect(snap.idleProviders.map(p => p.id)).toEqual([76]);
   });
@@ -40,15 +40,17 @@ describe('computeSpendSnapshot (BIN-99)', () => {
   it('excludes free services (0 cost) from spend', () => {
     // SVT Play (520) is free → not counted even though owned.
     const snap = computeSpendSnapshot([520, 8], [mk({ providers: [8] })], {});
-    expect(snap.totalKr).toBe(149);
+    expect(snap.totalKr).toBe(169);
     // And the free service must NOT show up as idle spend (pins the cost<=0 guard).
     expect(snap.idleProviders.some(p => p.id === 520)).toBe(false);
   });
 
   it('sorts idle providers priciest-first', () => {
-    const snap = computeSpendSnapshot([531, 8, 76], [], {}); // none active
-    // Viaplay 169 > Netflix 149 > Paramount+ 99
-    expect(snap.idleProviders.map(p => p.id)).toEqual([76, 8, 531]);
+    // Three DISTINCT catalog prices so the sort is deterministic (Netflix and
+    // Viaplay both 169 post-2026-07, so this uses Netflix/Max/Disney+ instead).
+    const snap = computeSpendSnapshot([337, 8, 384], [], {}); // none active
+    // Netflix 169 > Max 149 > Disney+ 109
+    expect(snap.idleProviders.map(p => p.id)).toEqual([8, 384, 337]);
     expect(snap.activeKr).toBe(0);
     expect(snap.idleKr).toBe(snap.totalKr);
   });

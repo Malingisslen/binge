@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolveProviderMonthlyCost } from './providers';
 
-// Netflix (id 8) has tiers basic 109 / standard 149 / premium 199, default 149.
+// Netflix (id 8) has tiers basic 129 / standard 169 / premium 219, default 169.
 // Prime (id 119) has NO tiers, default 69.
 // SVT (id 520) is free, default 0.
 
@@ -13,7 +13,7 @@ describe('resolveProviderMonthlyCost — live tier pricing', () => {
       providerTiers: { 8: 'premium' },
       providerCosts: { 8: 999 }, // stale/garbage frozen value — must be ignored
     });
-    expect(cost).toBe(199);
+    expect(cost).toBe(219);
   });
 
   it('uses a custom entered cost when no tier is chosen', () => {
@@ -36,7 +36,7 @@ describe('resolveProviderMonthlyCost — live tier pricing', () => {
     ).toBe(130);
     expect(
       resolveProviderMonthlyCost(8, { providerTiers: { 8: 'gone-tier' }, providerCosts: {} }),
-    ).toBe(149); // Netflix default
+    ).toBe(169); // Netflix default
   });
 
   it('resolves an alias id to the canonical provider (TV4 Play 1944 → 489)', () => {
