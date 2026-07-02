@@ -201,12 +201,19 @@ function DashboardSkeleton() {
   // vecka…"-copy direkt — visuell kontinuitet hela vägen från auth-loading
   // genom watchlist-loading till calendar-loading till focal block. Annars
   // skulle vi blinka ett tomt fält först.
+  //
+  // VIKTIGT: skelettet måste vara strukturellt IDENTISKT med Dashboards
+  // loading-gren (focal- OCH filmstrip-skelett) — annars växer kolumnen
+  // plötsligt med ~330px när auth resolverar och allt under hoppar. Det var
+  // "flickret vid start" (2026-07-02): osynligt när hela sidan var långsam,
+  // fullt synligt när resten blev snabbt.
   return (
     <>
       <HemHero focal={null} totalThisWeek={0} hasLibrary={true} isLoading={true} />
       <div className="hem-grid">
         <div>
           <div className="hem-focal-skeleton" aria-hidden="true" />
+          <div className="hem-filmstrip-skeleton" aria-hidden="true" />
         </div>
         <aside className="rail" aria-label="Sidostatistik" aria-hidden="true" />
       </div>
