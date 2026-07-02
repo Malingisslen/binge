@@ -1,4 +1,4 @@
-import { getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { getProvider, resolveProviderMonthlyCost, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import type { WatchlistItem } from '@/types';
 
 // BIN-99 — whole-watchlist streaming spend snapshot. One headline number:
@@ -40,7 +40,8 @@ export function computeSpendSnapshot(
   let totalKr = 0;
   let activeKr = 0;
   const idleProviders: { id: number; name: string; cost: number }[] = [];
-  for (const id of myProviders) {
+  // Canonicalise + dedupe so a legacy alias+canonical pair isn't double-counted (BIN-409).
+  for (const id of canonicalUniqueProviders(myProviders)) {
     const cost = costOf(id, providerCosts, providerTiers);
     if (cost <= 0) continue; // free services (SVT Play) aren't "spend"
     totalKr += cost;

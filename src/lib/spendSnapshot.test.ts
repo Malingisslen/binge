@@ -45,6 +45,14 @@ describe('computeSpendSnapshot (BIN-99)', () => {
     expect(snap.idleProviders.some(p => p.id === 520)).toBe(false);
   });
 
+  it('collapses an alias+canonical pair so a service is not double-counted (BIN-409)', () => {
+    // Legacy user with both Paramount+ (531, now an alias of SkyShowtime) and
+    // SkyShowtime (431) selected — SkyShowtime (109) must be counted once, not 218.
+    const snap = computeSpendSnapshot([531, 431], [], {});
+    expect(snap.totalKr).toBe(109);
+    expect(snap.idleProviders.map(p => p.id)).toEqual([431]);
+  });
+
   it('sorts idle providers priciest-first', () => {
     // Three DISTINCT catalog prices so the sort is deterministic (Netflix and
     // Viaplay both 169 post-2026-07, so this uses Netflix/Max/Disney+ instead).

@@ -74,6 +74,10 @@ describe('totalMonthlyCost', () => {
   it('is 0 for empty selection', () => {
     expect(totalMonthlyCost([], { 8: 109 })).toBe(0);
   });
+  it('collapses an alias+canonical pair so a service is not double-counted (BIN-409)', () => {
+    // 531 (Paramount+, now a SkyShowtime alias) + 431 (SkyShowtime) → 109 once, not 218.
+    expect(totalMonthlyCost([531, 431], {}, {})).toBe(109);
+  });
   it('resolves alias ids against canonical cost keys', () => {
     expect(totalMonthlyCost([1944], { 489: 69 })).toBe(69);
   });

@@ -203,6 +203,15 @@ export function canonicalProviderId(id: number): number {
   return PROVIDER_MAP.get(id)?.id ?? id;
 }
 
+// Canonicalise + de-duplicate a list of provider ids (BIN-409). A user's
+// myProviders can hold a legacy alias id AND its canonical id at once (e.g. 531
+// Paramount+ + 431 SkyShowtime after the merge, or 1759 C More + 489 TV4) — every
+// cost-summing surface must map through this first, or the same service is counted
+// twice. Order-preserving (first occurrence of each canonical id wins).
+export function canonicalUniqueProviders(ids: number[]): number[] {
+  return [...new Set(ids.map(canonicalProviderId))];
+}
+
 // The single source of truth for "what does THIS user pay per month for this
 // provider" (BIN — automatisk prisuppdatering). Every personal-cost surface
 // (Streamingrådgivaren, spend-snapshot, service-value, Settings-totalen,

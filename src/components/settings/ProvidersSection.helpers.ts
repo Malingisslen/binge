@@ -1,4 +1,4 @@
-import { canonicalProviderId, resolveProviderMonthlyCost, type SwedishProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, canonicalUniqueProviders, resolveProviderMonthlyCost, type SwedishProvider } from '@/lib/tmdb/providers';
 
 /** WCAG relative luminance → pick legible foreground for a hex background. */
 export function readableTextColor(hex: string): 'white' | 'ink' {
@@ -44,7 +44,8 @@ export function totalMonthlyCost(
   providerCosts: Record<number, number>,
   providerTiers: Record<number, string> = {},
 ): number {
-  return selectedIds.reduce(
+  // Canonicalise + dedupe so an alias+canonical pair isn't summed twice (BIN-409).
+  return canonicalUniqueProviders(selectedIds).reduce(
     (sum, id) => sum + (resolveProviderMonthlyCost(id, { providerTiers, providerCosts }) ?? 0),
     0,
   );

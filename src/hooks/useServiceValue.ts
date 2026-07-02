@@ -8,7 +8,7 @@
 import { useMemo } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { resolveProviderMonthlyCost, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { watchedForValueFromItems, rollupServiceValue, type ServiceValueRow } from '@/lib/advisor/serviceValue';
 
 export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; monthLabel: string } {
@@ -16,7 +16,8 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
   const { user } = useAuth();
 
   return useMemo(() => {
-    const owned = user?.myProviders ?? [];
+    // Canonicalise + dedupe so an alias+canonical pair isn't valued twice (BIN-409).
+    const owned = canonicalUniqueProviders(user?.myProviders ?? []);
     const now = new Date(nowMs);
     const startMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const endMs = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();

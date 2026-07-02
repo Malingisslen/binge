@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite } from '@/lib/tmdb/client';
-import { getProvider, canonicalProviderId, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, canonicalUniqueProviders, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -148,8 +148,13 @@ export function useSubscriptionAdvisor(
     // icke-relevanta gratis-tjänster upp som "alternativ" vilket förvirrar.
     // Free-bucket (SVT Play, YLE) är alltid relevant eftersom de är licens-
     // finansierade och öppna för alla svenska användare.
-    const myProviderSet = new Set(myProviders);
-    const userHasAdsProvider = myProviders.some(pid => {
+    // Canonicalise + dedupe once: a legacy alias+canonical pair (e.g. 531+431)
+    // would otherwise build two advisories for the same service and double-count
+    // its cost in the total; canonicalising also lets an alias-only saved id
+    // match canonical show provider ids (BIN-409).
+    const canonMyProviders = canonicalUniqueProviders(myProviders);
+    const myProviderSet = new Set(canonMyProviders);
+    const userHasAdsProvider = canonMyProviders.some(pid => {
       const p = getProvider(pid);
       return p?.isAds === true;
     });
@@ -212,7 +217,7 @@ export function useSubscriptionAdvisor(
     }
 
     const providerAdvisories: ProviderAdvisory[] = [];
-    for (const pid of myProviders) {
+    for (const pid of canonMyProviders) {
       const provider = getProvider(pid);
       if (!provider || provider.type !== 'flatrate') continue;
 
