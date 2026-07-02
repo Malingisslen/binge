@@ -88,6 +88,47 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
   });
 });
 
+// Instant week (2026-07): nextAirReadRepair merge-writes the denormalized
+// next-air field group. Mirrors the BIN-93 runtime-backfill precedent: the
+// fields must be whitelisted or every silent read-repair write is rejected.
+describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
+  it('allows a next-air-only merge write', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
+    await assertSucceeds(setDoc(ref, {
+      nextAirDate: '2026-07-09', nextAirCode: 'S2E03', nextAirProvider: 'HBO Max',
+      nextAirUpdatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('allows a digitalReleaseDate-only merge write', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, {
+      digitalReleaseDate: '2026-08-01', nextAirUpdatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('allows clearing next-air fields with nulls', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
+    await assertSucceeds(setDoc(ref, {
+      nextAirDate: null, nextAirCode: null, nextAirProvider: null,
+      nextAirUpdatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('rejects an oversize nextAirProvider', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
+    await assertFails(setDoc(ref, {
+      nextAirProvider: 'x'.repeat(81), nextAirUpdatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('rejects a non-timestamp nextAirUpdatedAt', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
+    await assertFails(setDoc(ref, { nextAirUpdatedAt: 'igår' }, { merge: true }));
+  });
+});
+
 // BIN-164: per-title tags — owner-only, no public/friends read clause (free-text
 // tags can name third parties, so they must NEVER leak like public watchlist items).
 describe('users/{uid}/watchlistTags/{id} (BIN-164)', () => {
