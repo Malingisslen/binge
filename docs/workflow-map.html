@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binge — Workflow Map</title>
+<!--
+  Binge workflow map — single self-contained file, opens offline (double-click).
+  DATA-DRIVEN: to add a flow, add one entry to DATA.actions. No build step, no framework,
+  no external requests.
+
+  Binge is a Next.js PWA + Firebase (Auth, Firestore, Cloud Functions europe-west1, FCM) —
+  NOT a browser extension. The closest analog to an extension's split contexts is FCM's
+  foreground (onMessage, tab open) vs background (service worker, tab closed) branch.
+
+  Styled to the "Schemat" (Direction H) design system: warm off-white paper, saffran accent
+  for the decisive/active, plum reserved for time/today, Albert Sans, flat with 3-6px radii.
+  All hops below verified in a second code pass (src, functions/src) — 2026-07-02.
+-->
+<style>
+  :root{
+    --bg:#FBFAF8; --surface:#FFFFFF; --ink:#242220; --muted:#6E6A64; --faint:#9B968E;
+    --acc:#D99A3E; --acc-deep:#A66B21; --acc-t:#D99A3E22;
+    --plum:#7A4E80; --success:#2A9B6F; --danger:#C24632;
+    --line:#E7E3DC;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font:13.5px/1.5 'Albert Sans',system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .app{display:grid;grid-template-columns:292px 1fr 348px;height:100vh}
+
+  /* ---- left rail ---- */
+  aside{background:var(--surface);border-right:1px solid var(--line);overflow-y:auto;padding:20px 0}
+  aside h1{font-size:16px;font-weight:800;margin:0 20px 2px;letter-spacing:-.01em}
+  aside h1 .dot{color:var(--acc)}
+  aside .sub{font-size:11.5px;color:var(--muted);margin:6px 20px 16px;line-height:1.55}
+  .flow{display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer;
+        padding:11px 20px 11px 16px;border-left:4px solid transparent;color:var(--ink);font:inherit;border-radius:0}
+  .flow:hover{background:#F4F1EB}
+  .flow.active{background:var(--acc-t);border-left-color:var(--acc)}
+  .flow .flabel{font-weight:700;font-size:13px}
+  .flow.active .flabel{color:var(--acc-deep)}
+  .flow .fdesc{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;line-height:1.45}
+  .legend{margin:16px 20px 6px;padding-top:14px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+  .legend div{margin:6px 0;display:flex;align-items:center;gap:9px}
+  .legend .sw{width:24px;height:0;border-top:2.5px solid var(--acc)}
+  .legend .sw.inf{border-top:2.5px dashed var(--faint)}
+  .legend .dot{width:9px;height:9px;border:2px solid var(--acc);border-radius:3px;background:var(--surface)}
+
+  /* ---- centre canvas ---- */
+  main{position:relative;overflow:auto}
+  #canvas{position:relative;min-width:100%;padding:30px 34px 64px}
+  .colhead{position:absolute;top:8px;font-size:10px;font-weight:800;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--plum);white-space:nowrap}
+  #edges{position:absolute;inset:0;pointer-events:none;overflow:visible}
+  .node{position:absolute;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--acc);
+        border-radius:6px;padding:8px 11px;width:176px;box-shadow:0 1px 2px oklch(0 0 0 / 0.04);
+        transition:opacity .15s,border-color .15s,box-shadow .15s;z-index:1}
+  .node .nlabel{font-size:11.5px;font-weight:600;line-height:1.35}
+  .node .npath{font-size:10px;color:var(--faint);margin-top:3px;word-break:break-all;display:none}
+  .node:hover .npath{display:block}
+  .node:hover{z-index:5}
+  .node.dim{opacity:.15}
+  .node.on{border-color:var(--acc);box-shadow:0 2px 10px oklch(0 0 0 / 0.06),0 0 0 1px var(--acc-t)}
+  .node[data-ctx=web-app]{border-left-color:var(--acc)}
+  .node[data-ctx=client-state]{border-left-color:var(--plum)}
+  .node[data-ctx=service-worker]{border-left-color:#5A7C9B}
+  .node[data-ctx=firebase],.node[data-ctx=datastore]{border-left-color:var(--success)}
+  .node[data-ctx=backend-api]{border-left-color:#3E8F5C}
+  .node[data-ctx=external-api]{border-left-color:var(--danger)}
+  .node.on[data-ctx]{border-left-color:var(--acc)}
+
+  .badge-t{fill:#fff;font-size:10px;font-weight:800;text-anchor:middle;dominant-baseline:central}
+
+  /* ---- right panel ---- */
+  section.notes{background:var(--surface);border-left:1px solid var(--line);overflow-y:auto;padding:22px 20px}
+  section.notes h2{font-size:14px;font-weight:800;margin:0 0 2px}
+  section.notes .ndesc{font-size:11.5px;color:var(--muted);margin:6px 0 16px;line-height:1.55}
+  .step{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+  .step .n{flex:0 0 21px;height:21px;border-radius:6px;background:var(--acc);color:#fff;
+           font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .step.inf .n{background:var(--faint)}
+  .step .body{flex:1;min-width:0}
+  .step .route{font-size:11.5px;font-weight:600;line-height:1.4}
+  .step .route .arrow{color:var(--acc-deep);font-weight:400;margin:0 5px}
+  .step .payload{font-size:11.5px;margin-top:3px;color:#4a463f;line-height:1.5}
+  .step .transport{display:inline-block;font-size:10px;color:var(--muted);background:var(--bg);
+                   border:1px solid var(--line);border-radius:3px;padding:1px 6px;margin-top:6px;
+                   font-family:ui-monospace,Menlo,Consolas,monospace}
+  .step .inftag{font-size:9.5px;color:var(--faint);margin-left:6px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .empty{color:var(--muted);font-size:12.5px;margin-top:40px;text-align:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Binge<span class="dot">.</span> Workflow Map</h1>
+    <p class="sub">How data moves between the app, Firebase and the Cloud Functions for each action. Click a flow to trace it.</p>
+    <div id="flowlist"></div>
+    <div class="legend">
+      <div><span class="sw"></span> verified in code</div>
+      <div><span class="sw inf"></span> inferred (not fully traced)</div>
+      <div><span class="dot"></span> component in this flow</div>
+    </div>
+  </aside>
+
+  <main><div id="canvas"><svg id="edges"></svg></div></main>
+
+  <section class="notes">
+    <h2 id="ntitle">Select a flow</h2>
+    <p class="ndesc" id="ndesc">Each step shows what is passed and over which channel.</p>
+    <div id="steps"><p class="empty">Pick an action on the left to trace it.</p></div>
+  </section>
+</div>
+
+<script id="data" type="application/json">
+{
+  "columns": [
+    {"key":"ui",       "label":"SPA / UI",         "types":["web-app"]},
+    {"key":"state",    "label":"Client state",     "types":["client-state"]},
+    {"key":"sw",       "label":"Service worker",   "types":["service-worker"]},
+    {"key":"firebase", "label":"Firebase",         "types":["firebase","datastore"]},
+    {"key":"functions","label":"Cloud Functions",  "types":["backend-api"]},
+    {"key":"external", "label":"External APIs",    "types":["external-api"]}
+  ],
+  "nodes": [
+    {"id":"web-app","label":"Binge SPA (Next.js)","context":"web-app","path":"src/app/layout.tsx"},
+    {"id":"ask-page","label":"“Fråga Binge” page","context":"web-app","path":"src/app/ask/page.tsx"},
+    {"id":"auth-context","label":"AuthContext","context":"client-state","path":"src/contexts/AuthContext.tsx"},
+    {"id":"watchlist-context","label":"WatchlistContext","context":"client-state","path":"src/contexts/WatchlistContext.tsx"},
+    {"id":"local-parser","label":"Deterministic query parser","context":"client-state","path":"src/lib/askBinge/parseSearch.ts"},
+    {"id":"messaging-lib","label":"FCM client wrapper","context":"client-state","path":"src/lib/firebase/messaging.ts"},
+    {"id":"fcm-sw","label":"Push service worker","context":"service-worker","path":"public/firebase-messaging-sw.js"},
+    {"id":"firebase-auth","label":"Firebase Auth","context":"firebase","path":"src/contexts/AuthContext.tsx"},
+    {"id":"firestore","label":"Cloud Firestore","context":"datastore","path":"firestore.rules"},
+    {"id":"cf-triggers","label":"Firestore triggers","context":"backend-api","path":"functions/src/index.ts"},
+    {"id":"cf-offers","label":"streamingOffersRefresh (daily)","context":"backend-api","path":"functions/src/streamingOffers/index.ts"},
+    {"id":"cf-pricedrop","label":"priceDropNotify (daily)","context":"backend-api","path":"functions/src/priceDropNotify/index.ts"},
+    {"id":"cf-sendPush","label":"sendPushToUser","context":"backend-api","path":"functions/src/push.ts"},
+    {"id":"askbinge-parse","label":"askBingeParse (callable)","context":"backend-api","path":"functions/src/askbinge/parse.ts"},
+    {"id":"tmdb-api","label":"TMDB API (sv-SE, region SE)","context":"external-api","path":"src/lib/tmdb/client.ts"},
+    {"id":"gemini-api","label":"Gemini 2.5 Flash","context":"external-api","path":"functions/src/askbinge/parse.ts"},
+    {"id":"motn-api","label":"MOTN — streaming offers API","context":"external-api","path":"functions/src/streamingOffers/*"}
+  ],
+  "actions": [
+    {"id":"flow1","label":"Sign in & hydrate","description":"Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory.","steps":[
+      {"from":"web-app","to":"firebase-auth","payload":"signIn (email / Google)","transport":"Firebase Auth SDK","verified":true},
+      {"from":"firebase-auth","to":"auth-context","payload":"onAuthStateChanged(user)","transport":"Auth listener","verified":true},
+      {"from":"auth-context","to":"firestore","payload":"read users/{uid}","transport":"Firestore read","verified":true},
+      {"from":"auth-context","to":"watchlist-context","payload":"session/profile via React context","transport":"React context","verified":true},
+      {"from":"watchlist-context","to":"firestore","payload":"onSnapshot users/{uid}/watchlist → WatchlistItem docs · second onSnapshot on users/{uid}/watchlistTags (owner-only), joined in memory (BIN-164)","transport":"Firestore listeners","verified":true}
+    ]},
+    {"id":"flow2","label":"Enable push & receive one","description":"User opts in; a Firestore trigger later fires a Cloud Function that pushes — shown as an OS notification (tab closed) or an in-app toast (tab open). The two delivery branches are Binge’s closest analog to an extension’s context split.","steps":[
+      {"from":"web-app","to":"messaging-lib","payload":"request notification permission","transport":"Notifications API","verified":true},
+      {"from":"messaging-lib","to":"fcm-sw","payload":"register SW + getToken()","transport":"FCM SDK","verified":true},
+      {"from":"messaging-lib","to":"firestore","payload":"save FCM token to users/{uid}","transport":"Firestore write","verified":true},
+      {"from":"firestore","to":"cf-triggers","payload":"Firestore trigger fires (friend request, session pick, episode release …)","transport":"Firestore trigger","verified":true},
+      {"from":"cf-triggers","to":"cf-sendPush","payload":"sendPushToUser(uid, {title, body, actionUrl, tag})","transport":"in-process call","verified":true},
+      {"from":"cf-sendPush","to":"fcm-sw","payload":"push message (tab closed)","transport":"FCM / Web Push","verified":true},
+      {"from":"fcm-sw","to":"web-app","payload":"onBackgroundMessage → showNotification; click navigates the tab","transport":"SW notification","verified":true},
+      {"from":"cf-sendPush","to":"messaging-lib","payload":"onMessage (tab open) → in-app toast","transport":"FCM onMessage","verified":true}
+    ]},
+    {"id":"flow3","label":"“Fråga Binge” NL search","description":"A deterministic Swedish/English parser tries first — the LLM only runs when it finds literally zero filter fields and the user is signed in. Gemini output is schema-forced, clamped to a closed vocabulary, cached 24 h, and capped (25/user/day, 2 000/day global).","steps":[
+      {"from":"ask-page","to":"local-parser","payload":"free-text query → regex/keyword parse (mediaType, decade, providers, excludeSeen …)","transport":"method call","verified":true},
+      {"from":"local-parser","to":"askbinge-parse","payload":"[fallback: parsed filter is EMPTY + signed in] httpsCallable askBingeParse {text}","transport":"Cloud Functions callable","verified":true},
+      {"from":"askbinge-parse","to":"firestore","payload":"24 h cache (askBingeCache) + budget docs: 25/user/day, 2 000/day global","transport":"Firestore read/write","verified":true},
+      {"from":"askbinge-parse","to":"gemini-api","payload":"gemini-2.5-flash · JSON-schema-forced response · temperature 0 (“Flash, not Lite — Lite failed the accuracy gate”)","transport":"REST generateContent","verified":true},
+      {"from":"askbinge-parse","to":"ask-page","payload":"{filter: AskFilter, cached} — clamped to closed vocab (validateAndClampFilter); null on failure → help state","transport":"callable response","verified":true},
+      {"from":"ask-page","to":"tmdb-api","payload":"/discover/movie · /discover/tv with parsed filters · region SE, sv-SE · api_key param · max 8 concurrent, one 429 retry","transport":"fetch (TMDB)","verified":true}
+    ]},
+    {"id":"flow4","label":"Track title → price-drop push","description":"Adding a “vill se” movie writes to Firestore; two separate daily jobs do the rest. streamingOffersRefresh fetches offers from MOTN on a strict budget (85/day vs the 100/day free tier) and writes price history — it never pushes. priceDropNotify reads that history and pushes “Prisras” to opted-in users.","steps":[
+      {"from":"web-app","to":"watchlist-context","payload":"addItem(title, status:'vill_se')","transport":"React context","verified":true},
+      {"from":"watchlist-context","to":"firestore","payload":"setDoc users/{uid}/watchlist/{tmdbId} — denormalized effectiveVisibility/isPublic so read rules skip the parent join","transport":"Firestore write (merge)","verified":true},
+      {"from":"cf-offers","to":"firestore","payload":"daily: collectionGroup('watchlist') → intent titles, bounded batch (budget 85, hard cap 90)","transport":"Firestore read","verified":true},
+      {"from":"cf-offers","to":"motn-api","payload":"fetchOffers(tmdbId) — streaming/rental/buy offers","transport":"fetch (MOTN)","verified":true},
+      {"from":"cf-offers","to":"firestore","payload":"write streamingOffers/{tmdbId} + append priceHistory/{tmdbId}.points + streamingHealth/current (admin in-app alert on degradation — NO push)","transport":"Firestore write","verified":true},
+      {"from":"cf-pricedrop","to":"firestore","payload":"daily: watchlist where status=='vill_se' && mediaType=='movie' + priceHistory points → detectPriceDrop · dedup via priceDropNotifyState/{tmdbId}","transport":"Firestore read","verified":true},
+      {"from":"cf-pricedrop","to":"cf-sendPush","payload":"sendPushToUser(uid, {title:'Prisras', body, actionUrl, tag}) — only if notificationSettings.priceDrops === true","transport":"in-process call","verified":true},
+      {"from":"cf-sendPush","to":"fcm-sw","payload":"push notification","transport":"FCM / Web Push","verified":true}
+    ]},
+    {"id":"flow5","label":"Cross-device sync","description":"A watch-state write on one device propagates live to every signed-in tab and device — same onSnapshot listeners as sign-in hydration, no polling.","steps":[
+      {"from":"web-app","to":"firestore","payload":"write users/{uid}/watchlist/{tmdbId} (device A)","transport":"Firestore write","verified":true},
+      {"from":"firestore","to":"watchlist-context","payload":"onSnapshot pushes the change into React state on device B (watchlist + watchlistTags)","transport":"Firestore listener","verified":true}
+    ]}
+  ]
+}
+</script>
+
+<script>
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const canvas = document.getElementById('canvas');
+const svg = document.getElementById('edges');
+const NS = 'http://www.w3.org/2000/svg';
+const nodeEl = {};
+let current = null;
+const COLW = 212, ROW_H = 60, NODE_GAP = 14, TOP = 36, COLGAP = 42;
+const colOf = {};
+DATA.columns.forEach(c => c.types.forEach(t => colOf[t] = c.key));
+
+function layout(){
+  canvas.querySelectorAll('.node,.colhead').forEach(n=>n.remove());
+  const perCol = {};
+  DATA.columns.forEach(c => perCol[c.key] = []);
+  DATA.nodes.forEach(n => (perCol[colOf[n.context]] ||= []).push(n));
+  DATA.columns.forEach((col, ci) => {
+    const x = 34 + ci * (COLW + COLGAP);
+    const head = document.createElement('div');
+    head.className = 'colhead'; head.textContent = col.label; head.style.left = x + 'px';
+    canvas.appendChild(head);
+    let y = TOP;
+    (perCol[col.key]||[]).forEach(n => {
+      const el = document.createElement('div');
+      el.className = 'node'; el.dataset.ctx = n.context; el.dataset.id = n.id;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      el.innerHTML = `<div class="nlabel">${n.label}</div><div class="npath">${n.path}</div>`;
+      canvas.appendChild(el);
+      nodeEl[n.id] = el;
+      y += Math.max(ROW_H, el.offsetHeight + NODE_GAP);
+    });
+  });
+  const cols = DATA.columns.length;
+  canvas.style.minWidth = (34 + cols * (COLW + COLGAP) + 20) + 'px';
+  const maxY = Math.max(...Object.values(nodeEl).map(el => el.offsetTop + el.offsetHeight));
+  canvas.style.minHeight = (maxY + 60) + 'px';
+  sizeSvg();
+  if (current) draw(current);
+}
+function sizeSvg(){
+  svg.setAttribute('width', canvas.scrollWidth);
+  svg.setAttribute('height', canvas.scrollHeight);
+  svg.setAttribute('viewBox', `0 0 ${canvas.scrollWidth} ${canvas.scrollHeight}`);
+}
+function rectOf(id){
+  const el = nodeEl[id];
+  return {x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight};
+}
+function draw(action){
+  svg.innerHTML = '';
+  addDefs();
+  const active = new Set();
+  action.steps.forEach(s => { active.add(s.from); active.add(s.to); });
+  Object.entries(nodeEl).forEach(([id,el]) => {
+    el.classList.toggle('dim', !active.has(id));
+    el.classList.toggle('on', active.has(id));
+  });
+  const pairCount = {};
+  action.steps.forEach((s, i) => {
+    const a = rectOf(s.from), b = rectOf(s.to);
+    const key = [s.from, s.to].sort().join('|');
+    const occ = (pairCount[key] = (pairCount[key]||0) + 1) - 1;
+    drawEdge(a, b, i+1, s.verified, occ);
+  });
+}
+function drawEdge(a, b, num, verified, occ){
+  const rightward = (b.x + b.w/2) >= (a.x + a.w/2);
+  const x1 = rightward ? a.x + a.w : a.x;
+  const y1 = a.y + a.h/2;
+  const x2 = rightward ? b.x : b.x + b.w;
+  const y2 = b.y + b.h/2;
+  const dx = Math.max(40, Math.abs(x2 - x1) * 0.5);
+  const bow = occ * 24 * (occ % 2 ? 1 : -1);
+  const c1x = x1 + (rightward ? dx : -dx), c2x = x2 + (rightward ? -dx : dx);
+  const c1y = y1 + bow, c2y = y2 + bow;
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', verified ? 'var(--acc)' : 'var(--faint)');
+  path.setAttribute('stroke-width', '1.8');
+  path.setAttribute('opacity', '.9');
+  if (!verified) path.setAttribute('stroke-dasharray', '5 4');
+  path.setAttribute('marker-end', verified ? 'url(#arrow)' : 'url(#arrowInf)');
+  svg.appendChild(path);
+  const t = 0.5;
+  const bx = bez(x1, c1x, c2x, x2, t), by = bez(y1, c1y, c2y, y2, t);
+  const g = document.createElementNS(NS, 'g');
+  const r = document.createElementNS(NS, 'rect');
+  r.setAttribute('x', bx-9); r.setAttribute('y', by-9);
+  r.setAttribute('width', 18); r.setAttribute('height', 18); r.setAttribute('rx', 5);
+  r.setAttribute('fill', verified ? '#D99A3E' : '#9B968E');
+  r.setAttribute('stroke', '#fff'); r.setAttribute('stroke-width', '1.5');
+  const txt = document.createElementNS(NS, 'text');
+  txt.setAttribute('x', bx); txt.setAttribute('y', by+0.5); txt.setAttribute('class', 'badge-t');
+  txt.textContent = num;
+  g.appendChild(r); g.appendChild(txt); svg.appendChild(g);
+}
+const bez = (p0,p1,p2,p3,t)=>{const u=1-t;return u*u*u*p0+3*u*u*t*p1+3*u*t*t*p2+t*t*t*p3;};
+function addDefs(){
+  svg.insertAdjacentHTML('afterbegin', `<defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#D99A3E"/></marker>
+    <marker id="arrowInf" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#9B968E"/></marker>
+  </defs>`);
+}
+function showNotes(action){
+  document.getElementById('ntitle').textContent = action.label;
+  document.getElementById('ndesc').textContent = action.description;
+  const wrap = document.getElementById('steps');
+  wrap.innerHTML = '';
+  action.steps.forEach((s, i) => {
+    const from = DATA.nodes.find(n=>n.id===s.from), to = DATA.nodes.find(n=>n.id===s.to);
+    const div = document.createElement('div');
+    div.className = 'step' + (s.verified ? '' : ' inf');
+    div.innerHTML = `
+      <div class="n">${i+1}</div>
+      <div class="body">
+        <div class="route">${from?from.label:s.from}<span class="arrow">→</span>${to?to.label:s.to}
+          ${s.verified?'':'<span class="inftag">inferred</span>'}</div>
+        <div class="payload">${s.payload}</div>
+        <div class="transport">${s.transport}</div>
+      </div>`;
+    wrap.appendChild(div);
+  });
+}
+const list = document.getElementById('flowlist');
+DATA.actions.forEach(a => {
+  const b = document.createElement('button');
+  b.className = 'flow';
+  b.innerHTML = `<span class="flabel">${a.label}</span><span class="fdesc">${a.description.split('.')[0]}.</span>`;
+  b.onclick = () => select(a, b);
+  list.appendChild(b);
+});
+function select(a, btn){
+  current = a;
+  document.querySelectorAll('.flow').forEach(f=>f.classList.remove('active'));
+  btn.classList.add('active');
+  draw(a); showNotes(a);
+}
+layout();
+window.addEventListener('resize', () => { sizeSvg(); if (current) draw(current); });
+select(DATA.actions[0], list.firstChild);
+</script>
+</body>
+</html>
