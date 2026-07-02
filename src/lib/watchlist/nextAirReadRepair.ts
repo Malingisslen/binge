@@ -53,6 +53,17 @@ export interface NextAirUpdate {
   delta: Partial<Record<RepairableKey, string | null>>;
 }
 
+// Ren payload-byggare — testbar utan Firebase. `stamp` är serverTimestamp()-
+// sentineln vid riktig skrivning. INVARIANTEN (spec-villkor 2): payloaden får
+// ALDRIG innehålla updatedAt — "Fortsätt titta" sorterar på den. Testet låser
+// nyckeluppsättningen så en regression i flush inte kan smyga förbi CI.
+export function buildRepairPayload(
+  delta: Partial<Record<RepairableKey, string | null>>,
+  stamp: unknown,
+): Record<string, unknown> {
+  return { ...delta, nextAirUpdatedAt: stamp };
+}
+
 export function collectNextAirUpdates(
   items: WatchlistItem[],
   shows: TMDBTVShow[],
@@ -97,8 +108,8 @@ export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]):
       for (const u of pending.slice(i, i + 450)) {
         batch.set(
           doc(db, 'users', uid, 'watchlist', String(u.tmdbId)),
-          // OBS: ALDRIG updatedAt här — se modulhuvudet.
-          { ...u.delta, nextAirUpdatedAt: serverTimestamp() },
+          // OBS: ALDRIG updatedAt här — payload-byggaren är testlåst på det.
+          buildRepairPayload(u.delta, serverTimestamp()),
           { merge: true },
         );
       }

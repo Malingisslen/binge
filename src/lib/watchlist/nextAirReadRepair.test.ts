@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeNextAirFields, computeMovieReleaseFields, nextAirDelta, collectNextAirUpdates,
+  buildRepairPayload,
 } from './nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
 
@@ -61,6 +62,16 @@ describe('nextAirDelta', () => {
     expect(d).not.toBeNull();
     expect(Object.keys(d!)).not.toContain('updatedAt');
     expect(Object.keys(d!)).not.toContain('nextAirUpdatedAt');
+  });
+});
+
+describe('buildRepairPayload', () => {
+  it('contains exactly the delta keys + nextAirUpdatedAt — NEVER updatedAt (spec-villkor 2)', () => {
+    const stamp = Symbol('serverTimestamp');
+    const payload = buildRepairPayload({ nextAirDate: '2026-07-09', nextAirCode: 'S02E03' }, stamp);
+    expect(Object.keys(payload).sort()).toEqual(['nextAirCode', 'nextAirDate', 'nextAirUpdatedAt']);
+    expect(payload.nextAirUpdatedAt).toBe(stamp);
+    expect('updatedAt' in payload).toBe(false);
   });
 });
 
