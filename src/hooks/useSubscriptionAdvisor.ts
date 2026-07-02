@@ -231,7 +231,9 @@ export function useSubscriptionAdvisor(
       if (hasActiveShow) status = 'active';
       else if (hasUpcomingShow) status = 'upcoming';
       else if (hasWillSeeAnchor) status = 'upcoming';
-      else if (provider.isFree) status = 'free';
+      // A 0-cost service is free to the user (SVT via isFree; ad-funded AVOD like
+      // Pluto TV via cost 0) — never a "pause to save" candidate (BIN-410).
+      else if (provider.isFree || (provider.defaultMonthlyCost ?? 0) === 0) status = 'free';
       else status = 'pause';
 
       const dates = followingAnchors

@@ -143,6 +143,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // (katalog-endpoint 2026-06-20); 521 / 578 var de gamla. Aliasa de nya (BIN-64).
   // live-verifierat 2026-07-02 — https://www.tele2.se/tv — 99 kr var KAMPANJ (6 mån); ordinarie Streaming Flex = 199 (BIN-406)
   { id: 521, name: 'Tele2 Play', shortName: 'Tele2', color: '#00A0D6', type: 'flatrate', defaultMonthlyCost: 199, aliases: [497] },
+  // Pluto TV (TMDB SE-id 300, live-verifierat 2026-07-02) — gratis reklamfinansierad AVOD;
+  // ersatte Viafree i SE 2022 (Lyxfällan/Paradise Hotel m.m., 70+ kanaler). isAds driver
+  // advisor-ads-bucketen; defaultMonthlyCost 0 → advisor ger 'free'-status (aldrig paus-
+  // kandidat). Ligger MEDVETET inte i FREE_PUBLIC_PROVIDER_IDS (isFree) — det lagret är för
+  // skattefinansierad public service (SVT), inte kommersiellt AVOD (BIN-410).
+  { id: 300, name: 'Pluto TV', shortName: 'Pluto', color: '#FFE100', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
   // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
   // numera en hyr-tjänst med medlemsklubb ("Klubben" 49 kr/mån = en gratisfilm + hyrrabatter). (BIN-406)
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'rent', aliases: [517] },

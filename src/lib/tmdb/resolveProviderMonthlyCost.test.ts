@@ -53,6 +53,10 @@ describe('resolveProviderMonthlyCost — live tier pricing', () => {
     expect(resolveProviderMonthlyCost(520, { providerTiers: {}, providerCosts: {} })).toBe(0);
   });
 
+  it('returns 0 for Pluto TV (free ad-funded AVOD, defaultMonthlyCost 0)', () => {
+    expect(resolveProviderMonthlyCost(300, { providerTiers: {}, providerCosts: {} })).toBe(0);
+  });
+
   it('returns null for an unknown provider id', () => {
     expect(resolveProviderMonthlyCost(999999, { providerTiers: {}, providerCosts: {} })).toBeNull();
   });

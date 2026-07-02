@@ -71,6 +71,7 @@ const BASELINE: Record<number, ProviderIdentity> = {
     student: { name: 'Student', kind: null }, solo: { name: 'Enskild', kind: null }, family: { name: 'Familj', kind: null },
   } },
   521: { name: 'Tele2 Play', shortName: 'Tele2', aliases: [497], isFree: false, isAds: false, tiers: {} },
+  300: { name: 'Pluto TV', shortName: 'Pluto', aliases: [], isFree: false, isAds: true, tiers: {} },
   578: { name: 'TriArt Play', shortName: 'TriArt', aliases: [517], isFree: false, isAds: false, tiers: {} },
   35: { name: 'Rakuten TV', shortName: 'Rakuten', aliases: [], isFree: false, isAds: false, tiers: {} },
   3: { name: 'Google Play Movies', shortName: 'Google', aliases: [], isFree: false, isAds: false, tiers: {} },
