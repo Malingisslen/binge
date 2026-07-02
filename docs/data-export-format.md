@@ -44,7 +44,7 @@ Filen är en JSON med följande top-level-struktur (se
 | Fält | Källa | Innehåll |
 |------|-------|----------|
 | `profile` | `users/{uid}` | displayName, email, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerTiers, providerPauses, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt |
-| `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, notes, progress (TV), rewatchCount, providers, genreIds, tmdbStatus |
+| `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, notes, progress (TV), rewatchCount, genreIds, visibility. Plus TMDB-metadata cachead som bekvämlighet (denormaliserad; ingår i exporten): title, posterPath, releaseYear, totalSeasons, tmdbStatus, runtime, providers, providersCheckedAt, nextAirDate, nextAirCode, nextAirProvider, nextAirUpdatedAt, digitalReleaseDate |
 | `watchlistTags` | `users/{uid}/watchlistTags/{tmdbId}` | Dina egna fritext-taggar per titel (privata; egen ägar-skyddad subcollection) |
 | `episodeProgress` | `users/{uid}/episodeProgress/{tmdbId}` | Watched-flagga per avsnitt |
 | `notInterested` | `users/{uid}/notInterested/{tmdbId}` | Gömda titlar från rekommendationer |
