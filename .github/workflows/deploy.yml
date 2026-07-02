@@ -72,6 +72,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Workflow-map freshness (same check as ci.yml — deploy is the only
+      # gate on direct pushes to main).
+      - name: Workflow map paths must exist
+        run: node scripts/check-workflow-map.mjs
+
       - name: Test
         run: npm test
 

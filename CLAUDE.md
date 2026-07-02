@@ -448,3 +448,12 @@ kunna testas utan Firebase-imports i test-miljön (se
 - **Sprint 3** — Growth + polish (SEO, sitemap, Schema.org, UGC moderation, onboarding)
 - **Sprint 4** — Compliance + security (GDPR export, auth hardening, session/invite-token security)
 - **Sprint 5** — Docs + DX (pågående)
+
+## Workflow map freshness
+
+`docs/workflow-map.html` (interactive, JSON-driven) documents the PWA/Firebase flows.
+CI + deploy fail if a path it references stops existing (`node scripts/check-workflow-map.mjs`).
+A PostToolUse hook stamps `.claude/state/workflow-map-stale.json` when mapped code is edited.
+**If that flag exists:** re-trace ONLY the flows whose nodes match the flag's `triggers`,
+update the map's `<script id="data">` JSON (nothing else), run the linter, delete the flag,
+commit the map. Don't rebuild the map; don't ignore the flag.

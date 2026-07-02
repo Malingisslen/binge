@@ -48,6 +48,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Workflow-map freshness: every path referenced by docs/workflow-map.html
+      # must still exist (renames/deletions). Semantic drift is handled by
+      # .claude/hooks/map-freshness.mjs. No deps needed.
+      - name: Workflow map paths must exist
+        run: node scripts/check-workflow-map.mjs
+
       - name: Test
         run: npm test
 
