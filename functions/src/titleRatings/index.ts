@@ -41,19 +41,26 @@ async function notifyOmdbBudgetApproaching(): Promise<void> {
 }
 
 export const titleRatings = onCall(
-  { region: 'europe-west1', secrets: [OMDB_API_KEY, ADMIN_UID] },
+  // BIN-361: App Check ENFORCED. This is the real fix for the OMDb quota-drain
+  // vector — no auth exists on this public backfill, so the only way to stop an
+  // anonymous actor from draining the 900/day budget with many distinct uncached
+  // ids is to require a first-party App Check token. The web client mints one
+  // (initAppCheck) and httpsCallable attaches it automatically; the callable is
+  // invoked only after init, so real calls carry a token. Unattested calls are
+  // rejected by the runtime before reaching this handler. The client degrades
+  // gracefully on rejection (useTitleRatings: catch → render nothing, self-heals
+  // on a later visit). Preceded by a monitoring period (request.app logging).
+  { region: 'europe-west1', secrets: [OMDB_API_KEY, ADMIN_UID], enforceAppCheck: true },
   async (request): Promise<RatingsDoc> => {
-    // Public backfill: no auth. Clients read the cached doc directly; this runs
-    // only on a cache miss to populate it, behind a hard global daily cap.
+    // Public backfill: no user auth (App Check gates it instead). Clients read the
+    // cached doc directly; this runs only on a cache miss to populate it, behind a
+    // hard global daily cap.
     const imdbId = String((request.data as { imdbId?: unknown })?.imdbId ?? '');
     if (!IMDB_RE.test(imdbId)) throw new HttpsError('invalid-argument', 'Ogiltigt IMDb-id.');
 
-    // BIN-361: App Check MONITORING (not enforcement). request.app is populated
-    // when a valid App Check token rode along, undefined otherwise — logging it
-    // lets us measure the verified rate of REAL titleRatings calls before ever
-    // flipping enforceAppCheck. A callable is invoked after the client has minted
-    // its token, so this rate should be high (unlike cold-load Firestore reads).
-    // Rejects nothing; safe to ship.
+    // Coverage log retained: with enforcement on, request.app is always populated
+    // here (unattested calls never reach the handler), but the line stays as a
+    // cheap invariant check + audit trail of real backfills.
     logger.info('titleRatings: appcheck-coverage', { appCheckVerified: !!request.app });
 
     const db = getFirestore();
