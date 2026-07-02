@@ -1,21 +1,9 @@
-import { getProvider } from '@/lib/tmdb/providers';
 import { formatEpisodeCode } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { pickSwedishDigitalRelease } from './releaseDate';
-import type { TMDBTVShow, TMDBEpisode, TMDBMovie, TMDBProviderData } from '@/types';
+import { streamingProviderName } from './nextAir';
+import type { TMDBTVShow, TMDBEpisode, TMDBMovie } from '@/types';
 import type { CalendarEntry } from './types';
-
-/**
- * Provider-policy för kalenderns metarader (H3): visa var titeln STREAMAS när
- * TMDB vet det — flatrate, free eller ads (i den ordningen). Rent/buy räknas
- * inte ("kan köpas" är inte "sänds på"). Saknar TMDB SE-data helt lämnas
- * provider tom; konsumenterna (EventCard, LaterThisWeek) visar då bara
- * dag · avsnittskod — det är datagränsen, inte en bugg.
- */
-function streamingProviderName(data: TMDBProviderData | undefined): string | undefined {
-  const p = data?.flatrate?.[0] ?? data?.free?.[0] ?? data?.ads?.[0];
-  return p ? (getProvider(p.provider_id)?.shortName ?? p.provider_name) : undefined;
-}
 
 export interface SeasonDatum {
   showId: number;

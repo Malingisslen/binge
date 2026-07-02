@@ -3,8 +3,11 @@
 // Extracted from useSubscriptionAdvisor.ts so unit tests can import them
 // without pulling in Firebase/React Query/Auth dependencies.
 
-import { formatEpisodeCode, todayIso } from '@/lib/utils';
 import { isEndedStatus } from '@/lib/airingState';
+
+// Hoistad till lib/calendar/nextAir (instant week 2026-07) — re-exporteras
+// här så befintliga imports + tester fortsätter fungera oförändrat.
+export { getNextAirInfo } from '@/lib/calendar/nextAir';
 import type {
   TMDBTVShow,
   ProviderAdvisory,
@@ -126,27 +129,6 @@ export function findIdleNextCheckDate(
   for (const ap of activePauses) if (ap.resumeAt) candidates.push(ap.resumeAt);
   candidates.sort();
   return candidates[0] ?? null;
-}
-
-export function getNextAirInfo(show: TMDBTVShow): { date: string | null; code: string | null } {
-  if (show.next_episode_to_air?.air_date) {
-    const ep = show.next_episode_to_air;
-    return {
-      date: ep.air_date,
-      code: formatEpisodeCode(ep.season_number, ep.episode_number),
-    };
-  }
-  const now = todayIso();
-  const futureSeason = show.seasons
-    ?.filter(s => s.air_date && s.air_date > now && s.season_number > 0)
-    .sort((a, b) => a.air_date.localeCompare(b.air_date))[0];
-  if (futureSeason?.air_date) {
-    return {
-      date: futureSeason.air_date,
-      code: formatEpisodeCode(futureSeason.season_number, 1),
-    };
-  }
-  return { date: null, code: null };
 }
 
 // Vilka tmdb-ids rådgivaren ska hämta TV-detaljer för: following-TV +
