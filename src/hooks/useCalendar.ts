@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite, getTVSeason, getMovieLite } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { buildCalendarEntries, buildMovieEntries } from '@/lib/calendar/buildEntries';
+import { collectNextAirUpdates, flushNextAirWrites } from '@/lib/watchlist/nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie } from '@/types';
 
 // CalendarEntry-modellen bor i @/lib/calendar/types (diskriminerad union över
@@ -30,7 +32,8 @@ export interface UseCalendarResult {
 
 export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalendarResult {
   const enabled = opts.enabled ?? true;
-  const { getByStatus } = useWatchlist();
+  const { getByStatus, items } = useWatchlist();
+  const { uid } = useAuth();
   // Kalendern visar avsnitt för alla serier du följer ('mina') — inklusive
   // ej påbörjade (premiärbevakning är ett kärnvärde). Filmer i 'vill_se'
   // bidrar med digitala släppdatum längre ner.
@@ -142,6 +145,19 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   );
 
   const moviesPending = movieIds.length > 0 && movieQueries.some(q => q.isPending);
+
+  // Instant week (2026-07): ENDA anropsplatsen för next-air read-repair.
+  // Debounce 1200 ms koalescerar fan-out-bursten till en batch; effekten
+  // re-körs när fler shows/movies löser och omplanerar med större mängd.
+  // Session-dedupe + no-op-diff bor i nextAirReadRepair. Avmontering
+  // avbryter pending flush — best-effort, nästa besök reparerar.
+  useEffect(() => {
+    if (!uid || !enabled) return;
+    const updates = collectNextAirUpdates(items, shows, movies);
+    if (updates.length === 0) return;
+    const t = setTimeout(() => { void flushNextAirWrites(uid, updates); }, 1200);
+    return () => clearTimeout(t);
+  }, [uid, enabled, items, shows, movies]);
 
   const entries: CalendarEntry[] = useMemo(() => {
     return [

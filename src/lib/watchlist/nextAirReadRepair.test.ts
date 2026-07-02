@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  computeNextAirFields, computeMovieReleaseFields, nextAirDelta,
+  computeNextAirFields, computeMovieReleaseFields, nextAirDelta, collectNextAirUpdates,
 } from './nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
 
@@ -61,5 +61,27 @@ describe('nextAirDelta', () => {
     expect(d).not.toBeNull();
     expect(Object.keys(d!)).not.toContain('updatedAt');
     expect(Object.keys(d!)).not.toContain('nextAirUpdatedAt');
+  });
+});
+
+describe('collectNextAirUpdates', () => {
+  const show = showWith({
+    next_episode_to_air: { air_date: '2026-07-09', season_number: 2, episode_number: 3 } as TMDBTVShow['next_episode_to_air'],
+  });
+  it('emits a delta for a stale item and nothing for a fresh one', () => {
+    const stale = baseItem({ tmdbId: 1399 });
+    const fresh = baseItem({ tmdbId: 42, nextAirDate: null, nextAirCode: null, nextAirProvider: null });
+    const freshShow = showWith({ id: 42 });
+    const updates = collectNextAirUpdates([stale, fresh], [show, freshShow], []);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].tmdbId).toBe(1399);
+    expect(updates[0].delta.nextAirDate).toBe('2026-07-09');
+  });
+  it('ignores shows not in the library (idempotens: stabil show → noll writes)', () => {
+    expect(collectNextAirUpdates([], [show], [])).toHaveLength(0);
+    // Upprepad resolution av samma redan-reparerade item → noll deltas varje gång.
+    const repaired = baseItem({ tmdbId: 1399, nextAirDate: '2026-07-09', nextAirCode: 'S02E03', nextAirProvider: null });
+    expect(collectNextAirUpdates([repaired], [show], [])).toHaveLength(0);
+    expect(collectNextAirUpdates([repaired], [show], [])).toHaveLength(0);
   });
 });
