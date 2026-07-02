@@ -36,7 +36,13 @@ export function initAppCheck(): Promise<void> {
     let appMod: typeof import('@/lib/firebase/config');
     try {
       [mod, appMod] = await Promise.all([
-        import('firebase/app-check'),
+        // webpackPrefetch: låt webbläsaren idle-hämta chunken direkt efter
+        // sidladdning så awaiten i AuthContext oftast är cache-träff även på
+        // kall load. OBS: init-ORDNINGEN (await initAppCheck() FÖRE
+        // onAuthStateChanged) är lastbärande och får inte parallelliseras —
+        // se kommentaren överst i filen (hang om providern inte är
+        // registrerad när enforcement är på). Granskad + blockerad 2026-07-02.
+        import(/* webpackPrefetch: true */ 'firebase/app-check'),
         import('@/lib/firebase/config'),
       ]);
     } catch (err) {

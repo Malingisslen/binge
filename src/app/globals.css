@@ -2299,3 +2299,11 @@ button { font: inherit; cursor: pointer; }
    border-rule, etc.) — these resolve to the new oklch values via the
    tailwind.config.ts. The names below are kept for any inline styles or
    third-party code that referenced the old hex literals. */
+
+/* Instant week (2026-07): mjuk intoning när skelett byts mot innehåll på Hem.
+   Endast opacity (ingen transform) — noll CLS-påverkan. */
+@keyframes hem-settle {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.hem-settle { animation: hem-settle 180ms ease-out both; }

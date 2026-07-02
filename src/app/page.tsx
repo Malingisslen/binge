@@ -274,11 +274,11 @@ function Dashboard() {
   const detailLoading = watchlistLoading || calendarLoading;
 
   const detailBlock = (
-    <>
+    <div className="hem-settle">
       <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
       <ContinueWatchingTile entries={continueWatching} />
       <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
-    </>
+    </div>
   );
 
   return (
@@ -300,7 +300,9 @@ function Dashboard() {
               // under fylls i när resten av vattenfallet landat; tills dess en
               // filmstrip-skeleton så höjden hålls stabil (ingen CLS-hopp).
               <>
-                <HemFocal entry={shownFocal} />
+                <div className="hem-settle">
+                  <HemFocal entry={shownFocal} />
+                </div>
                 {detailLoading ? (
                   <div className="hem-filmstrip-skeleton" aria-hidden="true" />
                 ) : (
