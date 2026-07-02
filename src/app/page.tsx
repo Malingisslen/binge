@@ -215,7 +215,12 @@ function DashboardSkeleton() {
           <div className="hem-focal-skeleton" aria-hidden="true" />
           <div className="hem-filmstrip-skeleton" aria-hidden="true" />
         </div>
-        <aside className="rail" aria-label="Sidostatistik" aria-hidden="true" />
+        {/* Rail-platshållare — utan dem poppar hela högerspalten in när auth
+            resolverar och Dashboard monterar sina tiles (flicker-fix). */}
+        <aside className="rail" aria-label="Sidostatistik" aria-hidden="true">
+          <div className="hem-tile-skeleton" />
+          <div className="hem-tile-skeleton" />
+        </aside>
       </div>
     </>
   );
@@ -287,15 +292,25 @@ function Dashboard() {
   // löst") lämnas ORÖRD i useCalendar för rådgivar-konsumenterna
   // (useUpcomingShowsForAdvisor) som förlitar sig på dess strikta betydelse.
   const heroLoading = watchlistLoading || (!shownFocal && calendarLoading);
-  // Detaljraderna (senare i veckan / fortsätt titta / backlog) behöver KOMPLETT
-  // kalenderdata (fasta datum + aireade avsnitt) — de fylls i när hela
-  // vattenfallet landat, medan focal-kortet redan syns ovanför.
   const detailLoading = watchlistLoading || calendarLoading;
 
+  // Progressiva detaljrader (flicker-fix 2026-07-02): "Senare i veckan"
+  // bygger på samma seeds/effectiveEntries som heron och backloggen behöver
+  // bara watchlisten — ENDAST "Fortsätt titta" kräver hela vattenfallet
+  // (aired-historik, live-only). Tidigare väntade alla tre raderna på full
+  // load → rubriker + posterrader poppade in ~8 s efter att sidan såg klar
+  // ut och sköt ner allt under sig. Nu: en sammanhängande reveal ihop med
+  // heron; Fortsätt titta byter skelett→rad PÅ PLATS när fan-outen landat.
   const detailBlock = (
     <div className="hem-settle">
-      <LaterThisWeek entries={calendarEntries} excludeKey={focalKey} />
-      <ContinueWatchingTile entries={continueWatching} />
+      <LaterThisWeek entries={effectiveEntries} excludeKey={focalKey} />
+      {detailLoading ? (
+        <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+      ) : (
+        <div className="hem-settle">
+          <ContinueWatchingTile entries={continueWatching} />
+        </div>
+      )}
       <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
     </div>
   );
@@ -315,18 +330,14 @@ function Dashboard() {
         <div className="hem-grid">
           <div>
             {shownFocal ? (
-              // Vi har nästa avsnitt → visa focal-kortet direkt. Detaljraderna
-              // under fylls i när resten av vattenfallet landat; tills dess en
-              // filmstrip-skeleton så höjden hålls stabil (ingen CLS-hopp).
+              // Vi har nästa avsnitt → visa focal-kortet + detaljraderna
+              // direkt (seeds bär Senare i veckan; Fortsätt titta har eget
+              // in-place-skelett tills aired-datat landat).
               <>
                 <div className="hem-settle">
                   <HemFocal entry={shownFocal} />
                 </div>
-                {detailLoading ? (
-                  <div className="hem-filmstrip-skeleton" aria-hidden="true" />
-                ) : (
-                  detailBlock
-                )}
+                {detailBlock}
               </>
             ) : detailLoading ? (
               // Ingen focal än + fortfarande laddning: reservera utrymme för

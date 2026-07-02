@@ -2307,3 +2307,14 @@ button { font: inherit; cursor: pointer; }
   to { opacity: 1; }
 }
 .hem-settle { animation: hem-settle 180ms ease-out both; }
+
+/* Flicker-fix (2026-07-02): rail-skelett för auth-fasen. DashboardSkeletons
+   högerkolumn var TOM medan Dashboard direkt renderar 4 tiles → hela
+   högerspalten poppade in när auth resolverade. Två diskreta platshållare
+   (samma kant/radie som .tile) håller spaltens form tills tiles landar. */
+.hem-tile-skeleton {
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  min-height: 96px;
+  background: var(--surface);
+}
