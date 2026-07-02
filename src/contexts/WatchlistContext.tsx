@@ -40,6 +40,8 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     addedAt: toDate(data.addedAt),
     updatedAt: toDate(data.updatedAt),
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
+    // BIN-349: lazy — old docs have none; consumers fall back to updatedAt.
+    ratedAt: data.ratedAt ? toDate(data.ratedAt) : null,
   };
 }
 
@@ -204,6 +206,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
+    // BIN-349: addItem is ALSO a merge-write re-mark path (useMarkSeen /
+    // StatusButton / QuickAddButton re-mark an in-library title, passing
+    // rating: current?.rating). So compare against the current rating and stamp
+    // ratedAt only on a genuinely new/changed rating — a blind stamp would
+    // re-bump recency on every re-mark, the exact drift this fix removes.
+    const currentForRating = items.find(i => i.tmdbId === item.tmdbId);
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
     //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
     //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
@@ -235,12 +243,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       addedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
+      // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this
+      // call — covers pre-rated CSV imports (current undefined) while NOT bumping
+      // recency when a re-mark carries the unchanged current rating. Omit the key
+      // otherwise so the merge preserves any existing ratedAt.
+      ...(item.rating != null && item.rating !== (currentForRating?.rating ?? null)
+        ? { ratedAt: serverTimestamp() }
+        : {}),
     }, { merge: true });
     trackEvent('title_added_watchlist', { mediaType: item.mediaType, status: item.status });
     if (fireFirstNow) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, user?.defaultVisibility]);
+  }, [uid, user?.defaultVisibility, items]);
 
   const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
@@ -298,7 +313,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // defense-in-depth bakom firestore.rules-gränsen) så ett buggigt anrop aldrig
     // skickar ett värde reglerna nekar.
     const safeRating = rating == null ? null : Math.max(0, Math.min(5, rating));
-    await setDoc(ref, { rating: safeRating, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+    // BIN-349: stamp ratedAt on set/change; clear to null on unset so a stale
+    // rating-recency can't survive a cleared rating (the exact drift this fixes).
+    await setDoc(ref, {
+      rating: safeRating,
+      ratedAt: safeRating == null ? null : serverTimestamp(),
+      ...visFields,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
 
   const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {

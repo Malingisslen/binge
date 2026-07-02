@@ -71,7 +71,8 @@ export interface Seed {
   rating: number;
   /** Display title from WatchlistItem — used in row headings ("Liknar {title}"). */
   title: string;
-  /** Timestamp from WatchlistItem.updatedAt — used by row 9 recency scoring. */
+  /** When the user rated the title — WatchlistItem.ratedAt, falling back to
+   *  updatedAt for items rated before ratedAt existed (BIN-349). Row-9 recency. */
   ratedAt: Date | null;
 }
 

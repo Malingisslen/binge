@@ -75,6 +75,11 @@ export interface WatchlistItem {
   // free text captures third-party personal data ("med mamma"). Default [] when
   // a title has no tags. Consumers read item.tags; writes go via updateTags.
   tags?: string[];
+  // BIN-349: when the user set/changed the rating (serverTimestamp), written by
+  // updateRating/addItem. The "din senaste 5★" rec anchor + taste-recency read
+  // this instead of updatedAt (which ANY edit bumps). Optional/lazy: old items
+  // have none → consumers fall back to updatedAt. Cleared to null when rating unset.
+  ratedAt?: Date | null;
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;

@@ -56,10 +56,17 @@ describe('classifySeeds', () => {
     expect(weak.map(s => s.tmdbId).sort()).toEqual([3]);
   });
 
-  it('passes ratedAt from updatedAt', () => {
+  it('passes ratedAt from updatedAt when no dedicated ratedAt (lazy fallback)', () => {
     const d = new Date('2026-04-20');
     const items = [mkItem({ tmdbId: 10, rating: 5, updatedAt: d })];
     expect(classifySeeds(items).strong[0].ratedAt?.getTime()).toBe(d.getTime());
+  });
+
+  it('prefers the dedicated ratedAt over updatedAt when present (BIN-349)', () => {
+    const rated = new Date('2026-01-01');
+    const edited = new Date('2026-04-20'); // a later edit (note/status) — must NOT win
+    const items = [mkItem({ tmdbId: 11, rating: 5, ratedAt: rated, updatedAt: edited })];
+    expect(classifySeeds(items).strong[0].ratedAt?.getTime()).toBe(rated.getTime());
   });
 
   it('accepts both sedd and mina status', () => {
@@ -114,6 +121,27 @@ describe('detectLatestFiveStar', () => {
       mkItem({ tmdbId: 2, rating: 5, updatedAt: new Date('2026-04-10T12:00:00Z') }),
       mkItem({ tmdbId: 3, rating: 4, updatedAt: new Date('2026-04-24T12:00:00Z') }),
     ];
+    const r = detectLatestFiveStar(items, today, 30);
+    expect(r?.tmdbId).toBe(1);
+    expect(r?.daysSince).toBe(3);
+  });
+
+  it('anchors on ratedAt, not updatedAt — a recently-edited old rating loses (BIN-349)', () => {
+    const items = [
+      // Rated in January but edited (e.g. a note change) yesterday → updatedAt is
+      // recent. The OLD updatedAt anchor wrongly picked this; ratedAt is outside
+      // the 30-day window, so it must NOT win.
+      mkItem({ tmdbId: 1, rating: 5, ratedAt: new Date('2026-01-01T12:00:00Z'), updatedAt: new Date('2026-04-24T12:00:00Z') }),
+      // Genuinely rated 2 days ago.
+      mkItem({ tmdbId: 2, rating: 5, ratedAt: new Date('2026-04-23T12:00:00Z'), updatedAt: new Date('2026-04-23T12:00:00Z') }),
+    ];
+    const r = detectLatestFiveStar(items, today, 30);
+    expect(r?.tmdbId).toBe(2);
+    expect(r?.daysSince).toBe(2);
+  });
+
+  it('falls back to updatedAt when ratedAt is absent (lazy migration, BIN-349)', () => {
+    const items = [mkItem({ tmdbId: 1, rating: 5, updatedAt: new Date('2026-04-22T12:00:00Z') })]; // no ratedAt
     const r = detectLatestFiveStar(items, today, 30);
     expect(r?.tmdbId).toBe(1);
     expect(r?.daysSince).toBe(3);

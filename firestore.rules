@@ -103,7 +103,11 @@ service cloud.firestore {
         // nextAirReadRepair (tyst read-repair, aldrig user-edit — bumpar ALDRIG
         // updatedAt). Spec: docs/superpowers/specs/2026-07-02-home-instant-week-design.md
         'nextAirDate', 'nextAirCode', 'nextAirProvider', 'nextAirUpdatedAt',
-        'digitalReleaseDate'
+        'digitalReleaseDate',
+        // BIN-349: tidpunkt då användaren satte/ändrade betyget (serverTimestamp,
+        // skrivs av updateRating/addItem). Rekommendations-ankaret "din senaste
+        // 5★" läser detta i st. f. updatedAt (som varje redigering bumpar).
+        'ratedAt'
       ])
       // BIN-143: bind rating-VÄRDET, inte bara nyckeluppsättningen. En ägd
       // watchlist-doc skrivs direkt av användaren; utan denna kunde någon skriva
@@ -120,7 +124,11 @@ service cloud.firestore {
       && (!('nextAirCode' in d) || d.nextAirCode == null || (d.nextAirCode is string && d.nextAirCode.size() <= 16))
       && (!('nextAirProvider' in d) || d.nextAirProvider == null || (d.nextAirProvider is string && d.nextAirProvider.size() <= 80))
       && (!('nextAirUpdatedAt' in d) || d.nextAirUpdatedAt == null || d.nextAirUpdatedAt is timestamp)
-      && (!('digitalReleaseDate' in d) || d.digitalReleaseDate == null || (d.digitalReleaseDate is string && d.digitalReleaseDate.size() <= 32));
+      && (!('digitalReleaseDate' in d) || d.digitalReleaseDate == null || (d.digitalReleaseDate is string && d.digitalReleaseDate.size() <= 32))
+      // BIN-349: ratedAt måste vara en timestamp (eller null/frånvarande) —
+      // hasOnly kollar bara nyckeln, inte typen; utan denna kunde en klient
+      // skriva skräp under nyckeln och störa rekommendations-sorteringen.
+      && (!('ratedAt' in d) || d.ratedAt == null || d.ratedAt is timestamp);
     }
 
     // BIN-164: owner-only per-title tags. Free-text tags capture third-party

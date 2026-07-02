@@ -86,6 +86,17 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, { runtime: 136 }, { merge: true }));
   });
+  // BIN-349: ratedAt must be whitelisted AND type-bound to a timestamp.
+  it('allows a ratedAt timestamp merge write (BIN-349)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, { ratedAt: serverTimestamp() }, { merge: true }));
+  });
+  it('rejects a non-timestamp ratedAt (type bound, BIN-349)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertFails(setDoc(ref, { ratedAt: 'igår' }, { merge: true }));
+  });
 });
 
 // Instant week (2026-07): nextAirReadRepair merge-writes the denormalized

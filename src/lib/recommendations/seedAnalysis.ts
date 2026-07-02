@@ -29,7 +29,9 @@ export function classifySeeds(items: readonly WatchlistItem[]): {
       mediaType: it.mediaType,
       rating: it.rating,
       title: it.title,
-      ratedAt: it.updatedAt ?? null,
+      // BIN-349: prefer the dedicated rating-time; fall back to updatedAt for
+      // items rated before ratedAt existed (lazy migration, no backfill sweep).
+      ratedAt: it.ratedAt ?? it.updatedAt ?? null,
     };
     if (it.rating >= 4) strong.push(seed);
     else if (it.rating === 3) weak.push(seed);
@@ -61,9 +63,9 @@ export function detectLatestFiveStar(
   for (const it of items) {
     if (it.rating !== 5) continue;
     if (!STRONG_SEED_STATUSES.includes(it.status)) continue;
-    // updatedAt kan saknas på äldre/handredigerade Firestore-docs — guarda så
-    // .getTime() inte kastar (L2).
-    const ts = it.updatedAt?.getTime();
+    // BIN-349: anchor on ratedAt (when the user actually rated), falling back to
+    // updatedAt for pre-ratedAt items. Guard so .getTime() never throws (L2).
+    const ts = (it.ratedAt ?? it.updatedAt)?.getTime();
     if (!ts || ts < cutoffMs) continue;
     if (!best || ts > best.ts) best = { item: it, ts };
   }

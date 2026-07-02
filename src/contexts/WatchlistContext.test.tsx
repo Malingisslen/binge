@@ -125,6 +125,7 @@ let updateProgressRef: ((tmdbId: number, season: number, episode: number) => Pro
 let setRuntimeRef: ((tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
 let removeItemRef: ((tmdbId: number) => Promise<void>) | null = null;
 let updateTagsRef: ((tmdbId: number, tags: string[]) => Promise<void>) | null = null;
+let updateRatingRef: ((tmdbId: number, rating: number | null) => Promise<void>) | null = null;
 
 function Harness() {
   const wl = useWatchlist();
@@ -135,6 +136,7 @@ function Harness() {
     setRuntimeRef = wl.setRuntime;
     removeItemRef = wl.removeItem;
     updateTagsRef = wl.updateTags;
+    updateRatingRef = wl.updateRating;
   }, [wl]);
   return <div>ready</div>;
 }
@@ -475,5 +477,59 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(setDoc).not.toHaveBeenCalled();
     expect(deleteDoc).toHaveBeenCalledTimes(1);
     expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
+  });
+
+  // BIN-349: ratedAt stamps rating-recency; the serverTimestamp mock returns 'ts'.
+  it('updateRating stamps ratedAt when a rating is set (BIN-349)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9, rating: null })]);
+
+    await act(async () => {
+      await updateRatingRef!(9, 5);
+    });
+
+    const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('users/u1/watchlist/9');
+    expect(payload.rating).toBe(5);
+    expect(payload.ratedAt).toBe('ts'); // serverTimestamp sentinel
+  });
+
+  it('updateRating clears ratedAt to null when the rating is unset (BIN-349)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 9, rating: 4 })]);
+
+    await act(async () => {
+      await updateRatingRef!(9, null);
+    });
+
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.rating).toBeNull();
+    // A stale rating-recency must NOT survive a cleared rating.
+    expect(payload.ratedAt).toBeNull();
+  });
+
+  it('addItem stamps ratedAt on a new/changed rating, NOT on a same-rating re-mark (BIN-349)', async () => {
+    // Seed an already-rated in-library title (id 60, rating 5).
+    await mountSeeded([seedDoc({ tmdbId: 60, mediaType: 'movie', status: 'sedd', rating: 5 })]);
+
+    // Re-mark it via the addItem merge-write path (useMarkSeen/StatusButton/
+    // QuickAddButton) carrying the UNCHANGED rating → ratedAt must NOT be written
+    // (a blind stamp here re-bumped recency — the exact bug this fix closes).
+    await act(async () => { await addItemRef!({ ...newTitle(60, 'movie'), rating: 5 }); });
+    let payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
+    expect('ratedAt' in payload).toBe(false);
+
+    // A brand-new pre-rated title (CSV import) → stamped.
+    await act(async () => { await addItemRef!({ ...newTitle(61, 'movie'), rating: 5 }); });
+    payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
+    expect(payload.ratedAt).toBe('ts');
+
+    // A re-mark that genuinely CHANGES the rating (5 → 4) → stamped.
+    await act(async () => { await addItemRef!({ ...newTitle(60, 'movie'), rating: 4 }); });
+    payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
+    expect(payload.ratedAt).toBe('ts');
+
+    // A brand-new unrated title → no ratedAt key at all.
+    await act(async () => { await addItemRef!({ ...newTitle(62, 'movie'), rating: null }); });
+    payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
+    expect('ratedAt' in payload).toBe(false);
   });
 });

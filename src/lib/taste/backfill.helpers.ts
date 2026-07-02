@@ -19,8 +19,9 @@ export function arraysEqualAsSets(a: number[], b: number[]): boolean {
 // `providersCheckedAt` is written ALWAYS — it stamps that we checked and drives
 // the 60-day STALE_AFTER_MS skip (else an unchanged title re-fetches every
 // cycle). But `updatedAt` is bumped ONLY on real content change (BIN-319): a
-// pure provider-recheck must not clobber the recency anchor that
-// seedAnalysis.detectLatestFiveStar reads for the "din senaste 5★" row.
+// pure provider-recheck must not clobber `updatedAt`, which the "din senaste
+// 5★" recency anchor (seedAnalysis.detectLatestFiveStar, now `ratedAt ??
+// updatedAt` per BIN-349) still falls back to for items rated before ratedAt.
 // `stamp` is injected (serverTimestamp() in prod, a sentinel in tests) — a
 // FieldValue can't be compared in a pure unit test.
 export function buildBackfillUpdate(

@@ -52,7 +52,9 @@ export function computeProfileStats(items: WatchlistItem[]): ProfileStats {
 
     if (within30Days(item.watchedAt)) watched += 1;
     if (within30Days(item.addedAt)) added += 1;
-    if (item.rating != null && within30Days(item.updatedAt)) rated += 1;
+    // BIN-349: "rated in last 30 days" should anchor on when the user actually
+    // rated (ratedAt), not any edit (updatedAt); fall back for pre-ratedAt items.
+    if (item.rating != null && within30Days(item.ratedAt ?? item.updatedAt)) rated += 1;
   }
 
   const topGenres = Array.from(genreCount.entries())

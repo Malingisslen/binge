@@ -84,4 +84,31 @@ describe('computeProfileStats — recent30 30-dagarsfönster (BIN-339)', () => {
     expect(stats.recent30.watched).toBe(0); // watchedAt null på alla → 0
     expect(stats.recent30.added).toBe(0);   // addedAt 100 dagar bort → 0
   });
+
+  // Distinguishing case: a SINGLE item where old (updatedAt) and new (ratedAt)
+  // anchors DISAGREE, so the assertion fails against the old implementation.
+  it('does NOT count a rating set long ago even when the row was edited recently (BIN-349)', () => {
+    const stats = computeProfileStats([
+      // Betygsatt för 60 dagar sedan men redigerad igår (färsk updatedAt).
+      // Gamla updatedAt-ankaret räknade detta som rated=1; ratedAt ger rätt 0.
+      mkItem({ tmdbId: 1, rating: 9, ratedAt: daysAgo(60), updatedAt: daysAgo(1), watchedAt: null, addedAt: daysAgo(100) }),
+    ]);
+    expect(stats.recent30.rated).toBe(0);
+  });
+
+  it('counts a recently-rated title even when the row is otherwise old (BIN-349)', () => {
+    const stats = computeProfileStats([
+      // Betygsatt för 2 dagar sedan men gammal updatedAt (80d). Gamla ankaret
+      // MISSADE detta (rated=0); ratedAt räknar det rätt (rated=1).
+      mkItem({ tmdbId: 1, rating: 9, ratedAt: daysAgo(2), updatedAt: daysAgo(80), watchedAt: null, addedAt: daysAgo(100) }),
+    ]);
+    expect(stats.recent30.rated).toBe(1);
+  });
+
+  it('falls back to updatedAt for items without ratedAt (lazy migration, BIN-349)', () => {
+    const stats = computeProfileStats([
+      mkItem({ tmdbId: 1, rating: 9, updatedAt: daysAgo(3), watchedAt: null, addedAt: daysAgo(100) }), // no ratedAt
+    ]);
+    expect(stats.recent30.rated).toBe(1);
+  });
 });
