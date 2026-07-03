@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { advisorTmdbIds, rankCoverageOptions } from './useSubscriptionAdvisor.helpers';
+import { advisorTmdbIds, rankCoverageOptions, deriveProviderStatus } from './useSubscriptionAdvisor.helpers';
 import type { WatchlistItem, WillSeePerProviderRow } from '@/types';
 
 // Avsiktligt partiella mocks — advisorTmdbIds läser bara tmdbId + mediaType.
@@ -74,5 +74,65 @@ describe('rankCoverageOptions (BIN-87)', () => {
       providerId: 7, providerName: 'Max', shortName: 'HBO', color: '#7B2FBE',
       monthlyCost: 79, titleCount: 2, tvCount: 1, movieCount: 1, krPerTitle: 40,
     });
+  });
+});
+
+describe('deriveProviderStatus (BIN-411)', () => {
+  // Baslinje: en betald tjänst utan aktivitet → paus-kandidat.
+  const base = {
+    hasActiveShow: false,
+    hasUpcomingShow: false,
+    hasWillSeeAnchor: false,
+    isFree: false,
+    defaultMonthlyCost: 149,
+  };
+
+  it("aktivt airande följd serie → 'active' (vinner över allt annat)", () => {
+    expect(deriveProviderStatus({ ...base, hasActiveShow: true })).toBe('active');
+    // Precedens: active vinner även när alla andra signaler också är sanna.
+    expect(deriveProviderStatus({
+      hasActiveShow: true, hasUpcomingShow: true, hasWillSeeAnchor: true,
+      isFree: true, defaultMonthlyCost: 0,
+    })).toBe('active');
+  });
+
+  it("airar inom lookahead (men inte inom 30 dgr) → 'upcoming'", () => {
+    expect(deriveProviderStatus({ ...base, hasUpcomingShow: true })).toBe('upcoming');
+  });
+
+  it("bara ett vill_se-ankare → 'upcoming' (egen gren, inte hopslagen med hasUpcomingShow)", () => {
+    expect(deriveProviderStatus({ ...base, hasWillSeeAnchor: true })).toBe('upcoming');
+  });
+
+  it("aktivitet vinner över free: ett ankare på en gratis-tjänst ger 'active'/'upcoming', inte 'free'", () => {
+    // Pinnar produktbeslutet: en airande/kommande titel på SVT eller Pluto är
+    // fortfarande "nu/snart", inte nedgraderad till gratis-hinken.
+    expect(deriveProviderStatus({ ...base, isFree: true, defaultMonthlyCost: 0, hasActiveShow: true })).toBe('active');
+    expect(deriveProviderStatus({ ...base, isFree: true, defaultMonthlyCost: 0, hasWillSeeAnchor: true })).toBe('upcoming');
+  });
+
+  it("gratis-guard: isFree ELLER cost 0 → 'free' (aldrig paus-kandidat, BIN-410)", () => {
+    // SVT-vägen: isFree true, cost oväsentlig.
+    expect(deriveProviderStatus({ ...base, isFree: true })).toBe('free');
+    // Pluto-vägen: ad-finansierad AVOD, cost 0, isFree false → ändå 'free'.
+    expect(deriveProviderStatus({ ...base, isFree: false, defaultMonthlyCost: 0 })).toBe('free');
+  });
+
+  it("betald inaktiv tjänst → 'pause'", () => {
+    expect(deriveProviderStatus(base)).toBe('pause');
+  });
+
+  it('nullish (inte falsy) coalescing: undefined cost behandlas som 0 → free', () => {
+    // ?? 0, inte || 0 — undefined/utelämnad cost ⇒ 0 ⇒ 'free'. Pinnar att en
+    // tjänst utan katalogpris inte felaktigt blir paus-kandidat.
+    expect(deriveProviderStatus({
+      hasActiveShow: false, hasUpcomingShow: false, hasWillSeeAnchor: false,
+      isFree: false, defaultMonthlyCost: undefined,
+    })).toBe('free');
+    // Och utan cost-fältet alls (optional param).
+    expect(deriveProviderStatus({
+      hasActiveShow: false, hasUpcomingShow: false, hasWillSeeAnchor: false,
+      isFree: false,
+    })).toBe('free');
   });
 });

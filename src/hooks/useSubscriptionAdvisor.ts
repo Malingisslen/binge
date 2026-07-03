@@ -21,6 +21,7 @@ import {
   aggregateAdvisorLoading,
   splitTvByProgress,
   advisorTmdbIds,
+  deriveProviderStatus,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -227,14 +228,16 @@ export function useSubscriptionAdvisor(
       const hasUpcomingShow = followingAnchors.some(s => isWithinDays(s.nextAirDate, lookAheadDays));
       const hasWillSeeAnchor = anchorShows.some(s => !followingIds.has(s.tmdbId));
 
-      let status: ProviderAdvisory['status'];
-      if (hasActiveShow) status = 'active';
-      else if (hasUpcomingShow) status = 'upcoming';
-      else if (hasWillSeeAnchor) status = 'upcoming';
-      // A 0-cost service is free to the user (SVT via isFree; ad-funded AVOD like
-      // Pluto TV via cost 0) — never a "pause to save" candidate (BIN-410).
-      else if (provider.isFree || (provider.defaultMonthlyCost ?? 0) === 0) status = 'free';
-      else status = 'pause';
+      // Status-precedensen bor nu i deriveProviderStatus (BIN-411) — extraherad
+      // för egna regressionstester. Named options-fält gör en positionsförväxling
+      // omöjlig (hasUpcomingShow/hasWillSeeAnchor är båda boolean → 'upcoming').
+      const status = deriveProviderStatus({
+        hasActiveShow,
+        hasUpcomingShow,
+        hasWillSeeAnchor,
+        isFree: provider.isFree,
+        defaultMonthlyCost: provider.defaultMonthlyCost,
+      });
 
       const dates = followingAnchors
         .map(s => s.nextAirDate)

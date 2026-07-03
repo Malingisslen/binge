@@ -49,6 +49,37 @@ export function splitTvByProgress(
   return { started, unstarted };
 }
 
+// Härleder en tjänsts rådgivar-status ur redan-beräknade signaler. Extraherad
+// verbatim ur useSubscriptionAdvisor-hookkroppen (BIN-411) så precedensen får
+// egna regressionstester utan att montera Firebase/React Query.
+//
+// Precedensen är avsiktlig och får INTE kollapsas:
+//   active   — något följt airar inom 30 dagar (driver "nu"-nudges)
+//   upcoming — airar inom lookahead-fönstret ELLER har ett vill_se-ankare
+//              (två oberoende signaler, medvetet separata grenar)
+//   free     — 0-kostnad: SVT via isFree, ad-finansierad AVOD (Pluto TV) via
+//              cost 0 — aldrig en "pausa & spara"-kandidat (BIN-410)
+//   pause    — betald tjänst utan aktivitet → paus-kandidat
+//
+// Options-objekt (inte positionella booleans): hasUpcomingShow och
+// hasWillSeeAnchor landar båda på 'upcoming', så en positionsförväxling vore en
+// tyst scoring-bugg som TypeScript inte fångar (BIN-411 stakeholder-villkor #6).
+// isFree || (defaultMonthlyCost ?? 0) === 0 bevaras ordagrant — nullish (inte
+// falsy) coalescing, och OR-av-två-villkor.
+export function deriveProviderStatus(input: {
+  hasActiveShow: boolean;
+  hasUpcomingShow: boolean;
+  hasWillSeeAnchor: boolean;
+  isFree?: boolean;
+  defaultMonthlyCost?: number;
+}): ProviderAdvisory['status'] {
+  if (input.hasActiveShow) return 'active';
+  else if (input.hasUpcomingShow) return 'upcoming';
+  else if (input.hasWillSeeAnchor) return 'upcoming';
+  else if (input.isFree || (input.defaultMonthlyCost ?? 0) === 0) return 'free';
+  else return 'pause';
+}
+
 export function findTopPausable(
   providers: ProviderAdvisory[],
   userPausedSet: Set<number>,
