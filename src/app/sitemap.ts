@@ -10,6 +10,7 @@ import {
   SEO_TOP_RATED_PAGES,
   SEO_PROVIDER_IDS,
   cappedTitleIds,
+  latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { FRANCHISES } from '@/lib/seo/franchises';
@@ -76,9 +77,9 @@ async function collectIds(fetcher: Fetcher, pageCount: number): Promise<Set<numb
   const results = await Promise.allSettled(pages.map(p => fetcher(p)));
   for (const r of results) {
     if (r.status === 'fulfilled') {
-      for (const item of r.value.results) {
-        if (item.id) ids.add(item.id);
-      }
+      // Curation: skip non-Latin-titled entries — MUST match the identical
+      // filter in {movie,tv}/[id]/page.tsx so sitemap == pre-render URL set.
+      for (const id of latinDisplayIds(r.value.results)) ids.add(id);
     }
   }
   return ids;

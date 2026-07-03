@@ -32,6 +32,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
@@ -52,7 +54,10 @@ import type { TMDBMovie } from '@/types';
 
 export default function MoviePageClient({ id, initialData }: { id: string; initialData?: TMDBMovie }) {
   const movieId = parseInt(id, 10);
-  const { data: movie, isLoading } = useMovie(movieId, initialData);
+  // BINGE-9: en skräp-URL som /movie/undefined ger movieId=NaN. Skicka null då
+  // så TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
+  // till "Filmen hittades inte." nedan.
+  const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
   const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, updateTags, items } = useWatchlist();
@@ -239,7 +244,9 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
             </div>
           )}
-          {movie.overview && <p className="syn">{movie.overview}</p>}
+          {movie.overview
+            ? <p className="syn">{movie.overview}</p>
+            : <p className="syn">{buildContentFloor(movieContentFloorInput(movie)).paragraph}</p>}
 
           {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
               library state (inLibrary) and isn't core SEO content. */}

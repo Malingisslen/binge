@@ -14,9 +14,12 @@ import {
   SEO_TOP_RATED_PAGES,
   SEO_FALLBACK_TV_IDS,
   cappedTitleIds,
+  latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
+import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -46,9 +49,9 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     const results = await Promise.allSettled(pages.map(p => fetcher(p)));
     for (const r of results) {
       if (r.status === 'fulfilled') {
-        for (const item of r.value.results) {
-          if (item.id) ids.add(item.id);
-        }
+        // Curation: skip non-Latin-titled series — same rule as browsing
+        // (titleFilter.ts); identical filter in sitemap.ts keeps parity.
+        for (const id of latinDisplayIds(r.value.results)) ids.add(id);
       }
     }
     return ids;
@@ -84,8 +87,9 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     const displayTitle = preferOriginalTitle(show.name, show.original_name);
     const firstYear = show.first_air_date ? show.first_air_date.slice(0, 4) : '';
     const yearSuffix = firstYear ? ` (${firstYear})` : '';
-    const overview = show.overview?.slice(0, 180) ?? '';
-    const description = `${displayTitle}${yearSuffix}. ${overview}`.trim();
+    // Content floor: real overview when substantive, else a generated Swedish
+    // availability-first sentence — so empty-overview series are not thin.
+    const description = buildContentFloor(tvContentFloorInput(show)).description;
     const url = `https://binge.nu/tv/${showId}/`;
     const image = show.poster_path ? posterUrl(show.poster_path, 'w500') : 'https://binge.nu/og-image.png';
 

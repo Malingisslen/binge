@@ -38,6 +38,8 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import ClientOnly from '@/components/utils/ClientOnly';
@@ -54,7 +56,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // när användaren klickar från en grupps watchlist. Vi propagerar det till
   // SeasonList → EpisodeRow så avsnitt utöver gruppens minsta-position maskas.
   const fromGroup = searchParams?.get('fromGroup') ?? null;
-  const { data: show, isLoading } = useTVShow(showId, initialData);
+  // BINGE-9: en skräp-URL som /tv/undefined ger showId=NaN. Skicka null då så
+  // TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
+  // till "Serien hittades inte." nedan.
+  const { data: show, isLoading } = useTVShow(Number.isFinite(showId) ? showId : null, initialData);
   const { offers } = useStreamingOffers(show?.id);
   const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, updateTags, items } = useWatchlist();
   const { user } = useAuth();
@@ -225,7 +230,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               ))}
             </div>
           )}
-          {show.overview && <p className="syn">{show.overview}</p>}
+          {show.overview
+            ? <p className="syn">{show.overview}</p>
+            : <p className="syn">{buildContentFloor(tvContentFloorInput(show)).paragraph}</p>}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (

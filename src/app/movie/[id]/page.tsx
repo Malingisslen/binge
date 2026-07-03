@@ -13,9 +13,12 @@ import {
   SEO_TOP_RATED_PAGES,
   SEO_FALLBACK_MOVIE_IDS,
   cappedTitleIds,
+  latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
+import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -51,9 +54,10 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     const results = await Promise.allSettled(pages.map(p => fetcher(p)));
     for (const r of results) {
       if (r.status === 'fulfilled') {
-        for (const item of r.value.results) {
-          if (item.id) ids.add(item.id);
-        }
+        // Curation: skip titles that render in a non-Latin alphabet — same rule
+        // browsing surfaces already apply (titleFilter.ts). Keeps sitemap +
+        // pre-render addressing the same set (both filter identically here).
+        for (const id of latinDisplayIds(r.value.results)) ids.add(id);
       }
     }
     return ids;
@@ -89,8 +93,9 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     const displayTitle = preferOriginalTitle(movie.title, movie.original_title);
     const releaseYear = movie.release_date ? movie.release_date.slice(0, 4) : '';
     const yearSuffix = releaseYear ? ` (${releaseYear})` : '';
-    const overview = movie.overview?.slice(0, 180) ?? '';
-    const description = `${displayTitle}${yearSuffix}. ${overview}`.trim();
+    // Content floor: real overview when substantive, else a generated Swedish
+    // availability-first sentence — so empty-overview titles are not thin.
+    const description = buildContentFloor(movieContentFloorInput(movie)).description;
     const url = `https://binge.nu/movie/${movieId}/`;
     const image = movie.poster_path ? posterUrl(movie.poster_path, 'w500') : 'https://binge.nu/og-image.png';
 

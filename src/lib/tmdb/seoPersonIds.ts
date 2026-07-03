@@ -3,6 +3,7 @@ import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
   SEO_PERSON_TARGET_IDS,
+  latinDisplayIds,
 } from './seoCoverage';
 
 /**
@@ -51,8 +52,10 @@ export async function collectPersonIds(
   for (const r of movieDetails) {
     if (r.status === 'fulfilled') {
       const cast = r.value.credits?.cast ?? [];
-      for (const c of cast.slice(0, SEO_PERSON_CAST_PER_MOVIE)) {
-        if (c.id) peopleIds.add(c.id);
+      // Curation: skip non-Latin-named people (same rule as browsing/titles).
+      // Filter AFTER the top-N slice so the per-movie cast order contract holds.
+      for (const id of latinDisplayIds(cast.slice(0, SEO_PERSON_CAST_PER_MOVIE))) {
+        peopleIds.add(id);
       }
     }
   }

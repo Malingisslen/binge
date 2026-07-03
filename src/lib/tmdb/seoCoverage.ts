@@ -37,6 +37,9 @@
  * byggtid domineras av cache-träffar, inte fetch.
  */
 
+import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+
 // Antal TMDB-pages från /movie/popular respektive /tv/popular vi pre-renderar.
 // Höj med försiktighet — varje ökning med 100 pages ger ~10-15 min extra build.
 export const SEO_TITLE_PAGES = 500;
@@ -71,6 +74,43 @@ export const SEO_PERSON_TARGET_IDS = 1000;
  */
 export function cappedTitleIds(popular: number[], topRated: number[]): number[] {
   return Array.from(new Set<number>([...popular, ...topRated])).slice(0, SEO_TITLE_TARGET_IDS);
+}
+
+export interface SeoTitledItem {
+  id?: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+}
+
+/**
+ * Filter a TMDB list/result set down to the ids whose DISPLAYED title (what
+ * preferOriginalTitle actually renders) is Latin-script.
+ *
+ * Non-Latin-displaying titles (e.g. 侠岚) are already hidden from every browsing
+ * surface via hasNonLatinTitle (titleFilter.ts — used on home/discover/lists/
+ * recs). This extends the same curation to the SEO pre-render + sitemap so those
+ * titles aren't offered to Google either. Apply this identically inside EVERY
+ * collector BEFORE cappedTitleIds/the person cap, so sitemap and pre-render keep
+ * addressing the exact same URL set (the load-bearing parity invariant).
+ *
+ * Display-based on purpose: a foreign film with a Latin display title (e.g.
+ * "Parasite", original 기생충) still renders fine and stays indexed — only titles
+ * that actually show in a non-Latin alphabet drop out. Kept pure/network-free so
+ * seoCoverage's unit test stays the trustworthy parity guard (ADR 0005).
+ */
+export function latinDisplayIds(items: ReadonlyArray<SeoTitledItem>): number[] {
+  const ids: number[] = [];
+  for (const item of items) {
+    if (!item.id) continue;
+    const displayed = preferOriginalTitle(
+      item.title ?? item.name,
+      item.original_title ?? item.original_name,
+    );
+    if (!hasNonLatinTitle(displayed)) ids.push(item.id);
+  }
+  return ids;
 }
 
 /**
