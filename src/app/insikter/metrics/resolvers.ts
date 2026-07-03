@@ -1,6 +1,6 @@
 import type { MetricKey, MetricValue } from './types';
 import type { InsightsData } from '../insights.types';
-import { getProvider } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { genreLabel } from '@/lib/tmdb/genreLabels';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -13,6 +13,29 @@ const emptyBreakdown: MetricValue = { kind: 'breakdown', entries: [] };
 // genreLabel — Swedish genre names — moved to @/lib/tmdb/genreLabels (shared
 // with the library filter, BIN-44).
 const providerLabel = (id: number): string => getProvider(id)?.name ?? `Tjänst ${id}`;
+
+// The rollup stores a top-N of raw provider ids. Two clean-ups happen here so the
+// panel reads as real subscription services (BIN-407):
+//  1. Fold TMDB alias ids onto the canonical service and re-sum counts — a service
+//     stored under several ids (Max = 384/1899/1825) would otherwise show 2-3 rows.
+//     The rollup now canonicalises too, but this keeps the panel correct on a daily
+//     doc written before that deploy (self-healing, no wait for the next rollup).
+//  2. Drop ids not in the Swedish catalog (rent/buy leaks like Amazon Video = 10,
+//     which surfaced as the bare placeholder "Tjänst 10") — this panel is titled
+//     "streamingtjänster", so transactional/unmodelled ids don't belong.
+const topProviderEntries = (
+  raw: readonly { providerId: number; count: number }[],
+): { label: string; value: number }[] => {
+  const merged = new Map<number, number>();
+  for (const { providerId, count } of raw) {
+    const id = canonicalProviderId(providerId);
+    if (!getProvider(id)) continue; // unmodelled (rent/buy/unknown) → not a "streamingtjänst"
+    merged.set(id, (merged.get(id) ?? 0) + count);
+  }
+  return [...merged.entries()]
+    .map(([id, value]) => ({ label: providerLabel(id), value }))
+    .sort((a, b) => b.value - a.value);
+};
 
 // ── Fråga Binge label maps ─────────────────────────────────────────────────────
 // Filter-TYPE names (telemetry.ts) → Swedish. A combo "decade+rating" renders as
@@ -113,7 +136,7 @@ export const DATA_RESOLVERS: Record<MetricKey, (data: InsightsData) => MetricVal
 
   topProviders: (d) => ({
     kind: 'breakdown',
-    entries: (d.rollup?.topProviders ?? []).map((p) => ({ label: providerLabel(p.providerId), value: p.count })),
+    entries: topProviderEntries(d.rollup?.topProviders ?? []),
   }),
 
   topGenres: (d) => ({

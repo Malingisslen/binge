@@ -25,7 +25,7 @@ import {
 import type { RollupData } from './types';
 // BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
 // they unit-test under the root vitest toolchain — see that file's header.
-import { topTitles, expiredInsightDocIds, type WatchlistLite } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite } from './rollup.helpers';
 // BIN-350: dated history doc-id keys on the Stockholm wall-clock day so it agrees
 // with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
 // the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
@@ -118,7 +118,10 @@ export async function computeRollup(): Promise<RollupData> {
     safeCount(() => countActiveSessions()),
   ]);
 
-  const providers = watchlist.flatMap((w) => w.providers);
+  // Fold TMDB's alias ids onto the canonical service before tallying, so a
+  // service stored under several ids (e.g. Max = 384/1899/1825 across docs of
+  // different vintages) counts as ONE row instead of splitting the panel.
+  const providers = watchlist.flatMap((w) => w.providers).map(canonicalProviderId);
   const genres = watchlist.flatMap((w) => w.genreIds);
 
   return {

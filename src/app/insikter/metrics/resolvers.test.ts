@@ -141,6 +141,48 @@ describe('ratingsHistogram resolves to a 5-star breakdown labelled 1★..5★ (B
   });
 });
 
+describe('topProviders folds alias ids and drops unmodelled services (BIN-407)', () => {
+  const rollupWith = (topProviders: { providerId: number; count: number }[]): InsightsData =>
+    emptyData({
+      rollup: {
+        computedAt: '', readsUsed: 0, partial: false,
+        totals: { users: 0, titlesTracked: 0, reviews: 0, activeSessions: 0, groups: 0 },
+        statusDistribution: { vill_se: 0, mina: 0, sedd: 0, avbruten: 0 },
+        mediaTypeSplit: { movie: 0, tv: 0 },
+        ratingsHistogram: [], topTitles: [], topProviders, topGenres: [],
+      },
+    });
+
+  it('merges a service stored under several TMDB ids into one row with summed count', () => {
+    // Max = 384 (base) + 1899 (legacy HBO Max) + 1825 (Amazon channel).
+    const v = DATA_RESOLVERS.topProviders(rollupWith([
+      { providerId: 384, count: 45 },
+      { providerId: 1899, count: 41 },
+      { providerId: 1825, count: 26 },
+    ]));
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Max', value: 112 }] });
+  });
+
+  it('drops ids not in the Swedish catalog (no more "Tjänst 10" placeholder)', () => {
+    const v = DATA_RESOLVERS.topProviders(rollupWith([
+      { providerId: 8, count: 82 },   // Netflix — kept
+      { providerId: 10, count: 30 },  // Amazon Video (rent) — unmodelled, dropped
+    ]));
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Netflix', value: 82 }] });
+  });
+
+  it('re-sorts by merged count so the fold cannot leave rows out of order', () => {
+    // Netflix inserted FIRST so map insertion order is wrong until the sort runs —
+    // Max only overtakes after its two alias parts merge (30 + 40 = 70 > 50).
+    const v = DATA_RESOLVERS.topProviders(rollupWith([
+      { providerId: 8, count: 50 },    // Netflix
+      { providerId: 384, count: 30 },  // Max part 1
+      { providerId: 1899, count: 40 }, // Max part 2 → Max total 70 > Netflix 50
+    ]));
+    expect(v).toEqual({ kind: 'breakdown', entries: [{ label: 'Max', value: 70 }, { label: 'Netflix', value: 50 }] });
+  });
+});
+
 describe('period metrics read window deltas and floor at 0', () => {
   it('newUsers and titlesAdded are NaN when window is null', () => {
     expect(DATA_RESOLVERS.newUsers(emptyData())).toEqual({ kind: 'scalar', value: NaN });

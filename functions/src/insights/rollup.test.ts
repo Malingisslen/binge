@@ -1,9 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { topTitles, expiredInsightDocIds } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId } from './rollup.helpers';
 
 // topTitles takes the WatchlistLite shape; only tmdbId/mediaType/title matter here.
 const wl = (tmdbId: number, title: string, mediaType = 'movie') =>
   ({ status: 'sedd', mediaType, rating: null, title, tmdbId, providers: [], genreIds: [] });
+
+describe('canonicalProviderId', () => {
+  it('folds TMDB alias ids onto the canonical service id', () => {
+    // Max is stored under 384 (base) + 1899 (legacy HBO Max) + 1825 (Amazon channel).
+    expect(canonicalProviderId(384)).toBe(384);
+    expect(canonicalProviderId(1899)).toBe(384);
+    expect(canonicalProviderId(1825)).toBe(384);
+    // A few other multi-id services.
+    expect(canonicalProviderId(1944)).toBe(489); // TV4 Play
+    expect(canonicalProviderId(531)).toBe(431);  // retired Paramount+ → SkyShowtime
+  });
+
+  it('is identity for a base id or an unmodelled rent/buy id', () => {
+    expect(canonicalProviderId(8)).toBe(8);   // Netflix
+    expect(canonicalProviderId(10)).toBe(10); // Amazon Video (rent) — no alias, stays as-is
+  });
+});
 
 describe('topTitles', () => {
   it('counts occurrences per tmdbId and returns them sorted by count desc, capped', () => {
