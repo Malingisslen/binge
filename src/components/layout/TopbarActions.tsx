@@ -205,6 +205,22 @@ export default function TopbarActions() {
                         </Link>
                       );
                     }
+                    // BINGE-9: system-notiser (admin-varningar från backend, t.ex.
+                    // Cineasterna-synk) är inte tmdbId-formade — länka till deras
+                    // actionUrl och visa body, aldrig en /tv/undefined-titel+länk.
+                    if (n.kind === 'system') {
+                      return (
+                        <Link
+                          key={n.id}
+                          href={n.actionUrl || '/insikter'}
+                          onClick={() => { markRead(n.id); setBellOpen(false); }}
+                          className={`popover-row${n.read ? '' : ' is-unread'}`}
+                        >
+                          <div className="popover-row-title">{n.title}</div>
+                          {n.body && <div className="popover-row-meta">{n.body}</div>}
+                        </Link>
+                      );
+                    }
                     const provider = n.providerId != null ? getProvider(n.providerId) : undefined;
                     const href = `/${n.mediaType === 'movie' ? 'movie' : 'tv'}/${n.tmdbId}/`;
                     return (

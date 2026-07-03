@@ -17,11 +17,16 @@ export interface AppNotification {
   // defaultas till 'provider_available'. Episod-release-notifs (Fas 6) sätter
   // 'episode_release' + episodeCode och saknar provider-fälten. Veckodigest
   // (BIN-163) sätter 'weekly_digest' + summary/digestItems och är INTE
-  // tmdbId-formad (tmdbId=0) — en rollup över flera titlar.
-  kind: 'provider_available' | 'episode_release' | 'weekly_digest';
+  // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en
+  // admin-varning från backend-funktioner (t.ex. Cineasterna-synk) — INTE
+  // tmdbId-formad; bär `body` + `actionUrl` och länkar dit, inte till en titel.
+  kind: 'provider_available' | 'episode_release' | 'weekly_digest' | 'system';
   providerId: number | null;
   providerName: string | null;
   episodeCode: string | null;
+  // 'system'-fält (undefined för övriga kinds).
+  body?: string;
+  actionUrl?: string;
   // BIN-163 weekly_digest-fält (undefined för övriga kinds).
   summary?: string;
   leavingCount?: number;
@@ -82,6 +87,26 @@ export function useNotifications() {
             leavingCount: data.leavingCount ?? 0,
             newCount: data.newCount ?? 0,
             digestItems: Array.isArray(data.items) ? (data.items as DigestCardItem[]) : [],
+            read: data.read ?? false,
+            createdAt: toDate(data.createdAt),
+          } as AppNotification;
+        }
+        if (data.kind === 'system') {
+          // Admin-varning från en backend-funktion (Cineasterna-synk m.fl.).
+          // Inte tmdbId-formad — länkar till `actionUrl` (t.ex. /insikter), inte
+          // en titelsida. Utan denna gren coerce:ades den till 'provider_available'
+          // och byggde en trasig /tv/undefined-länk (Sentry BINGE-9).
+          return {
+            id: d.id,
+            tmdbId: 0,
+            mediaType: 'movie',
+            title: data.title ?? 'Systemnotis',
+            kind: 'system',
+            providerId: null,
+            providerName: null,
+            episodeCode: null,
+            body: data.body ?? '',
+            actionUrl: typeof data.actionUrl === 'string' ? data.actionUrl : undefined,
             read: data.read ?? false,
             createdAt: toDate(data.createdAt),
           } as AppNotification;
