@@ -1,0 +1,451 @@
+'use client';
+
+import { useMemo } from 'react';
+import Link from 'next/link';
+import { Search } from 'lucide-react';
+import SearchDropdown from '@/components/search/SearchDropdown';
+import { useSearchBox } from '@/hooks/useSearchBox';
+import TitleGrid from '@/components/title/TitleGrid';
+import { useWatchlist } from '@/hooks/useWatchlist';
+import { useCalendarEntries } from '@/hooks/useCalendar';
+import { useAuth } from '@/hooks/useAuth';
+import { useTrending } from '@/hooks/useTMDB';
+import { hasNonLatinTitle } from '@/lib/utils/titleFilter';
+import { isAddableMediaType } from '@/lib/tmdb/client';
+import HemHero from '@/components/home/HemHero';
+import HemFocal from '@/components/home/HemFocal';
+import LaterThisWeek from '@/components/home/LaterThisWeek';
+import BacklogResurfaceTile from '@/components/home/BacklogResurfaceTile';
+import { pickBacklogResurface } from '@/lib/backlogResurface';
+import ContinueWatchingTile from '@/components/home/ContinueWatchingTile';
+import { pickContinueWatching, latestAiredEpisodeByShow } from '@/lib/continueWatching';
+import SparandeTile from '@/components/home/SparandeTile';
+import SpendSnapshotTile from '@/components/home/SpendSnapshotTile';
+import VannerTile from '@/components/home/VannerTile';
+import GrupperTile from '@/components/home/GrupperTile';
+import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
+import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
+import type { TMDBSearchResult } from '@/types';
+
+const FAQ_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'Vad är Binge.nu och hur fungerar det?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Binge.nu är en gratis svensk mediatracker för film och TV-serier. Du loggar in med Google, lägger till titlar du tittar på eller vill se, och sajten visar automatiskt var varje titel går att streama i Sverige — Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play med flera.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Var kan jag streama en specifik film eller serie i Sverige?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'På Binge.nu kan du söka efter en film eller serie och direkt se vilka svenska streamingtjänster som har den tillgänglig just nu. Data uppdateras löpande via TMDB.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Är Binge.nu gratis?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Ja, Binge.nu är helt gratis att använda. Du skapar ett konto via Google-inloggning, utan kostnad.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Kan Binge.nu hjälpa mig spara pengar på streaming?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Ja. Streamingrådgivaren på Binge.nu analyserar vilka av dina abonnemang som faktiskt används av titlarna i ditt bibliotek. Den visar vilka tjänster du kan pausa utan att missa något — och hur mycket du sparar per månad.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Vilka streamingtjänster täcker Binge.nu?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Binge.nu täcker svenska streamingtjänster inklusive Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play, C More, SkyShowtime och fler. Tjänsten är begränsad till tillgänglighet i Sverige.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Hur håller jag koll på kommande avsnitt av mina serier?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'När du lägger till en TV-serie i din lista på Binge.nu visas kommande avsnitt automatiskt i din kalender, med datum och avsnittsinformation i svensk tidszon. Kalendern visar även avsnitt för serier du vill se och digitala filmsläpp för filmer du vill se i Sverige.',
+      },
+    },
+  ],
+};
+
+// LandingPage tar trending-sektionen som ReactNode-prop istället för en
+// withTrending-flagga: auth-loading-grenen (den som pre-renderas) skickar en
+// hook-fri <TrendingSection> byggd på build-seeden — så exportens statiska
+// HTML får crawlbara titellänkar — medan anonym-grenen skickar den hookade
+// <LandingPageTrending> (live-fetch med seed-fallback). Två syskon-
+// komponenter, aldrig en villkorlig hook.
+function LandingPage({ trending }: { trending?: React.ReactNode }) {
+  const { signIn } = useAuth();
+  const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
+
+  return (
+    <div className="min-h-screen bg-bg">
+      <section className="bg-sidebar-bg text-white">
+        <div className="max-w-[640px] mx-auto px-4 py-16 text-center">
+          <h1 className="text-[32px] font-extrabold text-acc-deep mb-2">
+            binge<span className="font-normal text-white/60 text-[22px]">.nu</span>
+          </h1>
+          <p className="text-[17px] font-semibold mb-2 max-w-[520px] mx-auto">
+            Håll koll på vad du tittar på — och var det streamas.
+          </p>
+          <p className="text-sm text-white/60 mb-5 max-w-[480px] mx-auto leading-relaxed">
+            Se vilken streamingtjänst som har filmen eller serien du söker, håll reda på kommande avsnitt och samla allt på ett ställe.
+          </p>
+          <div className="relative max-w-[440px] mx-auto mb-4" ref={searchRef}>
+            <div className="flex items-center gap-[5px] px-3 py-[8px] bg-white/[0.08] border border-white/10 rounded-sm">
+              <Search size={14} className="text-white/50 shrink-0" />
+              <input
+                type="text"
+                placeholder="Sök film eller serie…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                className="bg-transparent border-none text-white text-sm font-[inherit] outline-none w-full placeholder:text-white/40"
+              />
+            </div>
+            {searchFocused && debouncedQuery.length >= 2 && (
+              <SearchDropdown
+                query={debouncedQuery}
+                onSelect={clearSearch}
+              />
+            )}
+          </div>
+          <button
+            onClick={signIn}
+            className="px-5 py-[7px] bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
+          >
+            Logga in med Google
+          </button>
+          <div className="flex justify-center gap-8 flex-wrap max-w-[520px] mx-auto">
+            <div className="text-center">
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streaming-koll</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Se direkt vilken tjänst som har titeln.</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Avsnittkalender</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Missa aldrig ett nytt avsnitt.</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs font-bold text-acc-deep mb-[3px]">Streamingrådgivaren</div>
+              <div className="text-xxs text-white/50 leading-snug max-w-[140px]">Pausa tjänster du inte använder.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {trending}
+    </div>
+  );
+}
+
+// Hook-fri presentationskomponent — renderas i auth-loading-grenen (den som
+// pre-renderas) med build-seeden, och av LandingPageTrending med live-data.
+function TrendingSection({ items }: { items: TMDBSearchResult[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="max-w-[1000px] mx-auto px-4 py-8">
+      <div className="bg-surface border border-rule rounded-sm">
+        <div className="px-3 py-[6px] border-b border-rule-2">
+          <h2 className="text-sm font-bold text-ink-2 m-0">Trendande just nu</h2>
+        </div>
+        <TitleGrid items={items} />
+      </div>
+    </section>
+  );
+}
+
+// Sub-komponent som äger trending-fetchen så att hooken bara fyrar när
+// LandingPage faktiskt renderas mot en användare som är anonym (auth
+// resolverad). Innan live-datat löst visas build-seeden (redan person- och
+// non-Latin-filtrerad) så anonyma aldrig ser en tom sektion.
+function LandingPageTrending({ seed }: { seed: TMDBSearchResult[] }) {
+  const { data: trending } = useTrending('all', 'week');
+  const items = trending
+    ? (trending.results ?? [])
+        .filter(r => isAddableMediaType(r) && !hasNonLatinTitle(r.title ?? r.name, r.original_title ?? r.original_name))
+        .slice(0, 10)
+    : seed;
+
+  return <TrendingSection items={items} />;
+}
+
+function EmptyLibrary() {
+  return (
+    <div className="hem-empty">
+      <h2>Bygg ditt bibliotek.</h2>
+      <p>
+        Lägg till några serier eller filmer du tittar på så börjar veckan ovan
+        fyllas med dina avsnitt — och tjänster du inte använder dyker upp
+        som möjliga pauser i högerkolumnen.
+      </p>
+      <div className="actions">
+        <Link href="/series/" className="btn">Utforska serier</Link>
+        <Link href="/films/" className="btn btn-ghost">Utforska filmer</Link>
+      </div>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  // Visas för inloggade återvändande användare medan Firebase Auth resolveras.
+  // Aldrig prerendrad — `wasLoggedIn` är alltid `false` på servern (ingen
+  // localStorage). Crawlers ser därför LandingPage istället.
+  //
+  // Renderar HemHero i loading-läge så användaren ser samma "Hämtar din
+  // vecka…"-copy direkt — visuell kontinuitet hela vägen från auth-loading
+  // genom watchlist-loading till calendar-loading till focal block. Annars
+  // skulle vi blinka ett tomt fält först.
+  //
+  // VIKTIGT: skelettet måste vara strukturellt IDENTISKT med Dashboards
+  // loading-gren (focal- OCH filmstrip-skelett) — annars växer kolumnen
+  // plötsligt med ~330px när auth resolverar och allt under hoppar. Det var
+  // "flickret vid start" (2026-07-02): osynligt när hela sidan var långsam,
+  // fullt synligt när resten blev snabbt.
+  return (
+    <>
+      <HemHero focal={null} totalThisWeek={0} hasLibrary={true} isLoading={true} />
+      <div className="hem-grid">
+        <div>
+          <div className="hem-focal-skeleton" aria-hidden="true" />
+          <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+        </div>
+        {/* Rail-platshållare — utan dem poppar hela högerspalten in när auth
+            resolverar och Dashboard monterar sina tiles (flicker-fix). */}
+        <aside className="rail" aria-label="Sidostatistik" aria-hidden="true">
+          <div className="hem-tile-skeleton" />
+          <div className="hem-tile-skeleton" />
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function Dashboard() {
+  const { user } = useAuth();
+  const { items, loading: watchlistLoading } = useWatchlist();
+  const { entries: calendarEntries, isLoading: calendarLoading } = useCalendarEntries();
+
+  // BIN-86: progress-driven "Fortsätt titta" (in-progress series). The calendar
+  // is already loaded here for the focal/week strip, so reuse its aired-episode
+  // data (no extra TMDB cost) to drop series you're caught up on.
+  const continueWatching = useMemo(() => {
+    const aired = latestAiredEpisodeByShow(calendarEntries, new Date());
+    return pickContinueWatching(items, { aired });
+  }, [items, calendarEntries]);
+  // BIN-88: resurfaced vill_se backlog (streamable on a service the user has).
+  const resurfaced = useMemo(
+    () => pickBacklogResurface(items, user?.myProviders ?? []),
+    [items, user?.myProviders],
+  );
+
+  // Instant week: medan fan-outen löser unioneras tunna seeds (denormaliserad
+  // next-air-data från watchlisten) med live-entries — live vinner per titel.
+  // Efter full load används ENBART live-datat. Samma pickFocalEntry-väg —
+  // en render-väg, två datakällor.
+  const effectiveEntries = useMemo(() => {
+    if (!calendarLoading) return calendarEntries;
+    const liveIds = new Set(calendarEntries.map(e => e.tmdbId));
+    const seeds = seedCalendarEntries(items).filter(s => !liveIds.has(s.tmdbId));
+    return [...calendarEntries, ...seeds];
+  }, [calendarLoading, calendarEntries, items]);
+
+  const { focal, totalThisWeek } = useMemo(() => {
+    const focal = pickFocalEntry(effectiveEntries);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekAhead = new Date(today);
+    weekAhead.setDate(today.getDate() + 7);
+    const totalThisWeek = effectiveEntries.filter(e => {
+      const d = new Date(e.airDate + 'T00:00:00');
+      return d >= today && d < weekAhead;
+    }).length;
+    return { focal, totalThisWeek };
+  }, [effectiveEntries]);
+
+  const hasLibrary = items.length > 0;
+  // EmptyLibrary får bara renderas när vi *vet* att biblioteket är tomt —
+  // alltså efter att Firestore-snapshoten kommit (watchlistLoading=false)
+  // och items är tomt. Annars skulle vi blinka "Välkommen, lägg till
+  // titlar" mot en användare som faktiskt har 100 serier på laddning.
+  const showEmptyLibrary = !watchlistLoading && !hasLibrary;
+
+  // Skydd mot att MÅLA GENOM en inaktuell focal: vid ett direkt konto-byte
+  // (uid A → uid B utan mellansteg via null) hinner `items`/`calendarEntries`
+  // vara kvar från förra kontot medan watchlistLoading flippar tillbaka till
+  // true. `focal` renderas därför bara när watchlisten är avgjord — annars
+  // skulle hero + HemFocal kunna visa förra kontots avsnitt ett ögonblick.
+  const shownFocal = watchlistLoading ? null : focal;
+  const focalKey = shownFocal ? focalEntryKey(shownFocal) : undefined;
+
+  // Progressiv hero (prestanda): `focal` (nästa avsnitt) seedas från tv-lite:s
+  // next_episode_to_air och dyker upp i calendarEntries så fort den relevanta
+  // serien resolverat — vi behöver INTE vänta på HELA vattenfallet (alla ~200
+  // tv-lite + säsonger + sista strular, tidigare ~7,5 s till innehåll). Visa
+  // focal-kortet så fort det finns; visa hero-skelettet bara när vi ännu inte
+  // har en focal OCH något fortfarande laddar. `calendarLoading` (strikt "allt
+  // löst") lämnas ORÖRD i useCalendar för rådgivar-konsumenterna
+  // (useUpcomingShowsForAdvisor) som förlitar sig på dess strikta betydelse.
+  const heroLoading = watchlistLoading || (!shownFocal && calendarLoading);
+  const detailLoading = watchlistLoading || calendarLoading;
+
+  // Progressiva detaljrader (flicker-fix 2026-07-02): "Senare i veckan"
+  // bygger på samma seeds/effectiveEntries som heron och backloggen behöver
+  // bara watchlisten — ENDAST "Fortsätt titta" kräver hela vattenfallet
+  // (aired-historik, live-only). Tidigare väntade alla tre raderna på full
+  // load → rubriker + posterrader poppade in ~8 s efter att sidan såg klar
+  // ut och sköt ner allt under sig. Nu: en sammanhängande reveal ihop med
+  // heron; Fortsätt titta byter skelett→rad PÅ PLATS när fan-outen landat.
+  const detailBlock = (
+    <div className="hem-settle">
+      <LaterThisWeek entries={effectiveEntries} excludeKey={focalKey} />
+      {detailLoading ? (
+        <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+      ) : (
+        <div className="hem-settle">
+          <ContinueWatchingTile entries={continueWatching} />
+        </div>
+      )}
+      <BacklogResurfaceTile items={resurfaced} myProviders={user?.myProviders ?? []} />
+    </div>
+  );
+
+  return (
+    <>
+      <HemHero
+        focal={shownFocal}
+        totalThisWeek={totalThisWeek}
+        hasLibrary={hasLibrary || watchlistLoading}
+        isLoading={heroLoading}
+      />
+
+      {showEmptyLibrary ? (
+        <EmptyLibrary />
+      ) : (
+        <div className="hem-grid">
+          <div>
+            {shownFocal ? (
+              // Vi har nästa avsnitt → visa focal-kortet + detaljraderna
+              // direkt (seeds bär Senare i veckan; Fortsätt titta har eget
+              // in-place-skelett tills aired-datat landat).
+              <>
+                <div className="hem-settle">
+                  <HemFocal entry={shownFocal} />
+                </div>
+                {detailBlock}
+              </>
+            ) : detailLoading ? (
+              // Ingen focal än + fortfarande laddning: reservera utrymme för
+              // BÅDA focal + filmstrip så main-column-höjden är stabil.
+              <>
+                <div className="hem-focal-skeleton" aria-hidden="true" />
+                <div className="hem-filmstrip-skeleton" aria-hidden="true" />
+              </>
+            ) : (
+              // Allt löst, ingen focal → lugn vecka: detaljraderna (troligen tom
+              // senare-i-veckan) utan focal-kort.
+              detailBlock
+            )}
+          </div>
+          <aside className="rail" aria-label="Sidostatistik">
+            <SpendSnapshotTile />
+            <SparandeTile />
+            <VannerTile />
+            <GrupperTile />
+          </aside>
+        </div>
+      )}
+
+      {/* JustWatch-crediten måste vara synlig så fort provider-data visas —
+          inkl. seed-focalen som kan rendera långt före detaljraderna (TMDB:s
+          attribution-krav för JustWatch-licensierad provider-data). */}
+      {hasLibrary && (shownFocal != null || !detailLoading) && (
+        <div style={{ marginTop: 16 }}>
+          <JustWatchCredit />
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function HomePageClient({
+  initialTrending,
+}: {
+  // Build-time-seedade trendande titlar (server page.tsx). Renderas hook-fritt
+  // i auth-loading-grenen — det är den grenen som pre-renderas, så seeden är
+  // vad som ger exportens statiska HTML crawlbara titellänkar.
+  initialTrending?: TMDBSearchResult[];
+}) {
+  const { uid, loading } = useAuth();
+  const seed = initialTrending ?? [];
+
+  // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
+  const faqLd = (
+    <script
+      type="application/ld+json"
+      // Hardcoded konstant — ingen XSS-risk.
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+    />
+  );
+
+  // Pre-hydration / auth-loading: rendera BÅDA staterna sida-vid-sida.
+  // CSS i globals.css döljer den ena baserat på .returning-user-klassen som
+  // ett inline-script i <head> sätter innan body parsas. Resultat:
+  // - Crawlers + anonyma användare ser LandingPage i HTML:en (SEO-vänligt)
+  // - Återvändande inloggade ser skelettet direkt utan LandingPage-flash
+  //
+  // Trending i den här grenen är den hook-fria TrendingSection på build-
+  // seeden: ingen TMDB-request fyras mot återvändande inloggade (samma
+  // intention som gamla withTrending={false}), men crawlers får riktiga
+  // titellänkar i HTML:en. Länkbilder är loading="lazy" och subträdet är
+  // display:none för returning users → inga bildhämtningar i onödan.
+  if (loading) {
+    return (
+      <>
+        {faqLd}
+        <div data-pre-state="landing">
+          <LandingPage trending={<TrendingSection items={seed} />} />
+        </div>
+        <div data-pre-state="returning-skeleton" aria-hidden="true">
+          <DashboardSkeleton />
+        </div>
+      </>
+    );
+  }
+
+  // Auth resolverat utan uid: anonym besökare. Visa LandingPage med den
+  // hookade trending-sektionen (live-data, seed-fallback medan den laddar).
+  // (Gatear på uid — inte user — eftersom profilen numera laddas parallellt
+  // och kan landa något senare än auth-beskedet.)
+  if (!uid) {
+    return (
+      <>
+        {faqLd}
+        <LandingPage trending={<LandingPageTrending seed={seed} />} />
+      </>
+    );
+  }
+
+  // Auth resolverat med user: dashboard.
+  return (
+    <>
+      {faqLd}
+      <Dashboard />
+    </>
+  );
+}

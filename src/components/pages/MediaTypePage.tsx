@@ -32,7 +32,14 @@ const CONFIG = {
   },
 } as const;
 
-export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
+export default function MediaTypePage({
+  mediaType,
+  initialItems,
+}: {
+  mediaType: MediaType;
+  // Build-time-seedade titlar från server-page.tsx (SEO internal linking).
+  initialItems?: TMDBSearchResult[];
+}) {
   const { getByStatus } = useWatchlist();
   const { user } = useAuth();
   const hideNonLatin = user?.hideNonLatinTitles ?? false;
@@ -43,7 +50,12 @@ export default function MediaTypePage({ mediaType }: { mediaType: MediaType }) {
     ? getByStatus('mina', 'tv')
     : getByStatus('sedd', 'movie');
   const [page, setPage] = useState(1);
-  const [allResults, setAllResults] = useState<TMDBSearchResult[]>([]);
+  // Seedar med build-datat (server page.tsx) så exportens statiska HTML får
+  // crawlbara titellänkar; live page-1-data ersätter seeden efter hydration.
+  // OBS för framtida ändringar: effekten nedan är gated på popular?.results —
+  // lägger du till en ovillkorlig reset-effekt behövs en firstReset-guard
+  // (se ProviderPageClient), annars nollas seeden före hydration.
+  const [allResults, setAllResults] = useState<TMDBSearchResult[]>(initialItems ?? []);
 
   const { data: popularTV, isLoading: tvLoading } = usePopularTV(mediaType === 'tv' ? page : 1);
   const { data: popularMovies, isLoading: movieLoading } = usePopularMovies(mediaType === 'movie' ? page : 1);
