@@ -17,6 +17,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { EmptyState } from '@/components/ui/EmptyState';
+import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
+import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 
 export default function ListPageClient({ listId }: { listId: string }) {
   const { uid } = useAuth();
@@ -36,6 +38,13 @@ export default function ListPageClient({ listId }: { listId: string }) {
 
   const existingIds = useMemo(
     () => new Set((list?.items ?? []).map(i => i.tmdbId)),
+    [list?.items],
+  );
+
+  // BIN-416 — feed the "billigaste sättet att se listan" optimizer. Panel
+  // self-gates (logged-in + ≥2 titles), so it's safe to always render.
+  const planItems = useMemo<ListPlanItem[]>(
+    () => (list?.items ?? []).map(i => ({ tmdbId: i.tmdbId, mediaType: i.mediaType, title: i.title })),
     [list?.items],
   );
 
@@ -110,6 +119,8 @@ export default function ListPageClient({ listId }: { listId: string }) {
       {!isOwner && canEdit && (
         <span className="text-xxs text-acc-deep ml-2">· du är medredigerare</span>
       )}
+
+      <ListCheapestPlanPanel items={planItems} />
 
       {isOwner && (
         <EditorsManager
