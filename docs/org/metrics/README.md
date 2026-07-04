@@ -23,19 +23,34 @@ dependency). Callers wrap it so a failure is swallowed.
 
 Every event has `ts` (ISO-UTC) + `type`. Type-specific fields:
 
-### `review` — a `/stakeholder-review` run *(instrumented — this is the rubber-stamp signal)*
+### `review` — a stakeholder-review run *(instrumented — this is the rubber-stamp signal)*
+
+**Two writers emit this event, same schema:** `/stakeholder-review` (ad-hoc) and
+`/sprint-execute` §2b (the sprint's pre-build panel). Both MUST use the canonical field
+names below — do not improvise (`mustHaves`-array / free-form `outcome`-only payloads
+drifted the shakedown data; the writers are now pinned to this contract).
+
 | field | meaning |
 |---|---|
 | `tier` | `top` / `medium` / `skip` (what the router chose) |
 | `panel` | array of role numbers convened (e.g. `[3,4,6,8,27]`) |
 | `recommendation` | synthesizer verdict (`proceed` / `proceed-with-conditions` / `revise` / `hold`) |
-| `must_haves` | count of consolidated conditions |
+| `must_haves` | **count** (integer) of consolidated conditions — NOT the array of strings |
 | `conflicts` | count of genuine disagreements |
 | `escalations` | count escalated to the human |
 | `adrs` | ADR ids written (e.g. `["0001"]`) |
 | `rubber_stamp` | **true** iff the panel approved with **no** conditions, conflicts, escalations, or ADRs (= it added nothing) |
 | `approx_tokens` | rough subagent token total for the run |
 | `plan` | one-line plan description |
+| `ticket` | *(optional, sprint path)* the BIN-id under review |
+| `outcome` | *(optional)* free-form label (`approved-with-conditions`, `parked-conditional-block`, …) |
+| `via` | *(optional)* `"sprint-execute"` / `"stakeholder-review"` — which writer; lets `/org-retro` separate internally-routed reviews (no trigger expected) from ad-hoc ones |
+
+> **Legacy tolerance (pre-schema-fix events):** events written before the writer fix carry a
+> `mustHaves` *array* + `outcome` string and no `rubber_stamp` bool. `/org-retro`'s analyzer
+> derives the score for them (conditions = array length; rubber-stamp = zero conditions AND
+> no ADR AND an `outcome` showing no park/override/correction/ruling), so history still
+> scores. A legacy event with a `ticket` field is treated as sprint-routed for calibration.
 
 ### `trigger` — the ExitPlanMode suggest-hook fired *(instrumented — this is the calibration signal)*
 | field | meaning |
@@ -47,6 +62,11 @@ Every event has `ts` (ISO-UTC) + `type`. Type-specific fields:
 > events with later `review` events (by time) to score calibration: suggested-and-ran vs
 > suggested-and-ignored, and (via the manual spot-check) high-stakes plans that ran with
 > no trigger at all.
+>
+> **Only ad-hoc plans fire this hook.** `/sprint-execute` convenes its panel internally
+> (§2b) without going through ExitPlanMode, so sprint-routed reviews have **no** preceding
+> `trigger` by design — `triggers:0` alongside all-sprint reviews is expected, not a broken
+> hook. Calibration (over/under-firing) applies to the ad-hoc set only.
 
 ### `world-watch` — a `/world-watch` scan *(documented-optional)*
 `state.json` already records `lastScan` + `snapshot` per role, so this is optional.

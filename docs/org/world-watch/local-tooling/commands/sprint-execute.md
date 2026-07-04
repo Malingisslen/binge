@@ -127,8 +127,17 @@ stakeholder critique **before implementing it**, per `/stakeholder-review`:
 2. **Synthesize** → consolidated **must-haves** + a conflict table, resolving by the
    priority rubric (`DESIGN.md §1.2`). **Fold the must-haves into the ticket's acceptance
    criteria** (§1.6) so they become binding and get graded by the verifier (§4).
-3. **Log** the review event (`node docs/org/metrics/log_event.mjs review '{…}'`) and write
-   an ADR for any disagreement (`docs/org/adr/NNNN-*.md`) — same as `/stakeholder-review`.
+3. **Log** the review event with the **canonical schema** — do NOT improvise field names,
+   or `/org-retro` can't score it (this is what drifted the shakedown data). Required
+   *scoreable* fields: `tier`, `panel`, `recommendation`, `must_haves` (a **count**, not an
+   array), `rubber_stamp` (bool — `true` iff the panel added nothing: no must-haves,
+   conflicts, escalations, or ADR), `approx_tokens`, `plan`. Optional *context* fields the
+   sprint path should also include: `ticket` (BIN-id), `outcome` (free-form label), `via`
+   (`"sprint-execute"`). Exact shape in `docs/org/metrics/README.md` + `/stakeholder-review`:
+   ```bash
+   node docs/org/metrics/log_event.mjs review '{"tier":"medium","panel":[28],"recommendation":"proceed-with-conditions","must_haves":6,"conflicts":0,"escalations":0,"adrs":[],"rubber_stamp":false,"approx_tokens":120000,"plan":"one-line plan","ticket":"BIN-XXX","outcome":"approved-with-conditions","via":"sprint-execute"}'
+   ```
+   Then write an ADR for any disagreement (`docs/org/adr/NNNN-*.md`) — same as `/stakeholder-review`.
 
 **`--no-review` (or "skip the panel" in natural language):** skips step 2b entirely for
 this run. Tickets are still routed and tier-tagged, but no panel convenes and no

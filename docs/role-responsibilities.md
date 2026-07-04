@@ -18,6 +18,10 @@ truth; line numbers drift, so they're omitted here.
 > passes, then a third **diagnostic** sweep that added the DBA and
 > scoring-integrity lenses and the [un-owned gaps](#genuinely-un-owned-gaps)
 > section). Refresh when major surfaces are added or removed.
+> **Refreshed 2026-07-04** (`/refresh-dossiers`, all 28 flagged): updated the Agent-Ops
+> section (the role-org machinery has since landed), role 28's advisor bullet
+> (campaign-aware cost + list optimizer, BIN-417/416), and role 25 (the cast-the-panel
+> governance rule). The other 25 dossiers re-audited accurate.
 
 > **World-watch layer.** Each role also carries an external-knowledge posture —
 > what it must watch in the outside world (CVEs, EU law, vendor terms, framework
@@ -380,11 +384,13 @@ Owns the nascent revenue surface.
 Owns the process.
 
 - The solo push-direct-to-main working agreement + the risky-migration
-  written-plan exception; the deploy drift-guard (rules/functions never
-  auto-ship); the 5 CI quality gates; BIN-* issue taxonomy + sprint cadence;
-  Dependabot grouping + the deferred Sprint 7 framework upgrade; the "explain in
-  product terms" communication norm.
-  → `CLAUDE.md` (working agreement), `.github/workflows/deploy.yml`, `.github/dependabot.yml`, `docs/analysis/SPRINT_7_PLAN.md`
+  written-plan exception; the **"plan before large changes — cast the role-org
+  first" governance rule** (route → convene the stakeholder panel → fold conditions
+  into acceptance criteria, for ad-hoc work as well as sprints); the deploy
+  drift-guard (rules/functions never auto-ship); the 5 CI quality gates; BIN-* issue
+  taxonomy + sprint cadence; Dependabot grouping + the deferred Sprint 7 framework
+  upgrade; the "explain in product terms" communication norm.
+  → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`, `docs/analysis/SPRINT_7_PLAN.md`
 
 ## 26. Information Architect
 
@@ -466,7 +472,10 @@ owns the _social graph_). This is the Binge analog of the sibling projects'
   → `src/lib/recommendations/rowComposition.ts`
 - **Advisor logic** — rotation plan (greedy value-density), rotation calendar
   (pause prorating, dead-zone threshold), service-value attribution + dead-weight
-  detection, the cheapest-path cascade, the 4-state primary-action tree.
+  detection, the cheapest-path cascade, the 4-state primary-action tree,
+  **campaign-aware effective-cost resolution** (`resolveEffectiveMonthlyCost(now)`
+  with auto-revert at expiry, BIN-417) and the **min-cost list optimizer** (cheapest
+  set-cover of a watchlist across services, BIN-416).
   → `src/lib/advisor/`, `src/lib/streaming/cheapestPath.ts`, `src/hooks/useSubscriptionAdvisor.ts`
 
 **Watch-items (diagnostic):**
@@ -547,17 +556,29 @@ The diagnostic sweep surfaced a few more co-owned surfaces, each split by intent
 
 ---
 
-## A role that doesn't exist here: Agent-Ops
+## A role that has since landed: Agent-Ops
 
 Both sibling projects make a **Claude AI-Harness Owner / Agent-Ops Lead** their
-flagship role — a commit-gate, a fleet of self-improving reviewer agents, and an
-append-only knowledge contract that govern how Claude ships code. Binge has **none
-of that machinery**: `.claude/` is empty (no agents, hooks, rules, or commit gates),
-and the only meta-artifacts are `CLAUDE.md` (the working agreement) and
-`tasks/lessons.md` (a hand-kept lessons log).
+flagship role — a commit-gate, a fleet of reviewer agents, and an append-only
+knowledge contract that govern how Claude ships code. As of the 2026-06→07 build-out,
+**Binge now has this machinery too** (the original sweep, 2026-06-26, correctly found
+it absent — this section is the refresh):
 
-So the role is genuinely absent rather than un-owned — its concerns are absorbed by
-the **Engineering Manager (#25)**, with governance enforced by CI quality gates and
-the deploy drift-guard rather than by a local agent harness. Worth noting as a
-deliberate difference if Binge ever adopts a heavier Claude setup: that's where a
-27th-style "executable role" would land.
+- **Commit-gate reviewer agents** — `binge-code-reviewer`, `binge-security-reviewer`,
+  `binge-test-reviewer` run before any commit and stamp freshness markers.
+- **Hooks** — `dossier-freshness`, `exit-plan-suggest-review` (high-stakes plan →
+  suggest a stakeholder panel), `require-review-before-commit`, workflow-map + lessons
+  guards.
+- **A committed role-org layer** under `docs/org/`: this role map, the world-watch
+  external-knowledge system (`docs/org/world-watch/`, per-role sources + `state.json`),
+  the ADR corpus (`docs/org/adr/`), and the measurement layer
+  (`docs/org/metrics/events.jsonl` scored by `/org-retro`).
+- **A knowledge contract** — `tasks/lessons.md` + its auto-loaded digest
+  (`.claude/rules/lessons-digest.md`).
+
+Much of the harness (`.claude/` agents + hooks) is gitignored (local-only, $0
+interactive), while the durable artifacts (role map, world-watch state, ADRs, metrics)
+are committed. Governance is shared between the **Engineering Manager (#25)** (working
+agreement, CI gates, deploy drift-guard) and this Agent-Ops layer (the pre-build
+stakeholder panel + the commit-gate reviewers). If Binge ever formalizes a 27th-style
+"executable role," this is the machinery it would own.
