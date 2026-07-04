@@ -34,17 +34,21 @@ export interface UserNotifSettings {
 // canonicalise too — otherwise it (a) misses titles on an aliased provider the
 // user has, and (b) writes a notif id that won't dedupe against the inbox's
 // `${tmdbId}-${canonicalId}` convention.
-const ALIAS_TO_CANONICAL: Record<number, number> = {
+// Exported (frozen) so the root-vitest parity test in
+// src/lib/tmdb/providerAliasParity.test.ts can assert this mirror still matches
+// SWEDISH_PROVIDERS.aliases and fail CI on any future drift (BIN-420). Frozen so
+// an importer can't mutate the shared map and silently corrupt canonicalisation.
+export const ALIAS_TO_CANONICAL: Readonly<Record<number, number>> = Object.freeze({
   1899: 384, 1825: 384,   // Max
   493: 520,               // SVT Play
   1944: 489, 1759: 489,   // TV4 Play
   2243: 350,              // Apple TV+
   1968: 323, 283: 323,    // Crunchyroll
-  1773: 431,              // SkyShowtime
+  1773: 431, 531: 431,    // SkyShowtime (531 = nedlagda Paramount+ → efterträdaren)
   188: 335,               // YouTube Premium
   497: 521,               // Tele2 Play
   517: 578,               // TriArt Play
-};
+});
 
 export function canonicalProviderId(id: number): number {
   return ALIAS_TO_CANONICAL[id] ?? id;

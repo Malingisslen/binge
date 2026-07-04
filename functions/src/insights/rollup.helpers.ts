@@ -13,7 +13,11 @@ import type { RollupData, MediaType } from './types';
 // 1825); watchlist docs written before the client canonicalised on write still
 // hold the raw alias ids, so the rollup must fold them together before ranking —
 // otherwise "Max" splits into three rows in the topProviders panel.
-const ALIAS_TO_CANONICAL: Record<number, number> = {
+// Exported (frozen) so the root-vitest parity test in
+// src/lib/tmdb/providerAliasParity.test.ts can assert this mirror still matches
+// SWEDISH_PROVIDERS.aliases and fail CI on any future drift (BIN-420). Frozen so
+// an importer can't mutate the shared map and silently corrupt canonicalisation.
+export const ALIAS_TO_CANONICAL: Readonly<Record<number, number>> = Object.freeze({
   1899: 384, 1825: 384,   // Max
   493: 520,               // SVT Play
   1944: 489, 1759: 489,   // TV4 Play
@@ -23,7 +27,7 @@ const ALIAS_TO_CANONICAL: Record<number, number> = {
   188: 335,               // YouTube Premium
   497: 521,               // Tele2 Play
   517: 578,               // TriArt Play
-};
+});
 
 /** Fold TMDB's alias ids onto the canonical service id (identity for base ids). */
 export function canonicalProviderId(id: number): number {
