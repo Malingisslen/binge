@@ -52,7 +52,7 @@ export function ProvidersSection() {
   };
 
   const { selected: selectedProviders, available } = splitProviders(FLATRATE, selected);
-  const total = totalMonthlyCost(selected, user.providerCosts ?? {}, user.providerTiers ?? {});
+  const total = totalMonthlyCost(selected, user.providerCosts ?? {}, user.providerTiers ?? {}, user.providerCampaigns ?? {});
 
   const tile = (p: SwedishProvider, isSelected: boolean) => {
     const fg = readableTextColor(p.color);

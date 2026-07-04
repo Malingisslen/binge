@@ -17,7 +17,7 @@ export default function SpendSnapshotTile() {
   const myProviders = user?.myProviders ?? [];
   if (myProviders.length === 0) return null;
 
-  const snap = computeSpendSnapshot(myProviders, items, user?.providerCosts ?? {}, user?.providerTiers ?? {});
+  const snap = computeSpendSnapshot(myProviders, items, user?.providerCosts ?? {}, user?.providerTiers ?? {}, user?.providerCampaigns ?? {});
   if (snap.totalKr <= 0) return null;
 
   return (

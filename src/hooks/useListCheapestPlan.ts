@@ -48,6 +48,8 @@ export function useListCheapestPlan(
 ): UseListCheapestPlanResult {
   const enabled = options?.enabled ?? true;
   const { user } = useAuth();
+  // BIN-417: stable per-mount `now` for campaign resolution (see useSubscriptionAdvisor).
+  const now = useMemo(() => new Date(), []);
 
   const queries = useQueries({
     queries: items.map((item) => ({
@@ -89,11 +91,16 @@ export function useListCheapestPlan(
     const ownedProviderIds = canonicalUniqueProviders(user?.myProviders ?? []);
     const plan =
       titles.length > 0
-        ? cheapestListPlan(titles, {
-            providerTiers: user?.providerTiers ?? {},
-            providerCosts: user?.providerCosts ?? {},
-            ownedProviderIds,
-          })
+        ? cheapestListPlan(
+            titles,
+            {
+              providerTiers: user?.providerTiers ?? {},
+              providerCosts: user?.providerCosts ?? {},
+              providerCampaigns: user?.providerCampaigns ?? {}, // BIN-417 campaign-aware
+              ownedProviderIds,
+            },
+            now,
+          )
         : null;
 
     return {
@@ -103,5 +110,5 @@ export function useListCheapestPlan(
       uncheckableCount,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, isLoading, items, settleKey, user?.myProviders, user?.providerTiers, user?.providerCosts]);
+  }, [enabled, isLoading, items, settleKey, user?.myProviders, user?.providerTiers, user?.providerCosts, user?.providerCampaigns, now]);
 }

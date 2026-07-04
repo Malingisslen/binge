@@ -5,7 +5,8 @@ import { useQueries } from '@tanstack/react-query';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite } from '@/lib/tmdb/client';
-import { getProvider, canonicalProviderId, canonicalUniqueProviders, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, canonicalUniqueProviders } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -73,7 +74,12 @@ export function useSubscriptionAdvisor(
   const myProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
   const providerCosts = useMemo(() => user?.providerCosts ?? {}, [user?.providerCosts]);
   const providerTiers = useMemo(() => user?.providerTiers ?? {}, [user?.providerTiers]);
+  const providerCampaigns = useMemo(() => user?.providerCampaigns ?? {}, [user?.providerCampaigns]);
   const providerPauses = useMemo(() => user?.providerPauses ?? {}, [user?.providerPauses]);
+  // BIN-417: stable per-mount `now` for campaign resolution. Campaigns flip at a
+  // day boundary; a per-mount value refreshes on navigation, which is enough and
+  // keeps the cost memos stable (never busts on every render).
+  const now = useMemo(() => new Date(), []);
 
   const showQueries = useQueries({
     queries: tmdbIds.map(id => ({
@@ -249,7 +255,7 @@ export function useSubscriptionAdvisor(
         providerName: provider.name,
         shortName: provider.shortName,
         color: provider.color,
-        monthlyCost: resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }),
+        monthlyCost: resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now),
         status,
         shows: followingAnchors,
         nextAirDate: dates[0] ?? null,
@@ -320,7 +326,7 @@ export function useSubscriptionAdvisor(
           shortName: provider.shortName,
           color: provider.color,
           isSubscribed: myProviderSet.has(pid),
-          monthlyCost: resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }),
+          monthlyCost: resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now),
           tvCount: c.tv,
           movieCount: c.movie,
         });
@@ -339,7 +345,7 @@ export function useSubscriptionAdvisor(
       const provider = getProvider(pid);
       if (!provider) continue;
       const state = providerPauses[pid];
-      const monthlyCost = resolveProviderMonthlyCost(pid, { providerTiers, providerCosts }) ?? 0;
+      const monthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0;
       const days = daysBetween(state.pausedAt);
       activePauses.push({
         providerId: pid,
@@ -420,7 +426,7 @@ export function useSubscriptionAdvisor(
       // normally has no tier/custom entry, so this equals defaultMonthlyCost today)
       // — keeps the "one source of truth" invariant airtight against a stale
       // providerTiers/providerCosts entry left behind after un-subscribing.
-      monthlyCost: resolveProviderMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts }) ?? 0,
+      monthlyCost: resolveEffectiveMonthlyCost(topSubscribe.providerId, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0,
     } : null;
 
     const primaryAction: PrimaryAction =
@@ -476,7 +482,7 @@ export function useSubscriptionAdvisor(
       unfinishedTmdbIds,
       endedCaughtUpTmdbIds,
     };
-  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerPauses, lookAheadDays, hasError]);
+  }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerCampaigns, now, providerPauses, lookAheadDays, hasError]);
 
   return { ...computed, isLoading, hasError };
 }

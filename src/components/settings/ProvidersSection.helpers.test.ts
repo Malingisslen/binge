@@ -81,4 +81,10 @@ describe('totalMonthlyCost', () => {
   it('resolves alias ids against canonical cost keys', () => {
     expect(totalMonthlyCost([1944], { 489: 69 })).toBe(69);
   });
+  it('BIN-417: uses an active campaign price, reverting to ordinary past its end date', () => {
+    // Netflix (8) ordinary 169; a 29 kr campaign t.o.m. 2026-10-01.
+    const campaigns = { 8: { monthlyCost: 29, endDate: '2026-10-01' } };
+    expect(totalMonthlyCost([8], {}, {}, campaigns, new Date(2026, 8, 1))).toBe(29);   // during
+    expect(totalMonthlyCost([8], {}, {}, campaigns, new Date(2026, 9, 2))).toBe(169);  // after → reverted
+  });
 });

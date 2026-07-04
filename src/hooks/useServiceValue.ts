@@ -8,7 +8,8 @@
 import { useMemo } from 'react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { resolveProviderMonthlyCost, canonicalUniqueProviders } from '@/lib/tmdb/providers';
+import { canonicalUniqueProviders } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import { watchedForValueFromItems, rollupServiceValue, type ServiceValueRow } from '@/lib/advisor/serviceValue';
 
 export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; monthLabel: string } {
@@ -25,6 +26,7 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
 
     const costs = user?.providerCosts ?? {};
     const tiers = user?.providerTiers ?? {};
+    const campaigns = user?.providerCampaigns ?? {};
     // BIN-208: only films currently marked 'sedd' count. watchedAt is set when a
     // film is marked seen but NOT cleared if it later leaves 'sedd' (merge write),
     // so gating on watchedAt alone would count un-watched films and skew the verdict.
@@ -33,7 +35,8 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
     const rows = rollupServiceValue({
       watched,
       ownedProviderIds: owned,
-      costFor: (id) => resolveProviderMonthlyCost(id, { providerTiers: tiers, providerCosts: costs }) ?? 0,
+      // BIN-417: campaign-aware; `now` is already the value-month reference date.
+      costFor: (id) => resolveEffectiveMonthlyCost(id, { providerTiers: tiers, providerCosts: costs, providerCampaigns: campaigns }, now) ?? 0,
       monthStartMs: startMs,
       monthEndMs: endMs,
     });

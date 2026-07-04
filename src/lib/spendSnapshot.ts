@@ -1,4 +1,6 @@
-import { getProvider, resolveProviderMonthlyCost, canonicalUniqueProviders } from '@/lib/tmdb/providers';
+import { getProvider, canonicalUniqueProviders } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import type { WatchlistItem } from '@/types';
 
 // BIN-99 — whole-watchlist streaming spend snapshot. One headline number:
@@ -19,8 +21,11 @@ function costOf(
   id: number,
   providerCosts: Record<number, number>,
   providerTiers: Record<number, string>,
+  providerCampaigns: Record<number, ProviderCampaign>,
+  now: Date,
 ): number {
-  return resolveProviderMonthlyCost(id, { providerTiers, providerCosts }) ?? 0;
+  // BIN-417: campaign-aware — a lapsed campaign auto-reverts to the ordinary price.
+  return resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0;
 }
 
 export function computeSpendSnapshot(
@@ -28,6 +33,10 @@ export function computeSpendSnapshot(
   items: WatchlistItem[],
   providerCosts: Record<number, number>,
   providerTiers: Record<number, string> = {},
+  // BIN-417: trailing optionals so existing callers/tests are unchanged. `now`
+  // is only consulted when a campaign exists, so defaulting it is safe.
+  providerCampaigns: Record<number, ProviderCampaign> = {},
+  now: Date = new Date(),
 ): SpendSnapshot {
   // Providers that carry backlog you'd actually watch: vill_se (film) + 'mina'
   // (followed series). sedd/avbruten don't count as a reason to keep paying.
@@ -42,7 +51,7 @@ export function computeSpendSnapshot(
   const idleProviders: { id: number; name: string; cost: number }[] = [];
   // Canonicalise + dedupe so a legacy alias+canonical pair isn't double-counted (BIN-409).
   for (const id of canonicalUniqueProviders(myProviders)) {
-    const cost = costOf(id, providerCosts, providerTiers);
+    const cost = costOf(id, providerCosts, providerTiers, providerCampaigns, now);
     if (cost <= 0) continue; // free services (SVT Play) aren't "spend"
     totalKr += cost;
     if (activeProviderIds.has(id)) {

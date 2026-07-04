@@ -11,6 +11,19 @@ const title = (
   rentable = false,
 ): ListTitle => ({ tmdbId, title: `Title ${tmdbId}`, subscriptionProviderIds: subs, rentable });
 
+describe('cheapestListPlan — BIN-417 campaign-aware cost', () => {
+  it('uses the campaign price while active, then reverts to ordinary past its end date', () => {
+    const titles = [title(1, [8]), title(2, [8])]; // both on Netflix (ordinary 169)
+    const user = { providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-10-01' } } };
+    const during = cheapestListPlan(titles, user, new Date(2026, 8, 1)); // 2026-09-01
+    expect(during.bestSingle.providerId).toBe(8);
+    expect(during.bestSingle.monthlyKr).toBe(29); // campaign price flows into the plan
+    expect(during.fullPlan.monthlyKr).toBe(29);
+    const after = cheapestListPlan(titles, user, new Date(2026, 9, 2)); // 2026-10-02
+    expect(after.bestSingle.monthlyKr).toBe(169); // auto-reverted to ordinary
+  });
+});
+
 describe('cheapestListPlan — best single subscription', () => {
   it('picks the single subscription that covers the most of the list', () => {
     const plan = cheapestListPlan([

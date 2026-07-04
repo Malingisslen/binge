@@ -15,7 +15,9 @@
 // defaultMonthlyCost 0 but isAds) is NOT "free". The free tie-break rung gates
 // on isFree === true, never on cost === 0 — same as franchisePlan.
 
-import { canonicalProviderId, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 
 export interface ListTitle {
   tmdbId: number;
@@ -35,6 +37,8 @@ export interface UnplannedTitle {
 export interface UserCostSettings {
   providerTiers?: Record<number, string>;
   providerCosts?: Record<number, number>;
+  /** BIN-417: raw per-provider campaign (auto-reverts past endDate), canonical-keyed. */
+  providerCampaigns?: Record<number, ProviderCampaign>;
   /** Services the user already pays for → 0 kr incremental for this list. */
   ownedProviderIds?: number[];
 }
@@ -91,11 +95,12 @@ function isFree(id: number): boolean {
   return getProvider(id)?.isFree === true;
 }
 
-function makeCost(user: UserCostSettings) {
+function makeCost(user: UserCostSettings, now: Date) {
   const owned = new Set((user.ownedProviderIds ?? []).map(canonicalProviderId));
   return (id: number): number => {
     if (owned.has(id)) return 0; // already paid for → 0 incremental
-    return resolveProviderMonthlyCost(id, user) ?? 0;
+    // BIN-417: campaign-aware — a lapsed campaign auto-reverts to ordinary here too.
+    return resolveEffectiveMonthlyCost(id, user, now) ?? 0;
   };
 }
 
@@ -264,8 +269,11 @@ function cheapestCover(
 export function cheapestListPlan(
   titles: readonly ListTitle[],
   user: UserCostSettings = {},
+  // BIN-417: `now` for campaign resolution; only consulted when a providerCampaign
+  // exists, so defaulting keeps existing callers/tests unchanged.
+  now: Date = new Date(),
 ): ListPlan {
-  const cost = makeCost(user);
+  const cost = makeCost(user, now);
 
   const streamable = titles.filter((t) => subsOf(t).length > 0);
   const nonStreamable = titles.filter((t) => subsOf(t).length === 0);

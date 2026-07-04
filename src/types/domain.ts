@@ -127,6 +127,12 @@ export interface UserProfile {
   hiddenCountries: string[];
   providerCosts: Record<number, number>;
   providerTiers: Record<number, string>;
+  // BIN-417: valfri tidsbegränsad kampanj per provider — RÅTT pris + slutdatum,
+  // aldrig ett för-resolvat effektivpris. Auto-återgår till ordinariepris efter
+  // endDate via resolveEffectiveMonthlyCost. Nyckel = kanoniskt provider-id.
+  // Strukturellt identisk med ProviderCampaign (lib/advisor/campaignPricing) —
+  // inlinad här så domän-typerna slipper ett lib-beroende.
+  providerCampaigns?: Record<number, { monthlyCost: number; endDate: string }>;
   // BIN-46: valfri faktureringsdag (1–28) per provider för förnyelse-nedräkning.
   providerRenewalDays: Record<number, number>;
   providerPauses: Record<number, ProviderPauseState>;

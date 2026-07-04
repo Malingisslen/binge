@@ -1,4 +1,6 @@
-import { canonicalProviderId, canonicalUniqueProviders, resolveProviderMonthlyCost, type SwedishProvider } from '@/lib/tmdb/providers';
+import { canonicalProviderId, canonicalUniqueProviders, type SwedishProvider } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 
 /** WCAG relative luminance → pick legible foreground for a hex background. */
 export function readableTextColor(hex: string): 'white' | 'ink' {
@@ -43,10 +45,14 @@ export function totalMonthlyCost(
   selectedIds: number[],
   providerCosts: Record<number, number>,
   providerTiers: Record<number, string> = {},
+  // BIN-417: trailing optionals — campaign-aware total. `now` only matters when a
+  // campaign exists, so defaulting it keeps existing callers/tests unchanged.
+  providerCampaigns: Record<number, ProviderCampaign> = {},
+  now: Date = new Date(),
 ): number {
   // Canonicalise + dedupe so an alias+canonical pair isn't summed twice (BIN-409).
   return canonicalUniqueProviders(selectedIds).reduce(
-    (sum, id) => sum + (resolveProviderMonthlyCost(id, { providerTiers, providerCosts }) ?? 0),
+    (sum, id) => sum + (resolveEffectiveMonthlyCost(id, { providerTiers, providerCosts, providerCampaigns }, now) ?? 0),
     0,
   );
 }

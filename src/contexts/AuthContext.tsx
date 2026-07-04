@@ -20,7 +20,9 @@ import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
-import { getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
+import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -55,6 +57,10 @@ interface AuthState {
   // funktionella-merge-härdning som setProviderCost (BIN-46, jfr BIN-40).
   setProviderRenewalDay: (providerId: number, day: number | null) => Promise<void>;
   updateProviderTier: (providerId: number, tierId: string | null) => Promise<void>;
+  // BIN-417: sätt/ta bort EN providers tidsbegränsade kampanj (null = ta bort).
+  // Lagrar RÅTT { monthlyCost, endDate } (aldrig ett resolvat pris), keyat på
+  // kanoniskt id. Samma funktionella-merge-härdning som setProviderCost.
+  setProviderCampaign: (providerId: number, campaign: ProviderCampaign | null) => Promise<void>;
   pauseProvider: (providerId: number, resumeAt?: string | null) => Promise<void>;
   resumeProvider: (providerId: number) => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
@@ -89,6 +95,7 @@ const AuthContext = createContext<AuthState>({
   setProviderCost: async () => {},
   setProviderRenewalDay: async () => {},
   updateProviderTier: async () => {},
+  setProviderCampaign: async () => {},
   pauseProvider: async () => {},
   resumeProvider: async () => {},
   updateUsername: async () => {},
@@ -146,6 +153,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
       hiddenCountries: (data.hiddenCountries as string[]) ?? [],
       providerCosts: (data.providerCosts as Record<number, number>) ?? {},
       providerTiers: (data.providerTiers as Record<number, string>) ?? {},
+      providerCampaigns: (data.providerCampaigns as UserProfile['providerCampaigns']) ?? {},
       providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
       providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
       calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
@@ -436,6 +444,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     providerCostsRef.current = next;
     await updateUserField('providerCosts', next);
   }, [updateUserField]);
+  // BIN-417: same synchronous-mirror pattern for campaigns. Stores the RAW
+  // { monthlyCost, endDate } keyed by CANONICAL id (so an alias id and its
+  // canonical resolve the same entry, matching resolveEffectiveMonthlyCost).
+  const providerCampaignsRef = useRef<Record<number, ProviderCampaign>>({});
+  useEffect(() => { providerCampaignsRef.current = user?.providerCampaigns ?? {}; }, [user?.providerCampaigns]);
+  const setProviderCampaign = useCallback(async (providerId: number, campaign: ProviderCampaign | null) => {
+    const key = canonicalProviderId(providerId);
+    const next = { ...providerCampaignsRef.current };
+    if (campaign == null) delete next[key];
+    else next[key] = campaign;
+    providerCampaignsRef.current = next;
+    await updateUserField('providerCampaigns', next);
+  }, [updateUserField]);
   // Samma synkrona-spegel-mönster som providerCosts (BIN-46) så tabbning mellan
   // fält inte skriver mot en stale render-snapshot och tappar ett värde.
   const providerRenewalDaysRef = useRef<Record<number, number>>({});
@@ -497,10 +518,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // was migrated away still records the right saved amount instead of falling to
     // defaultMonthlyCost. Historic pauseHistory rows are never rewritten.
     const provider = getProvider(providerId);
-    const monthlyCost = resolveProviderMonthlyCost(providerId, {
+    // BIN-417: snapshot the EFFECTIVE cost at resume — if a campaign was active
+    // during the pause, that's the price that actually applied.
+    const monthlyCost = resolveEffectiveMonthlyCost(providerId, {
       providerTiers: user?.providerTiers,
       providerCosts: user?.providerCosts,
-    }) ?? 0;
+      providerCampaigns: user?.providerCampaigns,
+    }, new Date()) ?? 0;
     // Minst 1 dag — annars hamnar pause-then-instant-resume-test som 0 kr.
     const durationDays = Math.max(1, daysBetween(pause.pausedAt));
     const savedAmount = Math.round((monthlyCost * durationDays) / 30);
@@ -653,7 +677,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
@@ -661,7 +685,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user, uid, loading, profileLoading, emailVerified,
       signIn, signInEmail, register, resendEmailVerification, signOut,
-      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier,
+      updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,

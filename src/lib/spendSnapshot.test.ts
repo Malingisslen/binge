@@ -29,6 +29,15 @@ describe('computeSpendSnapshot (BIN-99)', () => {
     expect(snap.activeKr).toBe(99);
   });
 
+  it('BIN-417: applies an active campaign, then auto-reverts past its end date', () => {
+    // Netflix (8) ordinary 169; a 29 kr campaign runs t.o.m. 2026-10-01.
+    const campaigns = { 8: { monthlyCost: 29, endDate: '2026-10-01' } };
+    const during = computeSpendSnapshot([8], [], {}, {}, campaigns, new Date(2026, 8, 1)); // 2026-09-01
+    expect(during.totalKr).toBe(29); // campaign price flows through the whole snapshot
+    const after = computeSpendSnapshot([8], [], {}, {}, campaigns, new Date(2026, 9, 2)); // 2026-10-02
+    expect(after.totalKr).toBe(169); // reverted to ordinary, no manual cleanup
+  });
+
   it('counts followed series (mina) as active backlog, ignores sedd/avbruten', () => {
     const seriesActive = mk({ tmdbId: 2, mediaType: 'tv', status: 'mina', providers: [76] });
     const watched = mk({ tmdbId: 3, status: 'sedd', providers: [8] }); // sedd → not backlog
