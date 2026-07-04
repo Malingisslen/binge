@@ -7,6 +7,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import SrOnlyTableHeader from '@/components/ui/SrOnlyTableHeader';
 import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
+import CampaignExpiryNudges from '@/components/savings/CampaignExpiryNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
 import ServiceValueCard from '@/components/savings/ServiceValueCard';
@@ -236,6 +237,8 @@ function SavingsContent() {
       </header>
       <div style={{ marginTop: 22 }}>
         <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
+
+        <CampaignExpiryNudges />
 
         {advisor.activePauses.length > 0 && (
           <ActivePausesSection

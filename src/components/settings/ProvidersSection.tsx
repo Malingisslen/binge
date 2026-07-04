@@ -17,7 +17,7 @@ import {
 const FLATRATE = SWEDISH_PROVIDERS.filter(p => p.type === 'flatrate');
 
 export function ProvidersSection() {
-  const { user, updateProviders, setProviderCost, setProviderRenewalDay, updateProviderTier } = useAuth();
+  const { user, updateProviders, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign } = useAuth();
   const { show: toast } = useToast();
 
   const savedProviders = useMemo(() => user?.myProviders ?? [], [user?.myProviders]);
@@ -126,7 +126,8 @@ export function ProvidersSection() {
               const fg = readableTextColor(provider.color);
               const renewalDay = user.providerRenewalDays?.[provider.id];
               return (
-                <div key={provider.id} className="flex items-center gap-[10px] py-[3px]">
+                <div key={provider.id}>
+                <div className="flex items-center gap-[10px] py-[3px]">
                   <span
                     className="rounded-sm px-2 py-[1px] text-[11px] font-semibold min-w-[54px] text-center"
                     style={{ background: provider.color, color: fg === 'white' ? 'white' : 'var(--ink)' }}
@@ -192,6 +193,16 @@ export function ProvidersSection() {
                     className="w-[48px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
                   />
                 </div>
+                <ProviderCampaignRow
+                  campaign={user.providerCampaigns?.[provider.id]}
+                  onSave={(c) => setProviderCampaign(provider.id, c)
+                    .then(() => toast('Kampanjpris sparat'))
+                    .catch(() => toast('Kunde inte spara kampanjen. Försök igen.'))}
+                  onClear={() => setProviderCampaign(provider.id, null)
+                    .then(() => toast('Kampanjpris borttaget'))
+                    .catch(() => toast('Kunde inte ta bort kampanjen.'))}
+                />
+                </div>
               );
             })}
           </div>
@@ -204,5 +215,100 @@ export function ProvidersSection() {
         </div>
       )}
     </SettingsSection>
+  );
+}
+
+// BIN-417 — per-provider tidsbegränsad kampanj. Sparar RÅTT { monthlyCost, endDate }
+// (aldrig ett resolvat pris); resolveEffectiveMonthlyCost auto-återgår till
+// ordinariepriset efter slutdatumet. type="date" ger alltid YYYY-MM-DD.
+type Campaign = { monthlyCost: number; endDate: string };
+
+function ProviderCampaignRow({
+  campaign,
+  onSave,
+  onClear,
+}: {
+  campaign: Campaign | undefined;
+  onSave: (c: Campaign) => Promise<void> | void;
+  onClear: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [cost, setCost] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const startEdit = () => {
+    setCost(campaign?.monthlyCost != null ? String(campaign.monthlyCost) : '');
+    setEndDate(campaign?.endDate ?? '');
+    setEditing(true);
+  };
+
+  const parsedCost = parseInt(cost, 10);
+  const valid = !isNaN(parsedCost) && parsedCost > 0 && /^\d{4}-\d{2}-\d{2}$/.test(endDate);
+
+  const save = async () => {
+    if (!valid || saving) return;
+    // Await the write before leaving edit mode: user.providerCampaigns (the view
+    // row's source) only updates after Firestore round-trips, so flipping early
+    // would flash the pre-edit value. onSave swallows its own errors (toast).
+    setSaving(true);
+    await onSave({ monthlyCost: parsedCost, endDate });
+    setSaving(false);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 pl-[64px] pb-[4px] text-[11px]">
+        {campaign ? (
+          <>
+            <span className="text-ink-3">
+              Kampanj:{' '}
+              <span className="text-ink font-semibold tabular-nums">{campaign.monthlyCost} kr</span>{' '}
+              t.o.m. {campaign.endDate}
+            </span>
+            <button type="button" onClick={startEdit} className="text-acc-deep bg-transparent border-none p-0 cursor-pointer">Ändra</button>
+            <button type="button" onClick={onClear} className="text-ink-3 bg-transparent border-none p-0 cursor-pointer">Ta bort</button>
+          </>
+        ) : (
+          <button type="button" onClick={startEdit} className="text-ink-3 bg-transparent border-none p-0 cursor-pointer hover:text-acc-deep">
+            + Lägg till kampanjpris
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 pl-[64px] pb-[5px] text-[11px] flex-wrap">
+      <span className="text-ink-3">Kampanjpris</span>
+      <input
+        type="number"
+        min="1"
+        step="1"
+        placeholder="kr/mån"
+        value={cost}
+        onChange={e => setCost(e.target.value)}
+        aria-label="Kampanjpris per månad"
+        className="w-[70px] px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none text-right"
+      />
+      <span className="text-ink-3">t.o.m.</span>
+      <input
+        type="date"
+        value={endDate}
+        onChange={e => setEndDate(e.target.value)}
+        aria-label="Kampanjens slutdatum"
+        className="px-1 py-[1px] text-xs border border-rule rounded-sm bg-surface text-ink font-[inherit] outline-none"
+      />
+      <button
+        type="button"
+        onClick={save}
+        disabled={!valid || saving}
+        className="text-acc-deep font-semibold bg-transparent border-none p-0 cursor-pointer disabled:text-ink-3 disabled:cursor-default"
+      >
+        {saving ? 'Sparar…' : 'Spara'}
+      </button>
+      <button type="button" onClick={() => setEditing(false)} disabled={saving} className="text-ink-3 bg-transparent border-none p-0 cursor-pointer disabled:opacity-50">Avbryt</button>
+    </div>
   );
 }
