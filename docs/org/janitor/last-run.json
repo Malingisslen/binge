@@ -1,0 +1,8 @@
+{
+  "lastRun": "2026-07-04",
+  "dossiersRefreshed": 0,
+  "worldWatchRoles": 1,
+  "retroDue": true,
+  "acceptRate": null,
+  "notes": "No docs/org/dossier-staleness/ dir (skipped); Security Architect scan ran (weekly, due) — no material findings, no issues filed; shakedown retro overdue since 2026-07-01."
+}

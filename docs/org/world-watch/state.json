@@ -39,11 +39,16 @@
         { "id": "recaptcha-enterprise-relnotes", "title": "reCAPTCHA Enterprise release notes", "url": "https://docs.cloud.google.com/recaptcha/docs/release-notes", "type": "html", "note": "Use docs.cloud.google.com host (301 from cloud.google.com)." },
         { "id": "gh-changelog-dependabot", "title": "GitHub changelog — Dependabot", "url": "https://github.blog/changelog/label/dependabot/feed/", "type": "rss", "note": "How vuln alerts/grouping reach the repo." }
       ],
-      "lastScan": "2026-06-27",
+      "lastScan": "2026-07-04",
       "snapshot": {
-        "nextjs-advisories": "newest: GHSA-26hh-7cqf-hhc6 segment-prefetch middleware bypass follow-up (2026-05-07); May-2026 coordinated batch baselined → BIN-213",
-        "firebase-js-sdk-releases": "firebase@12.15.0 (2026-06-16); Auth/App-Check reCAPTCHA-Enterprise conflict fix — N/A to Binge (uses reCAPTCHA v3)"
-      }
+        "nextjs-advisories": "Newest still the May 6-7 2026 coordinated batch (10 GHSAs incl. GHSA-26hh-7cqf-hhc6 follow-up, GHSA-c4j6-fc7j-m34r SSRF via WebSocket upgrade, GHSA-wfc6-r584-vfw7 cache poisoning) — already ticketed as BIN-213. Nothing published after 2026-05-07.",
+        "ghsa-npm": "No Next.js/React/Firebase JS SDK/firebase-functions advisories in the current feed. Surfaced two transitive-dep CVEs already patched in Binge's lockfiles: protobufjs CVE-2026-41242/GHSA-xq3m-2v4x-88gg (fix >=7.5.5/8.0.1 — Binge resolves 7.6.4 root, 7.5.6 in functions/) and fast-xml-parser CVE-2026-25128/GHSA-37qj-frw5-hhjh (fix >=5.3.4 — Binge resolves 5.7.2 in functions/). Both non-issues.",
+        "firebase-js-sdk-releases": "Still firebase@12.15.0 (2026-06-16), no newer release.",
+        "firestore-rules-relnotes": "Page's own 'last updated' is 2026-01-21 — predates the prior baseline. No rules-language change this cycle. (WebFetch 403'd; WebSearch fallback used.)",
+        "recaptcha-enterprise-relnotes": "No v3-breaking change found. General context only (April-2026 controller->processor DPA shift, Q1-2026 Classic-key auto-migration) is non-breaking; existing v2/v3 site keys continue to work, no code changes needed. (WebFetch 403'd; WebSearch fallback used.)",
+        "gh-changelog-dependabot": "Most recent relevant entries (Deno/sbt ecosystem support, 'no longer infers .npmrc' 2026-06-30, GitHub-hosted registry access) are feature/config changes, not alert/grouping behavior affecting Binge's npm setup. (WebFetch 403'd; WebSearch fallback used.)"
+      },
+      "_lastScanCoverage": "6/6 sources covered (3 reachable directly, 3 via WebSearch fallback after 403s). Cross-checked surfaced CVEs (protobufjs, fast-xml-parser) against Binge's actual resolved lockfile versions — none actionable. No new material findings; no issues filed."
     },
     "legal-gdpr-counsel": {
       "roleNumber": 5,
