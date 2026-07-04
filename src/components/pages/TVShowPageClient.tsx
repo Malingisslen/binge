@@ -45,7 +45,7 @@ import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/pr
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
-import PriceHistoryStatRow from '@/components/title/PriceHistoryStatRow';
+import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 import type { TMDBTVShow } from '@/types';
 
@@ -341,7 +341,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
-              <PriceHistoryStatRow tmdbId={show.id} nowMs={now} />
+              <PriceHistoryChart tmdbId={show.id} nowMs={now} />
             </div>
           )}
 

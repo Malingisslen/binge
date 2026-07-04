@@ -42,7 +42,7 @@ import { offerForProvider, isLeavingSoon, formatLeaving } from '@/lib/streaming/
 import { useCineasternaCatalog } from '@/hooks/useCineasternaCatalog';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
 import CinemaCountdownStrip from '@/components/title/CinemaCountdownStrip';
-import PriceHistoryStatRow from '@/components/title/PriceHistoryStatRow';
+import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import type { TMDBMovie } from '@/types';
@@ -393,7 +393,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
               {/* BIN-354: rent price-history stat row (option C). Lazy — only
                   fetches priceHistory/{id} when this disclosure is expanded. */}
-              <PriceHistoryStatRow tmdbId={movie.id} nowMs={now} />
+              <PriceHistoryChart tmdbId={movie.id} nowMs={now} />
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>
