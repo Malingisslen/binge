@@ -19,6 +19,8 @@ import { storeParticipantId } from '@/hooks/useSession';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { GroupMembersPanel } from '@/components/groups/GroupMembersPanel';
 import { GroupWatchlistTable } from '@/components/groups/GroupWatchlistTable';
+import ListCheapestPlanPanel from '@/components/lists/ListCheapestPlanPanel';
+import type { ListPlanItem } from '@/hooks/useListCheapestPlan';
 import { GroupSessionHistoryPanel } from '@/components/groups/GroupSessionHistoryPanel';
 import {
   InvitePanel,
@@ -155,6 +157,13 @@ function GroupView({
     [members],
   );
 
+  // BIN-416 — "billigaste sättet att se listan" over the group's shared watchlist,
+  // costed against the VIEWING member's own providers. Panel self-gates (≥2 titles).
+  const planItems = useMemo<ListPlanItem[]>(
+    () => watchlist.map(i => ({ tmdbId: i.tmdbId, mediaType: i.mediaType, title: i.title })),
+    [watchlist],
+  );
+
   const startSession = async () => {
     setError(null);
     setStartingSession(true);
@@ -252,6 +261,7 @@ function GroupView({
         </div>
 
         <div className="space-y-3">
+          <ListCheapestPlanPanel items={planItems} />
           <GroupWatchlistTable
             groupId={groupId}
             watchlist={watchlist}
