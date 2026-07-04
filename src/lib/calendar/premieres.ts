@@ -1,7 +1,7 @@
 import type { CalendarEntry, EpisodeEntry } from './types';
 import { entryKey } from './entry';
 import { getDisplayTitle } from '@/lib/tmdb/client';
-import type { TMDBSearchResult, WatchlistItem } from '@/types';
+import type { TMDBSearchResult, TMDBTVShow, WatchlistItem } from '@/types';
 
 // "Premiärer & finaler" — kvartalshorisonten (13 veckor) av landmärken:
 // säsongspremiärer, säsongsfinaler och digitala filmsläpp. Byggd ovanpå exakt
@@ -188,13 +188,16 @@ export interface DiscoveryPremiere {
   tmdbId: number;
   title: string;
   posterPath: string | null;
-  firstAirDate: string;
+  /** Premiärdatum: first_air_date för nya serier (S1), next_episode_to_air.air_date för återkomster. */
+  airDate: string;
+  /** 1 = helt ny serie, ≥2 = ny säsong av en serie du inte följer. Driver badgen (premiär/säsong N). */
+  seasonNumber: number;
   genreIds: number[];
   overview: string;
 }
 
 /**
- * Stora kommande seriepremiärer att UPPTÄCKA — nya serier (S1) i fönstret som
+ * Stora kommande seriepremiärer att UPPTÄCKA — NYA serier (S1) i fönstret som
  * användaren inte redan följer/avfärdat. Filtrerar bort: saknat/utanför-fönster
  * first_air_date, exkluderade ids, saknad poster. Deduplicerar över sidor,
  * behåller TMDB:s popularitetsordning, cappar till `cap`. Titel via
@@ -220,10 +223,76 @@ export function selectDiscoveryPremieres(
       tmdbId: r.id,
       title: getDisplayTitle(r),
       posterPath: r.poster_path,
-      firstAirDate: firstAir,
+      airDate: firstAir,
+      seasonNumber: 1,
       genreIds: r.genre_ids ?? [],
       overview: r.overview,
     });
   }
   return out;
+}
+
+/**
+ * Fas 2 — UPPCOMMANDE SÄSONGSPREMIÄRER (säsong ≥ 2, avsnitt 1) för RETURNERANDE
+ * serier du inte följer. Tar en pool av tv-lite-detaljer (redan hämtade via en
+ * capad fan-out) och behåller dem vars `next_episode_to_air` är en säsongspremiär
+ * i fönstret. En återkomsts premiärdatum är INTE seriens first_air_date, så detta
+ * kräver per-titel-detaljen (discover:s air_date-filter är bara en grov förfilter).
+ * Cappar, deduplicerar på id, mappar `genres`-objekten → id-array för duotone.
+ */
+export function selectSeasonPremiereDiscoveries(
+  shows: readonly TMDBTVShow[],
+  excludedIds: ReadonlySet<number>,
+  window: PremiereWindow,
+  cap = 12,
+): DiscoveryPremiere[] {
+  const seen = new Set<number>();
+  const out: DiscoveryPremiere[] = [];
+  for (const show of shows) {
+    if (out.length >= cap) break;
+    const next = show.next_episode_to_air;
+    if (!next) continue;
+    if (next.season_number < 2 || next.episode_number !== 1) continue;
+    if (!next.air_date || !inWindow(next.air_date, window)) continue;
+    if (excludedIds.has(show.id)) continue;
+    if (!show.poster_path) continue;
+    if (seen.has(show.id)) continue;
+    seen.add(show.id);
+    out.push({
+      tmdbId: show.id,
+      title: getDisplayTitle(show),
+      posterPath: show.poster_path,
+      airDate: next.air_date,
+      seasonNumber: next.season_number,
+      genreIds: show.genres?.map(g => g.id) ?? [],
+      overview: show.overview,
+    });
+  }
+  return out;
+}
+
+/**
+ * Slår ihop nya-serier-listan (S1) med återkomst-listan (S≥2) till EN datumsorterad
+ * "Upptäck"-rad. S1 först i indata → vinner vid id-krock (en serie kan inte vara
+ * både helt ny och återkommande, men vakten är billig). Sorterar på airDate, sedan
+ * sv titel; cappar totalen.
+ */
+export function mergeDiscoveries(
+  primary: readonly DiscoveryPremiere[],
+  secondary: readonly DiscoveryPremiere[],
+  cap = 12,
+): DiscoveryPremiere[] {
+  const seen = new Set<number>();
+  const merged: DiscoveryPremiere[] = [];
+  for (const d of [...primary, ...secondary]) {
+    if (seen.has(d.tmdbId)) continue;
+    seen.add(d.tmdbId);
+    merged.push(d);
+  }
+  merged.sort((a, b) =>
+    a.airDate < b.airDate ? -1
+      : a.airDate > b.airDate ? 1
+        : a.title.localeCompare(b.title, 'sv'),
+  );
+  return merged.slice(0, cap);
 }

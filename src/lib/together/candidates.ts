@@ -143,7 +143,7 @@ function resultToCandidate(r: TMDBSearchResult, mediaType: 'movie' | 'tv'): Sess
   return {
     tmdbId: r.id,
     mediaType,
-    title: getDisplayTitle({ ...r, media_type: mediaType }),
+    title: getDisplayTitle(r),
     posterPath: r.poster_path,
     year: extractYear(r.release_date || r.first_air_date),
     runtime: null,

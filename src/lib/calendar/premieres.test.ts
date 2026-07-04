@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { CalendarEntry, EpisodeEntry, MovieEntry } from './types';
-import type { TMDBSearchResult, WatchlistItem } from '@/types';
+import type { TMDBEpisode, TMDBSearchResult, TMDBTVShow, WatchlistItem } from '@/types';
 import {
   quarterWindow,
   coveredTmdbIdsInWindow,
@@ -8,7 +8,10 @@ import {
   selectQuarterEvents,
   groupEntriesByMonth,
   selectDiscoveryPremieres,
+  selectSeasonPremiereDiscoveries,
+  mergeDiscoveries,
   QUARTER_WEEKS,
+  type DiscoveryPremiere,
   type PremiereWindow,
 } from './premieres';
 
@@ -84,6 +87,44 @@ function searchResult(partial: Partial<TMDBSearchResult> = {}): TMDBSearchResult
     vote_average: 0,
     first_air_date: '2026-08-01',
     genre_ids: [10765],
+    ...partial,
+  };
+}
+
+function tvEpisode(partial: Partial<TMDBEpisode> = {}): TMDBEpisode {
+  return {
+    id: 5000,
+    episode_number: 1,
+    season_number: 3,
+    name: 'Premiär',
+    overview: '',
+    air_date: '2026-08-15',
+    still_path: null,
+    vote_average: 0,
+    runtime: 45,
+    ...partial,
+  };
+}
+
+function tvShow(partial: Partial<TMDBTVShow> = {}): TMDBTVShow {
+  return {
+    id: 200,
+    name: 'Återkomst',
+    original_name: 'The Return',
+    overview: 'En serie som kommer tillbaka.',
+    poster_path: '/r.jpg',
+    backdrop_path: null,
+    first_air_date: '2022-01-01',
+    last_air_date: '2025-06-01',
+    vote_average: 0,
+    vote_count: 0,
+    genres: [{ id: 18, name: 'Drama' }],
+    number_of_seasons: 3,
+    number_of_episodes: 24,
+    status: 'Returning Series',
+    seasons: [],
+    next_episode_to_air: tvEpisode(),
+    last_episode_to_air: null,
     ...partial,
   };
 }
@@ -292,5 +333,114 @@ describe('selectDiscoveryPremieres', () => {
       new Set(), WINDOW,
     );
     expect(out[0].title).toBe('Original Title');
+  });
+
+  it('emits the unified shape: airDate = first_air_date, seasonNumber = 1', () => {
+    const out = selectDiscoveryPremieres(
+      [searchResult({ id: 1, first_air_date: '2026-08-01' })],
+      new Set(), WINDOW,
+    );
+    expect(out[0]).toMatchObject({ airDate: '2026-08-01', seasonNumber: 1 });
+  });
+});
+
+// --- selectSeasonPremiereDiscoveries (Phase 2) -----------------------------
+
+describe('selectSeasonPremiereDiscoveries', () => {
+  it('keeps a returning show whose next episode is an S≥2 E1 premiere in-window', () => {
+    const out = selectSeasonPremiereDiscoveries(
+      [tvShow({ id: 200, next_episode_to_air: tvEpisode({ season_number: 3, episode_number: 1, air_date: '2026-08-15' }) })],
+      new Set(), WINDOW,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      tmdbId: 200, airDate: '2026-08-15', seasonNumber: 3, title: 'The Return', posterPath: '/r.jpg',
+    });
+    expect(out[0].genreIds).toEqual([18]); // genres objects → id array
+  });
+
+  it('rejects a mid-season next episode (E5)', () => {
+    const out = selectSeasonPremiereDiscoveries(
+      [tvShow({ next_episode_to_air: tvEpisode({ season_number: 3, episode_number: 5 }) })],
+      new Set(), WINDOW,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('rejects a season-1 premiere (that is Phase 1\'s lane)', () => {
+    const out = selectSeasonPremiereDiscoveries(
+      [tvShow({ next_episode_to_air: tvEpisode({ season_number: 1, episode_number: 1 }) })],
+      new Set(), WINDOW,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('rejects missing next_episode_to_air, out-of-window, excluded and posterless shows', () => {
+    const inWindowPremiere = tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-08-15' });
+    const out = selectSeasonPremiereDiscoveries([
+      tvShow({ id: 1, next_episode_to_air: null }),
+      tvShow({ id: 2, next_episode_to_air: tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-06-01' }) }), // before window
+      tvShow({ id: 3, next_episode_to_air: inWindowPremiere }), // excluded below
+      tvShow({ id: 4, poster_path: null, next_episode_to_air: inWindowPremiere }),
+    ], new Set([3]), WINDOW);
+    expect(out).toHaveLength(0);
+  });
+
+  it('caps the list length', () => {
+    const shows = Array.from({ length: 20 }, (_, i) =>
+      tvShow({ id: 300 + i, next_episode_to_air: tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-07-20' }) }));
+    expect(selectSeasonPremiereDiscoveries(shows, new Set(), WINDOW, 12)).toHaveLength(12);
+  });
+
+  it('dedupes the same show id (e.g. across discover pages)', () => {
+    const premiere = tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-07-20' });
+    const shows = [
+      tvShow({ id: 500, next_episode_to_air: premiere }),
+      tvShow({ id: 500, next_episode_to_air: premiere }), // dup
+    ];
+    expect(selectSeasonPremiereDiscoveries(shows, new Set(), WINDOW)).toHaveLength(1);
+  });
+
+  it('falls back to [] genreIds when the show has no genres', () => {
+    const out = selectSeasonPremiereDiscoveries(
+      [tvShow({ id: 600, genres: undefined as unknown as { id: number; name: string }[],
+        next_episode_to_air: tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-07-20' }) })],
+      new Set(), WINDOW,
+    );
+    expect(out[0].genreIds).toEqual([]);
+  });
+});
+
+// --- mergeDiscoveries ------------------------------------------------------
+
+describe('mergeDiscoveries', () => {
+  function disc(partial: Partial<DiscoveryPremiere>): DiscoveryPremiere {
+    return {
+      tmdbId: 1, title: 'X', posterPath: '/x.jpg', airDate: '2026-08-01',
+      seasonNumber: 1, genreIds: [], overview: '', ...partial,
+    };
+  }
+
+  it('dedupes by tmdbId with the primary (new-series) entry winning', () => {
+    const merged = mergeDiscoveries(
+      [disc({ tmdbId: 7, title: 'Primary', seasonNumber: 1 })],
+      [disc({ tmdbId: 7, title: 'Secondary', seasonNumber: 3 })],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].title).toBe('Primary');
+  });
+
+  it('sorts the merged list by airDate then Swedish title', () => {
+    const merged = mergeDiscoveries(
+      [disc({ tmdbId: 1, title: 'Örn', airDate: '2026-08-10' })],
+      [disc({ tmdbId: 2, title: 'Apa', airDate: '2026-08-10' }), disc({ tmdbId: 3, title: 'Björn', airDate: '2026-07-01' })],
+    );
+    expect(merged.map(d => d.tmdbId)).toEqual([3, 2, 1]);
+  });
+
+  it('caps the total', () => {
+    const many = Array.from({ length: 10 }, (_, i) => disc({ tmdbId: i, airDate: `2026-07-${String(i + 1).padStart(2, '0')}` }));
+    expect(mergeDiscoveries(many, [], 12)).toHaveLength(10);
+    expect(mergeDiscoveries(many, many.map(d => disc({ ...d, tmdbId: d.tmdbId + 100 })), 12)).toHaveLength(12);
   });
 });

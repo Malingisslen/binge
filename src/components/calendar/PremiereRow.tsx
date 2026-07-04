@@ -50,16 +50,17 @@ export function PremiereRow({ entry, isToday = false }: { entry: CalendarEntry; 
 
 export function DiscoveryRow({ premiere }: { premiere: DiscoveryPremiere }) {
   const tone = toneForGenreIds(premiere.genreIds);
+  const badge = premiere.seasonNumber === 1 ? 'premiär' : `säsong ${premiere.seasonNumber}`;
   return (
     <Link href={`/tv/${premiere.tmdbId}/`} className="prow no-underline">
       <Poster path={premiere.posterPath} tone={tone} />
       <div className="prow-body">
         <div className="prow-ttl">{premiere.title}</div>
         <div className="prow-meta">
-          <span>{fmtDate(premiere.firstAirDate)}</span>
+          <span>{fmtDate(premiere.airDate)}</span>
         </div>
       </div>
-      <span className="prow-badge">premiär</span>
+      <span className="prow-badge">{badge}</span>
     </Link>
   );
 }

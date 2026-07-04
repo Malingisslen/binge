@@ -9,6 +9,7 @@ import CalendarSubnav from '@/components/calendar/CalendarSubnav';
 import { PremiereRow, DiscoveryRow } from '@/components/calendar/PremiereRow';
 import { usePremiereEvents } from '@/hooks/usePremiereEvents';
 import { useDiscoveryPremieres } from '@/hooks/useDiscoveryPremieres';
+import { useInView } from '@/hooks/useInView';
 import { buildPremiererHeadline, buildPremiererStandfirst } from '@/lib/calendar/copy';
 import { entryKey } from '@/lib/calendar/entry';
 
@@ -25,7 +26,13 @@ function todayIso(): string {
 
 function PremiererContent() {
   const { window, groups, counts, isLoading } = usePremiereEvents();
-  const discovery = useDiscoveryPremieres(window);
+  // Fas 2-upptäckten (dyr per-titel-fan-out) gate:as på synlighet: den fyras av
+  // först när "Upptäck"-raden scrollas in, så den aldrig tävlar med sidans egen
+  // personliga kalender-fan-out vid mount. `once` håller den laddad när man
+  // scrollat förbi. Sentineln (<div ref>) renderas alltid — annars skulle en tom
+  // sektion (null) lämna ingen nod att observera och gaten låsa sig.
+  const { ref: discoveryRef, inView } = useInView<HTMLDivElement>({ rootMargin: '300px', once: true });
+  const discovery = useDiscoveryPremieres(window, { seasonPremieresEnabled: inView });
   const today = todayIso();
 
   const headline = buildPremiererHeadline(counts);
@@ -69,7 +76,9 @@ function PremiererContent() {
             ))
           )}
 
-          <DiscoverySection discovery={discovery} />
+          <div ref={discoveryRef}>
+            <DiscoverySection discovery={discovery} />
+          </div>
         </>
       )}
 
