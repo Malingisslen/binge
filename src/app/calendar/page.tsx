@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import WeekBoard from '@/components/calendar/WeekBoard';
 import MonthStrip from '@/components/calendar/MonthStrip';
+import CalendarSubnav from '@/components/calendar/CalendarSubnav';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useCalendarEntries, getWeekStart, getWeekNumber } from '@/hooks/useCalendar';
@@ -68,6 +69,7 @@ function CalendarContent() {
           </div>
           <h1 className="page-h1">Kalender</h1>
         </header>
+        <CalendarSubnav active="week" />
         <LoadingView label="Hämtar din vecka…" variant="detail" />
       </>
     );
@@ -82,6 +84,8 @@ function CalendarContent() {
         <h1 className="page-h1">{headline}</h1>
         <p className="stand">{standfirst}</p>
       </header>
+
+      <CalendarSubnav active="week" />
 
       <div className="kal-actions">
         <div className="nav-week">

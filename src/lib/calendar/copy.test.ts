@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildCalendarHeadline, buildCalendarStandfirst } from './copy';
+import {
+  buildCalendarHeadline,
+  buildCalendarStandfirst,
+  buildPremiererHeadline,
+  buildPremiererStandfirst,
+} from './copy';
 import type { CalendarCounts } from './summary';
 
 function counts(p: Partial<CalendarCounts> = {}): CalendarCounts {
@@ -80,5 +85,41 @@ describe('buildCalendarStandfirst', () => {
   it('bara filmsläpp — ingen avsnittsuppmaning', () => {
     expect(buildCalendarStandfirst(counts({ movies: 2, total: 2 }), true))
       .toBe('Veckans filmsläpp nedan.');
+  });
+});
+
+describe('buildPremiererHeadline', () => {
+  it('lugnt kvartal när inget händer', () => {
+    expect(buildPremiererHeadline(counts())).toBe('Ett lugnt kvartal.');
+  });
+
+  it('räknar premiärer, finaler (disjunkt) och filmsläpp', () => {
+    expect(buildPremiererHeadline(
+      counts({ episodes: 6, premieres: 4, finales: 2, movies: 1, total: 7 }),
+    )).toBe('Kommande tre månader — 4 premiärer, 2 säsongsfinaler och 1 filmsläpp.');
+  });
+
+  it('premiär+final-avsnitt räknas som premiär, inte dubbelt', () => {
+    // 1 avsnitt som är både premiär och final → "1 premiär", ingen final visas.
+    expect(buildPremiererHeadline(
+      counts({ episodes: 1, premieres: 1, finales: 1, premiereFinales: 1, total: 1 }),
+    )).toBe('Kommande tre månader — 1 premiär.');
+  });
+
+  it('singular premiär', () => {
+    expect(buildPremiererHeadline(counts({ episodes: 1, premieres: 1, total: 1 })))
+      .toBe('Kommande tre månader — 1 premiär.');
+  });
+});
+
+describe('buildPremiererStandfirst', () => {
+  it('tomt kvartal pekar mot Upptäck', () => {
+    expect(buildPremiererStandfirst(counts(), '2026-10-01'))
+      .toBe('Inget stort planerat just nu för dina serier. Titta förbi Upptäck nedan för kommande premiärer att hålla koll på.');
+  });
+
+  it('visar horisont och final-brasklapp', () => {
+    expect(buildPremiererStandfirst(counts({ premieres: 2, episodes: 2, total: 2 }), '2026-10-03'))
+      .toBe('Fram till 3 okt. Finaler syns först när TMDB känner till hela säsongen.');
   });
 });

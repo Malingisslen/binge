@@ -1671,6 +1671,72 @@ button { font: inherit; cursor: pointer; }
   opacity: 0.55;
 }
 
+/* Premiärer & finaler — kompakt horisontell listrad (mini-poster · titel/datum
+   · badge). Delar tokens med .ev men ligger platt i en lista. */
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 140ms, box-shadow 140ms;
+}
+.prow:hover {
+  border-color: var(--ink);
+  box-shadow: 0 4px 14px oklch(0 0 0 / 0.06);
+}
+.prow.is-today {
+  border-color: var(--cal-deep);
+  box-shadow: inset 3px 0 0 var(--cal-deep);
+}
+.prow-px {
+  flex-shrink: 0;
+  width: 46px;
+  height: 69px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: oklch(0.16 0 0);
+}
+.prow-px img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.prow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.prow-ttl {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prow-meta { font-size: 11px; letter-spacing: 0.02em; color: var(--ink-3); line-height: 1.3; }
+.prow-meta .ch { color: var(--ink-2); }
+.prow.is-today .prow-meta { color: var(--cal-deep); }
+.prow-badge {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--bg-2);
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
+  padding: 3px 6px;
+  border-radius: 2px;
+}
+.prow-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.cal-month-h {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0;
+}
+
 .ev-toggle {
   flex-shrink: 0;
   width: 14px; height: 14px;

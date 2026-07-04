@@ -47,6 +47,41 @@ export function buildCalendarStandfirst(counts: CalendarCounts, isCurrent: boole
     : 'Veckans avsnitt nedan.';
 }
 
+// --- Premiärer & finaler (kvartalsvyn) ------------------------------------
+// Samma ärliga K2-aritmetik: händelserna är bara premiärer, finaler och
+// filmsläpp, och ett premiär+final-avsnitt räknas som premiär (den större
+// nyheten) via premiereFinales.
+
+const MONTHS_SV_SHORT = [
+  'jan', 'feb', 'mars', 'apr', 'maj', 'juni',
+  'juli', 'aug', 'sep', 'okt', 'nov', 'dec',
+];
+
+function fmtIsoShort(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${Number(d)} ${MONTHS_SV_SHORT[Number(m) - 1]}`;
+}
+
+/** Kvartalsvyns h1. Tomt kvartal → lugn ton. */
+export function buildPremiererHeadline(counts: CalendarCounts): string {
+  const { premieres, finales, premiereFinales, movies, total } = counts;
+  if (total === 0) return 'Ett lugnt kvartal.';
+  const finalesShown = finales - premiereFinales;
+  const parts: string[] = [];
+  if (premieres > 0) parts.push(`${premieres} premiär${premieres === 1 ? '' : 'er'}`);
+  if (finalesShown > 0) parts.push(`${finalesShown} säsongsfinal${finalesShown === 1 ? '' : 'er'}`);
+  if (movies > 0) parts.push(`${movies} filmsläpp`); // "filmsläpp" invariant sing/plur
+  return `Kommande tre månader — ${joinSwedish(parts)}.`;
+}
+
+/** Undertext: horisont + ärlig final-brasklapp. Tomt kvartal pekar mot Upptäck. */
+export function buildPremiererStandfirst(counts: CalendarCounts, endIso: string): string {
+  if (counts.total === 0) {
+    return 'Inget stort planerat just nu för dina serier. Titta förbi Upptäck nedan för kommande premiärer att hålla koll på.';
+  }
+  return `Fram till ${fmtIsoShort(endIso)}. Finaler syns först när TMDB känner till hela säsongen.`;
+}
+
 // "a", "a och b", "a, b och c" — svensk uppräkning.
 function joinSwedish(parts: string[]): string {
   if (parts.length <= 1) return parts.join('');
