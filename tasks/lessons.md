@@ -6,7 +6,7 @@ bottom.
 
 Format:
 ```
-### [Category] Short title
+#### [Category] Short title   <!-- template: real lessons use ### -->
 - **Date:** YYYY-MM-DD
 - **Trigger:** what I did / the situation that prompted the correction
 - **Rule:** the corrected behavior, stated as a directive
