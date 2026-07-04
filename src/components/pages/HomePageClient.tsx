@@ -28,61 +28,6 @@ import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 import type { TMDBSearchResult } from '@/types';
 
-const FAQ_JSON_LD = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: [
-    {
-      '@type': 'Question',
-      name: 'Vad är Binge.nu och hur fungerar det?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Binge.nu är en gratis svensk mediatracker för film och TV-serier. Du loggar in med Google, lägger till titlar du tittar på eller vill se, och sajten visar automatiskt var varje titel går att streama i Sverige — Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play med flera.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Var kan jag streama en specifik film eller serie i Sverige?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'På Binge.nu kan du söka efter en film eller serie och direkt se vilka svenska streamingtjänster som har den tillgänglig just nu. Data uppdateras löpande via TMDB.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Är Binge.nu gratis?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Ja, Binge.nu är helt gratis att använda. Du skapar ett konto via Google-inloggning, utan kostnad.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Kan Binge.nu hjälpa mig spara pengar på streaming?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Ja. Streamingrådgivaren på Binge.nu analyserar vilka av dina abonnemang som faktiskt används av titlarna i ditt bibliotek. Den visar vilka tjänster du kan pausa utan att missa något — och hur mycket du sparar per månad.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Vilka streamingtjänster täcker Binge.nu?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Binge.nu täcker svenska streamingtjänster inklusive Netflix, Viaplay, HBO Max, Disney+, SVT Play, TV4 Play, C More, SkyShowtime och fler. Tjänsten är begränsad till tillgänglighet i Sverige.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Hur håller jag koll på kommande avsnitt av mina serier?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'När du lägger till en TV-serie i din lista på Binge.nu visas kommande avsnitt automatiskt i din kalender, med datum och avsnittsinformation i svensk tidszon. Kalendern visar även avsnitt för serier du vill se och digitala filmsläpp för filmer du vill se i Sverige.',
-      },
-    },
-  ],
-};
-
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
 // withTrending-flagga: auth-loading-grenen (den som pre-renderas) skickar en
 // hook-fri <TrendingSection> byggd på build-seeden — så exportens statiska
@@ -394,15 +339,6 @@ export default function HomePageClient({
   const { uid, loading } = useAuth();
   const seed = initialTrending ?? [];
 
-  // FAQ JSON-LD är alltid med på `/` — viktigast i prerendrad HTML.
-  const faqLd = (
-    <script
-      type="application/ld+json"
-      // Hardcoded konstant — ingen XSS-risk.
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
-    />
-  );
-
   // Pre-hydration / auth-loading: rendera BÅDA staterna sida-vid-sida.
   // CSS i globals.css döljer den ena baserat på .returning-user-klassen som
   // ett inline-script i <head> sätter innan body parsas. Resultat:
@@ -417,7 +353,6 @@ export default function HomePageClient({
   if (loading) {
     return (
       <>
-        {faqLd}
         <div data-pre-state="landing">
           <LandingPage trending={<TrendingSection items={seed} />} />
         </div>
@@ -433,19 +368,9 @@ export default function HomePageClient({
   // (Gatear på uid — inte user — eftersom profilen numera laddas parallellt
   // och kan landa något senare än auth-beskedet.)
   if (!uid) {
-    return (
-      <>
-        {faqLd}
-        <LandingPage trending={<LandingPageTrending seed={seed} />} />
-      </>
-    );
+    return <LandingPage trending={<LandingPageTrending seed={seed} />} />;
   }
 
   // Auth resolverat med user: dashboard.
-  return (
-    <>
-      {faqLd}
-      <Dashboard />
-    </>
-  );
+  return <Dashboard />;
 }
