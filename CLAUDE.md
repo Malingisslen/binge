@@ -62,6 +62,21 @@ diff-review half already runs via the commit-gate specialists, and the `ExitPlan
 already *suggests* the panel on high-stakes plans; this adds the **cast + plan** halves to
 direct requests.
 
+## Commit gates (shared workflow-guards plugin; config in .claude/shared-plugin.json)
+
+- **Reviewer gate:** `require-review-before-commit` blocks `git commit` until fresh markers
+  exist for the reviewers matching the staged diff (`binge-code-reviewer` on TS/TSX,
+  `binge-security-reviewer` on functions/ + auth/firebase paths, `binge-test-reviewer` on
+  test files). Markers in `.claude/state/`, mtime-freshness-checked.
+- **Code-review gate (enabled 2026-07-05, same system as Butlery):**
+  `require-simplify-before-commit` blocks `git commit` for TS diffs until `/code-review` has
+  run. Flow: run `/code-review high` (xhigh when the diff touches `functions/src/` or
+  `firestore.rules`) → `touch .claude/state/simplify-done.marker` (SEPARATE Bash call) →
+  retry the commit.
+- **Plan gate:** edits reaching a 2nd production file (`src/**` or `functions/src/**` —
+  widened 2026-07-05; the plan gate was previously blind to all backend code) require plan
+  evidence, same semantics as Butlery.
+
 ## Project Overview
 
 Binge (binge.nu) is a Swedish media tracker for movies and TV shows. Users track what they're watching, want to watch, and have watched — with the killer feature being where each title is available on Swedish streaming services. Think Prisjakt for media: dense, functional, data-forward. The UI is in Swedish.

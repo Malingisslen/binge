@@ -6,7 +6,7 @@ bottom.
 
 Format:
 ```
-#### [Category] Short title   <!-- template: real lessons use ### -->
+### [Category] Short title   <!-- template shows the REAL heading level (###) so copy-paste stays visible to the digest drift-check -->
 - **Date:** YYYY-MM-DD
 - **Trigger:** what I did / the situation that prompted the correction
 - **Rule:** the corrected behavior, stated as a directive
