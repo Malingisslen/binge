@@ -438,6 +438,18 @@
    "path": "src/components/groups/GroupSidePanels.tsx"
   },
   {
+   "id": "household-panel",
+   "label": "HouseholdPanel (BIN-184 opt-in kostnadsdelning)",
+   "context": "web-app",
+   "path": "src/components/groups/HouseholdPanel.tsx"
+  },
+  {
+   "id": "use-group-household",
+   "label": "useGroupHousehold (opt-in status + aggregat)",
+   "context": "client-state",
+   "path": "src/hooks/useGroupHousehold.ts"
+  },
+  {
    "id": "tillsammans-new-page",
    "label": "New Tillsammans session (/tillsammans/ny)",
    "context": "web-app",
@@ -586,6 +598,12 @@
    "label": "/person, /provider, /billigaste static routes",
    "context": "web-app",
    "path": "src/app/provider/[id]/page.tsx"
+  },
+  {
+   "id": "hub-seed-lib",
+   "label": "seedHubItems (SEO hub-seed curation, WP1)",
+   "context": "web-app",
+   "path": "src/lib/seo/hubSeeds.ts"
   },
   {
    "id": "ugc-actions-menu",
@@ -1025,11 +1043,12 @@
   {
    "id": "flow-lists",
    "label": "Custom lists",
-   "description": "Lists are top-level Firestore docs (uid + items array, not a subcollection — items are mutated via arrayUnion/arrayRemove), so there's no per-title write history. Creating a list happens on /my/lists; adding titles happens either inline from a title's AddToListButton or from the list's own page, which is served through the [...path] catch-all router (DynamicRouter → ListPageClient), not a dedicated Next.js route folder.",
+   "description": "Lists are top-level Firestore docs (uid + items array, not a subcollection — items are mutated via arrayUnion/arrayRemove), so there's no per-title write history. Creating a list happens on /my/lists; adding titles happens either inline from a title's AddToListButton or from the list's own page, which is served through the [...path] catch-all router (DynamicRouter → ListPageClient), not a dedicated Next.js route folder. BIN-416: a signed-in viewer of a curated list (≥2 titles) also gets a \"billigaste sättet att se listan\" panel, computed client-side from a lite TMDB fan-out.",
    "covers": [
     "/my/lists",
     "list/[id]",
-    "AddToListButton"
+    "AddToListButton",
+    "ListCheapestPlanPanel"
    ],
    "steps": [
     {
@@ -1086,6 +1105,13 @@
      "to": "uselists-hook",
      "payload": "owner/co-editor adds/removes a title from the list page itself → addItemToList/removeItemFromList, optimistic queryClient cache patch first",
      "transport": "method call",
+     "verified": true
+    },
+    {
+     "from": "list-page-client",
+     "to": "tmdb-api",
+     "payload": "BIN-416: useListCheapestPlan fans out getMovieLite/getTVShowLite per title (shared {movie,tv}-lite cache) → listPlanInput maps to ListTitle (raw SE flatrate+free ids, ads excluded) → cheapestListPlan (pure optimizer, BIN-169) → ListCheapestPlanPanel shows best single subscription + cheapest full-coverage bundle + savings; honesty-gated (computes zero times while any title is still pending)",
+     "transport": "fetch (TMDB) + method call",
      "verified": true
     }
    ],
@@ -1211,6 +1237,13 @@
      "payload": "reads users/{uid}/following (via useFollowing), caps to MAX_FANOUT=30 non-blocked followed uids, then per uid: getDoc users/{followedUid}/watchlist/{tmdbId} — Promise.allSettled filters to public-visible items only (rules deny private/nonexistent); getDoc users/{followedUid} profile only for matches",
      "transport": "Firestore reads",
      "verified": true
+    },
+    {
+     "from": "discover-page",
+     "to": "hub-seed-lib",
+     "payload": "SEO WP1 (build-time only): DiscoverPage server component build-fetches getTrending('all','week') and runs seedHubItems() to seed DiscoverPageClient's initial grid — same crawlable-link fix applied to '/', '/films', '/series' (flow-static)",
+     "transport": "build-time fetch (TMDB) + method call",
+     "verified": true
     }
    ],
    "area": "social"
@@ -1273,12 +1306,13 @@
   {
    "id": "flow-groups",
    "label": "Groups: create, invite, manage",
-   "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections.",
+   "description": "Owner creates a group (self as first member) and gets a plaintext invite token whose hash alone is persisted; joining is a two-step rule-verified token check, or a consent-based invite-by-handle that mirrors the friend-request pattern. Owner-only settings cover rename/defaults, member removal, and a client-side cascading delete across subcollections. BIN-184 added an opt-in household facet: a member who explicitly shares (writes groups/{gid}/household/{uid}) unlocks a share-to-see aggregate view of the group's cost data (HouseholdPanel/useGroupHousehold) — reads require the reader to already share too, revoke is immediate, and the doc is cascade-deleted on opt-out/leave/removal/group-deletion and on account deletion/export (flow-gdpr).",
    "covers": [
     "/grupper",
     "/grupper/ny",
     "grupper/[id]",
-    "GroupSettingsModal"
+    "GroupSettingsModal",
+    "HouseholdPanel"
    ],
    "steps": [
     {
@@ -1326,15 +1360,43 @@
     {
      "from": "group-settings-modal",
      "to": "firestore",
-     "payload": "owner delete (after ConfirmDialog) — deleteGroup: chunked batched deletes of members/watchlist(+progress)/sessionHistory subcollections, expires the owner's own linked sessions, then deletes groups/{id}",
+     "payload": "owner delete (after ConfirmDialog) — deleteGroup: chunked batched deletes of members/watchlist(+progress)/sessionHistory/household subcollections (BIN-184: everyone's shared cost docs go with the group), expires the owner's own linked sessions, then deletes groups/{id}",
      "transport": "Firestore batched deletes",
      "verified": true
     },
     {
      "from": "group-members-panel",
      "to": "firestore",
-     "payload": "owner removeMember — update groups/{id}.memberUids arrayRemove(uid) + delete groups/{id}/members/{uid}",
+     "payload": "owner removeMember — update groups/{id}.memberUids arrayRemove(uid) + delete groups/{id}/members/{uid} + groups/{id}/household/{uid} (BIN-184: a removed/leaving member's shared cost doc never survives their membership — no-op if never opted in)",
      "transport": "Firestore write",
+     "verified": true
+    },
+    {
+     "from": "group-page-client",
+     "to": "household-panel",
+     "payload": "renders <HouseholdPanel groupId> in the group side panel — aggregate-only UI (\"Disney+ betalas av 2 av er\"), never per-person; copy never implies account sharing (ADR 0010)",
+     "transport": "React component render",
+     "verified": true
+    },
+    {
+     "from": "household-panel",
+     "to": "use-group-household",
+     "payload": "useGroupHousehold(groupId) — status ('loading'|'gated'|'active') is derived purely from the Firestore read outcome (permission-denied ⇒ 'gated'); no separate opt-in flag is stored anywhere",
+     "transport": "React hook call",
+     "verified": true
+    },
+    {
+     "from": "use-group-household",
+     "to": "firestore",
+     "payload": "subscribeToGroupHousehold(groupId) — onSnapshot groups/{gid}/household (share-to-see, ADR 0010: rules require the reader to already have their own household doc); optIn → setHouseholdContribution(groupId, uid, content) setDoc groups/{gid}/household/{uid} {providerIds, providerCosts, providerCampaigns, activeProviderIds, updatedAt}; optOut/opt-out-without-leaving → deleteHouseholdContribution deleteDoc same doc (revoke is immediate, not eventual)",
+     "transport": "Firestore read/write (rule-gated)",
+     "verified": true
+    },
+    {
+     "from": "auth-context",
+     "to": "firestore",
+     "payload": "BIN-184: on a myProviders/providerCosts/providerCampaigns profile edit, refreshMyHouseholdContributions(uid, fields) fans out a dirty-checked rewrite to every group the user has already opted into — same best-effort per-group pattern as the pre-existing updateMemberProviders fan-out",
+     "transport": "Firestore write (fan-out)",
      "verified": true
     }
    ],
@@ -1944,7 +2006,7 @@
   {
    "id": "flow-titlepage",
    "label": "Title page assembly",
-   "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with four independently-cached Firestore-backed enrichments (streaming offers, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment.",
+   "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with five independently-cached Firestore-backed enrichments (streaming offers + price history, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment.",
    "covers": [
     "/movie/[id]",
     "/tv/[id]",
@@ -1965,6 +2027,13 @@
      "from": "movie-tv-page",
      "to": "firestore",
      "payload": "useStreamingOffers(tmdbId) reads streamingOffers/{tmdbId} (10s-timeout race) — populated by the separate cf-offers daily job",
+     "transport": "Firestore read",
+     "verified": true
+    },
+    {
+     "from": "movie-tv-page",
+     "to": "firestore",
+     "payload": "BIN-359: usePriceHistory(tmdbId) reads priceHistory/{tmdbId}.points (same daily cf-offers job, flow4) → PriceHistoryChart draws a date/price line graph (Nu/Lägst/Högst stat row + \"X% under högst\" via dropFromHighPct), JustWatch-attributed; renders nothing until ≥1 point, falls back to the stat row alone under 2 points",
      "transport": "Firestore read",
      "verified": true
     },
@@ -2194,7 +2263,7 @@
   {
    "id": "flow-gdpr",
    "label": "GDPR export & account deletion",
-   "description": "DataExportSection (Art. 20) lazy-loads dataExport.ts and calls buildUserExport(uid), which runs entirely client-side — Firestore security rules gate each read to the caller's own docs — via collectUserDataSnapshots(uid) reading every user-owned collection (watchlist, tags, progress, reviews, follows, sessions, etc.), and downloadExport() triggers a browser-local JSON file download (no server round trip). DeleteAccountSection (Art. 17) calls AuthContext.deleteAccount(), which reuses the same collectUserDataSnapshots reads, then builds a deletion plan via collectDeletionRefs (every doc ref to delete plus member/editor-array updates on shared docs like groups/lists) and commits it in ≤450-op batches via applyDeletionPlan — both pure, db-injectable functions extracted (BIN-347) so the cascade is exercised against the Firestore emulator in tests. Only after the Firestore cascade succeeds does it call Firebase Auth deleteUser (ordered last so a requires-recent-login failure leaves data+cache intact for retry), then clears local Firestore IndexedDB persistence. EmailVerificationBanner is a lightweight adjacent flow: resendEmailVerification calls Firebase Auth's sendEmailVerification directly (no Firestore/Functions involved), non-blocking, dismissible.",
+   "description": "DataExportSection (Art. 20) lazy-loads dataExport.ts and calls buildUserExport(uid), which runs entirely client-side — Firestore security rules gate each read to the caller's own docs — via collectUserDataSnapshots(uid) reading every user-owned collection (watchlist, tags, progress, reviews, follows, sessions, etc.), and downloadExport() triggers a browser-local JSON file download (no server round trip). DeleteAccountSection (Art. 17) calls AuthContext.deleteAccount(), which reuses the same collectUserDataSnapshots reads, then builds a deletion plan via collectDeletionRefs (every doc ref to delete plus member/editor-array updates on shared docs like groups/lists) and commits it in ≤450-op batches via applyDeletionPlan — both pure, db-injectable functions extracted (BIN-347) so the cascade is exercised against the Firestore emulator in tests. Only after the Firestore cascade succeeds does it call Firebase Auth deleteUser (ordered last so a requires-recent-login failure leaves data+cache intact for retry), then clears local Firestore IndexedDB persistence. BIN-184: household contributions (groups/{gid}/household/{uid}) are group-scoped, not user-owned, so they're fetched/queued inline rather than through collectUserDataSnapshots — the same pattern already used for joinAttempts. EmailVerificationBanner is a lightweight adjacent flow: resendEmailVerification calls Firebase Auth's sendEmailVerification directly (no Firestore/Functions involved), non-blocking, dismissible.",
    "covers": [
     "DataExportSection",
     "DeleteAccountSection",
@@ -2217,6 +2286,13 @@
     },
     {
      "from": "data-export-lib",
+     "to": "firestore",
+     "payload": "BIN-184: householdContributions (schema 1.2) — per group I'm a member of, inline getDoc groups/{gid}/household/{myUid}; only opted-in (existing) docs are included",
+     "transport": "firestore-query",
+     "verified": true
+    },
+    {
+     "from": "data-export-lib",
      "to": "web-app",
      "payload": "downloadExport(data) — client-local JSON file download, no network call",
      "transport": "browser-download",
@@ -2233,6 +2309,13 @@
      "from": "account-deletion-lib",
      "to": "firestore",
      "payload": "applyDeletionPlan — chunked batch.delete/update across owned + shared (member/editor array) docs, ≤450 ops/batch",
+     "transport": "firestore-batch-write",
+     "verified": true
+    },
+    {
+     "from": "account-deletion-lib",
+     "to": "firestore",
+     "payload": "BIN-184: household refs queued alongside — for a group I OWN, the whole groups/{gid}/household subcollection (deleting my account cascades the whole group, everyone's shared cost docs included); for a group I'm just a member of, only my own groups/{gid}/household/{myUid} doc",
      "transport": "firestore-batch-write",
      "verified": true
     },
@@ -2263,7 +2346,7 @@
   {
    "id": "flow-static",
    "label": "Static & passive pages",
-   "description": "Legal/policy pages (villkor, integritet, community-guidelines) are static server-rendered content with no backend calls. Library/browse views (calendar, my/all, my/films, my/avbrutna, my/vill-se, my/diary, series, films, search, recommendations) and small inline widgets (SearchDropdown, NotInterestedButton, AddToGroupButton) read exclusively through existing client-state contexts (auth-context, watchlist-context) that already stream from Firestore/TMDB elsewhere in the map — these views don't open a distinct new backend path, they just render/filter/search data already resident in context state, occasionally issuing an incremental Firestore write (e.g. NotInterestedButton, AddToGroupButton) through the same rules-gated per-user pattern as the rest of the app.",
+   "description": "Legal/policy pages (villkor, integritet, community-guidelines) are static server-rendered content with no backend calls. Library/browse views (calendar, my/all, my/films, my/avbrutna, my/vill-se, my/diary, series, films, search, recommendations) and small inline widgets (SearchDropdown, NotInterestedButton, AddToGroupButton) read exclusively through existing client-state contexts (auth-context, watchlist-context) that already stream from Firestore/TMDB elsewhere in the map — these views don't open a distinct new backend path, they just render/filter/search data already resident in context state, occasionally issuing an incremental Firestore write (e.g. NotInterestedButton, AddToGroupButton) through the same rules-gated per-user pattern as the rest of the app. One exception: '/', '/films' and '/series' ALSO open a distinct build-time-only TMDB path — SEO WP1 seeds their client grids so the exported static HTML carries crawlable title links (see the seed step below; /discover's identical seed is under flow-feed).",
    "covers": [
     "/villkor",
     "/integritet",
@@ -2305,6 +2388,13 @@
      "payload": "SearchDropdown/NotInterestedButton/AddToGroupButton — occasional rules-gated per-user read/write (search-as-you-type, not-interested flag, group add)",
      "transport": "firestore-query",
      "verified": "inferred"
+    },
+    {
+     "from": "static-passive-pages",
+     "to": "hub-seed-lib",
+     "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items (stricter than the SEO pre-render filter, so a seed can never link a de-indexed title), caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
+     "transport": "build-time fetch (TMDB) + method call",
+     "verified": true
     }
    ],
    "area": "ops & compliance"

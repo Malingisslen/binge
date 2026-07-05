@@ -32,6 +32,14 @@ export type SnapshotReadKit = Pick<
  * nyckel och UNDANTAGET ur exporten: payloaden är gruppens delade invite-token
  * (en hemlighet), inte användarens egna personuppgifter — samma resonemang som
  * `fcmTokens`. Lägg därför inte till det här.
+ *
+ * BIN-184: `groups/{gid}/household/{myUid}` (opt-in delade kostnadsdata) är
+ * också grupp-scopat och medvetet INTE en nyckel här. Det hanteras inline i
+ * BÅDA konsumenterna: `buildUserExport` hämtar mina bidrag per grupp (Art. 20 —
+ * self-reported financial data ingår i exporten, till skillnad från
+ * joinAttempts), och `collectDeletionRefs` raderar dem i både owner- och
+ * member-grenen. Rör du household-schemat: uppdatera båda ställena +
+ * account-deletion.test.ts.
  */
 export interface UserDataSnapshots {
   profileSnap: DocumentSnapshot;

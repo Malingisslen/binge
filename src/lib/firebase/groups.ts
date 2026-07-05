@@ -1,5 +1,12 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
+import {
+  buildHouseholdContribution,
+  contributionContentEquals,
+  type HouseholdContribution,
+  type HouseholdContributionContent,
+} from '@/lib/advisor/householdAggregate';
+import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import type {
   Group,
   GroupDefaults,
@@ -239,6 +246,10 @@ export async function removeMember(groupId: string, uid: string): Promise<void> 
     updatedAt: serverTimestamp(),
   });
   batch.delete(doc(db, 'groups', groupId, 'members', uid));
+  // BIN-184: den lämnande/borttagna medlemmens hushålls-bidrag (delade
+  // kostnadsdata) får ALDRIG överleva medlemskapet — raderas i samma batch
+  // (no-op när medlemmen aldrig opt:at in; rules tillåter self + owner).
+  batch.delete(doc(db, 'groups', groupId, 'household', uid));
   await batch.commit();
 }
 
@@ -291,10 +302,18 @@ export async function deleteGroup(groupId: string, currentUid: string): Promise<
 
   // Samla alla refs och committa i chunkar ≤450 för att hålla oss under
   // Firestore-batchens 500-gräns (samma mönster som deleteAccount).
+  // BIN-184: hushålls-refs härleds ur medlems-id:na — ALDRIG via list-query
+  // (share-to-see-reglerna nekar list för en ägare som inte själv delar; en
+  // list här fick hela deleteGroup att kasta, xhigh-review 2026-07-05).
+  // batch.delete på icke-existerande docs är no-ops → full täckning ändå.
+  const householdUids = new Set<string>(membersSnap.docs.map(d => d.id));
+  householdUids.add(currentUid);
+
   const refs = [
     ...membersSnap.docs.map(d => d.ref),
     ...watchlistSnap.docs.map(d => d.ref),
     ...sessionHistorySnap.docs.map(d => d.ref),
+    ...[...householdUids].map(u => doc(db, 'groups', groupId, 'household', u)),
     ...progressSnaps.flatMap(snap => snap.docs.map(d => d.ref)),
     doc(db, 'groups', groupId),
   ];
@@ -643,6 +662,112 @@ export function subscribeToGroupWatchlist(
     onSnapshot(collection(db, 'groups', groupId, 'watchlist'), snap => {
       cb(snap.docs.map(d => watchlistDocToObject(d.id, d.data())));
     }));
+}
+
+// ── BIN-184: Hushåll — opt-in delade prenumerationsbidrag ────────────────────
+// groups/{gid}/household/{uid} skrivs ENDAST av medlemmen själv (opt-in = att
+// skriva doc:et), läses bara av medlemmar som själva delar (share-to-see,
+// ADR 0010), raderas av self/owner. Payload byggs av buildHouseholdContribution
+// (householdAggregate.ts) — tier-namn lämnar aldrig klienten (DPO-krav).
+
+function householdDocToObject(uid: string, data: Record<string, unknown>): HouseholdContribution {
+  return {
+    uid,
+    providerIds: Array.isArray(data.providerIds) ? (data.providerIds as number[]) : [],
+    providerCosts: (data.providerCosts as HouseholdContribution['providerCosts']) ?? {},
+    providerCampaigns: (data.providerCampaigns as HouseholdContribution['providerCampaigns']) ?? {},
+    activeProviderIds: Array.isArray(data.activeProviderIds) ? (data.activeProviderIds as number[]) : [],
+    updatedAt: toDate(data.updatedAt)?.getTime() ?? null,
+  };
+}
+
+/** Opt-in / refresh: skriv (över) medlemmens eget bidrag. Callern ansvarar för
+ *  dirty-checken (contributionContentEquals) så oförändrat innehåll aldrig ger
+ *  en Firestore-write (25 SEK-cappen). */
+export async function setHouseholdContribution(
+  groupId: string,
+  uid: string,
+  content: HouseholdContributionContent,
+): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp } = await fsdb();
+  await setDoc(doc(db, 'groups', groupId, 'household', uid), {
+    ...content,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Opt-out (ångra delning) utan att lämna gruppen — DBA-krav: opt-in får inte
+ *  vara enkelriktad. Raderingen slår igenom live hos läsande klienter via
+ *  onSnapshot-prenumerationen (DPO-krav: revoke är omedelbar, inte eventual). */
+export async function deleteHouseholdContribution(groupId: string, uid: string): Promise<void> {
+  const { db, doc, deleteDoc } = await fsdb();
+  await deleteDoc(doc(db, 'groups', groupId, 'household', uid));
+}
+
+/** Live-prenumeration på gruppens hushålls-bidrag. Ett revokerat/lämnat
+ *  medlemsbidrag försvinner ur aggregatet i samma session. OBS: rules släpper
+ *  bara igenom läsare som själva delar (share-to-see) — `onDenied` anropas
+ *  ENDAST vid permission-denied (= inte opt-in) så opt-in-gaten aldrig visas
+ *  för en delande medlem under ett transient fel; övriga fel går till
+ *  `onError` (säkerhetsreview 2026-07-05: gate-by-denial får inte maskera
+ *  en riktig driftstörning som "du delar inte"). */
+export function subscribeToGroupHousehold(
+  groupId: string,
+  cb: (contributions: HouseholdContribution[]) => void,
+  onDenied?: () => void,
+  onError?: () => void,
+): () => void {
+  return lazySubscribe(({ db, collection, onSnapshot }) =>
+    onSnapshot(
+      collection(db, 'groups', groupId, 'household'),
+      snap => {
+        cb(snap.docs.map(d => householdDocToObject(d.id, d.data())));
+      },
+      err => {
+        if (err.code === 'permission-denied') onDenied?.();
+        else onError?.();
+      },
+    ));
+}
+
+/** DBA-krav (BIN-184): fan-out från mutationskällan — när användaren ändrar
+ *  providers/kostnad/tier/kampanj uppdateras hens hushålls-bidrag i varje grupp
+ *  där hen opt:at in, så andra medlemmars vy inte rotar tills nästa sidbesök.
+ *  Speglar updateMemberProviders-mönstret. activeProviderIds bevaras från det
+ *  befintliga doc:et (watchlist-datan finns inte i det här lagret; den
+ *  uppdateras av grupp-sidans visit-refresh). Dirty-check före varje write. */
+export async function refreshMyHouseholdContributions(
+  uid: string,
+  fields: {
+    myProviders: number[];
+    providerCosts: Record<number, number>;
+    providerTiers: Record<number, string>;
+    providerCampaigns: Record<number, ProviderCampaign>;
+  },
+): Promise<void> {
+  const { db, collection, doc, getDoc, getDocs, query, where } = await fsdb();
+  const groupsSnap = await getDocs(
+    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+  );
+  await Promise.all(groupsSnap.docs.map(async g => {
+    try {
+      const snap = await getDoc(doc(db, 'groups', g.id, 'household', uid));
+      if (!snap.exists()) return; // inte opt-in i den här gruppen
+      const existing = householdDocToObject(uid, snap.data() as Record<string, unknown>);
+      const built = buildHouseholdContribution(
+        fields.myProviders, fields.providerCosts, fields.providerTiers, fields.providerCampaigns, [],
+      );
+      const next: HouseholdContributionContent = {
+        ...built,
+        activeProviderIds: existing.activeProviderIds,
+      };
+      if (contributionContentEquals(next, existing)) return; // dirty-check → ingen write
+      await setHouseholdContribution(g.id, uid, next);
+    } catch {
+      // Best-effort per grupp (samma som updateMemberProviders-fan-outen) —
+      // en trasig grupp får inte stoppa övriga eller själva profil-ändringen.
+    }
+  }));
 }
 
 export function subscribeToMyGroups(

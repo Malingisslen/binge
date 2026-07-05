@@ -457,6 +457,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     providerCampaignsRef.current = next;
     await updateUserField('providerCampaigns', next);
   }, [updateUserField]);
+
+  // BIN-184: hushålls-fan-out — när kostnadsrelaterade profilfält ÄNDRAS
+  // uppdateras användarens opt-in-bidrag i alla grupper (dirty-checkat, så en
+  // oförändrad payload aldrig ger en write). Effekt-driven istället för fem
+  // call-sites: updateUserField's setUser bevarar orörda fält-referenser, så
+  // deps:en triggar bara på verkliga ändringar. Första körningen per inloggning
+  // hoppas över (profil-laddning ≠ ändring — sparar onödiga reads varje session).
+  const householdSyncArmed = useRef(false);
+  useEffect(() => { householdSyncArmed.current = false; }, [uid]);
+  const hhProviders = user?.myProviders;
+  const hhCosts = user?.providerCosts;
+  const hhTiers = user?.providerTiers;
+  const hhCampaigns = user?.providerCampaigns;
+  useEffect(() => {
+    if (!uid || !user) return;
+    if (!householdSyncArmed.current) { householdSyncArmed.current = true; return; }
+    const t = setTimeout(() => {
+      import('@/lib/firebase/groups')
+        .then(({ refreshMyHouseholdContributions }) =>
+          refreshMyHouseholdContributions(uid, {
+            myProviders: hhProviders ?? [],
+            providerCosts: hhCosts ?? {},
+            providerTiers: hhTiers ?? {},
+            providerCampaigns: hhCampaigns ?? {},
+          }),
+        )
+        .catch(() => {}); // best-effort — profiländringen är redan sparad
+    }, 2000); // koalescera snabba successiva redigeringar till EN fan-out
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, hhProviders, hhCosts, hhTiers, hhCampaigns]);
   // Samma synkrona-spegel-mönster som providerCosts (BIN-46) så tabbning mellan
   // fält inte skriver mot en stale render-snapshot och tappar ett värde.
   const providerRenewalDaysRef = useRef<Record<number, number>>({});

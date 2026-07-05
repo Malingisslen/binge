@@ -126,6 +126,37 @@ När användaren raderas:
   kan inte modifieras (okej tillstånd eftersom owner ändå kan delete:a
   gruppen först).
 
+### Hushålls-bidrag (delade prenumerationskostnader) → Samtyckesbaserad, självstyrd radering (BIN-184, 2026-07-05)
+
+`groups/{gid}/household/{uid}` — en OPT-IN "Hushåll"-yta i grupper. Varje
+medlem skriver bara sitt eget bidrag (aldrig andras):
+
+- **Innehåll:** `providerIds` (vilka tjänster), `providerCosts` (kr/tjänst,
+  ordinarie pris — INGA nivå-/tier-namn, medveten minimering),
+  `providerCampaigns` (kampanjpris + slutdatum, så kampanjer auto-återgår till
+  ordinarie pris), `activeProviderIds` (vilka av tjänsterna som bär minst en
+  osedd titel i backloggen — **usage-härlett, aldrig självrapporterat, och
+  bara på tjänste-nivå, aldrig titel-nivå**; DPO-krav om att inte exponera VAD
+  någon tittar på, bara VILKEN tjänst som bär vikt), `updatedAt`
+  (server-stämplad).
+- **Rättslig grund:** samtycke (art. 6.1.a) — explicit opt-in per grupp; en
+  samtyckesskärm visas före första skrivningen. Att gå med i en grupp är INTE
+  samtycke till att dela.
+- **Vem kan läsa:** endast gruppmedlemmar som SJÄLVA delar (share-to-see-
+  reciprocitet, `exists()`-check i `firestore.rules`) — se ADR 0010
+  (`docs/org/adr/0010-household-read-gap.md`). Appens UI visar bara aggregat
+  ("Disney+ betalas av 2 av er"), men en delande medlem kan tekniskt läsa en
+  annan medlems post-för-post-lista; det är en medveten, founder-godkänd
+  disclosure-lucka (ingen Cloud Function-proxy) — konsent-texten säger det
+  rakt ut.
+- **Radering:** ett tryck ("Sluta dela") raderar dokumentet omedelbart. Att
+  lämna gruppen eller bli borttagen ur den raderar det också. Kontoradering
+  kaskadar via BÅDA grenarna i `deleteAccount` (owner-grenen tar hela
+  gruppens `household`-collection när gruppen raderas; medlems-grenen
+  raderar bara mitt eget doc när jag lämnar) — emulator-testat.
+- **Retention:** inget tidsbaserat utgångsdatum — dokumentet lever tills
+  återkallelse/lämnande/borttagning/kontoradering.
+
 ### Användarnamn → Hård radering + release
 
 `usernames/{username}` doc tas bort → användarnamnet blir tillgängligt

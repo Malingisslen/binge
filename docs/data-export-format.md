@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -35,7 +35,8 @@ Filen är en JSON med följande top-level-struktur (se
   "lists":           [ … ],
   "editableLists":   [ … ],
   "sessions":        [ … ],
-  "groupMemberships":[ … ]
+  "groupMemberships":[ … ],
+  "householdContributions": [ … ]
 }
 ```
 
@@ -66,6 +67,7 @@ Filen är en JSON med följande top-level-struktur (se
 | `editableLists` | `lists/{listId}` (editors array-contains me) | Listor du är medredigerare i (BIN-100) |
 | `sessions` | `sessions/{sessionId}` (where hostUid==me) | Tillsammans-sessioner du är värd för |
 | `groupMemberships` | `groups/{groupId}` (array-contains me) | Grupper du är medlem i + gruppdata |
+| `householdContributions` | `groups/{groupId}/household/{uid}` (endast grupper du opt:at in i, BIN-184) | Ditt delade hushålls-bidrag per grupp: providerIds, providerCosts (kr/tjänst, ordinarie pris — inga tier-namn), providerCampaigns (kampanjpris + slutdatum), activeProviderIds (tjänster med minst en osedd backlog-titel — usage-härlett, inte självrapporterat), updatedAt |
 
 ## Datumserialisering
 
@@ -118,3 +120,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
 - **1.1 (2026-07-01, BIN-164)** — Lade till `watchlistTags` (dina privata
   fritext-taggar per titel, egen ägar-skyddad subcollection). Additivt fält →
   minor-bump 1.0 → 1.1.
+- **1.2 (2026-07-05, BIN-184)** — Lade till `householdContributions` (dina
+  delade hushålls-bidrag i grupper du opt:at in i — providerIds,
+  providerCosts, providerCampaigns, activeProviderIds, updatedAt). Additivt
+  fält → minor-bump 1.1 → 1.2.

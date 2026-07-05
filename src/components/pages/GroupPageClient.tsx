@@ -27,6 +27,7 @@ import {
   LeavePanel,
   ProviderOverlapPanel,
 } from '@/components/groups/GroupSidePanels';
+import HouseholdPanel from '@/components/groups/HouseholdPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -256,6 +257,8 @@ function GroupView({
             isOwner={isOwner}
           />
           <ProviderOverlapPanel intersect={intersectProviders} union={unionProviders} />
+          {/* BIN-184: opt-in hushållsvy — aggregatet av delade kostnadsdata. */}
+          <HouseholdPanel groupId={groupId} />
           {isOwner && <InvitePanel groupId={groupId} group={group} isOwner={isOwner} />}
           {!isOwner && <LeavePanel groupId={groupId} myUid={myUid} onLeft={() => router.push('/grupper')} />}
         </div>

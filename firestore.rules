@@ -910,6 +910,57 @@ service cloud.firestore {
             && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
         }
       }
+
+      // BIN-184: Hushåll — opt-in delade prenumerationsbidrag (kostnadsdata).
+      // Opt-in = att medlemmen själv skriver sitt doc; payloaden byggs client-
+      // side utan tier-namn (DPO-minimering). Till skillnad från progress-
+      // mönstret valideras form + storlek hårt: doc:et bär öppna maps som
+      // annars vore attacker-sized (Security #4). updatedAt pinnas till
+      // request.time så ålders-stämpeln ("senast uppdaterad") inte kan förfalskas.
+      //
+      // LÄS kräver reciprocitet (share-to-see, ADR 0010): bara medlemmar som
+      // själva delar (har ett eget household-doc) får läsa andras bidrag —
+      // första gången medlemskaps-linjen INTE räcker som access-line, eftersom
+      // detta är pengadata, inte watch-status.
+      //
+      // DELETE: medlemmen själv (opt-out — utan medlemskrav, så ett kvarlämnat
+      // doc alltid kan självstädas) eller ägaren (removeMember-städning).
+      match /household/{householdUid} {
+        // GET på sitt EGET doc är alltid tillåtet — även när det inte finns
+        // (export/radering får då exists()=false istället för permission-denied;
+        // rules är inte filter, xhigh-review 2026-07-05) och även efter utträde
+        // (självstädning + Art. 20-export). Andras docs kräver share-to-see.
+        allow get: if isSignedIn()
+          && (request.auth.uid == householdUid
+            || (request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+              && exists(/databases/$(database)/documents/groups/$(groupId)/household/$(request.auth.uid))));
+
+        // LIST förblir strikt reciprok (share-to-see, ADR 0010). OBS: klient-
+        // flöden får ALDRIG lista household som del av radering — deletion-refs
+        // härleds ur medlems-id:na (accountDeletion/deleteGroup) just för att en
+        // icke-delande ägare inte kan lista.
+        allow list: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          && exists(/databases/$(database)/documents/groups/$(groupId)/household/$(request.auth.uid));
+
+        allow create, update: if isOwner(householdUid)
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids
+          && request.resource.data.keys().hasAll(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['providerIds', 'providerCosts', 'providerCampaigns', 'activeProviderIds', 'updatedAt'])
+          && request.resource.data.providerIds is list
+          && request.resource.data.providerIds.size() <= 100
+          && request.resource.data.activeProviderIds is list
+          && request.resource.data.activeProviderIds.size() <= 100
+          && request.resource.data.providerCosts is map
+          && request.resource.data.providerCosts.size() <= 100
+          && request.resource.data.providerCampaigns is map
+          && request.resource.data.providerCampaigns.size() <= 100
+          && request.resource.data.updatedAt == request.time;
+
+        allow delete: if isSignedIn()
+          && (request.auth.uid == householdUid
+            || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid);
+      }
     }
   }
 }

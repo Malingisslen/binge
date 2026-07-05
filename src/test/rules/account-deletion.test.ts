@@ -155,18 +155,29 @@ async function seedFullAccount() {
     // name + defaults are required: the member-leave update rule pins them via
     // dot-notation equality, so a group lacking them errors the rule (real groups
     // always carry them).
-    await set(['groups', 'mygroup'], { ownerUid: ME, memberUids: [ME], name: 'Mine', defaults: {} });
+    await set(['groups', 'mygroup'], { ownerUid: ME, memberUids: [ME, OTHER], name: 'Mine', defaults: {} });
     await set(['groups', 'mygroup', 'members', ME], { uid: ME });
     await set(['groups', 'mygroup', 'watchlist', 'w1'], { tmdbId: 1 });
     await set(['groups', 'mygroup', 'watchlist', 'w1', 'progress', ME], { season: 1 });
     await set(['groups', 'mygroup', 'sessionHistory', 'sh1'], { pickedByUid: ME });
     await set(['groups', 'mygroup', 'joinAttempts', ME], { token: 'plain' });
+    // BIN-184: hushålls-bidrag i den ägda gruppen — MEDVETET utan ME:s eget doc:
+    // ägaren har INTE opt:at in (launch-fallet för varje befintlig ägare). Detta
+    // är exakt scenariot som maskerades innan xhigh-reviewen: en list-query här
+    // nekades av share-to-see-reglerna och fick HELA raderingen att kasta. Nu
+    // härleds refs ur medlems-id:na, så OTHERS doc raderas ändå.
+    await set(['groups', 'mygroup', 'members', OTHER], { uid: OTHER });
+    await set(['groups', 'mygroup', 'household', OTHER], { providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [] });
 
     await set(['groups', 'othergroup'], { ownerUid: OTHER, memberUids: [OTHER, ME], name: 'Theirs', defaults: {} });
     await set(['groups', 'othergroup', 'members', ME], { uid: ME });
     await set(['groups', 'othergroup', 'watchlist', 'w2'], { tmdbId: 2 });
     await set(['groups', 'othergroup', 'watchlist', 'w2', 'progress', ME], { season: 1 });
     await set(['groups', 'othergroup', 'joinAttempts', ME], { token: 'plain2' });
+    // BIN-184: mitt bidrag i gruppen jag bara är medlem i (member-grenen) —
+    // OTHERS bidrag där ska överleva (deras data, deras grupp).
+    await set(['groups', 'othergroup', 'household', ME], { providerIds: [8], providerCosts: { 8: 169 }, providerCampaigns: {}, activeProviderIds: [] });
+    await set(['groups', 'othergroup', 'household', OTHER], { providerIds: [337], providerCosts: { 337: 109 }, providerCampaigns: {}, activeProviderIds: [] });
 
     // A report I filed — retained under Art. 17(3).
     await set(['reports', 'rep1'], {
@@ -231,10 +242,15 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(await exists(['groups', 'mygroup', 'watchlist', 'w1', 'progress', ME]), 'owned-group watchlist progress erased').toBe(false);
     expect(await exists(['groups', 'mygroup', 'sessionHistory', 'sh1']), 'owned-group sessionHistory erased').toBe(false);
     expect(await exists(['groups', 'mygroup', 'joinAttempts', ME]), 'owned-group joinAttempts erased').toBe(false);
+    // BIN-184: owner-grenen raderar HELA household-collectionen (alla medlemmars bidrag).
+    expect(await count(['groups', 'mygroup', 'household']), 'owned-group household erased (BIN-184)').toBe(0);
     expect(await exists(['groups', 'othergroup']), 'member group survives').toBe(true);
     expect(await exists(['groups', 'othergroup', 'members', ME]), 'my member doc removed').toBe(false);
     expect(await exists(['groups', 'othergroup', 'joinAttempts', ME]), 'my joinAttempt erased (BIN-329)').toBe(false);
     expect(await exists(['groups', 'othergroup', 'watchlist', 'w2', 'progress', ME]), 'my group progress erased').toBe(false);
+    // BIN-184: member-grenen raderar MITT bidrag; OTHERS bidrag i deras grupp överlever.
+    expect(await exists(['groups', 'othergroup', 'household', ME]), 'my household contribution erased (BIN-184)').toBe(false);
+    expect(await exists(['groups', 'othergroup', 'household', OTHER]), "other's household contribution survives").toBe(true);
 
     // 9. reports retained — Art. 17(3) carve-out (reporterUid intact).
     expect(await exists(['reports', 'rep1']), 'moderation report retained (Art. 17(3))').toBe(true);

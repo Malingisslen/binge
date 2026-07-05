@@ -11,7 +11,10 @@ import type { QuerySnapshot } from 'firebase/firestore';
  */
 
 // 1.1 (BIN-164): additive — new `watchlistTags` array (your private per-title tags).
-export const SCHEMA_VERSION = '1.1' as const;
+// 1.2 (BIN-184): additive — new `householdContributions` array (your opt-in shared
+//     subscription data per group; id = groupId). Self-reported financial data →
+//     squarely Art. 20 scope.
+export const SCHEMA_VERSION = '1.2' as const;
 
 export interface ExportDoc {
   id: string;
@@ -48,6 +51,9 @@ export interface BingeExport {
   editableLists: ExportDoc[];
   sessions: ExportDoc[];
   groupMemberships: ExportDoc[];
+  // BIN-184: mina hushålls-bidrag (delade kostnadsdata), ett per grupp där jag
+  // opt:at in — id är groupId (doc-id:t i gruppen är alltid min egen uid).
+  householdContributions: ExportDoc[];
 }
 
 const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personuppgifter från Binge.nu.
@@ -94,6 +100,27 @@ function toExportDocs(snap: QuerySnapshot): ExportDoc[] {
 export async function buildUserExport(uid: string): Promise<BingeExport> {
   const s = await collectUserDataSnapshots(uid);
 
+  // BIN-184: hushålls-bidrag är grupp-scopade (groups/{gid}/household/{uid}) och
+  // ingår därför inte i den users/{uid}-formade helpern — hämtas inline här,
+  // samma mönster som joinAttempts hanteras inline i deleteAccount. Ett getDoc
+  // per grupp jag är medlem i; bara existerande (opt-in) docs exporteras.
+  // Dynamisk ./db-import: laddas bara när det finns grupper, så modulgrafen
+  // förblir Firebase-fri för test/miljöer som mockar userData (BIN-328-guarden).
+  const householdContributions: ExportDoc[] = [];
+  if (s.groupsSnap.docs.length > 0) {
+    const { fsdb } = await import('./db');
+    const { db, doc, getDoc } = await fsdb();
+    const householdSnaps = await Promise.all(
+      s.groupsSnap.docs.map(g => getDoc(doc(db, 'groups', g.id, 'household', uid))),
+    );
+    s.groupsSnap.docs.forEach((g, i) => {
+      const snap = householdSnaps[i];
+      if (snap.exists()) {
+        householdContributions.push({ id: g.id, data: snap.data() as Record<string, unknown> });
+      }
+    });
+  }
+
   return {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -124,6 +151,7 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     editableLists: toExportDocs(s.editableListsSnap),
     sessions: toExportDocs(s.sessionsSnap),
     groupMemberships: toExportDocs(s.groupsSnap),
+    householdContributions,
   };
 }
 

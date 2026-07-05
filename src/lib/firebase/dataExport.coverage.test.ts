@@ -142,6 +142,27 @@ vi.mock('./userData', () => ({
   collectUserDataSnapshots: vi.fn(),
 }));
 
+// BIN-184: buildUserExport fetches group-scoped household contributions inline
+// (dynamic import('./db')) — mock the kit so the export path flows without
+// Firebase and the fake contribution surfaces in the payload.
+vi.mock('./db', () => ({
+  fsdb: vi.fn(async () => ({
+    db: {},
+    doc: vi.fn((_db: unknown, ...segs: string[]) => ({ path: segs.join('/') })),
+    getDoc: vi.fn(async () => ({
+      exists: () => true,
+      data: () => ({ seeded: 'household' }),
+    })),
+  })),
+}));
+
+// BIN-184: BingeExport keys that are GROUP-scoped (groups/{gid}/household/{uid})
+// and therefore deliberately NOT backed by a users/{uid}-shaped kernel snap —
+// fetched inline in buildUserExport, deleted via literal refs in the
+// accountDeletion groups-loop (emulator-asserted in account-deletion.test.ts).
+// Adding a key here is a reviewable widening, same discipline as the skip-sets.
+const GROUP_SCOPED_EXPORT_KEYS = new Set<keyof BingeExport>(['householdContributions']);
+
 describe('GDPR export/delete completeness (BIN-328)', () => {
   let exported: BingeExport;
 
@@ -175,11 +196,31 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
       coverageKeys.map(k => COVERAGE[k].export).filter((e): e is keyof BingeExport => e !== null),
     );
     const exportCollectionKeys = (Object.keys(exported) as (keyof BingeExport)[]).filter(
-      k => !EXPORT_METADATA_KEYS.has(k),
+      k => !EXPORT_METADATA_KEYS.has(k) && !GROUP_SCOPED_EXPORT_KEYS.has(k),
     );
     for (const key of exportCollectionKeys) {
       expect(mappedTargets.has(key), `BingeExport.${String(key)} has no backing UserDataSnapshots key`).toBe(true);
     }
+  });
+
+  it('BIN-184: household contributions surface in the export and in BOTH deletion branches', () => {
+    // Export: one contribution per (fake) group membership, carrying the doc data.
+    expect(exported.householdContributions).toHaveLength(1);
+    expect(exported.householdContributions[0]).toEqual({ id: 'doc1', data: { seeded: 'household' } });
+
+    // Deletion: the group-scoped path can't be a kernel snap, so hold the
+    // cascade to it by source reference — owner branch enumerates the household
+    // collection; member branch pushes the literal own-doc ref. The emulator
+    // test (account-deletion.test.ts) proves the actual erasure.
+    const src = readFileSync(
+      join(process.cwd(), 'src', 'lib', 'firebase', 'accountDeletion.ts'),
+      'utf8',
+    );
+    expect(src.includes("'household'"), 'accountDeletion.ts no longer references household').toBe(true);
+    // Owner branch derives household refs from MEMBER uids — never a list query,
+    // which share-to-see rules deny for a non-sharing owner (xhigh 2026-07-05).
+    expect(src.includes('householdUids'), 'owner branch lost its member-derived household refs').toBe(true);
+    expect(src.includes("'household', id"), 'member branch lost its own-doc household ref').toBe(true);
   });
 
   it('export-skip set is exactly the intended operational-metadata keys', () => {

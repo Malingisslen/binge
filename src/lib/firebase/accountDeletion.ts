@@ -144,6 +144,14 @@ export async function collectDeletionRefs(
       ]);
       membersSnap.docs.forEach(d => refs.push(d.ref));
       sessionHistorySnap.docs.forEach(d => refs.push(d.ref));
+      // BIN-184: hushålls-refs härleds ur MEDLEMS-id:na — ALDRIG via en list-
+      // query, som share-to-see-reglerna nekar för en ägare som inte själv delar
+      // (xhigh-review 2026-07-05: list-nekandet fick hela raderingen att kasta).
+      // batch.delete på icke-existerande docs är no-ops, och household ⊆ members
+      // (removeMember + member-grenen nedan städar vid utträde) → full täckning.
+      const householdUids = new Set<string>(membersSnap.docs.map(d => d.id));
+      householdUids.add(id);
+      householdUids.forEach(u => refs.push(doc(db, 'groups', groupDoc.id, 'household', u)));
       for (const wDoc of groupWatchlistSnap.docs) {
         const progSnap = await getDocs(
           collection(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress'),
@@ -165,6 +173,9 @@ export async function collectDeletionRefs(
         refs.push(doc(db, 'groups', groupDoc.id, 'watchlist', wDoc.id, 'progress', id));
       }
       refs.push(doc(db, 'groups', groupDoc.id, 'members', id));
+      // BIN-184: mitt hushålls-bidrag i gruppen jag lämnar (delade kostnadsdata)
+      // — GDPR Art. 17: får inte överleva kontot (no-op om aldrig opt-in).
+      refs.push(doc(db, 'groups', groupDoc.id, 'household', id));
     }
   }
 

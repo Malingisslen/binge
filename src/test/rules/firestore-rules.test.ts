@@ -6,7 +6,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -1065,5 +1065,135 @@ describe('priceHistory/{tmdbId} (BIN-180)', () => {
   it('cannot be written by clients (cron-only history asset)', async () => {
     await assertFails(setDoc(doc(ownerDb(), 'priceHistory', '603'), { points: [] }));
     await assertFails(setDoc(doc(anonDb(), 'priceHistory', '1399'), { points: [] }));
+  });
+});
+
+// BIN-184: Hushåll — opt-in delade prenumerationsbidrag. Self-write med hård
+// form/storleks-validering, share-to-see-reciprocitet på läs (ADR 0010),
+// delete av self eller ägare. Varje deny paras med en positiv tvilling
+// (samma disciplin som BIN-276-sviten).
+describe('groups household — opt-in delade kostnadsdata (BIN-184)', () => {
+  const MEMBER = 'member_uid';
+  function memberDb() { return testEnv.authenticatedContext(MEMBER).firestore(); }
+
+  function validContent() {
+    return {
+      providerIds: [8, 337],
+      providerCosts: { 8: 169, 337: 109 },
+      providerCampaigns: { 8: { monthlyCost: 29, endDate: '2026-10-01' } },
+      activeProviderIds: [8],
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  async function seedContribution(uid: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'groups', GROUP, 'household', uid), {
+        providerIds: [], providerCosts: {}, providerCampaigns: {},
+        activeProviderIds: [], updatedAt: serverTimestamp(),
+      });
+    });
+  }
+
+  it('a member can opt in — create own contribution with the exact shape', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertSucceeds(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), validContent()));
+  });
+
+  it("a member cannot write ANOTHER member's contribution", async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(ownerDb(), 'groups', GROUP, 'household', MEMBER), validContent()));
+  });
+
+  it('a non-member can neither create nor read a contribution', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedContribution(OWNER);
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'household', 'other_uid'), validContent()));
+    await assertFails(getDoc(doc(otherDb(), 'groups', GROUP, 'household', OWNER)));
+  });
+
+  it('an extra field is rejected (hasOnly whitelist)', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), {
+      ...validContent(), tierNames: { 8: 'premium' },
+    }));
+  });
+
+  it('a missing field is rejected (hasAll — full shape required)', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    const partial: Record<string, unknown> = { ...validContent() };
+    delete partial.providerCampaigns;
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), partial));
+  });
+
+  it('a forged (non-server) updatedAt is rejected — åldersstämpeln kan inte fejkas', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), {
+      ...validContent(), updatedAt: new Date('2099-01-01'),
+    }));
+  });
+
+  it('an oversized providerIds list (101) is rejected — attacker-sized docs stoppas', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertFails(setDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER), {
+      ...validContent(), providerIds: Array.from({ length: 101 }, (_, i) => i),
+    }));
+  });
+
+  it("share-to-see: a member WITH own contribution can read another's", async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await seedContribution(OWNER);
+    await seedContribution(MEMBER);
+    await assertSucceeds(getDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+  });
+
+  it('share-to-see: a member WITHOUT own contribution cannot read others (reciprocity)', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await seedContribution(OWNER);
+    await assertFails(getDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+  });
+
+  it("a departed member cannot read OTHERS' household docs, but can still GET their own stale one", async () => {
+    await seedGroup({ memberUids: [OWNER] }); // MEMBER already removed
+    await seedContribution(OWNER);
+    await seedContribution(MEMBER); // stale leftover
+    await assertFails(getDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+    // Own doc stays self-GET-able post-departure (export + self-cleanup path).
+    await assertSucceeds(getDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
+  });
+
+  it('a member who has NOT opted in can GET their own MISSING doc (exists=false, never denied)', async () => {
+    // GDPR-flödena (export/radering) läser eget doc per grupp — ett nekande här
+    // kraschade hela exporten (xhigh-review 2026-07-05). Rules är inte filter.
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await assertSucceeds(getDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
+  });
+
+  it('LIST stays share-to-see: a non-sharing member cannot list; a sharing member can', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await seedContribution(OWNER);
+    await assertFails(getDocs(collection(memberDb(), 'groups', GROUP, 'household')));
+    await seedContribution(MEMBER);
+    await assertSucceeds(getDocs(collection(memberDb(), 'groups', GROUP, 'household')));
+  });
+
+  it('self-delete (opt-out) and owner-delete (removeMember-städning) both succeed', async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await seedContribution(MEMBER);
+    await assertSucceeds(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
+    await seedContribution(MEMBER);
+    await assertSucceeds(deleteDoc(doc(ownerDb(), 'groups', GROUP, 'household', MEMBER)));
+  });
+
+  it("a non-owner member cannot delete someone else's contribution", async () => {
+    await seedGroup({ memberUids: [OWNER, MEMBER] });
+    await seedContribution(OWNER);
+    await assertFails(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', OWNER)));
+  });
+
+  it('a departed member can still self-delete their leftover doc (orphan-städning)', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedContribution(MEMBER);
+    await assertSucceeds(deleteDoc(doc(memberDb(), 'groups', GROUP, 'household', MEMBER)));
   });
 });

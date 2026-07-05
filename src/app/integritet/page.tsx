@@ -10,8 +10,8 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-06-30"
-      version="1.1"
+      lastUpdated="2026-07-05"
+      version="1.2"
     >
       <section>
         <h2>1. Vem är ansvarig?</h2>
@@ -52,7 +52,7 @@ export default function IntegritetPage() {
         <ul>
           <li><strong>Avtal (GDPR art. 6.1.b)</strong> — för att leverera tjänsten: spara din bevakningslista, visa rätt streaming-info, köra rådgivaren.</li>
           <li><strong>Berättigat intresse (art. 6.1.f)</strong> — för driftlogg, felsökning, felövervakning, bot- och missbruksskydd, samt cookiefri och anonymiserad besöksstatistik (se §4).</li>
-          <li><strong>Samtycke (art. 6.1.a)</strong> — för eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga sådana används idag.</li>
+          <li><strong>Samtycke (art. 6.1.a)</strong> — för Hushåll, den frivilliga delningen av prenumerationskostnader i grupper (se §10), samt eventuella framtida inslag som kräver samtycke, t.ex. marknadsföring eller cookie-baserad spårning. Inga marknadsföringsinslag används idag.</li>
         </ul>
       </section>
 
@@ -167,7 +167,25 @@ export default function IntegritetPage() {
       </section>
 
       <section>
-        <h2>10. Ändringar</h2>
+        <h2>10. Delning i grupper (Hushåll)</h2>
+        <p>
+          Om du går med i en grupp kan du välja att aktivera <strong>Hushåll</strong> —
+          en frivillig funktion där du delar dina prenumerationskostnader med de
+          medlemmar i gruppen som själva också delar sina. Att gå med i en grupp
+          innebär inte automatiskt att du delar; du får en samtyckesruta innan
+          något sparas.
+        </p>
+        <ul>
+          <li><strong>Vad vi sparar</strong> — vilka streamingtjänster du har, vad de kostar dig (ordinarie pris, aldrig vilken abonnemangsnivå), eventuellt kampanjpris med slutdatum, samt vilka av tjänsterna som bär minst en osedd titel i din bevakningslista.</li>
+          <li><strong>Syfte</strong> — att ge gruppen en samlad hushållsbild, t.ex. &quot;Disney+ betalas av 2 av er&quot;, så ni kan se om ni betalar dubbelt för samma tjänst.</li>
+          <li><strong>Vem kan se det</strong> — andra medlemmar i gruppen (nuvarande och framtida), men bara de som själva delar sina egna kostnader. Appens gränssnitt visar bara summerade totaler, men tekniskt kan en delande medlem läsa din enskilda lista rad för rad — vi vill att du vet det innan du väljer att dela.</li>
+          <li><strong>Din kontroll</strong> — sluta dela när som helst med ett tryck; din data raderas då omedelbart. Den raderas också automatiskt om du lämnar gruppen, blir borttagen ur den, eller tar bort ditt konto.</li>
+          <li><strong>Export</strong> — dina hushålls-bidrag ingår i din dataexport (se §7).</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>11. Ändringar</h2>
         <p>
           Om vi gör materiella ändringar i denna policy uppdaterar vi
           versionsnumret ovan och meddelar dig i appen. Mindre
@@ -177,7 +195,7 @@ export default function IntegritetPage() {
       </section>
 
       <section>
-        <h2>11. Kontakt</h2>
+        <h2>12. Kontakt</h2>
         <p>
           Har du frågor? Skriv till{' '}
           <a href="mailto:hej@binge.nu">hej@binge.nu</a>.
