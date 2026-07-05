@@ -105,15 +105,18 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     ],
   },
   {
-    id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 89,
+    // live-verifierat 2026-07-05 — https://www.crunchyroll.com/premium (SE, VAT-inkl.):
+    // Fan 85 / Mega Fan 99. Var 89/119 (för högt); den påstådda 199 kr var fel — SE har
+    // bara två nivåer och de ligger LÄGRE än katalogen tidigare visade (BIN-406).
+    id: 323, name: 'Crunchyroll', shortName: 'CR', color: '#F47521', type: 'flatrate', defaultMonthlyCost: 85,
     // 1968 = "Crunchyroll Amazon Channel" (live-verifierat SE-id 2026-06-10).
     // 283 = TMDB:s nuvarande bas-id för Crunchyroll på titel-nivå (live-verifierat
     // 2026-06-20 via /tv/37854 → SE flatrate 283). Behåll 323 som primär så
     // redan sparad canonical-data (323) inte splittras; aliasa 283 hit (BIN-64).
     aliases: [1968, 283],
     tiers: [
-      { id: 'fan', name: 'Fan', cost: 89 },
-      { id: 'megafan', name: 'Mega Fan', cost: 119 },
+      { id: 'fan', name: 'Fan', cost: 85 },
+      { id: 'megafan', name: 'Mega Fan', cost: 99 },
     ],
   },
   {
