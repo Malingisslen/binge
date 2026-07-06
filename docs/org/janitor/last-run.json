@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-07-04",
+  "lastRun": "2026-07-06",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 1,
-  "retroDue": true,
+  "worldWatchRoles": 0,
+  "retroDue": false,
   "acceptRate": null,
-  "notes": "No docs/org/dossier-staleness/ dir (skipped); Security Architect scan ran (weekly, due) — no material findings, no issues filed; shakedown retro overdue since 2026-07-01."
+  "notes": "No docs/org/dossier-staleness/ dir (skipped, expected). World-watch: 0/3 roles due (Security Architect next due 2026-07-11, Legal/GDPR + DPO next due 2026-07-27) — no scans run. Shakedown retro already logged 2026-07-04; full retro not due until 2026-07-25. No tasks/*-plan.md found to sweep. accept-rate metric is butlery-only, skipped here."
 }
