@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import DiagnosisCard from '@/components/savings/DiagnosisCard';
 import CampaignExpiryNudges from '@/components/savings/CampaignExpiryNudges';
 import NumberedActionsList from '@/components/savings/NumberedActionsList';
+import BundleArbitrageCard from '@/components/savings/BundleArbitrageCard';
 import ProvidersByValue from '@/components/savings/ProvidersByValue';
 import ServiceValueCard from '@/components/savings/ServiceValueCard';
 import CoverageOptimizer from '@/components/savings/CoverageOptimizer';
@@ -254,6 +255,8 @@ function SavingsContent() {
               onPauseProvider={(id, resumeAt) => { pauseProvider(id, resumeAt); trackEvent('advisor_action_taken', { action: 'pause', providerId: id }); }}
               onShowSubscribeRows={handleShowSubscribeRows}
             />
+
+            <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
 
             <ProvidersByValue
               providers={advisor.providers}

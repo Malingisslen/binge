@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite } from '@/lib/tmdb/client';
 import { getProvider, canonicalProviderId, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
+import { detectBundleArbitrage, SWEDISH_BUNDLES } from '@/lib/advisor/bundleArbitrage';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -484,5 +485,23 @@ export function useSubscriptionAdvisor(
     };
   }, [enabled, shows, followingTV, willSeeItems, myProviders, providerCosts, providerTiers, providerCampaigns, now, providerPauses, lookAheadDays, hasError]);
 
-  return { ...computed, isLoading, hasError };
+  // BIN-430: paket-arbitrage. Ren funktion över ägda tjänster + samma
+  // campaign-cost-inställningar (providerTiers/providerCosts/providerCampaigns)
+  // + samma per-mount `now` som resten av kostnadskaskaden. Ingen TMDB-fan-out,
+  // så den beräknas fristående från `computed` och överlever ett TMDB-fel.
+  // enabled=false (gated bibliotekssidor) → tom, precis som computed.
+  const bundleSuggestions = useMemo(
+    () =>
+      enabled
+        ? detectBundleArbitrage(
+            myProviders,
+            { providerTiers, providerCosts, providerCampaigns },
+            SWEDISH_BUNDLES,
+            now,
+          )
+        : [],
+    [enabled, myProviders, providerTiers, providerCosts, providerCampaigns, now],
+  );
+
+  return { ...computed, bundleSuggestions, isLoading, hasError };
 }

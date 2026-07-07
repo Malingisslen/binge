@@ -1,4 +1,8 @@
 import type { MediaType } from './domain';
+import type { BundleSuggestion } from '@/lib/advisor/bundleArbitrage';
+
+// Re-export so `@/types` consumers get BundleSuggestion alongside AdvisorResult.
+export type { BundleSuggestion, SwedishBundle } from '@/lib/advisor/bundleArbitrage';
 
 // Subscription advisor — beräknad rekommendations-state för
 // Streamingrådgivaren (se src/hooks/useSubscriptionAdvisor.ts).
@@ -112,4 +116,10 @@ export interface AdvisorResult {
   // serie. /my/series använder det för att sortera avslutade serier till
   // "Avslutade" även när lazy-backfillad tmdbStatus saknas (librarySubState).
   endedCaughtUpTmdbIds: Set<number>;
+  // BIN-430: paket-arbitrage — lösa tjänster användaren betalar var för sig som
+  // vore billigare som ett svenskt telecom/streamer-paket. Best-saving-first,
+  // ÖMSESIDIGT UTESLUTANDE (användaren kan bara köpa ETT paket — summera aldrig).
+  // Byggs enbart från ägda tjänster + kostnadsinställningar (ingen TMDB-fan-out),
+  // så det finns även när TMDB-detaljqueryerna failar.
+  bundleSuggestions: BundleSuggestion[];
 }
