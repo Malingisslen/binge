@@ -139,6 +139,14 @@ export interface TMDBPerson {
   place_of_birth: string | null;
   profile_path: string | null;
   known_for_department: string;
+  // Bifogas via append_to_response=combined_credits (BIN-423 WP3 build-seed).
+  // OBS: det bifogade objektet saknar top-level `id` (till skillnad från den
+  // fristående /combined_credits-endpointen / TMDBPersonCredits) — därför en
+  // egen inline-form, inte återanvänd TMDBPersonCredits.
+  combined_credits?: {
+    cast: (TMDBSearchResult & { character?: string })[];
+    crew: (TMDBSearchResult & { job?: string; department?: string })[];
+  };
 }
 
 export interface TMDBPersonCredits {

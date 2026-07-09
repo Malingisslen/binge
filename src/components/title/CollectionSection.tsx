@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Check, Plus, ChevronDown, ChevronUp } from 'lucide-react';
-import { franchiseByCollectionId } from '@/lib/seo/franchises';
 import { useCollection } from '@/hooks/useTMDB';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
@@ -60,7 +59,6 @@ export default function CollectionSection({
   currentMovieId: number;
 }) {
   const { data: collection } = useCollection(collectionId);
-  const franchise = franchiseByCollectionId(collectionId);
   const { getItem, addItem } = useWatchlist();
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
@@ -159,14 +157,6 @@ export default function CollectionSection({
               {seenCount} av {parts.length} sedda
               {unseen.length > 0 && ` · ${unseen.length} kvar`}
             </div>
-          )}
-          {franchise && (
-            <Link
-              href={`/billigaste/${franchise.slug}/`}
-              className="text-sm text-acc-deep hover:underline inline-block mt-1"
-            >
-              Billigaste sättet att se hela {franchise.name} →
-            </Link>
           )}
         </div>
         {mounted && unseenNotInLibrary.length > 0 && (

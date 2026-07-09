@@ -234,7 +234,9 @@ export async function getKeywords(
 
 // Person
 export function getPerson(id: number, opts?: TmdbFetchOpts): Promise<TMDBPerson> {
-  return tmdbFetch(`/person/${id}`, {}, opts);
+  // append_to_response=combined_credits: samma enda request, men filmografin
+  // följer med så den kan bakas in i statisk HTML vid bygget (BIN-423 WP3 SEO).
+  return tmdbFetch(`/person/${id}`, { append_to_response: 'combined_credits' }, opts);
 }
 
 export function getPersonEn(id: number, opts?: TmdbFetchOpts): Promise<TMDBPerson> {

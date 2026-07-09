@@ -9,6 +9,7 @@ import {
 import { SEO_FALLBACK_PERSON_IDS } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
+import { prunePersonSeed } from '@/lib/tmdb/personSeed';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -100,7 +101,9 @@ export default async function PersonPage({ params }: { params: Promise<PageParam
 
   let initialData;
   try {
-    initialData = await cachedGetPerson(personId);
+    // BIN-423 WP3: trimma combined_credits till konsumerade fält innan de bakas
+    // in i den statiska HTML:en (annars fet payload × ~1000 sidor).
+    initialData = prunePersonSeed(await cachedGetPerson(personId));
   } catch {
     initialData = undefined;
   }

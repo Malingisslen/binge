@@ -34,6 +34,7 @@ import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
+import { franchiseByCollectionId } from '@/lib/seo/franchises';
 import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
@@ -106,6 +107,13 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
   if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
+
+  // BIN-422: känd franchise → statisk, crawlbar /billigaste-länk (renderas
+  // utanför ClientOnly nedan). Härledd ur build-initialData, inte ur den
+  // klient-hämtade collection-fetchen, så den finns i den statiska HTML:en.
+  const franchise = movie.belongs_to_collection
+    ? franchiseByCollectionId(movie.belongs_to_collection.id)
+    : undefined;
 
   const onCineasterna = cineasterna.has(movie.id);
   const cineRental = cineasterna.rentalFor(movie.id);
@@ -473,6 +481,20 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           <ReviewList tmdbId={movie.id} mediaType="movie" title={displayTitle} posterPath={movie.poster_path} />
         </section>
       </ClientOnly>
+
+      {/* BIN-422: crawlbar franchise-länk i statisk HTML (utanför ClientOnly) —
+          intern länkning till /billigaste som Google följer. Visas för kända
+          franchises oavsett collection-fetchens tillstånd. */}
+      {franchise && (
+        <section className="detail-section" style={{ borderTop: '1px solid var(--rule)', paddingTop: 28 }}>
+          <Link
+            href={`/billigaste/${franchise.slug}/`}
+            className="text-sm text-acc-deep hover:underline inline-block"
+          >
+            Billigaste sättet att se hela {franchise.name} →
+          </Link>
+        </section>
+      )}
 
       {/* Franchise/samling (BIN-94) — din progress genom serien, ovanför generiska
           "liknande filmer". Bara när filmen hör till en TMDB-samling. */}

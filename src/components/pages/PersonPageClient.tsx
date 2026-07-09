@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePerson, usePersonCredits } from '@/hooks/useTMDB';
 import { usePageMeta } from '@/hooks/usePageMeta';
+import { JsonLd, breadcrumbSchema } from '@/components/title/JsonLd';
 import { useSwedishWikiBio } from '@/hooks/useSwedishWikiBio';
 import { profileUrl, getPersonEn, isAddableMediaType } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
@@ -21,7 +22,17 @@ import type { TMDBPerson } from '@/types';
 export default function PersonPageClient({ id, initialData }: { id: string; initialData?: TMDBPerson }) {
   const personId = parseInt(id, 10);
   const { data: person, isLoading } = usePerson(personId, initialData);
-  const { data: credits } = usePersonCredits(personId);
+  // BIN-423 WP3: getPerson bifogar numera combined_credits, så filmografin
+  // finns i build-seedad initialData (crawlbar i statisk HTML) OCH i den
+  // klient-hämtade personen. Har vi den → hoppa över den separata
+  // /combined_credits-queryn (en request mindre per förrenderad sida).
+  const seededCredits = person?.combined_credits;
+  // Hämta bara /combined_credits separat om personen laddats UTAN dem (sällsynt
+  // nu när getPerson bifogar dem) — annars null, så vi slipper en bortkastad
+  // request i fönstret innan person-objektet finns. Ger 2→1-request på ALLA
+  // person-sidor, inte bara de förrenderade.
+  const { data: fetchedCredits } = usePersonCredits(person && !seededCredits ? personId : null);
+  const credits = seededCredits ?? fetchedCredits;
   const { getItem, loading: watchlistLoading } = useWatchlist();
 
   const svBio = person?.biography || '';
@@ -108,6 +119,11 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
 
   return (
     <div>
+      {/* BIN-423 WP4: breadcrumb structured data (speglar movie/tv-sidorna) */}
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Binge.nu', url: 'https://binge.nu/' },
+        { name: person.name, url: `https://binge.nu/person/${person.id}/` },
+      ])} />
       <PageHeader
         crumb={translateDepartment(person.known_for_department)}
         title={person.name}
