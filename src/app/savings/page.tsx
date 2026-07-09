@@ -198,6 +198,25 @@ function SavingsContent() {
   }
 
   if (advisor.providers.length === 0) {
+    // BIN-442: `providers` härleds från TMDB-fan-outen och nollas vid ett totalt
+    // fetch-fel (kall cache / TMDB nere). Paket-arbitrage beräknas DÄREMOT
+    // fristående från ägda tjänster + kostnader (ingen TMDB) och överlever felet.
+    // Så när det finns paketförslag HAR användaren bevisligen tjänster — visa
+    // paketkortet istället för den missvisande "inga tjänster"-tomrutan, precis
+    // som motorn ursprungligen konstruerades att fungera under ett TMDB-avbrott.
+    if (advisor.bundleSuggestions.length > 0) {
+      return (
+        <>
+          <header>
+            <div className="crumb">Streamingrådgivaren</div>
+            <h1 className="page-h1">Streamingrådgivaren</h1>
+          </header>
+          <div style={{ marginTop: 22 }}>
+            <BundleArbitrageCard suggestions={advisor.bundleSuggestions} />
+          </div>
+        </>
+      );
+    }
     return (
       <>
         <header>

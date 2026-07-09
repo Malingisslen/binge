@@ -112,3 +112,28 @@ describe('design consistency — token vocabulary (app-wide, BIN-356)', () => {
     expect(roots.flatMap(tsxFilesRecursive).length).toBeGreaterThan(0);
   });
 });
+
+// BIN-441 (BIN-439 follow-up): the app-wide BIN-356 sweep above already covers
+// src/components/savings recursively, but the Streamingrådgivaren cluster is a
+// hot, frequently-extended surface (BIN-430/433/439) — so pin an explicit
+// sub-scoped guard as belt-and-suspenders. A raw-red / legacy-alias regression
+// introduced here then fails a savings-named test, not just the broad sweep,
+// making the offending cluster obvious at a glance.
+describe('design consistency — savings cluster tokens (BIN-441)', () => {
+  const SAVINGS_DIR = join(process.cwd(), 'src', 'components', 'savings');
+  const savingsFiles = () => tsxFilesRecursive(SAVINGS_DIR);
+
+  it('no savings component uses raw Tailwind red-* (use the danger token)', () => {
+    const offenders = savingsFiles().filter(f => RAW_RED.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  });
+
+  it('no savings component uses legacy token aliases (use Direction-H tokens)', () => {
+    const offenders = savingsFiles().filter(f => LEGACY_TOKENS.test(readFileSync(f, 'utf8')));
+    expect(offenders.map(f => f.replace(process.cwd(), ''))).toEqual([]);
+  });
+
+  it('scans a non-empty set of savings files (guard is not vacuous)', () => {
+    expect(savingsFiles().length).toBeGreaterThan(0);
+  });
+});
