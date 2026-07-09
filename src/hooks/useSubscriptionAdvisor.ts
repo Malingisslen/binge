@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTVShowLite } from '@/lib/tmdb/client';
 import { getProvider, canonicalProviderId, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
-import { detectBundleArbitrage, SWEDISH_BUNDLES } from '@/lib/advisor/bundleArbitrage';
+import { SWEDISH_BUNDLES } from '@/lib/advisor/bundleArbitrage';
 import { daysBetween } from '@/lib/utils';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { isEndedStatus } from '@/lib/airingState';
@@ -24,6 +24,7 @@ import {
   splitTvByProgress,
   advisorTmdbIds,
   deriveProviderStatus,
+  selectBundleSuggestions,
 } from './useSubscriptionAdvisor.helpers';
 import type {
   TMDBTVShow, AdvisedShow, ProviderAdvisory, SubscribeAdvisory, AdvisorResult,
@@ -492,14 +493,13 @@ export function useSubscriptionAdvisor(
   // enabled=false (gated bibliotekssidor) → tom, precis som computed.
   const bundleSuggestions = useMemo(
     () =>
-      enabled
-        ? detectBundleArbitrage(
-            myProviders,
-            { providerTiers, providerCosts, providerCampaigns },
-            SWEDISH_BUNDLES,
-            now,
-          )
-        : [],
+      selectBundleSuggestions(
+        enabled,
+        myProviders,
+        { providerTiers, providerCosts, providerCampaigns },
+        SWEDISH_BUNDLES,
+        now,
+      ),
     [enabled, myProviders, providerTiers, providerCosts, providerCampaigns, now],
   );
 

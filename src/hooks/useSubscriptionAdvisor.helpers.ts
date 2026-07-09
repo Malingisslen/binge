@@ -4,6 +4,9 @@
 // without pulling in Firebase/React Query/Auth dependencies.
 
 import { isEndedStatus } from '@/lib/airingState';
+import { detectBundleArbitrage } from '@/lib/advisor/bundleArbitrage';
+import type { SwedishBundle, BundleSuggestion } from '@/lib/advisor/bundleArbitrage';
+import type { CampaignCostSettings } from '@/lib/advisor/effectiveCost';
 
 // Hoistad till lib/calendar/nextAir (instant week 2026-07) — re-exporteras
 // här så befintliga imports + tester fortsätter fungera oförändrat.
@@ -221,4 +224,28 @@ export function rankCoverageOptions(rows: WillSeePerProviderRow[]): CoverageOpti
     return a.providerName.localeCompare(b.providerName, 'sv');             // stabil ordning
   });
   return options;
+}
+
+// BIN-430/439 — gate + engine-wiring for the advisor's paket-arbitrage memo,
+// extracted pure so the enabled-gate AND the exact args handed to the engine get
+// their own regression test without mounting Firebase/React Query/Auth. The hook's
+// `bundleSuggestions` useMemo is now a thin call to this:
+//   enabled=false → [] (gated bibliotekssidor fan-out:ar aldrig ut paket-motorn,
+//                   precis som `computed` och advisorTmdbIds redan gör);
+//   enabled=true  → delegera till detectBundleArbitrage med ägda tjänster + samma
+//                   campaign-cost-inställningar (providerTiers/providerCosts/
+//                   providerCampaigns) + samma per-mount `now` som resten av
+//                   kostnadskaskaden.
+// `detect` är injicerbar ENBART för test (default = riktiga motorn) så att hookens
+// wiring kan verifieras exakt — vilka args som skickas in — utan att duplicera
+// motorns beteende (det testas redan i bundleArbitrage.test.ts).
+export function selectBundleSuggestions(
+  enabled: boolean,
+  ownedProviderIds: number[],
+  costSettings: CampaignCostSettings,
+  bundles: readonly SwedishBundle[],
+  now: Date,
+  detect: typeof detectBundleArbitrage = detectBundleArbitrage,
+): BundleSuggestion[] {
+  return enabled ? detect(ownedProviderIds, costSettings, bundles, now) : [];
 }

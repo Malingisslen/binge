@@ -9,8 +9,15 @@ import {
   isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
+  selectBundleSuggestions,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
+import {
+  detectBundleArbitrage,
+  SWEDISH_BUNDLES,
+  type BundleSuggestion,
+} from '@/lib/advisor/bundleArbitrage';
+import type { CampaignCostSettings } from '@/lib/advisor/effectiveCost';
 import type {
   ProviderAdvisory,
   WatchlistItem,
@@ -614,5 +621,60 @@ describe('aggregateAdvisorLoading', () => {
   it('does not block on background refetch of already-cached data (stale-while-revalidate)', () => {
     const queries = [{ isPending: false, isFetching: true }];
     expect(aggregateAdvisorLoading(false, queries)).toBe(false);
+  });
+});
+
+// BIN-439 — hook-wiring coverage for the advisor's bundleSuggestions memo. The
+// engine (detectBundleArbitrage) is exhaustively tested in bundleArbitrage.test.ts;
+// these pin the HOOK's two responsibilities that the memo owns and that were
+// previously untested: the enabled=false gate, and passing the correct owned-
+// provider / cost-settings / bundles / now args into the engine.
+describe('selectBundleSuggestions — advisor bundle-arbitrage wiring (BIN-439)', () => {
+  const NOW = new Date(2026, 6, 4); // 2026-07-04 local
+  const SETTINGS: CampaignCostSettings = {
+    providerTiers: { 8: 'standard' },
+    providerCosts: { 337: 129 },
+    providerCampaigns: {},
+  };
+  const OWNED = [8, 337, 384];
+
+  // A typed spy standing in for the engine — lets us assert the EXACT args the
+  // hook forwards without coupling to catalog tier prices. Typed via the engine's
+  // own signature (no `any`) so the CI no-explicit-any gate stays green.
+  function makeDetectSpy(ret: BundleSuggestion[] = []) {
+    const spy = vi.fn<typeof detectBundleArbitrage>();
+    spy.mockReturnValue(ret);
+    return spy;
+  }
+
+  it('enabled=false → returns [] and never calls the engine (gated library surfaces)', () => {
+    const detect = makeDetectSpy();
+    const out = selectBundleSuggestions(false, OWNED, SETTINGS, SWEDISH_BUNDLES, NOW, detect);
+    expect(out).toEqual([]);
+    expect(detect).not.toHaveBeenCalled();
+  });
+
+  it('enabled=true → forwards owned providers + cost settings + bundles + now verbatim', () => {
+    const detect = makeDetectSpy();
+    selectBundleSuggestions(true, OWNED, SETTINGS, SWEDISH_BUNDLES, NOW, detect);
+    expect(detect).toHaveBeenCalledTimes(1);
+    expect(detect).toHaveBeenCalledWith(OWNED, SETTINGS, SWEDISH_BUNDLES, NOW);
+  });
+
+  it('enabled=true → returns the engine result unchanged (no post-processing)', () => {
+    const sentinel = [{ bundle: { id: 'x' } }] as unknown as BundleSuggestion[];
+    const detect = makeDetectSpy(sentinel);
+    expect(selectBundleSuggestions(true, OWNED, SETTINGS, SWEDISH_BUNDLES, NOW, detect)).toBe(sentinel);
+  });
+
+  it('default detector IS the real engine — output equals a direct engine call on the same args', () => {
+    // Proves the production default param wires to detectBundleArbitrage (not a
+    // stub) and that the helper delegates faithfully, without hardcoding catalog
+    // prices: whatever the engine returns for these args, the helper must match.
+    expect(selectBundleSuggestions(true, OWNED, SETTINGS, SWEDISH_BUNDLES, NOW)).toEqual(
+      detectBundleArbitrage(OWNED, SETTINGS, SWEDISH_BUNDLES, NOW),
+    );
+    // Empty owned set is deterministic (no ≥2 replacements possible → no suggestion).
+    expect(selectBundleSuggestions(true, [], {}, SWEDISH_BUNDLES, NOW)).toEqual([]);
   });
 });
