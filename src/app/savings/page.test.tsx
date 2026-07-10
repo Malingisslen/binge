@@ -48,6 +48,7 @@ function baseAdvisor(over: Partial<AdvisorResult> = {}): AdvisorResult {
     totalMonthlyCost: 0,
     isLoading: false,
     hasError: false,
+    hasConfiguredProviders: false,
     primaryAction: { kind: 'idle', nextCheckDate: null },
     secondaryAction: null,
     activePauses: [],
@@ -110,6 +111,39 @@ describe('SavingsPage — bundle card survives a TMDB outage (BIN-442)', () => {
     expect(screen.getByText('Inga tjänster tillagda än')).toBeInTheDocument();
     expect(
       screen.queryByText('Dina lösa tjänster kan bli billigare i ett paket'),
+    ).not.toBeInTheDocument();
+  });
+
+  // BIN-448: a TMDB outage zeroes `providers` even for a user who DOES have
+  // services. With no bundle suggestions to fall back on, the page must not claim
+  // "Inga tjänster tillagda än" — it must show an honest outage state instead.
+  it('shows an outage state (not the "no services" empty-state) when hasError and nothing to fall back on', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({ providers: [], hasError: true, hasConfiguredProviders: true, bundleSuggestions: [] }),
+    );
+    render(<SavingsPage />);
+
+    expect(
+      screen.getByText('Kunde inte räkna på dina tjänster just nu'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Försök igen')).toBeInTheDocument();
+    expect(screen.queryByText('Inga tjänster tillagda än')).not.toBeInTheDocument();
+  });
+
+  // BIN-448 disambiguation: a user who has NOT added any service but tracks shows
+  // can get hasError:true by coincidence (a followed-show TMDB fetch happened to
+  // fail), unrelated to any real outage. The outage state is gated on
+  // hasConfiguredProviders, so this user must see the actionable "add services"
+  // state — not the misleading "couldn't reach streaming data" outage message.
+  it('shows the "no services" state (not the outage state) when hasError but no services configured', () => {
+    advisorMock.mockReturnValue(
+      baseAdvisor({ providers: [], hasError: true, hasConfiguredProviders: false, bundleSuggestions: [] }),
+    );
+    render(<SavingsPage />);
+
+    expect(screen.getByText('Inga tjänster tillagda än')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Kunde inte räkna på dina tjänster just nu'),
     ).not.toBeInTheDocument();
   });
 });

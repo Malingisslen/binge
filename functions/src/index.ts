@@ -252,6 +252,17 @@ export { rotationReminderNotify } from './rotationReminder';
 // weeklyDigestState/{uid}.lastSentDate. Inga TMDB-anrop (rena Firestore-läsningar).
 export { weeklyDigestNotify } from './weeklyDigest';
 
+// ── TMDB ToS-svep (BIN-402) ──────────────────────────────────────────────────
+// tmdbFieldsSweep: månadsvis collectionGroup-scan av ALLA watchlist-docs →
+// rensar (nullar) denormaliserade TMDB-fält vars färskhetsstämpel
+// (tmdbFieldsRefreshedAt) är >5 mån eller saknas (TMDB ToS §1.C: ingen cache
+// >6 mån). Re-fetchar ALDRIG (obounded fan-out mot 25 SEK-cap:en) — färskhet
+// återställs lat vid nästa titelsidesvisning. Dry-run som default (skriver inget
+// tills sweepState/tmdbFieldsSweep.mutateEnabled === true). Rör aldrig updatedAt
+// eller user-authored fält (hård allowlist). Cursor-resumerbar + budget-tak +
+// audit-record. Admin SDK → ingen rules-ändring krävs för v1.
+export { tmdbFieldsSweep } from './tmdbTosSweep';
+
 // ── "Vad försvinner"-rollup (BIN-178 SEO) ────────────────────────────────────
 // leavingRollup: daglig scan av streamingOffers → en liten publik doc
 // streamingLeaving/current.byProvider (titlar vars abonnemangs-offer lämnar inom

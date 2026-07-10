@@ -100,6 +100,11 @@ export interface AdvisorResult {
   // true om en eller flera TMDB-queries misslyckades. Widget ska rendera en
   // specifik empty-state istället för att bara visa en blank panel.
   hasError: boolean;
+  // true om användaren faktiskt har konfigurerat minst en streamingtjänst
+  // (user.myProviders). Fristående från `providers` (som härleds från TMDB-
+  // fan-outen och nollas vid ett fetch-fel) — låter konsumenter skilja "inga
+  // tjänster tillagda" från "tjänster finns men TMDB-datan föll" (BIN-448).
+  hasConfiguredProviders: boolean;
   primaryAction: PrimaryAction;
   // När primaryAction är pause kan vi också ha en catchup-kandidat — visas
   // som mindre framträdande andra-kort så besparing alltid hamnar överst.

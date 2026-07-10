@@ -217,6 +217,42 @@ function SavingsContent() {
         </>
       );
     }
+    // BIN-448: `providers` nollas vid ett totalt TMDB-fel (kall cache / TMDB nere)
+    // — precis som när användaren faktiskt saknar tjänster. Utan paketförslag att
+    // luta oss mot (BIN-442-grenen ovan) kan vi inte veta om biblioteket är tomt
+    // eller om fan-outen bara föll; att då påstå "Inga tjänster tillagda än" är
+    // missvisande för någon som HAR tjänster. Visa istället ett ärligt avbrotts-
+    // tillstånd med en försök-igen-knapp när fetchen faktiskt felade.
+    //
+    // MEN: `hasError` beräknas från bibliotekets TMDB-fan-out (Följer/Vill se),
+    // helt fristående från om användaren har lagt till någon tjänst. En användare
+    // utan konfigurerade tjänster men med bevakade serier kan få hasError:true av
+    // ren slump (en följd-series fetch föll) — då är avbrotts-texten fel. Gatea
+    // därför på hasConfiguredProviders så vi bara visar avbrott för någon som
+    // FAKTISKT har tjänster; annars faller vi igenom till "inga tjänster tillagda".
+    if (advisor.hasError && advisor.hasConfiguredProviders) {
+      return (
+        <>
+          <header>
+            <div className="crumb">Streamingrådgivaren</div>
+            <h1 className="page-h1">Streamingrådgivaren</h1>
+          </header>
+          <EmptyState
+            title="Kunde inte räkna på dina tjänster just nu"
+            body="Vi når inte streamingdatan för tillfället. Det är oftast tillfälligt — försök igen om en stund."
+            action={
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="btn btn-ghost btn-sm"
+              >
+                Försök igen
+              </button>
+            }
+          />
+        </>
+      );
+    }
     return (
       <>
         <header>

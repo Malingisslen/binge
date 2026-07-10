@@ -503,5 +503,11 @@ export function useSubscriptionAdvisor(
     [enabled, myProviders, providerTiers, providerCosts, providerCampaigns, now],
   );
 
-  return { ...computed, bundleSuggestions, isLoading, hasError };
+  // BIN-448: expose whether the user has ANY configured service, independent of
+  // the derived `providers` array (which the TMDB fan-out zeroes on a fetch
+  // error). The savings page uses this to keep the honest outage state gated to
+  // real subscribers and fall through to "inga tjänster tillagda" otherwise.
+  const hasConfiguredProviders = myProviders.length > 0;
+
+  return { ...computed, bundleSuggestions, isLoading, hasError, hasConfiguredProviders };
 }
