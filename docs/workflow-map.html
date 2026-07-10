@@ -1717,7 +1717,7 @@
   {
    "id": "flow-savings",
    "label": "Subscription savings advisor",
-   "description": "useSubscriptionAdvisor derives an AdvisorResult from the user's watchlist + provider settings; CoverageOptimizer/RotationPlanner/RotationCalendar turn it into a coverage/rotation plan client-side, then RotationCalendar persists the dated schedule to the user doc so rotationReminderNotify can push cancel/resume reminders daily.",
+   "description": "useSubscriptionAdvisor derives an AdvisorResult from the user's watchlist + provider settings; CoverageOptimizer/RotationPlanner/RotationCalendar turn it into a coverage/rotation plan client-side, then RotationCalendar persists the dated schedule to the user doc so rotationReminderNotify can push cancel/resume reminders daily. BIN-442/448 outage-aware empty state: `providers` is derived from the per-title TMDB fan-out and zeros out on a total fetch failure (cold cache / TMDB down) — indistinguishable from a user who genuinely added no services — so when providers.length===0 the page renders a three-way cascade instead of a blind 'Inga tjänster tillagda'. (1) BIN-442: bundleSuggestions is computed independently from the user's owned providers + costs with no TMDB call, so it survives the outage; when it is non-empty the user provably has services → show the BundleArbitrageCard. (2) BIN-448: else if hasError (a library fan-out fetch actually failed, no cached data) AND hasConfiguredProviders (myProviders.length>0) → show an honest 'kunde inte räkna just nu' outage EmptyState with a retry button; gated on hasConfiguredProviders so someone with watched series but no configured services doesn't get the wrong text from an unlucky fetch failure. (3) else → the real 'Inga tjänster tillagda än' onboarding EmptyState.",
    "covers": [
     "/savings"
    ],
@@ -1739,7 +1739,7 @@
     {
      "from": "savings-advisor",
      "to": "savings-ui",
-     "payload": "AdvisorResult {providers, willSeeByProvider, subscribeAdvice, activePauses} passed as props",
+     "payload": "AdvisorResult {providers, willSeeByProvider, subscribeAdvice, activePauses} passed as props; also exposes {bundleSuggestions, hasError, hasConfiguredProviders} that gate the BIN-442/448 providers.length===0 empty-state cascade (bundle card → honest outage state → onboarding empty state)",
      "transport": "React props",
      "verified": true
     },
@@ -2006,7 +2006,7 @@
   {
    "id": "flow-titlepage",
    "label": "Title page assembly",
-   "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with five independently-cached Firestore-backed enrichments (streaming offers + price history, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment.",
+   "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with five independently-cached Firestore-backed enrichments (streaming offers + price history, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment. BIN-422: a movie in a known franchise renders a crawlable static-HTML link to its /billigaste/[slug] hub — emitted outside ClientOnly and derived from build initialData (belongs_to_collection → franchiseByCollectionId), so Google follows it without JS. BIN-423 WP3: /person bakes the actor's filmography into the pre-rendered HTML — getPerson now appends combined_credits in the same single request, prunePersonSeed trims each credit to only the fields the cards render, and PersonPageClient reuses that seed instead of re-fetching /combined_credits (2→1 requests sitewide); WP4 adds breadcrumb JSON-LD on person pages.",
    "covers": [
     "/movie/[id]",
     "/tv/[id]",
@@ -2075,7 +2075,7 @@
     {
      "from": "static-seo-pages",
      "to": "tmdb-api",
-     "payload": "lighter build-time-only assembly for /person, /provider, /billigaste — getPerson / discoverMovies+discoverTV / getCollection+getMovieLite; no offers/Cineasterna/ratings/community enrichment (those are movie/tv-detail-only)",
+     "payload": "lighter build-time-only assembly for /person, /provider, /billigaste — getPerson(append_to_response=combined_credits, then prunePersonSeed) / discoverMovies+discoverTV / getCollection+getMovieLite; person filmography is baked into the static HTML from that one request (PersonPageClient reuses the seed, no second /combined_credits fetch); no offers/Cineasterna/ratings/community enrichment (those are movie/tv-detail-only)",
      "transport": "fetch (TMDB)",
      "verified": true
     }
