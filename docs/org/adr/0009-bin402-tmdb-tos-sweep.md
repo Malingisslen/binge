@@ -1,7 +1,7 @@
 # ADR 0009 — BIN-402 TMDB ToS-svep: clear-by-default, lazy-refresh-on-view
 
 **Date:** 2026-07-03
-**Status:** Accepted (plan-level; implementation parked In Review pending Malin go-ahead)
+**Status:** Accepted (plan-level) · **implementation REVERTED off `main` 2026-07-10** and preserved on branch `bin-402-parked` — do not treat the `tmdbFieldsRefreshedAt` rules-allowlist entry or the `tmdbFieldsSweep` function described below as live/shipped. Blocked on BIN-453 (client-side freshness-stamp writer) before it may be re-attempted, and requires a founder-approved plan per the Tier-A-only autonomous-sprint rule.
 **Route tier:** `top` — full panel convened blind, pre-plan.
 **Panel:** Legal / GDPR Counsel (#5), Data Protection Officer (#6), Database Administrator / Data-layer Engineer (#27).
 

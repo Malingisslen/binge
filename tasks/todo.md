@@ -1,205 +1,4 @@
-# Sprint 2026-07-10 — workflow-map hygiene + advisor outage follow-up + TMDB ToS sweep
-
-Selection-phase only (Phase 1 of sprint-execute). Backlog scan (project "Binge",
-states Backlog/Todo/In Progress) returned 11 open tickets (Todo/In Progress both
-empty before this run). Only 3 clear a "build"/"build-review" mandate. The other
-8 are unchanged or newly-arrived variants of honest reads from prior sprints:
-still gated on a date/cache event, or still genuinely Malin's call. No
-manufactured work to fill N — a small batch is the correct call here.
-
-## Agent A — infra (workflow-map re-trace)
-
-- [ ] **[Tier A] BIN-449** — Re-trace the stale workflow-map flows flagged by
-  `.claude/state/workflow-map-stale.json` (stamped 2026-07-09T20:00, triggered by
-  BIN-422/423 + household-work edits to `firestore.rules`,
-  `src/app/person/[id]/page.tsx`, `src/components/groups/HouseholdPanel.tsx`,
-  `src/components/pages/MoviePageClient.tsx`, `src/hooks/useGroupHousehold.ts`,
-  `src/lib/firebase/accountDeletion.ts`, `src/lib/tmdb/client.ts`). Per CLAUDE.md's
-  "Workflow map freshness" contract: re-trace ONLY the flows whose nodes match the
-  flag's triggers, update the map's `<script id="data">` JSON (nothing else), run
-  the linter, delete the flag, commit.
-  - Disposition: **build** (repo-mandated mechanical hygiene, no product/UI
-    decision — CLAUDE.md itself specifies the exact procedure).
-  - Router: `node docs/org/route.mjs docs/workflow-map.html` → tier **skip**
-    (doc-only, owned solely by role #21 Technical Writer — never the sole MEDIUM
-    reviewer for a code change, and here it's not even a code change).
-  - requiresPlanMode: **false** (skip tier).
-  - Files:
-    - `docs/workflow-map.html` (~2571 lines — update ONLY the `<script id="data">`
-      JSON block for the flows whose nodes match the flag's triggers)
-    - `.claude/state/workflow-map-stale.json` (delete after the map update)
-  - Acceptance criteria (rubric for Phase 2.7 verify):
-    1. Every trigger path in the flag (`firestore.rules`, `person/[id]/page.tsx`,
-       `HouseholdPanel.tsx`, `MoviePageClient.tsx`, `useGroupHousehold.ts`,
-       `accountDeletion.ts`, `tmdb/client.ts`) is reflected in an updated or
-       added flow node in the map's data JSON — proven by diffing the JSON
-       against the trigger list.
-    2. `node scripts/check-workflow-map.mjs` passes (no dangling path references,
-       no function/route missing flow coverage).
-    3. `.claude/state/workflow-map-stale.json` no longer exists after the commit.
-    4. No file other than `docs/workflow-map.html`'s data JSON and the deleted
-       flag is touched — per CLAUDE.md's explicit "nothing else" instruction
-       (don't rebuild the whole map, don't touch unrelated flows).
-
-## Agent B — streaming (advisor outage empty-state, BIN-448)
-
-- [ ] **[Tier B] BIN-448** — Streamingrådgivaren: distinguish a TMDB-outage state
-  from a genuine "no services" state in the savings-page empty view, for the
-  narrower remaining case BIN-442 didn't cover: `providers: []`, `hasError: true`,
-  `bundleSuggestions: []` (user owns services, none happen to be bundle-eligible,
-  and TMDB failed) — today this still falls through to the misleading "Inga
-  tjänster tillagda än" empty state, exactly the false "you have no services"
-  screen BIN-442 fixed for the wider case.
-  - Disposition: **build-review** (the underlying misleading-state bug is a
-    clear build, but the specific fix requires new user-facing copy — an
-    "avbrottsmedveten" message replacing/augmenting the empty state — which is a
-    product/UX wording decision. Ship a best-guess fix; Malin should review the
-    exact copy/treatment before it's marked Done, per the ticket's own explicit
-    "if Malin decides the nuance isn't wanted, close deliberately instead" option).
-  - signoffReason: the new outage-aware copy/wording in the savings-page empty
-    state (or her call that the existing empty state is fine as-is and this
-    should be closed without a UI change).
-  - Router: `node docs/org/route.mjs src/app/savings/page.tsx
-    src/hooks/useSubscriptionAdvisor.ts` → tier **medium** (single) · owning role
-    **#28 Recommendations / Scoring-Integrity Engineer** (same role attached to
-    BIN-430/433/440/442).
-  - requiresPlanMode: **false** (single + priority Medium(3), not ≤2, no security
-    label).
-  - Files:
-    - `src/app/savings/page.tsx` (~200-235 — add a branch for
-      `hasError && providers.length === 0 && bundleSuggestions.length === 0`)
-    - `src/app/savings/page.test.tsx` (existing file from BIN-442 — extend with
-      the new regression case)
-    - `src/hooks/useSubscriptionAdvisor.ts` (read-only reference — `hasError` is
-      already exposed; don't touch its computation)
-  - Acceptance criteria (rubric for Phase 2.7 verify):
-    1. When `hasError === true` and `providers.length === 0` and
-       `bundleSuggestions.length === 0`, the page shows outage-aware messaging —
-       NOT the "Inga tjänster tillagda än" no-services copy — proven by a new
-       test stubbing exactly that shape.
-    2. The genuine no-services case (`hasError: false, providers: [],
-       bundleSuggestions: []`) still shows the existing EmptyState unchanged —
-       proven by a test (or the existing test left passing and asserted).
-    3. The already-fixed BIN-442 path (`hasError: true, providers: [],
-       bundleSuggestions: [oneSuggestion]`) still renders `BundleArbitrageCard`
-       unchanged — no regression to the prior fix.
-    4. `npm run typecheck` and `src/app/savings/page.test.tsx` stay green; the
-       new/changed copy string(s) are called out explicitly in the close-out
-       comment for Malin's review (not silently auto-closed Done).
-
-## Agent C — data (TMDB ToS sweep, BIN-402) — Tier C, expanded plan required
-
-- [ ] **[Tier C] BIN-402** — Build the periodic sweep mechanism Malin approved
-  2026-07-02 when she accepted the risk on unbounded-TTL denormalized TMDB fields
-  on watchlist docs (TMDB ToS §1.C forbids caching API data >6 months): a
-  scheduled Cloud Function (likely monthly), chunked `writeBatch`, refreshing-or-
-  clearing all denormalized TMDB fields older than 6 months for ALL users
-  (dormant accounts included — client-side read-repair doesn't reach them).
-  - Disposition: **build** (mandate is clear and explicit — this is a named
-    follow-up to Malin's own 2026-07-02 decision, not a speculative idea) — BUT
-    this is a Cloud Functions + Firestore-migration change, both explicitly
-    listed in CLAUDE.md's "plan before large changes" trigger list AND in
-    `cfg.tierCTriggers` ("functions/**", "Firestore migrations"). Per the
-    sprint-execute skill's Tier C rule, an EXPANDED PLAN (Phase 1.5) is
-    mandatory before any Edit/Write — this ticket does not skip straight to
-    code. It also cannot auto-close Done: Tier C lands In Review for sign-off
-    (budget/cost math + the "accepted risk, gate it as a separate chore" framing
-    both warrant her eyes before it ships to production data).
-  - Router: `node docs/org/route.mjs firestore.rules src/lib/firebase/userData.ts
-    functions/src/index.ts` (blast-radius estimate — closest real analog is the
-    user-owned-data collector pattern) → tier **top** (full-panel) via the
-    high-stakes path `src/lib/firebase/userData.ts` → roles **#5 Legal/GDPR
-    Counsel, #6 Data Protection Officer, #27 Database Administrator/Data-layer
-    Engineer**.
-  - requiresPlanMode: **true** (full-panel tier, AND independently a
-    `cfg.tierCTriggers` hit on both "functions/**" and "Firestore migrations").
-  - Files (estimate — confirm in the expanded plan):
-    - `functions/src/ttlSweep/index.ts` or similar new scheduled-function module
-      (new file, mirrors the `episodeNotify`/`retentionCleanup` pattern)
-    - `functions/src/index.ts` (export wiring for the new scheduled function)
-    - Possibly `src/lib/firebase/userData.ts` reference only, if reusing the
-      shared per-user-subcollection enumeration helper
-  - Acceptance criteria (rubric for Phase 2.7 verify):
-    1. An expanded plan (Phase 1.5 block) is written into this file BEFORE any
-       Edit/Write, covering: which fields sweep (title, posterPath,
-       providers/providersCheckedAt, genreIds, tmdbStatus, runtime,
-       nextAirDate/nextAirCode/nextAirProvider/nextAirUpdatedAt/
-       digitalReleaseDate), chunking strategy, and a documented read/write-volume
-       vs. 25 SEK/mån Blaze-cap cost estimate.
-    2. The sweep mechanism reaches ALL users (dormant accounts included), not
-       just active-client read-repair — proven by the implementation being a
-       server-side scheduled function, not a client hook.
-    3. No TMDB-derived field >6 months old survives a sweep run against a test
-       fixture with stale timestamps.
-    4. Swept docs receive NO `updatedAt` bump — proven by a test asserting
-       `updatedAt` is unchanged pre/post-sweep (protects "Fortsätt titta" sort
-       order in `continueWatching.ts`, an explicit "don't do X" from the ticket).
-
-## Not selected (mandate / gating — surfaced, not built)
-
-- **BIN-189** (seasonal challenges — Nordic Noir November etc., Low) — new
-  shareable feature with real design surface (progress rings, badges, share
-  cards). Recommendation: worth exploring as a themed mini-sprint, needs a
-  design pass first — not something to silently build into existence.
-- **BIN-170** (Binge Wrapped year-in-review, Low) — new shareable feature, needs
-  a design pass (what stats, what the share-card looks like). Recommendation:
-  fun, low urgency; revisit as a themed mini-sprint closer to a natural moment
-  (December/new year) rather than now. Unchanged from prior sprints.
-- **BIN-185** (spoiler-safe catch-up recaps, Low) — new AI-generated-content
-  feature; spoiler-boundary trust is high-stakes if wrong, needs a design/UX
-  pass first. Recommendation: worth exploring, needs a design spike before it's
-  a ticket that builds itself. Unchanged.
-- **BIN-360** (targeted "släpps idag" FCM push, Low) — a new push-notification
-  channel; UX/consent call (frequency, opt-in default) she should weigh in on
-  before it's built. Recommendation: build a small opt-in proposal for her to
-  react to, not a silent ship. Unchanged.
-- **BIN-173** (affiliate-tag rent/buy deeplinks, Medium) — real revenue
-  opportunity but a business/legal call (affiliate program terms, disclosure
-  copy, which networks) Malin hasn't greenlit. Recommendation: worth doing,
-  needs her decision on which affiliate program(s) first. Unchanged.
-- **BIN-424** (SEO hub-topology review, Low) — a scoping *review* of three
-  separate new-URL-surface ideas (hub-of-hubs, genre hubs, forsvinner SSR), each
-  needing its own product/keyword-targeting call before it's a buildable
-  ticket — not itself a code change. Recommendation: worth a scoping pass now
-  that WP1-3 have shipped, but that session is Malin's call to schedule.
-  Unchanged.
-- **BIN-419** (SEO re-measure content-floor impact, Low) — explicit due date
-  2026-08-28, not due for ~7 more weeks. Recommendation: leave parked; revisit
-  near the date. Unchanged.
-- **BIN-447** (Cloudflare-purge backstop for BIN-423 WP3 person filmography,
-  Medium) — mandate is clear (Malin's own backstop ticket) but genuinely not
-  actionable today: the build cache only re-seeds person entries at the next
-  weekly scheduled refresh (~2026-07-13); running the purge now would be a
-  no-op. Recommendation: do it — just not yet. Revisit ~2026-07-13; note any
-  `/commit`-driven deploy before then auto-purges everything and may resolve
-  this for free. Unchanged from the 2026-07-09 read.
-
-## Needs you (Tier D)
-
-None this round — no ops/credential-blocked candidate reached the build bar.
-
-## Post-sprint steps
-
-- [ ] Phase 2: implement BIN-449 first (mechanical, zero risk, unblocks the
-  dangling CI-freshness flag), then BIN-448 (TDD the outage-branch test first),
-  then BIN-402 LAST — write its expanded plan (Phase 1.5) before any Edit/Write,
-  since it's the one Tier C / full-panel item.
-- [ ] Phase 1.4: convene the stakeholder panel for BIN-402 (full-panel — Legal
-  #5, DPO #6, DBA #27) and the single-reviewer critique for BIN-448 (role #28)
-  before implementing either; fold must-haves into the acceptance criteria above.
-- [ ] Phase 2.7: fresh-context verifier grades the acceptance criteria above from
-  diff + tests only, per ticket.
-- [ ] Phase 3: commit (code-reviewer marker for all three; test-reviewer marker
-  for BIN-448/BIN-402's test files; security-reviewer marker for BIN-402's
-  functions/ changes), push (push triggers deploy — but BIN-402 needs an
-  explicit go-ahead per CLAUDE.md's Cloud-Functions large-change rule before its
-  commit ships, not just the reviewer markers). BIN-449 → Done on all-pass.
-  BIN-448 and BIN-402 → In Review (build-review / Tier C) regardless of
-  criteria outcome, per their tier semantics.
-
----
-
-# Archived — Sprint 2026-07-09 (b) — bundle-arbitrage resilience + test-guard follow-ups
+# Sprint 2026-07-09 (b) — bundle-arbitrage resilience + test-guard follow-ups
 
 Selection-phase only (Phase 1 of sprint-execute). Backlog scan (project "Binge",
 states Backlog/Todo/In Progress) returned 9 open tickets (Todo/In Progress both
@@ -214,30 +13,152 @@ Both tickets trace back to the BIN-430 ship. Files are disjoint (page/hook vs. a
 design-system test file) so there's no patch-conflict risk running them in one
 batch/one agent.
 
-- [x] **[Tier A] BIN-442** — Bundle-arbitrage card hidden during a TMDB outage —
-  decouple it from the `providers.length === 0` empty-state guard. Shipped
-  (87357bb).
-- [x] **[Tier A] BIN-441** — Decide + close the deferred BIN-439 sub-scope: a
-  savings-cluster-specific design-token guard in `consistency.test.ts`. Shipped.
+- [ ] **[Tier A] BIN-442** — Bundle-arbitrage card hidden during a TMDB outage —
+  decouple it from the `providers.length === 0` empty-state guard. Recovered by
+  BIN-440's investigation (interactive binge-test-reviewer, 2026-07-09): the hook
+  deliberately keeps `bundleSuggestions` alive through a cold-cache TMDB outage
+  (`useSubscriptionAdvisor.ts:489-506`), but `src/app/savings/page.tsx:200` early-
+  returns the "Inga tjänster tillagda än" empty state before
+  `<BundleArbitrageCard>` ever mounts (`:259`) whenever `advisor.providers` is
+  empty — including the outage case, where the emptiness is an artifact of the
+  error path, not a genuine no-services user. Result: a user who owns ≥2
+  bundle-eligible services sees a false "you have no services" screen during an
+  outage, and the panel that was engineered to survive exactly this never shows.
+  - Disposition: **build** (real, narrow, non-blocking correctness/resilience
+    bug with a clear, already-investigated fix; not a design/product pivot).
+    Scope is deliberately capped to the guard fix — the ticket's "ideally
+    distinguish outage state from genuine no-services state with new outage
+    copy" idea is an explicit "ideally" stretch goal, OUT of scope here to keep
+    this Tier A; file a follow-up if that copy nuance is still wanted after this
+    ships.
+  - Router: `node docs/org/route.mjs --md` → tier **medium** (single) · owning
+    role **#28 Recommendations / Scoring-Integrity Engineer** (same role
+    attached to BIN-430/433/440).
+  - requiresPlanMode: **false** (single + priority Medium(3), not ≤2, no
+    security label).
+  - Files:
+    - `src/app/savings/page.tsx` (~200, ~259 — render `BundleArbitrageCard`
+      independent of / above the `providers.length === 0` guard, gated on
+      `advisor.bundleSuggestions.length > 0` instead)
+    - `src/app/savings/page.test.tsx` (new — no existing test file for this
+      page; regression test per the ticket's missing-seam call-out)
+    - `src/hooks/useSubscriptionAdvisor.ts` (read-only reference unless the
+      gating condition needs a small export/shape tweak — don't touch its
+      `bundleSuggestions`/`hasError` computation logic)
+  - Acceptance criteria (rubric for Phase 2.7 verify):
+    1. `BundleArbitrageCard` renders whenever `advisor.bundleSuggestions.length
+       > 0`, even when `advisor.providers.length === 0` (outage case) — proven
+       by a new test that stubs `useSubscriptionAdvisor` to
+       `{ providers: [], hasError: true, bundleSuggestions: [oneSuggestion], … }`
+       and asserts the card is present.
+    2. The genuine no-services case (`providers: [], bundleSuggestions: []`)
+       still shows the existing "Inga tjänster tillagda än" `EmptyState`
+       unchanged — proven by a test (or the existing behavior left untouched
+       and explicitly asserted).
+    3. No new outage-specific copy/messaging is introduced — the "ideally
+       distinguish outage vs. no-services" idea is explicitly deferred (grep:
+       no new string literals about outages/errors added to `page.tsx`).
+    4. `npm run typecheck` and the scoped test suite
+       (`src/app/savings/page.test.tsx`, `useSubscriptionAdvisor*`,
+       `BundleArbitrageCard.test.tsx`) stay green;
+       `src/lib/advisor/bundleArbitrage.ts` is not touched.
+
+- [ ] **[Tier A] BIN-441** — Decide + close the deferred BIN-439 sub-scope: a
+  savings-cluster-specific design-token guard in `consistency.test.ts`. The
+  existing broad scan (`src/lib/design/consistency.test.ts`) already covers all
+  of `src/components` for the 18px-title anti-pattern and raw-Tailwind-red
+  usage, so `BundleArbitrageCard` (`src/components/savings/*`) is only loosely
+  covered, not uncovered. Ticket frames two valid closes: add a savings-cluster-
+  specific assertion, or close as intentionally-deferred (broad scan judged
+  sufficient).
+  - Decision: add the specific assertion — it's a low-risk, additive test-only
+    change (belt-and-suspenders) and directly satisfies what BIN-439's own note
+    asked for, rather than re-litigating whether the broad scan is "enough."
+  - Disposition: **build** (test-gap closure, no product/UI decision — the
+    ticket's only two options are both engineering-only).
+  - Router: `node docs/org/route.mjs --md` → tier **medium** (single) · owning
+    role **#1 Product Designer / UX** (design-system consistency guard).
+  - requiresPlanMode: **false** (single + priority Low(4)).
+  - Files:
+    - `src/lib/design/consistency.test.ts` (extend — add a
+      `src/components/savings/*`-scoped assertion alongside the existing
+      broad-scan checks; follow the file's existing `tsxFilesIn`/
+      `tsxFilesRecursive` + regex-offender pattern)
+  - Acceptance criteria (rubric for Phase 2.7 verify):
+    1. A new assertion in `consistency.test.ts` scans specifically
+       `src/components/savings/*.tsx` for the same banned patterns already
+       checked broadly (18px-title anti-pattern and/or raw-Tailwind-red), so
+       that cluster's compliance is explicitly pinned, not just incidentally
+       covered.
+    2. `BundleArbitrageCard.tsx` (and the rest of `src/components/savings/*`)
+       passes the new assertion with zero offenders — no source file in that
+       directory is modified to make the test pass (the guard should already
+       be clean; if it isn't, that's a real finding to fix, not to weaken).
+    3. The existing broad-scan tests in the same file are untouched and still
+       pass — this is additive, not a replacement.
+    4. `npm test -- consistency` (or the full suite) stays green; no change to
+       `bundleArbitrage.ts` or `useSubscriptionAdvisor.ts`.
 
 ## Not selected (mandate / gating — surfaced, not built)
 
 - **BIN-447** (SEO/infra, Medium) — Cloudflare-purge backstop for BIN-423 WP3
-  person-filmography static HTML. Time-gated, not actionable until ~2026-07-13.
-- **BIN-419** (SEO measurement, Low) — explicit due date 2026-08-28.
-- **BIN-424** (SEO hub-topology review, Low) — scoping review, needs her call.
-- **BIN-173** (affiliate-tag rent/buy deeplinks, Medium) — business/legal call.
-- **BIN-360** (targeted "släpps idag" FCM push, Low) — UX/consent call.
-- **BIN-185** (spoiler-safe catch-up recaps, Low) — needs design spike.
-- **BIN-170** (Binge Wrapped year-in-review, Low) — needs design pass.
+  person-filmography static HTML. Mandate is clear (Malin filed it herself as a
+  backstop) but it is genuinely **not actionable today**: the build cache only
+  re-seeds person entries past their 6-day freshness window at the next weekly
+  scheduled refresh (~2026-07-13); running the purge now would be a no-op since
+  nothing has re-seeded yet. Recommendation: **do it — just not yet.** Revisit
+  ~2026-07-13; note any `/commit`-driven deploy before then auto-purges
+  everything and may resolve this for free. The ticket's "optional durable fix"
+  (add a Cloudflare-purge step to `deploy.yml` for scheduled/cron deploys) is a
+  separate, sensitive-domain change (deploy/hosting/Cloudflare-CDN config is
+  explicitly called out in CLAUDE.md as needing a written plan + go-ahead) —
+  recommend scoping that as its own approved ticket if wanted, not bundled here.
+- **BIN-419** (SEO measurement, Low) — explicit due date 2026-08-28, not due for
+  ~7 more weeks; building the before/after measurement now would just measure
+  too little elapsed time. Recommendation: leave parked; revisit near the date.
+- **BIN-424** (SEO hub-topology review, Low) — the ticket says "evaluate after
+  WP1-3 ship"; WP1 (ff93b43) and WP2/3 (BIN-422/423, shipped b72c799 earlier
+  today) are now all live, so the gate has technically cleared. But the ticket
+  itself is a scoping *review* of three separate new-URL-surface ideas
+  (hub-of-hubs page, genre hub pages, `/forsvinner/[id]` server-rendering), each
+  needing its own product/keyword-targeting call before it becomes a buildable
+  ticket — it is not itself a code change. Recommendation: worth a scoping pass
+  now that the gate cleared, but that scoping session is Malin's call to
+  schedule, not something to silently build into existence this sprint.
+- **BIN-173** (affiliate-tag rent/buy deeplinks, Medium) — real revenue
+  opportunity but a business/legal call (affiliate program terms, disclosure
+  copy, which networks) Malin hasn't greenlit. Recommendation: worth doing,
+  needs her decision on which affiliate program(s) first.
+- **BIN-360** (targeted "släpps idag" FCM push, Low) — a new push-notification
+  channel; UX/consent call (frequency, opt-in default) she should weigh in on
+  before it's built. Recommendation: build a small opt-in proposal for her to
+  react to, not a silent ship.
+- **BIN-185** (spoiler-safe catch-up recaps, Low) — new AI-generated-content
+  feature; spoiler-boundary trust is high-stakes if wrong, needs a design/UX
+  pass first. Recommendation: worth exploring, needs a design spike before it's
+  a ticket that builds itself.
+- **BIN-170** (Binge Wrapped year-in-review, Low) — new shareable feature,
+  needs a design pass (what stats, what the share-card looks like).
+  Recommendation: fun, low urgency; revisit as a themed mini-sprint closer to a
+  natural moment (December/new year) rather than now.
 
 ## Needs you (Tier D)
 
-None this round.
+None this round — no ops/credential-blocked candidate reached the build bar.
+(BIN-447 is time-gated, not credential-blocked, so it's filed above instead.)
 
 ## Post-sprint steps
 
-- [x] Phase 2/2.7/3 complete — commit 87357bb, pushed, deployed.
+- [ ] Phase 2: implement BIN-442 then BIN-441 (correctness fix before the
+  test-only guard add), TDD where the fix lands, `npm run typecheck` + `npm
+  test` scoped to `savings/page*`, `useSubscriptionAdvisor*`,
+  `BundleArbitrageCard`, and `consistency.test.ts`.
+- [ ] Phase 2.7: fresh-context verifier grades the acceptance criteria above
+  from diff + tests only, per ticket.
+- [ ] Phase 3: commit (code-reviewer + test-reviewer markers — no security
+  marker, no firebase/rules/functions paths touched), push (push triggers
+  deploy). Both are clean Tier A builds → Done on all-pass; back to Todo only
+  if a criterion can't be closed in-session.
 
 ---
 

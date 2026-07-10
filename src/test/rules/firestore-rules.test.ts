@@ -97,27 +97,6 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { ratedAt: 'igår' }, { merge: true }));
   });
-  // BIN-402: the monthly TMDB-ToS sweep stamps `tmdbFieldsRefreshedAt` (Admin SDK,
-  // bypasses rules) onto real watchlist docs. Because a merge-write is evaluated
-  // against the FULL post-merge doc, an unlisted key would make the VERY NEXT
-  // ordinary client write (rating a movie, etc.) fail hasOnly → permission-denied
-  // on an unrelated action. Seed a post-sweep doc, then assert a normal owner
-  // merge-write that doesn't touch the stamp still succeeds.
-  it('allows a normal merge write on a post-sweep doc holding tmdbFieldsRefreshedAt (BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
-    await setDoc(ref, { ...validWatchlist(), tmdbFieldsRefreshedAt: serverTimestamp() });
-    await assertSucceeds(setDoc(ref, { rating: 4.5, updatedAt: serverTimestamp() }, { merge: true }));
-  });
-  it('allows a tmdbFieldsRefreshedAt timestamp merge write (BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
-    await setDoc(ref, validWatchlist());
-    await assertSucceeds(setDoc(ref, { tmdbFieldsRefreshedAt: serverTimestamp() }, { merge: true }));
-  });
-  it('rejects a non-timestamp tmdbFieldsRefreshedAt (type bound, BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
-    await setDoc(ref, validWatchlist());
-    await assertFails(setDoc(ref, { tmdbFieldsRefreshedAt: 'igår' }, { merge: true }));
-  });
 });
 
 // Instant week (2026-07): nextAirReadRepair merge-writes the denormalized
