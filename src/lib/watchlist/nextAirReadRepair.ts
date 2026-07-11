@@ -57,6 +57,16 @@ export interface NextAirUpdate {
 // sentineln vid riktig skrivning. INVARIANTEN (spec-villkor 2): payloaden får
 // ALDRIG innehålla updatedAt — "Fortsätt titta" sorterar på den. Testet låser
 // nyckeluppsättningen så en regression i flush inte kan smyga förbi CI.
+//
+// BIN-402: denna path skriver BARA nextAir*-delmängden — den bumpar därför INTE
+// den doc-nivå TMDB-freshness-stämpeln (tmdbFieldsRefreshedAt), som gäller HELA
+// TMDB-blocket (title/posterPath/providers/…). Att stämpla hela blocket här vore
+// oärligt: en kalender-aktiv men aldrig-titelsides-visande användare skulle hålla
+// title/providers "färska" i evighet utan att de faktiskt hämtats om → skulle
+// underminera ToS-sweepen (§1.C). Bara full-block-skrivarna (addItem +
+// titelsidans refreshTmdbFields) stämplar. Sweepen rensar nextAir* när blocket är
+// stale; nästa kalender-render reparerar dem igen (nextAirUpdatedAt är deras egen
+// färskhet). Stämpeln förblir ärlig.
 export function buildRepairPayload(
   delta: Partial<Record<RepairableKey, string | null>>,
   stamp: unknown,

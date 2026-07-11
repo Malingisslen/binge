@@ -6,7 +6,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -96,6 +96,35 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
     const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { ratedAt: 'igår' }, { merge: true }));
+  });
+  // BIN-402: the monthly TMDB-ToS sweep stamps `tmdbFieldsRefreshedAt` (Admin SDK,
+  // bypasses rules) onto real watchlist docs; the client also writes it on
+  // denormalization. Because a merge-write is evaluated against the FULL post-merge
+  // doc, an unlisted key would make the VERY NEXT ordinary client write (rating a
+  // movie, etc.) fail hasOnly → permission-denied on an unrelated action. Seed a
+  // post-sweep doc, then assert a normal owner merge-write still succeeds.
+  it('allows a normal merge write on a post-sweep doc holding tmdbFieldsRefreshedAt (BIN-402)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, { ...validWatchlist(), tmdbFieldsRefreshedAt: serverTimestamp() });
+    await assertSucceeds(setDoc(ref, { rating: 4.5, updatedAt: serverTimestamp() }, { merge: true }));
+  });
+  it('allows a tmdbFieldsRefreshedAt timestamp merge write (BIN-402)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, { tmdbFieldsRefreshedAt: serverTimestamp() }, { merge: true }));
+  });
+  it('rejects a non-timestamp tmdbFieldsRefreshedAt (type bound, BIN-402)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertFails(setDoc(ref, { tmdbFieldsRefreshedAt: 'igår' }, { merge: true }));
+  });
+  // Security-panel hardening: `<= request.time` — a client can't forge a FUTURE
+  // stamp to make the sweep treat the doc as perpetually fresh (skip clearing).
+  it('rejects a future-dated tmdbFieldsRefreshedAt (<= request.time bind, BIN-402)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+    await assertFails(setDoc(ref, { tmdbFieldsRefreshedAt: tomorrow }, { merge: true }));
   });
 });
 

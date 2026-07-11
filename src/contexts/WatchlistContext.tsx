@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
+import { needsTmdbFieldsRefresh, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
@@ -42,6 +43,8 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
     // BIN-349: lazy — old docs have none; consumers fall back to updatedAt.
     ratedAt: data.ratedAt ? toDate(data.ratedAt) : null,
+    // BIN-402: doc-level TMDB-fields freshness stamp (lazy — old docs have none).
+    tmdbFieldsRefreshedAt: data.tmdbFieldsRefreshedAt ? toDate(data.tmdbFieldsRefreshedAt) : null,
   };
 }
 
@@ -63,6 +66,9 @@ interface WatchlistState {
   updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
   updateTmdbStatus: (tmdbId: number, tmdbStatus: string | null) => Promise<void>;
   setRuntime: (tmdbId: number, runtime: number | null) => Promise<void>;
+  // BIN-402: title-page lazy-refresh of the denormalized TMDB block + freshness
+  // stamp (repopulates a swept-clean doc; keeps a viewed title from being swept).
+  refreshTmdbFields: (tmdbId: number, fields: TmdbDenormFields) => Promise<void>;
   updateTags: (tmdbId: number, tags: string[]) => Promise<void>;
   removeItem: (tmdbId: number) => Promise<void>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
@@ -80,6 +86,7 @@ const WatchlistContext = createContext<WatchlistState>({
   updateProgress: async () => {},
   updateTmdbStatus: async () => {},
   setRuntime: async () => {},
+  refreshTmdbFields: async () => {},
   updateTags: async () => {},
   updateVisibility: async () => {},
   removeItem: async () => {},
@@ -91,6 +98,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { uid, user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // BIN-402: `${uid}:${tmdbId}` keys of titles whose TMDB block we've lazy-refreshed
+  // this session. Marked synchronously before the write so the pending-serverTimestamp
+  // echo (which reads back null and would re-trip the staleness gate → write loop)
+  // can't re-fire it. Keyed by uid too (mirrors nextAirReadRepair's writtenThisSession)
+  // so a same-session account switch doesn't suppress the new user's refresh. Per-session.
+  const refreshedThisSession = useRef<Set<string>>(new Set());
   // BIN-164: tags live in a SEPARATE owner-only subcollection (never on the
   // publicly-readable watchlist doc), so they arrive on their own subscription
   // and are joined onto items in-memory below. Map keyed by tmdbId.
@@ -243,6 +256,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       addedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
+      // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness. This write
+      // denormalizes the whole TMDB-derived block (title/posterPath/providers/
+      // genreIds/…) fresh from TMDB, so mark it fresh — else the ToS sweep, which
+      // treats an absent stamp as stale, would clear a freshly-added title's fields.
+      tmdbFieldsRefreshedAt: serverTimestamp(),
       // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this
       // call — covers pre-rated CSV imports (current undefined) while NOT bumping
       // recency when a re-mark carries the unchanged current rating. Omit the key
@@ -391,6 +409,42 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
   }, [uid, items]);
 
+  // BIN-402 lazy-refresh (read-side complement to the ToS sweep). Called
+  // fire-and-forget (`void refreshTmdbFields`) from title pages, which already have
+  // the fresh TMDB detail (no extra request). Re-writes the denormalized TMDB block
+  // + freshness stamp ONLY for a library title whose stamp is absent (swept clean /
+  // never stamped) or older than the refresh interval — so it repopulates a swept
+  // doc and keeps a viewed title from ever reaching the sweep's 5-month clear line.
+  // NEVER bumps updatedAt (continueWatching sorts on it). Swallows failures like
+  // setRuntime — best-effort, next view retries.
+  const refreshTmdbFields = useCallback(async (tmdbId: number, fields: TmdbDenormFields) => {
+    if (!uid) return;
+    // Echo-proof dedupe (keyed by uid so an account switch doesn't suppress the new
+    // user): once written this session, never re-fire — the pending serverTimestamp
+    // reads back null and would otherwise re-trip the gate.
+    const dedupeKey = `${uid}:${tmdbId}`;
+    if (refreshedThisSession.current.has(dedupeKey)) return;
+    const current = items.find(i => i.tmdbId === tmdbId);
+    if (!current) return; // only titles in the library carry the stamp / get swept
+    if (!needsTmdbFieldsRefresh(current.tmdbFieldsRefreshedAt, Date.now())) return;
+    refreshedThisSession.current.add(dedupeKey); // mark BEFORE the await — synchronous, echo-independent
+    const { db, doc, setDoc, serverTimestamp } = await fsdb();
+    // Merge only the fields the caller actually has (undefined omitted); the stamp
+    // is always set. Explicitly never updatedAt.
+    const payload: Record<string, unknown> = { tmdbFieldsRefreshedAt: serverTimestamp() };
+    if (fields.title != null) payload.title = fields.title;
+    if (fields.posterPath !== undefined) payload.posterPath = fields.posterPath;
+    if (fields.providers != null) payload.providers = fields.providers;
+    if (fields.genreIds != null) payload.genreIds = fields.genreIds;
+    if (fields.tmdbStatus !== undefined) payload.tmdbStatus = fields.tmdbStatus;
+    if (fields.runtime !== undefined) payload.runtime = fields.runtime;
+    try {
+      await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), payload, { merge: true });
+    } catch (err) {
+      console.warn('[watchlist] tmdb-fields lazy-refresh misslyckades:', err);
+    }
+  }, [uid, items]);
+
   const removeItem = useCallback(async (tmdbId: number) => {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
@@ -424,8 +478,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [itemsWithTags]);
 
   const value = useMemo(() => ({
-    items: itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateTags, updateVisibility, removeItem, getByStatus, getItem,
-  }), [itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

@@ -61,7 +61,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // till "Serien hittades inte." nedan.
   const { data: show, isLoading } = useTVShow(Number.isFinite(showId) ? showId : null, initialData);
   const { offers } = useStreamingOffers(show?.id);
-  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, updateTags, items } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
   const { user } = useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
@@ -89,6 +89,34 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     if (!mounted || !show || showRuntime == null) return;
     void setRuntime(show.id, showRuntime);
   }, [mounted, show, showRuntime, setRuntime]);
+
+  // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
+  // have (free). No-ops unless the title is in the library AND its freshness stamp
+  // is absent (swept clean) or older than the refresh interval — repopulates a
+  // swept doc and keeps a viewed title from reaching the sweep's clear threshold.
+  // Never bumps updatedAt.
+  useEffect(() => {
+    if (!mounted || !show) return;
+    const se = show['watch/providers']?.results?.SE;
+    // Only send providers when the SE block is actually present — an absent block
+    // must not clobber good denormalized ids with [].
+    const providerIds = se
+      ? Array.from(new Set(
+          [...(se.flatrate ?? []), ...(se.free ?? []), ...(se.ads ?? []), ...(se.rent ?? []), ...(se.buy ?? [])]
+            .map(p => canonicalProviderId(p.provider_id)),
+        ))
+      : undefined;
+    void refreshTmdbFields(show.id, {
+      // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
+      // refresh never overwrites a correct original title with the localized one.
+      title: preferOriginalTitle(show.name, show.original_name) || undefined,
+      posterPath: show.poster_path,
+      providers: providerIds,
+      genreIds: show.genres?.map(g => g.id),
+      tmdbStatus: show.status,
+      runtime: showRuntime,
+    });
+  }, [mounted, show, showRuntime, refreshTmdbFields]);
 
   // T6: räknaren ("N förslag") och griden måste visa samma antal — skär till 5
   // (= similar-grid:s desktop-kolumner) redan här, istället för 8 i memo:t +

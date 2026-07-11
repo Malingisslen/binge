@@ -61,7 +61,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
   const { offers } = useStreamingOffers(movie?.id);
   const cineasterna = useCineasternaCatalog();
-  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, updateTags, items } = useWatchlist();
+  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
   const { user } = useAuth();
   const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -81,6 +81,34 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     if (!mounted || !movie || movieRuntime == null) return;
     void setRuntime(movie.id, movieRuntime);
   }, [mounted, movie, movieRuntime, setRuntime]);
+
+  // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
+  // have (free — no extra request). No-ops unless the title is in the library AND
+  // its freshness stamp is absent (swept clean / never stamped) or older than the
+  // refresh interval — repopulates a swept doc and keeps a viewed title from ever
+  // reaching the ToS sweep's 5-month clear threshold. Never bumps updatedAt.
+  useEffect(() => {
+    if (!mounted || !movie) return;
+    const se = movie['watch/providers']?.results?.SE;
+    // Only send providers when the SE block is actually present — an absent block
+    // must not clobber good denormalized ids with [] (a genuinely empty SE block
+    // does correctly write []).
+    const providerIds = se
+      ? Array.from(new Set(
+          [...(se.flatrate ?? []), ...(se.free ?? []), ...(se.ads ?? []), ...(se.rent ?? []), ...(se.buy ?? [])]
+            .map(p => canonicalProviderId(p.provider_id)),
+        ))
+      : undefined;
+    void refreshTmdbFields(movie.id, {
+      // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
+      // refresh never overwrites a correct original title with the localized one.
+      title: preferOriginalTitle(movie.title, movie.original_title) || undefined,
+      posterPath: movie.poster_path,
+      providers: providerIds,
+      genreIds: movie.genres?.map(g => g.id),
+      runtime: movieRuntime,
+    });
+  }, [mounted, movie, movieRuntime, refreshTmdbFields]);
 
   // T6 (samma mönster som TVShowPageClient): räknaren och griden måste visa
   // samma antal — skär till 5 direkt så "N förslag" är ärligt.

@@ -224,7 +224,32 @@ en framtida server-side reaper för konton vars ägar-uid inte längre finns.
 
 ## Retention-policy för icke-raderad data
 
-Ingen auto-retention idag (v1). Saker som kommer behövas vid tillväxt:
+### TMDB-fält-svep (BIN-402) — aktiv auto-retention på tredjeparts-cachedata
+
+**Syfte:** TMDB:s API-villkor §1.C förbjuder caching av TMDB-härledd data > 6 mån.
+Watchlist-docs denormaliserar TMDB-fält (`title`, `posterPath`, `providers`,
+`providersCheckedAt`, `genreIds`, `tmdbStatus`, `runtime`, `nextAir*`,
+`digitalReleaseDate`) utan TTL. Den schemalagda Cloud Functionen `tmdbFieldsSweep`
+(månadsvis, `functions/src/tmdbTosSweep/`) **rensar** (nullar) dessa fält när doc:ens
+färskhetsstämpel `tmdbFieldsRefreshedAt` är äldre än **5 mån** (medveten marginal
+under 6-månaderstaket) eller saknas.
+
+**Avgränsning (INTE användardata):** hård fält-allowlist — rör ALDRIG user-authored
+fält (`status`, `rating`, `ratedAt`, `notes`, `tags`, `watchedAt`) eller `updatedAt`
+(driver "Fortsätt titta"-sorteringen). Test-låst (`FORBIDDEN_FIELDS` i `logic.ts`).
+Det är dataminimering på processor-cache, inte radering av användarens egna data —
+ingen ny rättslig grund krävs (ADR 0009, DPO-panel 2026-07-11).
+
+**Färskhet återställs** lat: klienten skriver `tmdbFieldsRefreshedAt` vid
+denormalisering (`addItem`, `nextAirReadRepair`) och en titelsides-lazy-refresh
+repopulerar ett rensat block vid nästa visning (`refreshTmdbFields`).
+
+**Dry-run som default:** funktionen skriver inget förrän
+`sweepState/tmdbFieldsSweep.mutateEnabled === true` (flippas i Console efter granskad
+dry-run — verifiera `lastRun.fullPassCompleted === true` + kostnad först, DBA-villkor).
+Audit-record per körning i `sweepState/tmdbFieldsSweep.lastRun`.
+
+### Framtida (ej byggt)
 
 - **Gamla Tillsammans-sessioner** — bör delete:as efter 30 dagar via
   cron (kräver Cloud Functions, sprint 6 + 10)

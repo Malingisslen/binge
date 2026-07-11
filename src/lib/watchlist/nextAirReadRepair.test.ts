@@ -66,11 +66,15 @@ describe('nextAirDelta', () => {
 });
 
 describe('buildRepairPayload', () => {
-  it('contains exactly the delta keys + nextAirUpdatedAt — NEVER updatedAt (spec-villkor 2)', () => {
+  it('contains exactly the delta keys + nextAirUpdatedAt — NEVER updatedAt or tmdbFieldsRefreshedAt (spec-villkor 2)', () => {
     const stamp = Symbol('serverTimestamp');
     const payload = buildRepairPayload({ nextAirDate: '2026-07-09', nextAirCode: 'S02E03' }, stamp);
     expect(Object.keys(payload).sort()).toEqual(['nextAirCode', 'nextAirDate', 'nextAirUpdatedAt']);
     expect(payload.nextAirUpdatedAt).toBe(stamp);
+    // BIN-402: this subset-only writer must NOT stamp the whole-block freshness
+    // field (that would falsely mark title/providers fresh → ToS-sweep hole).
+    expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
+    // The load-bearing invariant is unchanged: this write must NEVER bump updatedAt.
     expect('updatedAt' in payload).toBe(false);
   });
 });

@@ -80,6 +80,12 @@ export interface WatchlistItem {
   // this instead of updatedAt (which ANY edit bumps). Optional/lazy: old items
   // have none → consumers fall back to updatedAt. Cleared to null when rating unset.
   ratedAt?: Date | null;
+  // BIN-402: doc-level freshness stamp for the denormalized TMDB-derived block
+  // (title/posterPath/providers/genreIds/nextAir*/…). Written by the client on
+  // denormalization (addItem / nextAirReadRepair / title-page lazy-refresh) and by
+  // the monthly tmdbFieldsSweep. Absent/older-than-5mo → the sweep clears the block
+  // (TMDB ToS §1.C). Lazy: old items have none.
+  tmdbFieldsRefreshedAt?: Date | null;
   addedAt: Date;
   updatedAt: Date;
   watchedAt: Date | null;
