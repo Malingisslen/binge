@@ -1555,8 +1555,8 @@
   },
   {
    "id": "flow-available",
-   "label": "Available-on-my-services notify",
-   "description": "Daily scan of every watchlist title (both 'vill_se' and 'mina') diffs SE flatrate providers against a per-title Firestore marker; when a title newly lands on a provider the user actually subscribes to (and has opted into availableOnMyServices + pushEnabled), fires exactly one push naming the first qualifying provider. First observation of a title only establishes the baseline — never a first-run blast.",
+   "label": "Available + release-day notify (2-phase)",
+   "description": "One daily scheduled pass with TWO phases in a single run so they dedupe deterministically (no cross-cron ordering assumption). RELEASE PHASE (BIN-360/463/464): for vill_se MOVIES (the 'bevakade' films) it resolves the SE digital-release date (TMDB release_dates type 4) — cached per title in releaseNotifyState/{tmdbId} so it stops re-fetching /release_dates for every bevakad film every day — and on the release day (plus a short catch-up grace window) writes a 'släpps idag' digital_release inbox card + fires a push, deduped per-user on a dedicated NON-client-deletable marker releaseNotifyState/{tmdbId}/notified/{uid}.notifiedDate (BIN-464, replacing the old inbox-doc-existence check that a user could reset by clearing their inbox). AVAILABILITY PHASE (BIN-60): scans every watchlist title (both 'vill_se' and 'mina'), diffs SE flatrate providers against the per-title availableNotifyState/{tmdbId}.lastFlatrate marker, and when a title newly lands on a provider the user actually subscribes to (and has opted into availableOnMyServices + pushEnabled) fires exactly one push naming the first qualifying provider. First observation of a title only establishes the baseline — never a first-run blast. Overlap: any (uid,mediaType,tmdbId) the release phase already notified today is added to a skip-set and suppressed by the availability phase, so the user gets exactly one signal and 'släpps idag' wins.",
    "covers": [
     "availableNotify"
    ],
@@ -1564,7 +1564,35 @@
     {
      "from": "cf-available-notify",
      "to": "firestore",
-     "payload": "collectionGroup('watchlist') where status in ['vill_se','mina'], select() narrowed → grouped by tmdbId (one entry per unique title, unbounded single-shot query)",
+     "payload": "RELEASE PHASE (BIN-360/463/464): group vill_se MOVIE owner-docs by tmdbId; per movie read releaseNotifyState/{tmdbId} cache doc (seDigitalDates + datesResolvedAt). shouldRefetchReleaseDates(cache, today, now) gates a TMDB re-hit — trust the cached SE type-4 digital dates unless the doc is missing, stale past its TTL, or a cached date is near release",
+     "transport": "Firestore read",
+     "verified": true
+    },
+    {
+     "from": "cf-available-notify",
+     "to": "tmdb-api",
+     "payload": "release phase, ONLY on cache miss/stale: GET /movie/{tmdbId}/release_dates → seDigitalReleaseDates() extracts SE type-4 (digital) dates → writeReleaseCache stamps releaseNotifyState/{tmdbId}.seDigitalDates + datesResolvedAt (cached even when [] so date-less films aren't re-fetched daily); a fetch failure leaves the cache untouched and retries next run",
+     "transport": "fetch (TMDB)",
+     "verified": true
+    },
+    {
+     "from": "cf-available-notify",
+     "to": "firestore",
+     "payload": "release phase per owner: releaseDateToFire(seDigitalDates, today) picks a date in the fire/catch-up window (else the movie is skipped); add (uid,'movie',tmdbId) to the release skip-set, then read releaseNotifyState/{tmdbId}/notified/{uid}.notifiedDate — shouldNotifyRelease() suppresses if this user was already pushed for THIS date (survives an inbox clear; a newer digital date re-arms). Otherwise write users/{uid}/notifications/{tmdbId}-release kind digital_release, then advance the marker's notifiedDate AFTER the attempt (at-most-once per user, per date)",
+     "transport": "Firestore read/write",
+     "verified": true
+    },
+    {
+     "from": "cf-available-notify",
+     "to": "cf-sendPush",
+     "payload": "release phase: sendPushToUser(uid, {title:'Släpps idag', body:'{title} finns digitalt i Sverige idag', actionUrl:'/movie/{tmdbId}/', tag:'release-{tmdbId}'}, {pushEnabled}) — the digital_release inbox card rides the Bevaka-släpp opt-in for every owner; only the FCM push is pushEnabled-gated",
+     "transport": "in-process call",
+     "verified": true
+    },
+    {
+     "from": "cf-available-notify",
+     "to": "firestore",
+     "payload": "AVAILABILITY PHASE (BIN-60): collectionGroup('watchlist') where status in ['vill_se','mina'], select() narrowed → grouped by tmdbId (one entry per unique title, unbounded single-shot query)",
      "transport": "Firestore read",
      "verified": true
     },
@@ -1585,7 +1613,7 @@
     {
      "from": "cf-available-notify",
      "to": "firestore",
-     "payload": "per recipient: read users/{uid} for myProviders + notificationSettings; qualifyingProviders() = newIds ∩ myProviders, gated on availableOnMyServices && pushEnabled; write users/{uid}/notifications/{tmdbId-providerId} kind provider_available (matches inbox model + dedupe key)",
+     "payload": "per recipient: if (uid,mediaType,tmdbId) is in the release skip-set, suppress BOTH the push and the provider_available card (release phase already sent 'släpps idag' today — the marker still advances so it won't re-fire). Else read users/{uid} for myProviders + notificationSettings; qualifyingProviders() = newIds ∩ myProviders, gated on availableOnMyServices && pushEnabled; write users/{uid}/notifications/{tmdbId-providerId} kind provider_available (matches inbox model + dedupe key)",
      "transport": "Firestore read/write",
      "verified": true
     },
@@ -2261,7 +2289,7 @@
   {
    "id": "flow-hygiene",
    "label": "Data hygiene & retention",
-   "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans three targets against the retention policy: expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, and groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop). All deletes go through the Admin SDK, which bypasses firestore.rules entirely.",
+   "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans four targets against the retention policy: expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop), and releaseNotifyState/{tmdbId}/notified/{uid} markers older than 30 days (BIN-464 — the per-user 'släpps idag' dedup marker, uid-identifying and admin-only so the client account-deletion cascade can't reach it; this sweep is its SOLE GDPR Art. 17 erasure path and its growth bound, covering self-service, abandoned and Console-deleted accounts alike). All deletes go through the Admin SDK, which bypasses firestore.rules entirely.",
    "covers": [
     "reclaimOrphanFollows",
     "retentionCleanup"
@@ -2306,6 +2334,13 @@
      "from": "cf-retentionCleanup",
      "to": "firestore",
      "payload": "collectionGroup('notifications'|'joinAttempts').select('createdAt') scan → stale refs → batch.delete",
+     "transport": "firestore-query+batch-write",
+     "verified": true
+    },
+    {
+     "from": "cf-retentionCleanup",
+     "to": "firestore",
+     "payload": "collectionGroup('notified').select('updatedAt') paginated scan → isStaleReleaseMarker (>30 days) → batch.delete: reaps releaseNotifyState/{tmdbId}/notified/{uid} per-user release-dedup markers (BIN-464). Sole GDPR Art. 17 erasure path for this admin-only, uid-keyed marker — no firestore.rules match means the client deletion cascade can't reach it — mirroring the joinAttempts backstop and covering Console-deleted accounts too. Note the age field is updatedAt (what the marker stamps), not createdAt",
      "transport": "firestore-query+batch-write",
      "verified": true
     }
