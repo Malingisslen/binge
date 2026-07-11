@@ -3,8 +3,19 @@ import {
   seDigitalReleaseDates,
   releasesDigitallyToday,
   stockholmDateString,
+  dayDiff,
+  ymdToUtcMs,
+  isWithinFireWindow,
+  releaseDateToFire,
+  shouldNotifyRelease,
+  shouldRefetchReleaseDates,
+  RELEASE_REFETCH_TTL_DAYS,
+  RELEASE_CATCHUP_GRACE_DAYS,
+  type ReleaseDateCache,
   type TmdbReleaseDatesCountry,
 } from './logic';
+
+const DAY = 86_400_000;
 
 const se = (types: { type: number; date: string }[]): TmdbReleaseDatesCountry[] => [
   { iso_3166_1: 'US', release_dates: [{ type: 4, release_date: '2026-07-11T00:00:00.000Z' }] },
@@ -94,5 +105,124 @@ describe('stockholmDateString — DST-safe calendar boundary', () => {
 
   it('agrees with UTC when the instant is mid-day', () => {
     expect(stockholmDateString(new Date('2026-07-11T10:00:00Z'))).toBe('2026-07-11');
+  });
+});
+
+describe('dayDiff / ymdToUtcMs — calendar arithmetic', () => {
+  it('counts whole days forward and backward', () => {
+    expect(dayDiff('2026-07-11', '2026-07-11')).toBe(0);
+    expect(dayDiff('2026-07-11', '2026-07-14')).toBe(3);
+    expect(dayDiff('2026-07-14', '2026-07-11')).toBe(-3);
+  });
+
+  it('crosses a month/year boundary correctly', () => {
+    expect(dayDiff('2026-12-31', '2027-01-01')).toBe(1);
+  });
+
+  it('ymdToUtcMs is UTC midnight (no local-TZ drift)', () => {
+    expect(ymdToUtcMs('2026-07-11')).toBe(Date.parse('2026-07-11T00:00:00.000Z'));
+  });
+});
+
+describe('isWithinFireWindow — catch-up grace (BIN-464)', () => {
+  it('fires on the exact day', () => {
+    expect(isWithinFireWindow('2026-07-11', '2026-07-11', 3)).toBe(true);
+  });
+
+  it('fires within the grace window after release (missed cron days)', () => {
+    expect(isWithinFireWindow('2026-07-11', '2026-07-14', 3)).toBe(true); // +3
+  });
+
+  it('does NOT fire past the grace window', () => {
+    expect(isWithinFireWindow('2026-07-11', '2026-07-15', 3)).toBe(false); // +4
+  });
+
+  it('does NOT fire before the release date', () => {
+    expect(isWithinFireWindow('2026-07-11', '2026-07-10', 3)).toBe(false);
+  });
+});
+
+describe('releaseDateToFire — window pick + dedup key (BIN-464)', () => {
+  it('returns the date when today is on it', () => {
+    expect(releaseDateToFire(['2026-07-11'], '2026-07-11', 3)).toBe('2026-07-11');
+  });
+
+  it('returns the date during the catch-up window', () => {
+    expect(releaseDateToFire(['2026-07-11'], '2026-07-13', 3)).toBe('2026-07-11');
+  });
+
+  it('returns null when nothing is in the window', () => {
+    expect(releaseDateToFire(['2026-07-11'], '2026-07-20', 3)).toBeNull();
+    expect(releaseDateToFire([], '2026-07-11', 3)).toBeNull();
+  });
+
+  it('prefers the LATEST in-window date (a newer digital date re-arms)', () => {
+    expect(releaseDateToFire(['2026-07-11', '2026-07-13'], '2026-07-14', 3)).toBe('2026-07-13');
+  });
+
+  it('ignores a future date even if a past one is out of window', () => {
+    expect(releaseDateToFire(['2026-07-01', '2026-08-01'], '2026-07-11', 3)).toBeNull();
+  });
+});
+
+describe('shouldNotifyRelease — per-user dedup (BIN-464)', () => {
+  it('notifies when no marker exists yet', () => {
+    expect(shouldNotifyRelease(undefined, '2026-07-11')).toBe(true);
+    expect(shouldNotifyRelease(null, '2026-07-11')).toBe(true);
+  });
+
+  it('suppresses a repeat for the same date (survives inbox deletion)', () => {
+    expect(shouldNotifyRelease('2026-07-11', '2026-07-11')).toBe(false);
+  });
+
+  it('re-arms for a newer date', () => {
+    expect(shouldNotifyRelease('2026-07-11', '2026-07-18')).toBe(true);
+  });
+});
+
+describe('shouldRefetchReleaseDates — TMDB fetch cache (BIN-463)', () => {
+  const opts = { ttlDays: RELEASE_REFETCH_TTL_DAYS, graceDays: RELEASE_CATCHUP_GRACE_DAYS };
+  const now = Date.parse('2026-07-11T09:00:00Z');
+  const today = '2026-07-11';
+
+  it('refetches when there is no cache at all', () => {
+    expect(shouldRefetchReleaseDates(null, today, now, opts)).toBe(true);
+  });
+
+  it('refetches when the cache was never resolved (null stamp)', () => {
+    const c: ReleaseDateCache = { seDigitalDates: [], datesResolvedAtMs: null };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(true);
+  });
+
+  it('trusts a fresh cache whose dates are far from today (SKIPS the fetch)', () => {
+    const c: ReleaseDateCache = { seDigitalDates: ['2026-09-01'], datesResolvedAtMs: now - DAY };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(false);
+  });
+
+  it('trusts a fresh EMPTY cache (film has no SE digital date — no daily re-fetch)', () => {
+    const c: ReleaseDateCache = { seDigitalDates: [], datesResolvedAtMs: now - DAY };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(false);
+  });
+
+  it('refetches once the cache is older than the TTL', () => {
+    const c: ReleaseDateCache = {
+      seDigitalDates: ['2026-09-01'],
+      datesResolvedAtMs: now - (RELEASE_REFETCH_TTL_DAYS * DAY + DAY),
+    };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(true);
+  });
+
+  it('refetches (confirms live) when a cached date is inside the fire window', () => {
+    const c: ReleaseDateCache = { seDigitalDates: ['2026-07-11'], datesResolvedAtMs: now - DAY };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(true);
+  });
+
+  it('refetches on a future/skewed resolved stamp (distrust the clock)', () => {
+    const c: ReleaseDateCache = { seDigitalDates: ['2026-09-01'], datesResolvedAtMs: now + DAY };
+    expect(shouldRefetchReleaseDates(c, today, now, opts)).toBe(true);
+  });
+
+  it('grace ≥ TTL so a date first seen at a refetch is still fireable', () => {
+    expect(RELEASE_CATCHUP_GRACE_DAYS).toBeGreaterThanOrEqual(RELEASE_REFETCH_TTL_DAYS);
   });
 });

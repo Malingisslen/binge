@@ -8,6 +8,7 @@ import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { fetchForBuild } from '@/lib/tmdb/buildFetch';
 import type { TMDBCollectionPart } from '@/types/tmdb';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { EmptyState } from '@/components/ui/EmptyState';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 
 export const dynamic = 'force-static';
@@ -131,7 +132,42 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
     });
   }
 
-  if (rows.length === 0) notFound();
+  // BIN-460 — zero released rows means either a flaked build-time TMDB fetch
+  // (collection/movie-lite miss under the 25k-page export concurrency) OR a
+  // franchise whose films aren't out/mapped in SE yet. The URL is already in the
+  // sitemap + generateStaticParams, so notFound() here would advertise a soft-404.
+  // Instead ship a resilient, indexable "kommer snart" page: it stays a valid 200
+  // in the index and fills with content on the next build once the fetch succeeds.
+  if (rows.length === 0) {
+    const emptyUrl = `${SITE}/billigaste/${franchise.slug}/`;
+    const emptyCollectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: `Billigaste sättet att se hela ${franchise.name} i Sverige`,
+      description: `Var och hur du ser hela ${franchise.name} billigast i Sverige.`,
+      url: emptyUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Binge.nu', url: `${SITE}/` },
+    };
+    return (
+      <div className="canvas">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(emptyCollectionPage) }} />
+        <PageHeader
+          crumb="Billigaste vägen"
+          title={`Se hela ${franchise.name} — billigast i Sverige`}
+          standfirst={`Vilken tjänst som täcker flest filmer, vad du behöver hyra, och var du ser resten.`}
+        />
+        <EmptyState
+          title={`${franchise.name} — streamingläget uppdateras`}
+          body={`Vi kartlägger just nu var ${franchise.name} går att streama i Sverige. Titta in snart — sidan fylls på så fort tillgänglighetsdatan är klar.`}
+          action={<Link href="/guider/" className="btn btn-acc btn-sm">Utforska fler streamingguider</Link>}
+        />
+        <div className="mt-6">
+          <JustWatchCredit />
+          <span className="text-ink-3 text-[11px]">{' · '}Tillgänglighet via Movie of the Night · Data från TMDB</span>
+        </div>
+      </div>
+    );
+  }
 
   const plan = franchisePlan(rows);
   const url = `${SITE}/billigaste/${franchise.slug}/`;

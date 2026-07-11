@@ -249,6 +249,32 @@ repopulerar ett rensat block vid nästa visning (`refreshTmdbFields`).
 dry-run — verifiera `lastRun.fullPassCompleted === true` + kostnad först, DBA-villkor).
 Audit-record per körning i `sweepState/tmdbFieldsSweep.lastRun`.
 
+### "Släpps idag"-dedup-markörer (BIN-464) — 30-dagars svep (GDPR Art. 17 + tillväxtgräns)
+
+`releaseNotifyState/{tmdbId}/notified/{uid}` — en per-användare-markör som
+`availableNotify`-jobbet skriver när det pushat "släpps idag" för en bevakad film,
+så samma användare inte får en andra push för samma digitala släppdatum. Doc-id är
+`uid`, innehållet är `{ notifiedDate, updatedAt }`.
+
+- **Varför den inte kan raderas via kontocascaden:** collectionen har INGEN
+  `firestore.rules`-match → klienter är default-nekade, bara Admin SDK (Cloud
+  Functions) rör den. Klientens `deleteAccount`-cascade körs med användarens egen
+  auth och kan därför inte nå den (en `batch.delete` skulle nekas och — eftersom
+  batchen är atomär — spränga hela raderingen). Samma form som `joinAttempts`.
+- **Beslut:** den schemalagda `retentionCleanup`-sweepen (Admin SDK, kringgår
+  reglerna) raderar varje markör vars `updatedAt` är äldre än **30 dagar**
+  (`RELEASE_MARKER_MAX_AGE_MS`). Det är markörens ENDA Art. 17-raderingsväg och
+  täcker självservice-, övergivna OCH Console-raderade konton lika.
+- **Varför 30 dagar är säkert:** markörens enda funktion är dedup över catch-up-
+  fönstret (`RELEASE_CATCHUP_GRACE_DAYS` = 3 dagar efter släppdatumet). När
+  fönstret stängt kan `releaseDateToFire` aldrig returnera det passerade datumet
+  igen, så markören är död vikt. 30 dagar är rejäl marginal över 3-dagarsfönstret
+  (en fortfarande användbar markör reaps aldrig) och samtidigt prompt radering av
+  uid-identifierande beteendedata (vilken film en användare bevakade / notifierades
+  om, och när). Ett förnyat släppdatum stämplar om `updatedAt` → markören
+  nollställer sin egen klocka. Ingen `firestore.indexes.json`-post krävs (svepet
+  pagesar på `__name__` via det automatiska collection-group-indexet, som de andra).
+
 ### Framtida (ej byggt)
 
 - **Gamla Tillsammans-sessioner** — bör delete:as efter 30 dagar via

@@ -2,12 +2,21 @@
  * Scheduled watchlist push job (BIN-60 + BIN-360). Two phases in ONE pass so
  * they dedupe deterministically (no cross-cron ordering assumption):
  *
- * 1. RELEASE PHASE (BIN-360) — for vill_se MOVIES ("bevakade" films), write a
- *    "släpps idag" inbox card + fire a push on the SE digital release date (TMDB
- *    type 4), regardless of whether the film is on a subscribed service. The card
- *    rides the Bevaka-släpp opt-in; only the PUSH is gated on pushEnabled.
- *    At-most-once is per-USER, keyed on the `${tmdbId}-release` inbox doc's
- *    existence (no per-title marker). Collects the notified (uid,tmdbId) set.
+ * 1. RELEASE PHASE (BIN-360 + BIN-463/464) — for vill_se MOVIES ("bevakade"
+ *    films), write a "släpps idag" inbox card + fire a push on the SE digital
+ *    release date (TMDB type 4), regardless of whether the film is on a subscribed
+ *    service. The card rides the Bevaka-släpp opt-in; only the PUSH is gated on
+ *    pushEnabled. Two robustness upgrades:
+ *      • BIN-463 — the resolved SE digital dates are CACHED per title in
+ *        releaseNotifyState/{tmdbId} (with a TTL), so we stop re-fetching
+ *        /release_dates for every bevakad film on every daily run.
+ *      • BIN-464 — at-most-once is per-USER, keyed on a dedicated marker the user
+ *        can't clear from the client (releaseNotifyState/{tmdbId}/notified/{uid}.
+ *        notifiedDate), not the user-deletable inbox card. A small catch-up grace
+ *        window means a missed cron day still fires. Collects the notified
+ *        (uid,tmdbId) set. The marker is uid-identifying, so retentionCleanup
+ *        reaps it after 30 days (its GDPR Art. 17 erasure path — admin-only, out
+ *        of the client deletion cascade's reach).
  * 2. AVAILABILITY PHASE (BIN-60) — scans vill_se + mina, fetches SE flatrate per
  *    unique title, diffs against availableNotifyState/{tmdbId}.lastFlatrate, and
  *    pushes followers who (a) subscribe to a newly-added provider, (b) have
@@ -26,7 +35,14 @@ import { defineSecret } from 'firebase-functions/params';
 import { sendPushToUser } from '../push';
 import { fetchSeFlatrate } from './tmdb';
 import { fetchReleaseDates } from '../releaseNotify/tmdb';
-import { releasesDigitallyToday, stockholmDateString } from '../releaseNotify/logic';
+import {
+  seDigitalReleaseDates,
+  stockholmDateString,
+  shouldRefetchReleaseDates,
+  releaseDateToFire,
+  shouldNotifyRelease,
+  type ReleaseDateCache,
+} from '../releaseNotify/logic';
 import { diffNewProviders, qualifyingProviders, canonicalProviderId, type WatchlistTitleLite, type UserNotifSettings } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
@@ -54,6 +70,46 @@ async function readLastFlatrate(tmdbId: number): Promise<number[] | null> {
   const snap = await getFirestore().collection('availableNotifyState').doc(String(tmdbId)).get();
   const v = snap.data()?.lastFlatrate;
   return Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number') : null;
+}
+
+// BIN-463: per-title cache of the resolved SE digital dates. Top-level, admin-only
+// state (mirrors availableNotifyState) — no firestore.rules change needed, and it
+// is NOT user-owned so it stays out of the GDPR export/delete path. Movie-only.
+async function readReleaseCache(tmdbId: number): Promise<ReleaseDateCache | null> {
+  const snap = await getFirestore().collection('releaseNotifyState').doc(String(tmdbId)).get();
+  if (!snap.exists) return null;
+  const d = snap.data() ?? {};
+  const seDigitalDates = Array.isArray(d.seDigitalDates)
+    ? d.seDigitalDates.filter((x: unknown): x is string => typeof x === 'string')
+    : [];
+  const ts = d.datesResolvedAt;
+  const datesResolvedAtMs = ts && typeof ts.toMillis === 'function' ? ts.toMillis() : null;
+  return { seDigitalDates, datesResolvedAtMs };
+}
+
+async function writeReleaseCache(tmdbId: number, seDigitalDates: string[]): Promise<void> {
+  await getFirestore().collection('releaseNotifyState').doc(String(tmdbId)).set(
+    { seDigitalDates, datesResolvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+// BIN-464: per-user dedup marker the user can't clear from the client. Lives
+// under the admin-only releaseNotifyState state doc (never in users/{uid}), so
+// wiping the inbox doesn't reset it. Stores the release date we last pushed this
+// user for. It IS uid-identifying behavioral data, so it is not retained forever:
+// the scheduled retentionCleanup sweep reaps markers older than 30 days
+// (RELEASE_MARKER_MAX_AGE_MS) — well past the 3-day catch-up window where it
+// matters — which is also its GDPR Art. 17 erasure path (the client deletion
+// cascade can't reach an admin-only collection). See docs/data-retention-policy.md.
+function releaseMarkerRef(tmdbId: number, uid: string) {
+  return getFirestore().collection('releaseNotifyState').doc(String(tmdbId)).collection('notified').doc(uid);
+}
+
+async function readNotifiedReleaseDate(tmdbId: number, uid: string): Promise<string | null> {
+  const snap = await releaseMarkerRef(tmdbId, uid).get();
+  const v = snap.data()?.notifiedDate;
+  return typeof v === 'string' ? v : null;
 }
 
 // One read of users/{uid} for both myProviders and the notif flags. null =
@@ -145,16 +201,20 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[], release
 }
 
 /**
- * Release phase (BIN-360). For every vill_se MOVIE (the "bevakad" set — vill_se is
- * film-only) that releases digitally in SE today, write a "släpps idag" inbox card
- * for each owner and push it to those with pushEnabled. Returns the set of
- * (uid,tmdbId) it owns today so the availability phase can skip them (dedup:
- * release wins). Every owner is added to the skip set regardless of send outcome —
- * a film releasing today always belongs to the release message, never "finns nu på
- * X". At-most-once is per-USER, keyed on the release inbox doc's existence (no
- * per-title marker), so a user who bevakar the film mid-day is still caught next run.
+ * Release phase (BIN-360 + BIN-463/464). For every vill_se MOVIE (the "bevakad"
+ * set — vill_se is film-only) whose SE digital date is today (or within the
+ * catch-up grace window), write a "släpps idag" inbox card for each owner and
+ * push it to those with pushEnabled. Returns the set of (uid,tmdbId) it owns
+ * (fire-window films) so the availability phase can skip them (dedup: release
+ * wins). Every owner of a fireable film is added to the skip set regardless of
+ * send outcome — that film belongs to the release message, never "finns nu på X".
+ *
+ * BIN-463: the resolved SE digital dates are cached per title; we only re-hit TMDB
+ * when the cache is missing, stale, or a cached date is near release. BIN-464:
+ * at-most-once is per-USER via a dedicated non-deletable marker storing the
+ * notified date, and the grace window makes a missed cron day self-heal.
  */
-async function runReleasePhase(titles: WatchlistTitleLite[], today: string): Promise<Set<string>> {
+async function runReleasePhase(titles: WatchlistTitleLite[], today: string, nowMs: number): Promise<Set<string>> {
   const db = getFirestore();
   const skip = new Set<string>();
 
@@ -170,24 +230,37 @@ async function runReleasePhase(titles: WatchlistTitleLite[], today: string): Pro
 
   for (const [tmdbId, owners] of byMovie) {
     // Isolate each movie (mirrors phase 2's per-title try/catch below): a throw in
-    // one movie's block must not skip the rest's release-day check (exact-day match
-    // → no catch-up next run) NOR discard the skip set built so far.
+    // one movie's block must not skip the rest's release-window check NOR discard
+    // the skip set built so far.
     try {
-      const results = await fetchReleaseDates(tmdbId);
-      if (results === null) continue;                    // fetch failed → skip
-      if (!releasesDigitallyToday(results, today)) continue;
+      // BIN-463: trust the cached dates unless missing/stale/near-release. On a
+      // refetch we re-resolve from TMDB and re-stamp the cache; a fetch failure
+      // leaves the cache untouched (retry next run).
+      const cache = await readReleaseCache(tmdbId);
+      let seDigitalDates: string[];
+      if (shouldRefetchReleaseDates(cache, today, nowMs)) {
+        const results = await fetchReleaseDates(tmdbId);
+        if (results === null) continue;                  // fetch failed → skip, keep cache
+        seDigitalDates = seDigitalReleaseDates(results);
+        await writeReleaseCache(tmdbId, seDigitalDates); // cache even [] → no daily re-fetch for date-less films
+      } else {
+        seDigitalDates = cache?.seDigitalDates ?? [];
+      }
+
+      const dateToFire = releaseDateToFire(seDigitalDates, today);
+      if (dateToFire === null) continue;                 // not in the fire window
 
       // Fan owners out (matches processTitle's Promise.allSettled) — one slow/
       // failing recipient can't block or abort the others.
       await Promise.allSettled(owners.map(async (it) => {
         skip.add(skipKey(it.uid, 'movie', tmdbId));      // movies only; availability defers for this owner regardless of send outcome
-        // At-most-once is PER USER, keyed on the release inbox doc itself: if this
-        // user already has a `${tmdbId}-release` card, we've notified them for this
-        // release — don't re-push on a same-day rerun. (No per-title marker, so a
-        // user who bevakar the film mid-day still gets notified on the next run.)
-        const inboxRef = db.collection('users').doc(it.uid).collection('notifications').doc(`${tmdbId}-release`);
+        // BIN-464: per-USER dedup on a NON-deletable marker, not the inbox card.
+        // If we already pushed this user for THIS release date, skip — even across
+        // the grace window and even if they cleared their inbox. A newer digital
+        // date re-arms (dateToFire changes).
         try {
-          if ((await inboxRef.get()).exists) return;
+          const notifiedDate = await readNotifiedReleaseDate(tmdbId, it.uid);
+          if (!shouldNotifyRelease(notifiedDate, dateToFire)) return;
           const u = await readUserData(it.uid);
           if (!u) return;                                // user-doc missing → nothing to write/send
           const filmTitle = it.title?.trim() || 'En film du bevakar';
@@ -196,7 +269,7 @@ async function runReleasePhase(titles: WatchlistTitleLite[], today: string): Pro
           // opt-in (the Bevaka-släpp tap), and ONLY the FCM push is gated on
           // pushEnabled (enforced inside sendPushToUser). kind 'digital_release' is
           // tmdbId-shaped like episode_release; the client renders it.
-          await inboxRef.set({
+          await db.collection('users').doc(it.uid).collection('notifications').doc(`${tmdbId}-release`).set({
             tmdbId, mediaType: 'movie', title: filmTitle, kind: 'digital_release',
             read: false, createdAt: FieldValue.serverTimestamp(),
           }, { merge: true });
@@ -209,6 +282,13 @@ async function runReleasePhase(titles: WatchlistTitleLite[], today: string): Pro
             actionUrl: `/movie/${tmdbId}/`,
             tag: `release-${tmdbId}`,
           }, { pushEnabled: u.settings.pushEnabled });
+          // Advance the marker AFTER the attempt (like availableNotify's marker):
+          // even if the push failed we won't re-spam this user for this date; the
+          // grace window + next-run retry covers a mid-day bevakning of a new date.
+          await releaseMarkerRef(tmdbId, it.uid).set(
+            { notifiedDate: dateToFire, updatedAt: FieldValue.serverTimestamp() },
+            { merge: true },
+          );
         } catch (err) {
           logger.error(`releaseNotify: notify ${it.uid} for title ${tmdbId} failed`, err);
         }
@@ -228,9 +308,10 @@ export const availableNotify = onSchedule(
     catch (err) { logger.error('availableNotify: watchlist scan failed', err); return; }
 
     // Phase 1: release-day pushes. A failure here must not block availability.
-    const today = stockholmDateString(new Date());
+    const now = new Date();
+    const today = stockholmDateString(now);
     let releaseSkip = new Set<string>();
-    try { releaseSkip = await runReleasePhase(titles, today); }
+    try { releaseSkip = await runReleasePhase(titles, today, now.getTime()); }
     catch (err) { logger.error('releaseNotify phase failed', err); }
 
     // Phase 2: availability transitions, skipping release-owned (uid,tmdbId).

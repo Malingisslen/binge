@@ -39,10 +39,14 @@ import type { DocumentReference, UpdateData, DocumentData } from 'firebase-admin
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import {
-  isTmdbFieldsStale,
-  allTargetFieldsAbsent,
   buildClearedPayload,
-  tsToMillis,
+  classifyWatchlistDoc,
+  resolveMutateEnabled,
+  resolveStartCursor,
+  budgetExhausted,
+  deadlineReached,
+  shouldResetCursor,
+  buildLastRunAudit,
   TMDB_DERIVED_FIELDS,
   TMDB_FIELDS_STAMP,
 } from './logic';
@@ -52,22 +56,6 @@ const BATCH_SIZE = 450;
 
 /** Page size for the bounded scan — never load the whole collection group at once. */
 const PAGE_SIZE = 2000;
-
-/**
- * Per-run safety ceilings. Generous so a normal-sized DB finishes in one run;
- * they only bite pathologically, at which point the cursor resumes next run.
- * Kept well under a day's free-tier quota (50k reads / 20k writes).
- */
-const MAX_DOCS_PER_RUN = 100_000;
-const MAX_CLEARS_PER_RUN = 18_000;
-
-/**
- * Soft wall-clock deadline (< the 300s hard kill). Break the scan loop here so
- * the `lastRun` audit record still writes on a slow month (DBA condition) — a
- * platform kill at 300s mid-loop would otherwise leave NO audit record, a silent
- * un-flagged failure rather than a `budgetAbort: true` one.
- */
-const SOFT_DEADLINE_MS = 270_000;
 
 /** Durable control + audit doc (also holds the cross-run cursor + the mutate gate). */
 const STATE_PATH = 'sweepState/tmdbFieldsSweep';
@@ -81,12 +69,11 @@ export const tmdbFieldsSweep = onSchedule(
 
     const stateSnap = await stateRef.get();
     const state = stateSnap.data() ?? {};
-    // Dry-run is the default: ONLY an explicit `true` enables writes.
-    const mutateEnabled = state.mutateEnabled === true;
-    // Resume the cursor only in mutate mode — a dry-run always scans from the
-    // start for a clean full count (and never persists a cursor of its own),
-    // so a stale cursor left by a prior mutate run can't make it skip docs.
-    let cursor: string | null = mutateEnabled && typeof state.cursor === 'string' ? state.cursor : null;
+    // Dry-run gate + cursor-resume policy (BIN-452 pure helpers): dry-run is the
+    // default (only an explicit `true` enables writes) and the cursor resumes
+    // ONLY in mutate mode so a stale cursor can't make a dry-run skip docs.
+    const mutateEnabled = resolveMutateEnabled(state);
+    let cursor: string | null = resolveStartCursor(state, mutateEnabled);
 
     let scanned = 0;
     let clearable = 0; // docs that WOULD be (dry-run) / WERE (mutate) cleared
@@ -115,17 +102,13 @@ export const tmdbFieldsSweep = onSchedule(
       const toClear: DocumentReference[] = [];
       for (const d of snap.docs) {
         scanned += 1;
-        const data = d.data();
-        const stampMs = tsToMillis(data[TMDB_FIELDS_STAMP]);
-        if (!isTmdbFieldsStale(stampMs, nowMs)) {
-          skipped += 1; // fresh — leave it
-          continue;
+        // Single admin-free verdict: fresh → skip, stale-but-empty → skip
+        // (idempotent), stale-and-non-empty → clear (BIN-452).
+        if (classifyWatchlistDoc(d.data(), nowMs) === 'clear') {
+          toClear.push(d.ref);
+        } else {
+          skipped += 1;
         }
-        if (allTargetFieldsAbsent(data)) {
-          skipped += 1; // stale stamp but nothing left to clear — skip the write
-          continue;
-        }
-        toClear.push(d.ref);
       }
 
       if (mutateEnabled && toClear.length > 0) {
@@ -158,32 +141,28 @@ export const tmdbFieldsSweep = onSchedule(
         fullPassCompleted = true;
         break;
       }
-      if (scanned >= MAX_DOCS_PER_RUN || clearable >= MAX_CLEARS_PER_RUN) {
+      // Per-run scan/clear ceiling, then the wall-clock guard — either breaks
+      // with budgetAbort so the cursor resumes next run and the audit still
+      // writes below (BIN-452 pure thresholds).
+      if (budgetExhausted(scanned, clearable)) {
         budgetAbort = true;
         break;
       }
-      // Wall-clock guard so the audit write below survives a slow month.
-      if (Date.now() - nowMs >= SOFT_DEADLINE_MS) {
+      if (deadlineReached(nowMs, Date.now())) {
         budgetAbort = true;
         break;
       }
     }
 
     // A completed full pass resets the cursor so next month starts fresh.
-    if (mutateEnabled && fullPassCompleted) {
+    if (shouldResetCursor(mutateEnabled, fullPassCompleted)) {
       await stateRef.set({ cursor: null }, { merge: true });
     }
 
-    const lastRun = {
-      at: FieldValue.serverTimestamp(),
-      dryRun: !mutateEnabled,
-      docsScanned: scanned,
-      docsCleared: mutateEnabled ? clearable : 0,
-      docsWouldClear: clearable,
-      docsSkipped: skipped,
-      budgetAbort,
-      fullPassCompleted,
-    };
+    const lastRun = buildLastRunAudit(
+      { mutateEnabled, scanned, clearable, skipped, budgetAbort, fullPassCompleted },
+      FieldValue.serverTimestamp(),
+    );
     await stateRef.set({ lastRun }, { merge: true });
 
     if (budgetAbort || !fullPassCompleted) {

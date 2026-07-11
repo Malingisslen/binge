@@ -25,6 +25,24 @@ export const NOTIFICATION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
  * two-step window, so this can never reap an in-flight join.
  */
 export const JOIN_ATTEMPT_MAX_AGE_MS = 60 * 60 * 1000;
+/**
+ * Release-notify per-user dedup markers (BIN-464:
+ * `releaseNotifyState/{tmdbId}/notified/{uid}`) are reaped once older than this —
+ * 30 days. The marker's ONLY job is to stop a second "släpps idag" push to the
+ * same user for the same digital-release date; that job is finished once the
+ * catch-up fire window (`RELEASE_CATCHUP_GRACE_DAYS` = 3 days after the release
+ * date) has closed, since `releaseDateToFire` can never return that past date
+ * again. 30 days is generous headroom over that 3-day window (so a still-useful
+ * marker is never reaped) while bounding growth and — crucially — erasing this
+ * uid-identifying behavioral data (which movie a user tracked / was notified
+ * about, and when). The collection is admin-SDK-only (no `firestore.rules` match
+ * → clients are default-denied), so the client account-deletion cascade cannot
+ * reach it; this sweep is the SOLE Art. 17 erasure path, exactly like the
+ * `joinAttempts` backstop, and covers self-service, abandoned and Console-deleted
+ * accounts alike. Keyed on `updatedAt` (stamped every write, always >= the
+ * release date), so a re-armed marker for a newer date resets its own clock.
+ */
+export const RELEASE_MARKER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Normalize a Firestore Timestamp field to epoch ms. Duck-typed on `toMillis()`
@@ -73,4 +91,14 @@ export function isStaleNotification(createdAtMs: number | null, nowMs: number): 
  */
 export function isStaleJoinAttempt(createdAtMs: number | null, nowMs: number): boolean {
   return createdAtMs !== null && createdAtMs < nowMs - JOIN_ATTEMPT_MAX_AGE_MS;
+}
+
+/**
+ * A release-notify dedup marker (BIN-464) is reapable once its `updatedAt` is
+ * older than RELEASE_MARKER_MAX_AGE_MS. An undateable marker (no `updatedAt`) is
+ * kept — same conservative stance as the other predicates (never delete data we
+ * can't date; every write stamps `updatedAt`, so an undateable doc is anomalous).
+ */
+export function isStaleReleaseMarker(updatedAtMs: number | null, nowMs: number): boolean {
+  return updatedAtMs !== null && updatedAtMs < nowMs - RELEASE_MARKER_MAX_AGE_MS;
 }

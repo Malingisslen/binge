@@ -11,6 +11,11 @@
  *     plaintext invite token left by an abandoned/failed-cleanup token-join, or
  *     by an account deleted via the Firebase Console (which runs no client
  *     cascade). This is the permanent erasure backstop for that secret.
+ *   - releaseNotifyState/{tmdbId}/notified/{uid} — older than 30 days (BIN-464):
+ *     the per-user "släpps idag" dedup marker. Admin-only (no firestore.rules
+ *     match), so the client account-deletion cascade cannot reach it — this sweep
+ *     is its SOLE GDPR Art. 17 erasure path AND its growth bound, covering
+ *     self-service, abandoned and Console-deleted accounts alike.
  *
  * Sessions own subcollections (participants/*, swipes/*), so a plain doc delete
  * would orphan them — we use recursiveDelete() to reap the whole session tree.
@@ -26,7 +31,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import type { DocumentReference, QueryDocumentSnapshot } from 'firebase-admin/firestore';
-import { isExpiredSession, isStaleNotification, isStaleJoinAttempt, tsToMillis } from './logic';
+import { isExpiredSession, isStaleNotification, isStaleJoinAttempt, isStaleReleaseMarker, tsToMillis } from './logic';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
 const BATCH_SIZE = 450;
@@ -105,6 +110,36 @@ async function collectStaleJoinAttempts(nowMs: number): Promise<DocumentReferenc
 }
 
 /**
+ * Release-notify dedup markers (BIN-464) older than the TTL, across all titles
+ * (collection group `notified`). GDPR Art. 17 erasure path for this uid-keyed,
+ * admin-only marker: the client account-deletion cascade cannot reach
+ * `releaseNotifyState/{tmdbId}/notified/{uid}` (no firestore.rules match →
+ * default-denied), so this sweep is the sole eraser — same role the joinAttempts
+ * sweep plays, and it covers Console-deleted accounts too.
+ */
+async function collectStaleReleaseMarkers(nowMs: number): Promise<DocumentReference[]> {
+  const db = getFirestore();
+  const refs: DocumentReference[] = [];
+  let cursor: QueryDocumentSnapshot | undefined;
+  for (;;) {
+    // Same bounded, index-free pattern as collectStaleJoinAttempts: select only
+    // the age field and page by __name__ (automatic collection-group index — no
+    // firestore.indexes.json entry needed). Markers are leaf docs. Note the age
+    // field here is `updatedAt` (what the marker stamps), not `createdAt`.
+    let q = db.collectionGroup('notified').select('updatedAt').orderBy('__name__').limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      if (isStaleReleaseMarker(tsToMillis(d.get('updatedAt')), nowMs)) refs.push(d.ref);
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return refs;
+}
+
+/**
  * recursiveDelete each session (doc + participants/* + swipes/*); never throw.
  * Serial on purpose — steady-state is tiny (sessions TTL at 7 days, this runs
  * daily). If expired-session volume ever spikes past ~few hundred per run, the
@@ -147,7 +182,7 @@ export const retentionCleanup = onSchedule(
   async () => {
     const nowMs = Date.now();
 
-    const [expiredSessions, staleNotifications, staleJoinAttempts] = await Promise.all([
+    const [expiredSessions, staleNotifications, staleJoinAttempts, staleReleaseMarkers] = await Promise.all([
       collectExpiredSessions(nowMs).catch((err) => {
         logger.error('retentionCleanup: sessions scan failed', err);
         return [] as DocumentReference[];
@@ -160,11 +195,16 @@ export const retentionCleanup = onSchedule(
         logger.error('retentionCleanup: joinAttempts scan failed', err);
         return [] as DocumentReference[];
       }),
+      collectStaleReleaseMarkers(nowMs).catch((err) => {
+        logger.error('retentionCleanup: releaseMarkers scan failed', err);
+        return [] as DocumentReference[];
+      }),
     ]);
 
     const deletedSessions = await deleteSessions(expiredSessions);
     const deletedNotifications = await deleteInBatches(staleNotifications);
     const deletedJoinAttempts = await deleteInBatches(staleJoinAttempts);
+    const deletedReleaseMarkers = await deleteInBatches(staleReleaseMarkers);
 
     logger.info('retentionCleanup done', {
       expiredSessions: expiredSessions.length,
@@ -173,6 +213,8 @@ export const retentionCleanup = onSchedule(
       deletedNotifications,
       staleJoinAttempts: staleJoinAttempts.length,
       deletedJoinAttempts,
+      staleReleaseMarkers: staleReleaseMarkers.length,
+      deletedReleaseMarkers,
     });
   },
 );
