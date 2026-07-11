@@ -1,0 +1,82 @@
+/**
+ * Pure logic for the "släpps idag" digital-release push (BIN-360).
+ *
+ * No firebase-admin / firebase-functions import — runs under the root Vitest
+ * suite (see reference_functions_test_import: root `npm ci` lacks firebase-admin,
+ * so anything root-tested must be import-free of it).
+ *
+ * The release-day push fires when a film the user has "bevakat" (movie in vill_se)
+ * reaches its Swedish DIGITAL release date (TMDB release type 4, region SE),
+ * independent of whether it lands on a service the user subscribes to.
+ */
+
+/** One dated release entry within a country block of TMDB's /release_dates. */
+export interface TmdbReleaseDate {
+  /** TMDB release type: 1=Premiere, 2=Theatrical(limited), 3=Theatrical, 4=Digital, 5=Physical, 6=TV. */
+  type: number;
+  /** Full ISO datetime, e.g. "2026-07-11T00:00:00.000Z". */
+  release_date: string;
+}
+
+/** A country block from TMDB's /release_dates `results`. */
+export interface TmdbReleaseDatesCountry {
+  iso_3166_1: string;
+  release_dates: TmdbReleaseDate[];
+}
+
+/** TMDB release type 4 = Digital (streaming/rent/buy availability date). */
+export const RELEASE_TYPE_DIGITAL = 4;
+
+/**
+ * All SE digital (type-4) release dates as their STATED calendar day `YYYY-MM-DD`,
+ * deduped. TMDB can list several type-4 entries for one film (different
+ * contributors / re-releases), so we collect ALL of them — the caller matches
+ * against any, never just `[0]`. Zero SE / zero type-4 entries → empty array (a
+ * legitimate no-op, not an error).
+ *
+ * A TMDB release_date is semantically a CALENDAR DATE (the time component is
+ * usually 00:00 and is noise when non-zero), so we take the stated date part
+ * directly — NOT a timezone conversion of the instant. The caller compares this
+ * stated date against Sweden's CURRENT calendar day (`stockholmDateString(now)`),
+ * i.e. "fire when Sweden's today reaches TMDB's stated release date". Converting
+ * the release_date itself through a timezone would wrongly roll a `22:00Z` entry
+ * (whose intended date is that day) to the next day.
+ */
+export function seDigitalReleaseDates(results: TmdbReleaseDatesCountry[] | null | undefined): string[] {
+  const se = results?.find((r) => r.iso_3166_1 === 'SE');
+  if (!se || !Array.isArray(se.release_dates)) return [];
+  const dates = new Set<string>();
+  for (const rd of se.release_dates) {
+    if (rd?.type === RELEASE_TYPE_DIGITAL && typeof rd.release_date === 'string' && rd.release_date.length >= 10) {
+      dates.add(rd.release_date.slice(0, 10));
+    }
+  }
+  return [...dates];
+}
+
+/**
+ * True if the film releases digitally in SE on `today` (YYYY-MM-DD). Fires if
+ * ANY type-4 SE entry equals today (multiple entries are OR-matched); zero
+ * entries → false.
+ */
+export function releasesDigitallyToday(
+  results: TmdbReleaseDatesCountry[] | null | undefined,
+  today: string,
+): boolean {
+  return seDigitalReleaseDates(results).includes(today);
+}
+
+/**
+ * `YYYY-MM-DD` calendar date in Europe/Stockholm for the given instant. Uses Intl
+ * with an explicit timeZone so the DST offset is always correct — the "today"
+ * boundary must be Sweden's local midnight, not UTC's (a UTC-date comparison
+ * would fire a day early/late for ~1-2h around midnight). sv-SE renders ISO order.
+ */
+export function stockholmDateString(now: Date): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Stockholm',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}

@@ -15,12 +15,14 @@ export interface AppNotification {
   title: string;
   // Diskriminator: legacy provider-availability-notifs saknar `kind` och
   // defaultas till 'provider_available'. Episod-release-notifs (Fas 6) sätter
-  // 'episode_release' + episodeCode och saknar provider-fälten. Veckodigest
+  // 'episode_release' + episodeCode och saknar provider-fälten. 'digital_release'
+  // (BIN-360) är film-analogen — en "släpps idag"-push på svenskt digitalt
+  // släppdatum; tmdbId-formad (movie), inga provider-/episod-fält. Veckodigest
   // (BIN-163) sätter 'weekly_digest' + summary/digestItems och är INTE
   // tmdbId-formad (tmdbId=0) — en rollup över flera titlar. 'system' är en
   // admin-varning från backend-funktioner (t.ex. Cineasterna-synk) — INTE
   // tmdbId-formad; bär `body` + `actionUrl` och länkar dit, inte till en titel.
-  kind: 'provider_available' | 'episode_release' | 'weekly_digest' | 'system';
+  kind: 'provider_available' | 'episode_release' | 'digital_release' | 'weekly_digest' | 'system';
   providerId: number | null;
   providerName: string | null;
   episodeCode: string | null;
@@ -116,7 +118,9 @@ export function useNotifications() {
           tmdbId: data.tmdbId,
           mediaType: data.mediaType,
           title: data.title,
-          kind: data.kind === 'episode_release' ? 'episode_release' : 'provider_available',
+          kind: data.kind === 'episode_release' ? 'episode_release'
+            : data.kind === 'digital_release' ? 'digital_release'
+            : 'provider_available',
           providerId: data.providerId ?? null,
           providerName: data.providerName ?? null,
           episodeCode: data.episodeCode ?? null,

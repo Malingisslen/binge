@@ -1,40 +1,34 @@
-# BIN-424 — Hub-of-hubs SEO index page (`/guider`)
+# BIN-360 — "släpps idag" FCM push on SE digital release date
 
-**Status:** approved by Malin (2026-07-11, verbal "go ahead" after scoping-pass recommendation).
-**Area:** frontend / seo. **Not** a sensitive domain (no rules/functions/auth/data-model) →
-router tier `skip`, no stakeholder panel required. Ships direct to main per working agreement.
+**Status:** APPROVED by Malin 2026-07-11 ("build now"). Full plan + PE critique folded:
+`~/.claude/plans/binge-bin360-release-push.md`. Domain: Cloud Functions + FCM (sensitive) →
+binge-security-reviewer at commit gate. Deploy = Tier-D manual `firebase deploy --only functions`.
 
-## Problem
-The footer links only 4 of 24 franchise pages and 4 of 11 "försvinner" pages
-(`Footer.tsx`). The other ~27 curated SEO landing pages are in the sitemap but have
-~zero internal links → weak crawl equity (the same orphaning BIN-178 fixed for
-`/provider`). Sitemap presence ≠ internal-link equity.
+## Approach B (chosen): single-pass, structural dedup
+Extend the live `availableNotify` scheduled job — it already scans watchlist for `vill_se ∪ mina`:
+1. **Release phase first** — for `vill_se` MOVIES in that scan, fetch SE type-4 digital date; if == today
+   (Europe/Stockholm), write a "släpps idag" inbox card per owner (uses each owner's OWN title) and push
+   it to those with `pushEnabled` (the Bevaka-släpp tap is consent, no new toggle; the card itself is
+   pushEnabled-independent like episodeNotify). At-most-once is **per-user**, keyed on the release inbox
+   doc's existence (no per-title marker — so a mid-day bevakare is still caught next run). Owners fanned out
+   with Promise.allSettled. Collect the notified `(uid,tmdbId)` set.
+2. **Availability phase** (existing) — runs after, SKIPS any `(uid,tmdbId)` in that set. → exactly one push,
+   release always wins, guaranteed by execution order in ONE process (no cron-timing assumption).
 
-## Approach
-One new indexable static page, `/guider`, that links **every** curated SEO landing page,
-plus a single footer link to it — so all of them are one hop from every pre-rendered page.
-Pure static, no data fetching; link lists come from existing constants.
+## Files
+- `functions/src/releaseNotify/logic.ts` — NEW pure (no firebase-admin/functions import): `seDigitalReleaseDates`,
+  `releasesDigitallyToday(results, today)` (zero entries → false; multiple → fire if ANY == today),
+  `stockholmDateString(now)` (Intl tz, DST-safe).
+- `functions/src/releaseNotify/logic.test.ts` — NEW root-vitest: zero/one/multiple type-4, non-SE, DST anchor.
+- `functions/src/releaseNotify/tmdb.ts` — NEW dedicated `GET /movie/{id}/release_dates`, 10s AbortSignal,
+  null-on-failure. Mirror `availableNotify/tmdb.ts`.
+- `functions/src/availableNotify/index.ts` — add release phase + skip-set threading into `processTitle`.
+- `src/hooks/useNotifications.ts` — add `'digital_release'` to the kind union + preserve in coercion.
+- `src/components/layout/TopbarActions.tsx` — render `digital_release` meta ("Släpps idag").
 
-## Work items
-1. `src/lib/seo/hubLinks.ts` — pure helper: `providerLinks()` / `franchiseLinks()` /
-   `leavingLinks()` / `hubSections()` from `FRANCHISES` + `SEO_PROVIDER_IDS`. ✅ done
-2. `src/lib/seo/hubLinks.test.ts` — coverage guard: fails if a franchise/provider is added
-   but not linked, or a curated provider id stops resolving. ✅ done (5 tests green)
-3. `src/app/guider/page.tsx` — `force-static` server page: metadata (index inherited +
-   canonical), CollectionPage + ItemList JSON-LD, `PageHeader`, three link sections from
-   `hubSections()`. Canonical `/guider/`.
-4. `src/app/sitemap.ts` — add `/guider/` to `staticEntries()` (priority ~0.6, weekly).
-5. `src/components/layout/Footer.tsx` — add one "Alla streamingguider" link to `/guider/`
-   (the de-orphaning hop). Keep the existing curated shortlists.
+## Acceptance (Malin + PE binding — see plan file)
+- Exactly ONE push (structural dedup); no new toggle (pushEnabled only); dedicated release_dates endpoint;
+  logic handles zero/multiple type-4 SE entries w/ tests; DST-safe date; security-reviewer passes.
 
-## Acceptance
-- `hubLinks.test.ts` green; page links all 24 franchises + 11 providers + 11 leaving.
-- typecheck + lint clean; page builds as a real static route (`out/guider/index.html`
-  with `<h1>`, not the noindex catch-all shell).
-- `/guider/` present in sitemap; footer links to it.
-
-## Open questions
-None architecture-changing. Assumptions: route slug `/guider/` (aligns with the footer's
-existing "Guider" grouping); page inherits root-layout `index:true` (mirrors the valid-slug
-`/billigaste` + `/provider` pages, which set only canonical). Genre hubs + försvinner SSR
-are explicitly **out of scope** (deferred per the scoping pass).
+## Out of scope
+TV episode pushes (episodeNotify's job); the Bevaka-släpp button; any rules change (Admin SDK bypasses rules).

@@ -234,6 +234,10 @@ export default function TopbarActions() {
                         <div className="popover-row-meta">
                           {n.kind === 'episode_release' ? (
                             <>Nytt avsnitt{n.episodeCode ? ` ${n.episodeCode}` : ''}</>
+                          ) : n.kind === 'digital_release' ? (
+                            // Time-neutral: the card persists in the inbox for days,
+                            // so it must not keep claiming "idag" after release day.
+                            <>Digitalt släpp</>
                           ) : (
                             <>
                               Finns nu på{' '}
