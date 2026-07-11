@@ -54,6 +54,11 @@ jobs:
       - name: Workflow map paths must exist
         run: node scripts/check-workflow-map.mjs
 
+      # Unit-tests the workflow-map linter itself (path-existence + coverage +
+      # content-ratchet logic). Runs on Node's built-in runner — no deps needed.
+      - name: Workflow map linter self-tests
+        run: node --test scripts/check-workflow-map.test.mjs
+
       - name: Test
         run: npm test
 

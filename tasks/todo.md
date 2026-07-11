@@ -1,4 +1,185 @@
-# Sprint 2026-07-11b — post-shipment cleanup batch
+# Sprint 2026-07-11c — follow-up completeness batch (post BIN-472 ship)
+
+**Selection context:** the prior sprint (66c4ad9) shipped BIN-472/470/473 and its own
+post-sprint completeness sweep filed four gap tickets: BIN-480 (security review found a
+firestore.rules hardening gap), BIN-479 (a new test file isn't wired into CI), BIN-478
+(a partially-met acceptance criterion), BIN-477 (workflow-map still stale for BIN-472's
+own new behavior). Those four are the entire actionable backlog this pass — everything
+else is either a carried-over `needsApproval` idea/decision or not yet actionable
+(ops-blocked or date-gated). Linear MCP connected, scoped to project "Binge" throughout
+(shared team). No ticket selected carries `onboarding-reserved`/`launch-gated`.
+
+**Step-0 grep-of-main check (all 4 candidates):** confirmed each gap is still real on
+current `main`, not already closed under a different id —
+- BIN-480: `firestore.rules:840-850` `joinAttempts` create rule still only has
+  `hasOnly(['token','createdAt'])`, no `is timestamp`/`== request.time` bind (pattern
+  exists elsewhere at line 975, `updatedAt == request.time`, so the fix is a known mirror).
+- BIN-479: `ci.yml`/`deploy.yml` still only run `node scripts/check-workflow-map.mjs`,
+  not `node --test scripts/check-workflow-map.test.mjs`.
+- BIN-478: `src/app/billigaste/[slug]/page.test.tsx` exists (BIN-473) but has zero
+  `JSON.parse`/`ld+json`/`generateMetadata` assertions.
+- BIN-477: `docs/workflow-map.html` release-phase steps (~line 1581) still only describe
+  `shouldNotifyRelease` + marker advance — no mention of the legacy-card read / seed
+  action / `viaMarker` stamp BIN-472 added.
+
+No obsolete tickets.
+
+## Mandate gate — full pass over every open ticket
+
+| Ticket | Verdict | Why |
+|---|---|---|
+| BIN-480 | **build-review** | Mandate is unambiguous (mechanical rule-hardening mirroring an existing pattern, closes a real GDPR Art.17 gap a security review found) — but it touches `firestore.rules`, a CLAUDE.md sensitive domain that the ticket's own text flags as needing a written plan + explicit go-ahead before the edit. Building it best-guess, parking for her sign-off rather than auto-closing. |
+| BIN-479 | **build** | Pure CI-wiring fix, no product decision, mirrors an existing step |
+| BIN-478 | **build** | Test-only completeness fix on already-shipped, already-approved behavior |
+| BIN-477 | **build** | Mechanical doc re-trace, satisfies existing CLAUDE.md workflow-map-freshness rule |
+| BIN-468 | **needsApproval** *(carried over)* | Unvetted Stage-2 redesign of a whole-DB blast-radius sweep; wants a dedicated planned session per prior sprint's note, nothing changed since |
+| BIN-173 | **needsApproval** *(carried over)* | Needs a manual affiliate-network signup + a legal disclosure decision before the code does anything real |
+| BIN-189 | **needsApproval** *(carried over)* | Speculative social feature, no mockup/spec |
+| BIN-170 | **needsApproval** *(carried over)* | Speculative shareable feature, no mockup/spec |
+| BIN-185 | **needsApproval** *(carried over)* | Speculative AI-recap feature, cost/product shape undecided |
+| BIN-461 | **needsApproval** *(carried over)* | Ticket's own text already records Malin's call ("build as its own workstream, not now") — surfacing only so it isn't silently dropped, not re-asking |
+| BIN-454 | *(excluded, Tier D)* | Pure ops runbook, blocked on BIN-468 landing first |
+| BIN-447 | *(excluded, not yet actionable)* | Blocked on the ~2026-07-13 weekly cache refresh (2 days out) |
+| BIN-419 | *(excluded, not yet actionable)* | Due 2026-08-28 — measurement window hasn't elapsed |
+
+## Batches (parallel worktrees, disjoint files per batch)
+
+### Agent A — area: security-rules (firestore)
+- [ ] **BIN-480** [Tier C · build-review] — `joinAttempts` create rule doesn't enforce
+  `createdAt` presence/type/freshness, so a hand-crafted create (bypassing the app's own
+  `groups.ts`, which always sets it) can produce an undateable doc that `retentionCleanup`'s
+  `isStaleJoinAttempt` will never reap ("never delete data we can't date") — a residual
+  GDPR Art. 17 retention gap on a spent invite token, specifically in the
+  Firebase-Console-deleted-account case the sweep exists to cover. Fix: mirror the existing
+  `updatedAt == request.time` pin pattern (firestore.rules:975) on the joinAttempts create
+  rule — add `request.resource.data.createdAt is timestamp` +
+  `request.resource.data.createdAt == request.time`. NOT currently exploited (live client
+  always sets it) — this is defense-in-depth hardening, not an incident.
+  Files: `firestore.rules`, `src/test/rules/firestore-rules.test.ts`.
+  Acceptance:
+  1. The `joinAttempts` create rule requires `request.resource.data.createdAt is timestamp`
+     AND `request.resource.data.createdAt == request.time` (mirroring the `updatedAt`
+     pattern already used elsewhere in this file).
+  2. A new rules test proves a create with `{token}` only (no `createdAt`) is DENIED, and
+     a create with a correct server-time `createdAt` is ALLOWED.
+  3. `npm run test:rules` passes (all existing + new rules tests green).
+  4. The live client (`src/lib/firebase/groups.ts`) is untouched — it already always sets
+     `createdAt`; only the rule (+its test) changes.
+  Stakeholders: router `top` → canonical `full-panel` (#4 Security Architect, #6 Data
+  Protection Officer, #27 Database Administrator / Data-layer Engineer) — full panel,
+  each blind.
+  requiresPlanMode: **true** (full-panel tier). Additionally: CLAUDE.md sensitive-domain
+  carve-out (firestore.rules) — build a best-guess implementation + expanded plan block,
+  but this parks **In Review** for Malin's explicit go-ahead before the manual
+  `firebase deploy --only firestore:rules` is ever run. Do NOT deploy rules from this
+  sprint even if the diff is clean.
+  Signoff reason: confirm the fix is scoped correctly (createdAt enforcement only, no
+  behavior change to the live client) before the manual rules deploy — rules deploys are
+  a one-way, unreviewable-by-CI risk surface.
+
+### Agent B — area: ci-tooling
+- [ ] **BIN-479** [Tier A · build] — `scripts/check-workflow-map.test.mjs` (added by
+  BIN-470, 11 tests) is only runnable by hand (`node --test ...`) because vitest's
+  `include` doesn't pick up `scripts/*.test.mjs`. Wire a
+  `node --test scripts/check-workflow-map.test.mjs` step into both `ci.yml` and
+  `deploy.yml`, next to the existing `check-workflow-map` linter step. Deliberately NOT
+  touching vitest config (ticket explicitly scoped this out — apply-conflict risk).
+  Files: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`.
+  Acceptance:
+  1. Both `ci.yml` and `deploy.yml` gain a `node --test scripts/check-workflow-map.test.mjs`
+     step positioned next to the existing `node scripts/check-workflow-map.mjs` step.
+  2. The new step actually runs the 11 tests and passes (verify locally before commit).
+  3. Neither workflow's existing `check-workflow-map.mjs` step is removed, reordered
+     into a broken position, or made conditional.
+  4. No change to `vitest.config.ts` / any `include` glob (ticket explicitly scoped this out).
+  Stakeholders: router `medium` → canonical `single` (#8 DevOps / SRE) — one blind critique.
+  requiresPlanMode: false (single-tier, priority Low, no security label).
+
+### Agent C — area: seo-tests
+- [ ] **BIN-478** [Tier A · build] — BIN-473's empty-branch render test for
+  `/billigaste/[slug]` proves the JSON-LD script tag doesn't throw, but never asserts the
+  emitted JSON-LD actually parses/is well-formed, and never exercises `generateMetadata`
+  at all. Add: (1) `JSON.parse()` on the emitted `ld+json` for the empty branch + assert
+  `@type`/`@context`, (2) call `generateMetadata({ params })` for the zero-row slug and
+  assert it resolves without throwing.
+  Files: `src/app/billigaste/[slug]/page.test.tsx`.
+  Acceptance:
+  1. A test asserts `JSON.parse(...)` succeeds on the empty-branch's emitted `ld+json`
+     content and checks `@type`/`@context` are present and correct.
+  2. A test calls `generateMetadata({ params })` for the zero-row slug and asserts it
+     resolves without throwing.
+  3. The existing BIN-473 populated-branch and empty-branch render assertions remain
+     intact (not weakened or removed to make the new assertions pass).
+  4. `src/app/billigaste/[slug]/page.tsx` itself is untouched — test-only ticket, per the
+     constraint BIN-473 already established for this page.
+  Stakeholders: router `skip` (test-only, no production behavior change).
+  requiresPlanMode: false.
+
+### Agent D — area: workflow-map
+- [ ] **BIN-477** [Tier A · build] — The BIN-471 re-trace covered BIN-463/464 but shipped
+  before BIN-472 landed in the same working tree; BIN-472 added a legacy-card read
+  (`hasLegacyReleaseCard` on the `${tmdbId}-release` inbox doc), a `seed` action (advances
+  the per-user notified marker without pushing), and a `viaMarker: true` stamp — none of
+  which are in the map's release-phase steps yet. The staleness flag
+  (`.claude/state/workflow-map-stale.json`) is still present, deliberately left uncleared.
+  Extend the `flow-available` release-phase steps to cover all three, regenerate
+  `docs/workflow-map-content-baseline.json` if prose length changed, run the linter, then
+  delete the stale flag.
+  Files: `docs/workflow-map.html`, `docs/workflow-map-content-baseline.json`,
+  `.claude/state/workflow-map-stale.json` (deleted).
+  Acceptance:
+  1. The `flow-available` release-phase steps in `docs/workflow-map.html` describe the
+     legacy-card read (`hasLegacyReleaseCard` / `${tmdbId}-release` inbox check).
+  2. The same steps describe the `seed` action (advance marker without push) and the
+     `viaMarker: true` stamp on marker-path cards.
+  3. `node scripts/check-workflow-map.mjs` passes (including against the regenerated
+     content baseline, if prose length changed enough to need one).
+  4. This commit touches ONLY `docs/workflow-map.html` +
+     `docs/workflow-map-content-baseline.json` — no feature code bundled (lessons-digest
+     rule) — and `.claude/state/workflow-map-stale.json` is deleted as part of it.
+  Stakeholders: router `skip` (doc-only).
+  requiresPlanMode: false.
+
+## Needs you (Tier D / ops-blocked, doesn't count toward N)
+*(none new this sprint — BIN-454 carries over, still blocked on BIN-468)*
+
+## Parked for your call (needsApproval — not built this sprint)
+- **BIN-468** (BIN-402 Stage 2) — carried over unchanged: build it as a dedicated
+  planned session with the 4-role panel re-convened, not an auto parallel-worktree
+  sprint.
+- **BIN-173** (affiliate-tag deeplinks) — carried over unchanged: needs an
+  Adtraction/affiliate account + your call on disclosure copy/placement.
+- **BIN-189/170/185** — carried over unchanged: speculative social/AI features, worth a
+  scoping pass each, not a blind build.
+- **BIN-461** (genre hub pages) — not a new ask: the ticket text already records your
+  call from the BIN-424 scoping pass ("its own workstream, not now"). Flagging only so
+  it isn't silently forgotten.
+
+## Post-sprint steps
+1. Full `npm run typecheck` + `npm run lint` + `npm test` (root) + `npm run test:rules`
+   if Java/JBR is on PATH.
+2. File follow-ups for anything deferred mid-implementation.
+3. Commit through the reviewer gates (`binge-code-reviewer` always applicable batches;
+   `binge-security-reviewer` on Agent A's batch — firestore.rules; `binge-test-reviewer`
+   on Agent A's, Agent C's, and Agent B's test-touching files) + `/code-review high`
+   (xhigh on Agent A's batch — touches `firestore.rules`).
+4. Push to main (triggers deploy.yml, hosting + CI workflow files only — Agent B's diff
+   changes CI/deploy YAML itself, verify the workflow syntax is valid before push).
+   Agent A's `firestore.rules` change is **NOT** covered by `deploy.yml` — per
+   `reference_deploy_scope` AND this ticket's explicit CLAUDE.md carve-out, do **not** run
+   `firebase deploy --only firestore:rules` from this sprint. It waits for Malin's
+   explicit go-ahead on the parked In Review ticket.
+5. Transition tickets: Agent B/C/D (Tier A builds, all-pass criteria) → Done. Agent A
+   (BIN-480, Tier C + build-review + sensitive domain) → **In Review regardless of
+   pass/fail**, with the plan-mode expansion block echoed in the ticket comment and an
+   explicit note that the rules deploy is blocked on her go-ahead.
+
+## Deviation log
+*(append here as execution diverges from this plan)*
+
+---
+
+# Archived — Sprint 2026-07-11b post-shipment cleanup batch (superseded above, SHIPPED)
 
 **Selection context:** the prior sprint's plan (archived below) already shipped —
 BIN-451/452/459/460/463/464 are gone from the backlog and their code is on `main`
@@ -31,118 +212,12 @@ from the backlog (closed) and their code is live on `main`.
 ## Batches (parallel worktrees, disjoint files per batch)
 
 ### Agent A — area: release-notify (functions)
-- [ ] **BIN-472** [Tier C · build] — Close the two pre-deploy gates BIN-464's own
-  follow-up flagged before the (still-pending, manual) `firebase deploy --only
-  functions` for `availableNotify`/`retentionCleanup`: (1) the GDPR-erasure
-  `retentionCleanup` sweep never got its own security-reviewer pass (the original
-  review only covered the staged release-notify diff), and (2) cutover from the old
-  inbox-doc-existence dedup to the new per-user marker can double-push anyone whose
-  film sits inside the 3-day catch-up grace window at deploy time (no marker exists
-  yet for them). Build the conservative fix: on first encounter with no marker for a
-  (tmdbId, uid) inside the fire window, check whether a `${tmdbId}-release` inbox
-  card already exists for that user; if so, seed the marker to `dateToFire` WITHOUT
-  sending a push (already notified once under the old scheme) instead of re-firing.
-  Files: `functions/src/availableNotify/index.ts`, `functions/src/releaseNotify/logic.ts`,
-  `functions/src/releaseNotify/logic.test.ts`.
-  Acceptance:
-  1. A user who already has a `${tmdbId}-release` inbox card for a film whose
-     `dateToFire` matches does NOT receive a second "släpps idag" push after
-     deploy — the marker is seeded from the existing card, not from a fresh send.
-  2. A user with NO existing inbox card for that title still gets pushed normally
-     (the seed-check never suppresses a genuinely new notification).
-  3. New pure-logic test(s) cover the seed-vs-notify decision, with no
-     `firebase-admin` import (root vitest constraint).
-  4. The staged diff carries a fresh `binge-security-reviewer` marker covering
-     BOTH `retentionCleanup` and this change (closes the ticket's gap #1 — the
-     sweep's security review that never happened).
-  Stakeholders: router `medium` → canonical `single` (#27 Database Administrator /
-  Data-layer Engineer) — one blind critique.
-  requiresPlanMode: **true** (single-tier + priority High ≤ 2 escalates per the
-  risk gate).
-
+- [x] **BIN-472** [Tier C · build] — SHIPPED (66c4ad9).
 ### Agent B — area: workflow-map
-- [ ] **BIN-471** [Tier A · build] — Re-trace the `availableNotify` +
-  `retentionCleanup` flows in `docs/workflow-map.html` to reflect BIN-463/464's
-  transport change (release-date cache doc + per-user dedup marker + the new
-  `retentionCleanup` `notified` collection-group sweep), which the prior sprint's
-  doc-only commit only partially covered (it added the new `tmdbFieldsSweep` flow
-  but left these two flows stale).
-  Files: `docs/workflow-map.html`.
-  Acceptance:
-  1. The `availableNotify` flow's release-phase description/steps mention the
-     `releaseNotifyState/{tmdbId}` cache doc and the per-user
-     `releaseNotifyState/{tmdbId}/notified/{uid}` marker (not the old
-     inbox-doc-existence check).
-  2. The `retentionCleanup` flow lists the `notified` collection-group sweep as a
-     step/payload.
-  3. `node scripts/check-workflow-map.mjs` passes.
-  4. This commit touches ONLY `docs/workflow-map.html` — no feature code bundled
-     (lessons-digest rule from the BIN-459 incident this ticket itself exists to
-     prevent recurring).
-  Stakeholders: router `skip` (doc-only).
-  requiresPlanMode: false.
-
-- [ ] **BIN-470** [Tier A · build] — Close BIN-459's failed acceptance #3: add a
-  committed per-flow content baseline the linter diffs against (so a revert that
-  *thins* a still-substantive flow description — not just guts it to a stub — fails
-  CI), plus a test/fixture exercising `checkFlowContent`'s fail path (currently
-  untested, so it could silently rot to a no-op).
-  Files: `scripts/check-workflow-map.mjs` (+ a new baseline/snapshot file it reads),
-  a new test file for the linter (e.g. `scripts/check-workflow-map.test.mjs` or
-  under root vitest if the repo's test runner picks up `.mjs`).
-  Acceptance:
-  1. A committed per-flow baseline exists and the linter fails when a flow's
-     current description is a net prose-loss vs. that baseline (not just below
-     the absolute floor from BIN-459).
-  2. `node scripts/check-workflow-map.mjs` still passes cleanly on the current,
-     unmodified `docs/workflow-map.html` (no false positive).
-  3. A new automated test proves the fail path: feed `checkFlowContent` (or the
-     baseline-diff function) a thinned-but-still-above-floor description →
-     assert it reports a problem; feed it a clean/unchanged description → assert
-     it passes.
-  4. The existing absolute-floor check from BIN-459 is kept, not replaced.
-  Stakeholders: router `skip` (doc/tooling-only).
-  requiresPlanMode: false.
-
+- [x] **BIN-471** [Tier A · build] — SHIPPED (4d61263).
+- [x] **BIN-470** [Tier A · build] — SHIPPED (66c4ad9).
 ### Agent C — area: seo
-- [ ] **BIN-473** [Tier A · build] — Add a light render test for
-  `/billigaste/[slug]`'s `rows.length === 0` branch (BIN-460's "kommer snart"
-  resilient page vs. `notFound()`), since the branch currently has zero test
-  coverage on all three of BIN-460's own acceptance criteria.
-  Files: a new test file, e.g. `src/app/billigaste/[slug]/page.test.tsx` (adjust
-  to whatever the page's export shape/test conventions allow — it's an async
-  Server Component; test the extractable render/data logic if the component
-  itself isn't directly testable under jsdom).
-  Acceptance:
-  1. A test asserts the `rows.length === 0` case renders the `EmptyState`-based
-     "kommer snart" page (200/indexable), not `notFound()`.
-  2. A test asserts the thin-state JSON-LD/metadata path doesn't throw or emit
-     malformed schema when `rows` is empty.
-  3. A test asserts the happy-path (`rows.length > 0`) render is unaffected by
-     the new branch (byte-for-byte / structurally unchanged is over-strict for a
-     Server Component test — assert the populated-state key content still
-     renders).
-  4. Don't touch `src/app/billigaste/[slug]/page.tsx` itself unless a test seam
-     is strictly required to make it testable — this ticket is test-only.
-  Stakeholders: router `skip` (doc/test-only, no production behavior change).
-  requiresPlanMode: false.
-
-## Needs you (Tier D / ops-blocked, doesn't count toward N)
-*(none new this sprint — BIN-454 carries over from the prior sprint, still blocked
-on BIN-468)*
-
-## Parked for your call (needsApproval — not built this sprint)
-- **BIN-468** (BIN-402 Stage 2) — carried over unchanged: build it as a dedicated
-  planned session with the 4-role panel re-convened, not an auto parallel-worktree
-  sprint.
-- **BIN-173** (affiliate-tag deeplinks) — carried over unchanged: needs an
-  Adtraction/affiliate account + your call on disclosure copy/placement.
-- **BIN-189/170/185** — carried over unchanged: speculative social/AI features,
-  worth a scoping pass each, not a blind build.
-- **BIN-461** (genre hub pages) — not a new ask: the ticket text already records
-  your call from the BIN-424 scoping pass ("its own workstream, not now"). Flagging
-  only so it isn't silently forgotten — recommendation is to leave it parked until
-  you schedule that workstream.
+- [x] **BIN-473** [Tier A · build] — SHIPPED (66c4ad9).
 
 ## Post-sprint steps
 1. Full `npm run typecheck` + `npm run lint` + `npm test` (root) + `npm run test:rules`
@@ -159,10 +234,11 @@ on BIN-468)*
    don't run it before Agent A's diff is reviewed and merged.
 5. Transition tickets: Tier A builds with all-pass criteria → Done. BIN-472 (Tier C,
    security-sensitive, requiresPlanMode) → In Review regardless of pass/fail, per tier
-   rules, with the plan-mode expansion block echoed in the ticket comment.
+   rules.
 
 ## Deviation log
-*(append here as execution diverges from this plan)*
+*(shipped clean, no deviations logged — filed BIN-477/478/479/480 as follow-ups, see
+current sprint above)*
 
 ---
 

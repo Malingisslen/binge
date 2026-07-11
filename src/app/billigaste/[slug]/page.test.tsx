@@ -20,7 +20,7 @@ vi.mock('@/lib/tmdb/buildFetch', () => ({
   fetchForBuild: (...args: unknown[]) => fetchForBuildMock(...args),
 }));
 
-import BilligastePage from './page';
+import BilligastePage, { generateMetadata } from './page';
 
 // 'avengers' is a real slug in the curated FRANCHISES catalog, so
 // franchiseBySlug resolves and the page never calls notFound() — both branches
@@ -55,6 +55,19 @@ describe('BilligastePage — empty-vs-populated fork (BIN-460)', () => {
     ).toBeInTheDocument();
     // …and the populated verdict block is NOT (this line is unique to it).
     expect(screen.queryByText(/Exakta hyrpriser varierar/)).not.toBeInTheDocument();
+
+    // BIN-478 — the empty branch still emits valid, machine-readable JSON-LD so
+    // the "kommer snart" page is indexable as a CollectionPage (not a soft-404).
+    // Parse the actual emitted <script> payload — jsonLd() escapes '<' as <,
+    // so a raw string check would be brittle; JSON.parse proves it round-trips.
+    const ldScripts = Array.from(
+      document.querySelectorAll('script[type="application/ld+json"]'),
+    );
+    expect(ldScripts).toHaveLength(1);
+    const ld = JSON.parse(ldScripts[0].textContent ?? '');
+    expect(ld['@context']).toBe('https://schema.org');
+    expect(ld['@type']).toBe('CollectionPage');
+    expect(ld.url).toBe('https://binge.nu/billigaste/avengers/');
   });
 
   it('renders the populated happy path (verdict + film row) when rows exist', async () => {
@@ -90,5 +103,14 @@ describe('BilligastePage — empty-vs-populated fork (BIN-460)', () => {
     expect(
       screen.queryByText('Avengers — streamingläget uppdateras'),
     ).not.toBeInTheDocument();
+  });
+
+  it('generateMetadata resolves indexable metadata for the zero-row slug (BIN-478)', async () => {
+    // generateMetadata runs BEFORE any fetch — it only resolves the franchise by
+    // slug — so the zero-row page (a flaked/empty build) still ships a real title
+    // + canonical rather than throwing or inheriting the root layout's index:true.
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: SLUG }) });
+    expect(meta.title).toBe('Billigaste sättet att se hela Avengers i Sverige');
+    expect(meta.alternates?.canonical).toBe('https://binge.nu/billigaste/avengers/');
   });
 });
