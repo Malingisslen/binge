@@ -845,6 +845,13 @@ service cloud.firestore {
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0
           && request.resource.data.token.size() <= 256
+          // BIN-480: pin createdAt to request.time (mirrors the household
+          // updatedAt pattern) so a hand-crafted create can't stamp a non-
+          // timestamp or future date — retentionCleanup reaps joinAttempts by
+          // createdAt, and an undateable doc would be retained forever (Art. 17
+          // backstop gap). The legit client writes serverTimestamp() → request.time.
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdAt == request.time
           && get(/databases/$(database)/documents/groups/$(groupId)).data.inviteTokenHash != null
           && hashing.sha256(request.resource.data.token).toHexString().lower()
              == get(/databases/$(database)/documents/groups/$(groupId)).data.inviteTokenHash;

@@ -906,6 +906,31 @@ describe('groups joinAttempts hash gate (BIN-327)', () => {
       token: 'wrong-token', createdAt: serverTimestamp(),
     }));
   });
+  // BIN-480: createdAt must be request.time so retentionCleanup can reap it.
+  // A hand-crafted non-timestamp or forged date would otherwise be retained
+  // forever (Art. 17 backstop gap).
+  it('rejects a joinAttempt created with no createdAt field at all', async () => {
+    await seedGroup({ inviteTokenHash: sha256Hex(TOKEN) });
+    // The exact undateable-doc scenario the rule guards against: a hand-crafted
+    // create that omits createdAt entirely. retentionCleanup can never reap it,
+    // so without this pin it would be retained forever (Art. 17 backstop gap).
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN,
+    }));
+  });
+  it('rejects a joinAttempt whose createdAt is not a timestamp', async () => {
+    await seedGroup({ inviteTokenHash: sha256Hex(TOKEN) });
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN, createdAt: 'not-a-timestamp',
+    }));
+  });
+  it('rejects a joinAttempt whose createdAt is a forged (non-request.time) date', async () => {
+    await seedGroup({ inviteTokenHash: sha256Hex(TOKEN) });
+    const future = Timestamp.fromMillis(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    await assertFails(setDoc(doc(otherDb(), 'groups', GROUP, 'joinAttempts', 'other_uid'), {
+      token: TOKEN, createdAt: future,
+    }));
+  });
 });
 
 describe('groups token-join membership add + size cap (BIN-327)', () => {
