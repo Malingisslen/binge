@@ -34,6 +34,7 @@ beforeEach(() => {
 const EXPECTED_STATIC = [
   'https://binge.nu/',
   'https://binge.nu/discover/',
+  'https://binge.nu/guider/', // BIN-424 hub-of-hubs index
   'https://binge.nu/films/',
   'https://binge.nu/series/',
   'https://binge.nu/integritet/',
@@ -61,11 +62,11 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     expect([...urls].some(u => /^https:\/\/binge\.nu\/billigaste\/[^/]+\/$/.test(u))).toBe(true);
   });
 
-  it('lists exactly the 7 public static routes — no auth-walled/noindex pages leak in', async () => {
+  it('lists exactly the 8 public static routes — no auth-walled/noindex pages leak in', async () => {
     const all = (await sitemap()).map(e => e.url);
     const urls = new Set(all);
     for (const u of EXPECTED_STATIC) expect(urls.has(u), `missing static: ${u}`).toBe(true);
-    // Two-sided: the static (non-dynamic) route set must be EXACTLY these 7, so a
+    // Two-sided: the static (non-dynamic) route set must be EXACTLY these 8, so a
     // newly-added top-level page (esp. an auth-walled one) can't silently leak in.
     const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/'];
     const staticUrls = all.filter(u => !DYNAMIC_PREFIXES.some(p => u.includes(p)));

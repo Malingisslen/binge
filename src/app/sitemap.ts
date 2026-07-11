@@ -59,6 +59,8 @@ function staticEntries(): MetadataRoute.Sitemap {
   return [
     { url: `${SITE_URL}/`, lastModified, changeFrequency: 'daily', priority: 1.0 },
     { url: `${SITE_URL}/discover/`, lastModified, changeFrequency: 'daily', priority: 0.9 },
+    // Hub-of-hubs index (BIN-424) — links every /provider, /billigaste, /forsvinner page.
+    { url: `${SITE_URL}/guider/`, lastModified, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${SITE_URL}/films/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/series/`, lastModified, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/integritet/`, lastModified, changeFrequency: 'yearly', priority: 0.3 },

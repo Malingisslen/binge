@@ -38,6 +38,10 @@ export default function Footer() {
         </nav>
         <nav aria-label="Guider">
           <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs items-center">
+            {/* De-orphaning hop (BIN-424): the hub links ALL franchise + leaving
+                pages, so the shortlists below stay curated while every SEO page
+                is one click from here. */}
+            <li><Link href="/guider/" className="hover:text-ink font-medium text-ink-2">Alla streamingguider</Link></li>
             <li className="text-ink-3">Billigaste sättet att se:</li>
             {FOOTER_FRANCHISES.map((f) => (
               <li key={f.slug}><Link href={`/billigaste/${f.slug}/`} className="hover:text-ink">{f.name}</Link></li>
