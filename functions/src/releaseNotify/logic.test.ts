@@ -8,6 +8,8 @@ import {
   isWithinFireWindow,
   releaseDateToFire,
   shouldNotifyRelease,
+  releaseAction,
+  isLegacyReleaseCard,
   shouldRefetchReleaseDates,
   RELEASE_REFETCH_TTL_DAYS,
   RELEASE_CATCHUP_GRACE_DAYS,
@@ -177,6 +179,58 @@ describe('shouldNotifyRelease — per-user dedup (BIN-464)', () => {
 
   it('re-arms for a newer date', () => {
     expect(shouldNotifyRelease('2026-07-11', '2026-07-18')).toBe(true);
+  });
+});
+
+describe('releaseAction — deploy-day double-push guard (BIN-472)', () => {
+  it('pushes on a genuine first fire (no marker, no legacy card)', () => {
+    expect(releaseAction(null, '2026-07-11', false)).toBe('push');
+    expect(releaseAction(undefined, '2026-07-11', false)).toBe('push');
+  });
+
+  it('seeds (no push) when no marker but a legacy card already exists', () => {
+    // Pre-BIN-464 code already notified this user via the '${tmdbId}-release'
+    // card; seed the marker instead of re-firing "släpps idag".
+    expect(releaseAction(null, '2026-07-11', true)).toBe('seed');
+    expect(releaseAction(undefined, '2026-07-11', true)).toBe('seed');
+  });
+
+  it('skips when the marker already covers this exact date (card presence is moot)', () => {
+    expect(releaseAction('2026-07-11', '2026-07-11', false)).toBe('skip');
+    expect(releaseAction('2026-07-11', '2026-07-11', true)).toBe('skip');
+  });
+
+  it('pushes a real re-arm: an OLDER marker date must fire even if a stale card lingers', () => {
+    // A marker holding an older date is a true BIN-464 re-arm for a newer
+    // release — never seed-suppress it on account of a leftover card.
+    expect(releaseAction('2026-07-11', '2026-07-18', true)).toBe('push');
+    expect(releaseAction('2026-07-11', '2026-07-18', false)).toBe('push');
+  });
+});
+
+describe('isLegacyReleaseCard — time-boxes the BIN-472 guard to the cutover', () => {
+  it('is false when no card exists', () => {
+    expect(isLegacyReleaseCard(null)).toBe(false);
+    expect(isLegacyReleaseCard(undefined)).toBe(false);
+  });
+
+  it('is true for a genuine pre-BIN-464 card (no viaMarker flag)', () => {
+    expect(isLegacyReleaseCard({})).toBe(true);
+    expect(isLegacyReleaseCard({ viaMarker: false })).toBe(true);
+  });
+
+  it('is false for a card the current (marker-era) code wrote', () => {
+    // The push branch stamps viaMarker: true; such a card must NOT count as
+    // legacy, or a newer release date arriving after the 30-day marker reap would
+    // be seed-suppressed and its "släpps idag" push lost forever.
+    expect(isLegacyReleaseCard({ viaMarker: true })).toBe(false);
+  });
+
+  it('feeds releaseAction so a reaped marker + own card still pushes a re-arm', () => {
+    // Regression guard for the exact bug: marker gone (reaped at 30 days), but the
+    // card this code wrote (viaMarker: true) lingers. It must resolve to 'push'.
+    const hasLegacy = isLegacyReleaseCard({ viaMarker: true });
+    expect(releaseAction(null, '2026-09-01', hasLegacy)).toBe('push');
   });
 });
 

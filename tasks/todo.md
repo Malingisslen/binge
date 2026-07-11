@@ -1,4 +1,172 @@
-# Sprint 2026-07-11 — follow-up cleanup batch
+# Sprint 2026-07-11b — post-shipment cleanup batch
+
+**Selection context:** the prior sprint's plan (archived below) already shipped —
+BIN-451/452/459/460/463/464 are gone from the backlog and their code is on `main`
+(ddeac3e, f1ebe89). This pass only found their **follow-up spawn**: BIN-459 filed
+BIN-470 (verification failed on acceptance #3); BIN-463/464/451 filed BIN-471/472/473.
+Linear MCP connected, scoped to project "Binge" throughout (shared team). No ticket
+selected carries `onboarding-reserved`/`launch-gated`.
+
+## Mandate gate — full pass over every open ticket
+
+| Ticket | Verdict | Why |
+|---|---|---|
+| BIN-473 | **build** | Mechanical test-gap fix on already-shipped behavior, no product decision |
+| BIN-472 | **build** | Finishes a pre-deploy safety gate the prior sprint's own follow-up flagged (GDPR sweep re-review + avoiding a one-time duplicate push); the conservative fix (seed dedup markers so no one double-pings) is the obvious-benefit option, not a debatable one |
+| BIN-471 | **build** | Mechanical doc re-trace, satisfies existing CLAUDE.md workflow-map-freshness rule |
+| BIN-470 | **build** | Tooling/CI fix closing a documented, verification-FAILED acceptance gap on BIN-459 |
+| BIN-468 | **needsApproval** *(carried over)* | Unvetted Stage-2 redesign of a whole-DB blast-radius sweep; wants a dedicated planned session per prior sprint's note, nothing changed since |
+| BIN-173 | **needsApproval** *(carried over)* | Needs a manual affiliate-network signup + a legal disclosure decision before the code does anything real |
+| BIN-189 | **needsApproval** *(carried over)* | Speculative social feature, no mockup/spec |
+| BIN-170 | **needsApproval** *(carried over)* | Speculative shareable feature, no mockup/spec |
+| BIN-185 | **needsApproval** *(carried over)* | Speculative AI-recap feature, cost/product shape undecided |
+| BIN-461 | **needsApproval** | Ticket's own text already records Malin's call ("build as its own workstream, not now") — surfacing only so it isn't silently dropped, not re-asking |
+| BIN-454 | *(excluded, Tier D)* | Pure ops runbook, blocked on BIN-468 landing first |
+| BIN-447 | *(excluded, not yet actionable)* | Blocked on the ~2026-07-13 weekly cache refresh |
+| BIN-419 | *(excluded, not yet actionable)* | Due 2026-08-28 — measurement window hasn't elapsed |
+
+No obsolete tickets found — the six tickets the prior sprint targeted are already gone
+from the backlog (closed) and their code is live on `main`.
+
+## Batches (parallel worktrees, disjoint files per batch)
+
+### Agent A — area: release-notify (functions)
+- [ ] **BIN-472** [Tier C · build] — Close the two pre-deploy gates BIN-464's own
+  follow-up flagged before the (still-pending, manual) `firebase deploy --only
+  functions` for `availableNotify`/`retentionCleanup`: (1) the GDPR-erasure
+  `retentionCleanup` sweep never got its own security-reviewer pass (the original
+  review only covered the staged release-notify diff), and (2) cutover from the old
+  inbox-doc-existence dedup to the new per-user marker can double-push anyone whose
+  film sits inside the 3-day catch-up grace window at deploy time (no marker exists
+  yet for them). Build the conservative fix: on first encounter with no marker for a
+  (tmdbId, uid) inside the fire window, check whether a `${tmdbId}-release` inbox
+  card already exists for that user; if so, seed the marker to `dateToFire` WITHOUT
+  sending a push (already notified once under the old scheme) instead of re-firing.
+  Files: `functions/src/availableNotify/index.ts`, `functions/src/releaseNotify/logic.ts`,
+  `functions/src/releaseNotify/logic.test.ts`.
+  Acceptance:
+  1. A user who already has a `${tmdbId}-release` inbox card for a film whose
+     `dateToFire` matches does NOT receive a second "släpps idag" push after
+     deploy — the marker is seeded from the existing card, not from a fresh send.
+  2. A user with NO existing inbox card for that title still gets pushed normally
+     (the seed-check never suppresses a genuinely new notification).
+  3. New pure-logic test(s) cover the seed-vs-notify decision, with no
+     `firebase-admin` import (root vitest constraint).
+  4. The staged diff carries a fresh `binge-security-reviewer` marker covering
+     BOTH `retentionCleanup` and this change (closes the ticket's gap #1 — the
+     sweep's security review that never happened).
+  Stakeholders: router `medium` → canonical `single` (#27 Database Administrator /
+  Data-layer Engineer) — one blind critique.
+  requiresPlanMode: **true** (single-tier + priority High ≤ 2 escalates per the
+  risk gate).
+
+### Agent B — area: workflow-map
+- [ ] **BIN-471** [Tier A · build] — Re-trace the `availableNotify` +
+  `retentionCleanup` flows in `docs/workflow-map.html` to reflect BIN-463/464's
+  transport change (release-date cache doc + per-user dedup marker + the new
+  `retentionCleanup` `notified` collection-group sweep), which the prior sprint's
+  doc-only commit only partially covered (it added the new `tmdbFieldsSweep` flow
+  but left these two flows stale).
+  Files: `docs/workflow-map.html`.
+  Acceptance:
+  1. The `availableNotify` flow's release-phase description/steps mention the
+     `releaseNotifyState/{tmdbId}` cache doc and the per-user
+     `releaseNotifyState/{tmdbId}/notified/{uid}` marker (not the old
+     inbox-doc-existence check).
+  2. The `retentionCleanup` flow lists the `notified` collection-group sweep as a
+     step/payload.
+  3. `node scripts/check-workflow-map.mjs` passes.
+  4. This commit touches ONLY `docs/workflow-map.html` — no feature code bundled
+     (lessons-digest rule from the BIN-459 incident this ticket itself exists to
+     prevent recurring).
+  Stakeholders: router `skip` (doc-only).
+  requiresPlanMode: false.
+
+- [ ] **BIN-470** [Tier A · build] — Close BIN-459's failed acceptance #3: add a
+  committed per-flow content baseline the linter diffs against (so a revert that
+  *thins* a still-substantive flow description — not just guts it to a stub — fails
+  CI), plus a test/fixture exercising `checkFlowContent`'s fail path (currently
+  untested, so it could silently rot to a no-op).
+  Files: `scripts/check-workflow-map.mjs` (+ a new baseline/snapshot file it reads),
+  a new test file for the linter (e.g. `scripts/check-workflow-map.test.mjs` or
+  under root vitest if the repo's test runner picks up `.mjs`).
+  Acceptance:
+  1. A committed per-flow baseline exists and the linter fails when a flow's
+     current description is a net prose-loss vs. that baseline (not just below
+     the absolute floor from BIN-459).
+  2. `node scripts/check-workflow-map.mjs` still passes cleanly on the current,
+     unmodified `docs/workflow-map.html` (no false positive).
+  3. A new automated test proves the fail path: feed `checkFlowContent` (or the
+     baseline-diff function) a thinned-but-still-above-floor description →
+     assert it reports a problem; feed it a clean/unchanged description → assert
+     it passes.
+  4. The existing absolute-floor check from BIN-459 is kept, not replaced.
+  Stakeholders: router `skip` (doc/tooling-only).
+  requiresPlanMode: false.
+
+### Agent C — area: seo
+- [ ] **BIN-473** [Tier A · build] — Add a light render test for
+  `/billigaste/[slug]`'s `rows.length === 0` branch (BIN-460's "kommer snart"
+  resilient page vs. `notFound()`), since the branch currently has zero test
+  coverage on all three of BIN-460's own acceptance criteria.
+  Files: a new test file, e.g. `src/app/billigaste/[slug]/page.test.tsx` (adjust
+  to whatever the page's export shape/test conventions allow — it's an async
+  Server Component; test the extractable render/data logic if the component
+  itself isn't directly testable under jsdom).
+  Acceptance:
+  1. A test asserts the `rows.length === 0` case renders the `EmptyState`-based
+     "kommer snart" page (200/indexable), not `notFound()`.
+  2. A test asserts the thin-state JSON-LD/metadata path doesn't throw or emit
+     malformed schema when `rows` is empty.
+  3. A test asserts the happy-path (`rows.length > 0`) render is unaffected by
+     the new branch (byte-for-byte / structurally unchanged is over-strict for a
+     Server Component test — assert the populated-state key content still
+     renders).
+  4. Don't touch `src/app/billigaste/[slug]/page.tsx` itself unless a test seam
+     is strictly required to make it testable — this ticket is test-only.
+  Stakeholders: router `skip` (doc/test-only, no production behavior change).
+  requiresPlanMode: false.
+
+## Needs you (Tier D / ops-blocked, doesn't count toward N)
+*(none new this sprint — BIN-454 carries over from the prior sprint, still blocked
+on BIN-468)*
+
+## Parked for your call (needsApproval — not built this sprint)
+- **BIN-468** (BIN-402 Stage 2) — carried over unchanged: build it as a dedicated
+  planned session with the 4-role panel re-convened, not an auto parallel-worktree
+  sprint.
+- **BIN-173** (affiliate-tag deeplinks) — carried over unchanged: needs an
+  Adtraction/affiliate account + your call on disclosure copy/placement.
+- **BIN-189/170/185** — carried over unchanged: speculative social/AI features,
+  worth a scoping pass each, not a blind build.
+- **BIN-461** (genre hub pages) — not a new ask: the ticket text already records
+  your call from the BIN-424 scoping pass ("its own workstream, not now"). Flagging
+  only so it isn't silently forgotten — recommendation is to leave it parked until
+  you schedule that workstream.
+
+## Post-sprint steps
+1. Full `npm run typecheck` + `npm run lint` + `npm test` (root) + `npm run test:rules`
+   if Java/JBR is on PATH.
+2. File follow-ups for anything deferred mid-implementation.
+3. Commit through the reviewer gates (`binge-code-reviewer` always; `binge-security-reviewer`
+   on Agent A's batch — functions + GDPR-adjacent; `binge-test-reviewer` on Agent A's
+   and Agent C's test files) + `/code-review high` (xhigh on Agent A's batch — touches
+   `functions/src/`).
+4. Push to main (triggers deploy.yml, hosting only). Agent A's `functions/**` change is
+   NOT covered by deploy.yml — it needs a manual, separately-confirmed
+   `firebase deploy --only functions:availableNotify` after the hosting push, per
+   `reference_deploy_scope`. This IS the deploy BIN-472 is a pre-deploy gate for, so
+   don't run it before Agent A's diff is reviewed and merged.
+5. Transition tickets: Tier A builds with all-pass criteria → Done. BIN-472 (Tier C,
+   security-sensitive, requiresPlanMode) → In Review regardless of pass/fail, per tier
+   rules, with the plan-mode expansion block echoed in the ticket comment.
+
+## Deviation log
+*(append here as execution diverges from this plan)*
+
+---
+
+# Archived — Sprint 2026-07-11 follow-up cleanup batch (superseded above, SHIPPED)
 
 **Selection context:** backlog was almost entirely BIN-402/360/424 follow-up tickets from
 the last few days plus a handful of untouched "idea" tickets from the 2026-06-22 ideation
@@ -33,112 +201,19 @@ ticket outright.
 Both tickets touch the same release-phase code in `availableNotify`/`releaseNotify`, so they
 stay in one worktree to avoid cross-batch conflicts.
 
-- [ ] **BIN-463** [Tier C · build] — Cache the resolved SE digital release date per title so
-  `availableNotify`'s release phase stops calling `GET /movie/{id}/release_dates` for every
-  `vill_se` movie on every daily run.
-  Files: `functions/src/availableNotify/index.ts`, `functions/src/availableNotify/tmdb.ts`,
-  `functions/src/releaseNotify/logic.ts`, `functions/src/releaseNotify/tmdb.ts`,
-  `functions/src/releaseNotify/logic.test.ts` (+ new per-title cache doc, e.g.
-  `digitalReleaseState/{tmdbId}`).
-  Acceptance:
-  1. A movie with a stored FUTURE `seDigitalDate` is not re-fetched from TMDB on subsequent
-     daily runs until the date passes or a re-check TTL elapses.
-  2. Movies with an unknown/near-term date are still checked, so the "släpps idag" push is
-     never missed because of the cache.
-  3. New pure-logic unit test(s) cover the caching gate, with no `firebase-admin` import
-     (root vitest constraint).
-  4. Push semantics are unchanged — a film still fires exactly once, on the correct
-     Stockholm calendar day.
-  Stakeholders: router `single` (Data/Integrations Engineer, #13) — one blind critique.
-  requiresPlanMode: false (priority Low, single-tier only escalates at priority ≤2 or
-  security label).
-
-- [ ] **BIN-464** [Tier C · build] — Replace the release-push dedup (keyed on the deletable
-  `${tmdbId}-release` inbox-doc's existence, exact-day match) with a dedicated per-user
-  marker storing the notified date + a small grace window.
-  Files: same as above, plus wherever the new marker doc/collection lives (top-level
-  Admin-SDK state doc per the ticket's own preference, to avoid new GDPR-export wiring) or
-  `src/lib/firebase/userData.ts` if a user-owned subcollection is used instead.
-  Acceptance:
-  1. The new dedup marker is separate from the deletable "släpps idag" inbox card (deleting
-     the card doesn't cause a same-day duplicate push).
-  2. A missed/delayed daily run still fires the push on a later run within the grace window
-     (no more permanent drop on a skipped day).
-  3. A genuine new future type-4 SE date on the same title (re-release) is allowed to notify
-     again — not blocked forever by the old marker.
-  4. If a user-owned subcollection is chosen for the marker, `collectUserDataSnapshots` in
-     `src/lib/firebase/userData.ts` is updated so GDPR export/delete still covers it; if a
-     top-level admin doc is chosen instead, this criterion is N/A.
-  Stakeholders: router `single` (Data/Integrations Engineer, #13) — one blind critique
-  (same routing as BIN-463, same files).
-  requiresPlanMode: false.
+- [x] **BIN-463** [Tier C · build] — SHIPPED (ddeac3e).
+- [x] **BIN-464** [Tier C · build] — SHIPPED (ddeac3e).
 
 ### Agent B — area: workflow-map
-- [ ] **BIN-451** [Tier A · build] — Add the already-shipped `tmdbFieldsSweep` scheduled
-  function to the workflow-map coverage universe and give it a flow.
-  Files: `docs/workflow-map-universe.json`, `docs/workflow-map.html`.
-  Acceptance:
-  1. `tmdbFieldsSweep` appears in `docs/workflow-map-universe.json`'s `functions[]` list.
-  2. `docs/workflow-map.html` has a new flow (scheduled trigger → dry-run gate →
-     collectionGroup scan → stale-field clear → audit record), referencing BIN-402/468.
-  3. `node scripts/check-workflow-map.mjs` passes with updated coverage (not the stale
-     59/59).
-  4. This commit touches ONLY workflow-map files — no feature code bundled (lessons-digest
-     rule from the BIN-459 incident).
-  Stakeholders: router `skip` (doc-only).
-  requiresPlanMode: false.
-
-- [ ] **BIN-459** [Tier A · build] — Extend the workflow-map coverage linter with a
-  content-level check so a feature-revert that thins a flow's description fails CI instead
-  of passing silently (this bit BIN-422/423's docs on 2026-07-10).
-  Files: `scripts/check-workflow-map.mjs` (+ any snapshot/baseline file it needs).
-  Acceptance:
-  1. The linter gains a check beyond path-existence (e.g. per-flow content
-     snapshot/ticket-id-retention assertion).
-  2. `node scripts/check-workflow-map.mjs` still passes cleanly on the current, unmodified
-     `workflow-map.html` (no false positive).
-  3. A repro (test or manual, documented in the commit) shows the new check FAILS when a
-     flow's description is reverted/thinned back to a prior version.
-  4. Don't edit `docs/workflow-map.html` content in this ticket — matches the ticket's own
-     "process fix already landed, this is the CI-fix half" framing.
-  Stakeholders: router `skip` (doc/tooling-only).
-  requiresPlanMode: false.
+- [x] **BIN-451** [Tier A · build] — SHIPPED (f1ebe89).
+- [x] **BIN-459** [Tier A · build] — SHIPPED (ddeac3e), partial (BIN-470 filed for the
+  gap verification found).
 
 ### Agent C — area: seo
-- [ ] **BIN-460** [Tier B · build] — `/billigaste/[slug]` renders a resilient, indexable
-  "kommer snart" state instead of `notFound()` when a franchise has zero SE-streamable
-  released films or a flaked build-time TMDB fetch, so a transient flake can't ship a
-  soft-404 URL that the sitemap + `/guider` hub already advertise.
-  Files: `src/app/billigaste/[slug]/page.tsx`.
-  Acceptance:
-  1. When `rows.length === 0`, the page renders a 200 indexable page using the design
-     system's `EmptyState` pattern (not `notFound()`).
-  2. JSON-LD / canonical metadata degrades gracefully on the thin state — no schema errors.
-  3. Existing happy-path rendering (`rows.length > 0`) is byte-for-byte unchanged.
-  4. No new TMDB calls added; still uses the existing `fetchForBuild` + `withRetry` pattern.
-  Stakeholders: router `skip`.
-  requiresPlanMode: false.
+- [x] **BIN-460** [Tier B · build] — SHIPPED (ddeac3e).
 
 ### Agent D — area: functions-tests
-- [ ] **BIN-452** [Tier A/C (mechanical exception) · build] — Extract the `tmdbFieldsSweep`
-  orchestration decisions (dry-run gate default, cursor-resume-only-in-mutate-mode,
-  budget-abort thresholds, idempotent skip) into an admin-free pure helper and unit-test
-  them — currently zero coverage on the whole-DB-blast-radius loop.
-  Files: `functions/src/tmdbTosSweep/logic.ts`, `functions/src/tmdbTosSweep/logic.test.ts`,
-  `functions/src/tmdbTosSweep/index.ts` (wire the scheduled function through the extracted
-  helper — no behavior change).
-  Acceptance:
-  1. New tests cover: `mutateEnabled` defaults false (dry-run), cursor resumes only when
-     `mutateEnabled` is true (dry-run always starts from `null`), and budget-abort triggers
-     at `MAX_DOCS_PER_RUN`/`MAX_CLEARS_PER_RUN`/`SOFT_DEADLINE_MS`.
-  2. A test asserts the clear payload never includes `updatedAt` (test-locked invariant
-     already documented in `index.ts`).
-  3. Extracted helper(s) import no `firebase-admin`/`firebase-functions` (root-vitest
-     constraint — reference_functions_test_import).
-  4. `index.ts`'s scheduled-function body calls through the extracted helper — no logic
-     duplicated/forked between the two files.
-  Stakeholders: router `skip`.
-  requiresPlanMode: false.
+- [x] **BIN-452** [Tier A/C (mechanical exception) · build] — SHIPPED (ddeac3e).
 
 ## Needs you (Tier D / ops-blocked, doesn't count toward N)
 - **BIN-454** — tmdbFieldsSweep rollout runbook. Blocked on BIN-468 landing first (per
@@ -171,7 +246,7 @@ stay in one worktree to avoid cross-batch conflicts.
    (Tier B, user-facing) → In Review regardless of pass/fail, per tier rules.
 
 ## Deviation log
-*(append here as execution diverges from this plan)*
+*(append here as execution diverges from this plan — this batch shipped clean, no deviations logged)*
 
 ---
 
@@ -215,3 +290,4 @@ stay in one worktree to avoid cross-batch conflicts.
 Never bump `updatedAt` (continueWatching sort, test-locked). Rules entry is a ONE-WAY RATCHET
 (never revert in isolation; roll back client stamp-writer first). Rules deploy STRICTLY before
 client. See `~/.claude/plans/binge-bin402-relaunch.md` for the full panel conditions.
+</content>

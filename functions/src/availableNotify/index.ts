@@ -40,7 +40,8 @@ import {
   stockholmDateString,
   shouldRefetchReleaseDates,
   releaseDateToFire,
-  shouldNotifyRelease,
+  releaseAction,
+  isLegacyReleaseCard,
   type ReleaseDateCache,
 } from '../releaseNotify/logic';
 import { diffNewProviders, qualifyingProviders, canonicalProviderId, type WatchlistTitleLite, type UserNotifSettings } from './logic';
@@ -110,6 +111,20 @@ async function readNotifiedReleaseDate(tmdbId: number, uid: string): Promise<str
   const snap = await releaseMarkerRef(tmdbId, uid).get();
   const v = snap.data()?.notifiedDate;
   return typeof v === 'string' ? v : null;
+}
+
+// BIN-472 deploy-day guard: does this user still hold a GENUINE pre-BIN-464
+// `${tmdbId}-release` inbox card? Only queried when the per-user marker is absent
+// (the common steady-state path skips this read entirely). A card the CURRENT
+// code wrote carries `viaMarker: true`, so isLegacyReleaseCard excludes it — that
+// distinction is what time-boxes the guard to the one-time cutover: without it, a
+// newer digital date arriving 30+ days after the first push (marker already
+// reaped, card still present) would look identical to the cutover and wrongly
+// suppress the fresh "släpps idag" push forever.
+async function hasLegacyReleaseCard(tmdbId: number, uid: string): Promise<boolean> {
+  const snap = await getFirestore()
+    .collection('users').doc(uid).collection('notifications').doc(`${tmdbId}-release`).get();
+  return isLegacyReleaseCard(snap.exists ? (snap.data() ?? null) : null);
 }
 
 // One read of users/{uid} for both myProviders and the notif flags. null =
@@ -260,7 +275,25 @@ async function runReleasePhase(titles: WatchlistTitleLite[], today: string, nowM
         // date re-arms (dateToFire changes).
         try {
           const notifiedDate = await readNotifiedReleaseDate(tmdbId, it.uid);
-          if (!shouldNotifyRelease(notifiedDate, dateToFire)) return;
+          // BIN-472: only when there is no marker do we check for a legacy card —
+          // the steady state (marker present) never pays for this extra read.
+          const hasLegacyCard = notifiedDate === null
+            ? await hasLegacyReleaseCard(tmdbId, it.uid)
+            : false;
+          const action = releaseAction(notifiedDate, dateToFire, hasLegacyCard);
+          if (action === 'skip') return;                 // marker already covers this date
+          if (action === 'seed') {
+            // Pre-BIN-464 code already notified this user via the legacy inbox
+            // card. Seed the per-user marker to this date WITHOUT re-pushing, so
+            // the BIN-464 cutover never double-fires "släpps idag". Bias: a stale,
+            // never-cleared card for an OLD release could seed-suppress a genuine
+            // new re-release once — accepted as the "never double-push" tradeoff.
+            await releaseMarkerRef(tmdbId, it.uid).set(
+              { notifiedDate: dateToFire, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true },
+            );
+            return;
+          }
           const u = await readUserData(it.uid);
           if (!u) return;                                // user-doc missing → nothing to write/send
           const filmTitle = it.title?.trim() || 'En film du bevakar';
@@ -268,10 +301,13 @@ async function runReleasePhase(titles: WatchlistTitleLite[], today: string, nowM
           // mirroring episodeNotify/weeklyDigest: the in-app card rides the feature
           // opt-in (the Bevaka-släpp tap), and ONLY the FCM push is gated on
           // pushEnabled (enforced inside sendPushToUser). kind 'digital_release' is
-          // tmdbId-shaped like episode_release; the client renders it.
+          // tmdbId-shaped like episode_release; the client renders it. `viaMarker`
+          // stamps this card as MARKER-ERA so the BIN-472 legacy guard never
+          // mistakes it for a pre-BIN-464 artifact and seed-suppresses a genuine
+          // re-arm once the 30-day marker has been reaped (see isLegacyReleaseCard).
           await db.collection('users').doc(it.uid).collection('notifications').doc(`${tmdbId}-release`).set({
             tmdbId, mediaType: 'movie', title: filmTitle, kind: 'digital_release',
-            read: false, createdAt: FieldValue.serverTimestamp(),
+            viaMarker: true, read: false, createdAt: FieldValue.serverTimestamp(),
           }, { merge: true });
           await sendPushToUser(it.uid, {
             // "finns digitalt" not "går att streama": TMDB type-4 (digital) is the

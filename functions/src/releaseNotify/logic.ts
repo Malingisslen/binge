@@ -171,6 +171,70 @@ export function shouldNotifyRelease(notifiedDate: string | null | undefined, dat
   return notifiedDate !== dateToFire;
 }
 
+/** What the release phase should do for one (uid, film) inside the fire window. */
+export type ReleaseAction = 'push' | 'seed' | 'skip';
+
+/** The subset of a `${tmdbId}-release` inbox card this decision needs. */
+export interface ReleaseCardData {
+  /** Stamped `true` by BIN-472+ code on every card it writes; absent on pre-BIN-464 cards. */
+  viaMarker?: boolean;
+}
+
+/**
+ * Is this `${tmdbId}-release` inbox card a genuine PRE-BIN-464 artifact (as
+ * opposed to one the current code itself wrote)? True only when the card exists
+ * AND lacks the `viaMarker` discriminator. `null` (no card) → false.
+ *
+ * Why this matters (the bug it closes): the current push branch writes a
+ * `${tmdbId}-release` card of the SAME id/shape used as the legacy-card signal.
+ * Meanwhile the per-user marker is reaped after 30 days (RELEASE_MARKER_MAX_AGE_MS)
+ * while the inbox card lives ~90 days. Without a discriminator, a film that gains
+ * a NEWER SE digital date 30+ days after its first push would look exactly like
+ * the cutover case — no marker, card present — and {@link releaseAction} would
+ * `'seed'` (suppress) the genuinely new "släpps idag" push forever. Stamping
+ * `viaMarker: true` on every card the marker-era code writes time-boxes the
+ * legacy guard to the true one-time BIN-464 cutover: only cards written by the
+ * OLD code (which never set the flag) are treated as legacy.
+ */
+export function isLegacyReleaseCard(cardData: ReleaseCardData | null | undefined): boolean {
+  return cardData != null && cardData.viaMarker !== true;
+}
+
+/**
+ * Deploy-day double-push guard (BIN-472). BIN-464 moved release dedup from the
+ * user-deletable `${tmdbId}-release` inbox card to a per-user marker
+ * (`notifiedDate`). At the moment that change ships, a user who already received
+ * the legacy card under the pre-BIN-464 code has NO marker yet — so a film still
+ * inside its catch-up fire window would re-fire "släpps idag" exactly once. This
+ * resolves the action from the marker + whether a genuine LEGACY card is present
+ * (see {@link isLegacyReleaseCard} — cards the current code writes carry
+ * `viaMarker: true` and are NOT counted, so this guard applies only to the
+ * one-time cutover, never to a normal re-arm whose marker has since been reaped):
+ *
+ *  - `'skip'` — the marker already covers this exact date (delegates to
+ *    {@link shouldNotifyRelease}); nothing to do.
+ *  - `'seed'` — NO marker yet, but a legacy card exists → the pre-BIN-464 code
+ *    already notified this user for this release. Seed the marker to `dateToFire`
+ *    WITHOUT pushing, so we never double-notify.
+ *  - `'push'` — NO marker and no legacy card → a genuine first fire; push.
+ *
+ * The legacy-card check only applies when there is no marker at all: an existing
+ * marker holding an OLDER date is a real BIN-464 re-arm for a newer release and
+ * must push, regardless of any stale card. The card carries no date, so its mere
+ * presence is the only available signal — a one-time transition compromise that
+ * biases to "never double-push" (documented in the caller). Once seeded, all
+ * future re-arms flow through the marker normally.
+ */
+export function releaseAction(
+  notifiedDate: string | null | undefined,
+  dateToFire: string,
+  hasLegacyCard: boolean,
+): ReleaseAction {
+  if (!shouldNotifyRelease(notifiedDate, dateToFire)) return 'skip';
+  if ((notifiedDate === null || notifiedDate === undefined) && hasLegacyCard) return 'seed';
+  return 'push';
+}
+
 /**
  * `YYYY-MM-DD` calendar date in Europe/Stockholm for the given instant. Uses Intl
  * with an explicit timeZone so the DST offset is always correct — the "today"

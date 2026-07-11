@@ -18,21 +18,32 @@
 //      feature-revert that keeps the flow shell but strips its description /
 //      steps / payloads down to a stub used to pass green. The floors are set
 //      below the current data's minimums, so a flow gutted of its prose now
-//      trips CI instead of vanishing silently. (Cross-commit partial thinning
-//      of an already-substantive description isn't mechanically detectable
-//      here — that's what the "keep map edits in their own commit" discipline
-//      in .claude/rules/lessons-digest.md defends.)
+//      trips CI instead of vanishing silently.
+//   5. CONTENT RATCHET (BIN-470, successor to BIN-459): the absolute floor in
+//      check 4 only catches a flow gutted below ~150 chars — it says nothing
+//      about a flow that is thinned from 900 chars to 200 (a big net prose loss
+//      that still clears the floor). So we also commit a per-flow content
+//      baseline (docs/workflow-map-content-baseline.json: flow id → current
+//      description+payload char count) and diff every flow's live content
+//      against it: shrink below the baseline, or drop a baselined flow entirely,
+//      fails CI. This catches the exact partial-thinning a feature-revert bundle
+//      could sneak past the floor. When a reduction is intentional (a flow was
+//      legitimately made more concise, or genuinely removed), regenerate the
+//      baseline with `node scripts/check-workflow-map.mjs --update-baseline` and
+//      commit it — the ratchet forces that to be a conscious, reviewable step.
 // Semantic drift (behavior changed inside a still-existing file) is handled by
 // .claude/hooks/map-freshness.mjs + .claude/state/workflow-map-stale.json.
 //
-// Usage: node scripts/check-workflow-map.mjs   (exit 1 with a problem list)
+// Usage: node scripts/check-workflow-map.mjs                    (lint; exit 1 on a problem list)
+//        node scripts/check-workflow-map.mjs --update-baseline  (regenerate the content baseline)
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAP_FILE = 'docs/workflow-map.html';
+const BASELINE_FILE = 'docs/workflow-map-content-baseline.json';
 const REPO_ROOTS = ['src/', 'functions/', 'extension/', 'public/', 'docs/', 'shared/', 'scripts/'];
 const ROOT_FILES = ['firestore.rules', 'firebase.json'];
 
@@ -48,10 +59,20 @@ const MIN_FLOW_DESC = 80; // a real sentence of prose, not a stub
 const MIN_STEP_PAYLOAD = 8; // a step must say what it carries
 const MIN_FLOW_CONTENT = 150; // description + all step payloads, combined
 
-function extractDataJson(html) {
+export function extractDataJson(html) {
   const m = html.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/);
   if (!m) throw new Error('no <script id="data"> block found');
   return JSON.parse(m[1]);
+}
+
+// A flow's "content" for the floor (check 4) and the ratchet (check 5): the
+// trimmed description length plus every step's trimmed payload length. This is
+// the prose a feature-revert would strip; label/step-count are guarded
+// separately in checkFlowContent.
+export function flowContentLen(action) {
+  const desc = String(action?.description ?? '').trim().length;
+  const steps = Array.isArray(action?.steps) ? action.steps : [];
+  return desc + steps.reduce((n, s) => n + String(s?.payload ?? '').trim().length, 0);
 }
 
 function checkableTokens(pathField) {
@@ -78,7 +99,7 @@ function globMatches(token) {
 
 // Check 4 — content floor per flow (anti-silent-loss, BIN-459). Pushes a
 // problem for every flow whose prose has been stripped below the floors above.
-function checkFlowContent(actions, problems) {
+export function checkFlowContent(actions, problems) {
   for (const action of actions) {
     const id = action.id || '(unnamed flow)';
     const label = String(action.label ?? '').trim();
@@ -102,7 +123,7 @@ function checkFlowContent(actions, problems) {
       }
     });
 
-    const contentLen = desc.length + steps.reduce((n, s) => n + String(s.payload ?? '').trim().length, 0);
+    const contentLen = flowContentLen(action);
     if (contentLen < MIN_FLOW_CONTENT) {
       problems.push(
         `flow '${id}': total prose too thin (${contentLen} < ${MIN_FLOW_CONTENT} chars across description + step payloads) — restore the lost detail`,
@@ -111,7 +132,60 @@ function checkFlowContent(actions, problems) {
   }
 }
 
-function main() {
+// Check 5 — content ratchet (BIN-470). Diffs each flow's live content length
+// against the committed per-flow baseline. Unlike the absolute floor (check 4),
+// this catches a NET prose loss that still clears the floor — a flow thinned
+// from 900 to 200 chars, or a whole baselined flow deleted. New flows (absent
+// from the baseline) are only held to the floor until the baseline is next
+// regenerated. To intentionally reduce a flow (or drop one), regenerate the
+// baseline with --update-baseline and commit it — a conscious, reviewable step.
+export function checkContentRatchet(actions, baseline, problems) {
+  const flows = baseline?.flows;
+  if (!flows || typeof flows !== 'object') return;
+  const byId = new Map((actions || []).filter((a) => a && a.id).map((a) => [a.id, a]));
+  for (const [id, baseLen] of Object.entries(flows)) {
+    if (typeof baseLen !== 'number') continue;
+    const action = byId.get(id);
+    if (!action) {
+      problems.push(
+        `flow '${id}': in the content baseline but missing from the map — a whole flow's prose was dropped (net loss). Restore it, or regenerate the baseline if the removal is intentional (node scripts/check-workflow-map.mjs --update-baseline).`,
+      );
+      continue;
+    }
+    const curr = flowContentLen(action);
+    if (curr < baseLen) {
+      problems.push(
+        `flow '${id}': prose shrank (${curr} < baseline ${baseLen} chars across description + step payloads) — net loss vs the committed baseline. Re-trace the flow, or regenerate the baseline if the reduction is intentional (node scripts/check-workflow-map.mjs --update-baseline).`,
+      );
+    }
+  }
+}
+
+// Build the content-baseline object from the current flows. Deterministic
+// (flows keyed by id, no timestamp) so the committed file only churns when the
+// prose actually changes.
+export function buildBaseline(actions) {
+  const flows = {};
+  for (const a of actions || []) {
+    if (a && a.id) flows[a.id] = flowContentLen(a);
+  }
+  return {
+    comment:
+      'Per-flow content baseline (description + step-payload char count) for scripts/check-workflow-map.mjs check 5 (BIN-470). The linter fails if any flow shrinks below its baseline or a baselined flow disappears — catching net prose-loss the absolute floor (check 4) misses. Regenerate + commit when you intentionally shorten or remove a flow: node scripts/check-workflow-map.mjs --update-baseline',
+    flows,
+  };
+}
+
+function writeBaseline() {
+  const data = extractDataJson(readFileSync(join(ROOT, MAP_FILE), 'utf8'));
+  const baseline = buildBaseline(data.actions || []);
+  writeFileSync(join(ROOT, BASELINE_FILE), JSON.stringify(baseline, null, 2) + '\n');
+  console.log(
+    `workflow-map baseline: wrote ${Object.keys(baseline.flows).length} flow content lengths to ${BASELINE_FILE}`,
+  );
+}
+
+export function main() {
   const mapPath = join(ROOT, MAP_FILE);
   if (!existsSync(mapPath)) {
     console.log(`workflow-map linter: ${MAP_FILE} missing — skipping`);
@@ -143,6 +217,18 @@ function main() {
   }
 
   checkFlowContent(data.actions || [], problems);
+
+  // Check 5 — content ratchet against the committed per-flow baseline (BIN-470).
+  const baselinePath = join(ROOT, BASELINE_FILE);
+  if (existsSync(baselinePath)) {
+    let baseline = null;
+    try {
+      baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    } catch (err) {
+      problems.push(`content baseline ${BASELINE_FILE} is not valid JSON: ${err.message}`);
+    }
+    if (baseline) checkContentRatchet(data.actions || [], baseline, problems);
+  }
 
   // Coverage cross-check against the enumerated universe.
   let covered = 0, universeSize = 0;
@@ -185,4 +271,14 @@ function main() {
   return 0;
 }
 
-process.exit(main());
+// Only run as a CLI when executed directly (`node scripts/check-workflow-map.mjs`),
+// NOT when imported by the test — importing must not call process.exit().
+const isDirectRun =
+  typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  if (process.argv.includes('--update-baseline')) {
+    writeBaseline();
+    process.exit(0);
+  }
+  process.exit(main());
+}
