@@ -5,7 +5,8 @@
     "episodeReleaseNotify", "showReturnNotify", "availableNotify", "communityRatingMaintain",
     "reclaimOrphanFollows", "retentionCleanup", "submitReport", "recordAskBinge",
     "askBingeParse", "titleRatings", "streamingOffersRefresh", "cineasternaCatalogSync",
-    "priceDropNotify", "rotationReminderNotify", "weeklyDigestNotify", "leavingRollup"
+    "priceDropNotify", "rotationReminderNotify", "weeklyDigestNotify", "leavingRollup",
+    "tmdbFieldsSweep"
   ],
   "routes": [
     "/", "/series", "/films", "/my/friends", "/my/avbrutna", "/my/series", "/calendar",

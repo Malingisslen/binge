@@ -516,6 +516,12 @@
    "path": "functions/src/leavingRollup/index.ts"
   },
   {
+   "id": "cf-tmdb-sweep",
+   "label": "tmdbFieldsSweep (monthly)",
+   "context": "backend-api",
+   "path": "functions/src/tmdbTosSweep/index.ts"
+  },
+  {
    "id": "forsvinner-page",
    "label": "ForsvinnerListClient",
    "context": "web-app",
@@ -1823,6 +1829,52 @@
      "to": "web-app",
      "payload": "renders dated 'lämnar {date}' list, links to /movie/{id}/ or /tv/{id}/",
      "transport": "React render",
+     "verified": true
+    }
+   ],
+   "area": "data pipelines"
+  },
+  {
+   "id": "flow-tmdb-sweep",
+   "label": "TMDB ToS field sweep",
+   "description": "tmdbFieldsSweep runs monthly (onSchedule every 720h, europe-west1). TMDB API terms §1.C forbid caching API-derived data past 6 months, but watchlist docs denormalize TMDB fields (title/posterPath/providers/genreIds/…) with no TTL. The sweep reads its control doc sweepState/tmdbFieldsSweep (mutateEnabled gate + cross-run cursor), paginates the whole watchlist collectionGroup by documentId (.select() narrows bandwidth to the freshness stamp + clearable fields), and for every doc whose tmdbFieldsRefreshedAt stamp is older than 5 months or absent, CLEARS (deletes) just the TMDB-derived fields via a fixed allowlist payload. It is DRY-RUN by default — it counts but writes nothing until sweepState/tmdbFieldsSweep.mutateEnabled===true (Malin flips that in the Console after reviewing the counts, no redeploy). It NEVER re-fetches TMDB (that is unbounded fan-out against the 25 SEK/mo cap) and NEVER bumps updatedAt (drives the continueWatching sort); freshness is instead restored lazily on the read side — a title page re-writes the denormalized block + re-stamps tmdbFieldsRefreshedAt when its stamp is >90 days old (needsTmdbFieldsRefresh), repopulating a swept-clean doc AND keeping a regularly-viewed title below the clear threshold. Cursor-resumable + per-run scan/write budget + a lastRun audit record so an incomplete or failed run is flagged (logged at warn), never a silent no-op.",
+   "covers": [
+    "tmdbFieldsSweep"
+   ],
+   "steps": [
+    {
+     "from": "cf-tmdb-sweep",
+     "to": "firestore",
+     "payload": "read control doc sweepState/tmdbFieldsSweep {mutateEnabled, cursor} — dry-run unless mutateEnabled===true; cursor is resumed only in mutate mode (a dry-run always scans from doc 0 for a clean full count and persists no cursor of its own)",
+     "transport": "Firestore read",
+     "verified": true
+    },
+    {
+     "from": "cf-tmdb-sweep",
+     "to": "firestore",
+     "payload": "collectionGroup('watchlist').orderBy(documentId()).select(tmdbFieldsRefreshedAt, ...TMDB-derived fields).limit(2000), paged via startAfter(cursor) — uses Firestore's automatic collection-group index, no firestore.indexes.json entry",
+     "transport": "Firestore read",
+     "verified": true
+    },
+    {
+     "from": "cf-tmdb-sweep",
+     "to": "firestore",
+     "payload": "per stale doc (tmdbFieldsRefreshedAt older than 5 months or absent, AND target fields still present): batched update() with buildClearedPayload(FieldValue.delete()) — fixed allowlist deleting only the TMDB-derived fields + the stamp, NEVER updatedAt, NEVER user-authored fields; skipped entirely in dry-run",
+     "transport": "Firestore write",
+     "verified": true
+    },
+    {
+     "from": "cf-tmdb-sweep",
+     "to": "firestore",
+     "payload": "persist cursor per committed page (mutate mode) then write the lastRun audit record {at, dryRun, docsScanned, docsCleared, docsWouldClear, docsSkipped, budgetAbort, fullPassCompleted} — a budgetAbort/incomplete run resumes next invocation and is logged at warn",
+     "transport": "Firestore write",
+     "verified": true
+    },
+    {
+     "from": "title-page",
+     "to": "firestore",
+     "payload": "lazy-refresh (read-side complement): opening a title whose stamp is >90 days old fires refreshTmdbFields → WatchlistContext merge-writes the denormalized TMDB block + a fresh tmdbFieldsRefreshedAt onto the watchlist doc (never updatedAt) — how a swept-clean doc is repopulated without any server-side TMDB fan-out",
+     "transport": "Firestore write",
      "verified": true
     }
    ],
