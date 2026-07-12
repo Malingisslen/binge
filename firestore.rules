@@ -549,6 +549,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // BIN-185: spoiler-safe episode recaps — public cache keyed {tmdbId}_{s}_{e},
+    // shared across all users. Written EXCLUSIVELY by the offline /recap Admin-SDK
+    // batch (bypasses rules); no personal data. Clients read directly on the hot
+    // path; they can never write/overwrite — a forged recap would be permanent
+    // public content served to every viewer of that show.
+    match /recaps/{recapId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Global daily OMDb budget counter — replaces per-user rate-limit.
     // Function-only: Admin SDK writes, no client access.
     match /omdbBudget/{day} {

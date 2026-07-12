@@ -203,6 +203,42 @@ describe('users/{uid}/watchlist/{id} providersCheckedAt gate (BIN-468)', () => {
   });
 });
 
+// BIN-185: recaps/{id} — public-read AI recap cache, written ONLY by the offline
+// /recap Admin-SDK batch (bypasses rules). Clients read directly on the hot path;
+// they can never write or overwrite (a forged recap would be permanent public content).
+describe('recaps/{id} (BIN-185)', () => {
+  const recapId = '1399_2_3';
+  const recapDoc = {
+    tmdbId: 1399, season: 2, episode: 3, text: 'Hittills har …', lang: 'sv',
+    model: 'claude-sonnet-5',
+    sources: [{ name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/x', license: 'CC BY-SA 4.0' }],
+    license: 'CC BY-SA 4.0', schemaVersion: 1,
+  };
+  async function seedRecap() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'recaps', recapId), recapDoc);
+    });
+  }
+  it('anyone (even unauthenticated) can read a recap', async () => {
+    await seedRecap();
+    await assertSucceeds(getDoc(doc(anonDb(), 'recaps', recapId)));
+    await assertSucceeds(getDoc(doc(ownerDb(), 'recaps', recapId)));
+  });
+  it('no client can create a recap (owner or anon)', async () => {
+    await assertFails(setDoc(doc(ownerDb(), 'recaps', recapId), recapDoc));
+    await assertFails(setDoc(doc(anonDb(), 'recaps', recapId), recapDoc));
+  });
+  it('no client can overwrite an existing recap (no poisoning a cached doc)', async () => {
+    await seedRecap();
+    await assertFails(setDoc(doc(ownerDb(), 'recaps', recapId), { ...recapDoc, text: 'poisoned' }));
+  });
+  it('no client can delete a recap (delete is a distinct write vector)', async () => {
+    await seedRecap();
+    await assertFails(deleteDoc(doc(ownerDb(), 'recaps', recapId)));
+    await assertFails(deleteDoc(doc(anonDb(), 'recaps', recapId)));
+  });
+});
+
 // BIN-164: per-title tags — owner-only, no public/friends read clause (free-text
 // tags can name third parties, so they must NEVER leak like public watchlist items).
 describe('users/{uid}/watchlistTags/{id} (BIN-164)', () => {
