@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRecap } from '@/hooks/useRecap';
 import { validateRecapText } from '@/lib/recaps/sanitize';
-import type { EpisodeRef } from '@/lib/recaps/boundary';
+import { missingEpisodeCount } from '@/lib/recaps/coverage';
+import type { EpisodeRef, SeasonEpisodes } from '@/lib/recaps/boundary';
 import type { RecapSource } from '@/lib/recaps/types';
 
 // BIN-185 — "Påminn mig var jag slutade". Shows ONLY when a cached recap exists for the user's
@@ -44,16 +45,28 @@ function RecapSourceCredit({ sources }: { sources: RecapSource[] }) {
   );
 }
 
-export default function RecapPanel({ tmdbId, boundary }: { tmdbId: number; boundary: EpisodeRef | null }) {
-  const { recap } = useRecap(tmdbId, boundary);
+export default function RecapPanel({
+  tmdbId,
+  boundary,
+  inventory,
+}: {
+  tmdbId: number;
+  boundary: EpisodeRef | null;
+  inventory: SeasonEpisodes;
+}) {
+  const { recap, coveredBoundary } = useRecap(tmdbId, boundary);
   const [open, setOpen] = useState(false);
 
   // Surface nothing unless we have a boundary, a cached recap, its CC BY-SA attribution
   // (mandatory per ADR 0011 — never show unattributed derived text), and text that passes the
   // plain-text guard on read (defense-in-depth; the batch validates on write, we re-check here).
-  if (!boundary || !recap) return null;
+  if (!boundary || !recap || !coveredBoundary) return null;
   if (recap.sources.length === 0) return null;
   if (!validateRecapText(recap.text).ok) return null;
+
+  // Fallback gap: the recap covers an EARLIER boundary (never later — spoiler-safe by
+  // construction). Tell the user honestly how many of their watched episodes it misses.
+  const missing = missingEpisodeCount(inventory, coveredBoundary, boundary);
 
   return (
     <div className="mt-3">
@@ -70,6 +83,12 @@ export default function RecapPanel({ tmdbId, boundary }: { tmdbId: number; bound
           <div className="text-[13px] text-ink-2">
             Du slutade efter S{boundary.season}E{boundary.episode}.
           </div>
+          {missing > 0 && (
+            <div className="text-[12px] text-ink-2 mt-1">
+              Sammanfattningen täcker till och med S{coveredBoundary.season}E{coveredBoundary.episode} —
+              {' '}informationen från {missing === 1 ? 'det senaste avsnittet' : `de ${missing} senaste avsnitten`} du sett saknas.
+            </div>
+          )}
           {/* AI disclosure ABOVE the prose (EU AI Act Art. 50 — legible secondary text). */}
           <div className="text-[11px] text-ink-2 mt-1 font-medium">AI-genererad sammanfattning</div>
           <p className="text-[14px] text-ink mt-1 whitespace-pre-line">{recap.text}</p>

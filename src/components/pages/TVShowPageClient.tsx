@@ -130,10 +130,12 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
 
   // BIN-185: the spoiler-safe recap boundary — the contiguous watched frontier over the show's
   // episode inventory, from the page's existing isWatched (so RecapPanel opens no second
-  // episodeProgress listener). Null-safe on show so this hook runs before the loading guard.
+  // episodeProgress listener). Null-safe on show so these hooks run before the loading guard.
+  // The inventory is also passed to RecapPanel for the fallback gap-count.
+  const recapInventory = useMemo(() => inventoryFromSeasons(show?.seasons), [show?.seasons]);
   const recapBoundary = useMemo(
-    () => contiguousWatchedBoundary(inventoryFromSeasons(show?.seasons), isWatched),
-    [show?.seasons, isWatched]
+    () => contiguousWatchedBoundary(recapInventory, isWatched),
+    [recapInventory, isWatched]
   );
 
   const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
@@ -419,7 +421,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           gatear hela sektionen för att inte mismatcha vid hydrering. */}
       <ClientOnly>
         {/* BIN-185: spoiler-safe recap, shown only when one is cached for the user's boundary. */}
-        {watchlistItem && <RecapPanel tmdbId={show.id} boundary={recapBoundary} />}
+        {watchlistItem && <RecapPanel tmdbId={show.id} boundary={recapBoundary} inventory={recapInventory} />}
         <section className="detail-section">
           <div className="head">
             <h2>Säsonger</h2>

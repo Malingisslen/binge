@@ -49,6 +49,17 @@ required; http(s) source URLs) and skips+logs any that fail. It writes `recaps/{
 `firebase-admin` from `functions/node_modules` — the repo root deliberately has no firebase-admin. Run it
 from the repo root (as above) so the relative data paths resolve.
 
+**The coverage index is MANDATORY.** The client finds recaps only via `recaps/{tmdbId}_index` (maintained
+automatically by every upload; `--index-only <file>` backfills without rewriting docs). Rules:
+- If the script reports `INDEX WRITE FAILED`, the uploaded recaps are invisible until you re-run the
+  printed `--index-only` command.
+- Never run two uploads for the SAME show concurrently — the index merge is last-writer-wins.
+- `--index-only` re-validates entries against the current text guard; if the guard has been tightened
+  since a recap was uploaded, that entry is SKIPped (and stays out of the index) — review the recap and
+  re-generate it rather than forcing it in.
+- Deleting a bad recap doc (purge, §5)? Also remove its `s_e` key from the index doc, or the client wastes
+  bounded fallback reads on the phantom entry.
+
 ## 4. Go live
 
 After the FIRST batch has seeded recaps, flip the client flag: set `RECAPS_ENABLED = true` in
