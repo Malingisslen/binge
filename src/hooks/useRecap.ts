@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
-import { recapDocId, type EpisodeRef } from '@/lib/recaps/boundary';
+import { recapDocId, seasonRecapDocId, type EpisodeRef } from '@/lib/recaps/boundary';
 import { recapIndexDocId, parseRecapIndex, nearestCoveredBoundary } from '@/lib/recaps/coverage';
 import { RECAPS_ENABLED } from '@/lib/recaps/config';
-import type { RecapDoc, RecapSource } from '@/lib/recaps/types';
+import { isSeasonRecapLoading } from './useRecap.helpers';
+import type { RecapDoc, RecapSource, SeasonRecapDoc } from '@/lib/recaps/types';
 
 /** A source entry is usable only if it has string name + url (attribution must link somewhere). */
 function isValidSource(s: unknown): s is { name: string; url: string; license?: unknown } {
@@ -24,6 +25,27 @@ function docToRecap(data: Record<string, unknown>): RecapDoc {
     tmdbId: Number(data.tmdbId),
     season: Number(data.season),
     episode: Number(data.episode),
+    text: String(data.text ?? ''),
+    textFull: typeof data.textFull === 'string' && data.textFull.length > 0 ? data.textFull : undefined,
+    lang: 'sv',
+    model: String(data.model ?? ''),
+    sources,
+    license: String(data.license ?? 'CC BY-SA 4.0'),
+    generatedAt: data.generatedAt ? toDate(data.generatedAt) : new Date(0),
+    schemaVersion: Number(data.schemaVersion ?? 1),
+  };
+}
+
+function docToSeasonRecap(data: Record<string, unknown>): SeasonRecapDoc {
+  const rawSources = Array.isArray(data.sources) ? (data.sources as unknown[]) : [];
+  const sources: RecapSource[] = rawSources.filter(isValidSource).map((s) => ({
+    name: s.name,
+    url: s.url,
+    license: typeof s.license === 'string' ? s.license : 'CC BY-SA 4.0',
+  }));
+  return {
+    tmdbId: Number(data.tmdbId),
+    season: Number(data.season),
     text: String(data.text ?? ''),
     lang: 'sv',
     model: String(data.model ?? ''),
@@ -101,4 +123,42 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
     },
   });
   return data ?? { recap: null, coveredBoundary: null };
+}
+
+export interface SeasonRecapResult {
+  season: number;
+  recap: SeasonRecapDoc | null;
+  /** True until this season's query has resolved SUCCESSFULLY — covers both "still in
+   * flight" AND "the read errored/timed out" (getDocWithTimeout's 10s race can reject). A
+   * consumer MUST check this before treating `recap === null` as "no recap exists": on an
+   * error, React Query settles `isPending` to false too, so checking pending-state alone
+   * still produces the same false-negative empty state as not checking anything (confirmed
+   * finding, BIN-185 story-so-far redesign review — this is the fixed, complete version). */
+  isLoading: boolean;
+}
+
+/**
+ * Lazily fetch full season recap docs (`recaps/{tmdbId}_season_{n}`) for the given season
+ * numbers — powers "Visa tidigare säsonger" only. `enabled` must stay false until the user
+ * expands that disclosure: these are extra reads with no default-view purpose. Parallel doc
+ * gets, in-memory only (never PERSISTED_QUERY_PREFIXES — per-title data), 1h staleTime
+ * (season recaps are immutable once generated, same as boundary recaps).
+ */
+export function useSeasonRecaps(tmdbId: number | undefined, seasons: number[], enabled: boolean): SeasonRecapResult[] {
+  const results = useQueries({
+    queries: seasons.map((season) => ({
+      queryKey: ['recap-season', tmdbId, season],
+      enabled: RECAPS_ENABLED && tmdbId != null && enabled,
+      staleTime: 1000 * 60 * 60,
+      queryFn: async (): Promise<SeasonRecapDoc | null> => {
+        const data = await getDocWithTimeout(seasonRecapDocId(tmdbId!, season));
+        return data ? docToSeasonRecap(data) : null;
+      },
+    })),
+  });
+  return seasons.map((season, i) => ({
+    season,
+    recap: results[i]?.data ?? null,
+    isLoading: isSeasonRecapLoading(enabled, results[i]),
+  }));
 }

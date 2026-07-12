@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { episodesUpToBoundary, recapDocId, type SeasonEpisodes } from './boundary';
+import { episodesUpToBoundary, recapDocId, seasonRecapDocId, priorSeasonNumbers, type SeasonEpisodes } from './boundary';
 
 // A small 3-season show with a gap (S2 skips ep 3) and a specials season 0.
 const inventory: SeasonEpisodes = [
@@ -14,6 +14,43 @@ const key = (r: { season: number; episode: number }) => `S${r.season}E${r.episod
 describe('recapDocId', () => {
   it('formats as tmdbId_season_episode', () => {
     expect(recapDocId(1399, 2, 3)).toBe('1399_2_3');
+  });
+});
+
+describe('seasonRecapDocId', () => {
+  it('formats as tmdbId_season_season', () => {
+    expect(seasonRecapDocId(1416, 7)).toBe('1416_season_7');
+  });
+
+  it('can never collide with a recapDocId output', () => {
+    // recapDocId is always int_int_int; seasonRecapDocId's middle segment is the literal
+    // string "season", which can never parse as an episode-position numeral.
+    expect(seasonRecapDocId(1416, 7)).not.toBe(recapDocId(1416, 7, 0));
+    expect(/^\d+_\d+_\d+$/.test(seasonRecapDocId(1416, 7))).toBe(false);
+  });
+});
+
+describe('priorSeasonNumbers — the "Visa tidigare säsonger" fetch set', () => {
+  it('S1 boundary has no prior seasons', () => {
+    expect(priorSeasonNumbers({ season: 1, episode: 1 })).toEqual([]);
+  });
+
+  it('S4 boundary yields seasons 1-3, in order', () => {
+    expect(priorSeasonNumbers({ season: 4, episode: 3 })).toEqual([1, 2, 3]);
+  });
+
+  it('NEVER includes the boundary\'s own season (that is textFull, not a season doc)', () => {
+    const out = priorSeasonNumbers({ season: 5, episode: 10 });
+    expect(out).not.toContain(5);
+  });
+
+  it('NEVER includes a future season', () => {
+    const out = priorSeasonNumbers({ season: 3, episode: 1 });
+    expect(out.some((s) => s >= 3)).toBe(false);
+  });
+
+  it('is derived purely from boundary.season, independent of episode', () => {
+    expect(priorSeasonNumbers({ season: 4, episode: 1 })).toEqual(priorSeasonNumbers({ season: 4, episode: 99 }));
   });
 });
 

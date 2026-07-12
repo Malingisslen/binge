@@ -17,6 +17,25 @@ export function recapDocId(tmdbId: number, season: number, episode: number): str
   return `${tmdbId}_${season}_${episode}`;
 }
 
+/** The cache doc id for a whole-season recap (`recaps/{tmdbId}_season_{season}`). Can never
+ * collide with a boundary id (`season` is not a valid episode-position numeral). */
+export function seasonRecapDocId(tmdbId: number, season: number): string {
+  return `${tmdbId}_season_${season}`;
+}
+
+/**
+ * Every COMPLETED season strictly before the boundary's season, in order — the exact set the
+ * "Visa tidigare säsonger" disclosure may fetch season docs for. Deliberately derived from the
+ * SAME `boundary.season` that gates `episodesUpToBoundary` (Security condition, BIN-185
+ * story-so-far redesign): a season doc is only ever fetched for a season the user has fully
+ * finished, never their current one (that's `textFull` instead) and never a future one.
+ */
+export function priorSeasonNumbers(boundary: EpisodeRef): number[] {
+  const result: number[] = [];
+  for (let s = 1; s < boundary.season; s++) result.push(s);
+  return result;
+}
+
 /**
  * Every episode up to AND INCLUDING the boundary, in air order — the exact source set a
  * spoiler-safe recap may be built from. Guarantees (test-locked):

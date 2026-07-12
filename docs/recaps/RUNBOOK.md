@@ -1,8 +1,16 @@
 # BIN-185 recaps — operator runbook (P3)
 
-Spoiler-safe catch-up recaps. The `recaps/{tmdbId}_{s}_{e}` cache is public-read / admin-write; the
+Spoiler-safe catch-up recaps. The `recaps/{tmdbId}_{s}_{e}` (boundary) and
+`recaps/{tmdbId}_season_{n}` (completed-season) caches are public-read / admin-write; the
 ONLY writer is the local `/recap` batch below. Spec:
 `docs/superpowers/specs/2026-07-12-bin185-spoiler-safe-recaps-design.md`. ADR: `docs/org/adr/0011-*`.
+
+**schemaVersion 2 (2026-07-12, story-so-far redesign):** boundary docs gained an optional
+`textFull` field (fuller "this season so far" recap) and the standalone `_season_{n}` doc type
+(full recap of a completed season) — plan: `~/.claude/plans/binge-recap-story-so-far-redesign-2026-07-12.md`.
+`text` must now be self-contained (a reader remembering nothing since they stopped should follow
+it) — v1 docs read as single-episode blurbs instead and are being regenerated (`.claude/skills/recap/SKILL.md`
+§Regeneration tracks the backlog).
 
 ## 1. One-time: the least-privilege service-account key (Malin, Firebase/GCP console)
 
@@ -29,7 +37,10 @@ Per show, I:
   strictly on episode-specific pages ≤ the boundary — never character/overall-plot pages (they span the
   whole series → spoilers).
 - Write an original Swedish `sammanfattning` — **paraphrase, never copy verbatim phrasing or track a
-  source's structure** (Legal). Record every source in `sources[]`.
+  source's structure** (Legal). Record every source in `sources[]`. Per boundary, write BOTH `text`
+  (short, self-contained "story so far") and `textFull` (fuller season-so-far) from the same source
+  read. After a season's boundaries are done, also write its `_season_{n}` doc (completed seasons
+  only) — see SKILL.md steps 4–5 for the exact shape and the self-contained-text requirement.
 - **No usable CC BY-SA source?** Don't stretch to copyrighted sites — log it:
   `node functions/scripts/recap-upload.mjs --unsourced <tmdbId> "<title>" <no-wiki|partial-coverage|incompatible-license>`
 - **Spot-check** a sample of the batch before upload (cached forever — a bad one is public to all).
@@ -44,6 +55,10 @@ GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
 
 The script re-validates every entry (plain-text guard mirroring `sanitize.ts`; CC BY-SA attribution
 required; http(s) source URLs) and skips+logs any that fail. It writes `recaps/{id}` via Admin SDK.
+Season entries (`kind: 'season'`) are refused unless every episode 1..`episodeCount` for that season
+already has a boundary doc (in this batch or previously indexed), and are written ONCE — a season doc
+that already exists is skipped unless you pass `--force` (season regen is non-deterministic; don't
+let an accidental rerun silently overwrite one with different output).
 
 **NOTE:** the script lives at `functions/scripts/recap-upload.mjs` (not `scripts/`) so it resolves
 `firebase-admin` from `functions/node_modules` — the repo root deliberately has no firebase-admin. Run it

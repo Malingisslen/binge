@@ -281,9 +281,13 @@ konvergens-check mot `MAX_CLEARS_PER_RUN` (DBA-villkor).
 ### Spoilerfria avsnittssammanfattningar (BIN-185) — durabel delad cache, ingen TTL
 
 `recaps/{tmdbId}_{s}_{e}` — en publik, delad cache av AI-genererade "var jag slutade"-sammanfattningar,
-genererade en gång globalt per (serie, säsong, avsnitt) och serverade till alla. **Ingen personuppgift**
-finns i collectionen (inga uid, bara serie/avsnitts-ID + text + källor); den är därför korrekt utanför
-`collectUserDataSnapshots` (varken export eller radering rör den). Skriven ENDAST av den offline
+genererade en gång globalt per (serie, säsong, avsnitt) och serverade till alla. Sedan story-so-far-
+omdesignen (2026-07-12, schemaVersion 2) har varje dokument även ett valfritt `textFull`-fält (fylligare
+"den här säsongen hittills"-sammanfattning, samma boundary) för "Visa säsongens sammanfattning"-panelen.
+Utöver boundary-dokumenten finns `recaps/{tmdbId}_season_{n}` — en helsäsongs-sammanfattning per AVSLUTAD
+säsong, skriven en gång, för "Visa tidigare säsonger". **Ingen personuppgift** finns i någon av dessa
+(inga uid, bara serie/säsongs/avsnitts-ID + text + källor); de är därför korrekt utanför
+`collectUserDataSnapshots` (varken export eller radering rör dem). Skrivna ENDAST av den offline
 `/recap`-batchen (Admin SDK); klienter kan bara läsa.
 
 **Retention:** durabel för alltid, ingen TTL — samma klass som `titleRatings`. Till skillnad från BIN-402:

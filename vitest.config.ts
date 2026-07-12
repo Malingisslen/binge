@@ -25,6 +25,9 @@ export default defineConfig({
     include: [
       'src/**/*.{test,spec}.{ts,tsx}',
       'functions/src/**/*.{test,spec}.ts',
+      // recap-upload.mjs's pure logic lives in an admin-free sibling module so it can run here
+      // too — the script itself imports firebase-admin and is never matched by this glob.
+      'functions/scripts/**/*.{test,spec}.mjs',
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,

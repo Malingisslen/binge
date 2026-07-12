@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { History, ChevronDown, ChevronUp } from 'lucide-react';
-import { useRecap } from '@/hooks/useRecap';
+import { useRecap, useSeasonRecaps } from '@/hooks/useRecap';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { validateRecapText } from '@/lib/recaps/sanitize';
 import { missingEpisodeCount } from '@/lib/recaps/coverage';
-import type { EpisodeRef, SeasonEpisodes } from '@/lib/recaps/boundary';
+import { priorSeasonNumbers, type EpisodeRef, type SeasonEpisodes } from '@/lib/recaps/boundary';
 import type { RecapSource } from '@/lib/recaps/types';
 
 // BIN-185 — "Påminn mig var jag slutade". Shows ONLY when a cached recap exists for the user's
@@ -57,6 +58,15 @@ export default function RecapPanel({
 }) {
   const { recap, coveredBoundary } = useRecap(tmdbId, boundary);
   const [open, setOpen] = useState(false);
+  const [openFull, setOpenFull] = useState(false);
+  const [openSeasons, setOpenSeasons] = useState(false);
+
+  // Prior COMPLETED seasons, derived from the recap's actual covered boundary (never the
+  // user's raw boundary — on a fallback hit those can differ, and a season doc must only ever
+  // be offered for a season the cached recap itself has fully passed). Fetched lazily, only
+  // once "Visa tidigare säsonger" is expanded.
+  const priorSeasons = coveredBoundary ? priorSeasonNumbers(coveredBoundary) : [];
+  const seasonRecaps = useSeasonRecaps(tmdbId, priorSeasons, openSeasons);
 
   // Surface nothing unless we have a boundary, a cached recap, its CC BY-SA attribution
   // (mandatory per ADR 0011 — never show unattributed derived text), and text that passes the
@@ -68,6 +78,28 @@ export default function RecapPanel({
   // Fallback gap: the recap covers an EARLIER boundary (never later — spoiler-safe by
   // construction). Tell the user honestly how many of their watched episodes it misses.
   const missing = missingEpisodeCount(inventory, coveredBoundary, boundary);
+
+  // textFull / season docs are absent on older (schemaVersion 1) or not-yet-regenerated
+  // recaps — degrade silently, never show an empty disclosure.
+  const fullText = recap.textFull && validateRecapText(recap.textFull).ok ? recap.textFull : null;
+  // Loading vs. genuinely-absent MUST stay distinct — while any season query is still in
+  // flight, `recap` is null the same way it is for a doc that doesn't exist, so showing the
+  // "no summaries yet" message during that window is a false negative on every expand.
+  const seasonsLoading = seasonRecaps.some((s) => s.isLoading);
+  const loadedSeasons = seasonRecaps.filter(
+    (s): s is { season: number; recap: NonNullable<(typeof seasonRecaps)[number]['recap']>; isLoading: boolean } =>
+      s.recap != null && s.recap.sources.length > 0 && validateRecapText(s.recap.text).ok,
+  );
+  const aggregatedSources: RecapSource[] = [];
+  const seenSourceUrls = new Set<string>();
+  for (const { recap: seasonRecap } of loadedSeasons) {
+    for (const s of seasonRecap.sources) {
+      if (!seenSourceUrls.has(s.url)) {
+        seenSourceUrls.add(s.url);
+        aggregatedSources.push(s);
+      }
+    }
+  }
 
   return (
     <div className="mt-3 rounded-md border border-rule bg-surface overflow-hidden">
@@ -99,6 +131,70 @@ export default function RecapPanel({
           <p className="text-[14px] text-ink mt-1 whitespace-pre-line">{recap.text}</p>
           <div className="text-[11px] text-ink-3 mt-2">Kan innehålla mindre felaktigheter.</div>
           <RecapSourceCredit sources={recap.sources} />
+
+          {fullText && (
+            <div className="mt-3 border-t border-rule-2 pt-2">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 text-[12px] font-medium text-ink-2 hover:text-ink"
+                onClick={() => setOpenFull((o) => !o)}
+                aria-expanded={openFull}
+              >
+                <span>Visa säsongens sammanfattning</span>
+                <span className="ml-auto text-ink-3">
+                  {openFull ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </span>
+              </button>
+              {openFull && (
+                <div className="mt-2">
+                  <div className="text-[11px] text-ink-2 font-medium">AI-genererad sammanfattning</div>
+                  <p className="text-[14px] text-ink mt-1 whitespace-pre-line">{fullText}</p>
+                  <div className="text-[11px] text-ink-3 mt-2">Kan innehålla mindre felaktigheter.</div>
+                  <RecapSourceCredit sources={recap.sources} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {priorSeasons.length > 0 && (
+            <div className="mt-3 border-t border-rule-2 pt-2">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 text-[12px] font-medium text-ink-2 hover:text-ink"
+                onClick={() => setOpenSeasons((o) => !o)}
+                aria-expanded={openSeasons}
+              >
+                <span>Visa tidigare säsonger</span>
+                <span className="ml-auto text-ink-3">
+                  {openSeasons ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </span>
+              </button>
+              {openSeasons && (
+                <div className="mt-2">
+                  {loadedSeasons.length > 0 ? (
+                    <>
+                      {/* One shared disclosure stack for the whole nested-seasons region —
+                          repeating it per season (up to ~20 for a long-running show) would
+                          wallpaper the panel with identical disclaimers. */}
+                      <div className="text-[11px] text-ink-2 font-medium">AI-genererad sammanfattning</div>
+                      {loadedSeasons.map(({ season, recap: seasonRecap }) => (
+                        <div key={season} className="mt-2">
+                          <div className="text-[12px] font-medium text-ink-2">Säsong {season}</div>
+                          <p className="text-[14px] text-ink mt-1 whitespace-pre-line">{seasonRecap.text}</p>
+                        </div>
+                      ))}
+                      <div className="text-[11px] text-ink-3 mt-2">Kan innehålla mindre felaktigheter.</div>
+                      <RecapSourceCredit sources={aggregatedSources} />
+                    </>
+                  ) : seasonsLoading ? (
+                    <LoadingView variant="inline" />
+                  ) : (
+                    <div className="text-[12px] text-ink-3">Inga tidigare säsonger har en sammanfattning ännu.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
