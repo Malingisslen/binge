@@ -60,8 +60,15 @@ marginal**):
    an explicit **"paraphrase, never copy verbatim phrasing or track sentence structure"** instruction (Legal).
    Record every source used in `sources[]`; set the output `license` to the latest-compatible CC BY-SA version
    across them (3.0 → 4.0 is one-way compatible; license the combined output CC BY-SA 4.0).
-3. **Human spot-check** a sample of each batch before upload (Security — cached-forever stakes).
-4. Upload each recap via a **least-privilege Admin-SDK** script (`recaps/*` write only; service-account key
+3. **No usable source → log, don't stretch.** If a show has no CC BY-SA-compatible wiki (or only partial
+   per-episode coverage), it is NOT recapped and the agent does **NOT** search wider into arbitrary
+   copyrighted sources (recap blogs / review sites / streaming synopses — the same all-rights-reserved risk
+   that parked IMDb). Instead the show is appended to a committed **`docs/recaps/unsourced-shows.json`**
+   (`{ tmdbId, title, reason: 'no-wiki' | 'partial-coverage' | 'incompatible-license', checkedAt }`) for
+   Malin to triage manually later. That list is just show names + a reason — no copyrighted content, no legal
+   surface.
+4. **Human spot-check** a sample of each batch before upload (Security — cached-forever stakes).
+5. Upload each recap via a **least-privilege Admin-SDK** script (`recaps/*` write only; service-account key
    never committed — explicit `.gitignore`; documented in the runbook) using the **shared**
    `buildAndValidateRecap()` sanitiser (below). Idempotent: skip boundaries already cached (`--force` to refresh).
 
@@ -155,6 +162,8 @@ Firestore: public-read single-doc gets + admin batch writes — negligible, well
 ## Non-goals (YAGNI)
 
 No movie recaps. No runtime/on-demand AI generation (offline batch only). No Gemini tier. No TMDB content to the
-AI. No long-tail coverage (Wikipedia-covered popular shows only). No IMDB (prohibited — needs a commercial
+AI. **No wider search into arbitrary/copyrighted sources** — a show with no CC BY-SA source is logged to
+`docs/recaps/unsourced-shows.json` for manual triage, never recapped from an unlicensed source. No long-tail
+coverage beyond what CC BY-SA wikis cover. No IMDB (prohibited — needs a commercial
 AI-synthesis licence from IMDb/Amazon to ever reconsider). No binge-specific most-tracked rebuild (reuse stored
 `topTitles`). No auto-generation on show-open (button = explicit read).
