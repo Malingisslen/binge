@@ -57,3 +57,10 @@ next-env.d.ts
 # /brag skill output (local launch video + share copy — never commit the mp4 blob)
 brag-output/
 brag-output-*/
+
+# BIN-185 recaps — service-account key + local generation working files (NEVER commit)
+*serviceaccount*.json
+*service-account*.json
+*recaps-writer*.json
+*firebase-adminsdk*.json
+scripts/recaps/*.local.json
