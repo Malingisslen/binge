@@ -167,6 +167,40 @@ describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     await assertFails(setDoc(ref, { nextAirUpdatedAt: 'igår' }, { merge: true }));
   });
+  // BIN-468: nextAirUpdatedAt is now a per-group sweep FRESHNESS GATE (the sweep
+  // trusts it to decide whether the next-air group is stale). Same forge risk as
+  // tmdbFieldsRefreshedAt → same `<= request.time` ratchet.
+  it('rejects a future-dated nextAirUpdatedAt (<= request.time bind, BIN-468)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
+    const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+    await assertFails(setDoc(ref, { nextAirUpdatedAt: tomorrow }, { merge: true }));
+  });
+});
+
+// BIN-468: providersCheckedAt is now the providers-group sweep FRESHNESS GATE.
+// It had NO validation before (only a hasOnly key) — a client could write any
+// junk incl. a future timestamp to make the sweep skip the providers group
+// forever. Add the same type-bind + `<= request.time` ratchet as the other stamps.
+describe('users/{uid}/watchlist/{id} providersCheckedAt gate (BIN-468)', () => {
+  it('allows a providersCheckedAt serverTimestamp merge write', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, {
+      providers: [8], providersCheckedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('rejects a non-timestamp providersCheckedAt (type bound)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertFails(setDoc(ref, { providersCheckedAt: 'igår' }, { merge: true }));
+  });
+  it('rejects a future-dated providersCheckedAt (<= request.time bind)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+    await assertFails(setDoc(ref, { providersCheckedAt: tomorrow }, { merge: true }));
+  });
 });
 
 // BIN-164: per-title tags — owner-only, no public/friends read clause (free-text

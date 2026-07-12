@@ -153,7 +153,7 @@ export function useCalendarEntries(opts: { enabled?: boolean } = {}): UseCalenda
   // avbryter pending flush — best-effort, nästa besök reparerar.
   useEffect(() => {
     if (!uid || !enabled) return;
-    const updates = collectNextAirUpdates(items, shows, movies);
+    const updates = collectNextAirUpdates(items, shows, movies, Date.now());
     if (updates.length === 0) return;
     const t = setTimeout(() => { void flushNextAirWrites(uid, updates); }, 1200);
     return () => clearTimeout(t);

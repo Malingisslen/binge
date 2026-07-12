@@ -1,7 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { needsTmdbFieldsRefresh, TMDB_FIELDS_REFRESH_INTERVAL_MS } from './tmdbFieldsRefresh';
+import {
+  needsTmdbFieldsRefresh,
+  needsProvidersRefresh,
+  planTmdbFieldsRefresh,
+  shouldStampProvidersAtAdd,
+  stampOlderThan,
+  TMDB_FIELDS_REFRESH_INTERVAL_MS,
+  PROVIDERS_REFRESH_INTERVAL_MS,
+} from './tmdbFieldsRefresh';
 
 const NOW = Date.UTC(2026, 6, 11); // 2026-07-11
+const STAMP = Symbol('serverTimestamp'); // sentinel — the real serverTimestamp() in prod
+
+// Shared freshness predicate underlying all three group gates (BIN-468 code-review #2).
+describe('stampOlderThan', () => {
+  it('absent stamp is always older-than', () => {
+    expect(stampOlderThan(null, NOW, 1000)).toBe(true);
+    expect(stampOlderThan(undefined, NOW, 1000)).toBe(true);
+  });
+  it('inclusive boundary: true AT the interval, false just inside', () => {
+    expect(stampOlderThan(new Date(NOW - 1000), NOW, 1000)).toBe(true);
+    expect(stampOlderThan(new Date(NOW - 999), NOW, 1000)).toBe(false);
+  });
+});
 
 describe('needsTmdbFieldsRefresh', () => {
   it('refreshes when the stamp is absent (never stamped, or swept clean)', () => {
@@ -27,5 +48,101 @@ describe('needsTmdbFieldsRefresh', () => {
   it('interval stays well under the 5-month sweep threshold (viewed titles are never swept)', () => {
     const SWEEP_THRESHOLD_MS = 5 * 30 * 24 * 60 * 60 * 1000;
     expect(TMDB_FIELDS_REFRESH_INTERVAL_MS).toBeLessThan(SWEEP_THRESHOLD_MS);
+  });
+});
+
+// BIN-468 A2 — the title page writes providers only as a FALLBACK, gated by the
+// providers group's own stamp (providersCheckedAt), so it never clobbers a fresher
+// advisor/backfill value. The interval matches the advisor's re-check window (60d).
+describe('needsProvidersRefresh (providers-group fallback gate)', () => {
+  it('refreshes when providersCheckedAt is absent (never checked / swept clean)', () => {
+    expect(needsProvidersRefresh(null, NOW)).toBe(true);
+    expect(needsProvidersRefresh(undefined, NOW)).toBe(true);
+  });
+
+  it('skips when providers were checked within the advisor re-check window (do NOT clobber fresher data)', () => {
+    const recent = new Date(NOW - (PROVIDERS_REFRESH_INTERVAL_MS - 24 * 60 * 60 * 1000)); // 1 day inside
+    expect(needsProvidersRefresh(recent, NOW)).toBe(false);
+  });
+
+  it('refreshes once providersCheckedAt crosses the window', () => {
+    const old = new Date(NOW - (PROVIDERS_REFRESH_INTERVAL_MS + 24 * 60 * 60 * 1000)); // 1 day past
+    expect(needsProvidersRefresh(old, NOW)).toBe(true);
+  });
+
+  it('exact boundary: refreshes AT the interval (>= — guards a >= → > regression)', () => {
+    expect(needsProvidersRefresh(new Date(NOW - PROVIDERS_REFRESH_INTERVAL_MS), NOW)).toBe(true);
+    expect(needsProvidersRefresh(new Date(NOW - PROVIDERS_REFRESH_INTERVAL_MS + 1), NOW)).toBe(false);
+  });
+
+  it('window stays under the 5-month sweep threshold', () => {
+    expect(PROVIDERS_REFRESH_INTERVAL_MS).toBeLessThan(5 * 30 * 24 * 60 * 60 * 1000);
+  });
+});
+
+// BIN-468 (code-review MEDIUM): addItem is overloaded (new add + useMarkSeen re-mark).
+// providersCheckedAt must be stamped ONLY on a genuine new add carrying real providers —
+// a re-mark reuses cached/[] providers and would falsely re-certify + suppress backfill.
+describe('shouldStampProvidersAtAdd', () => {
+  it('stamps on a genuine new add with real providers', () => {
+    expect(shouldStampProvidersAtAdd(true, [8, 76])).toBe(true);
+  });
+  it('does NOT stamp on a re-mark of an existing item (even with providers)', () => {
+    expect(shouldStampProvidersAtAdd(false, [8, 76])).toBe(false);
+  });
+  it('does NOT stamp a new add that carries no provider data (let backfill own it)', () => {
+    expect(shouldStampProvidersAtAdd(true, [])).toBe(false);
+    expect(shouldStampProvidersAtAdd(true, undefined)).toBe(false);
+  });
+});
+
+describe('planTmdbFieldsRefresh (decoupled per-group write plan)', () => {
+  const fields = { title: 'Dune', posterPath: '/d.jpg', providers: [8], genreIds: [878], tmdbStatus: 'Released', runtime: 155 };
+
+  it('returns null when neither group needs a write (both stamps fresh)', () => {
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: new Date(NOW - 1000) };
+    expect(planTmdbFieldsRefresh(current, fields, NOW, STAMP)).toBeNull();
+  });
+
+  it('writes the static group + its stamp when only the static stamp is stale — NOT providers', () => {
+    // static stale, providers fresh → providers must be left untouched (no clobber)
+    const current = { tmdbFieldsRefreshedAt: null, providersCheckedAt: new Date(NOW - 1000) };
+    const p = planTmdbFieldsRefresh(current, fields, NOW, STAMP)!;
+    expect(p).not.toBeNull();
+    expect(p.tmdbFieldsRefreshedAt).toBe(STAMP);
+    expect(p.title).toBe('Dune');
+    expect(p.runtime).toBe(155);
+    expect('providers' in p).toBe(false);
+    expect('providersCheckedAt' in p).toBe(false);
+  });
+
+  it('writes providers + providersCheckedAt when only providers is stale — decoupled from the static stamp', () => {
+    // static FRESH but providers stale → must still repair providers (DBA decoupling condition)
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, fields, NOW, STAMP)!;
+    expect(p.providers).toEqual([8]);
+    expect(p.providersCheckedAt).toBe(STAMP);
+    expect('tmdbFieldsRefreshedAt' in p).toBe(false);
+    expect('title' in p).toBe(false);
+  });
+
+  it('regression (A2): a fresher providersCheckedAt is NEVER overwritten by a build-stale title page', () => {
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: new Date(NOW - 1000) };
+    const p = planTmdbFieldsRefresh(current, fields, NOW, STAMP);
+    expect(p).toBeNull(); // nothing to write — advisor's fresh providers stand
+  });
+
+  it('never writes updatedAt', () => {
+    const current = { tmdbFieldsRefreshedAt: null, providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, fields, NOW, STAMP)!;
+    expect('updatedAt' in p).toBe(false);
+  });
+
+  it('omits providers from the plan when the caller has none, even if the group is stale', () => {
+    const current = { tmdbFieldsRefreshedAt: null, providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, { title: 'Dune' }, NOW, STAMP)!;
+    expect('providers' in p).toBe(false);
+    expect('providersCheckedAt' in p).toBe(false);
+    expect(p.title).toBe('Dune');
   });
 });

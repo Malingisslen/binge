@@ -1,5 +1,6 @@
 import { getNextAirInfo, streamingProviderName } from '@/lib/calendar/nextAir';
 import { pickSwedishDigitalRelease } from '@/lib/calendar/releaseDate';
+import { stampOlderThan } from '@/lib/watchlist/tmdbFieldsRefresh';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
 
 // Instant week (2026-07): tyst read-repair av denormaliserade next-air-fält på
@@ -74,24 +75,64 @@ export function buildRepairPayload(
   return { ...delta, nextAirUpdatedAt: stamp };
 }
 
+// BIN-468 A3: nextAirUpdatedAt is the next-air group's freshness stamp for the
+// ToS sweep. A settled digitalReleaseDate (or an ended show's air fields) never
+// changes → without this the stamp would FREEZE at first-write → the sweep clears
+// the group at 5mo → the next Calendar visit re-writes it → a recurring
+// clear-then-repair cycle. So we also re-stamp (value-unchanged) once the stamp
+// crosses this interval, keeping it under the 5-month sweep threshold for any
+// calendar-active user. Well under 5mo so an active user is never swept.
+export const NEXTAIR_RESTAMP_INTERVAL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+/** True when nextAirUpdatedAt is absent or older than the re-stamp interval. */
+export function nextAirStampStale(stamp: Date | null | undefined, now: number): boolean {
+  return stampOlderThan(stamp, now, NEXTAIR_RESTAMP_INTERVAL_MS);
+}
+
+/** Whether the item currently holds any non-null next-air/digital-release value. */
+function hasNextAirData(item: WatchlistItem): boolean {
+  return item.nextAirDate != null || item.nextAirCode != null
+    || item.nextAirProvider != null || item.digitalReleaseDate != null;
+}
+
+/**
+ * The update (if any) for one item: a value delta when something changed, else a
+ * stamp-only refresh ({} delta → buildRepairPayload writes just nextAirUpdatedAt)
+ * when the item holds data and its stamp is stale — so stable data keeps a fresh
+ * stamp instead of freezing. Nothing for a dataless item (nothing to attest).
+ */
+function updateForItem(
+  item: WatchlistItem,
+  computed: Partial<Record<RepairableKey, string | null>>,
+  now: number,
+): NextAirUpdate | null {
+  const delta = nextAirDelta(item, computed);
+  if (delta) return { tmdbId: item.tmdbId, delta };
+  if (hasNextAirData(item) && nextAirStampStale(item.nextAirUpdatedAt, now)) {
+    return { tmdbId: item.tmdbId, delta: {} };
+  }
+  return null;
+}
+
 export function collectNextAirUpdates(
   items: WatchlistItem[],
   shows: TMDBTVShow[],
   movies: TMDBMovie[],
+  now: number,
 ): NextAirUpdate[] {
   const byId = new Map(items.map(i => [i.tmdbId, i]));
   const updates: NextAirUpdate[] = [];
   for (const show of shows) {
     const item = byId.get(show.id);
     if (!item || item.mediaType !== 'tv') continue;
-    const delta = nextAirDelta(item, computeNextAirFields(show));
-    if (delta) updates.push({ tmdbId: show.id, delta });
+    const u = updateForItem(item, computeNextAirFields(show), now);
+    if (u) updates.push(u);
   }
   for (const movie of movies) {
     const item = byId.get(movie.id);
     if (!item || item.mediaType !== 'movie') continue;
-    const delta = nextAirDelta(item, computeMovieReleaseFields(movie));
-    if (delta) updates.push({ tmdbId: movie.id, delta });
+    const u = updateForItem(item, computeMovieReleaseFields(movie), now);
+    if (u) updates.push(u);
   }
   return updates;
 }

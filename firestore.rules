@@ -133,7 +133,11 @@ service cloud.firestore {
       && (!('nextAirDate' in d) || d.nextAirDate == null || (d.nextAirDate is string && d.nextAirDate.size() <= 32))
       && (!('nextAirCode' in d) || d.nextAirCode == null || (d.nextAirCode is string && d.nextAirCode.size() <= 16))
       && (!('nextAirProvider' in d) || d.nextAirProvider == null || (d.nextAirProvider is string && d.nextAirProvider.size() <= 80))
-      && (!('nextAirUpdatedAt' in d) || d.nextAirUpdatedAt == null || d.nextAirUpdatedAt is timestamp)
+      // BIN-468: nextAirUpdatedAt is now the next-air GROUP's sweep freshness gate
+      // (the sweep trusts it to decide the group is stale). Same forge risk as
+      // tmdbFieldsRefreshedAt → add the `<= request.time` ratchet, not just a type-bind.
+      && (!('nextAirUpdatedAt' in d) || d.nextAirUpdatedAt == null
+          || (d.nextAirUpdatedAt is timestamp && d.nextAirUpdatedAt <= request.time))
       && (!('digitalReleaseDate' in d) || d.digitalReleaseDate == null || (d.digitalReleaseDate is string && d.digitalReleaseDate.size() <= 32))
       // BIN-349: ratedAt måste vara en timestamp (eller null/frånvarande) —
       // hasOnly kollar bara nyckeln, inte typen; utan denna kunde en klient
@@ -145,7 +149,13 @@ service cloud.firestore {
       // doc:en är färsk → hoppar över rensning → underminerar ToS-kontrollen. En
       // ärlig klient skriver serverTimestamp() (== request.time) och passerar.
       && (!('tmdbFieldsRefreshedAt' in d) || d.tmdbFieldsRefreshedAt == null
-          || (d.tmdbFieldsRefreshedAt is timestamp && d.tmdbFieldsRefreshedAt <= request.time));
+          || (d.tmdbFieldsRefreshedAt is timestamp && d.tmdbFieldsRefreshedAt <= request.time))
+      // BIN-468: providersCheckedAt is the providers GROUP's sweep freshness gate.
+      // It had NO validation before (only a hasOnly key) — a client could write junk
+      // or a FUTURE timestamp to make the sweep skip the providers group forever.
+      // Same type-bind + one-way `<= request.time` ratchet as the other gate stamps.
+      && (!('providersCheckedAt' in d) || d.providersCheckedAt == null
+          || (d.providersCheckedAt is timestamp && d.providersCheckedAt <= request.time));
     }
 
     // BIN-164: owner-only per-title tags. Free-text tags capture third-party

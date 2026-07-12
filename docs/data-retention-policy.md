@@ -224,30 +224,59 @@ en framtida server-side reaper för konton vars ägar-uid inte längre finns.
 
 ## Retention-policy för icke-raderad data
 
-### TMDB-fält-svep (BIN-402) — aktiv auto-retention på tredjeparts-cachedata
+### TMDB-fält-svep (BIN-402 / BIN-468) — aktiv auto-retention på tredjeparts-cachedata
 
 **Syfte:** TMDB:s API-villkor §1.C förbjuder caching av TMDB-härledd data > 6 mån.
-Watchlist-docs denormaliserar TMDB-fält (`title`, `posterPath`, `providers`,
-`providersCheckedAt`, `genreIds`, `tmdbStatus`, `runtime`, `nextAir*`,
-`digitalReleaseDate`) utan TTL. Den schemalagda Cloud Functionen `tmdbFieldsSweep`
-(månadsvis, `functions/src/tmdbTosSweep/`) **rensar** (nullar) dessa fält när doc:ens
-färskhetsstämpel `tmdbFieldsRefreshedAt` är äldre än **5 mån** (medveten marginal
-under 6-månaderstaket) eller saknas.
+Watchlist-docs denormaliserar TMDB-fält utan TTL. Den schemalagda Cloud Functionen
+`tmdbFieldsSweep` (månadsvis, `functions/src/tmdbTosSweep/`) **rensar** (nullar) dessa
+fält när de är äldre än **5 mån** (medveten marginal under 6-månaderstaket) eller saknar
+färskhetsstämpel.
 
-**Avgränsning (INTE användardata):** hård fält-allowlist — rör ALDRIG user-authored
-fält (`status`, `rating`, `ratedAt`, `notes`, `tags`, `watchedAt`) eller `updatedAt`
-(driver "Fortsätt titta"-sorteringen). Test-låst (`FORBIDDEN_FIELDS` i `logic.ts`).
-Det är dataminimering på processor-cache, inte radering av användarens egna data —
-ingen ny rättslig grund krävs (ADR 0009, DPO-panel 2026-07-11).
+**Per-grupp-färskhet (BIN-468):** en enda doc-nivå-stämpel räckte inte — titelsidan
+skriver bara en delmängd av blocket men förnyar stämpeln, så en användare som bara
+öppnar titelsidor kunde hålla stämpeln färsk i evighet medan providers/next-air-data
+tyst åldrades förbi 6 mån. Fältet är därför uppdelat i **tre oberoende grupper**, var
+och en med sin EGEN stämpel, staleness-check (5 mån) och reparationsväg. Svepen rensar
+varje grupp för sig när dess stämpel är stale/saknas, och **raderar den gruppens stämpel
+vid rensning** så att gruppens egen reparationsväg repopulerar den — aldrig med
+överskrivning av en syskongrupp som fortfarande är färsk:
 
-**Färskhet återställs** lat: klienten skriver `tmdbFieldsRefreshedAt` vid
-denormalisering (`addItem`, `nextAirReadRepair`) och en titelsides-lazy-refresh
-repopulerar ett rensat block vid nästa visning (`refreshTmdbFields`).
+| Grupp | Fält | Stämpel | Reparationsväg |
+|---|---|---|---|
+| static | `title`, `posterPath`, `genreIds`, `tmdbStatus`, `runtime` | `tmdbFieldsRefreshedAt` | `addItem` + titelsidans `refreshTmdbFields` |
+| providers | `providers` | `providersCheckedAt` | advisor/backfill; titelsidan som *fallback* (bara när `providersCheckedAt` inte är färskare än 60 d, så en färskare advisor-koll aldrig klobbras) |
+| nextair | `nextAirDate`, `nextAirCode`, `nextAirProvider`, `digitalReleaseDate` | `nextAirUpdatedAt` | kalender-`nextAirReadRepair` (om-stämplar även vid oförändrat värde när stämpeln > 90 d, så en stabil `digitalReleaseDate` inte fryser → onödig rensa-rep, BIN-468 A3) |
+
+**Terminal null-state:** en användare som t.ex. aldrig öppnar Kalendern reparerar aldrig
+sin nextair-grupp — den rensas då till **null** och förblir null. Det är avsiktligt och
+compliant: att visa *ingenting* är ToS-säkert, att visa stale TMDB-data är överträdelsen.
+Null är alltså det korrekta slutläget, inte en bugg.
+
+**Avgränsning (INTE användardata):** hård fält-allowlist per grupp — rör ALDRIG
+user-authored fält (`status`, `rating`, `ratedAt`, `notes`, `tags`, `watchedAt`) eller
+`updatedAt` (driver "Fortsätt titta"-sorteringen). Test-låst (`FORBIDDEN_FIELDS` +
+per-grupp-nyckeluppsättningar i `logic.test.ts`). Det är dataminimering på
+processor-cache, inte radering av användarens egna data — ingen ny rättslig grund krävs
+(ADR 0009, DPO-panel 2026-07-11/2026-07-12).
+
+**GDPR-export:** en rensad TMDB-grupp kan visa sig som `null` i en Art. 20-export
+(`buildUserExport` exporterar hela råa watchlist-doc:en, cleared eller ej). Det är
+förväntat och compliant — TMDB-fält är icke-personlig tredjeparts-metadata (se
+export-README), inte dataförlust. En framtida ändring ska INTE "fixa" ett null-fält
+som saknad data.
+
+**Stämpelns integritet (Security):** de tre stämplarna är sweep-freshness-gates —
+`firestore.rules` binder alla tre `is timestamp && <= request.time` (envägs-ratchet) så
+en klient inte kan förfalska en framtida stämpel och få svepen att hoppa över en grupp i
+evighet.
 
 **Dry-run som default:** funktionen skriver inget förrän
 `sweepState/tmdbFieldsSweep.mutateEnabled === true` (flippas i Console efter granskad
-dry-run — verifiera `lastRun.fullPassCompleted === true` + kostnad först, DBA-villkor).
-Audit-record per körning i `sweepState/tmdbFieldsSweep.lastRun`.
+dry-run). Audit-record per körning i `sweepState/tmdbFieldsSweep.lastRun` inkl. en
+**per-grupp**-uppdelning (`docsWouldClearByGroup`) — enable-grinden kräver att static- +
+providers-grupperna ligger < 5 % rensning över ≥ 2 månaders dry-runs innan flip (nextair
+undantas då den bara propagerar via Kalender-besök), plus en missad-körning-larm och en
+konvergens-check mot `MAX_CLEARS_PER_RUN` (DBA-villkor).
 
 ### "Släpps idag"-dedup-markörer (BIN-464) — 30-dagars svep (GDPR Art. 17 + tillväxtgräns)
 

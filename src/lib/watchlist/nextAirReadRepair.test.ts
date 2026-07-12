@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeNextAirFields, computeMovieReleaseFields, nextAirDelta, collectNextAirUpdates,
-  buildRepairPayload,
+  buildRepairPayload, nextAirStampStale, NEXTAIR_RESTAMP_INTERVAL_MS,
 } from './nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
+
+const NOW = Date.UTC(2026, 6, 11); // 2026-07-11
 
 const baseItem = (over: Partial<WatchlistItem> = {}): WatchlistItem => ({
   tmdbId: 1399, mediaType: 'tv', status: 'mina', rating: null, notes: null,
@@ -79,24 +81,82 @@ describe('buildRepairPayload', () => {
   });
 });
 
+// BIN-468 A3: nextAirUpdatedAt must not FREEZE on a stable item. A settled
+// digitalReleaseDate (or an ended show's air fields) never changes → its stamp
+// would freeze → sweep clears at 5mo → next visit re-writes → a recurring
+// clear-then-repair cycle. Fix: re-stamp when the stamp is older than the
+// re-stamp interval (~90d) even if no value changed — but only for items that
+// actually hold next-air data (nothing to attest otherwise).
+describe('nextAirStampStale', () => {
+  it('stale when the stamp is absent (legacy has-data doc, never stamped)', () => {
+    expect(nextAirStampStale(null, NOW)).toBe(true);
+    expect(nextAirStampStale(undefined, NOW)).toBe(true);
+  });
+  it('fresh within the interval, stale once past it', () => {
+    expect(nextAirStampStale(new Date(NOW - (NEXTAIR_RESTAMP_INTERVAL_MS - 86_400_000)), NOW)).toBe(false);
+    expect(nextAirStampStale(new Date(NOW - (NEXTAIR_RESTAMP_INTERVAL_MS + 86_400_000)), NOW)).toBe(true);
+  });
+  it('exact boundary: stale AT the interval (>= — guards a >= → > regression)', () => {
+    expect(nextAirStampStale(new Date(NOW - NEXTAIR_RESTAMP_INTERVAL_MS), NOW)).toBe(true);
+    expect(nextAirStampStale(new Date(NOW - NEXTAIR_RESTAMP_INTERVAL_MS + 1), NOW)).toBe(false);
+  });
+  it('interval stays under the 5-month sweep threshold', () => {
+    expect(NEXTAIR_RESTAMP_INTERVAL_MS).toBeLessThan(5 * 30 * 24 * 60 * 60 * 1000);
+  });
+});
+
 describe('collectNextAirUpdates', () => {
   const show = showWith({
     next_episode_to_air: { air_date: '2026-07-09', season_number: 2, episode_number: 3 } as TMDBTVShow['next_episode_to_air'],
   });
-  it('emits a delta for a stale item and nothing for a fresh one', () => {
+  const freshStamp = new Date(NOW - 86_400_000); // 1 day old — within re-stamp interval
+  const staleStamp = new Date(NOW - (NEXTAIR_RESTAMP_INTERVAL_MS + 86_400_000)); // past interval
+
+  it('emits a value delta for a changed item and nothing for a fresh, dataless one', () => {
     const stale = baseItem({ tmdbId: 1399 });
     const fresh = baseItem({ tmdbId: 42, nextAirDate: null, nextAirCode: null, nextAirProvider: null });
     const freshShow = showWith({ id: 42 });
-    const updates = collectNextAirUpdates([stale, fresh], [show, freshShow], []);
+    const updates = collectNextAirUpdates([stale, fresh], [show, freshShow], [], NOW);
     expect(updates).toHaveLength(1);
     expect(updates[0].tmdbId).toBe(1399);
     expect(updates[0].delta.nextAirDate).toBe('2026-07-09');
   });
-  it('ignores shows not in the library (idempotens: stabil show → noll writes)', () => {
-    expect(collectNextAirUpdates([], [show], [])).toHaveLength(0);
-    // Upprepad resolution av samma redan-reparerade item → noll deltas varje gång.
-    const repaired = baseItem({ tmdbId: 1399, nextAirDate: '2026-07-09', nextAirCode: 'S02E03', nextAirProvider: null });
-    expect(collectNextAirUpdates([repaired], [show], [])).toHaveLength(0);
-    expect(collectNextAirUpdates([repaired], [show], [])).toHaveLength(0);
+
+  it('a stable item that is already stamped-fresh produces no write (idempotent)', () => {
+    const repaired = baseItem({
+      tmdbId: 1399, nextAirDate: '2026-07-09', nextAirCode: 'S02E03', nextAirProvider: null,
+      nextAirUpdatedAt: freshStamp,
+    });
+    expect(collectNextAirUpdates([repaired], [show], [], NOW)).toHaveLength(0);
+    expect(collectNextAirUpdates([repaired], [show], [], NOW)).toHaveLength(0);
+  });
+
+  it('re-stamps a stable item whose stamp is stale — no value delta, just the stamp (A3)', () => {
+    const stableButStale = baseItem({
+      tmdbId: 1399, nextAirDate: '2026-07-09', nextAirCode: 'S02E03', nextAirProvider: null,
+      nextAirUpdatedAt: staleStamp,
+    });
+    const updates = collectNextAirUpdates([stableButStale], [show], [], NOW);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].delta).toEqual({}); // stamp-only — buildRepairPayload adds nextAirUpdatedAt
+  });
+
+  it('re-stamps a has-data item with an absent stamp (legacy doc)', () => {
+    const legacy = baseItem({
+      tmdbId: 1399, nextAirDate: '2026-07-09', nextAirCode: 'S02E03', nextAirProvider: null,
+      // nextAirUpdatedAt undefined
+    });
+    expect(collectNextAirUpdates([legacy], [show], [], NOW)).toHaveLength(1);
+  });
+
+  it('does NOT re-stamp an item that holds no next-air data (nothing to attest)', () => {
+    // a TV show with nothing upcoming: computed all-null == stored all-null, no data → no stamp churn
+    const empty = baseItem({ tmdbId: 42, nextAirUpdatedAt: undefined });
+    const emptyShow = showWith({ id: 42 });
+    expect(collectNextAirUpdates([empty], [emptyShow], [], NOW)).toHaveLength(0);
+  });
+
+  it('ignores shows not in the library', () => {
+    expect(collectNextAirUpdates([], [show], [], NOW)).toHaveLength(0);
   });
 });

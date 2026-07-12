@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
-import { needsTmdbFieldsRefresh, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
+import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, shouldStampProvidersAtAdd, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
@@ -261,6 +261,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // genreIds/…) fresh from TMDB, so mark it fresh — else the ToS sweep, which
       // treats an absent stamp as stale, would clear a freshly-added title's fields.
       tmdbFieldsRefreshedAt: serverTimestamp(),
+      // BIN-468: stamp the providers group ONLY on a genuine new add carrying real
+      // providers. addItem is also the useMarkSeen re-mark path (cached/[] providers);
+      // stamping there would falsely re-certify stale providers AND suppress
+      // taste/backfill's 60-day re-fetch. "Genuine new add" requires the snapshot to
+      // have SETTLED — during a cold load `items` is [] so an in-library re-mark would
+      // otherwise misread as new. When unsettled we can't tell → don't stamp; backfill
+      // / the title-page fallback owns it.
+      ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers)
+        ? { providersCheckedAt: serverTimestamp() }
+        : {}),
       // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this
       // call — covers pre-rated CSV imports (current undefined) while NOT bumping
       // recency when a re-mark carries the unchanged current rating. Omit the key
@@ -426,18 +436,27 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (refreshedThisSession.current.has(dedupeKey)) return;
     const current = items.find(i => i.tmdbId === tmdbId);
     if (!current) return; // only titles in the library carry the stamp / get swept
-    if (!needsTmdbFieldsRefresh(current.tmdbFieldsRefreshedAt, Date.now())) return;
+    // BIN-468: the static group and the providers group are gated INDEPENDENTLY —
+    // a stale providers group must repair even when the static stamp is fresh
+    // (DBA decoupling), and providers are written only as a fallback so a fresher
+    // advisor value is never clobbered. Decide synchronously so the session dedupe
+    // is marked BEFORE any await (echo-proof — the pending serverTimestamp reads
+    // back null and would otherwise re-trip the gate).
+    const now = Date.now();
+    const staticNeeded = needsTmdbFieldsRefresh(current.tmdbFieldsRefreshedAt, now);
+    const providersNeeded = fields.providers != null && needsProvidersRefresh(current.providersCheckedAt, now);
+    if (!staticNeeded && !providersNeeded) return;
     refreshedThisSession.current.add(dedupeKey); // mark BEFORE the await — synchronous, echo-independent
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    // Merge only the fields the caller actually has (undefined omitted); the stamp
-    // is always set. Explicitly never updatedAt.
-    const payload: Record<string, unknown> = { tmdbFieldsRefreshedAt: serverTimestamp() };
-    if (fields.title != null) payload.title = fields.title;
-    if (fields.posterPath !== undefined) payload.posterPath = fields.posterPath;
-    if (fields.providers != null) payload.providers = fields.providers;
-    if (fields.genreIds != null) payload.genreIds = fields.genreIds;
-    if (fields.tmdbStatus !== undefined) payload.tmdbStatus = fields.tmdbStatus;
-    if (fields.runtime !== undefined) payload.runtime = fields.runtime;
+    // Build the per-group merge payload (static fields + tmdbFieldsRefreshedAt when
+    // stale; providers + providersCheckedAt only as the fallback). Never updatedAt.
+    const payload = planTmdbFieldsRefresh(
+      { tmdbFieldsRefreshedAt: current.tmdbFieldsRefreshedAt, providersCheckedAt: current.providersCheckedAt },
+      fields,
+      now,
+      serverTimestamp(),
+    );
+    if (!payload) return; // gated above; defensive
     try {
       await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), payload, { merge: true });
     } catch (err) {

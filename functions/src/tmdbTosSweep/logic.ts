@@ -1,16 +1,26 @@
 /**
- * Pure predicates + payload builder for the monthly TMDB ToS sweep (BIN-402) —
- * no firebase-admin imports so they unit-test under the root vitest toolchain
- * (same split as retentionCleanup/logic.ts and episodeNotify/logic.ts; the
- * functions-test-import gotcha: root `npm ci` in CI lacks firebase-admin, so
+ * Pure predicates + payload builder for the monthly TMDB ToS sweep (BIN-402 /
+ * BIN-468) — no firebase-admin imports so they unit-test under the root vitest
+ * toolchain (same split as retentionCleanup/logic.ts and episodeNotify/logic.ts;
+ * the functions-test-import gotcha: root `npm ci` in CI lacks firebase-admin, so
  * anything tested by the root runner MUST stay admin-free).
  *
  * Background: TMDB API terms §1.C forbid caching API-derived data > 6 months.
  * Binge denormalizes TMDB fields onto users/{uid}/watchlist/{tmdbId} with no
  * TTL. This sweep CLEARS (nulls) those fields once stale; freshness is restored
- * lazily on the next title-page view (which calls TMDB anyway) — never
- * proactively re-fetched (unbounded fan-out vs the 25 SEK/mo Blaze cap). See
- * ADR 0009 + docs/superpowers/plans/2026-07-03-bin-402-tmdb-tos-sweep.md.
+ * lazily by each field-group's own repair path — never proactively re-fetched
+ * (unbounded fan-out vs the 25 SEK/mo Blaze cap). See ADR 0009 +
+ * ~/.claude/plans/binge-bin468-stage2.md.
+ *
+ * BIN-468 — PER-GROUP FRESHNESS. A single doc-level stamp is NOT enough: the
+ * title page re-writes only a subset of the TMDB block while renewing one stamp,
+ * so a user who only ever opens title pages keeps that stamp perpetually fresh
+ * while providers / next-air data silently age past 6 months. The fix: three
+ * independently-gated field GROUPS, each checked against its OWN stamp and its
+ * OWN repair path (title-page lazy-refresh / advisor+backfill / calendar
+ * read-repair). Each group is cleared independently when ITS stamp is stale, and
+ * the clear deletes only that group's stamp so its own repair path repopulates
+ * it — never clobbering a sibling group that is still fresh.
  */
 
 /**
@@ -21,41 +31,75 @@
 export const TMDB_FIELDS_MAX_AGE_MS = 5 * 30 * 24 * 60 * 60 * 1000;
 
 /**
- * The HARD allowlist of denormalized TMDB-derived fields the sweep may clear.
- * This is the single source of truth for scope (DPO must-have): the update
- * payload's key-set is asserted set-equal to this + {tmdbFieldsRefreshedAt} in
- * logic.test.ts, so no user-authored field (rating/status/notes/lastWatched-*,
- * updatedAt/watchedAt/visibility/…) can ever ride along. Exactly the fields
- * enumerated in the plan — no silent carve-out (genreIds looks innocent but is
- * TMDB-derived). releaseYear/totalSeasons are intentionally out of the reviewed
- * scope and are NOT here.
+ * A field group: a set of denormalized TMDB-derived data `fields` that share one
+ * `stamp` (freshness gate + repair marker) and one repair path. The sweep judges
+ * staleness per group against `stamp`, and on clear deletes the group's `fields`
+ * AND its `stamp` together (never a sibling group's).
  */
-export const TMDB_DERIVED_FIELDS = [
-  'title',
-  'posterPath',
-  'providers',
-  'providersCheckedAt',
-  'genreIds',
-  'tmdbStatus',
-  'runtime',
-  'nextAirDate',
-  'nextAirCode',
-  'nextAirProvider',
-  'nextAirUpdatedAt',
-  'digitalReleaseDate',
-] as const;
+export interface FieldGroup {
+  readonly name: 'static' | 'providers' | 'nextair';
+  readonly fields: readonly string[];
+  readonly stamp: string;
+}
 
 /**
- * The single doc-level freshness stamp the sweep sets on every touch. NOT a
- * clearable field — it records when the TMDB block was last known-compliant so
- * the next scan can skip fresh docs. Missing = stale (see isTmdbFieldsStale).
+ * Static block — the fields the title-page lazy-refresh (addItem +
+ * refreshTmdbFields) owns. Gated by `tmdbFieldsRefreshedAt`.
  */
-export const TMDB_FIELDS_STAMP = 'tmdbFieldsRefreshedAt';
+export const STATIC_GROUP: FieldGroup = {
+  name: 'static',
+  fields: ['title', 'posterPath', 'genreIds', 'tmdbStatus', 'runtime'],
+  stamp: 'tmdbFieldsRefreshedAt',
+};
+
+/**
+ * Providers — gated by `providersCheckedAt`. Repaired by the advisor/backfill
+ * path and, as a conditional fallback, the title page (BIN-468 A2: the title
+ * page only writes providers when providersCheckedAt is not already fresher than
+ * the advisor's re-check window, and co-stamps providersCheckedAt when it does).
+ */
+export const PROVIDERS_GROUP: FieldGroup = {
+  name: 'providers',
+  fields: ['providers'],
+  stamp: 'providersCheckedAt',
+};
+
+/**
+ * Next-air trio + the movie digital-release date — gated by `nextAirUpdatedAt`,
+ * repaired only by the Calendar read-repair (nextAirReadRepair). Grouped
+ * together because that one writer computes both in the same pass.
+ */
+export const NEXTAIR_GROUP: FieldGroup = {
+  name: 'nextair',
+  fields: ['nextAirDate', 'nextAirCode', 'nextAirProvider', 'digitalReleaseDate'],
+  stamp: 'nextAirUpdatedAt',
+};
+
+/** The three groups, in a stable order (used for iteration + audit keys). */
+export const FIELD_GROUPS: readonly FieldGroup[] = [STATIC_GROUP, PROVIDERS_GROUP, NEXTAIR_GROUP];
+
+/**
+ * Every key the sweep may ever delete: each group's data fields ∪ each group's
+ * stamp. This is the total clearing scope (DPO must-have) — the per-group clear
+ * payloads are asserted set-equal to `fields ∪ {stamp}` in logic.test.ts, so no
+ * user-authored field can ever ride along.
+ */
+export const ALL_CLEARABLE_KEYS: readonly string[] = [
+  ...FIELD_GROUPS.flatMap((g) => g.fields),
+  ...FIELD_GROUPS.map((g) => g.stamp),
+];
+
+/**
+ * Everything the scan loop must `.select()` to judge each group: every stamp (to
+ * read freshness) + every data field (to test presence). Same key set as
+ * ALL_CLEARABLE_KEYS, named separately for intent at the query site.
+ */
+export const ALL_SELECT_KEYS: readonly string[] = ALL_CLEARABLE_KEYS;
 
 /**
  * User-authored / structural fields the sweep must NEVER touch. Not consumed by
  * production code — it exists so logic.test.ts can assert the clear payload
- * intersects none of them (a live tripwire if someone edits TMDB_DERIVED_FIELDS).
+ * intersects none of them (a live tripwire if someone edits a group's fields).
  */
 export const FORBIDDEN_FIELDS = [
   'tmdbId',
@@ -92,47 +136,61 @@ export function tsToMillis(raw: unknown): number | null {
 }
 
 /**
- * The TMDB-derived block is stale when its freshness stamp is older than the
- * threshold OR ABSENT. **Missing stamp = stale** is the safe default here — a
- * doc predating the stamp mechanism holds TMDB data of unknown, possibly >6mo
- * age that MUST be cleared for §1.C. (This flips retentionCleanup's stance,
- * where an undateable doc is KEPT: there the risk is deleting user data; here
- * the risk is RETAINING TMDB data, so the conservative default inverts.)
+ * A TMDB stamp is stale when older than the threshold OR ABSENT. **Missing stamp
+ * = stale** is the safe default here — a doc predating the stamp holds TMDB data
+ * of unknown, possibly >6mo age that MUST be cleared for §1.C. (This flips
+ * retentionCleanup's stance, where an undateable doc is KEPT: there the risk is
+ * deleting user data; here the risk is RETAINING TMDB data, so it inverts.)
  */
 export function isTmdbFieldsStale(stampMs: number | null, nowMs: number): boolean {
   return stampMs === null || stampMs < nowMs - TMDB_FIELDS_MAX_AGE_MS;
 }
 
-/**
- * True when none of the clearable TMDB fields is present on the doc — used to
- * skip the write entirely on an already-cleared doc (idempotency; saves writes
- * against the cap). A field counts as present when its value is not `undefined`
- * (Firestore returns undefined for an absent field; an explicit null counts as
- * present so a half-cleared legacy doc still gets a clean sweep).
- */
-export function allTargetFieldsAbsent(data: Record<string, unknown>): boolean {
-  return TMDB_DERIVED_FIELDS.every((f) => data[f] === undefined);
+/** True when a group's own stamp is stale/absent (the group may need clearing). */
+export function groupIsStale(group: FieldGroup, data: Record<string, unknown>, nowMs: number): boolean {
+  return isTmdbFieldsStale(tsToMillis(data[group.stamp]), nowMs);
 }
 
 /**
- * Build the field-clearing update payload: every clearable field AND the freshness
- * stamp → the caller's `deleteSentinel` (FieldValue.delete()). INVARIANT (DPO
- * must-have, test-locked): the key set is EXACTLY TMDB_DERIVED_FIELDS ∪
- * {tmdbFieldsRefreshedAt} — never updatedAt, never any user-authored field. This is
- * a fresh object built only from the allowlist; it is NEVER a read-modify-write /
- * merge of the existing doc (that is the #1 way a mixed TMDB+user-authored doc gets
- * corrupted).
- *
- * BIN-402: the stamp is DELETED, not set fresh — a cleared doc must end up with an
- * ABSENT stamp so the title-page lazy-refresh (which fires on absent/stale) actually
- * repopulates it on next view. A fresh stamp would make needsTmdbFieldsRefresh return
- * false → the doc renders blank until the stamp aged out ~90 days. The next sweep
- * skips an already-cleared doc via allTargetFieldsAbsent (idempotent).
+ * True when at least one of a group's DATA fields is present on the doc — used to
+ * skip clearing a group that holds nothing (idempotency; saves writes against the
+ * cap). A field counts as present when not `undefined` (Firestore returns
+ * undefined for an absent field; an explicit null counts as present so a
+ * half-cleared legacy doc still gets a clean sweep). The group's stamp is NOT a
+ * data field and never counts here.
  */
-export function buildClearedPayload(deleteSentinel: unknown): Record<string, unknown> {
+export function groupHasData(group: FieldGroup, data: Record<string, unknown>): boolean {
+  return group.fields.some((f) => data[f] !== undefined);
+}
+
+/**
+ * The groups this doc needs swept: each group that is stale AND still holds data.
+ * A fresh group is left untouched; a stale-but-empty group is skipped (already
+ * clear). Order follows FIELD_GROUPS.
+ */
+export function groupsToClear(data: Record<string, unknown>, nowMs: number): FieldGroup[] {
+  return FIELD_GROUPS.filter((g) => groupIsStale(g, data, nowMs) && groupHasData(g, data));
+}
+
+/**
+ * Build the field-clearing update payload for the given groups: each group's data
+ * fields AND its own stamp → the caller's `deleteSentinel` (FieldValue.delete()).
+ * INVARIANT (DPO must-have, test-locked): the key set is EXACTLY the union of the
+ * passed groups' (fields ∪ {stamp}) — never updatedAt, never a user-authored
+ * field, never a stamp of a group that isn't being cleared. A fresh object built
+ * only from the allowlist; NEVER a read-modify-write / merge of the existing doc.
+ *
+ * Each cleared group's stamp is DELETED, not set fresh — a cleared group must end
+ * absent-stamped so its own repair path (which fires on absent/stale) repopulates
+ * it. The next sweep skips an already-cleared group via groupHasData (idempotent).
+ * A SINGLE flat payload spanning all stale groups → a single per-doc write.
+ */
+export function buildClearedPayload(groups: readonly FieldGroup[], deleteSentinel: unknown): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
-  for (const f of TMDB_DERIVED_FIELDS) payload[f] = deleteSentinel;
-  payload[TMDB_FIELDS_STAMP] = deleteSentinel;
+  for (const g of groups) {
+    for (const f of g.fields) payload[f] = deleteSentinel;
+    payload[g.stamp] = deleteSentinel;
+  }
   return payload;
 }
 
@@ -189,25 +247,6 @@ export function resolveStartCursor(
   return mutateEnabled && typeof cursor === 'string' ? cursor : null;
 }
 
-/** Per-doc verdict for the sweep loop. */
-export type SweepDisposition = 'skip-fresh' | 'skip-empty' | 'clear';
-
-/**
- * The idempotent per-doc decision, folding staleness + already-cleared into one
- * verdict:
- *  • `skip-fresh` — stamp within threshold → leave it (compliant).
- *  • `skip-empty` — stale/absent stamp but no clearable field present → skip the
- *    write (idempotency; saves a write against the cap on an already-swept doc).
- *  • `clear`      — stale AND still holds TMDB-derived data → clear it.
- * `data` is the doc's field map (already narrowed by `.select()` in index.ts).
- */
-export function classifyWatchlistDoc(data: Record<string, unknown>, nowMs: number): SweepDisposition {
-  const stampMs = tsToMillis(data[TMDB_FIELDS_STAMP]);
-  if (!isTmdbFieldsStale(stampMs, nowMs)) return 'skip-fresh';
-  if (allTargetFieldsAbsent(data)) return 'skip-empty';
-  return 'clear';
-}
-
 /**
  * True once the per-run scan OR clear budget is spent — the loop breaks with
  * `budgetAbort: true` and resumes from the persisted cursor next invocation.
@@ -235,24 +274,38 @@ export function shouldResetCursor(mutateEnabled: boolean, fullPassCompleted: boo
   return mutateEnabled && fullPassCompleted;
 }
 
+/** Per-group tally of docs that would be / were cleared (BIN-468 A6 audit). */
+export interface GroupClearTally {
+  static: number;
+  providers: number;
+  nextair: number;
+}
+
 /** Tallies the loop accumulates, fed into the audit record. */
 export interface SweepRunTally {
   mutateEnabled: boolean;
   scanned: number;
-  /** Docs that WOULD be (dry-run) / WERE (mutate) cleared. */
+  /** Docs that WOULD be (dry-run) / WERE (mutate) cleared (any group). */
   clearable: number;
   skipped: number;
   budgetAbort: boolean;
   fullPassCompleted: boolean;
+  /** How many docs had each group cleared — the per-group would-clear breakdown. */
+  wouldClearByGroup: GroupClearTally;
 }
 
 /**
  * Build the per-run audit record (`sweepState/tmdbFieldsSweep.lastRun`) — the
  * evidence the control ran against prod. The dry-run/mutate distinction is
  * encoded here so the record is honest: `docsCleared` is 0 in dry-run (nothing
- * was written) while `docsWouldClear` always reports what a mutate run WOULD
- * clear, so a dry-run's counts preview the real run. `serverTimestamp` is
- * injected (like buildClearedPayload's sentinel) to keep this admin-free.
+ * was written) while `docsWouldClear` (+ the per-group breakdown) always reports
+ * what a mutate run WOULD clear, so a dry-run's counts preview the real run.
+ *
+ * The per-group breakdown is BIN-468's enable-gate metric (A6): the nextair group
+ * propagates only via Calendar visits so it structurally clears at a higher rate
+ * than static/providers — a blended `docsWouldClear` would hide that, so the flip
+ * decision reads the groups separately. `serverTimestamp` is injected (like
+ * buildClearedPayload's sentinel) to keep this admin-free.
  */
 export function buildLastRunAudit(tally: SweepRunTally, serverTimestamp: unknown): Record<string, unknown> {
   return {
@@ -261,6 +314,7 @@ export function buildLastRunAudit(tally: SweepRunTally, serverTimestamp: unknown
     docsScanned: tally.scanned,
     docsCleared: tally.mutateEnabled ? tally.clearable : 0,
     docsWouldClear: tally.clearable,
+    docsWouldClearByGroup: { ...tally.wouldClearByGroup },
     docsSkipped: tally.skipped,
     budgetAbort: tally.budgetAbort,
     fullPassCompleted: tally.fullPassCompleted,

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   isTmdbFieldsStale,
-  allTargetFieldsAbsent,
+  groupIsStale,
+  groupHasData,
+  groupsToClear,
   buildClearedPayload,
   tsToMillis,
-  classifyWatchlistDoc,
   resolveMutateEnabled,
   resolveStartCursor,
   budgetExhausted,
@@ -12,8 +13,12 @@ import {
   shouldResetCursor,
   buildLastRunAudit,
   TMDB_FIELDS_MAX_AGE_MS,
-  TMDB_DERIVED_FIELDS,
-  TMDB_FIELDS_STAMP,
+  FIELD_GROUPS,
+  STATIC_GROUP,
+  PROVIDERS_GROUP,
+  NEXTAIR_GROUP,
+  ALL_CLEARABLE_KEYS,
+  ALL_SELECT_KEYS,
   FORBIDDEN_FIELDS,
   MAX_DOCS_PER_RUN,
   MAX_CLEARS_PER_RUN,
@@ -70,57 +75,177 @@ describe('isTmdbFieldsStale', () => {
   });
 });
 
-describe('allTargetFieldsAbsent', () => {
-  it('true when none of the clearable fields is present', () => {
-    expect(allTargetFieldsAbsent({})).toBe(true);
-    expect(allTargetFieldsAbsent({ rating: 4, status: 'sedd', updatedAt: {} })).toBe(true);
+// --------------------------------------------------------------------------
+// Per-group freshness model (BIN-468) — three independently-gated field groups
+// --------------------------------------------------------------------------
+
+describe('FIELD_GROUPS definition', () => {
+  it('has exactly the three groups, each gated by its own stamp', () => {
+    expect(FIELD_GROUPS.map((g) => g.name)).toEqual(['static', 'providers', 'nextair']);
+    expect(STATIC_GROUP.stamp).toBe('tmdbFieldsRefreshedAt');
+    expect(PROVIDERS_GROUP.stamp).toBe('providersCheckedAt');
+    expect(NEXTAIR_GROUP.stamp).toBe('nextAirUpdatedAt');
   });
 
-  it('false when any clearable field is present — including an explicit null or empty array', () => {
-    expect(allTargetFieldsAbsent({ title: 'Dune' })).toBe(false);
-    expect(allTargetFieldsAbsent({ posterPath: null })).toBe(false); // present-but-null still needs clearing
-    expect(allTargetFieldsAbsent({ providers: [] })).toBe(false);
-    expect(allTargetFieldsAbsent({ genreIds: [878] })).toBe(false);
+  it('static group = the fields the title-page lazy-refresh owns', () => {
+    expect([...STATIC_GROUP.fields].sort()).toEqual(
+      ['title', 'posterPath', 'genreIds', 'tmdbStatus', 'runtime'].sort(),
+    );
+  });
+
+  it('providers group = just providers (gated by providersCheckedAt)', () => {
+    expect([...PROVIDERS_GROUP.fields]).toEqual(['providers']);
+  });
+
+  it('nextair group = next-air trio + digitalReleaseDate (calendar read-repair lane)', () => {
+    expect([...NEXTAIR_GROUP.fields].sort()).toEqual(
+      ['nextAirDate', 'nextAirCode', 'nextAirProvider', 'digitalReleaseDate'].sort(),
+    );
+  });
+
+  it("a group's own stamp is never also one of its clearable data fields", () => {
+    for (const g of FIELD_GROUPS) {
+      expect((g.fields as readonly string[]).includes(g.stamp)).toBe(false);
+    }
+  });
+
+  it('groups are field-disjoint (no field clearable under two stamps)', () => {
+    const seen = new Set<string>();
+    for (const g of FIELD_GROUPS) {
+      for (const f of g.fields) {
+        expect(seen.has(f)).toBe(false);
+        seen.add(f);
+      }
+    }
+  });
+
+  it('ALL_CLEARABLE_KEYS is every data field ∪ every stamp — the total clearing scope', () => {
+    const expected = [
+      ...FIELD_GROUPS.flatMap((g) => g.fields),
+      ...FIELD_GROUPS.map((g) => g.stamp),
+    ].sort();
+    expect([...ALL_CLEARABLE_KEYS].sort()).toEqual(expected);
+  });
+
+  it('ALL_SELECT_KEYS covers everything the loop reads to judge staleness + presence', () => {
+    // must include every stamp (to read freshness) and every data field (to test presence)
+    for (const g of FIELD_GROUPS) {
+      expect(ALL_SELECT_KEYS).toContain(g.stamp);
+      for (const f of g.fields) expect(ALL_SELECT_KEYS).toContain(f);
+    }
   });
 });
 
-describe('buildClearedPayload (DPO hard field-allowlist)', () => {
+describe('groupIsStale (per-group, against the group\'s own stamp)', () => {
+  it('a group with a fresh stamp is not stale', () => {
+    expect(groupIsStale(PROVIDERS_GROUP, { providersCheckedAt: fresh }, now)).toBe(false);
+  });
+
+  it('a group with a stale stamp is stale', () => {
+    expect(groupIsStale(PROVIDERS_GROUP, { providersCheckedAt: stale }, now)).toBe(true);
+  });
+
+  it('a group with an ABSENT stamp is stale (safe default)', () => {
+    expect(groupIsStale(NEXTAIR_GROUP, {}, now)).toBe(true);
+    // a fresh sibling stamp does not rescue a different group
+    expect(groupIsStale(PROVIDERS_GROUP, { tmdbFieldsRefreshedAt: fresh }, now)).toBe(true);
+  });
+});
+
+describe('groupHasData (is there anything to clear in this group)', () => {
+  it('true when any of the group\'s data fields is present (incl. null / empty array)', () => {
+    expect(groupHasData(PROVIDERS_GROUP, { providers: [] })).toBe(true);
+    expect(groupHasData(STATIC_GROUP, { posterPath: null })).toBe(true);
+    expect(groupHasData(NEXTAIR_GROUP, { digitalReleaseDate: '2026-01-01' })).toBe(true);
+  });
+
+  it('false when none of the group\'s data fields is present', () => {
+    expect(groupHasData(PROVIDERS_GROUP, { providersCheckedAt: stale })).toBe(false); // stamp is not data
+    expect(groupHasData(STATIC_GROUP, { providers: [8] })).toBe(false); // other group's field
+    expect(groupHasData(NEXTAIR_GROUP, {})).toBe(false);
+  });
+});
+
+describe('groupsToClear (which groups this doc needs swept)', () => {
+  it('a group that is stale AND holds data is selected', () => {
+    const groups = groupsToClear({ providersCheckedAt: stale, providers: [8] }, now);
+    expect(groups.map((g) => g.name)).toEqual(['providers']);
+  });
+
+  it('a stale-but-empty group is NOT selected (idempotent — no wasted write)', () => {
+    expect(groupsToClear({ providersCheckedAt: stale }, now)).toEqual([]);
+  });
+
+  it('a fresh group holding data is NOT selected', () => {
+    expect(groupsToClear({ providersCheckedAt: fresh, providers: [8] }, now)).toEqual([]);
+  });
+
+  it('selects ONLY the stale groups on a mixed doc — fresh groups are left untouched', () => {
+    const data = {
+      // static: fresh, holds data → keep
+      tmdbFieldsRefreshedAt: fresh,
+      title: 'Dune',
+      // providers: stale, holds data → clear
+      providersCheckedAt: stale,
+      providers: [8],
+      // nextair: stale, holds data → clear
+      nextAirUpdatedAt: stale,
+      nextAirDate: '2026-01-01',
+    };
+    expect(groupsToClear(data, now).map((g) => g.name)).toEqual(['providers', 'nextair']);
+  });
+
+  it('a legacy doc with no stamps at all clears every group that holds data', () => {
+    const data = { title: 'Dune', providers: [8], nextAirDate: '2026-01-01' };
+    expect(groupsToClear(data, now).map((g) => g.name)).toEqual(['static', 'providers', 'nextair']);
+  });
+});
+
+describe('buildClearedPayload (per-group, DPO hard field-allowlist)', () => {
   const DELETE = Symbol('delete');
-  const payload = buildClearedPayload(DELETE);
-  const keys = Object.keys(payload).sort();
 
-  it('key set is EXACTLY the TMDB-derived fields plus the freshness stamp', () => {
-    const expected = [...TMDB_DERIVED_FIELDS, TMDB_FIELDS_STAMP].sort();
-    expect(keys).toEqual(expected);
+  it('clears exactly one group: its data fields + its own stamp, nothing else', () => {
+    const payload = buildClearedPayload([PROVIDERS_GROUP], DELETE);
+    expect(Object.keys(payload).sort()).toEqual(['providers', 'providersCheckedAt'].sort());
+    expect(payload.providers).toBe(DELETE);
+    expect(payload.providersCheckedAt).toBe(DELETE);
   });
 
-  it('every clearable field maps to the delete sentinel', () => {
-    for (const f of TMDB_DERIVED_FIELDS) expect(payload[f]).toBe(DELETE);
-  });
-
-  it('DELETES the freshness stamp too (absent stamp → lazy-refresh repopulates the swept doc)', () => {
-    // BIN-402: must NOT leave a fresh stamp — that would make needsTmdbFieldsRefresh
-    // return false and the swept doc would render blank until the stamp aged out.
-    expect(payload[TMDB_FIELDS_STAMP]).toBe(DELETE);
-  });
-
-  it('never contains updatedAt or any user-authored field', () => {
-    for (const forbidden of FORBIDDEN_FIELDS) {
-      expect(payload).not.toHaveProperty(forbidden);
+  it('per-group key sets are exact — one independent assertion per group (no cross-leak)', () => {
+    for (const g of FIELD_GROUPS) {
+      const payload = buildClearedPayload([g], DELETE);
+      expect(Object.keys(payload).sort()).toEqual([...g.fields, g.stamp].sort());
+      for (const f of g.fields) expect(payload[f]).toBe(DELETE);
+      expect(payload[g.stamp]).toBe(DELETE);
     }
-    // updatedAt is the load-bearing one (drives continueWatching sort).
+  });
+
+  it('clears the union when multiple groups are passed — still a single flat payload (one write)', () => {
+    const payload = buildClearedPayload([PROVIDERS_GROUP, NEXTAIR_GROUP], DELETE);
+    expect(Object.keys(payload).sort()).toEqual(
+      ['providers', 'providersCheckedAt', 'nextAirDate', 'nextAirCode', 'nextAirProvider', 'digitalReleaseDate', 'nextAirUpdatedAt'].sort(),
+    );
+  });
+
+  it('DELETES each cleared group\'s stamp too (absent stamp → that group\'s repair path repopulates it)', () => {
+    // a doc whose only stale group is static → static stamp deleted, providers/nextair stamps untouched
+    const payload = buildClearedPayload([STATIC_GROUP], DELETE);
+    expect(payload).toHaveProperty('tmdbFieldsRefreshedAt', DELETE);
+    expect(payload).not.toHaveProperty('providersCheckedAt');
+    expect(payload).not.toHaveProperty('nextAirUpdatedAt');
+  });
+
+  it('never contains updatedAt or any user-authored field, for any group combination', () => {
+    const payload = buildClearedPayload([...FIELD_GROUPS], DELETE);
+    for (const forbidden of FORBIDDEN_FIELDS) expect(payload).not.toHaveProperty(forbidden);
     expect(payload).not.toHaveProperty('updatedAt');
   });
 });
 
 describe('scope integrity', () => {
-  it('TMDB_DERIVED_FIELDS and FORBIDDEN_FIELDS are disjoint', () => {
-    const derived = new Set<string>(TMDB_DERIVED_FIELDS);
-    for (const f of FORBIDDEN_FIELDS) expect(derived.has(f)).toBe(false);
-  });
-
-  it('the freshness stamp is not itself a clearable field', () => {
-    expect((TMDB_DERIVED_FIELDS as readonly string[]).includes(TMDB_FIELDS_STAMP)).toBe(false);
+  it('no clearable key (data field or stamp) is a forbidden/user-authored field', () => {
+    const forbidden = new Set<string>(FORBIDDEN_FIELDS);
+    for (const key of ALL_CLEARABLE_KEYS) expect(forbidden.has(key)).toBe(false);
   });
 });
 
@@ -158,25 +283,6 @@ describe('resolveStartCursor (resume ONLY in mutate mode)', () => {
     expect(resolveStartCursor(undefined, true)).toBe(null);
     expect(resolveStartCursor({ cursor: null }, true)).toBe(null);
     expect(resolveStartCursor({ cursor: 123 }, true)).toBe(null); // non-string
-  });
-});
-
-describe('classifyWatchlistDoc (idempotent per-doc verdict)', () => {
-  it('skip-fresh when the stamp is within the staleness threshold', () => {
-    expect(classifyWatchlistDoc({ [TMDB_FIELDS_STAMP]: fresh, title: 'Dune' }, now)).toBe('skip-fresh');
-  });
-
-  it('skip-empty when stale/absent stamp but no clearable field remains (idempotent — no wasted write)', () => {
-    expect(classifyWatchlistDoc({ [TMDB_FIELDS_STAMP]: stale }, now)).toBe('skip-empty');
-    // absent stamp = stale, but nothing left to clear (only user-authored fields)
-    expect(classifyWatchlistDoc({ rating: 4, status: 'sedd' }, now)).toBe('skip-empty');
-  });
-
-  it('clear when stale AND at least one TMDB-derived field is still present', () => {
-    expect(classifyWatchlistDoc({ [TMDB_FIELDS_STAMP]: stale, title: 'Dune' }, now)).toBe('clear');
-    // missing stamp counts as stale, so a stamp-less legacy doc with TMDB data clears
-    expect(classifyWatchlistDoc({ providers: [] }, now)).toBe('clear');
-    expect(classifyWatchlistDoc({ posterPath: null }, now)).toBe('clear'); // present-but-null still clears
   });
 });
 
@@ -218,7 +324,7 @@ describe('shouldResetCursor (full-pass cursor reset, mutate-only)', () => {
   });
 });
 
-describe('buildLastRunAudit (honest dry-run vs mutate counts)', () => {
+describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdown)', () => {
   const AT = Symbol('serverTimestamp');
   const tally = {
     scanned: 500,
@@ -226,6 +332,7 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts)', () => {
     skipped: 488,
     budgetAbort: false,
     fullPassCompleted: true,
+    wouldClearByGroup: { static: 3, providers: 7, nextair: 9 },
   };
 
   it('dry-run: docsCleared is 0 (nothing written) but docsWouldClear previews the real run', () => {
@@ -236,17 +343,19 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts)', () => {
       docsScanned: 500,
       docsCleared: 0,
       docsWouldClear: 12,
+      docsWouldClearByGroup: { static: 3, providers: 7, nextair: 9 },
       docsSkipped: 488,
       budgetAbort: false,
       fullPassCompleted: true,
     });
   });
 
-  it('mutate: docsCleared reports what was actually written', () => {
+  it('mutate: docsCleared reports docs actually written; per-group counts still reported', () => {
     const rec = buildLastRunAudit({ ...tally, mutateEnabled: true }, AT);
     expect(rec.dryRun).toBe(false);
     expect(rec.docsCleared).toBe(12);
     expect(rec.docsWouldClear).toBe(12);
+    expect(rec.docsWouldClearByGroup).toEqual({ static: 3, providers: 7, nextair: 9 });
     expect(rec.at).toBe(AT);
   });
 

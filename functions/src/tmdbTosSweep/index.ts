@@ -4,11 +4,13 @@
  * onSchedule('every 720 hours' ≈ monthly, europe-west1). TMDB API terms §1.C
  * forbid caching API-derived data > 6 months; watchlist docs denormalize TMDB
  * fields with no TTL. This sweep CLEARS (nulls) the TMDB-derived fields once
- * their freshness stamp (`tmdbFieldsRefreshedAt`) is older than 5 months — or
- * absent. It never re-fetches TMDB (that is unbounded fan-out against the
- * 25 SEK/mo Blaze cap); freshness is restored lazily on the next title-page
- * view. Full rationale + panel must-haves: ADR 0009 +
- * docs/superpowers/plans/2026-07-03-bin-402-tmdb-tos-sweep.md.
+ * stale. BIN-468 — PER-GROUP: the block is split into three field-groups (static
+ * / providers / nextair), each judged against its OWN stamp (tmdbFieldsRefreshedAt
+ * / providersCheckedAt / nextAirUpdatedAt) and cleared independently at 5 months
+ * or when its stamp is absent. It never re-fetches TMDB (that is unbounded fan-out
+ * against the 25 SEK/mo Blaze cap); each group's freshness is restored lazily by
+ * its own repair path. Full rationale + panel must-haves: ADR 0009 +
+ * ~/.claude/plans/binge-bin468-stage2.md.
  *
  * SAFETY (this is the first scheduled function that writes to EVERY user's
  * watchlist — whole-DB blast radius):
@@ -40,15 +42,16 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import {
   buildClearedPayload,
-  classifyWatchlistDoc,
+  groupsToClear,
   resolveMutateEnabled,
   resolveStartCursor,
   budgetExhausted,
   deadlineReached,
   shouldResetCursor,
   buildLastRunAudit,
-  TMDB_DERIVED_FIELDS,
-  TMDB_FIELDS_STAMP,
+  ALL_SELECT_KEYS,
+  type FieldGroup,
+  type GroupClearTally,
 } from './logic';
 
 /** Firestore's per-commit write ceiling is 500; leave headroom like the client. */
@@ -80,16 +83,21 @@ export const tmdbFieldsSweep = onSchedule(
     let skipped = 0;
     let budgetAbort = false;
     let fullPassCompleted = false;
+    // BIN-468 A6: per-group would-clear breakdown for the enable-gate metric.
+    // The nextair group propagates only via Calendar visits, so it structurally
+    // clears at a higher rate than static/providers; a blended count would hide
+    // that. Malin reads these three separately before flipping mutateEnabled.
+    const wouldClearByGroup: GroupClearTally = { static: 0, providers: 0, nextair: 0 };
 
     for (;;) {
       // orderBy(documentId()) uses Firestore's automatic collection-group index
       // (no firestore.indexes.json entry — same as retentionCleanup's __name__
       // paging). `.select(...)` narrows bandwidth (read count is unchanged) to
-      // just the stamp + clearable fields we need to judge staleness/presence.
+      // just the group stamps + clearable fields we need to judge staleness/presence.
       let q = db
         .collectionGroup('watchlist')
         .orderBy(FieldPath.documentId())
-        .select(TMDB_FIELDS_STAMP, ...TMDB_DERIVED_FIELDS)
+        .select(...ALL_SELECT_KEYS)
         .limit(PAGE_SIZE);
       if (cursor) q = q.startAfter(cursor);
 
@@ -99,13 +107,15 @@ export const tmdbFieldsSweep = onSchedule(
         break;
       }
 
-      const toClear: DocumentReference[] = [];
+      const toClear: { ref: DocumentReference; groups: FieldGroup[] }[] = [];
       for (const d of snap.docs) {
         scanned += 1;
-        // Single admin-free verdict: fresh → skip, stale-but-empty → skip
-        // (idempotent), stale-and-non-empty → clear (BIN-452).
-        if (classifyWatchlistDoc(d.data(), nowMs) === 'clear') {
-          toClear.push(d.ref);
+        // BIN-468 per-group verdict: which of the doc's field-groups are stale
+        // AND still hold data. Empty → nothing to clear (fresh or already-swept).
+        const groups = groupsToClear(d.data(), nowMs);
+        if (groups.length > 0) {
+          toClear.push({ ref: d.ref, groups });
+          for (const g of groups) wouldClearByGroup[g.name] += 1;
         } else {
           skipped += 1;
         }
@@ -114,15 +124,16 @@ export const tmdbFieldsSweep = onSchedule(
       if (mutateEnabled && toClear.length > 0) {
         for (let i = 0; i < toClear.length; i += BATCH_SIZE) {
           const batch = db.batch();
-          for (const ref of toClear.slice(i, i + BATCH_SIZE)) {
+          for (const { ref, groups } of toClear.slice(i, i + BATCH_SIZE)) {
             // update() (not set-merge): a fixed allowlist payload touching only
-            // the named fields, never a read-modify-write of the existing doc.
+            // the stale groups' fields + their own stamps, never a read-modify-
+            // write of the existing doc and never a fresh sibling group's fields.
             batch.update(
               ref,
-              // Deletes every TMDB-derived field AND the freshness stamp — the
-              // cleared doc ends absent-stamped so the title-page lazy-refresh
-              // repopulates it on next view (BIN-402).
-              buildClearedPayload(FieldValue.delete()) as UpdateData<DocumentData>,
+              // Deletes each stale group's fields AND that group's stamp — the
+              // cleared group ends absent-stamped so ITS repair path repopulates
+              // it on next use (BIN-468). One flat payload → one write per doc.
+              buildClearedPayload(groups, FieldValue.delete()) as UpdateData<DocumentData>,
             );
           }
           await batch.commit();
@@ -160,7 +171,7 @@ export const tmdbFieldsSweep = onSchedule(
     }
 
     const lastRun = buildLastRunAudit(
-      { mutateEnabled, scanned, clearable, skipped, budgetAbort, fullPassCompleted },
+      { mutateEnabled, scanned, clearable, skipped, budgetAbort, fullPassCompleted, wouldClearByGroup },
       FieldValue.serverTimestamp(),
     );
     await stateRef.set({ lastRun }, { merge: true });
