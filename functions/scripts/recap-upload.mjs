@@ -2,7 +2,7 @@
 // cache. Run locally with a least-privilege service-account key; never in CI.
 //
 //   GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-//     node scripts/recaps/upload.mjs path/to/generated-recaps.json
+//     node functions/scripts/recap-upload.mjs path/to/generated-recaps.json
 //
 // Input: a JSON array of generated recaps, each:
 //   { tmdbId, season, episode, text, model, sources: [{ name, url, license }] }
@@ -79,7 +79,7 @@ async function main() {
     return;
   }
   const inputPath = args[0];
-  if (!inputPath) { console.error('usage: node scripts/recaps/upload.mjs <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
+  if (!inputPath) { console.error('usage: node functions/scripts/recap-upload.mjs <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     console.error('GOOGLE_APPLICATION_CREDENTIALS is not set — point it at the least-privilege recaps-writer service-account key.');
     process.exit(1);

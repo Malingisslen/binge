@@ -31,7 +31,7 @@ Per show, I:
 - Write an original Swedish `sammanfattning` — **paraphrase, never copy verbatim phrasing or track a
   source's structure** (Legal). Record every source in `sources[]`.
 - **No usable CC BY-SA source?** Don't stretch to copyrighted sites — log it:
-  `node scripts/recaps/upload.mjs --unsourced <tmdbId> "<title>" <no-wiki|partial-coverage|incompatible-license>`
+  `node functions/scripts/recap-upload.mjs --unsourced <tmdbId> "<title>" <no-wiki|partial-coverage|incompatible-license>`
 - **Spot-check** a sample of the batch before upload (cached forever — a bad one is public to all).
 - Emit a `scripts/recaps/<show>.local.json` array of `{ tmdbId, season, episode, text, model, sources }`.
 
@@ -39,11 +39,15 @@ Per show, I:
 
 ```
 GOOGLE_APPLICATION_CREDENTIALS=/abs/path/recaps-writer.json \
-  node scripts/recaps/upload.mjs scripts/recaps/<show>.local.json
+  node functions/scripts/recap-upload.mjs scripts/recaps/<show>.local.json
 ```
 
 The script re-validates every entry (plain-text guard mirroring `sanitize.ts`; CC BY-SA attribution
 required; http(s) source URLs) and skips+logs any that fail. It writes `recaps/{id}` via Admin SDK.
+
+**NOTE:** the script lives at `functions/scripts/recap-upload.mjs` (not `scripts/`) so it resolves
+`firebase-admin` from `functions/node_modules` — the repo root deliberately has no firebase-admin. Run it
+from the repo root (as above) so the relative data paths resolve.
 
 ## 4. Go live
 
