@@ -124,6 +124,7 @@ En term per koncept. Använd dessa, inga synonymer.
 | Återuppta tjänst | **återuppta** | starta igen |
 | Användarens lista | **bibliotek** | watchlist, samling, kollektion |
 | Veckans nya avsnitt | **avsnittkalender** eller bara **kalender** | schedule, programplan |
+| AI-avsnittsöversikt "var jag slutade" (BIN-185) | **sammanfattning** | recap, återblick, synopsis, resumé |
 | Streamingrådgivar-feature | **Streamingrådgivaren** (alltid) | Sparande (endast kodnamn), Sparrådgivare, Advisor |
 | Rekommendationer | **rekommendationer** | förslag, tips, vad ska jag se |
 | Sökning i app | **sök** (verb) / **sökning** (substantiv) | utforska (för det är en separat sida) |

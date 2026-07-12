@@ -19,6 +19,8 @@ import CommunityRating from '@/components/title/CommunityRating';
 import ProviderTag from '@/components/title/ProviderTag';
 import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import RecapPanel from '@/components/title/RecapPanel';
+import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
@@ -124,6 +126,14 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const mappedRecs = useMemo(
     () => (show?.recommendations?.results?.slice(0, 5) ?? []).map(r => ({ ...r, media_type: 'tv' as const })),
     [show?.recommendations]
+  );
+
+  // BIN-185: the spoiler-safe recap boundary — the contiguous watched frontier over the show's
+  // episode inventory, from the page's existing isWatched (so RecapPanel opens no second
+  // episodeProgress listener). Null-safe on show so this hook runs before the loading guard.
+  const recapBoundary = useMemo(
+    () => contiguousWatchedBoundary(inventoryFromSeasons(show?.seasons), isWatched),
+    [show?.seasons, isWatched]
   );
 
   const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
@@ -408,6 +418,8 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           Säsongs-progress är watchlist-beroende (Firestore) så vi ClientOnly-
           gatear hela sektionen för att inte mismatcha vid hydrering. */}
       <ClientOnly>
+        {/* BIN-185: spoiler-safe recap, shown only when one is cached for the user's boundary. */}
+        {watchlistItem && <RecapPanel tmdbId={show.id} boundary={recapBoundary} />}
         <section className="detail-section">
           <div className="head">
             <h2>Säsonger</h2>

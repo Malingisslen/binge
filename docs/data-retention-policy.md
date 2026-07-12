@@ -278,6 +278,19 @@ providers-grupperna ligger < 5 % rensning över ≥ 2 månaders dry-runs innan f
 undantas då den bara propagerar via Kalender-besök), plus en missad-körning-larm och en
 konvergens-check mot `MAX_CLEARS_PER_RUN` (DBA-villkor).
 
+### Spoilerfria avsnittssammanfattningar (BIN-185) — durabel delad cache, ingen TTL
+
+`recaps/{tmdbId}_{s}_{e}` — en publik, delad cache av AI-genererade "var jag slutade"-sammanfattningar,
+genererade en gång globalt per (serie, säsong, avsnitt) och serverade till alla. **Ingen personuppgift**
+finns i collectionen (inga uid, bara serie/avsnitts-ID + text + källor); den är därför korrekt utanför
+`collectUserDataSnapshots` (varken export eller radering rör den). Skriven ENDAST av den offline
+`/recap`-batchen (Admin SDK); klienter kan bara läsa.
+
+**Retention:** durabel för alltid, ingen TTL — samma klass som `titleRatings`. Till skillnad från BIN-402:
+sammanfattningarna är **härledda från Wikipedia (CC BY-SA)**, inte TMDB-data, så TMDB:s §1.C-6-månaderstak
+gäller INTE. En dålig/förgiftad post rättas via Admin-SDK (purge/regenerera — se runbook), inte via en
+schemalagd svep. Se ADR 0011 för CC BY-SA-hållningen.
+
 ### "Släpps idag"-dedup-markörer (BIN-464) — 30-dagars svep (GDPR Art. 17 + tillväxtgräns)
 
 `releaseNotifyState/{tmdbId}/notified/{uid}` — en per-användare-markör som
