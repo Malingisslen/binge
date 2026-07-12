@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useRecap } from '@/hooks/useRecap';
 import { validateRecapText } from '@/lib/recaps/sanitize';
 import { missingEpisodeCount } from '@/lib/recaps/coverage';
@@ -69,18 +70,22 @@ export default function RecapPanel({
   const missing = missingEpisodeCount(inventory, coveredBoundary, boundary);
 
   return (
-    <div className="mt-3">
+    <div className="mt-3 rounded-md border border-rule bg-surface overflow-hidden">
       <button
         type="button"
-        className="btn btn-ghost btn-sm"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-ink hover:bg-bg-2"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        Påminn mig var jag slutade
+        <History size={15} className="text-ink-3 shrink-0" />
+        <span>Påminn mig var jag slutade</span>
+        <span className="ml-auto text-ink-3">
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
       </button>
       {open && (
-        <div className="mt-2 rounded-md border border-rule bg-surface p-3">
-          <div className="text-[13px] text-ink-2">
+        <div className="px-3 pb-3 pt-1 border-t border-rule">
+          <div className="text-[13px] text-ink-2 mt-2">
             Du slutade efter S{boundary.season}E{boundary.episode}.
           </div>
           {missing > 0 && (
