@@ -41,7 +41,7 @@ import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
-import { canonicalProviderId, dedupeProvidersByCanonicalId } from '@/lib/tmdb/providers';
+import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
@@ -329,7 +329,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                   return (
                     <span key={p.provider_id} className="inline-flex items-center gap-1">
                       {offer?.link ? (
-                        <a href={offer.link} target="_blank" rel="noopener noreferrer">{imgEl}</a>
+                        <a href={affiliateWrap(p.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">{imgEl}</a>
                       ) : imgEl}
                       {leavingLabel && (
                         <span className="rounded-sm bg-acc-soft text-acc-deep px-1 text-[11px]">{leavingLabel}</span>

@@ -1,5 +1,5 @@
 import type { TMDBProvider } from '@/types';
-import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
+import { getProvider, canonicalProviderId, affiliateWrap } from '@/lib/tmdb/providers';
 import { useAuth } from '@/hooks/useAuth';
 import { type Offer, isLeavingSoon, formatLeaving } from '@/lib/streaming/offers';
 
@@ -56,7 +56,9 @@ export default function ProviderTag({ provider, size = 'sm', offer, nowMs }: Pro
   );
 
   return offer?.link ? (
-    <a href={offer.link} target="_blank" rel="noopener noreferrer">
+    // BIN-173: route the outbound deeplink through affiliateWrap — a no-op
+    // passthrough until an AFFILIATE_PROGRAMS entry exists for this provider.
+    <a href={affiliateWrap(provider.provider_id, offer.link)} target="_blank" rel="noopener noreferrer">
       {body}
     </a>
   ) : (
