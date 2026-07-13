@@ -23,12 +23,12 @@ const URL = `${SITE}/guider/`;
 export const metadata: Metadata = {
   title: 'Streamingguider — var du ser filmer och serier i Sverige',
   description:
-    'Alla Binges streamingguider på ett ställe: vad du kan streama på varje tjänst, billigaste sättet att se hela filmserier, och vad som snart lämnar tjänsterna i Sverige.',
+    'Alla Binges streamingguider på ett ställe: vad du kan streama på varje tjänst, bästa filmer och serier per genre, billigaste sättet att se hela filmserier, och vad som snart lämnar tjänsterna i Sverige.',
   alternates: { canonical: URL },
   openGraph: {
     title: 'Streamingguider — var du ser filmer och serier i Sverige',
     description:
-      'Vad du kan streama på varje tjänst, billigaste vägen att se hela filmserier, och vad som snart försvinner — samlat i Sverige.',
+      'Vad du kan streama på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner — samlat i Sverige.',
     url: URL,
     siteName: 'Binge.nu',
     locale: 'sv_SE',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Streamingguider — var du ser filmer och serier i Sverige',
     description:
-      'Vad du kan streama på varje tjänst, billigaste vägen att se hela filmserier, och vad som snart försvinner — samlat i Sverige.',
+      'Vad du kan streama på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner — samlat i Sverige.',
   },
 };
 
@@ -54,7 +54,7 @@ export default function GuiderPage() {
     '@type': 'CollectionPage',
     name: 'Streamingguider i Sverige',
     description:
-      'Alla Binges streamingguider: streamingtjänster, billigaste vägen att se filmserier, och vad som snart lämnar tjänsterna.',
+      'Alla Binges streamingguider: streamingtjänster, bästa titlar per genre, billigaste vägen att se filmserier, och vad som snart lämnar tjänsterna.',
     url: URL,
     isPartOf: { '@type': 'WebSite', name: 'Binge.nu', url: `${SITE}/` },
   };
@@ -81,7 +81,7 @@ export default function GuiderPage() {
       <PageHeader
         crumb="Guider"
         title="Streamingguider för Sverige"
-        standfirst="Var du ser filmer och serier på varje tjänst, billigaste vägen att se hela filmserier, och vad som snart försvinner."
+        standfirst="Var du ser filmer och serier på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner."
       />
 
       <div className="flex flex-col gap-6">

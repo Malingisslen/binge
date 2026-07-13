@@ -19,6 +19,7 @@ import {
 } from '@/lib/tmdb/client';
 import sitemap from './sitemap';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
+import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
 
 const list = (ids: number[]) => ({ results: ids.map(id => ({ id })) } as never);
 
@@ -60,6 +61,18 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     expect(urls.has(`https://binge.nu/provider/${SEO_PROVIDER_IDS[0]}/`)).toBe(true);
     expect(urls.has(`https://binge.nu/forsvinner/${SEO_PROVIDER_IDS[0]}/`)).toBe(true);
     expect([...urls].some(u => /^https:\/\/binge\.nu\/billigaste\/[^/]+\/$/.test(u))).toBe(true);
+    // BIN-461 — genre hubs must match the page's generateStaticParams set.
+    expect(urls.has(`https://binge.nu/genre/${SEO_GENRE_SLUGS[0]}/`)).toBe(true);
+  });
+
+  it('genre family is EXACTLY the curated slug set — none dropped, none extra (BIN-461)', async () => {
+    const genreUrls = (await sitemap()).map(e => e.url).filter(u => u.includes('/genre/'));
+    // Two-sided, like the static-route guard: a sitemap /genre/ URL outside
+    // generateStaticParams' set would build to nothing (dynamicParams=false)
+    // and serve the noindex catch-all shell — a sitemap-committed soft-404.
+    expect(genreUrls.sort()).toEqual(
+      SEO_GENRE_SLUGS.map(slug => `https://binge.nu/genre/${slug}/`).sort(),
+    );
   });
 
   it('lists exactly the 8 public static routes — no auth-walled/noindex pages leak in', async () => {
@@ -68,7 +81,7 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     for (const u of EXPECTED_STATIC) expect(urls.has(u), `missing static: ${u}`).toBe(true);
     // Two-sided: the static (non-dynamic) route set must be EXACTLY these 8, so a
     // newly-added top-level page (esp. an auth-walled one) can't silently leak in.
-    const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/'];
+    const DYNAMIC_PREFIXES = ['/movie/', '/tv/', '/person/', '/provider/', '/billigaste/', '/forsvinner/', '/genre/'];
     const staticUrls = all.filter(u => !DYNAMIC_PREFIXES.some(p => u.includes(p)));
     expect(staticUrls.sort()).toEqual([...EXPECTED_STATIC].sort());
     // Auth-walled / noindex routes must never appear (GSC "submitted URL marked noindex").

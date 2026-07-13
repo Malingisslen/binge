@@ -3,9 +3,11 @@ import {
   providerLinks,
   franchiseLinks,
   leavingLinks,
+  genreLinks,
   hubSections,
 } from './hubLinks';
 import { FRANCHISES } from './franchises';
+import { GENRE_HUBS } from './genreHubs';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 
 // The whole point of the hub is FULL coverage — every curated SEO landing page
@@ -44,13 +46,24 @@ describe('hubLinks — provider coverage', () => {
   });
 });
 
+describe('hubLinks — genre coverage (BIN-461)', () => {
+  it('links every curated genre hub page, none dropped', () => {
+    const links = genreLinks();
+    expect(links).toHaveLength(GENRE_HUBS.length);
+    for (const g of GENRE_HUBS) {
+      expect(links).toContainEqual({ href: `/genre/${g.slug}/`, label: g.label });
+    }
+  });
+});
+
 describe('hubLinks — sections', () => {
-  it('exposes exactly the three hub groups with links', () => {
+  it('exposes exactly the four hub groups with links', () => {
     const sections = hubSections();
     expect(sections.map((s) => s.id)).toEqual([
       'streamingtjanster',
       'billigaste',
       'forsvinner',
+      'genre',
     ]);
     for (const s of sections) {
       expect(s.links.length).toBeGreaterThan(0);

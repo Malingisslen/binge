@@ -14,6 +14,7 @@ import {
 } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { FRANCHISES } from '@/lib/seo/franchises';
+import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
 
 // Next 16 + output:'export' kräver explicit static/revalidate-deklaration
 // för Metadata-routes. Vi vill att sitemap:en genereras en gång vid build
@@ -181,6 +182,18 @@ function forsvinnerEntries(): MetadataRoute.Sitemap {
   }));
 }
 
+// Genre-landningssidor (BIN-461) — MÅSTE matcha generateStaticParams i
+// src/app/genre/[slug]/page.tsx (samma SEO_GENRE_SLUGS). Inga TMDB-calls.
+function genreEntries(): MetadataRoute.Sitemap {
+  const lastModified = new Date();
+  return SEO_GENRE_SLUGS.map(slug => ({
+    url: `${SITE_URL}/genre/${slug}/`,
+    lastModified,
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const statics = staticEntries();
   // Titles + persons kan failla oberoende av varandra (separata try-catch)
@@ -195,5 +208,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return [] as MetadataRoute.Sitemap;
     }),
   ]);
-  return [...statics, ...providerEntries(), ...franchiseEntries(), ...forsvinnerEntries(), ...titles, ...persons];
+  return [...statics, ...providerEntries(), ...franchiseEntries(), ...forsvinnerEntries(), ...genreEntries(), ...titles, ...persons];
 }

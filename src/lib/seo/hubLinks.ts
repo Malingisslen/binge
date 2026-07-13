@@ -10,6 +10,7 @@
 // franchise or provider is added.
 
 import { FRANCHISES } from '@/lib/seo/franchises';
+import { GENRE_HUBS } from '@/lib/seo/genreHubs';
 import { getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 
@@ -51,6 +52,11 @@ export function leavingLinks(): HubLink[] {
   return providerKeyedLinks('forsvinner');
 }
 
+/** "Bästa [genre] att streama" (BIN-461) — one link per curated genre hub. */
+export function genreLinks(): HubLink[] {
+  return GENRE_HUBS.map((g) => ({ href: `/genre/${g.slug}/`, label: g.label }));
+}
+
 export function hubSections(): HubSection[] {
   return [
     {
@@ -70,6 +76,12 @@ export function hubSections(): HubSection[] {
       heading: 'Lämnar snart',
       blurb: 'Filmer och serier som snart försvinner från varje tjänst — se dem innan de är borta.',
       links: leavingLinks(),
+    },
+    {
+      id: 'genre',
+      heading: 'Bästa per genre',
+      blurb: 'Populära filmer och serier genre för genre — och var de streamar i Sverige.',
+      links: genreLinks(),
     },
   ];
 }
