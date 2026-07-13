@@ -4,5 +4,11 @@
     "title": "Grey's Anatomy (S19 E14,16,17,19,20 + kolla nyare säsonger)",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-12T19:31:22.307Z"
+  },
+  {
+    "tmdbId": 102904,
+    "title": "Sweet Magnolias (S1 E2-9, S2 E3-19, S3 E2-10, all S4+S5 - Wikipedia has no per-episode plot summaries, only titles/credits; Fandom 402-blocked)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-13T18:53:37.778Z"
   }
 ]
