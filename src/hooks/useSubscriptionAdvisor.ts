@@ -43,6 +43,10 @@ export {
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
 
+// lookAheadDays = 60: the "upcoming" window matches season-premiere cadence — long
+// enough to justify keeping/subscribing, short enough not to nag. The advisor is
+// deliberately advisory-only: it never auto-pauses, never auto-subscribes, and never
+// projects yearly/lifetime cost totals — it recommends, the user acts.
 export function useSubscriptionAdvisor(
   lookAheadDays = 60,
   options?: { enabled?: boolean },
@@ -232,6 +236,8 @@ export function useSubscriptionAdvisor(
 
       const anchorShows = anchorShowsByProvider.get(pid) ?? [];
       const followingAnchors = anchorShows.filter(s => followingIds.has(s.tmdbId));
+      // 30-day "active" window: short enough that the "något på gång just nu"-feeling
+      // holds — a provider with content airing inside 30 days is never a pause candidate.
       const hasActiveShow = followingAnchors.some(s => isWithinDays(s.nextAirDate, 30));
       const hasUpcomingShow = followingAnchors.some(s => isWithinDays(s.nextAirDate, lookAheadDays));
       const hasWillSeeAnchor = anchorShows.some(s => !followingIds.has(s.tmdbId));

@@ -101,7 +101,7 @@ service cloud.firestore {
         'runtime',
         // Instant week (2026-07): denormaliserade next-air-fält, skrivna av
         // nextAirReadRepair (tyst read-repair, aldrig user-edit — bumpar ALDRIG
-        // updatedAt). Spec: docs/superpowers/specs/2026-07-02-home-instant-week-design.md
+        // updatedAt; se nextAirReadRepair.ts för de bindande invarianterna).
         'nextAirDate', 'nextAirCode', 'nextAirProvider', 'nextAirUpdatedAt',
         'digitalReleaseDate',
         // BIN-349: tidpunkt då användaren satte/ändrade betyget (serverTimestamp,

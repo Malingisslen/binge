@@ -40,4 +40,4 @@ not for AI. Keep Organization + per-page OpenGraph; add nothing more "for AI."
 
 ## Decided by
 Recommendation accepted 2026-05-22; recorded on the 2026-07-13 docs-sweep when the
-`ai-optimering.md` sprint plan (work shipped) was retired.
+AI-SEO sprint plan (work shipped) was retired.

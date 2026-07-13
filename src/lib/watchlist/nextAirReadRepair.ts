@@ -4,8 +4,7 @@ import { stampOlderThan } from '@/lib/watchlist/tmdbFieldsRefresh';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
 
 // Instant week (2026-07): tyst read-repair av denormaliserade next-air-fält på
-// watchlist-docs. Regler (bindande, från stakeholder-panelen — spec
-// docs/superpowers/specs/2026-07-02-home-instant-week-design.md):
+// watchlist-docs. Regler (bindande, från stakeholder-panelen):
 //   • Skrivs ENDAST härifrån, anropat från EN plats (useCalendar-effekten).
 //   • Bumpar ALDRIG updatedAt ("Fortsätt titta" sorterar på den, se
 //     continueWatching.ts) — nextAirUpdatedAt är enda tidsstämpeln.

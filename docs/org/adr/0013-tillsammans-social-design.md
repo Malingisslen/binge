@@ -31,5 +31,5 @@ them and that the code enforces but does not explain.
 
 ## Decided by
 Malin (design interview, 2026-04-17). Recorded on the 2026-07-13 docs-sweep when the
-"tillsammans-roadmap" living-doc was retired; phase/roadmap tracking now lives in Linear,
+social-layer roadmap living-doc was retired; phase/roadmap tracking now lives in Linear,
 and the shipped behaviour is the code.

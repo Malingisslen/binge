@@ -1,6 +1,6 @@
 // BIN-185 — spoiler-safe catch-up recaps. Shared types for the `recaps/{tmdbId}_{s}_{e}`
 // public-read cache, consumed by both the offline /recap batch (writer) and the client (reader).
-// Spec: docs/superpowers/specs/2026-07-12-bin185-spoiler-safe-recaps-design.md
+// Licensing/source decision: docs/org/adr/0011-bin185-recap-cc-by-sa.md
 
 // v1: single-episode-style `text` only. v2 (2026-07-12, story-so-far redesign): `text` is a
 // self-contained cumulative "story so far" (not just the boundary episode's own plot), plus an

@@ -13,8 +13,8 @@ import type { RecapSource } from '@/lib/recaps/types';
 // spoiler-safe boundary (the contiguous frontier, computed by the parent from episodeProgress +
 // the show inventory — passed in, so this doesn't open a second progress listener). The recap
 // text is rendered as a plain-text child (React auto-escapes; never dangerouslySetInnerHTML) —
-// the primary control against poisoned world-editable source text. Spec:
-// docs/superpowers/specs/2026-07-12-bin185-spoiler-safe-recaps-design.md
+// the primary control against poisoned world-editable source text.
+// Licensing/source decision: docs/org/adr/0011-bin185-recap-cc-by-sa.md
 
 /** Only ever emit an href for an http(s) URL — defense-in-depth so a malformed source URL
  * (e.g. a `javascript:` scheme React would not block) can never become a live link. */
