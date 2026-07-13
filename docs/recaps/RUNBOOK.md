@@ -31,7 +31,12 @@ script self-limits to `recaps/*`.
 ## 2. Generate recaps for a show (Claude, in-session — 0 kr on the Max subscription)
 
 Per show, I:
-- Resolve the show + its season/episode list; prioritise by the stored insikter `topTitles` (TV).
+- Resolve the show + its season/episode list. Show selection priority (no-args `/recap`): (1) the
+  schemaVersion regeneration backlog if any is pending, (2) the stored insikter `topTitles` (TV, ranked
+  by count), (3) once topTitles has no uncovered TV title left, a TMDB popularity fallback
+  (`/discover/tv`, `watch_region=SE`, excludes talk/news/reality/documentary) so coverage keeps growing
+  toward "all relevant shows" rather than stalling once the watchlist snapshot is exhausted — see
+  `.claude/skills/recap/SKILL.md` for the exact query and skip-list mechanics.
 - For **each** boundary `(s,e)`: read **per-episode** summaries for episodes **≤ (s,e)** from Wikipedia and
   other **CC BY-SA-compatible** wikis (verify each source's licence footer; SKIP all-rights-reserved). Stay
   strictly on episode-specific pages ≤ the boundary — never character/overall-plot pages (they span the
