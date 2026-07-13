@@ -7,7 +7,7 @@
    All colours expressed in oklch. The two-accent rule is structural:
      --acc-* (saffran) means "now / live / decisive"
      --cal-* (plum)    means "today / picker / time-position"
-   Don't mix them. See docs/design_handoff_direction_h_schemat/README.md.
+   Don't mix them. See CLAUDE.md → Design Constraints → Färgsystem (Tvåaccentregel).
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   /* surfaces */

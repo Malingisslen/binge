@@ -190,20 +190,20 @@ två gånger.
 
 ## Design Constraints
 
-Key rules:
+Direction H · "Schemat" — the shipped design. All tokens live in `globals.css :root`
+and `tailwind.config.ts`. Key rules:
 
-- **Must NOT look AI-generated.** No rounded cards with shadows, no gradients, no emoji in UI, no decorative badges
-- **Layout:** Fixed 210px dark sidebar (#1e2028) + scrollable main content
-- **Base font size:** 13px (dense tool, not a marketing site)
-- **Font:** System font stack only (`system-ui, -apple-system, "Segoe UI", sans-serif`)
-- **Border radius:** 2-3px maximum, never more
-- **No box-shadow anywhere**, no transform/scale on hover
-- **Accent color:** #d97b35 (warm orange-brown)
-- **Page background:** #eeece8, surfaces: #faf8f5, sidebar: #1e2028
-- **Table headers:** 9-10px uppercase, letter-spacing 0.5px, color #aaa
-- **Provider tags:** Tiny bordered pills (9px), user's own services highlighted with accent border/color
-- **No `next/image`** — static export har ingen image optimizer. Alla `<img>`
-  har explicit `width`/`height` för CLS + `loading="lazy"` + `decoding="async"`.
+- **Must NOT look AI-generated.** No rounded cards with big shadows, no decorative gradients, no emoji in UI, no decorative badges.
+- **Layout:** sticky horizontal top chrome — **no sidebar**. `AppTopbar` (brand · WeekStrip · search · avatar) with a horizontal `Subnav` directly below; `MobileTabBar` (5 tabs, fixed bottom) replaces the subnav on narrow screens. Main content in `.canvas` (max-width 1320px, centered).
+- **Base font size:** 15px. **Font:** Albert Sans → `system-ui, -apple-system, "Segoe UI", sans-serif` fallback. (The mono font is being phased out — don't add `font-mono`/`var(--mono)`.)
+- **Colors:** every value is an oklch CSS variable in `globals.css :root`, mirrored as Tailwind tokens. **No hex in component code.** Surfaces `--bg` (warm off-white) / `--bg-2` / `--surface`; text `--ink`/`--ink-2`/`--ink-3`; borders `--rule`/`--rule-2`.
+- **Two-accent rule (don't break it):** `--acc` **saffran** = "now / live / decisive" (CTA buttons, live indicators, veto, brand mark); `--cal-*` **plum** = "today / time positioning" (WeekStrip today cell, calendar today column). Never mix them — saffran isn't "calendar", plum isn't "CTA".
+- **Border radius:** `rounded-sm` 3px · `rounded`/`rounded-md` 6px · `rounded-lg` 8px. Poster thumbnails 3px, buttons 6px, cards/modals 6–8px, never more than 8px.
+- **Shadows:** exactly two allowed — `shadow-lift` (card hover) + `shadow-pop` (popover). Everything else is flat; no `drop-shadow`, `filter: blur`, or arbitrary box-shadow.
+- **Posters:** per-genre SVG duotone filters (`DuotoneFilters`, mounted once in AppShell); hover → `filter: none` reveals the original bitmap; film cards lift `translateY(-2px)` on hover (this transform is intentional).
+- **Density:** a tool, not a marketing page — keep text sizes and margins compact. A guard test (`src/lib/design/consistency.test.ts`) fails the build if a page reintroduces the 18px-title anti-pattern.
+- **No `next/image`** — static export has no image optimizer. All `<img>` have explicit `width`/`height` for CLS + `loading="lazy"` + `decoding="async"`.
+- **TMDB attribution required** (`src/lib/tmdb/attribution.ts`); all UI text is Swedish.
 
 ## Environment Variables
 
@@ -239,7 +239,7 @@ GitHub Actions-workflows:
 
 ## Testing
 
-Vitest kör 93+ tester. Pure-logic helpers är extracted från hooks för att
+Vitest kör 1000+ tester. Pure-logic helpers är extracted från hooks för att
 kunna testas utan Firebase-imports i test-miljön (se
 `useSubscriptionAdvisor.helpers.ts` och `sessionTiming.ts`-mönstret).
 

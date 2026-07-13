@@ -1,7 +1,7 @@
 // Direction H "Schemat" duotone palette — eight muted tones, one per
 // genre/category. Each tone is implemented as an SVG <filter> defined in
 // <DuotoneFilters /> and applied via CSS `filter: url(#duo-<tone>)` on the
-// poster <img>. See docs/design_handoff_direction_h_schemat/README.md.
+// poster <img>. See CLAUDE.md → Design Constraints (Posters och duotone).
 //
 //   Use duotone for IDENTIFICATION surfaces (lists, library, calendar,
 //   recommendations, similar-shows, hero-block poster). Use raw imagery for

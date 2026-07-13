@@ -315,7 +315,7 @@ två gånger.
 ## Design Constraints
 
 Direction H · "Schemat" — den shippade designen. Se `globals.css :root` och
-`tailwind.config.ts` för alla tokens. Referens: `docs/design_handoff_direction_h_schemat/`.
+`tailwind.config.ts` för alla tokens.
 
 ### Layout
 
