@@ -15,7 +15,7 @@ onto every `users/{uid}/watchlist/{tmdbId}` doc with no TTL. A scheduled server-
 ## Decision
 
 All three panelists returned **no blocking objection**, conditional on must-haves (folded into the
-plan's binding acceptance criteria: `docs/superpowers/plans/2026-07-03-bin-402-tmdb-tos-sweep.md`).
+sprint plan's binding acceptance criteria at build time).
 
 **The one design tension — and its resolution:**
 - **Legal (#5)** required that "refresh OR clear" both genuinely satisfy §1.C, with refresh meaning a

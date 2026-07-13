@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 151,
+  "patternCount": 149,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -23,7 +23,6 @@
       "title": "Accessibility Specialist",
       "slug": "accessibility-specialist",
       "patterns": [
-        "docs/analysis/REMEDIATION_PLAN.md",
         "src/components/layout/AppShell.tsx",
         "src/components/ui/ConfirmDialog.tsx",
         "src/contexts/ToastContext.tsx"
@@ -96,6 +95,7 @@
         ".github/workflows/ci.yml",
         ".github/workflows/deploy.yml",
         ".github/workflows/preview.yml",
+        "docs/analysis/EXTERNAL_ACTIONS.md",
         "firebase.json"
       ]
     },
@@ -103,8 +103,8 @@
       "title": "Product Manager",
       "slug": "product-manager",
       "patterns": [
-        "docs/analysis/REMEDIATION_PLAN.md",
-        "docs/tillsammans-roadmap.md",
+        "docs/org/adr/0013-tillsammans-social-design.md",
+        "src/lib/analytics.ts",
         "src/lib/watchStatus.ts",
         "src/types/advisor.ts",
         "src/types/domain.ts"
@@ -180,7 +180,6 @@
       "title": "Creative Director / Brand",
       "slug": "creative-director-brand",
       "patterns": [
-        "docs/superpowers/plans/",
         "docs/voice-and-tone.md",
         "public/manifest.json",
         "public/og-image.svg",
@@ -236,7 +235,7 @@
       "slug": "technical-writer-documentation",
       "patterns": [
         "docs/",
-        "docs/advisor-logic.md",
+        "docs/analysis/EXTERNAL_ACTIONS.md",
         "docs/data-export-format.md",
         "docs/moderation.md",
         "public/llms.txt"
@@ -265,7 +264,7 @@
       "title": "Monetization / Partnerships Lead",
       "slug": "monetization-partnerships-lead",
       "patterns": [
-        "docs/superpowers/plans/2026-06-23-bin-172-library-card-layer.md",
+        "src/hooks/useCineasternaCatalog.ts",
         "src/lib/advisor/serviceValue.ts",
         "src/lib/streaming/cheapestPath.ts",
         "src/lib/tmdb/providers.ts"
@@ -277,8 +276,7 @@
       "patterns": [
         ".github/dependabot.yml",
         ".github/workflows/deploy.yml",
-        "CLAUDE.md",
-        "docs/analysis/SPRINT_7_PLAN.md"
+        "CLAUDE.md"
       ]
     },
     "26": {

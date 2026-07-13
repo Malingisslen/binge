@@ -516,7 +516,7 @@ SPA; Safari/WebKit quirks (highest-risk engine); Baseline status shifts; dark-mo
 Signals: llms.txt convention evolution (spec revisions, `llms-full.txt` practice)
 affecting `public/llms.txt`; Diátaxis / docs-structure practice; changelog conventions
 (Keep a Changelog v1.1.0 → v2.0.0 upcoming); ADR practice (Nygard → MADR) affecting
-the advisor-logic ADR.
+the ADR corpus under `docs/org/adr/`.
 
 | Source | URL | status |
 |---|---|---|

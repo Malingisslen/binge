@@ -2,8 +2,7 @@
 
 **Date:** 2026-07-12
 **Status:** Accepted (Malin's decision, Legal-panel-recommended default)
-**Context:** BIN-185 spoiler-safe catch-up recaps. Spec:
-`docs/superpowers/specs/2026-07-12-bin185-spoiler-safe-recaps-design.md`.
+**Context:** BIN-185 spoiler-safe catch-up recaps. Operator runbook: `docs/recaps/RUNBOOK.md`.
 
 ## Context
 

@@ -13,8 +13,6 @@ från en selektor-baserad skrapa) är robust mot layoutändringar och kan bedöm
 schemaläggningen av molnagenten är ett **ops-steg som Malin wire:ar** (se "Wiring" nedan) —
 den kräver ett konto/miljö som får pusha till `main`.
 
-Design: [`docs/superpowers/specs/2026-07-01-automatisk-prisuppdatering-streamingtjanster-design.md`](superpowers/specs/2026-07-01-automatisk-prisuppdatering-streamingtjanster-design.md).
-
 ---
 
 ## Agentens uppdrag (systemprompt-kärna)
@@ -58,8 +56,8 @@ Design: [`docs/superpowers/specs/2026-07-01-automatisk-prisuppdatering-streaming
 
 ## TMDB SE-provider-svep (samma körning)
 Jämför TMDB:s SE-providerlista mot katalogen. Föreslå **betydande saknade flatrate-tjänster**
-som ärende — bar med samma triage som `docs/provider-catalog-audit.md` (rimligt
-`display_priority` + verklig SE-marknadsnärvaro, flatrate-only). **Aldrig** auto-tillägg,
+som ärende — triage-kriterier: rimligt `display_priority` + verklig
+SE-marknadsnärvaro, flatrate-only. **Aldrig** auto-tillägg,
 och filtrera bort Amazon Channel-varianter och mikrotjänster.
 
 ## Skyddslager (redan i koden)

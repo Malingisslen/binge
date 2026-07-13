@@ -1,423 +1,110 @@
-# External Actions
+# External Actions — ops reference
 
-Åtgärder som kräver access utanför repot (Firebase Console, gcloud,
-Cloudflare, UptimeRobot, TMDB).
-
-> **Kör-ordning + exakta kommandon:** se [`docs/EXTERNAL_ACTIONS_RUNBOOK.md`](../EXTERNAL_ACTIONS_RUNBOOK.md)
-> — den här filen är status/checklista, runbooken är de körbara stegen.
-
----
-
-## Insikter (intern analys-dashboard) — krävs innan /insikter visar riktig data
-
-Kod + wiring är klar och deployad-redo (Fas 1). Följande måste göras manuellt
-utanför repot:
-
-- [ ] **Deploya function + rules FÖRST** — `deploy.yml` (push→main) deployar bara
-      hosting. Kör manuellt: `firebase deploy --only functions:rollupInsights,functions:apiInsights,firestore:rules`
-      (annars 404 på `/api/insights` + rollupen körs aldrig).
-- [ ] **Function-secrets** — sätt:
-      `firebase functions:secrets:set INSIGHTS_TOKEN` (generera en hemlig sträng),
-      `firebase functions:secrets:set PLAUSIBLE_API_KEY` (skapas i plausible.io → Settings → API Keys),
-      `firebase functions:secrets:set PLAUSIBLE_SITE_ID` (= `binge.nu`).
-- [ ] **Plausible goals** — bekräfta att custom-events (`signed_up`, `title_added_watchlist`,
-      `review_created`, `advisor_pause_taken`, `donate_clicked`, `signed_in`,
-      `onboarding_completed`) är registrerade som goals i Plausible, annars 0 i goal-måtten.
-- [ ] **Admin-flagga** — sätt `users/{din-uid}.isAdmin = true` i Firestore Console
-      (görs bara manuellt — reglerna förbjuder klient-skrivning av fältet).
-- [ ] **Cloud Scheduler** — `rollupInsights` (`onSchedule`) aktiverar Scheduler-API:t
-      vid första deploy (Blaze krävs, redan på).
-- [ ] **Verifiera** — gå till `binge.nu/insikter` inloggad som admin (eller
-      `/insikter?token=<INSIGHTS_TOKEN>`); efter första rollup-körningen ska
-      nuläges-måtten fyllas i.
-
-Fas 2/3 (Web Vitals via Cloudflare RUM, Sentry-felfrekvens, drilldowns, CSV,
-auto-refresh, "Egen…"-datumväljare) är medvetet uppskjutna — se
-`docs/superpowers/specs/2026-06-02-binge-insikter-design.md`.
+Evergreen reference for the things that **can't be done from the repo**: manual
+`firebase deploy` of functions/rules/indexes, function secrets, Cloudflare cache config,
+and the third-party accounts each Cloud Function needs. `deploy.yml` (push → main) deploys
+**hosting only** — everything below is manual.
 
 ---
 
-## Status per 2026-04-24 (verifierat via Chrome-MCP-sweep)
+## Manual deploy: functions + rules + indexes
 
-| Item | Status | Blockerare |
-|------|--------|-----------|
-| Firestore region `eur3` (EU multi-region) | ✅ Verifierat — GDPR-compliant | — |
-| Firestore PITR | ❌ Kräver **Blaze-plan** | Billing-beslut |
-| Schemalagda backups | ❌ Kräver **Blaze-plan** | Billing-beslut |
-| Firebase App Check (reCAPTCHA v3) | ⏸ Partiellt — webapp listad som "Unregistered" | Kräver reCAPTCHA-sitekey från Google |
-| Sentry DSN | ⏸ Inte provisionerat | Skapa projekt på sentry.io |
-| Branch protection på `main` | ⏸ Inte aktiverat | GitHub Settings → Branches |
-| Official TMDB logo | ⏸ Placeholder `public/tmdb-logo.svg` | Ladda ner från themoviedb.org |
-| UptimeRobot monitor | ⏸ Inte skapat | Gratis, 5 min |
+`deploy.yml` never touches functions, `firestore.rules`, or `firestore.indexes.json`. After
+changing any of them, deploy manually.
 
-Billing-frågan är den enda verkliga blockeraren; alla andra är friktions-items.
-
----
-
-## Blaze-upgrade eller inte?
-
-**Spark (gratis) räcker för:**
-- Nuvarande Firestore-användning (42K reads/701 writes per 7 dagar)
-- Hosting
-- Authentication
-- Vanlig drift
-
-**Blaze behövs för:**
-- PITR (~$0.18/GiB/mån, just nu troligen < 10 MB = ~$0.01/mån)
-- Schemalagda backups (~$0.03/GiB/mån)
-- Cloud Functions (krävs för Sprint 10 monetization)
-- Överstiga free tier (50K reads/20K writes per dag)
-
-**Rekommendation:** Sätt en Firebase budget på 100 SEK/mån FÖRST (fail-closed
-spärr), uppgradera sedan till Blaze. Kostnaden för en solo-app på den här
-trafiknivån är < 5 SEK/mån i praktiken. Se §1.7a nedan för budget-setup.
-
----
-
-## 1.1 — Firebase App Check (reCAPTCHA v3)
-
-**Status:** Webappen är listad men `Unregistered`. Secret key saknas.
-Site key behövs också för `NEXT_PUBLIC_APP_CHECK_SITE_KEY` env-var.
-
-**Steg-för-steg:**
-
-1. **Skapa reCAPTCHA v3-site** (gratis):
-   - Gå till https://www.google.com/recaptcha/admin/create
-   - Label: "Binge.nu"
-   - reCAPTCHA type: **reCAPTCHA v3**
-   - Domains: `binge.nu`, `binge-nu.web.app`, och `localhost` (för dev)
-   - Acceptera villkoren → Submit
-   - Spara **Site key** (publik) och **Secret key** (privat) på säker plats
-
-2. **Registrera i Firebase App Check:**
-   - Öppna https://console.firebase.google.com/project/binge-nu/appcheck/apps
-   - Klicka `Register` bredvid `binge-nu-web`
-   - Välj **reCAPTCHA** (inte Enterprise)
-   - Paste in **Secret key** från steg 1
-   - Token time to live: 1 day (default ok)
-   - Save
-
-3. **Sätt env-var i produktion:**
-   - Hosting-env-var (Firebase gör det automatiskt via `firebase functions:config`
-     för Functions, men för static-hostade siter behöver vi bygga in den)
-   - Lägg in **Site key** i din CI-miljö som `NEXT_PUBLIC_APP_CHECK_SITE_KEY`
-   - För lokal dev: lägg i `.env.local` (redan dokumenterat i .env.local.example)
-
-4. **Enforce på Firestore + Auth:**
-   - Firebase Console → App Check → APIs-fliken
-   - Klicka Firestore, klicka "Enforce"
-   - Samma för Cloud Storage, Authentication, Realtime Database (om använda)
-   - Förslag: enforce på Firestore först, observera 1 vecka, sedan resten
-
-- [ ] 1. reCAPTCHA v3-site skapad
-- [ ] 2. App Check registrerad med secret key
-- [ ] 3. Site key satt som env-var + deployed
-- [ ] 4. Enforce på Firestore
-
----
-
-## 1.2 — Firestore PITR (Point-in-Time Recovery)
-
-_**Blaze-plan required.**_
-
----
-
-## 1.2 — Enable Firestore PITR (Point-in-Time Recovery)
-
-**Why:** 7-day recovery window at minute granularity. Fixes 03 DR1
-(CRITICAL data-loss risk). Cost: ~$0.18 / GiB / month.
-
-**Blaze required.** Upgrade sker via Firebase Console → "Upgrade billing plan"
-i vänsterspalten. Sätt budget-alert (§1.7a) FÖRST som skyddsnät.
-
-**How:**
+**Deploy the function(s) you changed by exact name** (targeted deploys are the standing rule
+— never a blanket `--only functions`). But do **not** rely on a hand-maintained named-subset
+list for a full rollout: that list drifted from the code before and silently dropped
+`retentionCleanup` + `reclaimOrphanFollows`, so scheduled cleanup never went live. For a full
+rollout deploy everything in one sweep:
 
 ```bash
-# Verify current status first
-gcloud firestore databases describe --database="(default)" \
-  --project=binge-nu --format="value(pointInTimeRecoveryEnablement)"
-
-# Enable (only if status is DISABLED)
-gcloud firestore databases update --database="(default)" \
-  --project=binge-nu \
-  --enable-pitr
+firebase deploy --only functions,firestore:rules,firestore:indexes
 ```
 
-Alternative via Firebase Console:
-1. https://console.firebase.google.com/project/binge-nu/firestore
-2. Settings → Point-in-time Recovery → Enable
+**After any functions deploy, verify the scheduled jobs still exist** (`firebase functions:list`
++ Cloud Scheduler Console) — a missing one means a background job silently stopped:
+`rollupInsights`, `episodeReleaseNotify`, `showReturnNotify`, `availableNotify`,
+`retentionCleanup` (daily — GDPR retention), `reclaimOrphanFollows` (weekly),
+`streamingOffersRefresh`, `cineasternaCatalogSync`.
 
-**Verification:** re-run the describe command; expect
-`POINT_IN_TIME_RECOVERY_ENABLED`.
+Index builds are **async** — a scheduled job that reads a not-yet-`Enabled` collection-group
+index logs errors until the build finishes (Firestore Console → Indexes). Several newer
+functions **no-op silently without their secrets** (below) — set those first.
 
-- [ ] PITR enabled and verified
-
----
-
-## 1.3 — Verify Firebase project region
-
-**Why:** EU user data should reside in EU for GDPR.
-
-**Verifierat 2026-04-24 via Firebase Console:** `eur3` (EU multi-region,
-Belgien + Nederländerna). GDPR-compliant. Ingen migration behövs.
-
-- [x] Region verified: **eur3**
-- [x] Migration needed? **No**
-
----
-
-## 1.6 — Firestore scheduled backups
-
-**Why:** PITR covers 7 days; scheduled backups cover longer (14 weeks).
-Fixes 03 DR2.
-
-**How:**
-
+Post-deploy verification:
 ```bash
-# Daily backup with 14-week retention
-gcloud firestore backups schedules create \
-  --database="(default)" \
-  --project=binge-nu \
-  --recurrence=daily \
-  --retention=14w
-
-# Verify
-gcloud firestore backups schedules list \
-  --database="(default)" \
-  --project=binge-nu
+curl -I https://binge.nu | grep -iE "content-security-policy|strict-transport|x-content-type|x-frame|referrer-policy|permissions-policy"
+firebase functions:log --only episodeReleaseNotify   # expect the "episodeNotify done {...}" line
 ```
 
-Backups stored automatically in Google Cloud. No separate GCS bucket
-config needed for the schedule itself.
+## Function secrets
 
-- [ ] Daily backup schedule created
-- [ ] Schedule visible in `backups schedules list`
+Set via `firebase functions:secrets:set NAME` **before** deploying the function that reads it.
 
----
+| Secret | Used by | Notes |
+|---|---|---|
+| `INSIGHTS_TOKEN` | `/api/insights` | bearer token for admin-bypass |
+| `PLAUSIBLE_API_KEY`, `PLAUSIBLE_SITE_ID` | insights rollup | site id = `binge.nu` |
+| `TMDB_API_KEY` | `episodeReleaseNotify` etc. | same value as `NEXT_PUBLIC_TMDB_API_KEY`, but functions need it as a secret |
+| `OMDB_API_KEY` | `titleRatings` | OMDb free tier 1,000/day |
+| `MOTN_API_KEY` | `streamingOffersRefresh` | RapidAPI (Movie of the Night), free 100/day |
+| `ADMIN_UID` | MOTN + Cineasterna crons | rot/warn notifications target `users/{ADMIN_UID}` |
 
-## 1.7 — Alerting setup
+Cineasterna reuses `TMDB_API_KEY` (for `/find`) + `ADMIN_UID`; no new external account.
 
-### 1.7a — Firebase billing alert
+**Admin flag** (`/insikter` + `/admin/reports`): set `users/{your-uid}.isAdmin = true` in the
+Firestore Console — rules forbid client writes to the field.
 
-**Why:** Avoid surprise bill if Blaze plan is active or gets triggered
-(e.g., large Scrapfly-adjacent usage). Fixes 03 I1.
+## Known exceptions (load-bearing)
 
-**How via GCP Console:**
+- **npm audit:** `npm audit --audit-level=high` = **0 HIGH**. Two **moderate** postcss
+  advisories remain; the fix requires a `next` major downgrade, so they are a **consciously
+  accepted exception**. The CI gate uses `--audit-level=high`, so moderate does not fail it.
+- **C More provider-id 1759:** TMDB fully retired C More (folded into TV4 Play) and no longer
+  lists it, so the id could not be live-confirmed. `1759` is the historical id and **no active
+  provider uses it**, so the alias `1759 → 489` (`canonicalProviderId`) is zero-collision — it
+  only catches old stored `watch/providers` payloads.
 
-1. https://console.cloud.google.com/billing → select billing account
-2. Budgets & alerts → Create Budget
-3. Scope: project `binge-nu`
-4. Amount: 200 SEK / month (starting threshold — adjust per comfort)
-5. Thresholds: 50 %, 90 %, 100 %
-6. Notification: email (developer's)
+## Open infra items (verify status; genuinely maybe-undone)
 
-- [ ] Budget created for binge-nu
-- [ ] 50/90/100 % alerts configured
-- [ ] Test email received
+| Item | Status | Blocker |
+|---|---|---|
+| Firestore region `eur3` (EU multi-region) | ✅ Verified — GDPR-compliant | — |
+| Firestore PITR (7-day recovery) | ❔ Blaze-gated; not confirmed enabled | billing decision |
+| Scheduled backups (14-week) | ❔ Blaze-gated; not confirmed enabled | billing decision |
+| UptimeRobot monitor on `https://binge.nu` | ❔ not confirmed | free, 5 min setup |
+| Official TMDB logo (replace `public/tmdb-logo.svg`) | ❔ placeholder | download from TMDB brand page |
 
-### 1.7b — UptimeRobot (uptime monitor)
+App Check (reCAPTCHA v3, monitoring mode) and Sentry are **live**. PITR/backups are enabled
+via Firebase Console → Firestore → Backups (`gcloud firestore databases update --enable-pitr`
+/ `backups schedules create --recurrence=daily --retention=14w`); set a budget alert first.
 
-**Why:** Detect downtime. Free tier: 50 monitors, 5-min checks. Fixes
-03 M3.
+## Cloudflare Cache Rule for HTML — as-built (recreate exactly)
 
-**How:**
+Active in the Cloudflare dashboard (free plan). If it must ever be rebuilt:
 
-1. Sign up at https://uptimerobot.com (free account)
-2. Add New Monitor:
-   - Type: HTTP(s)
-   - URL: `https://binge.nu`
-   - Friendly Name: "Binge landing page"
-   - Monitoring Interval: 5 min
-3. Add alert contact: email
-4. Optional 2nd monitor: `https://binge.nu/discover/` or another
-   content-heavy route
+- **Name:** `Edge-cache HTML kort` · Order: First
+- **Match:** `(http.host eq "binge.nu" and not starts_with(http.request.uri.path, "/_next/") and not starts_with(http.request.uri.path, "/api/"))`
+  — the `/_next/` exclusion is **critical**, else immutable static assets get downgraded to a
+  10-min edge TTL. `/api/` excludes the functions endpoint.
+- **Cache eligibility:** Eligible for cache.
+- **Edge TTL:** *Ignore cache-control header and use this TTL* → **10 minutes**. (Origin sends
+  `no-cache` from `firebase.json`, so "ignore" is required for the edge to cache at all.)
+- **Status-code TTL:** `>= 400` → **No store** (4xx/5xx never cached at edge).
+- **Browser TTL:** **Respect origin TTL** ← GOTCHA: leave this unset and CF falls back to the
+  *zone* Browser Cache TTL (4h) and sends `max-age=14400` to browsers instead of origin's
+  `no-cache`. Must be set explicitly.
 
-- [ ] UptimeRobot account created
-- [ ] Monitor(s) configured
-- [ ] Test alert verified
+Verified live: `/calendar/` → `Cache-Control: no-cache, must-revalidate` + `Cf-Cache-Status: HIT`
+(edge caches, browser revalidates); `/_next/static/*.js` → `public, max-age=31536000, immutable`
++ HIT (untouched). Effect: long-tail HTML serves from the CF edge (~0 ms origin) instead of a
+Fastly MISS to Firebase (~235–275 ms extra TTFB). Only `/commit` purges the whole zone on deploy,
+so a non-`/commit` deploy is at most 10 min stale (browsers revalidate immediately anyway).
 
----
+## Blaze vs Spark
 
-## 1.5b — Official TMDB logo
-
-The repo includes a placeholder at `public/tmdb-logo.svg`. Replace it
-with the official logo.
-
-**How:**
-
-1. Visit https://www.themoviedb.org/about/logos-attribution
-2. Download "The Movie Database Short Logo" in SVG (color on colored
-   background variant works well over the #fcfbf9 / #eeece8 footer).
-3. Save as `C:\binge\public\tmdb-logo.svg` (overwrite placeholder).
-4. Verify in browser: footer shows real TMDB logo.
-
-- [ ] Official TMDB logo downloaded and placed
-
----
-
-## Verification after all external actions
-
-```bash
-# Firestore
-gcloud firestore databases describe --database="(default)" \
-  --project=binge-nu
-
-# Should show:
-#   locationId: europe-west1 (or equivalent EU)
-#   pointInTimeRecoveryEnablement: POINT_IN_TIME_RECOVERY_ENABLED
-
-gcloud firestore backups schedules list \
-  --database="(default)" \
-  --project=binge-nu
-
-# Should list 1 daily schedule with 14w retention
-```
-
-```bash
-# Deployed security headers (after committing + deploying firebase.json)
-curl -I https://binge.nu
-
-# Should include:
-#   content-security-policy: ...
-#   strict-transport-security: max-age=63072000; includeSubDomains; preload
-#   x-frame-options: DENY
-#   x-content-type-options: nosniff
-#   referrer-policy: strict-origin-when-cross-origin
-#   permissions-policy: ...
-```
-
----
-
-## Cloudflare verification (quick sanity check — no code change)
-
-While you're in ops-mode, verify these Cloudflare settings at
-https://dash.cloudflare.com → binge.nu:
-
-- [ ] SSL/TLS mode: **Full (strict)** (not "Flexible")
-- [ ] "Always Use HTTPS": **On**
-- [ ] Automatic HTTPS Rewrites: **On**
-- [ ] Rocket Loader: **Off** (breaks React)
-- [ ] Brotli compression: **On**
-- [ ] Auto Minify: HTML/CSS/JS on (low risk, small gain)
-
-No code changes required. Flag issues if any.
-
----
-
-## Sentry setup (Sprint 2 follow-up)
-
-**Varför:** Sprint 2 integrerade `@sentry/react` men initialiseringen är
-no-op tills `NEXT_PUBLIC_SENTRY_DSN` är satt.
-
-**Steg:**
-
-1. Skapa konto på https://sentry.io (free tier räcker — 5k events/mån)
-2. Create Project → Platform: **Browser → JavaScript → Next.js**
-3. Project name: `binge-nu`
-4. Kopiera DSN (format: `https://<hash>@o<id>.ingest.sentry.io/<project>`)
-5. Lägg in i GitHub Actions secrets som `NEXT_PUBLIC_SENTRY_DSN`
-6. Lägg in `NEXT_PUBLIC_GIT_SHA` = `${{ github.sha }}` i `.github/workflows/deploy.yml` build-env
-7. Trigger:a redeploy
-
-- [ ] Sentry-projekt skapat
-- [ ] DSN satt i GitHub secrets + CI miljö
-- [ ] En test-exception rapporterad från produktion
-
----
-
-## Branch protection (Sprint 2 follow-up)
-
-**Varför:** CI-workflow finns men är inte enforcerande. En direct push till
-main som failar lint kan fortfarande deploya om vi inte blocker.
-
-**Steg:**
-
-1. https://github.com/Malingisslen/binge/settings/branches
-2. Add branch protection rule for `main`
-3. Required status checks: `quality` (från ci.yml) — check "Require status checks to pass before merging"
-4. Require pull request reviews: optional för solo
-5. Include administrators: **on** — annars kan du själv bypassa av misstag
-
-- [ ] Branch protection aktiverad på `main`
-- [ ] Verifierat: direct-push utan PR failar
-
----
-
-## Cloudflare Cache Rule för HTML (prestandaplan 2026-06-11, åtgärd 1b) — ✅ KLAR 2026-06-13
-
-Skapad och Active i Cloudflare-dashboarden (free plan). **As-built-konfiguration**
-(återskapa exakt så här om regeln någonsin måste byggas om):
-
-- **Namn:** `Edge-cache HTML kort` · Order: First
-- **When incoming requests match** (custom filter expression):
-  ```
-  (http.host eq "binge.nu" and not starts_with(http.request.uri.path, "/_next/") and not starts_with(http.request.uri.path, "/api/"))
-  ```
-  `/_next/`-exkludering är KRITISK — annars nedgraderas de immutable-cachade
-  statiska assetsen till 10 min edge-TTL. `/api/` exkluderar funktions-endpointen.
-- **Then → Cache eligibility:** Eligible for cache
-- **Edge TTL:** *Ignore cache-control header and use this TTL* → **10 minutes**.
-  (Origin skickar `no-cache` från firebase.json, så "ignore" krävs för att edge
-  alls ska cacha — "use cache-control if present" skulle bypassa.)
-- **Edge TTL → Status code TTL:** Scope *Greater than or equal* · `400` ·
-  Duration **No store** (felstatus 4xx/5xx cachas aldrig på edge).
-- **Browser TTL:** **Respect origin TTL** ← GOTCHA: lämnar man Browser TTL
-  oställd faller CF tillbaka på *zonens* Browser Cache TTL (4h default) och
-  skickar `max-age=14400` till browsern istället för origins `no-cache`. Måste
-  sättas explicit till "Respect origin TTL".
-
-**Verifierat live 2026-06-13:**
-- `curl -sI https://binge.nu/calendar/` → `Cache-Control: no-cache, must-revalidate`
-  + `Cf-Cache-Status: HIT` (edge cachar, browser revaliderar).
-- `/_next/static/*.js` → `public, max-age=31536000, immutable` + HIT (orört).
-
-Effekt: long-tail-HTML (alla rewrites till /_/index.html) serveras från
-Cloudflare-edge (~0 ms origin-tid) istället för Fastly-MISS mot Firebase
-(~235–275 ms extra TTFB). `/commit`-skillen purgar hela zonen vid deploy, så
-max 10 min stale efter en deploy som inte går via /commit (browsern revaliderar
-ändå direkt eftersom den får no-cache).
-
----
-
-## Sign-off
-
-All items done? Update this file's status here:
-
-- [ ] 1.1 App Check registered + enforced
-- [ ] 1.2 PITR enabled
-- [ ] 1.3 Region verified (record: ___)
-- [ ] 1.6 Scheduled backups active
-- [ ] 1.7a Firebase billing alert configured
-- [ ] 1.7b UptimeRobot monitor live
-- [ ] 1.5b Official TMDB logo in place
-- [ ] Cloudflare settings sanity-checked
-- [ ] Deployed + `curl -I` confirms security headers live
-- [ ] Sentry DSN provisionerat + deployt
-- [ ] Branch protection aktiverad på main
-
-Date completed: ___________
-
----
-
-## External Ratings (OMDb)
-
-- `firebase functions:secrets:set OMDB_API_KEY` — OMDb API key (free tier 1,000/day;
-  $1/mo Patreon lifts it). Required by the `titleRatings` callable.
-- Callable function → `firebase deploy --only functions`. Rules → `firebase deploy --only firestore:rules`.
-
-## Streaming Offers (MOTN) — secrets the deployer must set
-
-- `firebase functions:secrets:set MOTN_API_KEY` — RapidAPI key for the Movie of
-  the Night "Streaming Availability" API (free tier = 100 req/day). Required by
-  the `streamingOffersRefresh` cron.
-- Admin uid for the freshness flag: set `ADMIN_UID` the same way
-  (`firebase functions:secrets:set ADMIN_UID`) — the cron writes the warn/critical
-  notification to `users/{ADMIN_UID}/notifications` and pushes via FCM.
-- The cron is in `functions/` — remember `firebase deploy --only functions`
-  (deploy.yml only deploys hosting).
-
-## Cineasterna catalog sync
-
-- Reuses the existing `TMDB_API_KEY` secret (for /find) + `ADMIN_UID` (rot alert). No new external account.
-- Cron in `functions/` → `firebase deploy --only functions`; rules → `firebase deploy --only firestore:rules`.
-- Source: undocumented but robots-permitted JSON API at backend.cineasterna.com. If it changes shape, the rot guard preserves the last good catalog and alerts the admin.
+Spark (free) covers current Firestore usage, hosting, and auth. Blaze is needed for Cloud
+Functions (all the crons above), PITR/backups, and exceeding the free tier. At this traffic a
+solo app costs < 5 SEK/mån in practice; the 25 SEK/mån budget (50/90/100% alerts) is the
+fail-closed guard.

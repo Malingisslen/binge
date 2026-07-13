@@ -2,8 +2,7 @@
 
 Spoiler-safe catch-up recaps. The `recaps/{tmdbId}_{s}_{e}` (boundary) and
 `recaps/{tmdbId}_season_{n}` (completed-season) caches are public-read / admin-write; the
-ONLY writer is the local `/recap` batch below. Spec:
-`docs/superpowers/specs/2026-07-12-bin185-spoiler-safe-recaps-design.md`. ADR: `docs/org/adr/0011-*`.
+ONLY writer is the local `/recap` batch below. ADR: `docs/org/adr/0011-bin185-recap-cc-by-sa.md`.
 
 **schemaVersion 2 (2026-07-12, story-so-far redesign):** boundary docs gained an optional
 `textFull` field (fuller "this season so far" recap) and the standalone `_season_{n}` doc type

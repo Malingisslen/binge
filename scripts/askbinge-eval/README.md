@@ -103,4 +103,4 @@ instantly with no key or rate limit.
    + Anthropic support.
 3. The few stubborn LLM fields (rating/exclude-seen/decade) can ALSO be UI controls.
 
-Build plan: `docs/superpowers/plans/2026-06-23-bin-176-ask-binge.md`.
+Shipped parser: `src/lib/askBinge/parseSearch.ts` (deterministic-first; LLM fallback).

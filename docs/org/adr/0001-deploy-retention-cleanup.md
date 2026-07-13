@@ -21,7 +21,7 @@ The plan's "deploy as-is, unattended, no monitoring" collided with three high-st
 reviewers: arming two **destructive, admin-privileged** jobs (they bypass
 `firestore.rules`) on a schedule, with no alerting, no validated first run, and no
 kill-switch — and the same drift gap that orphaned these functions once before
-(per `EXTERNAL_ACTIONS_RUNBOOK.md`). Separately, the plan's RUNBOOK wording
+(per `docs/analysis/EXTERNAL_ACTIONS.md`). Separately, the plan's RUNBOOK wording
 (`expiresAt + 7d`) contradicted the actual code thresholds, and the user-facing privacy
 policy (`integritet` §6) is silent on the 90-day notification retention the jobs enforce.
 

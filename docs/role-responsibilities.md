@@ -111,7 +111,7 @@ services from 2025-06-28).
 - Keyboard nav — ⌘K/Ctrl+K search, arrow-key dropdowns, modal focus save/restore.
 - Color contrast across light/dark themes; `prefers-reduced-motion` honoring.
 - Image alt-text discipline, accessible form controls.
-  → `src/components/layout/AppShell.tsx`, `src/contexts/ToastContext.tsx`, `src/components/ui/ConfirmDialog.tsx`, `docs/analysis/REMEDIATION_PLAN.md` (§5.1–5.6)
+  → `src/components/layout/AppShell.tsx`, `src/contexts/ToastContext.tsx`, `src/components/ui/ConfirmDialog.tsx`
 
 ## 3. Financial Controller
 
@@ -200,8 +200,8 @@ Owns CI/CD, hosting, observability, and incident response.
   → `.github/workflows/{ci,deploy,preview}.yml`
 - Static export → Firebase Hosting → Cloudflare; CSP/HSTS headers; cache tiers.
   → `firebase.json`
-- Observability — Sentry, Plausible, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`
-  + `EXTERNAL_ACTIONS_RUNBOOK.md`; emulator suite.
+- Observability — Sentry, Plausible, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
+  the `docs/analysis/EXTERNAL_ACTIONS.md` ops reference; emulator suite.
 
 ## 9. Product Manager
 
@@ -210,9 +210,9 @@ Owns feature design and roadmap.
 - The asymmetric TV-vs-film status model; the killer feature (Swedish streaming
   availability); the subscription/rotation advisor; "Tillsammans" sessions;
   calendar; onboarding; the library-card free-streaming wedge.
-  → `src/types/{domain,advisor}.ts`, `src/lib/watchStatus.ts`, `docs/tillsammans-roadmap.md`
+  → `src/types/{domain,advisor}.ts`, `src/lib/watchStatus.ts`, `docs/org/adr/0013-tillsammans-social-design.md`
 - Sprint planning + analytics event taxonomy.
-  → `docs/analysis/REMEDIATION_PLAN.md`
+  → `src/lib/analytics.ts`
 
 ## 10. Performance Engineer
 
@@ -295,7 +295,7 @@ Owns brand identity above the design system.
 - Swedish product naming (Tillsammans, Streamingrådgivaren, Fråga Binge — "Ask,"
   not "Chat with"); brand coherence across social surfaces (ratings-first
   reviews, no celebration animations).
-  → `docs/voice-and-tone.md`, `docs/superpowers/plans/`
+  → `docs/voice-and-tone.md`
 
 ## 17. Content Strategist / Copywriter
 
@@ -342,10 +342,10 @@ Owns what automated tests can't reach (there is **no E2E suite**).
 Owns the `docs/` corpus.
 
 - Data-export-format spec + schema versioning; data-retention policy; the
-  12-section incident `RUNBOOK.md`; the moderation runbook;
-  `EXTERNAL_ACTIONS_RUNBOOK.md`; `SLO.md`; the advisor-logic ADR; `public/llms.txt`;
+  12-section incident `RUNBOOK.md`; the moderation runbook; the
+  `docs/analysis/EXTERNAL_ACTIONS.md` ops reference; `SLO.md`; `public/llms.txt`;
   the env-var reference; inline "why/gotcha" comment conventions.
-  → `docs/data-export-format.md`, `docs/moderation.md`, `docs/advisor-logic.md`, `public/llms.txt`
+  → `docs/data-export-format.md`, `docs/moderation.md`, `public/llms.txt`
 
 ## 22. Data Analyst / BI
 
@@ -377,7 +377,7 @@ Owns the nascent revenue surface.
   awaiting partner signup); the MOTN price-history asset; the **library-card
   free-streaming wedge** (Cineasterna/Viddla via `hemkommun`) as the defensible
   local moat.
-  → `src/lib/advisor/serviceValue.ts`, `src/lib/tmdb/providers.ts`, `src/lib/streaming/cheapestPath.ts`, `docs/superpowers/plans/2026-06-23-bin-172-library-card-layer.md`
+  → `src/lib/advisor/serviceValue.ts`, `src/lib/tmdb/providers.ts`, `src/lib/streaming/cheapestPath.ts`, `src/hooks/useCineasternaCatalog.ts` (library-card wedge; phase-2 scope in Linear BIN-493)
 
 ## 25. Engineering Manager / Release Manager
 
@@ -388,9 +388,9 @@ Owns the process.
   first" governance rule** (route → convene the stakeholder panel → fold conditions
   into acceptance criteria, for ad-hoc work as well as sprints); the deploy
   drift-guard (rules/functions never auto-ship); the 5 CI quality gates; BIN-* issue
-  taxonomy + sprint cadence; Dependabot grouping + the deferred Sprint 7 framework
-  upgrade; the "explain in product terms" communication norm.
-  → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`, `docs/analysis/SPRINT_7_PLAN.md`
+  taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
+  Next 16 landed); the "explain in product terms" communication norm.
+  → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`
 
 ## 26. Information Architect
 

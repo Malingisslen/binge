@@ -452,9 +452,7 @@ kunna testas utan Firebase-imports i test-miljön (se
 - `docs/data-retention-policy.md` — radering + anonymisering-policy
 - `docs/moderation.md` — admin-runbook för reports (Sprint 5)
 - `docs/RUNBOOK.md` — incident-playbooks (Sprint 5)
-- `docs/analysis/REMEDIATION_PLAN.md` — sprintplan 1–3
-- `docs/analysis/FUTURE_ROADMAP.md` — sprintplan 4+
-- `docs/analysis/EXTERNAL_ACTIONS.md` — saker som kräver access utanför repot
+- `docs/analysis/EXTERNAL_ACTIONS.md` — ops-referens: manuell functions/rules-deploy, secrets, Cloudflare-cache
 
 ## Sprint-historik
 
