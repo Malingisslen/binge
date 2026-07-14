@@ -45,7 +45,7 @@ function highestWatchedPosition(
  */
 export function useEpisodeProgressWithSync(tmdbId: number) {
   const episodeProgress = useEpisodeProgress(tmdbId);
-  const { progress, markEpisodeWatched: markEpisode, markSeasonWatched: markSeason } = episodeProgress;
+  const { progress, markEpisodeWatched: markEpisode, markSeasonWatched: markSeason, markSeasonUnwatched: markSeasonUnwatchedBase } = episodeProgress;
   const { updateProgress } = useWatchlist();
 
   // T7: progress läses via ref istället för closure-dep. Två vinster:
@@ -97,11 +97,13 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   // emellan), så lastWatched fastnade på ett avsnitt man just avmarkerade. Här:
   // avmarkera alla avsnitt, räkna sedan om högsta kvarvarande position EN gång
   // med hela säsongen exkluderad (0,0 om inget kvar i andra säsonger).
+  // BIN-495: hela säsongen skrivs i EN Firestore-write (markSeasonUnwatchedBase)
+  // istället för N parallella per-avsnitt-writes.
   const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
-    await Promise.all(episodeNumbers.map(ep => markEpisode(season, ep, false)));
+    await markSeasonUnwatchedBase(season, episodeNumbers);
     const highest = highestWatchedPosition(progressRef.current, undefined, season);
     await updateProgress(tmdbId, highest?.season ?? 0, highest?.episode ?? 0);
-  }, [markEpisode, updateProgress, tmdbId]);
+  }, [markSeasonUnwatchedBase, updateProgress, tmdbId]);
 
   return {
     ...episodeProgress,

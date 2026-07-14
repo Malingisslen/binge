@@ -65,6 +65,22 @@ export function useEpisodeProgress(tmdbId: number) {
     }, { merge: true });
   }, [uid, tmdbId]);
 
+  // BIN-495: unmark a whole season in ONE Firestore write (mirrors
+  // markSeasonWatched) instead of N parallel per-episode setDoc merges.
+  const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
+    if (!uid) return;
+    const { db, doc, setDoc } = await fsdb();
+    const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
+    const seasonData: Record<string, { watched: boolean; watchedAt: unknown }> = {};
+    for (const ep of episodeNumbers) {
+      seasonData[String(ep)] = { watched: false, watchedAt: null };
+    }
+    await setDoc(ref, {
+      tmdbId,
+      seasons: { [String(season)]: seasonData },
+    }, { merge: true });
+  }, [uid, tmdbId]);
+
   const getSeasonProgress = useCallback((season: number, episodeCount?: number): { watched: number; total: number } => {
     const seasonData = progress?.seasons?.[String(season)];
     if (!seasonData || typeof seasonData !== 'object') return { watched: 0, total: episodeCount ?? 0 };
@@ -88,5 +104,5 @@ export function useEpisodeProgress(tmdbId: number) {
     return total;
   }, [progress]);
 
-  return { progress, progressLoading, isWatched, markEpisodeWatched, markSeasonWatched, getSeasonProgress, getTotalProgress };
+  return { progress, progressLoading, isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress, getTotalProgress };
 }

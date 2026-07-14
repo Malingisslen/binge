@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { discoverMovies, discoverTV, posterUrl } from '@/lib/tmdb/client';
 import { GENRE_HUBS, genreHubBySlug, type GenreHub } from '@/lib/seo/genreHubs';
+import { jsonLd } from '@/lib/seo/jsonLd';
+import { withRetry } from '@/lib/seo/withRetry';
 import type { TMDBSearchResult } from '@/types';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -53,32 +55,6 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   };
 }
 
-function jsonLd(data: Record<string, unknown>): string {
-  // "<" → < så en titel med "</script>" aldrig bryter ut ur blocket.
-  return JSON.stringify(data).replace(/</g, '\\u003c');
-}
-
-// Build-time TMDB fetches flake intermittently under the 25k-page export's
-// concurrency (same failure mode as /billigaste). Retry per anrop med liten
-// backoff; buildSignal() skapas per försök (en timad-ut signal kan inte
-// återanvändas). En flakad TV-fetch får inte köra om en lyckad film-fetch —
-// därför retry PER CALL, inte per sida (PE-villkor).
-async function withRetry<T>(fn: () => Promise<T>, attempts: number): Promise<T> {
-  let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      // 700ms-steg (totalt ~7s över 5 försök): flake-stormen vid exportstart
-      // överlevde billigaste-mönstrets 300ms-steg — dessa sidor gör bara 1
-      // anrop var, så en längre svans kostar sekunder, inte byggminuter.
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 700 * (i + 1)));
-    }
-  }
-  throw lastErr;
-}
-
 // with_watch_monetization_types + watch_region=SE (klientens default) filtrerar
 // till titlar med NÅGOT svenskt erbjudande — utan det är listan global popularitet
 // och sidans löfte "att streama i Sverige" håller inte för toppositionerna.
@@ -118,7 +94,11 @@ async function fetchGenre(hub: GenreHub): Promise<{ movies: TMDBSearchResult[]; 
       ? Promise.resolve<TMDBSearchResult[]>([])
       : withRetry(
           () => discoverMovies({ ...DISCOVER_PARAMS, with_genres: String(hub.movieGenreId) }, { signal: attemptSignal() }),
+          // 5 attempts, 700ms step (~7s tail): these pages make 1 call each, so
+          // a longer tail costs seconds, not build minutes; attemptSignal() is
+          // rebuilt per attempt since a timed-out signal can't be reused.
           5,
+          700,
         ).then((r) => r.results ?? []).catch((e) => {
           console.warn(`[genre] ${hub.slug}: movie discover failed after retries — ${describeError(e)}`);
           return [];
@@ -128,6 +108,7 @@ async function fetchGenre(hub: GenreHub): Promise<{ movies: TMDBSearchResult[]; 
       : withRetry(
           () => discoverTV({ ...DISCOVER_PARAMS, with_genres: String(hub.tvGenreId) }, { signal: attemptSignal() }),
           5,
+          700,
         ).then((r) => r.results ?? []).catch((e) => {
           console.warn(`[genre] ${hub.slug}: tv discover failed after retries — ${describeError(e)}`);
           return [];

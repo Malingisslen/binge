@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { getCollection, getMovieLite, posterUrl } from '@/lib/tmdb/client';
 import { FRANCHISES, franchiseBySlug } from '@/lib/seo/franchises';
 import { franchisePlan, type FranchiseFilm } from '@/lib/seo/franchiseCheapest';
+import { jsonLd } from '@/lib/seo/jsonLd';
+import { withRetry } from '@/lib/seo/withRetry';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { fetchForBuild } from '@/lib/tmdb/buildFetch';
 import type { TMDBCollectionPart } from '@/types/tmdb';
@@ -50,27 +52,6 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     openGraph: { title, description, url, siteName: 'Binge.nu', locale: 'sv_SE', type: 'website' },
     twitter: { card: 'summary_large_image', title, description },
   };
-}
-
-function jsonLd(data: Record<string, unknown>): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
-}
-
-// Build-time TMDB fetches flake intermittently ("fetch failed") under the 25k-page
-// export's concurrency. A single collection-fetch miss would empty the whole page
-// (notFound), so retry with small backoff — fetchForBuild caches on first success,
-// so a retried success is also persisted for later builds.
-async function withRetry<T>(fn: () => Promise<T>, attempts: number): Promise<T> {
-  let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-    }
-  }
-  throw lastErr;
 }
 
 interface FilmRow extends FranchiseFilm {
@@ -213,7 +194,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
         standfirst={`${plan.totalFilms} ${plan.totalFilms === 1 ? 'film' : 'filmer'}. Vilken tjänst som täcker flest, vad du behöver hyra, och var du ser resten.`}
       />
 
-      <section className="surface rounded-lg p-4 mb-5 border border-rule">
+      <section className="bg-surface rounded-lg p-4 mb-5 border border-rule">
         <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Billigaste vägen</div>
         <div className="text-[17px] font-semibold text-ink">{verdict}</div>
         {remainderLine && <div className="text-base text-ink-2 mt-1">{remainderLine}</div>}
@@ -233,7 +214,7 @@ export default async function BilligastePage({ params }: { params: Promise<PageP
           const poster = posterUrl(r.posterPath, 'w92');
           return (
             <li key={r.tmdbId}>
-              <Link href={`/movie/${r.tmdbId}/`} className="flex items-center gap-3 surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+              <Link href={`/movie/${r.tmdbId}/`} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
                 {poster ? (
                   <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
                 ) : (

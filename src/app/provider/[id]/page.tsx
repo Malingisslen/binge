@@ -5,6 +5,7 @@ import { discoverMovies, discoverTV } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 import { buildSignal } from '@/lib/tmdb/buildFetch';
+import { jsonLd } from '@/lib/seo/jsonLd';
 import type { TMDBSearchResult } from '@/types';
 
 export const dynamic = 'force-static';
@@ -67,12 +68,6 @@ async function fetchPopular(pid: number): Promise<{ movies: TMDBSearchResult[]; 
     // TMDB-hick vid build → klienten hämtar själv; sidan förblir grön.
     return { movies: [], tv: [] };
   }
-}
-
-function jsonLd(data: Record<string, unknown>): string {
-  // Samma injektionsskydd som JsonLd-komponenten: "<" → < så en titel med
-  // "</script>" aldrig bryter ut ur blocket.
-  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 export default async function ProviderPage({ params }: { params: Promise<PageParams> }) {

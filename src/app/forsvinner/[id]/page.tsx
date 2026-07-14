@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import ForsvinnerListClient from '@/components/pages/ForsvinnerListClient';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
+import { jsonLd } from '@/lib/seo/jsonLd';
 import { PageHeader } from '@/components/layout/PageHeader';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 
@@ -50,10 +51,6 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     openGraph: { title, description, url, siteName: 'Binge.nu', locale: 'sv_SE', type: 'website' },
     twitter: { card: 'summary_large_image', title, description },
   };
-}
-
-function jsonLd(data: Record<string, unknown>): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 export default async function ForsvinnerPage({ params }: { params: Promise<PageParams> }) {

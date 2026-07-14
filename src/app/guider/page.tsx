@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { hubSections } from '@/lib/seo/hubLinks';
+import { jsonLd } from '@/lib/seo/jsonLd';
 
 export const dynamic = 'force-static';
 
@@ -41,10 +42,6 @@ export const metadata: Metadata = {
       'Vad du kan streama på varje tjänst, bästa titlarna per genre, billigaste vägen att se hela filmserier, och vad som snart försvinner — samlat i Sverige.',
   },
 };
-
-function jsonLd(data: Record<string, unknown>): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
-}
 
 export default function GuiderPage() {
   const sections = hubSections();
@@ -96,7 +93,7 @@ export default function GuiderPage() {
                 <li key={l.href}>
                   <Link
                     href={l.href}
-                    className="inline-block surface rounded border border-rule px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow"
+                    className="inline-block bg-surface rounded border border-rule px-3 py-1.5 text-base text-ink hover:shadow-lift transition-shadow"
                   >
                     {l.label}
                   </Link>
