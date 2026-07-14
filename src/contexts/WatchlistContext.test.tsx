@@ -126,6 +126,7 @@ let setRuntimeRef: ((tmdbId: number, runtime: number | null) => Promise<void>) |
 let removeItemRef: ((tmdbId: number) => Promise<void>) | null = null;
 let updateTagsRef: ((tmdbId: number, tags: string[]) => Promise<void>) | null = null;
 let updateRatingRef: ((tmdbId: number, rating: number | null) => Promise<void>) | null = null;
+let refreshTmdbFieldsRef: ((tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
 
 function Harness() {
   const wl = useWatchlist();
@@ -137,6 +138,7 @@ function Harness() {
     removeItemRef = wl.removeItem;
     updateTagsRef = wl.updateTags;
     updateRatingRef = wl.updateRating;
+    refreshTmdbFieldsRef = wl.refreshTmdbFields as typeof refreshTmdbFieldsRef;
   }, [wl]);
   return <div>ready</div>;
 }
@@ -531,5 +533,111 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await act(async () => { await addItemRef!({ ...newTitle(62, 'movie'), rating: null }); });
     payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect('ratedAt' in payload).toBe(false);
+  });
+});
+
+// BIN-508: hook-level coverage for the title-page lazy-refresh (refreshTmdbFields).
+// The pure decision (planTmdbFieldsRefresh + the group-freshness predicates) is unit-
+// tested in tmdbFieldsRefresh.test.ts; here we pin the CONTEXT wiring the pure layer
+// can't see: the in-library guard, the echo-proof per-session dedupe, that the write
+// is a merge that NEVER bumps updatedAt, and the BIN-468 independent gating (a stale
+// providers group repairs even when the static stamp is fresh). We keep the REAL
+// tmdbFieldsRefresh helpers (not mocked) so these tests exercise genuine gating.
+describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/402/468)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap(docs));
+    });
+  }
+
+  it('repopulates the static TMDB block + freshness stamp for a swept-clean title (no updatedAt)', async () => {
+    // No tmdbFieldsRefreshedAt on the doc → the sweep cleared it (or it was never
+    // stamped) → the read-side must rewrite the denormalized block and re-stamp.
+    await mountSeeded([seedDoc({ tmdbId: 77, title: 'Old', posterPath: null })]);
+
+    await act(async () => {
+      await refreshTmdbFieldsRef!(77, { title: 'Fresh', posterPath: '/p.jpg', genreIds: [18], tmdbStatus: 'Ended' });
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [ref, payload, opts] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>, unknown];
+    expect(ref._path).toBe('users/u1/watchlist/77');
+    expect(opts).toEqual({ merge: true });
+    // Static block re-written + re-stamped from the detail the title page already had.
+    expect(payload.title).toBe('Fresh');
+    expect(payload.posterPath).toBe('/p.jpg');
+    expect(payload.genreIds).toEqual([18]);
+    expect(payload.tmdbStatus).toBe('Ended');
+    expect(payload.tmdbFieldsRefreshedAt).toBe('ts'); // serverTimestamp sentinel
+    // INVARIANT: this silent denormalisation must never reorder "senast ändrad".
+    expect('updatedAt' in payload).toBe(false);
+  });
+
+  it('de-dupes per session: a second call for the same title writes nothing (echo-proof)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 78 })]);
+
+    await act(async () => {
+      await refreshTmdbFieldsRef!(78, { title: 'A' });
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // The pending serverTimestamp reads back null on the echo snapshot, which would
+    // re-trip the staleness gate — the session dedupe must suppress the re-fire.
+    await act(async () => {
+      await refreshTmdbFieldsRef!(78, { title: 'A' });
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when the title is not in the library (only library titles carry the stamp)', async () => {
+    await mountSeeded([]);
+    await act(async () => {
+      await refreshTmdbFieldsRef!(999, { title: 'Ghost' });
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when both the static stamp and the providers stamp are fresh', async () => {
+    const now = new Date();
+    await mountSeeded([seedDoc({ tmdbId: 79, tmdbFieldsRefreshedAt: now, providersCheckedAt: now })]);
+    await act(async () => {
+      await refreshTmdbFieldsRef!(79, { title: 'B', providers: [8] });
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('BIN-468: a stale providers group repairs even when the static stamp is fresh (independent gating)', async () => {
+    // Static freshly stamped, but providersCheckedAt absent → the providers group is
+    // stale and must repair on its own — WITHOUT rewriting the static block/stamp.
+    await mountSeeded([seedDoc({ tmdbId: 80, tmdbFieldsRefreshedAt: new Date() })]);
+
+    await act(async () => {
+      await refreshTmdbFieldsRef!(80, { title: 'C', providers: [8, 9] });
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    // Only the providers group is written (fallback), never the fresh static block.
+    expect(payload.providers).toEqual([8, 9]);
+    expect(payload.providersCheckedAt).toBe('ts');
+    expect('title' in payload).toBe(false);
+    expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
+    expect('updatedAt' in payload).toBe(false);
+  });
+
+  it('swallows a Firestore failure without throwing (best-effort, next view retries)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 81 })]);
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    // Must resolve, not reject — a rejected best-effort write would surface as an
+    // unhandled promise rejection (Sentry noise), the setRuntime-pattern this follows.
+    await act(async () => {
+      await expect(refreshTmdbFieldsRef!(81, { title: 'D' })).resolves.toBeUndefined();
+    });
   });
 });

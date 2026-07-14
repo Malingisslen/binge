@@ -5,13 +5,16 @@ import {
   groupHasData,
   groupsToClear,
   buildClearedPayload,
+  isUserWatchlistDocPath,
   tsToMillis,
   resolveMutateEnabled,
   resolveStartCursor,
+  cursorFieldFor,
   budgetExhausted,
   deadlineReached,
   shouldResetCursor,
   buildLastRunAudit,
+  errorToMessage,
   TMDB_FIELDS_MAX_AGE_MS,
   FIELD_GROUPS,
   STATIC_GROUP,
@@ -250,6 +253,29 @@ describe('scope integrity', () => {
 });
 
 // --------------------------------------------------------------------------
+// Collection-group scope guard (BIN-504) — never touch groups/{id}/watchlist
+// --------------------------------------------------------------------------
+
+describe('isUserWatchlistDocPath (only users/{uid}/watchlist docs are in scope)', () => {
+  it('accepts a users/{uid}/watchlist/{tmdbId} doc path', () => {
+    expect(isUserWatchlistDocPath('users/u1/watchlist/1396')).toBe(true);
+  });
+
+  it('REJECTS a groups/{id}/watchlist/{tmdbId} doc path (the bug BIN-504 fixes)', () => {
+    expect(isUserWatchlistDocPath('groups/g1/watchlist/1396')).toBe(false);
+  });
+
+  it('rejects any path whose grandparent collection is not users, and wrong depths', () => {
+    expect(isUserWatchlistDocPath('sessions/s1/watchlist/1396')).toBe(false);
+    expect(isUserWatchlistDocPath('users/u1/episodeProgress/1396')).toBe(false); // not watchlist
+    expect(isUserWatchlistDocPath('users/u1/watchlist')).toBe(false); // collection, not doc
+    expect(isUserWatchlistDocPath('users/u1/watchlist/1396/extra/deep')).toBe(false); // too deep
+    expect(isUserWatchlistDocPath('watchlist/1396')).toBe(false); // no user parent
+    expect(isUserWatchlistDocPath('')).toBe(false);
+  });
+});
+
+// --------------------------------------------------------------------------
 // Orchestration decisions (BIN-452)
 // --------------------------------------------------------------------------
 
@@ -269,24 +295,45 @@ describe('resolveMutateEnabled (dry-run gate default)', () => {
   });
 });
 
-describe('resolveStartCursor (resume ONLY in mutate mode)', () => {
-  it('resumes a string cursor when mutating', () => {
+describe('cursorFieldFor (mutate and dry-run keep separate cursors — BIN-507)', () => {
+  it('mutate mode → `cursor`, dry-run → `dryRunCursor`', () => {
+    expect(cursorFieldFor(true)).toBe('cursor');
+    expect(cursorFieldFor(false)).toBe('dryRunCursor');
+  });
+});
+
+describe('resolveStartCursor (each mode resumes its OWN cursor — BIN-507)', () => {
+  it('mutate resumes `cursor`; dry-run resumes `dryRunCursor`', () => {
     expect(resolveStartCursor({ cursor: 'users/u1/watchlist/42' }, true)).toBe('users/u1/watchlist/42');
+    expect(resolveStartCursor({ dryRunCursor: 'users/u9/watchlist/7' }, false)).toBe('users/u9/watchlist/7');
   });
 
-  it('ignores the cursor entirely in dry-run — always scans from doc 0 for a clean full count', () => {
+  it('a mode never resumes the OTHER mode\'s cursor', () => {
+    // dry-run ignores a leftover mutate cursor (no dryRunCursor stored → doc 0)
     expect(resolveStartCursor({ cursor: 'users/u1/watchlist/42' }, false)).toBe(null);
+    // mutate ignores a dry-run cursor
+    expect(resolveStartCursor({ dryRunCursor: 'users/u9/watchlist/7' }, true)).toBe(null);
   });
 
-  it('null when no usable cursor is stored, even in mutate mode', () => {
+  it('null when the mode has no usable stored cursor', () => {
     expect(resolveStartCursor({}, true)).toBe(null);
     expect(resolveStartCursor(undefined, true)).toBe(null);
     expect(resolveStartCursor({ cursor: null }, true)).toBe(null);
     expect(resolveStartCursor({ cursor: 123 }, true)).toBe(null); // non-string
+    expect(resolveStartCursor({ dryRunCursor: null }, false)).toBe(null);
+    expect(resolveStartCursor({ dryRunCursor: 99 }, false)).toBe(null); // non-string
   });
 });
 
 describe('budgetExhausted (per-run scan/clear ceilings)', () => {
+  it('each ceiling stays within Firestore\'s daily free-tier quota (BIN-507)', () => {
+    // The doc says a single run can never blow the cap because each ceiling is
+    // held at/under the free tier: 50k reads / 20k writes per day. A 100k scan
+    // ceiling (the pre-BIN-507 value) would bill reads past the free tier.
+    expect(MAX_DOCS_PER_RUN).toBeLessThanOrEqual(50_000);
+    expect(MAX_CLEARS_PER_RUN).toBeLessThan(20_000);
+  });
+
   it('false below both ceilings', () => {
     expect(budgetExhausted(0, 0)).toBe(false);
     expect(budgetExhausted(MAX_DOCS_PER_RUN - 1, MAX_CLEARS_PER_RUN - 1)).toBe(false);
@@ -312,15 +359,13 @@ describe('deadlineReached (soft wall-clock guard)', () => {
   });
 });
 
-describe('shouldResetCursor (full-pass cursor reset, mutate-only)', () => {
-  it('resets only when mutating AND the pass completed', () => {
-    expect(shouldResetCursor(true, true)).toBe(true);
+describe('shouldResetCursor (reset the mode\'s cursor on a completed full pass — BIN-507)', () => {
+  it('resets when the pass completed (both modes now own a cursor)', () => {
+    expect(shouldResetCursor(true)).toBe(true);
   });
 
-  it('never resets in dry-run (a dry-run owns no cursor) or on an incomplete pass', () => {
-    expect(shouldResetCursor(false, true)).toBe(false);
-    expect(shouldResetCursor(true, false)).toBe(false);
-    expect(shouldResetCursor(false, false)).toBe(false);
+  it('never resets on an incomplete pass — the cursor must persist to resume', () => {
+    expect(shouldResetCursor(false)).toBe(false);
   });
 });
 
@@ -366,5 +411,43 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdo
     );
     expect(rec.budgetAbort).toBe(true);
     expect(rec.fullPassCompleted).toBe(false);
+  });
+
+  it('no error passed → the record has NO error fields (clean-run shape unchanged) — BIN-507', () => {
+    const rec = buildLastRunAudit({ ...tally, mutateEnabled: false }, AT);
+    expect(rec).not.toHaveProperty('error');
+    expect(rec).not.toHaveProperty('errorMessage');
+    // omitting the arg and passing null are equivalent (both mean "no error")
+    expect(buildLastRunAudit({ ...tally, mutateEnabled: false }, AT, null)).not.toHaveProperty('error');
+  });
+
+  it('a thrown run flags the record with error + errorMessage and keeps partial counts — BIN-507', () => {
+    const rec = buildLastRunAudit(
+      { ...tally, mutateEnabled: true, scanned: 120, clearable: 3, fullPassCompleted: false },
+      AT,
+      new Error('Firestore unavailable'),
+    );
+    expect(rec.error).toBe(true);
+    expect(rec.errorMessage).toBe('Firestore unavailable');
+    expect(rec.docsScanned).toBe(120); // counts accumulated before the throw survive
+    expect(rec.fullPassCompleted).toBe(false);
+  });
+});
+
+describe('errorToMessage (BIN-507 audit error string)', () => {
+  it('reads an Error\'s message', () => {
+    expect(errorToMessage(new Error('boom'))).toBe('boom');
+  });
+
+  it('stringifies a non-Error throw', () => {
+    expect(errorToMessage('plain string throw')).toBe('plain string throw');
+    expect(errorToMessage(42)).toBe('42');
+  });
+
+  it('bounds a pathologically long message so it can\'t bloat the state doc', () => {
+    const long = 'x'.repeat(1000);
+    const out = errorToMessage(new Error(long));
+    expect(out.length).toBeLessThanOrEqual(501); // 500 chars + ellipsis
+    expect(out.endsWith('…')).toBe(true);
   });
 });

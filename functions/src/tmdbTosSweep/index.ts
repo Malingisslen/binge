@@ -43,8 +43,10 @@ import { logger } from 'firebase-functions/v2';
 import {
   buildClearedPayload,
   groupsToClear,
+  isUserWatchlistDocPath,
   resolveMutateEnabled,
   resolveStartCursor,
+  cursorFieldFor,
   budgetExhausted,
   deadlineReached,
   shouldResetCursor,
@@ -72,10 +74,12 @@ export const tmdbFieldsSweep = onSchedule(
 
     const stateSnap = await stateRef.get();
     const state = stateSnap.data() ?? {};
-    // Dry-run gate + cursor-resume policy (BIN-452 pure helpers): dry-run is the
-    // default (only an explicit `true` enables writes) and the cursor resumes
-    // ONLY in mutate mode so a stale cursor can't make a dry-run skip docs.
+    // Dry-run gate + cursor-resume policy (BIN-452/BIN-507 pure helpers): dry-run
+    // is the default (only an explicit `true` enables writes) and each mode
+    // resumes its OWN cursor (mutate → `cursor`, dry-run → `dryRunCursor`) so the
+    // two never resume each other's position.
     const mutateEnabled = resolveMutateEnabled(state);
+    const cursorField = cursorFieldFor(mutateEnabled);
     let cursor: string | null = resolveStartCursor(state, mutateEnabled);
 
     let scanned = 0;
@@ -88,94 +92,119 @@ export const tmdbFieldsSweep = onSchedule(
     // clears at a higher rate than static/providers; a blended count would hide
     // that. Malin reads these three separately before flipping mutateEnabled.
     const wouldClearByGroup: GroupClearTally = { static: 0, providers: 0, nextair: 0 };
+    // BIN-507: capture a thrown error so the `lastRun` audit is still written
+    // (with an error flag) below — a throw must never leave a silent gap.
+    let runError: unknown = null;
 
-    for (;;) {
-      // orderBy(documentId()) uses Firestore's automatic collection-group index
-      // (no firestore.indexes.json entry — same as retentionCleanup's __name__
-      // paging). `.select(...)` narrows bandwidth (read count is unchanged) to
-      // just the group stamps + clearable fields we need to judge staleness/presence.
-      let q = db
-        .collectionGroup('watchlist')
-        .orderBy(FieldPath.documentId())
-        .select(...ALL_SELECT_KEYS)
-        .limit(PAGE_SIZE);
-      if (cursor) q = q.startAfter(cursor);
+    try {
+      for (;;) {
+        // orderBy(documentId()) uses Firestore's automatic collection-group index
+        // (no firestore.indexes.json entry — same as retentionCleanup's __name__
+        // paging). `.select(...)` narrows bandwidth (read count is unchanged) to
+        // just the group stamps + clearable fields we need to judge staleness/presence.
+        let q = db
+          .collectionGroup('watchlist')
+          .orderBy(FieldPath.documentId())
+          .select(...ALL_SELECT_KEYS)
+          .limit(PAGE_SIZE);
+        if (cursor) q = q.startAfter(cursor);
 
-      const snap = await q.get();
-      if (snap.empty) {
-        fullPassCompleted = true;
-        break;
-      }
-
-      const toClear: { ref: DocumentReference; groups: FieldGroup[] }[] = [];
-      for (const d of snap.docs) {
-        scanned += 1;
-        // BIN-468 per-group verdict: which of the doc's field-groups are stale
-        // AND still hold data. Empty → nothing to clear (fresh or already-swept).
-        const groups = groupsToClear(d.data(), nowMs);
-        if (groups.length > 0) {
-          toClear.push({ ref: d.ref, groups });
-          for (const g of groups) wouldClearByGroup[g.name] += 1;
-        } else {
-          skipped += 1;
+        const snap = await q.get();
+        if (snap.empty) {
+          fullPassCompleted = true;
+          break;
         }
-      }
 
-      if (mutateEnabled && toClear.length > 0) {
-        for (let i = 0; i < toClear.length; i += BATCH_SIZE) {
-          const batch = db.batch();
-          for (const { ref, groups } of toClear.slice(i, i + BATCH_SIZE)) {
-            // update() (not set-merge): a fixed allowlist payload touching only
-            // the stale groups' fields + their own stamps, never a read-modify-
-            // write of the existing doc and never a fresh sibling group's fields.
-            batch.update(
-              ref,
-              // Deletes each stale group's fields AND that group's stamp — the
-              // cleared group ends absent-stamped so ITS repair path repopulates
-              // it on next use (BIN-468). One flat payload → one write per doc.
-              buildClearedPayload(groups, FieldValue.delete()) as UpdateData<DocumentData>,
-            );
+        const toClear: { ref: DocumentReference; groups: FieldGroup[] }[] = [];
+        for (const d of snap.docs) {
+          scanned += 1;
+          // BIN-504: collectionGroup('watchlist') also matches groups/{id}/watchlist
+          // docs (which likewise carry title/posterPath). Skip anything that isn't a
+          // users/{uid}/watchlist doc so a live group's titles are never judged stale
+          // and cleared. Still counted in `scanned` (it was a billed read, so the
+          // per-run budget must see it) but never classified, tallied, or cleared.
+          if (!isUserWatchlistDocPath(d.ref.path)) {
+            continue;
           }
-          await batch.commit();
+          // BIN-468 per-group verdict: which of the doc's field-groups are stale
+          // AND still hold data. Empty → nothing to clear (fresh or already-swept).
+          const groups = groupsToClear(d.data(), nowMs);
+          if (groups.length > 0) {
+            toClear.push({ ref: d.ref, groups });
+            for (const g of groups) wouldClearByGroup[g.name] += 1;
+          } else {
+            skipped += 1;
+          }
+        }
+
+        if (mutateEnabled && toClear.length > 0) {
+          for (let i = 0; i < toClear.length; i += BATCH_SIZE) {
+            const batch = db.batch();
+            for (const { ref, groups } of toClear.slice(i, i + BATCH_SIZE)) {
+              // update() (not set-merge): a fixed allowlist payload touching only
+              // the stale groups' fields + their own stamps, never a read-modify-
+              // write of the existing doc and never a fresh sibling group's fields.
+              batch.update(
+                ref,
+                // Deletes each stale group's fields AND that group's stamp — the
+                // cleared group ends absent-stamped so ITS repair path repopulates
+                // it on next use (BIN-468). One flat payload → one write per doc.
+                buildClearedPayload(groups, FieldValue.delete()) as UpdateData<DocumentData>,
+              );
+            }
+            await batch.commit();
+          }
+        }
+        clearable += toClear.length;
+
+        cursor = snap.docs[snap.docs.length - 1].ref.path;
+        // Persist the CURRENT mode's cursor per committed page (BIN-507: mutate →
+        // `cursor`, dry-run → `dryRunCursor`) so a timeout or budget abort resumes
+        // here next run instead of rescanning from doc 0 and re-hitting the same
+        // wall — the reason dry-run needs its own cursor.
+        await stateRef.set({ [cursorField]: cursor }, { merge: true });
+
+        if (snap.size < PAGE_SIZE) {
+          fullPassCompleted = true;
+          break;
+        }
+        // Per-run scan/clear ceiling, then the wall-clock guard — either breaks
+        // with budgetAbort so the cursor resumes next run and the audit still
+        // writes below (BIN-452 pure thresholds).
+        if (budgetExhausted(scanned, clearable)) {
+          budgetAbort = true;
+          break;
+        }
+        if (deadlineReached(nowMs, Date.now())) {
+          budgetAbort = true;
+          break;
         }
       }
-      clearable += toClear.length;
 
-      cursor = snap.docs[snap.docs.length - 1].ref.path;
-      // Persist the cursor per committed page (mutate mode only) so a timeout or
-      // budget abort resumes here instead of rescanning from doc 0.
-      if (mutateEnabled) {
-        await stateRef.set({ cursor }, { merge: true });
+      // A completed full pass resets THIS mode's cursor so its next run starts
+      // fresh from doc 0 (BIN-507 — both modes now own a cursor).
+      if (shouldResetCursor(fullPassCompleted)) {
+        await stateRef.set({ [cursorField]: null }, { merge: true });
       }
-
-      if (snap.size < PAGE_SIZE) {
-        fullPassCompleted = true;
-        break;
-      }
-      // Per-run scan/clear ceiling, then the wall-clock guard — either breaks
-      // with budgetAbort so the cursor resumes next run and the audit still
-      // writes below (BIN-452 pure thresholds).
-      if (budgetExhausted(scanned, clearable)) {
-        budgetAbort = true;
-        break;
-      }
-      if (deadlineReached(nowMs, Date.now())) {
-        budgetAbort = true;
-        break;
-      }
-    }
-
-    // A completed full pass resets the cursor so next month starts fresh.
-    if (shouldResetCursor(mutateEnabled, fullPassCompleted)) {
-      await stateRef.set({ cursor: null }, { merge: true });
+    } catch (err) {
+      // BIN-507: hold the error so the audit below still writes (with an error
+      // flag), then re-throw so the platform records a failed invocation rather
+      // than a false success. The cursor was persisted per page, so the next run
+      // resumes where this one threw.
+      runError = err;
     }
 
     const lastRun = buildLastRunAudit(
       { mutateEnabled, scanned, clearable, skipped, budgetAbort, fullPassCompleted, wouldClearByGroup },
       FieldValue.serverTimestamp(),
+      runError,
     );
     await stateRef.set({ lastRun }, { merge: true });
 
+    if (runError) {
+      logger.error('tmdbFieldsSweep: run threw — audit written with error flag', lastRun);
+      throw runError;
+    }
     if (budgetAbort || !fullPassCompleted) {
       logger.warn('tmdbFieldsSweep: incomplete run — resumes next invocation', lastRun);
     } else {

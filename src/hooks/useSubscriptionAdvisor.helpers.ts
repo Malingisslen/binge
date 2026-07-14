@@ -61,25 +61,32 @@ export function splitTvByProgress(
 //   upcoming — airar inom lookahead-fönstret ELLER har ett vill_se-ankare
 //              (två oberoende signaler, medvetet separata grenar)
 //   free     — 0-kostnad: SVT via isFree, ad-finansierad AVOD (Pluto TV) via
-//              cost 0 — aldrig en "pausa & spara"-kandidat (BIN-410)
+//              effektiv kostnad 0 — aldrig en "pausa & spara"-kandidat (BIN-410)
 //   pause    — betald tjänst utan aktivitet → paus-kandidat
+//
+// Kostnaden MÅSTE vara den RESOLVED effektiva månadskostnaden (tier/custom/
+// kampanj-kaskaden via resolveEffectiveMonthlyCost), inte den oföränderliga
+// katalog-defaulten (BIN-506): en tjänst med katalogpris 0 (SVT/Pluto) som
+// användaren gett en egen kostnad ÄR betald och ska kunna bli paus-kandidat.
+// isFree förblir den enda "genuint gratis"-signalen (SVT) — den överlever
+// alltid oavsett effektiv kostnad; cost-0-grenen fångar ad-AVOD utan egenpris.
 //
 // Options-objekt (inte positionella booleans): hasUpcomingShow och
 // hasWillSeeAnchor landar båda på 'upcoming', så en positionsförväxling vore en
 // tyst scoring-bugg som TypeScript inte fångar (BIN-411 stakeholder-villkor #6).
-// isFree || (defaultMonthlyCost ?? 0) === 0 bevaras ordagrant — nullish (inte
-// falsy) coalescing, och OR-av-två-villkor.
+// isFree || (effectiveMonthlyCost ?? 0) === 0 — nullish (inte falsy) coalescing,
+// och OR-av-två-villkor.
 export function deriveProviderStatus(input: {
   hasActiveShow: boolean;
   hasUpcomingShow: boolean;
   hasWillSeeAnchor: boolean;
   isFree?: boolean;
-  defaultMonthlyCost?: number;
+  effectiveMonthlyCost?: number | null;
 }): ProviderAdvisory['status'] {
   if (input.hasActiveShow) return 'active';
   else if (input.hasUpcomingShow) return 'upcoming';
   else if (input.hasWillSeeAnchor) return 'upcoming';
-  else if (input.isFree || (input.defaultMonthlyCost ?? 0) === 0) return 'free';
+  else if (input.isFree || (input.effectiveMonthlyCost ?? 0) === 0) return 'free';
   else return 'pause';
 }
 

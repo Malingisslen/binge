@@ -242,6 +242,11 @@ export function useSubscriptionAdvisor(
       const hasUpcomingShow = followingAnchors.some(s => isWithinDays(s.nextAirDate, lookAheadDays));
       const hasWillSeeAnchor = anchorShows.some(s => !followingIds.has(s.tmdbId));
 
+      // Effektiv månadskostnad = tier/custom/kampanj-kaskaden, inte katalog-
+      // defaulten. Delas mellan status-härledningen (BIN-506: en custom-prissatt
+      // gratis-katalog-tjänst ska kunna bli paus-kandidat) och monthlyCost nedan.
+      const effectiveMonthlyCost = resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now);
+
       // Status-precedensen bor nu i deriveProviderStatus (BIN-411) — extraherad
       // för egna regressionstester. Named options-fält gör en positionsförväxling
       // omöjlig (hasUpcomingShow/hasWillSeeAnchor är båda boolean → 'upcoming').
@@ -250,7 +255,7 @@ export function useSubscriptionAdvisor(
         hasUpcomingShow,
         hasWillSeeAnchor,
         isFree: provider.isFree,
-        defaultMonthlyCost: provider.defaultMonthlyCost,
+        effectiveMonthlyCost,
       });
 
       const dates = followingAnchors
@@ -263,7 +268,7 @@ export function useSubscriptionAdvisor(
         providerName: provider.name,
         shortName: provider.shortName,
         color: provider.color,
-        monthlyCost: resolveEffectiveMonthlyCost(pid, { providerTiers, providerCosts, providerCampaigns }, now),
+        monthlyCost: effectiveMonthlyCost,
         status,
         shows: followingAnchors,
         nextAirDate: dates[0] ?? null,

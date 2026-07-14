@@ -194,6 +194,24 @@ export function buildClearedPayload(groups: readonly FieldGroup[], deleteSentine
   return payload;
 }
 
+/**
+ * BIN-504 — collection-group SCOPE guard. `collectionGroup('watchlist')` matches
+ * EVERY `watchlist` subcollection in the database, which is TWO distinct things:
+ * `users/{uid}/watchlist/{tmdbId}` (the user-owned TMDB denormalizations this
+ * sweep exists to clear) AND `groups/{id}/watchlist/{tmdbId}` (group-owned docs
+ * that also carry title/posterPath). The sweep must touch ONLY the former — a
+ * group watchlist doc judged "stale" and cleared would wipe a live group's
+ * titles. Firestore can't scope a collection-group query by parent, so we filter
+ * post-read on the doc PATH: a user watchlist doc is exactly
+ * `users/{uid}/watchlist/{tmdbId}` — 4 segments, grandparent collection `users`.
+ * Anything else (grandparent `groups`, or any future `watchlist` nesting) is
+ * skipped and NEVER cleared.
+ */
+export function isUserWatchlistDocPath(path: string): boolean {
+  const segments = path.split('/');
+  return segments.length === 4 && segments[0] === 'users' && segments[2] === 'watchlist';
+}
+
 /* ------------------------------------------------------------------------- *
  * Orchestration decisions (BIN-452).
  *
@@ -208,10 +226,14 @@ export function buildClearedPayload(groups: readonly FieldGroup[], deleteSentine
 /**
  * Per-run safety ceilings for the scan/write budget. Generous so a normal DB
  * finishes in one run; they only bite pathologically, at which point the cursor
- * resumes next invocation. Kept well under a day's free-tier quota (50k reads /
- * 20k writes) so a single run can never blow the 25 SEK/mo cap.
+ * resumes next invocation. Each ceiling is held at/under Firestore's per-DAY
+ * free-tier quota (50k reads / 20k writes) so a single run can never blow the
+ * 25 SEK/mo cap: the scan ceiling caps reads at the 50k read quota, the clear
+ * ceiling (18k) sits under the 20k write quota. (BIN-507: the scan ceiling was
+ * 100_000 — double the read quota it is documented to stay within — so a large
+ * run could bill reads past the free tier; realigned to 50_000.)
  */
-export const MAX_DOCS_PER_RUN = 100_000;
+export const MAX_DOCS_PER_RUN = 50_000;
 export const MAX_CLEARS_PER_RUN = 18_000;
 
 /**
@@ -233,18 +255,32 @@ export function resolveMutateEnabled(state: Record<string, unknown> | undefined 
 }
 
 /**
- * Resume the cross-run cursor ONLY in mutate mode. A dry-run always scans from
- * the start for a clean full count (and never persists a cursor of its own), so
- * a stale cursor left by a prior mutate run can't make a dry-run skip docs and
- * under-report `docsWouldClear`. Returns null (scan from doc 0) unless we're
- * mutating AND a string cursor is present.
+ * The state-doc field that persists the cross-run cursor for the current mode.
+ * Mutate and dry-run keep SEPARATE cursors (`cursor` vs `dryRunCursor`, BIN-507)
+ * so the two modes never resume each other's position: a stale mutate cursor
+ * can't make a dry-run skip docs, and — the reason dry-run gets its own — a
+ * dry-run that budget-aborts persists `dryRunCursor` and resumes past the wall
+ * next run instead of restarting at doc 0 and re-hitting the identical ceiling,
+ * which would leave the tail of the DB perpetually un-counted (`docsWouldClear`
+ * under-reports the true clearable total).
+ */
+export function cursorFieldFor(mutateEnabled: boolean): 'cursor' | 'dryRunCursor' {
+  return mutateEnabled ? 'cursor' : 'dryRunCursor';
+}
+
+/**
+ * Resume the cross-run cursor for the current mode — mutate reads `cursor`,
+ * dry-run reads its own `dryRunCursor` (BIN-507). Returns null (scan from doc 0)
+ * unless the mode's cursor is a stored string. A dry-run therefore ignores the
+ * mutate cursor entirely (and vice-versa), so neither mode can be nudged off its
+ * own start position by the other's leftover cursor.
  */
 export function resolveStartCursor(
   state: Record<string, unknown> | undefined | null,
   mutateEnabled: boolean,
 ): string | null {
-  const cursor = state?.cursor;
-  return mutateEnabled && typeof cursor === 'string' ? cursor : null;
+  const cursor = state?.[cursorFieldFor(mutateEnabled)];
+  return typeof cursor === 'string' ? cursor : null;
 }
 
 /**
@@ -266,12 +302,14 @@ export function deadlineReached(startMs: number, nowMs: number): boolean {
 }
 
 /**
- * The completed-full-pass cursor reset fires only in mutate mode (a dry-run
- * never owns a cursor). Resetting to null makes next month start fresh from
- * doc 0 instead of resuming a spent cursor.
+ * A completed full pass resets the current mode's cursor (BIN-507: both modes now
+ * own a cursor — see cursorFieldFor). Resetting to null makes the NEXT run of that
+ * mode start fresh from doc 0 for a clean full count instead of resuming a spent
+ * cursor; an incomplete pass (budget/deadline abort) leaves the cursor so the next
+ * run resumes past the wall. The caller resets the mode-appropriate field.
  */
-export function shouldResetCursor(mutateEnabled: boolean, fullPassCompleted: boolean): boolean {
-  return mutateEnabled && fullPassCompleted;
+export function shouldResetCursor(fullPassCompleted: boolean): boolean {
+  return fullPassCompleted;
 }
 
 /** Per-group tally of docs that would be / were cleared (BIN-468 A6 audit). */
@@ -306,9 +344,19 @@ export interface SweepRunTally {
  * than static/providers — a blended `docsWouldClear` would hide that, so the flip
  * decision reads the groups separately. `serverTimestamp` is injected (like
  * buildClearedPayload's sentinel) to keep this admin-free.
+ *
+ * BIN-507: when the run THREW, pass the caught `error` so the audit record itself
+ * flags the failure (`error: true` + `errorMessage`) with whatever counts were
+ * accumulated before the throw — a thrown run must still leave a `lastRun` record,
+ * never a silent gap that reads as "the sweep didn't run this month". Omitted /
+ * null `error` → no error fields (a clean run's shape is unchanged).
  */
-export function buildLastRunAudit(tally: SweepRunTally, serverTimestamp: unknown): Record<string, unknown> {
-  return {
+export function buildLastRunAudit(
+  tally: SweepRunTally,
+  serverTimestamp: unknown,
+  error?: unknown,
+): Record<string, unknown> {
+  const rec: Record<string, unknown> = {
     at: serverTimestamp,
     dryRun: !tally.mutateEnabled,
     docsScanned: tally.scanned,
@@ -319,4 +367,18 @@ export function buildLastRunAudit(tally: SweepRunTally, serverTimestamp: unknown
     budgetAbort: tally.budgetAbort,
     fullPassCompleted: tally.fullPassCompleted,
   };
+  if (error !== undefined && error !== null) {
+    rec.error = true;
+    rec.errorMessage = errorToMessage(error);
+  }
+  return rec;
+}
+
+/**
+ * Best-effort human-readable message for an audit record's `errorMessage`. Bounded
+ * so a pathological error string can't bloat the state doc.
+ */
+export function errorToMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw.length > 500 ? `${raw.slice(0, 500)}…` : raw;
 }

@@ -84,7 +84,7 @@ describe('deriveProviderStatus (BIN-411)', () => {
     hasUpcomingShow: false,
     hasWillSeeAnchor: false,
     isFree: false,
-    defaultMonthlyCost: 149,
+    effectiveMonthlyCost: 149,
   };
 
   it("aktivt airande följd serie → 'active' (vinner över allt annat)", () => {
@@ -92,7 +92,7 @@ describe('deriveProviderStatus (BIN-411)', () => {
     // Precedens: active vinner även när alla andra signaler också är sanna.
     expect(deriveProviderStatus({
       hasActiveShow: true, hasUpcomingShow: true, hasWillSeeAnchor: true,
-      isFree: true, defaultMonthlyCost: 0,
+      isFree: true, effectiveMonthlyCost: 0,
     })).toBe('active');
   });
 
@@ -107,15 +107,24 @@ describe('deriveProviderStatus (BIN-411)', () => {
   it("aktivitet vinner över free: ett ankare på en gratis-tjänst ger 'active'/'upcoming', inte 'free'", () => {
     // Pinnar produktbeslutet: en airande/kommande titel på SVT eller Pluto är
     // fortfarande "nu/snart", inte nedgraderad till gratis-hinken.
-    expect(deriveProviderStatus({ ...base, isFree: true, defaultMonthlyCost: 0, hasActiveShow: true })).toBe('active');
-    expect(deriveProviderStatus({ ...base, isFree: true, defaultMonthlyCost: 0, hasWillSeeAnchor: true })).toBe('upcoming');
+    expect(deriveProviderStatus({ ...base, isFree: true, effectiveMonthlyCost: 0, hasActiveShow: true })).toBe('active');
+    expect(deriveProviderStatus({ ...base, isFree: true, effectiveMonthlyCost: 0, hasWillSeeAnchor: true })).toBe('upcoming');
   });
 
-  it("gratis-guard: isFree ELLER cost 0 → 'free' (aldrig paus-kandidat, BIN-410)", () => {
+  it("gratis-guard: isFree ELLER effektiv cost 0 → 'free' (aldrig paus-kandidat, BIN-410)", () => {
     // SVT-vägen: isFree true, cost oväsentlig.
     expect(deriveProviderStatus({ ...base, isFree: true })).toBe('free');
-    // Pluto-vägen: ad-finansierad AVOD, cost 0, isFree false → ändå 'free'.
-    expect(deriveProviderStatus({ ...base, isFree: false, defaultMonthlyCost: 0 })).toBe('free');
+    // Pluto-vägen: ad-finansierad AVOD, effektiv cost 0, isFree false → ändå 'free'.
+    expect(deriveProviderStatus({ ...base, isFree: false, effectiveMonthlyCost: 0 })).toBe('free');
+  });
+
+  it("BIN-506: custom-prissatt gratis-katalog-tjänst (Pluto, isFree false) → 'pause'", () => {
+    // Katalog-defaulten är 0, men användaren har gett tjänsten en egen
+    // månadskostnad → resolveEffectiveMonthlyCost > 0 landar här. En sån tjänst
+    // ÄR betald och ska kunna surfaceas som paus-kandidat, inte gömmas som gratis.
+    expect(deriveProviderStatus({ ...base, isFree: false, effectiveMonthlyCost: 59 })).toBe('pause');
+    // SVT (genuint gratis via isFree) förblir 'free' även med en påklistrad kostnad.
+    expect(deriveProviderStatus({ ...base, isFree: true, effectiveMonthlyCost: 59 })).toBe('free');
   });
 
   it("betald inaktiv tjänst → 'pause'", () => {
@@ -124,10 +133,10 @@ describe('deriveProviderStatus (BIN-411)', () => {
 
   it('nullish (inte falsy) coalescing: undefined cost behandlas som 0 → free', () => {
     // ?? 0, inte || 0 — undefined/utelämnad cost ⇒ 0 ⇒ 'free'. Pinnar att en
-    // tjänst utan katalogpris inte felaktigt blir paus-kandidat.
+    // tjänst utan effektiv kostnad inte felaktigt blir paus-kandidat.
     expect(deriveProviderStatus({
       hasActiveShow: false, hasUpcomingShow: false, hasWillSeeAnchor: false,
-      isFree: false, defaultMonthlyCost: undefined,
+      isFree: false, effectiveMonthlyCost: undefined,
     })).toBe('free');
     // Och utan cost-fältet alls (optional param).
     expect(deriveProviderStatus({
