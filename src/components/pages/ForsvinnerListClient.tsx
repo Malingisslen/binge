@@ -66,7 +66,7 @@ export default function ForsvinnerListClient({
         const href = `/${e.mediaType === 'movie' ? 'movie' : 'tv'}/${e.tmdbId}/`;
         return (
           <li key={`${e.tmdbId}-${e.mediaType}`}>
-            <Link href={href} className="flex items-center gap-3 surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
+            <Link href={href} className="flex items-center gap-3 bg-surface rounded p-2 border border-rule hover:shadow-lift transition-shadow">
               {poster ? (
                 <img src={poster} alt="" width={46} height={69} loading="lazy" decoding="async" className="rounded-sm shrink-0" />
               ) : (
