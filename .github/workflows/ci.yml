@@ -62,6 +62,16 @@ jobs:
       - name: Test
         run: npm test
 
+      # Coverage report — informational ONLY, never gates the build (BIN-525).
+      # continue-on-error keeps this step from ever failing CI; there are no
+      # coverage thresholds in vitest.config.ts either. Adding a blocking floor
+      # is a founder decision, deliberately deferred.
+      # Baseline at introduction (2026-07-16, src/** statements): 33.1%
+      # (branches 30.7%, functions 26.4%, lines 32.3%).
+      - name: Coverage report (non-blocking)
+        run: npm run test:coverage
+        continue-on-error: true
+
       - name: Build (smoke)
         run: npm run build
         env:

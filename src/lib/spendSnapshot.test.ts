@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSpendSnapshot } from './spendSnapshot';
+import { computeSpendSnapshot, isKeepReasonStatus } from './spendSnapshot';
 import type { WatchlistItem } from '@/types';
 
 const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
@@ -11,6 +11,19 @@ const mk = (over: Partial<WatchlistItem>): WatchlistItem => ({
   addedAt: new Date(), updatedAt: new Date(), watchedAt: null,
   ...over,
 }) as WatchlistItem;
+
+describe('isKeepReasonStatus (BIN-528 shared guard)', () => {
+  // The one definition of "active reason to keep a service" shared by the
+  // spend snapshot, household dead-weight, and service-value surfaces.
+  it('counts vill_se (film backlog) and mina (followed series) as keep-reasons', () => {
+    expect(isKeepReasonStatus('vill_se')).toBe(true);
+    expect(isKeepReasonStatus('mina')).toBe(true);
+  });
+  it('never counts sedd or avbruten', () => {
+    expect(isKeepReasonStatus('sedd')).toBe(false);
+    expect(isKeepReasonStatus('avbruten')).toBe(false);
+  });
+});
 
 describe('computeSpendSnapshot (BIN-99)', () => {
   it('splits owned spend into active vs idle by backlog availability', () => {

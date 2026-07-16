@@ -1,7 +1,18 @@
 import { getProvider, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
-import type { WatchlistItem } from '@/types';
+import type { WatchlistItem, WatchStatus } from '@/types';
+
+// BIN-528 — THE shared status guard for "an active reason to keep a service":
+// backlog you'd actually watch — 'vill_se' (film bookmark) or 'mina' (followed
+// series). 'sedd'/'avbruten' never count as a reason to keep paying. Consumed
+// by all three verdict surfaces (this spend snapshot's idle-kr, the household
+// dead-weight rollup, the monthly per-service value card) so their notions of
+// "in use" cannot drift apart. Surface-local refinements (TV-only lens,
+// 'avslutad' exclusion, canonicalisation) deliberately stay at each call site.
+export function isKeepReasonStatus(status: WatchStatus): boolean {
+  return status === 'vill_se' || status === 'mina';
+}
 
 // BIN-99 — whole-watchlist streaming spend snapshot. One headline number:
 // "du betalar X kr/mån, varav Y går till tjänster utan aktiv backlog." Pure +
@@ -38,11 +49,10 @@ export function computeSpendSnapshot(
   providerCampaigns: Record<number, ProviderCampaign> = {},
   now: Date = new Date(),
 ): SpendSnapshot {
-  // Providers that carry backlog you'd actually watch: vill_se (film) + 'mina'
-  // (followed series). sedd/avbruten don't count as a reason to keep paying.
+  // Providers that carry backlog you'd actually watch (shared guard above).
   const activeProviderIds = new Set<number>();
   for (const it of items) {
-    if (it.status !== 'vill_se' && it.status !== 'mina') continue;
+    if (!isKeepReasonStatus(it.status)) continue;
     for (const p of it.providers ?? []) activeProviderIds.add(p);
   }
 

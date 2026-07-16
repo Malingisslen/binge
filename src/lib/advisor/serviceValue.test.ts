@@ -174,6 +174,12 @@ describe('tvActiveProviderIdsFromItems (BIN-513)', () => {
     expect(ids).toContain(119);
   });
 
+  it('EXCLUDES a dropped series (avbruten) — giving up is not a reason to keep paying', () => {
+    // Pins the shared BIN-528 status guard at this surface.
+    const ids = tvActiveProviderIdsFromItems([tv({ status: 'avbruten', providers: [76] })]);
+    expect(ids).toHaveLength(0);
+  });
+
   it('ignores films entirely', () => {
     // status 'vill_se' would pass the status guard, so only the mediaType check
     // can exclude it — makes this a real test of the film/TV guard.

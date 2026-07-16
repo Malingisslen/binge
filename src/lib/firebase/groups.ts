@@ -16,6 +16,31 @@ import type {
   MediaType,
 } from '@/types';
 
+// BIN-510: alla "mina grupper"-queries (array-contains på memberUids) är
+// bounded — samma read-bomb-skydd som FOLLOWING_LIMIT i useFollow.ts. Ingen
+// användare är rimligen medlem i 100+ grupper; taket gör att en skenande
+// datamängd aldrig kan bli en obegränsad collection-scan per anrop.
+const MY_GROUPS_LIMIT = 100;
+
+// BIN-510: syncProgressToGroups körs på VARJE avsnitts-toggle. Användare
+// utan grupper (vanligaste fallet) ska inte betala en collection-query per
+// toggle: en scan som ser noll grupper cachas per uid med TTL. Cachen hålls
+// färsk av subscribeToMyGroups-snapshotten och invalideras direkt av modulens
+// membership-mutationer (createGroup/joinGroupViaToken/acceptGroupInvite).
+// Fel riktning är ofarlig — en stale "noll grupper" (t.ex. join från annan
+// enhet) betyder bara att en best-effort-synk skippas tills TTL:n löper ut.
+const ZERO_GROUPS_TTL_MS = 5 * 60 * 1000;
+let zeroGroupsCache: { uid: string; at: number } | null = null;
+
+function noteGroupMembership(uid: string, isEmpty: boolean): void {
+  zeroGroupsCache = isEmpty ? { uid, at: Date.now() } : null;
+}
+
+function knownZeroGroups(uid: string): boolean {
+  return zeroGroupsCache?.uid === uid
+    && Date.now() - zeroGroupsCache.at < ZERO_GROUPS_TTL_MS;
+}
+
 // Skapar en grupp och returnerar både groupId och plaintext-tokenet. Tokenet
 // hashas (sha256) innan det persisteras — plaintext finns BARA hos klienten
 // och i URL:n som ägaren delar. Caller ansvarar för att cacha plaintext (t.ex.
@@ -55,6 +80,7 @@ export async function createGroup(params: {
     joinedAt: serverTimestamp(),
   });
 
+  noteGroupMembership(params.ownerUid, false);
   return { groupId: groupRef.id, inviteToken };
 }
 
@@ -175,6 +201,7 @@ export async function joinGroupViaToken(params: {
   // ny och plaintext här blir värdelös).
   void deleteDoc(attemptRef).catch(() => {});
 
+  noteGroupMembership(params.uid, false);
   return { ok: true };
 }
 
@@ -230,6 +257,7 @@ export async function acceptGroupInvite(params: {
   });
   batch.delete(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
   await batch.commit();
+  noteGroupMembership(params.uid, false);
 }
 
 // Avböj inbjudan — raderar bara invite-doc:et utan att bli medlem.
@@ -474,7 +502,11 @@ export async function getRecentSessionPicksAcrossGroups(
 }>> {
   const { db, collection, getDocs, query, where, orderBy, limit: queryLimit, Timestamp } = await fsdb();
   const groupsSnap = await getDocs(
-    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+    query(
+      collection(db, 'groups'),
+      where('memberUids', 'array-contains', uid),
+      queryLimit(MY_GROUPS_LIMIT),
+    ),
   );
   if (groupsSnap.empty) return [];
 
@@ -556,11 +588,20 @@ export async function syncProgressToGroups(params: {
   lastWatchedEpisode: number | null;
   status?: string | null;
 }): Promise<void> {
+  // BIN-510: hoppa över hela fan-outen (inklusive grupp-scanen) när vi
+  // nyligen sett att användaren inte är med i någon grupp — progress-
+  // uppdateringar är högfrekventa och ska inte kosta en query styck då.
+  if (knownZeroGroups(params.uid)) return;
   try {
-    const { db, doc, getDoc, collection, getDocs, query, where } = await fsdb();
+    const { db, doc, getDoc, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
     const groupsSnap = await getDocs(
-      query(collection(db, 'groups'), where('memberUids', 'array-contains', params.uid)),
+      query(
+        collection(db, 'groups'),
+        where('memberUids', 'array-contains', params.uid),
+        queryLimit(MY_GROUPS_LIMIT),
+      ),
     );
+    noteGroupMembership(params.uid, groupsSnap.empty);
     if (groupsSnap.empty) return;
     await Promise.all(groupsSnap.docs.map(async groupDoc => {
       try {
@@ -745,9 +786,13 @@ export async function refreshMyHouseholdContributions(
     providerCampaigns: Record<number, ProviderCampaign>;
   },
 ): Promise<void> {
-  const { db, collection, doc, getDoc, getDocs, query, where } = await fsdb();
+  const { db, collection, doc, getDoc, getDocs, query, where, limit: queryLimit } = await fsdb();
   const groupsSnap = await getDocs(
-    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+    query(
+      collection(db, 'groups'),
+      where('memberUids', 'array-contains', uid),
+      queryLimit(MY_GROUPS_LIMIT),
+    ),
   );
   await Promise.all(groupsSnap.docs.map(async g => {
     try {
@@ -774,10 +819,20 @@ export function subscribeToMyGroups(
   uid: string,
   cb: (groups: Group[]) => void,
 ): () => void {
-  return lazySubscribe(({ db, collection, query, where, onSnapshot }) =>
-    onSnapshot(query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)), snap => {
-      cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
-    }));
+  return lazySubscribe(({ db, collection, query, where, limit, onSnapshot }) =>
+    onSnapshot(
+      query(
+        collection(db, 'groups'),
+        where('memberUids', 'array-contains', uid),
+        limit(MY_GROUPS_LIMIT),
+      ),
+      snap => {
+        // Live-signal till zero-groups-cachen (BIN-510) — gratis färskhet
+        // så länge någon gruppyta är monterad.
+        noteGroupMembership(uid, snap.empty);
+        cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
+      },
+    ));
 }
 
 export async function getGroupOnce(groupId: string): Promise<Group | null> {

@@ -32,6 +32,7 @@
 
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
+import { isKeepReasonStatus } from '@/lib/spendSnapshot';
 import type { WatchlistItem } from '@/types';
 
 /** Contribution shape as consumed here — plain data, Firestore Timestamp already
@@ -252,7 +253,7 @@ export function buildHouseholdContribution(
 
   const active = new Set<number>();
   for (const it of items) {
-    if (it.status !== 'vill_se' && it.status !== 'mina') continue;
+    if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
     for (const p of it.providers ?? []) active.add(canonicalProviderId(p));
   }
 

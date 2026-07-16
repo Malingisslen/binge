@@ -3,19 +3,19 @@ import { resolveFollowRows, followFallback, type FollowProfile, type FollowListU
 
 const alice: FollowListUser = { uid: 'a', displayName: 'Alice', username: 'alice', photoURL: null, isPublic: true };
 
+// BIN-505/BIN-522: users/{uid} is owner-locked and the hook reads the
+// publicProfiles projection instead. A deleted account and a private
+// non-friend BOTH come back as a null card, so the old 'ghost' drop-on-read
+// path is gone — every uid renders, unreadable ones as the anonymous
+// 'Privat användare' fallback (dangling docs from deleted accounts are reaped
+// by the weekly reclaimOrphanFollows sweep, not hidden client-side).
 describe('resolveFollowRows', () => {
   it('includes resolved profiles in order', () => {
     const cache = new Map<string, FollowProfile>([['a', alice]]);
     expect(resolveFollowRows(['a'], cache)).toEqual([alice]);
   });
 
-  it('drops ghost uids (deleted accounts whose profile doc is gone) — BIN-21', () => {
-    const cache = new Map<string, FollowProfile>([['a', alice], ['ghost1', 'ghost']]);
-    const rows = resolveFollowRows(['a', 'ghost1'], cache);
-    expect(rows.map(r => r.uid)).toEqual(['a']);
-  });
-
-  it('renders private profiles (cached null) as a fallback row, NOT dropped', () => {
+  it('renders unreadable profiles (cached null — private, deleted, or fetch error) as the real "Privat användare" fallback row, never dropped', () => {
     const cache = new Map<string, FollowProfile>([['p', null]]);
     const rows = resolveFollowRows(['p'], cache);
     expect(rows).toHaveLength(1);
@@ -28,18 +28,27 @@ describe('resolveFollowRows', () => {
     expect(rows).toEqual([followFallback('x')]);
   });
 
-  it('preserves order across a mix of resolved, ghost, private and unfetched', () => {
+  it('preserves order and row count across a mix of resolved, unreadable and unfetched (count matches the follow list)', () => {
     const cache = new Map<string, FollowProfile>([
       ['a', alice],
-      ['g', 'ghost'],
       ['p', null],
     ]);
-    const rows = resolveFollowRows(['a', 'g', 'p', 'u'], cache);
-    expect(rows.map(r => r.uid)).toEqual(['a', 'p', 'u']); // 'g' dropped, order kept
+    const rows = resolveFollowRows(['p', 'a', 'u'], cache);
+    expect(rows.map(r => r.uid)).toEqual(['p', 'a', 'u']); // nothing dropped, order kept
+    expect(rows[0].displayName).toBe('Privat användare');
+    expect(rows[1]).toEqual(alice);
+    expect(rows[2]).toEqual(followFallback('u'));
   });
+});
 
-  it('drops all rows when every uid is a ghost', () => {
-    const cache = new Map<string, FollowProfile>([['g1', 'ghost'], ['g2', 'ghost']]);
-    expect(resolveFollowRows(['g1', 'g2'], cache)).toEqual([]);
+describe('followFallback', () => {
+  it('is anonymous, private and keyed by uid (leaks nothing about the source profile)', () => {
+    expect(followFallback('z')).toEqual({
+      uid: 'z',
+      displayName: 'Privat användare',
+      username: null,
+      photoURL: null,
+      isPublic: false,
+    });
   });
 });

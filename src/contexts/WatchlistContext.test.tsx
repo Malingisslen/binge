@@ -140,6 +140,7 @@ let setRuntimeRef: ((tmdbId: number, runtime: number | null) => Promise<void>) |
 let removeItemRef: ((tmdbId: number) => Promise<void>) | null = null;
 let updateTagsRef: ((tmdbId: number, tags: string[]) => Promise<void>) | null = null;
 let updateRatingRef: ((tmdbId: number, rating: number | null) => Promise<void>) | null = null;
+let updateNotesRef: ((tmdbId: number, notes: string | null) => Promise<void>) | null = null;
 let refreshTmdbFieldsRef: ((tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
 
 function Harness() {
@@ -152,6 +153,7 @@ function Harness() {
     removeItemRef = wl.removeItem;
     updateTagsRef = wl.updateTags;
     updateRatingRef = wl.updateRating;
+    updateNotesRef = wl.updateNotes;
     refreshTmdbFieldsRef = wl.refreshTmdbFields as typeof refreshTmdbFieldsRef;
   }, [wl]);
   return <div>ready</div>;
@@ -563,6 +565,138 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await act(async () => { await addItemRef!({ ...newTitle(62, 'movie'), rating: null }); });
     payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect('ratedAt' in payload).toBe(false);
+  });
+});
+
+// BIN-522: pin the BIN-505 notes invariants that reviewers previously verified
+// only by manual trace — (1) a note write NEVER bumps updatedAt on the watchlist
+// doc (a note edit must not surface as fake "activity" in followers' feeds nor
+// leak the timing of a private edit), (2) the eager inline-note migration never
+// writes a previous account's notes under a new uid on a same-session account
+// switch (itemsUidRef cross-account guard), and (3) updateNotes skips the
+// item-doc write entirely on a true no-op (no inline note to strip, visibility
+// already stamped) so a note edit costs one billed write.
+describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-522)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap(docs));
+    });
+    return view;
+  }
+
+  function callsTo(pathPrefix: string) {
+    return setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path.startsWith(pathPrefix));
+  }
+
+  it('updateNotes writes the note to the owner-only subcollection and strips the inline note WITHOUT bumping updatedAt', async () => {
+    // Legacy title: inline note still on the doc, visibility never stamped →
+    // the item-doc write is needed (strip + visibility re-stamp) but must not
+    // carry updatedAt. The notes snapshot lands in the same batch so the eager
+    // migration sees the note as already-migrated and stays out of the way —
+    // this test isolates the updateNotes path.
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 21, notes: 'gammal inline-anteckning' })]));
+      notesSnapshotCallback!({ size: 1, docs: [{ id: '21', data: () => ({ note: 'gammal inline-anteckning' }) }] });
+    });
+    expect(setDoc).not.toHaveBeenCalled(); // migration correctly idle
+
+    await act(async () => {
+      await updateNotesRef!(21, '  ny anteckning  ');
+    });
+
+    // Owner-only subcollection gets the trimmed note.
+    const noteCalls = callsTo('users/u1/watchlistNotes/21');
+    expect(noteCalls).toHaveLength(1);
+    expect(noteCalls[0][1]).toEqual({ note: 'ny anteckning' });
+
+    // The public/friends-readable watchlist doc: inline note stripped +
+    // visibility stamped, and INVARIANT — no updatedAt (feed orders by it).
+    const itemCalls = callsTo('users/u1/watchlist/21');
+    expect(itemCalls).toHaveLength(1);
+    const payload = itemCalls[0][1] as Record<string, unknown>;
+    expect(payload.notes).toBe('DELETE_FIELD');
+    expect(payload.effectiveVisibility).toBe('private');
+    expect('updatedAt' in payload).toBe(false);
+  });
+
+  it('updateNotes skips the item-doc write on a true no-op (no inline note, visibility already stamped) — BIN-522', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 22, visibility: 'private' })]);
+
+    await act(async () => {
+      await updateNotesRef!(22, 'en anteckning');
+    });
+
+    // Exactly ONE write: the owner-only note doc. No touch of the watchlist doc.
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    expect((setDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/22');
+    expect(callsTo('users/u1/watchlist/22')).toHaveLength(0);
+  });
+
+  it('updateNotes(null) deletes the owner-only note doc (and still skips a no-op item write)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 23, visibility: 'private' })]);
+
+    await act(async () => {
+      await updateNotesRef!(23, '   '); // whitespace-only → cleared
+    });
+
+    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/23');
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('eager migration moves inline notes to watchlistNotes and strips them WITHOUT bumping updatedAt', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat om en vän' })]);
+
+    await vi.waitFor(() => expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1));
+    expect(callsTo('users/u1/watchlistNotes/50')[0][1]).toEqual({ note: 'privat om en vän' });
+
+    const itemCalls = callsTo('users/u1/watchlist/50');
+    expect(itemCalls).toHaveLength(1);
+    // System-only cleanup, not user activity: the inline field is deleted and
+    // NOTHING else is written — no updatedAt, no visibility churn.
+    expect(itemCalls[0][1]).toEqual({ notes: 'DELETE_FIELD' });
+  });
+
+  it('eager migration never writes a previous account\'s notes under the new uid (itemsUidRef cross-account guard)', async () => {
+    // Account A (u1) has a legacy inline note; its migration runs.
+    const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'A:s privata anteckning' })]);
+    await vi.waitFor(() => expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1));
+    setDoc.mockClear();
+
+    // Same-session switch A→B: uid flips but B's watchlist snapshot has NOT
+    // landed yet, so `items` still holds A's rows (and the per-uid migration
+    // dedup set was just reset). Without the guard the migration would write
+    // A's note under users/u2/watchlistNotes — a cross-account PII leak.
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(callsTo('users/u2/')).toHaveLength(0);
+    expect(setDoc).not.toHaveBeenCalled();
+
+    // Positive control: once B's OWN snapshot lands the migration runs for B —
+    // the guard defers, it never dead-locks the new account.
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 60, notes: 'B:s egen anteckning' })]));
+    });
+    await vi.waitFor(() => expect(callsTo('users/u2/watchlistNotes/60')).toHaveLength(1));
+    expect(callsTo('users/u1/')).toHaveLength(0); // and nothing leaks back to A
   });
 });
 

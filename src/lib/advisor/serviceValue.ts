@@ -9,6 +9,7 @@
 
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { librarySubState } from '@/lib/libraryView';
+import { isKeepReasonStatus } from '@/lib/spendSnapshot';
 import type { WatchlistItem } from '@/types';
 
 export interface WatchedForValue {
@@ -81,7 +82,7 @@ export function tvActiveProviderIdsFromItems(items: readonly WatchlistItem[]): n
   const out: number[] = [];
   for (const it of items) {
     if (it.mediaType !== 'tv') continue;
-    if (it.status !== 'mina' && it.status !== 'vill_se') continue;
+    if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
     if (librarySubState(it) === 'avslutad') continue;
     for (const p of it.providers ?? []) out.push(p);
   }

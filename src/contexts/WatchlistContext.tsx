@@ -469,11 +469,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const batch = writeBatch(db);
     if (clean) batch.set(noteRef, { note: clean });
     else batch.delete(noteRef);
-    // Strip any legacy inline note (deleteField is a no-op if absent) + re-stamp
-    // visibility, but NEVER bump updatedAt: a note now lives in the owner-only
-    // subcollection, so a note edit must not surface as activity in followers'
-    // feeds (feed orders by updatedAt) nor leak the timing of a private edit.
-    batch.set(itemRef, { notes: deleteField(), ...visFields }, { merge: true });
+    // Strip any legacy inline note + re-stamp visibility, but NEVER bump
+    // updatedAt: a note now lives in the owner-only subcollection, so a note
+    // edit must not surface as activity in followers' feeds (feed orders by
+    // updatedAt) nor leak the timing of a private edit. BIN-522: skip the
+    // item-doc write entirely when it would be a TRUE no-op — no inline note
+    // to strip AND visibility already stamped — so the common case (editing a
+    // note on an already-migrated title) costs one billed write, not two.
+    if (current?.notes != null || Object.keys(visFields).length > 0) {
+      batch.set(itemRef, { notes: deleteField(), ...visFields }, { merge: true });
+    }
     try {
       await batch.commit();
     } catch (e) {

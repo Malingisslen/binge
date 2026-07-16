@@ -1,4 +1,4 @@
-// Pure helpers for useFollowList — extracted so the ghost-filter logic can be
+// Pure helpers for useFollowList — extracted so the row-mapping logic can be
 // unit-tested without a React/Firebase harness.
 
 export interface FollowListUser {
@@ -10,30 +10,28 @@ export interface FollowListUser {
 }
 
 // Cache value per uid:
-// - FollowListUser : resolved profile
-// - null           : profile exists but is private / fetch errored → show fallback row
-// - 'ghost'        : profile doc does NOT exist (deleted account) → drop the row
+// - FollowListUser : resolved projection card
+// - null           : projection unreadable — private/not-a-friend, deleted
+//                    account, or fetch error → show the fallback row
 // - undefined      : not fetched yet → show fallback row until resolved
-export type FollowProfile = FollowListUser | null | 'ghost';
+//
+// BIN-505/BIN-522: the old 'ghost' variant (drop deleted accounts on read) is
+// gone. users/{uid} is owner-locked, so the projection read can no longer
+// distinguish "deleted" from "private" — both come back null and render as the
+// fallback row. Genuine dangling follow docs from deleted accounts are reaped
+// by the weekly reclaimOrphanFollows sweep instead of being dropped on read.
+export type FollowProfile = FollowListUser | null;
 
 export function followFallback(uid: string): FollowListUser {
   return { uid, displayName: 'Privat användare', username: null, photoURL: null, isPublic: false };
 }
 
-// Maps follow uids to display rows, dropping ghosts (deleted accounts whose
-// profile doc is gone). This is the tombstone/lazy cleanup for BIN-21: account
-// deletion can't remove the inbound follower/following mirror docs (they're
-// owned by the other party), so dangling references are filtered out on read
-// instead. Private/unfetched uids still render as a fallback row.
+// Maps follow uids to display rows in order. Unreadable (null) and unfetched
+// (cache miss) uids render as an anonymous fallback row — never dropped, so a
+// follower count and its visible rows always agree.
 export function resolveFollowRows(
   uids: readonly string[],
   cache: ReadonlyMap<string, FollowProfile>,
 ): FollowListUser[] {
-  const out: FollowListUser[] = [];
-  for (const uid of uids) {
-    const cached = cache.get(uid);
-    if (cached === 'ghost') continue;
-    out.push(cached ?? followFallback(uid));
-  }
-  return out;
+  return uids.map(uid => cache.get(uid) ?? followFallback(uid));
 }

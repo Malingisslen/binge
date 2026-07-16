@@ -10,7 +10,10 @@
  * Dedup marker: priceDropNotifyState/{tmdbId}.lastNotifiedDropAt = the `at` of the
  * point we alerted on. At-most-once per distinct drop; the marker advances even on
  * an empty recipient set (same contract as availableNotify). Admin SDK bypasses
- * firestore.rules, so priceDropNotifyState needs no rule change.
+ * firestore.rules, so priceDropNotifyState needs no rule change. Bare-tmdbId doc
+ * ids are safe here (BIN-523 checked): the scan filters mediaType === 'movie', so
+ * a TV title with the same TMDB id can never reach this collection — unlike
+ * availableNotifyState, which spans both media and is namespaced movie_/tv_.
  *
  * No TMDB calls — it reads only already-captured price history, so it's cheap.
  */

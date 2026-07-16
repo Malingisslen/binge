@@ -88,4 +88,32 @@ describe('syncMyPublicProfile', () => {
     await syncMyPublicProfile('u2', { displayName: 'B', username: null, photoURL: null, bio: '', createdAt: null });
     expect(setDocMock).toHaveBeenCalledTimes(2);
   });
+
+  // BIN-522: pin the clamping BIN-505's reviewers verified only by manual trace.
+  // users/{uid} has NO length rules on these fields at signup, but the projection
+  // rule (isValidPublicProfile) caps displayName/bio/photoURL at 80/160/500 — an
+  // unclamped write would fail the WHOLE atomic set and get swallowed, leaving
+  // the user with no projection at all (invisible in search/friends/profile).
+  it('clamps displayName (80) and bio (160) to the projection rule caps instead of failing the whole write', async () => {
+    await syncMyPublicProfile('u3', {
+      displayName: 'N'.repeat(200),
+      username: null,
+      photoURL: null,
+      bio: 'B'.repeat(400),
+      createdAt: null,
+    });
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+    const payload = setDocMock.mock.calls[0][1] as Record<string, unknown>;
+    expect((payload.displayName as string)).toBe('N'.repeat(80));
+    expect((payload.bio as string)).toBe('B'.repeat(160));
+  });
+
+  it('omits an over-long photoURL (rule cap 500) as null; a within-cap URL passes through untouched', async () => {
+    const longUrl = `https://x.example/${'p'.repeat(500)}`; // > 500 chars total
+    await syncMyPublicProfile('u4', { displayName: 'A', username: null, photoURL: longUrl, bio: '', createdAt: null });
+    expect((setDocMock.mock.calls[0][1] as Record<string, unknown>).photoURL).toBeNull();
+
+    await syncMyPublicProfile('u5', { displayName: 'A', username: null, photoURL: 'https://x.example/p.jpg', bio: '', createdAt: null });
+    expect((setDocMock.mock.calls[1][1] as Record<string, unknown>).photoURL).toBe('https://x.example/p.jpg');
+  });
 });

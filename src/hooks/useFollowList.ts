@@ -34,10 +34,10 @@ export function useFollowList(): FollowListState {
   const [following, setFollowing] = useState<FollowListUser[]>([]);
   const [followers, setFollowers] = useState<FollowListUser[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
-  // Cache per uid → profil (FollowListUser), null (privat/fetch-fel) eller
-  // 'ghost' (profil-doc saknas = raderat konto). Gör att vi bara hämtar NYA
-  // uids när follow-listan ändras, istället för att refetcha alla upp till
-  // 1000 profiler vid varje följ/avfölj (H5).
+  // Cache per uid → profil (FollowListUser) eller null (privat/raderad/
+  // fetch-fel → fallback-rad). Gör att vi bara hämtar NYA uids när
+  // follow-listan ändras, istället för att refetcha alla upp till 1000
+  // profiler vid varje följ/avfölj (H5).
   const profileCache = useRef<Map<string, FollowProfile>>(new Map());
 
   useEffect(() => {

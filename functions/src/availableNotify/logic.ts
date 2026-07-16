@@ -55,6 +55,31 @@ export function canonicalProviderId(id: number): number {
 }
 
 /**
+ * TMDB movie ids and TV ids are INDEPENDENT namespaces — movie N and TV N are
+ * unrelated titles. Anything keyed per-title must therefore key on
+ * (mediaType, tmdbId), never tmdbId alone (BIN-523). Unknown/blank mediaType
+ * normalizes to 'tv', matching the long-standing fetch/actionUrl fallback.
+ */
+export type NotifyMediaType = 'movie' | 'tv';
+
+export function normalizeMediaType(raw: string): NotifyMediaType {
+  return raw === 'movie' ? 'movie' : 'tv';
+}
+
+/**
+ * Doc id for availableNotifyState AND the phase-2 grouping key (BIN-523):
+ * `movie_${tmdbId}` / `tv_${tmdbId}`. Before this, movie N and TV N collapsed
+ * into one group keyed on bare tmdbId — one arbitrary mediaType won the TMDB
+ * fetch and both media shared a lastFlatrate baseline. Legacy bare-`${tmdbId}`
+ * docs are deliberately ORPHANED, not migrated: their lastFlatrate may already
+ * mix both media's providers, so reading them as a fallback would reintroduce
+ * the bug. New ids start at last === null → baseline only, no push blast.
+ */
+export function availableStateDocId(mediaType: string, tmdbId: number): string {
+  return `${normalizeMediaType(mediaType)}_${tmdbId}`;
+}
+
+/**
  * Provider ids present in `current` that were not in `last`. `last === null`
  * (no prior observation) yields [] — baseline only, never a first-run blast.
  */

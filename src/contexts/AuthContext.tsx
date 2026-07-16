@@ -374,7 +374,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName: name,
       email: cred.user.email ?? email,
       photoURL: cred.user.photoURL,
-      username: null,
+      // OBS: inget `username: null` här (BIN-517) — den här writen racear
+      // onAuthStateChanged → ensureUserProfile → tryAutoClaimUsername, och
+      // med merge:true skulle en explicit null klobbra ett just-claimat
+      // username tillbaka till null (medan usernames/{name}-reservationen
+      // står kvar). Saknat fält normaliseras till null av alla läsare, och
+      // ensureUserProfile:s backfill auto-claimar då på nästa sign-in.
       bio: '',
       defaultVisibility: 'private',
       isPublic: false,
@@ -457,11 +462,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const providerCostsRef = useRef<Record<number, number>>({});
   useEffect(() => { providerCostsRef.current = user?.providerCosts ?? {}; }, [user?.providerCosts]);
   const setProviderCost = useCallback(async (providerId: number, cost: number | null) => {
-    const next = { ...providerCostsRef.current };
+    const prev = providerCostsRef.current;
+    const next = { ...prev };
     if (cost == null) delete next[providerId];
     else next[providerId] = cost;
     providerCostsRef.current = next;
-    await updateUserField('providerCosts', next);
+    try {
+      await updateUserField('providerCosts', next);
+    } catch (err) {
+      // BIN-516: writen nådde aldrig Firestore — rulla tillbaka spegeln så
+      // det avvisade värdet inte smygpersistas via nästa edits spread.
+      // Identity-check: klobbra inte en senare concurrent edit (eller
+      // profil-sync-effekten) som redan hunnit byta ref:en.
+      if (providerCostsRef.current === next) providerCostsRef.current = prev;
+      throw err;
+    }
   }, [updateUserField]);
   // BIN-417: same synchronous-mirror pattern for campaigns. Stores the RAW
   // { monthlyCost, endDate } keyed by CANONICAL id (so an alias id and its
@@ -470,11 +485,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => { providerCampaignsRef.current = user?.providerCampaigns ?? {}; }, [user?.providerCampaigns]);
   const setProviderCampaign = useCallback(async (providerId: number, campaign: ProviderCampaign | null) => {
     const key = canonicalProviderId(providerId);
-    const next = { ...providerCampaignsRef.current };
+    const prev = providerCampaignsRef.current;
+    const next = { ...prev };
     if (campaign == null) delete next[key];
     else next[key] = campaign;
     providerCampaignsRef.current = next;
-    await updateUserField('providerCampaigns', next);
+    try {
+      await updateUserField('providerCampaigns', next);
+    } catch (err) {
+      // BIN-516: samma rollback-mönster som setProviderCost ovan.
+      if (providerCampaignsRef.current === next) providerCampaignsRef.current = prev;
+      throw err;
+    }
   }, [updateUserField]);
 
   // BIN-184: hushålls-fan-out — när kostnadsrelaterade profilfält ÄNDRAS
