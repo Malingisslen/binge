@@ -738,9 +738,18 @@ service cloud.firestore {
     }
 
     // ---- Tillsammans-sessioner ----
-    // Alla med sessions-länken kan läsa/skriva. Ingen värdefull data lagras
-    // (bara anonyma röster), så unlisted-link-modellen räcker.
-    // Sessioner kräver dock numera autentisering för att skapas
+    // Alla med sessions-länken kan läsa. Ingen värdefull data lagras (bara
+    // röster), men skrivningar binds sedan BIN-509 till anroparens egen
+    // deltagarplats för INLOGGADE: pid == auth.uid och bara den egna
+    // röstnyckeln får röras — inloggades röster/platser kan inte förfalskas
+    // av någon. Anonyma deltagare (uid == null) kan inte auth-bindas — deras
+    // platser/röster skyddas bara av länkens/tokenets ogissbarhet, så en annan
+    // länk-innehavare kan förfalska en ANONYM deltagares enskilda röst
+    // (accepterad deviation, se .claude/rules/accepted-deviations.md).
+    // Expiry-gate på skrivningar är MEDVETET utelämnad (kostnadsbeslut BIN-24
+    // e6d02e8, återbekräftat av Malin 2026-07-16 i BIN-509) —
+    // retentionCleanup skördar utgångna sessioner.
+    // Sessioner kräver autentisering för att skapas
     // (tidigare tillät null hostUid — skräp- och abuse-vektor).
     match /sessions/{sessionId} {
       allow read: if true;
@@ -749,19 +758,71 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.hostUid == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
 
+      // BIN-509: anonyma deltagar-id:n kommer ALLTID från generateSecureToken()
+      // (16 slumpbytes → exakt 32 tecken lowercase hex). Firebase-uids är
+      // ~28 tecken blandad bas62 och kan aldrig matcha den formen. Utan denna
+      // form-gate kunde en angripare FÖRPLANTERA en "spökplats" (uid null) på
+      // ett offers uid-väg INNAN offret joinat, och sedan förfalska en röst som
+      // efter offrets riktiga join läses som offrets egen (uids är enumererbara
+      // via publika usernames/{name} → {uid}). Form-gaten gör att en anon-plats
+      // strukturellt aldrig kan ligga på en riktig uid-väg. (BIN-509 sec-review.)
+      function anonShapedPid(p) {
+        return p.size() == 32 && p.matches('^[0-9a-f]+$');
+      }
+      // En röstnyckel tillhör en ANONYM plats om nyckeln är token-formad OCH
+      // deltagardokumentet finns och saknar uid. get() körs BARA på anon-vägen
+      // (en inloggads egen röst kortsluter före), och form-checken kortsluter
+      // före get() för ogiltiga/uid-formade nycklar → ingen extra läsning där.
+      // En påhittad nyckel utan deltagardokument nekas (get på saknat doc → deny).
+      function voteKeyIsAnonSlot(k) {
+        return anonShapedPid(k)
+          && get(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(k)).data.uid == null;
+      }
+      function validVote(v) { return v == 'yes' || v == 'no' || v == 'veto'; }
+      function swipeShapeOk() {
+        return request.resource.data.keys().hasOnly(['votes', 'updatedAt'])
+          && request.resource.data.votes is map
+          && request.resource.data.votes.size() <= 50;
+      }
+      // Add-only-skrivning av EN ny röstnyckel på en anonym plats: befintliga
+      // röster får varken ändras eller tas bort. Gäller alla anropare — även
+      // en inloggad vars plats skapades anonymt (joinade utloggad, loggade in
+      // mitt i sessionen). Baksidan: en anonym deltagare kan inte ÄNDRA sin
+      // egen redan lagda röst (går inte att skilja från förfalskning av en
+      // annan anonym plats) — recordSwipe lägger bara första-röster, så inget
+      // legitimt flöde träffar det.
+      function anonVoteAddOk() {
+        let added = request.resource.data.votes.keys().removeAll(resource.data.votes.keys());
+        return request.resource.data.votes.diff(resource.data.votes).changedKeys().size() == 0
+          && request.resource.data.votes.diff(resource.data.votes).removedKeys().size() == 0
+          && added.size() == 1
+          && validVote(request.resource.data.votes[added[0]])
+          && voteKeyIsAnonSlot(added[0]);
+      }
+
       // Anonyma deltagare tillåts (länk-delning utan inloggning) — men
       // skrivningar måste följa fältkontraktet så ingen kan spamma godtyckliga
       // fält eller blåsa upp dokumenten (kostnads-/skräp-skydd, H2).
       match /participants/{pid} {
         allow read: if true;
         allow create, update: if
-          // Anti-spoof (BIN-24): uid-fältet måste matcha den som skriver — en
-          // inloggad får bara sätta sitt eget uid, en anonym måste sätta null.
-          // Stoppar att någon misattribuerar en annan användares identitet i
-          // session/grupp-UI:t. (Anonymt deltagande är fortfarande tillåtet.)
+          // BIN-509 (skärper BIN-24): en inloggad skriver sin EGEN plats —
+          // både uid-FÄLTET (BIN-24) och dokument-VÄGEN (pid) binds till
+          // auth.uid (klienten sätter alltid pid = uid för inloggade).
+          // Anonyma platser (uid null före och efter skrivningen) får skrivas
+          // av vem som helst med länken (token-modellen) — men en befintlig
+          // plats med uid != null kan bara skrivas av sin ägare: ingen kan
+          // längre ta över en annans plats eller strippa dess identitet.
           (
-            (request.auth != null && request.resource.data.uid == request.auth.uid)
-            || (request.auth == null && request.resource.data.uid == null)
+            (request.auth != null
+              && pid == request.auth.uid
+              && request.resource.data.uid == request.auth.uid)
+            || (request.resource.data.uid == null
+              && (resource == null || resource.data.uid == null)
+              // Anon-plats får BARA ligga på en token-formad väg — annars kunde
+              // en angripare förplantera en spökplats på ett offers uid-väg och
+              // förfalska en röst som blir offrets efter join (BIN-509 sec-review).
+              && anonShapedPid(pid))
           )
           && request.resource.data.keys().hasOnly([
             'uid', 'displayName', 'providers', 'vetoRemaining',
@@ -777,10 +838,29 @@ service cloud.firestore {
 
       match /swipes/{tmdbId} {
         allow read: if true;
-        allow create, update: if
-          request.resource.data.keys().hasOnly(['votes', 'updatedAt'])
-          && request.resource.data.votes is map
-          && request.resource.data.votes.size() <= 50;
+        // BIN-509: första rösten på en titel SKAPAR dokumentet — create-grenen
+        // får aldrig röra resource.data (diff() på create kastar och skulle
+        // neka alla legitima förstaröster; alla .diff()-användningar i filen
+        // är update-only av samma skäl).
+        allow create: if swipeShapeOk()
+          && request.resource.data.votes.size() == 1
+          && validVote(request.resource.data.votes[request.resource.data.votes.keys()[0]])
+          && (
+            (request.auth != null
+              && request.resource.data.votes.keys().hasOnly([request.auth.uid]))
+            || voteKeyIsAnonSlot(request.resource.data.votes.keys()[0])
+          );
+        // Update: en inloggad får ändra/lägga sin EGEN röstnyckel; annars
+        // gäller add-only av en ny nyckel på en anonym plats. Ingen kan ändra
+        // eller ta bort någon annans befintliga röst, och hela röst-mapen kan
+        // aldrig bytas ut i ett svep (veto-storm/förfalskat matchresultat).
+        allow update: if swipeShapeOk()
+          && (
+            (request.auth != null
+              && request.resource.data.votes.diff(resource.data.votes).affectedKeys().hasOnly([request.auth.uid])
+              && validVote(request.resource.data.votes[request.auth.uid]))
+            || anonVoteAddOk()
+          );
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostUid == request.auth.uid;
       }

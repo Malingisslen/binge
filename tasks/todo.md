@@ -1,3 +1,123 @@
+# PLAN — BIN-509: Tillsammans session write rules (caller binding) — 2026-07-16
+
+**Class:** firestore.rules (sensitive domain, router tier `top`). Full panel convened
+2026-07-16 (Security #4, DPO #6, QA #7, DBA #27 + Codebase Archaeologist), all
+approve-with-conditions, zero inter-role conflicts, TWO escalations for Malin (below).
+Metrics event logged. Malin gave intent go-ahead ("go ahead") for panel+plan; build
+awaits her answers + plan approval.
+
+## The holes (verified against firestore.rules @ HEAD 3644a22)
+
+1. **Swipes (L778-786) — ZERO auth binding.** `allow create, update` checks only doc
+   shape (hasOnly['votes','updatedAt'], votes map ≤50). No isSignedIn(), no caller
+   binding, no expiry gate. ANY caller (anon link-holder included; participants/swipes
+   are public-read so participant ids are enumerable) can setDoc WITHOUT merge and
+   replace/forge any participant's vote. matching.ts treats 'veto' as -Infinity → one
+   hostile client silently kills every match or fabricates one. "One veto per session"
+   is client-UI-only. This hole has existed since Tillsammans launch — BIN-24 only
+   touched participants, never swipes (archaeologist-verified).
+2. **Participants (L755-776) — uid FIELD bound (BIN-24), doc PATH not.** A signed-in
+   user can setDoc(participants/{anyPid}, {uid:<own uid>,…}) overwriting another
+   participant's slot — including hijacking an ANON participant's slot (uid-field check
+   passes because the field is "honest"). Corrupts displayName/providers → feeds
+   computeSessionProviders → candidate filtering.
+
+**Identity model (ground truth):** pid = `existingUid ?? generateSecureToken()` — pid==uid
+for signed-in; a random unguessable client token for anon (request.auth is null; NOT
+Firebase Anonymous Auth — rules cannot verify anon identity, structurally).
+
+## Fix (panel-conditioned)
+
+### firestore.rules — swipes block
+- **Create branch** (resource == null): payload shape checks + votes.keys() constraint —
+  NEVER touch resource.data on create (diff()-on-create throws → denies ALL first votes;
+  4 roles + archaeologist flagged independently; every existing .diff() use in this file
+  is update-only for this reason).
+- **Update branch:** `votes.diff(resource.data.votes).affectedKeys()` must be exactly ONE key.
+- **Signed-in callers:** that one key must == request.auth.uid (their pid).
+- **Anon callers:** single-key constraint only (stops wholesale map replacement /
+  veto-storms). NO fake "secret" binding — any secret on a public-read doc is readable,
+  a false proof (Security). Residual anon-vs-anon forgery → ESCALATION A.
+- **Vote VALUE enum** (`in ['yes','no','veto']`) — trivially adjacent to the diff logic,
+  included (archaeologist scope-call).
+- **Expiry gate** `get(sessions/$(sessionId)).data.expiresAt > request.time` — reuses the
+  existing get() pattern from this block's delete rules. BUT: ESCALATION B (reverses a
+  prior founder decision).
+- Update the stale block comment (L741-742 "unlisted-link-modellen räcker") — it justifies
+  the old loose model and would mislead the next reader.
+
+### firestore.rules — participants block
+- Signed-in branch: add `pid == request.auth.uid` (path binding on top of BIN-24's field
+  binding). Anon branch (uid == null) unchanged — pid unbindable, token-trust model.
+- Expiry gate on participants: ONLY if Escalation B says yes, and then existing BIN-24
+  tests (~L697-741, which never seed a parent session doc) must be re-seeded, not loosened.
+
+### src/test/rules/firestore-rules.test.ts (extend BIN-24 describe block + new sibling swipes block, reuse ownerDb/anonDb/otherDb + validParticipant factory)
+DENY: signed-in writes vote key ≠ own uid; signed-in overwrites another pid's slot (incl.
+hijacking an anon slot); multi-key votes diff (any caller); non-merge setDoc that CHANGES
+another participant's existing key (QA: a same-content replacement + one new key is
+legitimately allowed — don't assert it as deny); write after expiresAt (if gate ships;
+seed parent session via withSecurityRulesDisabled with explicit past/future expiresAt);
+invalid vote value. ALLOW (regression): own-vote create (first swipe on fresh tmdbId —
+the create branch); own-vote merge update (recordSwipe shape: setDoc merge:true
+{votes:{[pid]:vote}, updatedAt} — deep-merges, diff isolates own key); anon participant
+create; anon single-key vote. Re-run FULL existing sessions tests — if the expiry gate
+breaks BIN-24 tests, seed sessions docs, never weaken the gate.
+
+### Honesty scope (QA/DBA/DPO binding)
+Ticket/commit language = "closes SIGNED-IN cross-participant vote + slot forgery; caps
+anon writes to single-key; anon-vs-anon forgery remains {per Escalation A}". NEVER "closes
+all vote forgery". A test named "anon forgery blocked" cannot be true — don't write one.
+
+### Pre-deploy check (DBA)
+Query live sessions/*/participants for docs with uid != null && docId != uid (legacy
+pattern-mismatch would brick their lastActiveAt/veto updates under the new path binding).
+Any found within TTL window → carve-out or delete before rules deploy.
+
+### Deploy (Tier-D)
+Manual `firebase deploy --only firestore:rules` FIRST (deploy.yml ships hosting only);
+no client code change expected (recordSwipe's write shape already passes the new rules —
+QA traced). xhigh /code-review (rules diff) + binge-security-reviewer + binge-test-reviewer
+gates. Accepted-deviations entry for the anon residual (per Escalation A). ADR for
+Escalation B's outcome (reverses BIN-24's recorded call).
+
+## ESCALATION A — anonymous-forgery residual (all 4 roles converge, Malin decides)
+Rules can't authenticate an anonymous caller. Options:
+- **A1 (panel lean):** accept residual — anon participants can still forge OTHER ANON
+  participants' single votes (not signed-in ones; not wholesale). Ephemeral 7-day data,
+  unlisted-link trust model, zero new data elements. Record in accepted-deviations.md.
+- **A2:** require sign-in to swipe — closes everything, breaks anonymous participation
+  (product regression for the link-share flow).
+- **A3:** Firebase Anonymous Auth — real binding for everyone, but a NEW pseudonymous
+  identifier in Firebase Auth: GDPR inventory + retention/reaper story required (DPO:
+  anon auth accounts never auto-expire; BIN-480-class follow-up), new auth provider.
+
+## ESCALATION B — expiry gate reverses a recorded founder decision
+BIN-24's commit (e6d02e8) explicitly says "Expiry-gate medvetet utelämnad (kostnad)" —
+Malin already decided ONCE against this gate on cost grounds. Adding it now = +1 billed
+read per swipe write (hottest session write path; ~0.01 kr per 300 swipes — trivial at
+current traffic under the 25 SEK cap, but ongoing). Value: blocks zombie-session write
+floods in the up-to-30-day window before retentionCleanup reaps expired sessions.
+- **B1 (panel lean):** add the gate on swipes (+ participants), document the read cost.
+- **B2:** keep BIN-24's call — skip the gate, rely on retentionCleanup's 30d reap.
+
+## Follow-up (file, don't build here): vetoRemaining/isHost value forging
+Participants can self-write vetoRemaining:999 / isHost:true raw (hasOnly lists keys, no
+value validation; one-veto cap is client-only). Adjacent, real, but its own small ticket.
+
+## Acceptance criteria (panel conditions folded — BINDING)
+- [ ] Create/update split — no unconditional resource.data reference (deny-all-creates bug class).
+- [ ] Signed-in: vote key == auth.uid; pid == auth.uid path binding. Anon: single-key cap.
+- [ ] Vote value enum enforced.
+- [ ] Expiry gate per Escalation B (+ re-seeded BIN-24 tests if yes).
+- [ ] Deny+allow tests per QA list; full sessions suite green (npm run test:rules, Java/JBR).
+- [ ] Legacy pid!=uid spot-check before deploy.
+- [ ] Stale block comment updated; accepted-deviations entry (anon residual per A); ADR (B).
+- [ ] Honest scope language in ticket/commit.
+- [ ] Manual rules deploy + xhigh review + security/test reviewer gates.
+
+---
+
 # Sprint 2026-07-16 — selection
 
 Linear available. 7 tickets selected (`build`), clustered into 6 disjoint-file batches.

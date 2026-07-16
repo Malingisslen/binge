@@ -43,3 +43,17 @@ put to Malin and her answer.>
 
 ## Index
 - [0001](0001-deploy-retention-cleanup.md) — Deploy dormant retentionCleanup + reclaimOrphanFollows (validation run)
+- [0002](0002-bin275-google-sso-terms-consent.md) — BIN-275: recording terms acceptance for Google-SSO users
+- [0003](0003-bin318-avbruten-taste-weight.md) — BIN-318: taste weight for rated-but-abandoned titles
+- [0004](0004-bin322-cheapestpath-tier-pricing.md) — BIN-322: cheapestPath must price by tier, and display honestly
+- [0005](0005-bin337-person-pipeline-placement.md) — BIN-337: shared person-ID pipeline placement
+- [0006](0006-bin350-vendor-quota-daykeys-stay-utc.md) — BIN-350: vendor-quota day-keys stay UTC (deviation from ticket)
+- [0007](0007-bin329-joinattempts-erasure-approach.md) — BIN-329: joinAttempts erasure mechanism infeasible, plan parked
+- [0008](0008-bin276-327-groups-rules-cap-scope.md) — Groups rules hardening: scope the memberUids size-cap to growth branches
+- [0009](0009-bin402-tmdb-tos-sweep.md) — BIN-402: TMDB ToS sweep — clear-by-default, lazy-refresh-on-view
+- [0010](0010-household-read-gap.md) — Household facet: read-gap disclosure + share-to-see reciprocity (BIN-184)
+- [0011](0011-bin185-recap-cc-by-sa.md) — BIN-185: recaps use CC BY-SA sources under the conservative posture
+- [0012](0012-provider-wordmark-vs-logo.md) — Provider pills use wordmarks, not real brand logos
+- [0013](0013-tillsammans-social-design.md) — Tillsammans / social layer: founding design decisions
+- [0014](0014-seo-lighthouse-tradeoffs.md) — SEO/AI-search: accept Lighthouse 93–96, and what NOT to build for AI
+- [0015](0015-tillsammans-write-binding-scope.md) — Tillsammans write binding: anon-forgery residual accepted (A1); expiry gate re-declined (BIN-24 re-affirmed)

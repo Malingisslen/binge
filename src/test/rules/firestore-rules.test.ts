@@ -691,9 +691,21 @@ describe('users/{uid}/reportMeta throttle write rule (BIN-49 locked)', () => {
   });
 });
 
+// BIN-509: anonymous participant ids always come from generateSecureToken() →
+// exactly 32 lowercase-hex chars. The rules gate anon slots to that shape (so a
+// ghost slot can't be pre-planted on a real uid's path), so these tests must use
+// real token-shaped ids for the anon allow-paths, and can use non-token ids
+// (uid-shaped) to prove the shape guard denies pre-planting.
+const ANON1 = '0123456789abcdef0123456789abcdef';
+const ANON2 = 'fedcba9876543210fedcba9876543210';
+const ANON_UNSEEDED = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // token-shaped, never seeded
+
 // BIN-24 — Tillsammans participant uid anti-spoof. Anonymous participation stays
 // allowed (uid null), but a signed-in writer may only set their OWN uid, and an
 // anonymous writer may not carry a non-null uid (identity misattribution).
+// BIN-509 tightened the contract: signed-in participants are keyed pid == uid
+// (the client always writes pid = uid when authed), so these fixtures use
+// pid == OWNER rather than an arbitrary 'p1'.
 describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
   function validParticipant(uid: string | null) {
     return {
@@ -701,42 +713,258 @@ describe('sessions/{id}/participants — uid anti-spoof (BIN-24)', () => {
       isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
     };
   }
-  it('signed-in user can create a participant carrying their own uid', async () => {
+  it('signed-in user can create their participant slot (pid == uid)', async () => {
     await assertSucceeds(setDoc(
-      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
       validParticipant(OWNER),
     ));
   });
   it('signed-in user cannot spoof another uid', async () => {
     await assertFails(setDoc(
-      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
       validParticipant('someone_else'),
     ));
   });
   it('anonymous user can create a participant with uid null', async () => {
     await assertSucceeds(setDoc(
-      doc(anonDb(), 'sessions', 's1', 'participants', 'anon1'),
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
       validParticipant(null),
     ));
   });
   it('anonymous user cannot carry a non-null uid', async () => {
     await assertFails(setDoc(
-      doc(anonDb(), 'sessions', 's1', 'participants', 'anon1'),
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
       validParticipant(OWNER),
     ));
   });
   it('a different signed-in user cannot update another participant doc', async () => {
-    // OWNER creates their participant (uid=OWNER); other_uid then tries to touch
-    // it. The merged doc's uid stays OWNER ≠ other_uid → guard denies (exercises
-    // the UPDATE branch + the cross-participant-write block).
+    // OWNER creates their slot (pid == uid == OWNER); other_uid then tries to
+    // touch it. pid != other_uid AND merged uid stays OWNER → both the path
+    // binding and the uid-field guard deny.
     await assertSucceeds(setDoc(
-      doc(ownerDb(), 'sessions', 's1', 'participants', 'p1'),
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
       validParticipant(OWNER),
     ));
     await assertFails(updateDoc(
-      doc(otherDb(), 'sessions', 's1', 'participants', 'p1'),
+      doc(otherDb(), 'sessions', 's1', 'participants', OWNER),
       { lastActiveAt: serverTimestamp() },
     ));
+  });
+});
+
+// BIN-509 — participant slot path binding. A signed-in writer's slot is bound
+// to pid == auth.uid; anon slots (uid null before AND after) are writable by
+// any link-holder (token-trust model, accepted deviation) but can never be
+// claimed by or stripped from a signed-in identity.
+describe('sessions/{id}/participants — slot hijack (BIN-509)', () => {
+  function validParticipant(uid: string | null) {
+    return {
+      uid, displayName: 'Spelare', providers: [], vetoRemaining: 1,
+      isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
+    };
+  }
+  it('signed-in user cannot create a slot at a foreign pid even with their own uid', async () => {
+    // The BIN-509 hole: uid-field check passed (field is "honest") while the
+    // PATH pointed at someone else's slot.
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', 'someone_elses_pid'),
+      validParticipant(OWNER),
+    ));
+  });
+  it('signed-in user cannot take over an existing anon slot with their identity', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      validParticipant(null),
+    ));
+    await assertFails(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', ANON1),
+      validParticipant(OWNER),
+    ));
+  });
+  it('anon caller cannot PRE-PLANT a ghost slot at a real uid\'s path (BIN-509 sec-review)', async () => {
+    // The blocking exploit: an attacker seeds participants/{victimUid} with
+    // uid:null BEFORE the victim joins (uids are enumerable via public
+    // usernames/{name}); a forged vote under that key would later read as the
+    // victim's own. The anonShapedPid(pid) gate blocks the ghost-slot create:
+    // a real uid is 28-char base62, never 32-char hex.
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', 'victim_real_uid'),
+      validParticipant(null),
+    ));
+    // Even a signed-in attacker can't plant an anon ghost at a foreign path.
+    await assertFails(setDoc(
+      doc(otherDb(), 'sessions', 's1', 'participants', 'victim_real_uid'),
+      validParticipant(null),
+    ));
+  });
+  it('anonymous caller cannot strip a signed-in slot down to uid null', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
+      validParticipant(OWNER),
+    ));
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', OWNER),
+      validParticipant(null),
+    ));
+  });
+  it('anon slot stays writable by an anon caller (activity update)', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      validParticipant(null),
+    ));
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { lastActiveAt: serverTimestamp(), vetoRemaining: 0 },
+    ));
+  });
+  it('signed-in caller may update an anon slot as long as uid stays null (mid-session login)', async () => {
+    // Joined logged-out (slot = random token, uid null), then logged in: their
+    // stored participantId still points at the anon slot. Same trust class as
+    // anon-writes-anon — allowed, as long as the slot is never claimed.
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      validParticipant(null),
+    ));
+    await assertSucceeds(updateDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', ANON1),
+      { lastActiveAt: serverTimestamp() },
+    ));
+  });
+});
+
+// BIN-509 — swipe vote binding. Signed-in votes are bound to the caller's own
+// key (forgeable by NO ONE); anon-slot votes are add-only single-key writes
+// verified against the participant doc (uid == null), so a signed-in
+// participant's vote can't be forged even by an anonymous caller. Wholesale
+// votes-map replacement (veto-storm / fabricated match) is impossible.
+// HONESTY SCOPE: one link-holder CAN still forge another ANONYMOUS
+// participant's single vote — accepted deviation (rules cannot authenticate an
+// unauthenticated caller), see .claude/rules/accepted-deviations.md.
+describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
+  function validParticipant(uid: string | null) {
+    return {
+      uid, displayName: 'Spelare', providers: [], vetoRemaining: 1,
+      isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
+    };
+  }
+  // Seed the participant slots the vote keys must resolve against.
+  async function seedParticipants() {
+    await setDoc(doc(ownerDb(), 'sessions', 's1', 'participants', OWNER), validParticipant(OWNER));
+    await setDoc(doc(otherDb(), 'sessions', 's1', 'participants', 'other_uid'), validParticipant('other_uid'));
+    await setDoc(doc(anonDb(), 'sessions', 's1', 'participants', ANON1), validParticipant(null));
+    await setDoc(doc(anonDb(), 'sessions', 's1', 'participants', ANON2), validParticipant(null));
+  }
+  const swipeRef = (db: ReturnType<typeof ownerDb>, tmdbId = '603') =>
+    doc(db, 'sessions', 's1', 'swipes', tmdbId);
+
+  it('signed-in first vote on a title succeeds (CREATE branch — the diff()-on-create trap)', async () => {
+    await seedParticipants();
+    await assertSucceeds(setDoc(swipeRef(ownerDb()), {
+      votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('signed-in user can change their OWN vote (merge update leaves other keys untouched)', async () => {
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertSucceeds(setDoc(swipeRef(ownerDb()), {
+      votes: { [OWNER]: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('anonymous first vote on a fresh title succeeds (create, key resolves to an anon slot)', async () => {
+    await seedParticipants();
+    await assertSucceeds(setDoc(swipeRef(anonDb(), '604'), {
+      votes: { [ANON1]: 'no' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('anonymous voter can ADD their key next to an existing signed-in vote', async () => {
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertSucceeds(setDoc(swipeRef(anonDb()), {
+      votes: { [ANON1]: 'no' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('signed-in user cannot forge another signed-in participant\'s vote', async () => {
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertFails(setDoc(swipeRef(ownerDb()), {
+      votes: { other_uid: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('anonymous caller cannot CHANGE a signed-in participant\'s existing vote', async () => {
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertFails(setDoc(swipeRef(anonDb()), {
+      votes: { [OWNER]: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('anonymous caller cannot ADD a vote under a signed-in participant\'s key', async () => {
+    await seedParticipants();
+    await assertFails(setDoc(swipeRef(anonDb(), '605'), {
+      votes: { other_uid: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('non-merge setDoc that wipes another participant\'s existing vote is denied', async () => {
+    // A replacement that REMOVES someone else's key — the veto-storm/
+    // fabricated-match vector. (A same-content replacement adding only your
+    // own key is legitimately allowed — not asserted as a deny.)
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertFails(setDoc(swipeRef(anonDb()), {
+      votes: { [ANON1]: 'yes' }, updatedAt: serverTimestamp(),
+    }));
+  });
+  it('multi-key votes diff is denied even across anon slots', async () => {
+    await seedParticipants();
+    await setDoc(swipeRef(ownerDb()), { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertFails(setDoc(swipeRef(anonDb()), {
+      votes: { [ANON1]: 'yes', [ANON2]: 'no' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('a token-shaped vote key with no participant doc behind it is denied (get() denies)', async () => {
+    await seedParticipants();
+    await assertFails(setDoc(swipeRef(anonDb(), '606'), {
+      votes: { [ANON_UNSEEDED]: 'yes' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('a uid-shaped vote key is denied by the shape gate even when a ghost slot exists (defense-in-depth swipe leg)', async () => {
+    // Isolate the swipes-side anonShapedPid() gate: admin-seed a uid-shaped
+    // participant doc with uid:null (the participants rule would REFUSE to
+    // create this — that's the primary defense — so we bypass rules to force
+    // the counterfactual). Now get(participants/victim_real_uid).uid == null
+    // would PASS, so the ONLY thing that can deny the forged vote is the
+    // anonShapedPid() shape gate. Proves the swipe leg is independently
+    // defended, not just riding on the missing-doc get() denial.
+    await seedParticipants();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'sessions', 's1', 'participants', 'victim_real_uid'),
+        validParticipant(null));
+    });
+    await assertFails(setDoc(swipeRef(anonDb(), '610'), {
+      votes: { victim_real_uid: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('invalid vote values are rejected', async () => {
+    await seedParticipants();
+    await assertFails(setDoc(swipeRef(ownerDb(), '607'), {
+      votes: { [OWNER]: 'super_yes' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('add-only boundary: an anon voter cannot change even their own existing vote', async () => {
+    // Honest limitation, documented: rules cannot tell an anon re-vote apart
+    // from one anon forging another anon's vote, so changes to existing anon
+    // keys are denied wholesale. recordSwipe only ever writes first-votes per
+    // title, so no legitimate flow hits this.
+    await seedParticipants();
+    await setDoc(swipeRef(anonDb(), '608'), { votes: { [ANON1]: 'no' }, updatedAt: serverTimestamp() }, { merge: true });
+    await assertFails(setDoc(swipeRef(anonDb(), '608'), {
+      votes: { [ANON1]: 'veto' }, updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+  it('swipe doc with unknown top-level fields is still rejected (shape guard)', async () => {
+    await seedParticipants();
+    await assertFails(setDoc(swipeRef(ownerDb(), '609'), {
+      votes: { [OWNER]: 'yes' }, evil: true, updatedAt: serverTimestamp(),
+    }, { merge: true }));
   });
 });
 
