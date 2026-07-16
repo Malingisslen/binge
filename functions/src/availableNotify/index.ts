@@ -28,7 +28,7 @@
  * Admin SDK bypasses firestore.rules → the state collections need no rule change.
  */
 
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
@@ -48,23 +48,45 @@ import { diffNewProviders, qualifyingProviders, canonicalProviderId, type Watchl
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
 
+// BIN-515: bounded scan. The old single `.get()` materialized the whole matching
+// collection-group in one query — an uncapped read-bill that can breach Firestore's
+// 10 MB single-response limit at scale (a hard error that aborts the entire notify
+// run, dropping every availability + "släpps idag" push). This mirrors the
+// streamingOffers / followedSeries paginated loop. The `status IN [...]` filter is
+// served by the existing `status` COLLECTION_GROUP single-field index (which the
+// old query already relied on); ordering by document id rides that index's implicit
+// __name__ tail, so the limit/startAfter cursor needs NO new index. Same docs, same
+// shape — just bounded reads.
+const PAGE_SIZE = 2000;
+
 async function readWatchlistTitles(): Promise<WatchlistTitleLite[]> {
   const db = getFirestore();
-  const snap = await db.collectionGroup('watchlist')
-    .where('status', 'in', ['vill_se', 'mina'])
-    .select('mediaType', 'status', 'title', 'tmdbId')
-    .get();
-  return snap.docs.map((d) => {
-    const x = d.data();
-    const uid = d.ref.parent.parent?.id ?? '';
-    return {
-      uid,
-      tmdbId: Number(x.tmdbId ?? Number(d.id)),
-      mediaType: String(x.mediaType ?? ''),
-      status: String(x.status ?? ''),
-      title: String(x.title ?? ''),
-    };
-  });
+  const out: WatchlistTitleLite[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let q = db.collectionGroup('watchlist')
+      .where('status', 'in', ['vill_se', 'mina'])
+      .select('mediaType', 'status', 'title', 'tmdbId')
+      .orderBy(FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      const x = d.data();
+      const uid = d.ref.parent.parent?.id ?? '';
+      out.push({
+        uid,
+        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        mediaType: String(x.mediaType ?? ''),
+        status: String(x.status ?? ''),
+        title: String(x.title ?? ''),
+      });
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return out;
 }
 
 async function readLastFlatrate(tmdbId: number): Promise<number[] | null> {

@@ -14,14 +14,16 @@ export interface ProfileStats {
 // taste/vector.ts för resonemanget.
 //
 // AVSIKTLIGT olik `buildTasteVector` i taste/vector.ts: detta är en
-// *beskrivande* topp-genre-vy för profilen, så betyg räknas rakt (rating/10,
-// inte ×2) och 'avbruten' är neutral (0) — en topp-5-lista sorterad på vikt
-// kan inte visa "negativ genre-närvaro". vector.ts straffar 'avbruten' (-0.5)
-// för att rekommendationsmotorn ska väga bort övergivna genrer. Skalorna ska
-// förbli olika.
+// *beskrivande* topp-genre-vy för profilen, så betyg normaliseras rakt på den
+// riktiga 0.5–5-skalan (rating/5 → 0.1–1.0), INTE amplifierat ×2 som vector.ts.
+// En topp-5-lista sorterad på vikt kan inte visa "negativ genre-närvaro", så
+// 'avbruten' är alltid neutral (0) — och kollas FÖRE rating (BIN-511) så en
+// ratad-men-avbruten titel inte råkar dra upp en genre man gett upp på.
+// vector.ts straffar istället 'avbruten' (-0.5) för att rekommendationsmotorn
+// ska väga bort övergivna genrer. Skalorna ska förbli olika.
 function weightForItem(item: WatchlistItem): number {
-  if (item.rating != null) return item.rating / 10;
   if (item.status === 'avbruten') return 0;
+  if (item.rating != null) return item.rating / 5;
   if (item.status === 'sedd') return 0.8;
   if (item.status === 'mina') return item.lastWatchedSeason == null ? 0.3 : 0.6;
   return 0.3;

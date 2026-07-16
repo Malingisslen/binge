@@ -15,7 +15,7 @@
  * No TMDB calls — it reads only already-captured price history, so it's cheap.
  */
 
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
@@ -28,21 +28,41 @@ interface WantedFilm {
   title: string;
 }
 
+// BIN-515: bounded scan (was a single unbounded `.get()`). At scale the whole
+// matching collection-group in one query is an uncapped read-bill that can breach
+// Firestore's 10 MB single-response limit — a hard error that aborts the daily run
+// so no price-drop pushes go out. Mirrors streamingOffers / followedSeries. The two
+// equality filters (status + mediaType) are served by the existing (mediaType,
+// status) COLLECTION_GROUP composite index; ordering by document id rides its
+// implicit __name__ tail, so the cursor needs NO new index. Same docs, same shape.
+const PAGE_SIZE = 2000;
+
 async function readWantedFilms(): Promise<WantedFilm[]> {
   const db = getFirestore();
-  const snap = await db.collectionGroup('watchlist')
-    .where('status', '==', 'vill_se')
-    .where('mediaType', '==', 'movie')
-    .select('mediaType', 'status', 'title', 'tmdbId')
-    .get();
-  return snap.docs.map((d) => {
-    const x = d.data();
-    return {
-      uid: d.ref.parent.parent?.id ?? '',
-      tmdbId: Number(x.tmdbId ?? Number(d.id)),
-      title: String(x.title ?? ''),
-    };
-  });
+  const out: WantedFilm[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let q = db.collectionGroup('watchlist')
+      .where('status', '==', 'vill_se')
+      .where('mediaType', '==', 'movie')
+      .select('mediaType', 'status', 'title', 'tmdbId')
+      .orderBy(FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      const x = d.data();
+      out.push({
+        uid: d.ref.parent.parent?.id ?? '',
+        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        title: String(x.title ?? ''),
+      });
+    }
+    if (snap.size < PAGE_SIZE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return out;
 }
 
 interface NotifySettings { priceDrops: boolean; pushEnabled: boolean }

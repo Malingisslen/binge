@@ -19,6 +19,7 @@ import FreeWatchBadge from '@/components/title/FreeWatchBadge';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
 import TagEditor from '@/components/title/TagEditor';
@@ -134,7 +135,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   });
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar filmen…" />;
-  if (!movie) return <div className="text-sm text-ink-3 py-4">Filmen hittades inte.</div>;
+  if (!movie) return <NotFound crumb="Film" title="Filmen hittades inte." body="Vi kunde inte hitta den här filmen i TMDB." />;
 
   // BIN-422: känd franchise → statisk, crawlbar /billigaste-länk (renderas
   // utanför ClientOnly nedan). Härledd ur build-initialData, inte ur den

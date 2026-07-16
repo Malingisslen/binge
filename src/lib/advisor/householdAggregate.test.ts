@@ -56,6 +56,16 @@ describe('aggregateHousehold (BIN-184)', () => {
     expect(out.deadWeight.every(r => r.providerId !== 520)).toBe(true);
   });
 
+  it('surfaces free/zeroed members on a paid row via zeroCostCount (BIN-514)', () => {
+    const a = contrib({ uid: 'a', providerIds: [8], providerCosts: { 8: 169 } }); // pays
+    const b = contrib({ uid: 'b', providerIds: [8], providerCosts: { 8: 0 } });   // free/zeroed
+    const out = aggregateHousehold([a, b], NOW);
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0].paidByCount).toBe(1);
+    expect(out.rows[0].zeroCostCount).toBe(1);
+    expect(out.rows[0].totalKr).toBe(169); // the 0-cost member adds no spend
+  });
+
   it('resolves campaigns with the SINGLE injected now — a stale doc still auto-reverts a lapsed promo', () => {
     const a = contrib({
       uid: 'a',

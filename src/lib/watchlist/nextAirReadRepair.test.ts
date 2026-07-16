@@ -1,9 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   computeNextAirFields, computeMovieReleaseFields, nextAirDelta, collectNextAirUpdates,
-  buildRepairPayload, nextAirStampStale, NEXTAIR_RESTAMP_INTERVAL_MS,
+  buildRepairPayload, nextAirStampStale, NEXTAIR_RESTAMP_INTERVAL_MS, flushNextAirWrites,
 } from './nextAirReadRepair';
+import type { NextAirUpdate } from './nextAirReadRepair';
 import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
+
+// BIN-518: flushNextAirWrites needs Firebase (the pure functions above don't).
+// Mock fsdb so we can force a chunk's commit to REJECT and assert failed-chunk
+// items are rolled back (retryable) while committed-chunk items stay deduped.
+// The dynamic import inside flush resolves to this mock; the pure-function tests
+// never reach it, so they're unaffected.
+let commitOutcomes: Array<'ok' | 'fail'> = [];
+let commitIndex = 0;
+const attemptedChunks: number[][] = [];
+vi.mock('@/lib/firebase/db', () => ({
+  fsdb: async () => ({
+    db: {},
+    doc: (_db: unknown, ..._path: string[]) => ({ id: _path[_path.length - 1] }),
+    writeBatch: () => {
+      const ids: number[] = [];
+      return {
+        set: (ref: { id: string }) => { ids.push(Number(ref.id)); },
+        commit: async () => {
+          attemptedChunks.push([...ids]);
+          const outcome = commitOutcomes[commitIndex++] ?? 'ok';
+          if (outcome === 'fail') throw new Error('forced batch rejection');
+        },
+      };
+    },
+    serverTimestamp: () => 'STAMP',
+  }),
+}));
 
 const NOW = Date.UTC(2026, 6, 11); // 2026-07-11
 
@@ -158,5 +186,40 @@ describe('collectNextAirUpdates', () => {
 
   it('ignores shows not in the library', () => {
     expect(collectNextAirUpdates([], [show], [], NOW)).toHaveLength(0);
+  });
+});
+
+describe('flushNextAirWrites — a rejected chunk rolls back its dedupe marks (BIN-518)', () => {
+  beforeEach(() => {
+    commitOutcomes = [];
+    commitIndex = 0;
+    attemptedChunks.length = 0;
+  });
+
+  const mkUpdate = (tmdbId: number): NextAirUpdate => ({
+    tmdbId, delta: { nextAirDate: '2026-08-01' },
+  });
+
+  it("a failed chunk's items retry on the next flush; a committed chunk's items don't", async () => {
+    // 451 updates → two chunks (450 + 1). First chunk's commit REJECTS, second commits.
+    const uid = 'bin518';
+    const updates = Array.from({ length: 451 }, (_, i) => mkUpdate(i + 1));
+    commitOutcomes = ['fail', 'ok'];
+    await flushNextAirWrites(uid, updates);
+
+    // Both chunks were attempted; chunk 1 = 450 ids, chunk 2 = [451].
+    expect(attemptedChunks).toHaveLength(2);
+    expect(attemptedChunks[0]).toHaveLength(450);
+    expect(attemptedChunks[1]).toEqual([451]);
+
+    // Second flush, same updates: id 451 (committed) is deduped out; the 450
+    // items from the rejected chunk retry because their marks were rolled back.
+    commitOutcomes = ['ok'];
+    commitIndex = 0;
+    attemptedChunks.length = 0;
+    await flushNextAirWrites(uid, updates);
+    expect(attemptedChunks).toHaveLength(1);
+    expect(attemptedChunks[0]).toHaveLength(450);
+    expect(attemptedChunks[0]).not.toContain(451);
   });
 });

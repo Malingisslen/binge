@@ -105,7 +105,7 @@ export default function QuickAddButton({
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-rule rounded-sm z-50 min-w-[110px] shadow-lg">
+        <div className="absolute top-full right-0 mt-1 bg-surface border border-rule rounded-sm z-50 min-w-[110px] shadow-pop">
           {options.map(status => (
             <button
               key={status}

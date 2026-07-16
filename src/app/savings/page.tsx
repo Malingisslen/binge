@@ -292,6 +292,18 @@ function SavingsContent() {
         <h1 className="page-h1">Streamingrådgivaren</h1>
       </header>
       <div style={{ marginTop: 22 }}>
+        {advisor.mostUsedProvider && (
+          // BIN-514: den redan-beräknade "mest använda tjänst"-statistiken —
+          // vilken tjänst som bär flest av dina anchor-titlar (Följer + Vill se).
+          <div className="mb-[14px] flex items-center gap-[6px] text-xs text-ink-2">
+            <span className="text-ink-3">Mest använda tjänst:</span>
+            <ProviderDot color={advisor.mostUsedProvider.color} size={7} />
+            <span className="font-semibold text-ink">{advisor.mostUsedProvider.shortName}</span>
+            <span className="text-ink-3">
+              · {advisor.mostUsedProvider.followCount} följer · {advisor.mostUsedProvider.willSeeCount} vill se
+            </span>
+          </div>
+        )}
         <DiagnosisCard advisor={advisor} activeProviderCount={activeProviderCount} />
 
         <CampaignExpiryNudges />

@@ -8,6 +8,8 @@
 // library). This measures *value received per service* over a closed month.
 
 import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { librarySubState } from '@/lib/libraryView';
+import type { WatchlistItem } from '@/types';
 
 export interface WatchedForValue {
   // The owned service this title is attributed to (canonical id). Attribution
@@ -68,14 +70,39 @@ export function watchedForValueFromItems(
   return out;
 }
 
+// BIN-513 (xhigh review 2026-07-16): the owned-provider ids that carry ACTIVE TV
+// usage — a followed/will-see series that still gives a reason to keep the
+// service. A fully-watched Ended/Canceled series (derived sub-state 'avslutad')
+// is NOT active use: nothing new is coming, so it must stay eligible for the
+// dead-weight verdict and is excluded here. Uses the persisted-fields-only
+// librarySubState (no extra TMDB fan-out); a finished show whose tmdbStatus
+// hasn't lazy-backfilled reads as 'paborjad' and is conservatively left shielded.
+export function tvActiveProviderIdsFromItems(items: readonly WatchlistItem[]): number[] {
+  const out: number[] = [];
+  for (const it of items) {
+    if (it.mediaType !== 'tv') continue;
+    if (it.status !== 'mina' && it.status !== 'vill_se') continue;
+    if (librarySubState(it) === 'avslutad') continue;
+    for (const p of it.providers ?? []) out.push(p);
+  }
+  return out;
+}
+
 export function rollupServiceValue(params: {
   watched: WatchedForValue[];
   ownedProviderIds: number[];
   costFor: (providerId: number) => number;
   monthStartMs: number;
   monthEndMs: number; // exclusive
+  // BIN-513: canonical(-or-alias) ids of owned services carrying active TV usage
+  // (a followed series / TV will-see anchor). This rollup is a films-this-month
+  // lens — it keys off `watchedAt`, which only films get — so a service used
+  // purely for TV shows zero titlesWatched and would be mislabelled dead weight.
+  // Suppress the false verdict here; a full TV-hours rollup remains a follow-up.
+  tvActiveProviderIds?: number[];
 }): ServiceValueRow[] {
   const { watched, ownedProviderIds, costFor, monthStartMs, monthEndMs } = params;
+  const tvActive = new Set((params.tvActiveProviderIds ?? []).map(canonicalProviderId));
 
   // One row per owned service (deduped on canonical id), seeded at zero so a
   // service nobody watched still shows up as dead-weight.
@@ -112,7 +139,9 @@ export function rollupServiceValue(params: {
     row.krPerHour = row.minutesWatched > 0
       ? Math.round(row.monthlyCost / (row.minutesWatched / 60))
       : null;
-    row.isDeadWeight = row.titlesWatched === 0 && row.monthlyCost > 0;
+    // Dead weight = paid for, watched no FILM this month AND not carrying any
+    // active TV usage (BIN-513) — otherwise a TV-only service reads as wasted.
+    row.isDeadWeight = row.titlesWatched === 0 && row.monthlyCost > 0 && !tvActive.has(row.providerId);
   }
 
   // Deterministic order: ascending canonical id.

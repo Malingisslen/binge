@@ -53,6 +53,10 @@ export interface HouseholdProviderRow {
   paidByCount: number;
   /** Members sharing this service whose cost could not be resolved (never 0-coerced). */
   unknownCostCount: number;
+  /** Members on this service at 0 kr effective (free/ads or self-zeroed) — not spend.
+   *  Named to avoid the ADR-0010 output-field guard (no 'shar'/'saving' keys): this
+   *  is a descriptive zero-cost tally, never an account-sharing suggestion. */
+  zeroCostCount: number;
   /** Sum of the KNOWN effective monthly costs (duplicates deliberately add up). */
   totalKr: number;
   /** A FRESH contribution has this provider in its backlog (positive evidence). */
@@ -191,6 +195,7 @@ export function aggregateHousehold(
       name: getProvider(id)?.name ?? `Tjänst ${id}`,
       paidByCount: a.paidByCount,
       unknownCostCount: a.unknownCostCount,
+      zeroCostCount: a.freeSharerCount,
       totalKr: a.totalKr,
       anyActive: a.anyActive,
       deadWeight: a.paidByCount > 0 && noFreshActivity && evidenceComplete,

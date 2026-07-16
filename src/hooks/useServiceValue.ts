@@ -10,7 +10,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
-import { watchedForValueFromItems, rollupServiceValue, type ServiceValueRow } from '@/lib/advisor/serviceValue';
+import { watchedForValueFromItems, rollupServiceValue, tvActiveProviderIdsFromItems, type ServiceValueRow } from '@/lib/advisor/serviceValue';
 
 export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; monthLabel: string } {
   const { items } = useWatchlist();
@@ -32,6 +32,13 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
     // so gating on watchedAt alone would count un-watched films and skew the verdict.
     const seenFilms = items.filter(i => i.status === 'sedd');
     const watched = watchedForValueFromItems(seenFilms, owned, startMs, endMs);
+
+    // BIN-513: providers carrying active TV usage — a followed series or a TV
+    // will-see anchor. The value lens above is films-only, so these must be fed
+    // in to stop an actively-used TV service reading as dead weight. A finished
+    // 'avslutad' series is NOT active use and is excluded (see helper).
+    const tvActiveProviderIds = tvActiveProviderIdsFromItems(items);
+
     const rows = rollupServiceValue({
       watched,
       ownedProviderIds: owned,
@@ -39,6 +46,7 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
       costFor: (id) => resolveEffectiveMonthlyCost(id, { providerTiers: tiers, providerCosts: costs, providerCampaigns: campaigns }, now) ?? 0,
       monthStartMs: startMs,
       monthEndMs: endMs,
+      tvActiveProviderIds,
     });
     return { rows, monthLabel };
   }, [items, user, nowMs]);

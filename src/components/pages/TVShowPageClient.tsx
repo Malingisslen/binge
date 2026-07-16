@@ -23,6 +23,7 @@ import RecapPanel from '@/components/title/RecapPanel';
 import { contiguousWatchedBoundary, inventoryFromSeasons } from '@/lib/recaps/progress';
 import TrailerSection from '@/components/ui/TrailerSection';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
 import { seasonCompletion } from '@/lib/tmdb/seasonCompletion';
@@ -166,7 +167,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
   if (isLoading) return <LoadingView variant="detail" label="Laddar serien…" />;
-  if (!show) return <div className="text-sm text-ink-3 py-4">Serien hittades inte.</div>;
+  if (!show) return <NotFound crumb="Serie" title="Serien hittades inte." body="Vi kunde inte hitta den här serien i TMDB." />;
 
   const poster = posterUrl(show.poster_path, 'w500');
   const tone = toneForGenreIds(show.genres.map(g => g.id));

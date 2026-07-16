@@ -29,7 +29,7 @@ function mkItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   };
 }
 
-describe('computeProfileStats — avbruten ger 0 vikt', () => {
+describe('computeProfileStats — genre-vikt', () => {
   it('avbruten utan rating bidrar inte till genre-vikt', () => {
     const stats = computeProfileStats([
       mkItem({ status: 'avbruten', rating: null, genreIds: [18] }),
@@ -49,12 +49,24 @@ describe('computeProfileStats — avbruten ger 0 vikt', () => {
     expect(g?.weight).toBe(0.8); // 'sedd' positiv vikt, inte 0
   });
 
-  it('avbruten med rating använder rating-vikten', () => {
+  it('en ratad avbruten titel förblir neutral — avbruten kollas före rating (BIN-511)', () => {
+    // Gav du upp titeln ska den inte dra upp genren, även om du hann sätta ett
+    // betyg. (Tidigare kom rating-grenen först → ratade avhopp drog upp genren.)
     const stats = computeProfileStats([
-      mkItem({ status: 'avbruten', rating: 8, genreIds: [18] }),
+      mkItem({ status: 'avbruten', rating: 4, genreIds: [18] }),
     ]);
     const g = stats.topGenres.find(t => t.genreId === 18);
-    expect(g?.weight).toBe(8 / 10);
+    expect(g?.weight).toBe(0);
+  });
+
+  it('normaliserar betyg på 0.5–5-skalan (rating/5), inte 0–10 (BIN-511)', () => {
+    // Topp-betyg 5 → vikt 1.0. Gamla /10-buggen gav 0.5 — lägre än ett osett
+    // 'sedd'-item (0.8), så en 5★-titel vägde mindre än en obetygsatt.
+    const top = computeProfileStats([mkItem({ status: 'sedd', rating: 5, genreIds: [18] })]);
+    expect(top.topGenres.find(t => t.genreId === 18)?.weight).toBe(1);
+    // Halva skalan (2.5) → 0.5.
+    const mid = computeProfileStats([mkItem({ status: 'sedd', rating: 2.5, genreIds: [12] })]);
+    expect(mid.topGenres.find(t => t.genreId === 12)?.weight).toBe(0.5);
   });
 });
 

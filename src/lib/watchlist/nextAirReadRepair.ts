@@ -137,15 +137,19 @@ export function collectNextAirUpdates(
 }
 
 // Session-dedupe: en (uid, tmdbId) skrivs högst en gång per session — skyddar
-// mot StrictMode-dubbeleffekter och re-render-churn. Markeras FÖRE await så
-// en parallell flush inte dubblerar; en misslyckad batch får vänta till nästa
-// session (best-effort, setRuntime-mönstret).
+// mot StrictMode-dubbeleffekter och re-render-churn. Markeras FÖRE await så en
+// parallell flush inte dubblerar (concurrency-vakten). BIN-518: markeringen är
+// dock inte ett "skrivet"-löfte — en chunk vars commit REJEKTAR rullas tillbaka
+// (marks tas bort) så dess items får försöka igen nästa flush/session istället
+// för att frysa till nästa sidladdning. Per-chunk try/catch → en trasig chunk
+// blockerar inte senare chunkar.
 const writtenThisSession = new Set<string>();
 
 export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]): Promise<void> {
-  const pending = updates.filter(u => !writtenThisSession.has(`${uid}:${u.tmdbId}`));
+  const keyOf = (u: NextAirUpdate) => `${uid}:${u.tmdbId}`;
+  const pending = updates.filter(u => !writtenThisSession.has(keyOf(u)));
   if (pending.length === 0) return;
-  pending.forEach(u => writtenThisSession.add(`${uid}:${u.tmdbId}`));
+  pending.forEach(u => writtenThisSession.add(keyOf(u)));
   try {
     // Dynamisk import — INTE top-level: modulens rena hälft (compute/delta/
     // collect) unit-testas utan Firebase i test-miljön (repo-mönstret för
@@ -154,8 +158,9 @@ export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]):
     const { db, doc, writeBatch, serverTimestamp } = await fsdb();
     // Firestore-batchtak är 500 ops; chunka vid 450 (AuthContext-precedent).
     for (let i = 0; i < pending.length; i += 450) {
+      const chunk = pending.slice(i, i + 450);
       const batch = writeBatch(db);
-      for (const u of pending.slice(i, i + 450)) {
+      for (const u of chunk) {
         batch.set(
           doc(db, 'users', uid, 'watchlist', String(u.tmdbId)),
           // OBS: ALDRIG updatedAt här — payload-byggaren är testlåst på det.
@@ -163,9 +168,19 @@ export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]):
           { merge: true },
         );
       }
-      await batch.commit();
+      try {
+        await batch.commit();
+      } catch (err) {
+        // Denna chunk skrevs aldrig → rulla tillbaka dess dedupe-marks så dess
+        // items försöker igen (best-effort, setRuntime-mönstret). Fortsätt med
+        // resten av chunkarna.
+        chunk.forEach(u => writtenThisSession.delete(keyOf(u)));
+        console.warn('[watchlist] next-air read-repair batch misslyckades:', err);
+      }
     }
   } catch (err) {
+    // Importen/fsdb() föll — ingenting skrevs → rulla tillbaka allt.
+    pending.forEach(u => writtenThisSession.delete(keyOf(u)));
     console.warn('[watchlist] next-air read-repair misslyckades:', err);
   }
 }

@@ -115,6 +115,10 @@ export default function HouseholdPanel({ groupId }: { groupId: string }) {
                   {row.unknownCostCount > 0 && (
                     <span className="text-ink-3"> · {row.unknownCostCount} med okänd kostnad</span>
                   )}
+                  {row.zeroCostCount > 0 && (
+                    // BIN-514: medlemmar på 0 kr (gratis/reklam eller nollställt) — inte spend.
+                    <span className="text-ink-3"> · {row.zeroCostCount} utan kostnad</span>
+                  )}
                   {row.deadWeight && (
                     // danger, inte saffran: "pengar slösas" är en varning, inte en CTA
                     // (två-accentregeln; samma mönster som ServiceValueCard).

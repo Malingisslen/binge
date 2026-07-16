@@ -115,6 +115,11 @@ export default function RotationCalendar() {
                 {' '}· {ledger.rotationCount} {ledger.rotationCount === 1 ? 'rotation' : 'rotationer'}
               </span>
             )}
+            {ledger.longestPauseDays > 0 && (
+              <span className="text-ink-3">
+                {' '}· längsta paus {ledger.longestPauseDays} {ledger.longestPauseDays === 1 ? 'dag' : 'dagar'}
+              </span>
+            )}
           </div>
           {ledger.byProvider.length > 0 && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 mt-[6px]">
