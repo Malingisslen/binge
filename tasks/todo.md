@@ -193,11 +193,15 @@ re-measurement, not due until 2026-08-28).
 - BIN-522: publicProfile.ts clamping already shipped in d6ff035 → tests only, no production change there.
 - BIN-522: WatchlistContext test gaps live in WatchlistContext.test.tsx, not useFollowList.helpers.test.ts as ticketed.
 - BIN-522: mutation-verification `git checkout --` wiped the real edit → re-applied + re-verified; lesson filed (tasks/lessons.md + digest).
-- BIN-523: releaseNotifyState doc ids deliberately NOT namespaced (movie-only by construction; renaming orphans live per-user dedup markers → double pushes in the 3-day catch-up window) → parked In Review for Malin's sign-off on the criterion deviation.
-- BIN-523: priceDropNotifyState verified movie-only at the query → no change, invariant documented in header comment.
-- BIN-523: FCM tag `available-${tmdbId}` shared the collision → included mediaType in the namespaced key (same root cause). Residual: inbox doc id still bare → BIN-529.
-- BIN-510: zero-groups skip needs one observation → per-uid 5-min TTL cache seeded by first scan/subscription, invalidated by in-module membership mutations.
-- BIN-510: refreshMyHouseholdContributions got the bounded limit() only, not the skip (low-frequency caller). Bounded-query test missing → BIN-530; AuthContext:443 → BIN-536.
+**BIN-523 + BIN-510 were REVERTED before deploy (2026-07-16) — failed verification.** The
+notes below record what the sprint *attempted*; none of it is in the code. Read them as
+rework input for the returned tickets, NOT as shipped fact. The code is back at `fd4b14e`.
+
+- BIN-523 [REVERTED]: attempted — releaseNotifyState doc ids deliberately NOT namespaced (movie-only by construction; renaming orphans live per-user dedup markers → double pushes in the 3-day catch-up window).
+- BIN-523 [REVERTED]: attempted — priceDropNotifyState verified movie-only at the query → no change, invariant claimed in a header comment. **The verification rejected exactly this claim:** the query filter only protects priceDropNotify's READ side; `priceHistory/{tmdbId}` is written by `streamingOffers`, which dedupes by bare tmdbId and carries the SAME collision. The header comment (now reverted away) asserted a safety property that does not hold. Any rework must fix `streamingOffers/logic.ts` too, or drop the claim.
+- BIN-523 [REVERTED]: attempted — FCM tag `available-${tmdbId}` shared the collision → include mediaType in the namespaced key. Residual: inbox doc id still bare → BIN-529.
+- BIN-510 [REVERTED]: attempted — zero-groups skip via per-uid 5-min TTL cache seeded by first scan/subscription, invalidated by in-module membership mutations. Failed correctness/intent verification.
+- BIN-510 [REVERTED]: attempted — refreshMyHouseholdContributions got the bounded limit() only, not the skip (low-frequency caller). Bounded-query test missing → BIN-530; AuthContext:443 → BIN-536.
 
 ---
 
