@@ -104,10 +104,13 @@ async function seedFullAccount() {
     await set(['users', ME], { username: MY_NAME, displayName: 'Me', isPublic: false });
     await set(['usernames', MY_NAME], { uid: ME });
     await set(['weeklyDigestState', ME], { lastSentDay: '2026-01-01' });
+    // BIN-505: public projection (top-level, doc-id = uid) — Art. 17 erasure.
+    await set(['publicProfiles', ME], { displayName: 'Me', username: MY_NAME });
 
     // Every users/{me}/<subcol> — one doc each.
     await set(['users', ME, 'watchlist', '603'], { tmdbId: 603 });
     await set(['users', ME, 'watchlistTags', '603'], { tags: ['mysrys'] });
+    await set(['users', ME, 'watchlistNotes', '603'], { note: 'privat anteckning' });
     await set(['users', ME, 'episodeProgress', '1399'], { tmdbId: 1399 });
     await set(['users', ME, 'notInterested', '500'], { tmdbId: 500 });
     await set(['users', ME, 'notifications', 'n1'], { kind: 'x' });
@@ -206,6 +209,9 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(await exists(['users', ME]), 'profile doc erased').toBe(false);
     expect(await exists(['usernames', MY_NAME]), 'username reservation released').toBe(false);
     expect(await exists(['weeklyDigestState', ME]), 'weeklyDigestState marker erased').toBe(false);
+    // BIN-505: the top-level public projection + owner-only notes are erased too.
+    expect(await exists(['publicProfiles', ME]), 'public projection erased').toBe(false);
+    expect(await exists(['users', ME, 'watchlistNotes', '603']), 'watchlist note erased').toBe(false);
 
     // 3. Mirrored social-graph docs on the counterparty reconciled (no dangling uid).
     expect(await exists(['users', OTHER, 'followers', ME]), 'follow mirror erased').toBe(false);

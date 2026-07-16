@@ -1,4 +1,5 @@
 import { fsdb } from './db';
+import { getPublicProfileCard } from './publicProfile';
 
 const USERNAME_REGEX = /^[a-z0-9]([a-z0-9-]{1,18}[a-z0-9])?$/;
 
@@ -62,12 +63,15 @@ export async function findAvailableUsername(base: string): Promise<string | null
   return null;
 }
 
+// BIN-505: myProviders removed — it lived on the now owner-locked users/{uid}
+// doc and was never public-safe (which-services). A group invitee's providers
+// populate from their OWN session when they accept (useGroups member-doc write),
+// not from the inviter's search result.
 export interface ResolvedUser {
   uid: string;
   displayName: string;
   username: string | null;
   photoURL: string | null;
-  myProviders: number[];
 }
 
 export async function lookupUserByHandle(handle: string): Promise<ResolvedUser | null> {
@@ -77,15 +81,16 @@ export async function lookupUserByHandle(handle: string): Promise<ResolvedUser |
   const usernameSnap = await getDoc(doc(db, 'usernames', cleaned));
   if (!usernameSnap.exists()) return null;
   const uid = usernameSnap.data().uid as string;
-  const profileSnap = await getDoc(doc(db, 'users', uid));
-  if (!profileSnap.exists()) return null;
-  const p = profileSnap.data();
+  // BIN-505: read the public projection, not the owner-locked users/{uid}. null
+  // = missing/private/not-a-friend (previously this threw a permission error for
+  // private profiles since there was no try/catch) → resolves cleanly to null.
+  const card = await getPublicProfileCard(uid);
+  if (!card) return null;
   return {
     uid,
-    displayName: (p.displayName as string) ?? cleaned,
-    username: (p.username as string | null) ?? cleaned,
-    photoURL: (p.photoURL as string | null) ?? null,
-    myProviders: (p.myProviders as number[]) ?? [],
+    displayName: card.displayName || cleaned,
+    username: card.username ?? cleaned,
+    photoURL: card.photoURL,
   };
 }
 

@@ -11,8 +11,15 @@ UGC enligt följande regler.
 
 Allt som bara användaren själv ser tas bort helt:
 
-- `users/{uid}` (profil-doc)
+- `users/{uid}` (privat profil-doc; sedan BIN-505 ägar-låst läsning)
+- `publicProfiles/{uid}` (BIN-505 — den publika projektionen; TOP-LEVEL, ej en
+  user-subcollection, så den raderas explicit i `collectDeletionRefs` via
+  `snaps.publicProfileSnap.ref`, inte via subcollection-guarden)
 - `users/{uid}/watchlist/*`
+- `users/{uid}/watchlistTags/*` (privata fritext-taggar, BIN-164)
+- `users/{uid}/watchlistNotes/*` (privata fritext-anteckningar, BIN-505 — flyttade
+  av från den publikt läsbara watchlist-doc:en; free-text kan fånga tredjeparts
+  personuppgifter, samma DPO-resonemang som taggar)
 - `users/{uid}/episodeProgress/*`
 - `users/{uid}/notInterested/*`
 - `users/{uid}/notifications/*`
@@ -181,6 +188,11 @@ men:
 - Firestore PITR ger 7-dagars recovery om användaren ångrar sig (men
   bara via admin). Vi dokumenterar inte detta i UI eftersom "pseudo-
   radering" skulle förvirra GDPR-kraven.
+
+> **Historik-/incident-not (BIN-505, 2026-07-14):** en tidigare rules-brist gjorde
+> `users/{uid}` (email/hemkommun/kostnader) och watchlist-`notes` läsbara för
+> publik/vänner. Fixad + internt breach-register enligt GDPR Art. 33(5):
+> [`docs/incidents/2026-07-14-bin505-profile-pii-exposure.md`](incidents/2026-07-14-bin505-profile-pii-exposure.md).
 
 ## Export- vs raderingstäckning (BIN-328)
 

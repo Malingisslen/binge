@@ -1,4 +1,5 @@
 import { fsdb } from './db';
+import { getPublicProfileCard } from './publicProfile';
 import type { ResolvedUser } from './username';
 
 // Prefix-sökning på `usernames/{username}` collection. Eftersom username är
@@ -23,7 +24,7 @@ export async function searchUsersByPrefix(
   const q = prefix.trim().toLowerCase().replace(/^@/, '');
   if (q.length < 2) return [];
 
-  const { db, collection, doc, getDoc, getDocs, query: fsQuery, where, limit, orderBy, documentId } = await fsdb();
+  const { db, collection, getDocs, query: fsQuery, where, limit, orderBy, documentId } = await fsdb();
   const usernamesQuery = fsQuery(
     collection(db, 'usernames'),
     orderBy(documentId()),
@@ -38,38 +39,21 @@ export async function searchUsersByPrefix(
 
   const profiles = await Promise.all(
     matches.map(async m => {
-      try {
-        const profileSnap = await getDoc(doc(db, 'users', m.uid));
-        if (!profileSnap.exists()) return null;
-        const p = profileSnap.data();
-        // Tre-state visibility (Fas 1) + befintlig relation. Visa:
-        // - Public-konton (sökbara av alla)
-        // - Konton jag redan är vän med (oavsett tier — vänskap = explicit
-        //   relation som motiverar att de syns i mitt sök)
-        // Lazy-migration: legacy isPublic=true → public, annars private.
-        const tier = (p.defaultVisibility as string | undefined)
-          ?? (p.isPublic === true ? 'public' : 'private');
-        if (tier !== 'public') {
-          if (!myUid || m.uid === myUid) return null;
-          // Är denna user redan min vän? Då släpp igenom oavsett tier.
-          // Kostar 1 extra getDoc per icke-public match (max 5 per sök).
-          try {
-            const friendDoc = await getDoc(doc(db, 'users', m.uid, 'friends', myUid));
-            if (!friendDoc.exists()) return null;
-          } catch {
-            return null;
-          }
-        }
-        return {
-          uid: m.uid,
-          displayName: (p.displayName as string) ?? m.username,
-          username: m.username,
-          photoURL: (p.photoURL as string | null) ?? null,
-          myProviders: (p.myProviders as number[]) ?? [],
-        } as ResolvedUser;
-      } catch {
-        return null;
-      }
+      // Egen profil visas aldrig i sökträffar.
+      if (myUid && m.uid === myUid) return null;
+      // BIN-505: publicProfiles/{uid} är läsbar EXAKT när profilen är publik
+      // ELLER jag redan är vän (rules gate:ar publik/vän live) — vilket är
+      // precis den gamla tier + friend-relationen. En läsbar card ÄR alltså
+      // sökbarhets-beviset; ingen manuell tier-läsning + friend-getDoc behövs,
+      // och användarens känsliga profil-doc nås aldrig.
+      const card = await getPublicProfileCard(m.uid);
+      if (!card) return null;
+      return {
+        uid: m.uid,
+        displayName: card.displayName || m.username,
+        username: m.username,
+        photoURL: card.photoURL,
+      } as ResolvedUser;
     }),
   );
 

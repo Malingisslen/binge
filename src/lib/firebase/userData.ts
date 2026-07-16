@@ -43,10 +43,17 @@ export type SnapshotReadKit = Pick<
  */
 export interface UserDataSnapshots {
   profileSnap: DocumentSnapshot;
+  // BIN-505: public projection doc (publicProfiles/{uid}) — TOP-LEVEL, so NOT a
+  // KNOWN_USER_SUBCOLLECTION. Wired explicitly here so both export (Art. 20) and
+  // the deletion cascade (Art. 17) cover it; the subcollection guard can't reach it.
+  publicProfileSnap: DocumentSnapshot;
   watchlistSnap: QuerySnapshot;
   // BIN-164: per-title tags (owner-only). Own subcollection so free-text tags
   // never ride the publicly-readable watchlist doc. In export + delete-cascade.
   watchlistTagsSnap: QuerySnapshot;
+  // BIN-505: per-title notes (owner-only). Same design as tags — free-text notes
+  // moved OFF the public/friends-readable watchlist doc. In export + delete-cascade.
+  watchlistNotesSnap: QuerySnapshot;
   episodeProgressSnap: QuerySnapshot;
   notInterestedSnap: QuerySnapshot;
   notificationsSnap: QuerySnapshot;
@@ -116,6 +123,7 @@ export interface UserDataSnapshots {
 export const KNOWN_USER_SUBCOLLECTIONS = [
   'watchlist',
   'watchlistTags',
+  'watchlistNotes',
   'episodeProgress',
   'notInterested',
   'pauseHistory',
@@ -140,8 +148,10 @@ export async function collectUserDataSnapshots(
   const { db, collection, collectionGroup, doc, getDoc, getDocs, query, where } = fs ?? await fsdb();
   const [
     profileSnap,
+    publicProfileSnap,
     watchlistSnap,
     watchlistTagsSnap,
+    watchlistNotesSnap,
     episodeProgressSnap,
     notInterestedSnap,
     notificationsSnap,
@@ -167,8 +177,10 @@ export async function collectUserDataSnapshots(
     groupsSnap,
   ] = await Promise.all([
     getDoc(doc(db, 'users', uid)),
+    getDoc(doc(db, 'publicProfiles', uid)),
     getDocs(collection(db, 'users', uid, 'watchlist')),
     getDocs(collection(db, 'users', uid, 'watchlistTags')),
+    getDocs(collection(db, 'users', uid, 'watchlistNotes')),
     getDocs(collection(db, 'users', uid, 'episodeProgress')),
     getDocs(collection(db, 'users', uid, 'notInterested')),
     getDocs(collection(db, 'users', uid, 'notifications')),
@@ -201,8 +213,10 @@ export async function collectUserDataSnapshots(
 
   return {
     profileSnap,
+    publicProfileSnap,
     watchlistSnap,
     watchlistTagsSnap,
+    watchlistNotesSnap,
     episodeProgressSnap,
     notInterestedSnap,
     notificationsSnap,

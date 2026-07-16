@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import AuthGuard from '@/components/AuthGuard';
 import { fsdb } from '@/lib/firebase/db';
+import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyGroups, useMyGroupInvites } from '@/hooks/useGroups';
@@ -154,24 +155,12 @@ function useInviteIdentity(invite: GroupInvite) {
     enabled: !!invite.groupId,
     staleTime: 60_000,
   });
-  const senderQuery = useQuery({
-    queryKey: ['sender-profile', invite.fromUid],
-    queryFn: async () => {
-      try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'users', invite.fromUid));
-        if (!snap.exists()) return null;
-        return (snap.data().displayName as string | undefined) ?? null;
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!invite.fromUid,
-    staleTime: 60_000,
-  });
+  // Shared hook — same `['sender-profile', uid]` key + SHAPE as the topbar/friends
+  // consumers (a bare-string return here previously collided in the cache).
+  const senderQuery = useSenderProfile(invite.fromUid);
   return {
     groupName: groupQuery.data ?? invite.groupName,
-    fromDisplayName: senderQuery.data ?? invite.fromDisplayName,
+    fromDisplayName: senderQuery.data?.displayName ?? invite.fromDisplayName,
   };
 }
 

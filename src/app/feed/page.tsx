@@ -12,6 +12,7 @@ import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { useAuth } from '@/hooks/useAuth';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
+import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { computeFollowTrending, type TrendingTitle } from '@/lib/feedTrending';
 import type { MediaType } from '@/types';
@@ -59,14 +60,14 @@ function FeedContent() {
     queryKey: ['feed', followingUids],
     queryFn: async (): Promise<FeedItem[]> => {
       if (followingUids.length === 0) return [];
-      const { db, doc, getDoc, collection, getDocs, query, where, orderBy, limit } = await fsdb();
+      const { db, collection, getDocs, query, where, orderBy, limit } = await fsdb();
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
       const results = await Promise.all(
         followingUids.slice(0, 30).map(async uid => {
-          const [profileSnap, watchlistSnap, reviewsSnap] = await Promise.all([
-            getDoc(doc(db, 'users', uid)),
+          const [card, watchlistSnap, reviewsSnap] = await Promise.all([
+            getPublicProfileCard(uid),
             getDocs(query(
               collection(db, 'users', uid, 'watchlist'),
               where('updatedAt', '>=', twoWeeksAgo),
@@ -79,9 +80,8 @@ function FeedContent() {
               limit(10),
             )),
           ]);
-          const profile = profileSnap.data();
-          const displayName = profile?.displayName ?? 'Okänd';
-          const username = profile?.username ?? null;
+          const displayName = card?.displayName ?? 'Okänd';
+          const username = card?.username ?? null;
 
           const watchlistItems: FeedItem[] = watchlistSnap.docs.map(d => {
             const data = d.data();

@@ -6,7 +6,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'binge-rules-test';
 const OWNER = 'owner_uid';
@@ -275,6 +275,128 @@ describe('users/{uid}/watchlistTags/{id} (BIN-164)', () => {
       await setDoc(doc(ctx.firestore(), 'users', OWNER), { isPublic: true, defaultVisibility: 'public' });
     });
     await assertFails(getDoc(otherRef));
+  });
+});
+
+// BIN-505: the PII-leak fix. users/{uid} is owner-locked; public/friends read a
+// display-only projection publicProfiles/{uid} gated LIVE against the source; and
+// free-text notes move to an owner-only watchlistNotes subcollection.
+describe('BIN-505 users/{uid} read is owner-only', () => {
+  async function seedProfile(fields: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), {
+        email: 'secret@example.com', hemkommun: 'Lund',
+        providerCosts: { 8: 129 }, providerCampaigns: {}, ...fields,
+      });
+    });
+  }
+  it('owner can read their own profile doc', async () => {
+    await seedProfile({ isPublic: false, defaultVisibility: 'private' });
+    await assertSucceeds(getDoc(doc(ownerDb(), 'users', OWNER)));
+  });
+  it('DENIES an unauthenticated read even when the profile is public (the leak)', async () => {
+    await seedProfile({ isPublic: true, defaultVisibility: 'public' });
+    await assertFails(getDoc(doc(anonDb(), 'users', OWNER)));
+  });
+  it('DENIES another signed-in user, even a friend', async () => {
+    await seedProfile({ isPublic: true, defaultVisibility: 'public' });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'friends', 'other_uid'), { since: serverTimestamp() });
+    });
+    await assertFails(getDoc(doc(otherDb(), 'users', OWNER)));
+  });
+});
+
+describe('BIN-505 publicProfiles/{uid} projection', () => {
+  const card = { displayName: 'Malin', username: 'malin', photoURL: null, bio: 'hej', isPublic: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  async function seedSourceVisibility(fields: Record<string, unknown>) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), fields);
+    });
+  }
+  it('owner can write a valid card and read their own', async () => {
+    await assertSucceeds(setDoc(doc(ownerDb(), 'publicProfiles', OWNER), card));
+    await assertSucceeds(getDoc(doc(ownerDb(), 'publicProfiles', OWNER)));
+  });
+  it('rejects an unknown field, oversized bio/displayName, bad username', async () => {
+    const ref = doc(ownerDb(), 'publicProfiles', OWNER);
+    await assertFails(setDoc(ref, { ...card, providerCosts: { 8: 129 } })); // sensitive field can't ride
+    await assertFails(setDoc(ref, { ...card, bio: 'x'.repeat(161) }));
+    await assertFails(setDoc(ref, { ...card, displayName: 'x'.repeat(81) }));
+    await assertFails(setDoc(ref, { ...card, username: 'Not Valid!' }));
+    await assertFails(setDoc(ref, { ...card, isPublic: 'yes' })); // isPublic must be a bool
+  });
+  it('another user cannot write my projection', async () => {
+    await assertFails(setDoc(doc(otherDb(), 'publicProfiles', OWNER), card));
+  });
+  it('public profile → readable by anon and another user; private → denied', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicProfiles', OWNER), card);
+    });
+    await seedSourceVisibility({ isPublic: true, defaultVisibility: 'public' });
+    await assertSucceeds(getDoc(doc(anonDb(), 'publicProfiles', OWNER)));
+    await assertSucceeds(getDoc(doc(otherDb(), 'publicProfiles', OWNER)));
+
+    // Flip the SOURCE to private → the live get()-gate denies immediately, with
+    // NO write to the projection itself (no stale-public window).
+    await seedSourceVisibility({ isPublic: false, defaultVisibility: 'private' });
+    await assertFails(getDoc(doc(anonDb(), 'publicProfiles', OWNER)));
+    await assertFails(getDoc(doc(otherDb(), 'publicProfiles', OWNER)));
+  });
+  it('friend can read a private profile projection; a non-friend cannot', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'publicProfiles', OWNER), card);
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), { isPublic: false, defaultVisibility: 'private' });
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'friends', 'other_uid'), { since: serverTimestamp() });
+    });
+    await assertSucceeds(getDoc(doc(otherDb(), 'publicProfiles', OWNER))); // friend
+    await assertFails(getDoc(doc(anonDb(), 'publicProfiles', OWNER)));     // stranger
+  });
+});
+
+describe('BIN-505 users/{uid}/watchlistNotes/{id} owner-only', () => {
+  it('owner can write/read/delete their own note', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistNotes', '603');
+    await assertSucceeds(setDoc(ref, { note: 'privat anteckning om mamma' }));
+    await assertSucceeds(getDoc(ref));
+    await assertSucceeds(deleteDoc(ref));
+  });
+  it('rejects an unknown field and an over-long note', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistNotes', '603');
+    await assertFails(setDoc(ref, { note: 'ok', evil: 'x' }));
+    await assertFails(setDoc(ref, { note: 'x'.repeat(5001) }));
+  });
+  it('never readable/writable by another user, even on a public profile', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlistNotes', '603'), { note: 'hemlig' });
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), { isPublic: true, defaultVisibility: 'public' });
+    });
+    const otherRef = doc(otherDb(), 'users', OWNER, 'watchlistNotes', '603');
+    await assertFails(getDoc(otherRef));
+    await assertFails(setDoc(otherRef, { note: 'hijack' }));
+  });
+});
+
+describe('BIN-505 watchlist notes-null guard', () => {
+  it('create with a non-null inline note is DENIED; null/absent is OK', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertFails(setDoc(ref, { ...validWatchlist(), notes: 'inline leak' }));
+    await assertSucceeds(setDoc(ref, { ...validWatchlist(), notes: null }));
+  });
+  it('an unrelated edit on a legacy doc that still has a note PASSES (note unchanged)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), { ...validWatchlist(), notes: 'legacy' });
+    });
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertSucceeds(setDoc(ref, { rating: 4.5, updatedAt: serverTimestamp() }, { merge: true }));
+  });
+  it('re-introducing a CHANGED note is DENIED; deleting the note is OK', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), { ...validWatchlist(), notes: 'legacy' });
+    });
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertFails(setDoc(ref, { notes: 'a new note', updatedAt: serverTimestamp() }, { merge: true }));
+    await assertSucceeds(setDoc(ref, { notes: deleteField(), updatedAt: serverTimestamp() }, { merge: true }));
   });
 });
 

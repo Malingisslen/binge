@@ -10,6 +10,11 @@ import { migrateStatus } from '@/lib/watchStatus.migration';
 import { buildStatusUpdate, normalizeTags } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
+// BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
+// cap; NOTES_MIGRATE_CAP bounds the eager per-session migration write-burst.
+const NOTE_MAX_LEN = 5000;
+const NOTES_MIGRATE_CAP = 300;
+
 function docToItem(data: Record<string, unknown>): WatchlistItem {
   const mediaType = data.mediaType as MediaType;
   const { status, dropped } = migrateStatus(data.status as string, mediaType, data.dropped as boolean | undefined);
@@ -108,6 +113,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // publicly-readable watchlist doc), so they arrive on their own subscription
   // and are joined onto items in-memory below. Map keyed by tmdbId.
   const [tagsByTmdbId, setTagsByTmdbId] = useState<Record<number, string[]>>({});
+  // BIN-505: per-title notes now live in the owner-only watchlistNotes
+  // subcollection (moved OFF the public/friends-readable watchlist doc).
+  const [notesByTmdbId, setNotesByTmdbId] = useState<Record<number, string>>({});
+  // Session guard for the eager notes migration so a mid-run re-render can't
+  // re-issue the same batch (echo-proof; mirrors refreshTmdbFields' dedup).
+  const migratedNotesRef = useRef<Set<number>>(new Set());
+  useEffect(() => { migratedNotesRef.current = new Set(); }, [uid]);
+  // Which uid the current `items` were loaded for — set by the watchlist listener
+  // when a snapshot lands. The migration gates on this so it never runs against a
+  // previous account's `items` during a same-session switch (cross-account guard).
+  const itemsUidRef = useRef<string | null>(null);
 
   // first_title_added-grindning (BIN-56 + BIN-38). Den gamla grinden
   // `items.length === 0 && !loading` hade två motstridiga krav:
@@ -175,6 +191,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           }
         }
         if (snap.size > 0) everNonEmptyRef.current = true;
+        // Tag these items with the uid they belong to, so the notes migration
+        // never runs against a previous account's rows on a same-session switch.
+        itemsUidRef.current = uid;
         setItems(snap.docs.map(d => docToItem(d.data())));
         setLoading(false);
       }));
@@ -196,13 +215,85 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       }));
   }, [uid]);
 
-  // Join tags onto items in-memory. Consumers read `item.tags` (default []);
-  // the raw `items` state (used by the mutators' current-item lookups) stays
-  // tag-free since mutators never need tags.
+  // BIN-505: parallel owner-only subscription for per-title notes — mirrors the
+  // tags listener. The collection is SPARSE (only note-bearing titles have a
+  // doc), so this listener's read cost scales with the number of NOTES, not
+  // library size. Empty/absent → fall back to any legacy inline note in
+  // docToItem until the eager migration below moves it off.
+  useEffect(() => {
+    if (!uid) { setNotesByTmdbId({}); return; }
+    return lazySubscribe(({ db, collection, onSnapshot }) =>
+      onSnapshot(collection(db, 'users', uid, 'watchlistNotes'), (snap) => {
+        const map: Record<number, string> = {};
+        snap.docs.forEach(d => {
+          const note = d.data().note as string | undefined;
+          if (note) map[Number(d.id)] = note;
+        });
+        setNotesByTmdbId(map);
+      }));
+  }, [uid]);
+
+  // Join tags + notes onto items in-memory. Consumers read `item.tags` (default
+  // []) and `item.notes`; the raw `items` state (used by the mutators'
+  // current-item lookups) stays tag/note-free since mutators never need them.
+  // Note source of truth: the subcollection wins; the legacy inline note
+  // (docToItem) is the fallback until the item is migrated.
   const itemsWithTags = useMemo(
-    () => items.map(i => ({ ...i, tags: tagsByTmdbId[i.tmdbId] ?? [] })),
-    [items, tagsByTmdbId],
+    () => items.map(i => ({
+      ...i,
+      tags: tagsByTmdbId[i.tmdbId] ?? [],
+      notes: notesByTmdbId[i.tmdbId] ?? i.notes,
+    })),
+    [items, tagsByTmdbId, notesByTmdbId],
   );
+
+  // BIN-505: one-pass EAGER migration — move any inline `notes` still on a
+  // watchlist doc into the owner-only watchlistNotes subcollection and delete
+  // the inline field atomically. Closes the leak for EXISTING notes without
+  // waiting for the owner to re-edit each one (DPO #6: a known third-party-PII
+  // leak must close on a bounded timeline, not lazily-on-touch). Bounded +
+  // chunked (Blaze cap); sparse in practice. Self-terminating: once inline
+  // notes are deleted the watchlist snapshot no longer surfaces them, so the
+  // filter empties and the effect no-ops.
+  useEffect(() => {
+    if (!uid) return;
+    // Cross-account safety: only migrate when the current `items` were loaded for
+    // THIS uid. On a same-session account switch (A→B) `items` still holds A's
+    // rows until B's snapshot lands; without this guard the migration would write
+    // A's private notes under users/B/watchlistNotes (a cross-account PII leak).
+    if (itemsUidRef.current !== uid) return;
+    const legacy = items
+      .filter(i => i.notes != null
+        && notesByTmdbId[i.tmdbId] === undefined
+        && !migratedNotesRef.current.has(i.tmdbId))
+      .slice(0, NOTES_MIGRATE_CAP);
+    if (legacy.length === 0) return;
+    // Mark in-progress BEFORE the async write so a re-render inside the same
+    // session can't re-select the same titles (echo-proof).
+    legacy.forEach(i => migratedNotesRef.current.add(i.tmdbId));
+    let cancelled = false;
+    void (async () => {
+      const { db, doc, writeBatch, deleteField } = await fsdb();
+      for (let i = 0; i < legacy.length && !cancelled; i += 200) {
+        const chunk = legacy.slice(i, i + 200);
+        const batch = writeBatch(db);
+        for (const it of chunk) {
+          const note = String(it.notes).slice(0, NOTE_MAX_LEN);
+          batch.set(doc(db, 'users', uid, 'watchlistNotes', String(it.tmdbId)), { note });
+          // Delete the inline note ONLY — never bump updatedAt. This is a
+          // system-only cleanup, not user activity; a serverTimestamp here would
+          // surface every migrated title as fake "activity" at the top of every
+          // follower's feed (feed queries order by updatedAt). Same invariant as
+          // nextAirReadRepair / refreshTmdbFields.
+          batch.update(doc(db, 'users', uid, 'watchlist', String(it.tmdbId)), {
+            notes: deleteField(),
+          });
+        }
+        try { await batch.commit(); } catch { /* best-effort; retry next session */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uid, items, notesByTmdbId]);
 
   // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
   // (effectiveVisibility + legacy isPublic-mirror) vid VARJE mutation. Gamla
@@ -248,8 +339,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
     // ärver default; per-item-override sätts via updateVisibility senare.
     const defaultVisibility = user?.defaultVisibility ?? 'private';
+    // BIN-505: notes now lives ONLY in the owner-only watchlistNotes subcollection,
+    // and the watchlist-doc rules REJECT a non-null inline `notes`. addItem is also
+    // the re-mark path (QuickAddButton/StatusButton/useMarkSeen pass current?.notes
+    // to preserve it) — so strip notes here or a re-mark of a NOTED title would be
+    // permission-denied. The note itself is untouched in its subcollection.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { notes: _strippedNotes, ...itemFields } = item;
     await setDoc(ref, {
-      ...item,
+      ...itemFields,
       dropped: false,
       effectiveVisibility: defaultVisibility,
       isPublic: defaultVisibility === 'public',
@@ -351,13 +449,41 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
 
+  // BIN-505: write the note to the OWNER-ONLY watchlistNotes subcollection and
+  // atomically strip any legacy inline `notes` off the public/friends-readable
+  // watchlist doc (writeBatch → no half-state where the note lives in both). The
+  // watchlist doc keeps getting its visibility re-stamped (lazy-on-write) so the
+  // effectiveVisibility cascade is unaffected.
   const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {
     if (!uid) return;
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    // A user-authored note is the source of truth — mark this title "handled" so
+    // the eager migration can never overwrite it with a stale captured inline note.
+    migratedNotesRef.current.add(tmdbId);
+    const { db, doc, writeBatch, deleteField } = await fsdb();
+    const noteRef = doc(db, 'users', uid, 'watchlistNotes', String(tmdbId));
+    const itemRef = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const trimmed = notes?.trim();
+    const clean = trimmed ? trimmed.slice(0, NOTE_MAX_LEN) : null;
     const current = items.find(i => i.tmdbId === tmdbId);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
-    await setDoc(ref, { notes, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+    const batch = writeBatch(db);
+    if (clean) batch.set(noteRef, { note: clean });
+    else batch.delete(noteRef);
+    // Strip any legacy inline note (deleteField is a no-op if absent) + re-stamp
+    // visibility, but NEVER bump updatedAt: a note now lives in the owner-only
+    // subcollection, so a note edit must not surface as activity in followers'
+    // feeds (feed orders by updatedAt) nor leak the timing of a private edit.
+    batch.set(itemRef, { notes: deleteField(), ...visFields }, { merge: true });
+    try {
+      await batch.commit();
+    } catch (e) {
+      // Un-mark on failure so a title that still carries a legacy inline note
+      // isn't permanently excluded from the eager migration this session — which
+      // would leave that inline note (PII) readable to friends/public until the
+      // next session. The mark is only meaningful once the write has committed.
+      migratedNotesRef.current.delete(tmdbId);
+      throw e;
+    }
   }, [uid, items, effectiveVisibilityNow]);
 
   const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
@@ -468,11 +594,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
     await deleteDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)));
-    // Best-effort: drop the sibling tags doc so it never orphans (its own
-    // owner-only collection isn't cascaded by the watchlist delete).
+    // Best-effort: drop the sibling tags + notes docs so they never orphan
+    // (their own owner-only collections aren't cascaded by the watchlist delete).
     try {
       await deleteDoc(doc(db, 'users', uid, 'watchlistTags', String(tmdbId)));
     } catch { /* no tags doc for this title — fine */ }
+    try {
+      await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', String(tmdbId)));
+    } catch { /* no notes doc for this title — fine */ }
   }, [uid]);
 
   // BIN-164: write the owner-only tags doc. normalizeTags enforces the per-tag

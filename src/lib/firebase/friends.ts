@@ -1,4 +1,5 @@
 import { fsdb } from './db';
+import { getPublicProfileCards } from './publicProfile';
 
 // Friend-system: mutuell relation som kompletterar ensidiga follow.
 // Vänner får läsa privata watchlist-items (visibility='friends').
@@ -130,27 +131,24 @@ export async function getFriendStatus(myUid: string, targetUid: string): Promise
 // resolved profile-data (display name, photo, username). Konsumeras av
 // useFriends-hooken i UI.
 export async function listFriends(myUid: string): Promise<FriendUser[]> {
-  const { db, doc, getDoc, collection, getDocs } = await fsdb();
+  const { db, collection, getDocs } = await fsdb();
   const snap = await getDocs(collection(db, 'users', myUid, 'friends'));
   if (snap.empty) return [];
-  // Hämta profile-doc per vän parallellt så displayName/photoURL är
-  // alltid färska. (Vi lagrar inte denormaliserat på friend-doc:et eftersom
-  // user-data ändras och vi inte vill cascada uppdateringar.)
-  const profiles = await Promise.all(
-    snap.docs.map(d => getDoc(doc(db, 'users', d.id))),
-  );
+  // BIN-505: läs vännernas display-fält från publicProfiles-projektionen (jag
+  // är vän → rules släpper igenom). users/{uid} är ägar-låst. En saknad card
+  // = ännu ej backfillad projektion (INTE ett raderat konto — deletion-kaskaden
+  // tar bort friend-doc:et), så vi DROPPAR aldrig en vän utan visar
+  // fallback-namn tills projektionen finns.
+  const cards = await getPublicProfileCards(snap.docs.map(d => d.id));
   const friends: FriendUser[] = [];
-  for (let i = 0; i < snap.docs.length; i += 1) {
-    const friendDoc = snap.docs[i];
-    const profileDoc = profiles[i];
-    if (!profileDoc.exists()) continue;
-    const p = profileDoc.data();
+  for (const friendDoc of snap.docs) {
+    const card = cards.get(friendDoc.id);
     const sinceTs = friendDoc.data().since;
     friends.push({
       uid: friendDoc.id,
-      displayName: (p.displayName as string) ?? 'Användare',
-      photoURL: (p.photoURL as string | null) ?? null,
-      username: (p.username as string | null) ?? null,
+      displayName: card?.displayName || 'Användare',
+      photoURL: card?.photoURL ?? null,
+      username: card?.username ?? null,
       since: sinceTs?.toDate?.() ?? new Date(),
     });
   }

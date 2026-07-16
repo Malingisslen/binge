@@ -59,6 +59,8 @@ export async function collectDeletionRefs(
   snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref));
   // BIN-164: owner-only per-title tags — deleted with the account (never orphaned).
   snaps.watchlistTagsSnap.docs.forEach(d => refs.push(d.ref));
+  // BIN-505: owner-only per-title notes — deleted with the account (never orphaned).
+  snaps.watchlistNotesSnap.docs.forEach(d => refs.push(d.ref));
   snaps.episodeProgressSnap.docs.forEach(d => refs.push(d.ref));
   snaps.notificationsSnap.docs.forEach(d => refs.push(d.ref));
   snaps.notInterestedSnap.docs.forEach(d => refs.push(d.ref));
@@ -194,6 +196,10 @@ export async function collectDeletionRefs(
   const username = (snaps.profileSnap.data()?.username as string | undefined)
     ?? fallbackUsername ?? null;
   refs.push(doc(db, 'weeklyDigestState', id));
+  // BIN-505: public projection (top-level, doc-id = uid) — Art. 17 erasure. NOT a
+  // KNOWN_USER_SUBCOLLECTION, so queued explicitly via the snap's own ref (the
+  // DocumentSnapshot always has .ref; batch.delete is a no-op if it never existed).
+  refs.push(snaps.publicProfileSnap.ref);
   refs.push(doc(db, 'users', id));
   if (username) refs.push(doc(db, 'usernames', username));
 

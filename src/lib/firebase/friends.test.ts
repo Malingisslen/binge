@@ -190,14 +190,24 @@ describe('listFriends', () => {
     }]);
   });
 
-  it('skippar vänner vars profil-doc raderats', async () => {
+  // BIN-505: a friend whose public projection isn't readable (not yet backfilled)
+  // is KEPT with a fallback name — NOT dropped. Account deletion cascades BOTH
+  // sides of the friends mirror (accountDeletion §2b), so a surviving friend-doc
+  // means a real, existing friend; a missing projection just means un-backfilled.
+  it('behåller en vän utan läsbar projektion med fallback-namn', async () => {
     getDocsMock.mockResolvedValueOnce({
       empty: false,
       docs: [
-        { id: 'ghost', data: () => ({ since: { toDate: () => new Date() } }) },
+        { id: 'nobackfill', data: () => ({ since: { toDate: () => new Date('2026-01-01') } }) },
       ],
     });
     getDocMock.mockResolvedValueOnce({ exists: () => false });
-    expect(await listFriends('me')).toEqual([]);
+    expect(await listFriends('me')).toEqual([{
+      uid: 'nobackfill',
+      displayName: 'Användare',
+      photoURL: null,
+      username: null,
+      since: new Date('2026-01-01'),
+    }]);
   });
 });

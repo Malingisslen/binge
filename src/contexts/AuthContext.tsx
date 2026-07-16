@@ -19,6 +19,7 @@ import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
+import { syncMyPublicProfile } from '@/lib/firebase/publicProfile';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
@@ -334,6 +335,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
+
+  // BIN-505: keep MY public projection (publicProfiles/{uid}) in sync with my
+  // display fields. Covers backfill for existing users (projection missing) AND
+  // drift-repair when name/username/photo/bio change. syncMyPublicProfile is
+  // best-effort + skips a no-op write via a stored signature, so this effect is
+  // cheap on steady state. A stale projection is only a cosmetic stale name —
+  // visibility is gated live by the rule — so a missed sync never leaks.
+  useEffect(() => {
+    if (!uid || !user) return;
+    void syncMyPublicProfile(uid, {
+      displayName: user.displayName,
+      username: user.username,
+      photoURL: user.photoURL,
+      bio: user.bio,
+      isPublic: user.isPublic,
+      createdAt: user.createdAt,
+    });
+  }, [uid, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();

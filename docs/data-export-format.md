@@ -7,15 +7,17 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
   "tmdbAttribution": "…",
   "justwatchAttribution": "…",
-  "profile": { /* users/{uid} */ },
+  "profile": { /* users/{uid} — privat, ägar-låst */ },
+  "publicProfile": { /* publicProfiles/{uid} — den publika projektionen andra ser */ },
   "watchlist":      [{ "id": "…", "data": { /* … */ } }],
   "watchlistTags":  [{ "id": "tmdbId", "data": { "tags": ["…"] } }],
+  "watchlistNotes": [{ "id": "tmdbId", "data": { "note": "…" } }],
   "episodeProgress": [ … ],
   "notInterested":   [ … ],
   "notifications":   [ … ],
@@ -44,9 +46,11 @@ Filen är en JSON med följande top-level-struktur (se
 
 | Fält | Källa | Innehåll |
 |------|-------|----------|
-| `profile` | `users/{uid}` | displayName, email, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerTiers, providerPauses, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt |
-| `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, notes, progress (TV), rewatchCount, genreIds, visibility. Plus TMDB-metadata cachead som bekvämlighet (denormaliserad; ingår i exporten): title, posterPath, releaseYear, totalSeasons, tmdbStatus, runtime, providers, providersCheckedAt, nextAirDate, nextAirCode, nextAirProvider, nextAirUpdatedAt, digitalReleaseDate |
+| `profile` | `users/{uid}` (ägar-låst läsning, BIN-505) | displayName, email, hemkommun, photoURL, username, bio, isPublic, myProviders, defaultView, providerCosts, providerCampaigns, providerTiers, providerPauses, calibrationGenres, termsAcceptedAt, termsVersion, onboardingCompletedAt, notificationSettings, createdAt, updatedAt. Denna doc är sedan BIN-505 **bara läsbar för dig** — känsliga fält (email, hemkommun, kostnader) läcker inte längre till andra. |
+| `publicProfile` | `publicProfiles/{uid}` (BIN-505) | Den publika projektionen andra användare ser: displayName, username, photoURL, bio, createdAt. INGA känsliga fält (ingen email/hemkommun/kostnader/myProviders). `null` om den aldrig backfillats. |
+| `watchlist` | `users/{uid}/watchlist/{tmdbId}` | Per-titel: status, betyg, progress (TV), rewatchCount, genreIds, visibility. (Anteckningar ligger sedan BIN-505 i `watchlistNotes`, inte här.) Plus TMDB-metadata cachead som bekvämlighet (denormaliserad; ingår i exporten): title, posterPath, releaseYear, totalSeasons, tmdbStatus, runtime, providers, providersCheckedAt, nextAirDate, nextAirCode, nextAirProvider, nextAirUpdatedAt, digitalReleaseDate |
 | `watchlistTags` | `users/{uid}/watchlistTags/{tmdbId}` | Dina egna fritext-taggar per titel (privata; egen ägar-skyddad subcollection) |
+| `watchlistNotes` | `users/{uid}/watchlistNotes/{tmdbId}` | Dina egna fritext-anteckningar per titel (privata; egen ägar-skyddad subcollection, BIN-505 — flyttade av från den publikt läsbara watchlist-doc:en) |
 | `episodeProgress` | `users/{uid}/episodeProgress/{tmdbId}` | Watched-flagga per avsnitt |
 | `notInterested` | `users/{uid}/notInterested/{tmdbId}` | Gömda titlar från rekommendationer |
 | `notifications` | `users/{uid}/notifications/{notifId}` | Notifikations-inbox |
@@ -124,3 +128,7 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   delade hushålls-bidrag i grupper du opt:at in i — providerIds,
   providerCosts, providerCampaigns, activeProviderIds, updatedAt). Additivt
   fält → minor-bump 1.1 → 1.2.
+- **1.3 (2026-07-14, BIN-505)** — Lade till `publicProfile` (den publika
+  projektionen andra ser) och `watchlistNotes` (dina privata anteckningar,
+  flyttade av från den publikt läsbara watchlist-doc:en till en ägar-skyddad
+  subcollection). Additiva fält → minor-bump 1.2 → 1.3.

@@ -4,20 +4,21 @@ import { useQuery } from '@tanstack/react-query';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
+import { getPublicProfileCard, type PublicProfileCard } from '@/lib/firebase/publicProfile';
 import { migrateStatus } from '@/lib/watchStatus.migration';
-import type { UserProfile, WatchlistItem, MediaType } from '@/types';
+import type { WatchlistItem, MediaType } from '@/types';
 
 // Tre möjliga resultat:
 // - null                                      → username-doc finns inte (verkligen ej användare)
-// - { uid, username, isPrivate: true }        → finns men profil ej läsbar (rules avvisar pga visibility-tier)
-// - { uid, profile }                          → publik/vän-läsbar profil
+// - { uid, username, isPrivate: true }        → finns men projektion ej läsbar (privat/ej-vän)
+// - { uid, card }                             → publik/vän-läsbar profil (display-fält)
 //
 // usernames-collection är public-read så vi kan alltid skilja "okänd
 // användare" från "privat profil" — bättre UX-feedback.
 export type PublicProfileResult =
   | null
   | { uid: string; username: string; isPrivate: true }
-  | { uid: string; profile: UserProfile };
+  | { uid: string; card: PublicProfileCard };
 
 export function usePublicProfile(username: string) {
   return useQuery<PublicProfileResult>({
@@ -27,43 +28,13 @@ export function usePublicProfile(username: string) {
       const usernameSnap = await getDoc(doc(db, 'usernames', username));
       if (!usernameSnap.exists()) return null;
       const uid = usernameSnap.data().uid as string;
-      try {
-        const profileSnap = await getDoc(doc(db, 'users', uid));
-        if (!profileSnap.exists()) {
-          // Edge: username-doc finns men user-doc raderad. Behandla som privat
-          // (kan inte läsa) snarare än "ej användare" (det skulle vara felaktigt).
-          return { uid, username, isPrivate: true };
-        }
-        const data = profileSnap.data();
-        return {
-          uid,
-          profile: {
-            displayName: data.displayName ?? '',
-            email: '',
-            photoURL: data.photoURL ?? null,
-            username: data.username ?? null,
-            bio: data.bio ?? '',
-            defaultVisibility: data.defaultVisibility ?? (data.isPublic ? 'public' : 'private'),
-            isPublic: data.isPublic ?? false,
-            myProviders: data.myProviders ?? [],
-            defaultView: data.defaultView ?? 'table',
-            hideNonLatinTitles: data.hideNonLatinTitles ?? false,
-            hiddenCountries: data.hiddenCountries ?? [],
-            providerCosts: {},
-            providerTiers: {},
-            providerPauses: {},
-            calibrationGenres: null,
-            createdAt: toDate(data.createdAt),
-            updatedAt: toDate(data.updatedAt),
-            notificationSettings: { newEpisodes: false, availableOnMyServices: false },
-          } as UserProfile,
-        };
-      } catch {
-        // Firestore-rules avvisade läsning — profil är private/friends och
-        // jag är inte tillåten. Visa "den här profilen är privat" istället
-        // för det vilseledande "användaren hittades inte".
-        return { uid, username, isPrivate: true };
-      }
+      // BIN-505: users/{uid} är ägar-låst — publik/vän-läsare når BARA
+      // publicProfiles/{uid}-projektionen. Går den att läsa → profilen är
+      // synlig för mig (rules gate:ar publik ELLER vän live mot källan). null →
+      // privat/ej-vän (eller ännu ej backfillad projektion) → visa "privat".
+      const card = await getPublicProfileCard(uid);
+      if (!card) return { uid, username, isPrivate: true };
+      return { uid, card };
     },
     staleTime: 60_000,
   });

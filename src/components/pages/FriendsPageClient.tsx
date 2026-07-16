@@ -3,42 +3,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { fsdb } from '@/lib/firebase/db';
 import { useFollowList, type FollowListUser } from '@/hooks/useFollowList';
 import { useFollowing } from '@/hooks/useFollow';
 import { useFriends, useFriendRequests, useFriendActions } from '@/hooks/useFriends';
 import { useAuth } from '@/hooks/useAuth';
+import { useSenderProfile } from '@/hooks/useSenderProfile';
 import type { FriendRequest, FriendUser } from '@/lib/firebase/friends';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePageMeta } from '@/hooks/usePageMeta';
 import { LoadingView } from '@/components/ui/LoadingView';
-
-// Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
-// klient-satta fromDisplayName/fromUsername på request-doc:et (de valideras inte
-// regel-sidigt och är därmed förfalskbara). Faller tillbaka till de
-// denormaliserade fälten om profilen inte är läsbar (privat profil).
-function useSenderProfile(uid: string) {
-  return useQuery({
-    queryKey: ['sender-profile', uid],
-    queryFn: async () => {
-      try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'users', uid));
-        if (!snap.exists()) return null;
-        const d = snap.data();
-        return {
-          displayName: (d.displayName as string | undefined) ?? null,
-          username: (d.username as string | null | undefined) ?? null,
-        };
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!uid,
-    staleTime: 60_000,
-  });
-}
 
 type Tab = 'friends' | 'requests' | 'following' | 'followers';
 

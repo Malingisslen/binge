@@ -169,6 +169,36 @@ service cloud.firestore {
         && d.tags is list && d.tags.size() <= 15;
     }
 
+    // BIN-505: owner-only per-title free-text notes. Same reasoning as tags
+    // (free text captures third-party personal data) — moved OFF the
+    // public/friends-readable watchlist doc into this owner-only subcollection.
+    // Shape { note: string } (or null to clear); bounded length.
+    function isValidNoteDoc(d) {
+      return d.keys().hasOnly(['note'])
+        && (d.note == null || (d.note is string && d.note.size() <= 5000));
+    }
+
+    // BIN-505: public profile PROJECTION contract. users/{uid} is owner-locked
+    // (it carries email/hemkommun/providerCosts/providerCampaigns and reads are
+    // whole-doc, so public/friends read leaked everything). publicProfiles/{uid}
+    // is a POSITIVE whitelist of ONLY public-safe DISPLAY fields — a field added
+    // to users/{uid} later is private by default. Value-bound each field (Security
+    // #4: hasOnly alone lets a client write oversized junk). `myProviders` is
+    // deliberately EXCLUDED (Malin 2026-07-14: which-services is not public).
+    function isValidPublicProfile(d) {
+      return d.keys().hasOnly(['displayName', 'username', 'photoURL', 'bio', 'isPublic', 'createdAt', 'updatedAt'])
+        && (!('isPublic' in d) || d.isPublic is bool)
+        && (!('displayName' in d) || d.displayName == null
+          || (d.displayName is string && d.displayName.size() <= 80))
+        && (!('bio' in d) || d.bio == null
+          || (d.bio is string && d.bio.size() <= 160))
+        && (!('username' in d) || d.username == null || isValidUsername(d.username))
+        && (!('photoURL' in d) || d.photoURL == null
+          || (d.photoURL is string && d.photoURL.size() <= 500))
+        && (!('createdAt' in d) || d.createdAt is timestamp)
+        && (!('updatedAt' in d) || d.updatedAt is timestamp);
+    }
+
     // ---- users ----
     // User profile — owner only (public read handled by isPublic check in app).
     // VIKTIGT: write-regeln förbjuder owner att själv sätta isAdmin-flaggan.
@@ -176,14 +206,16 @@ service cloud.firestore {
     // admin — annars blir hela admin-systemet trivialt eskalerbart via
     // klient-skrivning.
     match /users/{uid} {
-      allow read: if isOwner(uid)
-        || resource.data.get('defaultVisibility', '') == 'public'
-        || resource.data.get('isPublic', false) == true;
-      // Bekräftade vänner får ALLTID läsa varandras profil-doc — oavsett
-      // defaultVisibility-tier. Det är vänskapens grundläggande mening:
-      // "vi har accepterat varandra → vi ser varandras existens".
-      // Tier-grenen styr bara watchlist-items-synlighet, inte profil-doc.
-      allow read: if exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid));
+      // BIN-505: profil-doc:et är nu ENBART ägar-läsbart. Det bär känsliga fält
+      // (email, hemkommun, providerCosts, providerCampaigns, notificationSettings,
+      // rotationSchedule, ...) och Firestore-läsningar är hel-doc — de kan inte
+      // fält-filtreras — så den gamla publik/vän-läsningen läckte ALLT över tråden
+      // (klient-blankning är ingen säkerhetsgräns). Publik/vän-synliga display-fält
+      // serveras nu via publicProfiles/{uid} (positiv whitelist). Rules-INTERNA
+      // get(users/...) (isAdmin, matchesOwnIdentity, following/followers,
+      // watchlist-friends-fallback) är priviligierade läsningar som förbigår den
+      // här read-regeln, så de fortsätter fungera oförändrat.
+      allow read: if isOwner(uid);
       allow create: if isOwner(uid)
         && !('isAdmin' in request.resource.data);
       allow update: if isOwner(uid)
@@ -203,7 +235,20 @@ service cloud.firestore {
     }
     match /users/{uid}/watchlist/{itemId} {
       allow read, delete: if isOwner(uid);
-      allow create, update: if isOwner(uid) && isValidWatchlistItem(request.resource.data);
+      // BIN-505: `notes` moved to the owner-only watchlistNotes subcollection.
+      // The key STAYS whitelisted in isValidWatchlistItem (one-way-ratchet: a
+      // legacy doc still carrying `notes` must keep passing unrelated merge-writes,
+      // and the migration deletes the field via FieldValue.delete()). But NO new
+      // non-null note may be written to this public/friends-readable doc:
+      //  - create: notes must be absent/null (new items never carry inline notes).
+      //  - update: notes must be absent/null OR UNCHANGED from what's stored
+      //    (lets an unrelated rating/status edit on an un-migrated legacy doc pass;
+      //    blocks a stale client bundle from re-introducing a note = re-leak).
+      allow create: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
+        && (!('notes' in request.resource.data) || request.resource.data.notes == null);
+      allow update: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
+        && (!('notes' in request.resource.data) || request.resource.data.notes == null
+          || request.resource.data.notes == resource.data.get('notes', null));
       // Tre-state visibility — denormaliserad från parent-profil. WatchlistContext
       // stämplar effectiveVisibility vid skrivning och AuthContext.updateDefault
       // Visibility cascadar när profilen toggles. Sparar en extra doc-read per
@@ -226,6 +271,12 @@ service cloud.firestore {
     match /users/{uid}/watchlistTags/{tmdbId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && isValidTagDoc(request.resource.data);
+    }
+    // BIN-505: per-title free-text notes — OWNER ONLY, no public/friends read
+    // clause (same design as watchlistTags). Doc id = tmdbId, shape { note: string }.
+    match /users/{uid}/watchlistNotes/{tmdbId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isValidNoteDoc(request.resource.data);
     }
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, delete: if isOwner(uid);
@@ -392,6 +443,25 @@ service cloud.firestore {
       // Mottagaren raderar (accept/decline). Ägaren kan dra tillbaka en inbjudan.
       allow delete: if isOwner(uid)
         || get(/databases/$(database)/documents/groups/$(groupId)).data.ownerUid == request.auth.uid;
+    }
+
+    // ---- publicProfiles (BIN-505) ----
+    // Public projection of a user's DISPLAY fields (see isValidPublicProfile).
+    // The private users/{uid} doc is owner-locked; THIS is the only doc a
+    // public/friend viewer reads. Visibility is gated LIVE against the source
+    // via a privileged get(users/{uid}) so flipping to private takes effect
+    // instantly (no stale-public window). Owner-written; a stale display value
+    // is merely cosmetic (never a leak), so best-effort client sync is adequate.
+    // Top-level (NOT a user subcollection) → wired explicitly into the GDPR
+    // export + erasure paths (not covered by KNOWN_USER_SUBCOLLECTIONS).
+    match /publicProfiles/{uid} {
+      allow read: if isOwner(uid)
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('defaultVisibility', '') == 'public'
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('isPublic', false) == true
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(uid)/friends/$(request.auth.uid)));
+      allow create, update: if isOwner(uid) && isValidPublicProfile(request.resource.data);
+      allow delete: if isOwner(uid);
     }
 
     // ---- usernames ----

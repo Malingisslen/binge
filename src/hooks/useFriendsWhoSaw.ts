@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFollowing } from '@/hooks/useFollow';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
@@ -57,16 +58,16 @@ export function useFriendsWhoSaw(tmdbId: number | null) {
           if (!snap.exists()) return null;
           const data = snap.data() as { status?: string; rating?: number | null };
           // Profil-läsning först här — bara för de som faktiskt har titeln.
+          // BIN-505: läs display-fält från publicProfiles-projektionen (jag följer
+          // dem + titeln är läsbar → projektionen är läsbar). users/{uid} är
+          // ägar-låst. null → behåll fallback-namn.
           let displayName = 'Okänd', username: string | null = null, photoURL: string | null = null;
-          try {
-            const ps = await getDoc(doc(db, 'users', followedUid));
-            if (ps.exists()) {
-              const p = ps.data() as { displayName?: string; username?: string | null; photoURL?: string | null };
-              displayName = p.displayName || 'Okänd';
-              username = p.username ?? null;
-              photoURL = p.photoURL ?? null;
-            }
-          } catch { /* profil ej läsbar → behåll fallback-namn */ }
+          const card = await getPublicProfileCard(followedUid);
+          if (card) {
+            displayName = card.displayName || 'Okänd';
+            username = card.username;
+            photoURL = card.photoURL;
+          }
           return {
             uid: followedUid,
             status: data.status ?? '',

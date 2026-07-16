@@ -3,41 +3,14 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bell, Users } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { fsdb } from '@/lib/firebase/db';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useFriendActions } from '@/hooks/useFriends';
 import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
 import type { FriendRequest } from '@/lib/firebase/friends';
-
-// Slår upp avsändarens namn/användarnamn via dess uid istället för att lita på
-// klient-satta fromDisplayName/fromUsername (förfalskbara — valideras inte
-// regel-sidigt). Faller tillbaka till de denormaliserade fälten om profilen
-// inte är läsbar (privat profil).
-function useSenderProfile(uid: string) {
-  return useQuery({
-    queryKey: ['sender-profile', uid],
-    queryFn: async () => {
-      try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'users', uid));
-        if (!snap.exists()) return null;
-        const d = snap.data();
-        return {
-          displayName: (d.displayName as string | undefined) ?? null,
-          username: (d.username as string | null | undefined) ?? null,
-        };
-      } catch {
-        return null;
-      }
-    },
-    enabled: !!uid,
-    staleTime: 60_000,
-  });
-}
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
 // popover, and the user avatar (or "Logga in" if signed out). Extracted from

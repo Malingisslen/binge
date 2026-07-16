@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { fsdb } from '@/lib/firebase/db';
+import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { usePublicList, useListMutations, useListEditors, useListFollows } from '@/hooks/useLists';
 import { usePageMeta } from '@/hooks/usePageMeta';
@@ -329,10 +329,8 @@ function EditorRow({ uid, onRemove }: { uid: string; onRemove: () => void }) {
     let active = true;
     void (async () => {
       try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'users', uid));
-        const d = snap.exists() ? snap.data() : null;
-        if (active) setName((d?.displayName as string) || (d?.username as string) || 'Användare');
+        const card = await getPublicProfileCard(uid);
+        if (active) setName(card?.displayName || card?.username || 'Användare');
       } catch { if (active) setName('Användare'); }
     })();
     return () => { active = false; };

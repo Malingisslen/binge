@@ -25,16 +25,20 @@ export default function UserProfilePageClient({ username }: { username: string }
   // ger permission-denied i konsolen och ändå ingen siffra. Skicka därför bara
   // in uid när profilen faktiskt är publik eller min egen.
   const profileUid = data && 'uid' in data ? data.uid : null;
-  const profileIsPublic = !!data && 'profile' in data
-    && (data.profile.defaultVisibility ?? (data.profile.isPublic ? 'public' : 'private')) === 'public';
-  const countableUid = (profileIsPublic || profileUid === myUid) ? profileUid : null;
+  // BIN-505: följar-count-queryn (getCountFromServer på followers/following) är
+  // per rules bara läsbar för PUBLIKA profiler eller ägaren — INTE vänner. Så vi
+  // skickar bara in uid när projektionen säger publik (card.isPublic) eller det
+  // är min egen profil; annars skulle en vän-bara-profilvisning fyra två nekade
+  // count-queries → Sentry/Plausible-brus (och räkningen faller ändå till 0).
+  const countableUid = data && 'card' in data && (data.card.isPublic || profileUid === myUid)
+    ? profileUid : null;
   // Watchlistan läses bara när profilen faktiskt är läsbar för mig. Att
-  // usePublicProfile returnerar { profile, uid } (inte { isPrivate }) betyder
-  // att rules redan släppt in mig — dvs profilen är publik, vän-synlig och jag
+  // usePublicProfile returnerar { card, uid } (inte { isPrivate }) betyder att
+  // rules redan släppt in mig — dvs profilen är publik, eller vän-synlig och jag
   // är vän, eller min egen. Just då går watchlist-queries igenom. På privata/
   // icke-vän-profiler skickar vi null så inga onödiga permission-denied loggas
   // (hooken sväljer dessutom kvarvarande fel internt).
-  const watchlistUid = data && 'profile' in data ? data.uid : null;
+  const watchlistUid = data && 'card' in data ? data.uid : null;
   const watchlistQuery = usePublicWatchlist(watchlistUid);
   const followerQuery = useFollowerCount(countableUid);
   const followingQuery = useFollowingCount(countableUid);
@@ -43,7 +47,7 @@ export default function UserProfilePageClient({ username }: { username: string }
   const followingCount = followingQuery.data;
   const taste = useTasteMatch(data?.uid ?? null);
 
-  const metaTitle = data && 'profile' in data ? data.profile.displayName : `@${username}`;
+  const metaTitle = data && 'card' in data ? data.card.displayName : `@${username}`;
   usePageMeta({ title: metaTitle });
 
   // P1: stat-korten och följar-raden beräknas från egna queries (watchlist,
@@ -63,15 +67,10 @@ export default function UserProfilePageClient({ username }: { username: string }
     return <NotFound crumb={`@${username}`} title="Privat profil" body="Den här profilen är privat." />;
   }
 
-  const { profile, uid } = data;
-
-  // Defensiv: om profile-doc:et råkat ha defaultVisibility='private' men
-  // ändå läses (t.ex. ägaren kollar sin egen) — visa privat-vy för
-  // främlingar. (Faktiskt täcker rules redan detta, men dubbel-check.)
-  const tier = profile.defaultVisibility ?? (profile.isPublic ? 'public' : 'private');
-  if (tier === 'private' && uid !== myUid) {
-    return <NotFound crumb={`@${username}`} title="Privat profil" body="Den här profilen är privat." />;
-  }
+  const { card, uid } = data;
+  // BIN-505: ingen defensiv tier-check längre — firestore.rules gate:ar
+  // publicProfiles-läsningen live mot källans visibility, så en läsbar card ÄR
+  // synlighetsbeviset. Ägaren når alltid sin egen via isOwner-grenen.
 
   // "Följer" på publik profil = TV-shows i 'mina' (samlingen). Sedd = filmer
   // i 'sedd' (TV i 'mina' med sub-state avslutad räknas inte med här —
@@ -87,8 +86,8 @@ export default function UserProfilePageClient({ username }: { username: string }
     <div>
       <PageHeader
         crumb={`@${username}`}
-        title={profile.displayName}
-        standfirst={profile.bio || undefined}
+        title={card.displayName}
+        standfirst={card.bio || undefined}
         actions={
           <>
             {!isOwnProfile && <FollowButton targetUid={uid} />}
@@ -119,14 +118,14 @@ export default function UserProfilePageClient({ username }: { username: string }
             <div className="flex items-baseline gap-2">
               <span className="text-[22px] font-bold text-acc-deep leading-none">{taste.percent}%</span>
               <span className="text-xxs text-ink-3">
-                baserat på {taste.mySampleSize} titlar från dig och {taste.theirSampleSize} från {profile.displayName}
+                baserat på {taste.mySampleSize} titlar från dig och {taste.theirSampleSize} från {card.displayName}
               </span>
             </div>
           ) : (
             <div className="text-xs text-ink-3">
               {taste.mySampleSize < 5
                 ? 'Lägg till och betygsätt fler titlar för att se smak-match.'
-                : `${profile.displayName} har för få betygsatta titlar för att räkna ut matchning.`}
+                : `${card.displayName} har för få betygsatta titlar för att räkna ut matchning.`}
             </div>
           )}
         </div>

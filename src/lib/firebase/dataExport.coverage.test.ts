@@ -50,8 +50,13 @@ interface CoverageSpec {
 // until its export + delete wiring is declared.
 const COVERAGE: Record<keyof UserDataSnapshots, CoverageSpec> = {
   profileSnap: { export: 'profile', deleteCascade: true },
+  // BIN-505: public projection doc — exported (Art. 20) + erased (Art. 17, via
+  // snaps.publicProfileSnap.ref in accountDeletion).
+  publicProfileSnap: { export: 'publicProfile', deleteCascade: true },
   watchlistSnap: { export: 'watchlist', deleteCascade: true },
   watchlistTagsSnap: { export: 'watchlistTags', deleteCascade: true },
+  // BIN-505: owner-only per-title notes — exported + erased with the account.
+  watchlistNotesSnap: { export: 'watchlistNotes', deleteCascade: true },
   episodeProgressSnap: { export: 'episodeProgress', deleteCascade: true },
   notInterestedSnap: { export: 'notInterested', deleteCascade: true },
   notificationsSnap: { export: 'notifications', deleteCascade: true },
@@ -168,7 +173,10 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
 
   beforeAll(async () => {
     const fakeSnaps = Object.fromEntries(
-      coverageKeys.map(k => [k, k === 'profileSnap' ? fakeDocSnap() : fakeQuerySnap()]),
+      coverageKeys.map(k => [
+        k,
+        (k === 'profileSnap' || k === 'publicProfileSnap') ? fakeDocSnap() : fakeQuerySnap(),
+      ]),
     ) as unknown as UserDataSnapshots;
     vi.mocked(collectUserDataSnapshots).mockResolvedValue(fakeSnaps);
     exported = await buildUserExport('test-uid');
@@ -180,9 +188,9 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
       if (spec.export === null) continue;
       const value = exported[spec.export];
       expect(value, `${key} → BingeExport.${String(spec.export)} missing from export`).toBeDefined();
-      if (spec.export === 'profile') {
-        // profile is the single user doc, not an array.
-        expect(value, 'profile should carry the seeded doc data').not.toBeNull();
+      if (spec.export === 'profile' || spec.export === 'publicProfile') {
+        // profile + publicProfile are single docs, not arrays.
+        expect(value, `${String(spec.export)} should carry the seeded doc data`).not.toBeNull();
       } else {
         // Array collections: assert the snapshot docs actually flowed through.
         expect(Array.isArray(value), `${String(spec.export)} should be an array`).toBe(true);

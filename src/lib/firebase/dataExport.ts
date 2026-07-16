@@ -14,7 +14,9 @@ import type { QuerySnapshot } from 'firebase/firestore';
 // 1.2 (BIN-184): additive — new `householdContributions` array (your opt-in shared
 //     subscription data per group; id = groupId). Self-reported financial data →
 //     squarely Art. 20 scope.
-export const SCHEMA_VERSION = '1.2' as const;
+// 1.3 (BIN-505): additive — new `watchlistNotes` array (your private per-title notes,
+//     moved off the public watchlist doc) + `publicProfile` (the public projection doc).
+export const SCHEMA_VERSION = '1.3' as const;
 
 export interface ExportDoc {
   id: string;
@@ -29,8 +31,13 @@ export interface BingeExport {
   tmdbAttribution: string;
   justwatchAttribution: string;
   profile: Record<string, unknown> | null;
+  // BIN-505: the public projection doc (publicProfiles/{uid}) — the public-safe
+  // display fields other users can see. null if never backfilled.
+  publicProfile: Record<string, unknown> | null;
   watchlist: ExportDoc[];
   watchlistTags: ExportDoc[];
+  // BIN-505: your private per-title notes (owner-only watchlistNotes subcollection).
+  watchlistNotes: ExportDoc[];
   episodeProgress: ExportDoc[];
   notInterested: ExportDoc[];
   notifications: ExportDoc[];
@@ -60,8 +67,10 @@ const README_TEXT = `Detta är en komplett GDPR Art. 20-export av dina personupp
 
 Filen innehåller:
 - Din profil (profile)
+- Din publika profil-projektion som andra ser (publicProfile)
 - Alla titlar i din watchlist, inklusive status och betyg (watchlist)
 - Dina egna taggar per titel (watchlistTags)
+- Dina egna anteckningar per titel (watchlistNotes)
 - Episode-progress för serier (episodeProgress)
 - "Inte intresserad"-listan (notInterested)
 - Notifikationer (notifications)
@@ -129,8 +138,10 @@ export async function buildUserExport(uid: string): Promise<BingeExport> {
     tmdbAttribution: TMDB_ATTRIBUTION_EN,
     justwatchAttribution: JUSTWATCH_ATTRIBUTION_EN,
     profile: s.profileSnap.exists() ? (s.profileSnap.data() as Record<string, unknown>) : null,
+    publicProfile: s.publicProfileSnap.exists() ? (s.publicProfileSnap.data() as Record<string, unknown>) : null,
     watchlist: toExportDocs(s.watchlistSnap),
     watchlistTags: toExportDocs(s.watchlistTagsSnap),
+    watchlistNotes: toExportDocs(s.watchlistNotesSnap),
     episodeProgress: toExportDocs(s.episodeProgressSnap),
     notInterested: toExportDocs(s.notInterestedSnap),
     notifications: toExportDocs(s.notificationsSnap),

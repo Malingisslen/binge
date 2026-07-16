@@ -54,6 +54,9 @@ vi.mock('@/lib/firebase/utils', () => ({
 // `snapshotCallback` fortsatt driver watchlist-items (tags-callbacken separat).
 let snapshotCallback: ((snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void) | null = null;
 let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
+// BIN-505: third subscription — per-title notes (watchlistNotes). Routed separately
+// so it doesn't clobber the watchlist items callback.
+let notesSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
 
 const setDoc = vi.fn(async (..._args: unknown[]) => {});
 const deleteDoc = vi.fn(async (..._args: unknown[]) => {});
@@ -69,6 +72,8 @@ vi.mock('@/lib/firebase/db', () => ({
       ) => {
         if ((ref?._path ?? '').endsWith('watchlistTags')) {
           tagsSnapshotCallback = cb as typeof tagsSnapshotCallback;
+        } else if ((ref?._path ?? '').endsWith('watchlistNotes')) {
+          notesSnapshotCallback = cb as typeof notesSnapshotCallback;
         } else {
           snapshotCallback = cb;
         }
@@ -84,6 +89,15 @@ vi.mock('@/lib/firebase/db', () => ({
     doc: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
     setDoc,
     deleteDoc,
+    // BIN-505: updateNotes + the eager notes migration use an atomic batch +
+    // deleteField. Record ops on the shared spies so a note-write can be asserted.
+    writeBatch: () => ({
+      set: (ref: unknown, data: unknown) => setDoc(ref, data),
+      update: (ref: unknown, data: unknown) => setDoc(ref, data),
+      delete: (ref: unknown) => deleteDoc(ref),
+      commit: async () => {},
+    }),
+    deleteField: () => 'DELETE_FIELD',
     serverTimestamp: () => 'ts',
     Timestamp: { fromDate: (d: Date) => d },
   }),
@@ -174,6 +188,7 @@ beforeEach(() => {
   syncProgressToGroups.mockClear();
   snapshotCallback = null;
   tagsSnapshotCallback = null;
+  notesSnapshotCallback = null;
   authState.uid = 'u1';
   authState.user = { defaultVisibility: 'private' };
 });
@@ -447,12 +462,27 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
       await removeItemRef!(9);
     });
 
-    // Both the watchlist doc and the owner-only tags doc are removed so tags
-    // never orphan (their own collection isn't cascaded by the watchlist delete).
-    expect(deleteDoc).toHaveBeenCalledTimes(2);
+    // The watchlist doc + the owner-only tags AND notes docs are removed so
+    // neither orphans (their own collections aren't cascaded by the watchlist delete).
+    expect(deleteDoc).toHaveBeenCalledTimes(3);
     expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlist/9');
     expect((deleteDoc.mock.calls[1][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
+    expect((deleteDoc.mock.calls[2][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/9');
     expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('BIN-505: addItem never writes a non-null inline note to the watchlist doc', async () => {
+    // addItem is also the re-mark path (QuickAddButton/StatusButton/useMarkSeen
+    // pass current?.notes to preserve it). notes now lives in watchlistNotes and
+    // the watchlist-doc rules reject a non-null inline note — so the write must
+    // NOT carry `notes`, else re-marking a noted title is permission-denied.
+    await mountSeeded([]);
+    await act(async () => {
+      await addItemRef!({ ...newTitle(77), notes: 'en privat anteckning' });
+    });
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/77');
+    expect(call).toBeDefined();
+    expect('notes' in (call![1] as Record<string, unknown>)).toBe(false);
   });
 
   it('updateTags writes normalized tags to the owner-only tags doc (BIN-164)', async () => {

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { fsdb, lazySubscribe } from '@/lib/firebase/db';
+import { lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
+import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { type FollowListUser, type FollowProfile, resolveFollowRows } from './useFollowList.helpers';
 
 export type { FollowListUser } from './useFollowList.helpers';
@@ -76,24 +77,26 @@ export function useFollowList(): FollowListState {
 
     setProfilesLoading(true);
     Promise.all(missing.map(async u => {
-      try {
-        const { db, doc, getDoc } = await fsdb();
-        const snap = await getDoc(doc(db, 'users', u));
-        // Profil-doc saknas = raderat konto (tombstone). Markera 'ghost' så
-        // resolveFollowRows filtrerar bort den dangling följ-referensen i
-        // stället för att visa den som "Privat användare" (BIN-21).
-        if (!snap.exists()) return [u, 'ghost'] as const;
-        const d = snap.data();
-        return [u, {
-          uid: u,
-          displayName: (d.displayName as string) ?? 'Okänd',
-          username: (d.username as string | null) ?? null,
-          photoURL: (d.photoURL as string | null) ?? null,
-          isPublic: (d.isPublic as boolean) ?? false,
-        }] as const;
-      } catch {
-        return [u, null] as const;
-      }
+      // BIN-505: users/{uid} is now owner-locked, so we read the public-safe
+      // projection instead. Because the projection read is LIVE-GATED against the
+      // source, a deleted account and a private-non-friend account BOTH return
+      // null (the old code distinguished them via a direct users/{uid} read, which
+      // is no longer allowed). We therefore keep a null as a `null` cache entry →
+      // resolveFollowRows renders a 'Privat användare' fallback row (consistent
+      // with friends + feed, which also keep-with-fallback). Genuine dangling
+      // tombstones from deleted accounts are reaped by the weekly
+      // reclaimOrphanFollows sweep instead of being dropped on read.
+      const card = await getPublicProfileCard(u);
+      if (card == null) return [u, null] as const;
+      return [u, {
+        uid: u,
+        displayName: card.displayName || 'Okänd',
+        username: card.username,
+        photoURL: card.photoURL,
+        // Real visibility from the projection — a readable card can be a FRIEND
+        // reading a private profile, so this is not always true.
+        isPublic: card.isPublic,
+      }] as const;
     })).then(entries => {
       if (cancelled) return;
       for (const [u, p] of entries) cache.set(u, p);
