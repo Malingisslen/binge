@@ -1,0 +1,13 @@
+# Gitleaks allowlist — binge. Only DOCUMENTED public-by-design values belong here.
+# Baseline established 2026-07-16: 1 tracked-file finding, benign (below); real
+# secrets live in gitignored .env* files.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public-by-design client config"
+paths = [
+  # FCM service worker must embed the Firebase web client key — public by design.
+  '''public/firebase-messaging-sw\.js''',
+]

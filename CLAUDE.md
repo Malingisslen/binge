@@ -64,6 +64,12 @@ direct requests.
 
 ## Commit gates (shared workflow-guards plugin; config in .claude/shared-plugin.json)
 
+- **Before filing review findings — consult `.claude/rules/accepted-deviations.md`.** It
+  lists deliberate, decided deviations (hover transform, hygiene-level blocking, lazy status
+  migration, per-title persist ban, …). Do not re-flag anything listed there; when
+  dispatching a review agent, point it at that file so it does the same. A genuinely new
+  deviation gets appended there (dated), not argued in a review.
+
 - **Reviewer gate:** `require-review-before-commit` blocks `git commit` until fresh markers
   exist for the reviewers matching the staged diff (`binge-code-reviewer` on TS/TSX,
   `binge-security-reviewer` on functions/ + auth/firebase paths, `binge-test-reviewer` on
