@@ -63,5 +63,8 @@ brag-output-*/
 *service-account*.json
 *recaps-writer*.json
 *firebase-adminsdk*.json
-scripts/recaps/*.local.json
+scripts/recaps/*.json
+
+# engångs-scratchskript (underscore-prefix) — verktyg för en session, aldrig committade
+functions/scripts/_*.mjs
 

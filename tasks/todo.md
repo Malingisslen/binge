@@ -1,174 +1,250 @@
-# Sprint 2026-07-14 (c) — sweep-hardening + advisor money-bug + test-gap
+# PLAN — BIN-513 regression fix (xhigh review finding, 2026-07-16)
 
-**Selection outcome:** 12 open Backlog items. 7 remain timing/ops-gated (unchanged from the
-(a)/(b) sprints this same day — BIN-402/454/468/170/189/173/419, see "Not actionable yet"
-below). Of the 5 fresh scan findings, 4 are clear, contained bug/test fixes (**build**) and
-1 (BIN-505, PII/financial-data leak via `firestore.rules`) is a **needs-approval** parked
-item — the fix is real and urgent, but it's a rules+schema migration, which CLAUDE.md
-requires a written plan + Malin's explicit go-ahead for *before* any edit, not just an
-In-Review park. Commented on BIN-505 with the reasoning + recommendation; left in Backlog.
+**Context:** BIN-505 has LANDED (d6ff035). Finishing the sprint 2026-07-15 ship. The
+`/code-review xhigh` pass found one CONFIRMED correctness regression in BIN-513 that must be
+fixed before shipping it.
 
-N = 4 (all backlog volume that cleared the mandate gate this round — did not manufacture
-work to fill a larger N).
+**Problem:** `useServiceValue.ts` feeds every `'mina'` TV provider into `tvActiveProviderIds`
+keying on raw status only. A paid service whose ONLY title is a finished, Ended/Canceled series
+that the user has caught up on (derived sub-state `'avslutad'`) is therefore permanently
+suppressed from the "dead weight" verdict — the exact wasted subscription the advisor exists to
+flag. `ej_paborjad`/`paborjad`/`ligger_efter` are legitimate keep-anchors; `'avslutad'` is not.
 
-## Agent A — tmdb-sweep hardening (Tier: functions/, router=skip per-file but security-reviewer
-gate applies at commit; area "data")
+**Fix (2 production files + 1 test — scope is a small logic correction, tier `skip`/`medium`,
+no rules/auth/GDPR/status-model change — `librarySubState` is READ, not changed):**
+1. `src/lib/advisor/serviceValue.ts` — add pure, testable helper
+   `tvActiveProviderIdsFromItems(items)` that derives the guard list and EXCLUDES any TV title
+   whose persisted `librarySubState(it) === 'avslutad'`. (Persisted-fields-only variant — no
+   extra TMDB fan-out; a finished show without backfilled `tmdbStatus` conservatively reads as
+   `'paborjad'` and stays shielded, which is safe.)
+2. `src/hooks/useServiceValue.ts` — replace the inline loop with the helper call.
+3. `src/lib/advisor/serviceValue.test.ts` — cover: `avslutad`-only service is NOT in the guard
+   list (→ dead-weight true); `ej_paborjad`/`ligger_efter`/`vill_se` ARE (→ shielded); film
+   ignored.
 
-- [ ] [Tier A] **BIN-504** — Fix tmdbFieldsSweep: unscoped `collectionGroup('watchlist')` will
-  wipe `title`/`posterPath` on every group watchlist doc
-  - disposition: build · requiresPlanMode: **false** (router tier `skip`, priority High but
-    tier isn't `single`/`full-panel` so the Phase-1.5 formula doesn't fire; the mandatory
-    `binge-security-reviewer` commit gate is the real guard here per the ticket's own note)
-  - files: `functions/src/tmdbTosSweep/index.ts`, `functions/src/tmdbTosSweep/logic.ts`,
-    `functions/src/tmdbTosSweep/logic.test.ts`
-  - change: scope the collection-group scan to `users/{uid}/watchlist` docs only (skip any
-    doc whose grandparent collection isn't `users`), so `groups/{id}/watchlist` items are
-    never classified as stale/clearable.
-  - acceptance:
-    - [ ] A doc shaped like a group watchlist item (`{title, posterPath, addedBy, addedAt}`,
-      no `tmdbFieldsRefreshedAt` stamp) is asserted NOT swept in `logic.test.ts` (new test).
-    - [ ] A `users/{uid}/watchlist/{id}` doc with the same stale-stamp shape is still
-      correctly classified as clearable (no regression on the real target).
-    - [ ] The fix does not change the `__name__`/cursor paging behavior (per the ticket's
-      explicit "least-risk" constraint — no `orderBy('status')` swap).
-    - [ ] `mutateEnabled` gating and the existing dry-run behavior are untouched.
+**Acceptance:** helper unit-tested; `npm run typecheck` + full advisor suite green; re-run
+binge-code-reviewer + binge-test-reviewer over the changed files before commit.
 
-- [ ] [Tier A] **BIN-507** — Harden tmdbFieldsSweep audit + dry-run budget before enabling
-  mutate (BIN-468 gate fidelity)
-  - disposition: build · requiresPlanMode: **false** (router tier `skip`; priority Medium)
-  - files: `functions/src/tmdbTosSweep/index.ts`, `functions/src/tmdbTosSweep/logic.ts`,
-    `functions/src/tmdbTosSweep/logic.test.ts`
-  - change: (1) wrap the run so a thrown error still writes `lastRun` with an error flag
-    instead of silently no-op'ing the audit doc; (2) give dry-run its own persisted cursor
-    (`dryRunCursor`, never colliding with the mutate cursor) so repeated dry-runs don't hit
-    the identical 18k-doc wall and under-report; (3) reconcile the `MAX_DOCS_PER_RUN` comment
-    (says 50k) with the actual constant (100k).
-  - acceptance:
-    - [ ] A test forces `q.get()` (or `batch.commit()`) to throw and asserts `stateRef` still
-      receives a `lastRun` write (with an error indicator), not silence.
-    - [ ] A test with a stale-doc count exceeding the per-run budget shows a SECOND dry-run
-      invocation continues past where the first left off (no permanent identical-wall repeat).
-    - [ ] The mutate-mode cursor behavior (resume-on-timeout, reset-on-full-pass) is
-      unchanged — dry-run gets its own field, doesn't share the mutate cursor.
-    - [ ] Comment/constant mismatch fixed to state the true number (100k), not 50k.
-
-## Agent B — advisor money-correctness (area "streaming")
-
-- [ ] [Tier A] **BIN-506** — Advisor marks a paid custom-cost tier-less provider (SVT/Pluto)
-  as 'free' — never surfaces it as pausable spend
-  - disposition: build · requiresPlanMode: **false** (router tier `medium`/single, priority
-    Low, no security label)
-  - files: `src/hooks/useSubscriptionAdvisor.helpers.ts`,
-    `src/hooks/useSubscriptionAdvisor.helpers.test.ts`, `src/hooks/useSubscriptionAdvisor.ts`
-    (call site ~line 248)
-  - change: feed `deriveProviderStatus` the resolved **effective** monthly cost (the same
-    `resolveEffectiveMonthlyCost(pid, ...)` value already computed at line 266, reused rather
-    than recomputed) instead of the immutable catalog `defaultMonthlyCost`, keeping `isFree`
-    as the sole genuine-free signal.
-  - acceptance:
-    - [ ] New/updated test: a tier-less provider (`isFree:false`, `defaultMonthlyCost:0`) with
-      a user-assigned custom cost > 0 resolves to a **non-`free`** status (eligible for
-      `pause` per the existing precedence rules).
-    - [ ] Existing test coverage for genuinely free services (`isFree:true`, e.g. SVT with no
-      custom cost) still resolves to `free` — no regression on the real free-service case.
-    - [ ] `hasActiveShow`/`hasUpcomingShow`/`hasWillSeeAnchor` precedence over `free` is
-      unchanged (don't reorder the branches, only change the cost input).
-    - [ ] `totalMonthlyCost` and `ProvidersByValue` remain consistent with the new `status`
-      (no new contradiction introduced elsewhere).
-
-## Agent C — fan-out hook test coverage (area "watchlist", test-only)
-
-- [ ] [Tier A] **BIN-508** — Add tests for the instant-week fan-out hooks (useCalendar
-  next-air repair + refreshTmdbFields)
-  - disposition: build · requiresPlanMode: **false** (router tier `medium`/single, priority
-    Low)
-  - files (test-only, no production-code changes expected): new
-    `src/hooks/__tests__/useCalendar.test.ts` (or extend existing calendar test file if one
-    exists), new/extended test file covering `refreshTmdbFields` in
-    `src/contexts/WatchlistContext.tsx`
-  - change: hook-level tests (renderHook + mocked Firestore per the repo's existing pattern)
-    for both fan-out call sites.
-  - acceptance:
-    - [ ] Test asserts the next-air read-repair payload never includes `updatedAt` (pins the
-      load-bearing "never bump updatedAt on a read-repair" invariant at the hook layer, not
-      just the pure helper).
-    - [ ] Test asserts an item is marked "written" only after its batch actually commits
-      (partial-batch failure mid-flush should NOT mark later-chunk items as done).
-    - [ ] Test asserts rapid repeated calendar renders coalesce into one flush (debounce),
-      not one write per render.
-    - [ ] No production code in `useCalendar.ts` / `WatchlistContext.tsx` is modified unless a
-      test exposes an actual bug — this ticket is test-coverage only; a real bug found while
-      writing tests gets fixed but noted as a deviation, not silently expanded scope.
-
-## Not actionable yet (gated on time/ops/decision — unchanged, not re-litigated this sprint)
-
-- **BIN-402 / BIN-454 / BIN-468** — TMDB ToS sweep "flip to clearing": ops-blocked (manual
-  `firestore:rules` deploy) + propagation-timing gated (BIN-454 due 2026-11-01). BIN-504/507
-  above are prerequisite bug fixes on the SAME code, not a flip of `mutateEnabled` — that stays
-  frozen regardless.
-- **BIN-170 / BIN-189** — panel-approved seasonal features, scheduled for Aug/Sept build per
-  2026-07-13 decision queue. Not due yet.
-- **BIN-173** — waiting on Malin opening an Adtraction affiliate account (Tier D, ops-blocked).
-- **BIN-419** — SEO before/after measurement, needs GSC data dated ~2026-08-28. Not due yet.
-
-## Needs you (this sprint)
-
-- **BIN-505** — real, live PII/financial-data leak (email/provider costs/hemkommun/notes
-  exposed via `firestore.rules` whole-doc reads). Commented on the ticket with full reasoning;
-  **recommendation: approve soon** — it's a genuine security gap, just one that (per CLAUDE.md)
-  needs your go-ahead on the schema-migration approach before any rules edit lands.
-
-## Deviation log
-
-(none yet — populated during Phase 2 execution)
+**Assumptions (no architecture-changing unknowns):** the persisted-only sub-state is the right
+signal (matches how the library view itself sections these); threading the advisor's live
+ended-set into the hook is a larger change and out of scope for this fix.
 
 ---
 
-# Archived — Sprint 2026-07-14 (b) — "with me here" (interactive)
+# ⚠ BIN-505 still in progress — uncommitted work on disk, read before touching these files
 
-**Outcome: zero code shipped — and that's the correct result.** The backlog holds 8 open
-items; none is buildable-and-ungated. The one item with real forward motion (BIN-494) turned
-out to be a founder-decision that resolved to *no change*.
+`git status` shows a large uncommitted diff matching the BIN-505 plan below. It is **not**
+finished (GDPR wiring, rules tests, docs, gates, and deploy are still unchecked). Full plan:
+`tasks/bin-505-plan.md`. Full detail preserved below the `---` separator.
 
-## What ran
+**Files already touched by BIN-505 — do not select new tickets against these until it's
+committed:** `firestore.rules`, `src/contexts/AuthContext.tsx`, `src/contexts/WatchlistContext.tsx`,
+`src/lib/firebase/{friends,userData,dataExport,accountDeletion,userSearch,username,publicProfile}.ts`,
+`src/app/{feed,grupper}/page.tsx`, `src/components/layout/TopbarActions.tsx`,
+`src/components/pages/{FriendsPageClient,ListPageClient,UserProfilePageClient}.tsx`,
+`src/hooks/{useFollowList,useFriendsWhoSaw,usePublicProfile}.ts`.
 
-- **Selection:** classified the full open backlog. Every item is timing-gated (BIN-170 Nov,
-  BIN-189 Aug/Sept, BIN-419 GSC-data Aug 28), ops-blocked on Malin (BIN-173 Adtraction
-  account; BIN-402/468/454 TMDB-sweep flip waits on real traffic + manual rules deploy), or a
-  decision (BIN-494). No "build" tickets — did NOT manufacture work to fill N.
-- **BIN-494 — RESOLVED → Done (keep hard-delete).** The ticket's logged "ANONYMIZE" note was a
-  Claude-authored decision that, on verify-first + a top-tier role-org panel (DPO/Legal/
-  Security/DBA/TechWriter, all blind, sonnet/low), was found to:
-  1. contradict the LIVE privacy policy (`integritet/page.tsx` §6: *"Publikt innehåll
-     anonymiseras inte — det raderas helt"*), and
-  2. reverse a prior *reasoned* hard-delete decision (`data-retention-policy.md`:
-     *"anonymisera är en laglig gråzon vi inte vill testa"*).
-  Legal + DPO + Security all returned BLOCK; the legal/product conflict was escalated LIVE
-  (AskUserQuestion, since Malin was present) → **she chose status quo (keep hard-delete).**
-  Ticket closed with the rationale + the panel's buildable-path notes preserved for any future
-  revisit. No code / rules / doc change needed — live policy already matches.
-
-## Panel review logged
-`docs/org/metrics/events.jsonl` — one `review` event (tier top, outcome escalated→keep-hard-delete).
-
-## Needs you / still parked (unchanged from 2026-07-14 (a))
-- **BIN-173** — open an Adtraction affiliate account, then affiliate deeplinks are a fast follow-up.
-- **BIN-402/468/454** — TMDB-sweep "flip to clearing": waits on real user traffic (propagation)
-  + a manual `firebase deploy --only firestore:rules`. No rush pre-marketing.
-- **BIN-189 / BIN-170 / BIN-419** — scheduled (Aug/Sept, Nov, Aug 28). Leave as-is.
-
-## Follow-ups filed
-None. Keeping status quo needs no new tickets; `episodeReactions` identity-strip would only be a
-sibling ticket *if* anonymize is ever revisited (noted on BIN-494).
-
-## Deviation log
-- [discovery] BIN-494: verify-first + panel found the logged "anonymize" decision silently
-  reversed a documented prior decision AND contradicted live published policy copy → escalated
-  to founder instead of building. Conservative choice: no edits until she confirmed direction.
+This governed today's selection: BIN-509 (Tillsammans rules) and BIN-510 (groups fan-out,
+touches WatchlistContext.tsx) are real, worth-building tickets that were deliberately **not**
+selected this round for exactly this reason — see their Linear comments. Same for BIN-517/516
+(AuthContext.tsx bugs) — left unselected in Backlog, no comment needed (clear bug fixes,
+purely a scheduling conflict, pick up next sprint once BIN-505 lands).
 
 ---
 
-# Archived — Sprint 2026-07-14 (a) — SHIPPED (BIN-496 + BIN-495 + follow-ups BIN-499/500)
+# Sprint 2026-07-15 — selection
 
-Shipped in e0eb215 + f5e9def (live, purged). Full detail in project memory
-`project_sprint_2026-07-14.md`. Not reproduced here.
+Linear available. 8 tickets selected (`build`/`build-review`), clustered into 4 disjoint-file
+batches. 1 obsolete (BIN-173, closed with resolving commit). 1 needs-approval this round
+(BIN-521, idea needs its own design pass) plus BIN-509/BIN-510 held for timing (see banner
+above) — all three got a plain-language Linear comment recording the reasoning.
+
+## Batch: watchlist (scoring + next-air repair)
+
+- [ ] **BIN-511** [Tier A] `build` — Fix profile top-genre weighting: `stats.ts` divides
+      rating by 10 (0–10 scale) but ratings are 0.5–5, so a 5★ title under-weighs an unrated
+      watch. Files: `src/lib/taste/stats.ts`, `src/lib/taste/stats.test.ts`.
+      Stakeholders: single · #28 Recommendations/Scoring-Integrity. requiresPlanMode: no.
+  - [ ] `weightForItem` normalizes `rating` off the real 0.5–5 scale (e.g. `rating/5`) so a
+        5★ item's weight is ≥ the unrated `'sedd'` weight (0.8) — pin with a test.
+  - [ ] The `avbruten` check runs before the `rating` check so a rated-then-dropped item gets
+        weight 0.
+  - [ ] `stats.test.ts` fixtures use only 0.5–5 ratings (no impossible 8/9 values).
+  - [ ] `vector.ts`'s existing (correct) normalization is untouched.
+
+- [ ] **BIN-518** [Tier A] `build` — `nextAirReadRepair.flushNextAirWrites` marks a chunk
+      "written" before its `batch.commit()` resolves, so a partial-batch failure silently
+      drops the later chunk's repair. Files: `src/lib/watchlist/nextAirReadRepair.ts` (+ test).
+      Stakeholders: single · #10 Performance Engineer. requiresPlanMode: no.
+  - [ ] `writtenThisSession` is marked per-chunk only AFTER that chunk's `batch.commit()`
+        resolves (or the mark-before-commit choice is explicitly documented as deliberate —
+        pick one, code + comment agree).
+  - [ ] A new test forces `batch.commit()` to reject on a multi-chunk flush and asserts the
+        later, uncommitted chunk's ids are NOT left in `writtenThisSession`.
+  - [ ] Existing successful-path tests are unmodified in their assertions.
+
+- [ ] **BIN-519** [Tier A] `build` — Pin next-air read-repair invariants (no-`updatedAt`,
+      multi-render coalescing) at the `useCalendar` hook layer, not just the pure-helper
+      layer. Files: `src/hooks/useCalendar.test.ts` (+ `useCalendar.ts` if needed).
+      Stakeholders: single · #10 Performance Engineer. requiresPlanMode: no.
+  - [ ] A hook-layer test drives an unmocked (or Firestore-spied) `flushNextAirWrites` and
+        asserts the written payload has no `updatedAt` key.
+  - [ ] A hook-layer debounce test re-renders multiple times inside the 1200ms window and
+        asserts `flushNextAirWrites` fires exactly once (proves coalescing, not just delay).
+  - [ ] Both new/updated assertions live in `useCalendar.test.ts`, not only the pure-helper
+        test file.
+
+## Batch: streaming (advisor)
+
+- [ ] **BIN-513** [Tier A] `build` — `useServiceValue`'s "behåll eller säg upp" verdict only
+      counts films (`status === 'sedd'`), so a TV-only-watched service is wrongly flagged
+      dead weight. Scope: minimum guard (suppress the false verdict), full TV-hours rollup is
+      a follow-up. Files: `src/hooks/useServiceValue.ts`, `src/lib/advisor/serviceValue.ts`
+      (+ tests). Stakeholders: single · #24 Monetization/Partnerships. requiresPlanMode: no.
+  - [ ] `isDeadWeight` is no longer asserted true for a service whose only usage is TV
+        (nonzero follow/vill_se activity, zero film `'sedd'` titles) — either by folding TV
+        `watchedAt` hours into the rollup or by suppressing the guard for TV-only usage.
+  - [ ] A test proves a genuinely-unused service (no film AND no TV activity) is still
+        flagged dead weight — the existing correct case is not broken.
+  - [ ] `serviceValue.ts`'s doc comment stays accurate to whichever fix is chosen.
+
+- [ ] **BIN-514** [Tier B] `build-review` — Surface three already-computed, already-tested
+      advisor stats that render nowhere: `longestPauseDays`, `mostUsedProvider`,
+      `freeSharerCount`. Zero new logic/queries — render-only + one field pass-through.
+      Files: `src/components/watchlist/RotationCalendar.tsx`, `src/app/savings/page.tsx`,
+      `src/lib/advisor/householdAggregate.ts` (+ HouseholdPanel component + its row/interface
+      type). Stakeholders: single · #28 Recommendations/Scoring-Integrity. requiresPlanMode: no.
+      **Sign-off reason:** ticket self-flags "needs sign-off" — the exact copy/placement of
+      three new UI lines is Malin's call, not an engineering one. Parks In Review.
+  - [ ] `longestPauseDays` renders in `RotationCalendar.tsx`'s sparat-i-år card.
+  - [ ] `mostUsedProvider` renders on `src/app/savings/page.tsx`.
+  - [ ] `freeSharerCount` is copied into the returned household row/interface and rendered
+        in `HouseholdPanel`.
+  - [ ] No new Firestore reads/writes were added — diff is render + one struct field only.
+
+## Batch: frontend (design-system violations)
+
+- [ ] **BIN-512** [Tier A] `build` — Two title pages bypass the canonical `NotFound`
+      component with a raw div; `QuickAddButton`'s dropdown uses the disallowed `shadow-lg`
+      instead of `shadow-pop`. Files: `src/components/pages/MoviePageClient.tsx`,
+      `src/components/pages/TVShowPageClient.tsx`, `src/components/title/QuickAddButton.tsx`.
+      Stakeholders: skip (trivial). requiresPlanMode: no.
+  - [ ] `MoviePageClient.tsx`'s not-found return uses `<NotFound .../>`, not the raw div.
+  - [ ] `TVShowPageClient.tsx`'s not-found return uses `<NotFound .../>`, not the raw div.
+  - [ ] `QuickAddButton.tsx`'s dropdown uses `shadow-pop` (or `shadow-lift`), not `shadow-lg`.
+  - [ ] No other `shadow-lg` / raw not-found divs were introduced elsewhere in the diff.
+
+## Batch: data-functions
+
+- [ ] **BIN-515** [Tier C — functions/** trigger, expanded plan required] `build` — Paginate
+      `availableNotify` + `priceDropNotify`'s unbounded `collectionGroup('watchlist')` scans
+      (BIN-294 fixed the sibling functions, missed these two). Files:
+      `functions/src/availableNotify/index.ts`, `functions/src/priceDropNotify/index.ts`.
+      Stakeholders: single · #13 Data/Integrations Engineer. requiresPlanMode: **yes**
+      (functions/** tierCTrigger).
+  - [ ] Both functions' `collectionGroup('watchlist')` queries use
+        `orderBy(...).limit(PAGE_SIZE)` + `startAfter(cursor)`, looping until
+        `snap.size < PAGE_SIZE` — mirroring the established `streamingOffers` pattern.
+  - [ ] The existing `.where('status','in',…)` filter is unchanged.
+  - [ ] A new test proves multi-page results are all collected (no behavior change to who
+        gets notified — only bounded reads per query).
+
+- [ ] **BIN-520** [Tier C — functions/** trigger, expanded plan required] `build` — BIN-507's
+      two orchestration acceptance criteria (error-audit-on-throw, dry-run-resume) are only
+      proven at the pure-helper layer, not against the real `tmdbTosSweep/index.ts` wiring.
+      Do option (a) from the ticket: add the integration-level tests. Files:
+      `functions/src/tmdbTosSweep/index.ts` (+ new test). Stakeholders: skip (trivial by
+      router, but functions/** still forces the plan gate). requiresPlanMode: **yes**.
+  - [ ] A test forces `q.get()`/`batch.commit()` to throw mid-run and asserts `stateRef`
+        still receives a `lastRun` write (proves the real try/catch wiring, not just
+        `buildLastRunAudit`'s output shape).
+  - [ ] A test drives two dry-run invocations and asserts the second resumes past where the
+        first left off (`dryRunCursor` persisted + read back).
+  - [ ] No change to `mutateEnabled` — the sweep stays in count-only mode.
+
+## Needs you (mandate gate — not selected, see Linear comments)
+
+- **BIN-521** — Bundle-rådgivare nudge. Ticket self-declares "ren idé, kräver egen
+  brainstorm/design innan bygge." Recommend: run its own `/stakeholder-review`
+  (Monetization + Data/Integrations) before any code.
+- **BIN-509** — Tillsammans session rules fix (real bug, Tier top/full-panel). Held for
+  timing: `firestore.rules` already has BIN-505's uncommitted diff on disk. Build next,
+  right after BIN-505 ships, with its own `/stakeholder-review`.
+- **BIN-510** — Unbounded groups fan-out (real perf/cost issue, Tier top/full-panel). Held
+  for timing: touches `WatchlistContext.tsx`, which BIN-505 has uncommitted changes in.
+  Build next, right after BIN-505 ships, with its own `/stakeholder-review`.
+
+## Deferred, no new judgment needed (already-decided in memory, left in Backlog)
+
+BIN-517/BIN-516 (AuthContext.tsx bugs — file conflict with BIN-505, pick up next sprint),
+BIN-402/454/468 (TMDB ToS sweep — Stage 2 shipped count-only, mutateEnabled deliberately
+deferred to a real-traffic gate ~Aug), BIN-170 (Binge Wrapped — booked Nov), BIN-189
+(Seasonal challenges — panel-approved for Aug/Sept build, not now), BIN-419 (SEO
+re-measurement, not due until 2026-08-28).
+
+## Obsolete (closed this sprint)
+
+- **BIN-173** — Affiliate-tag rent/buy deeplinks. Already shipped 2026-07-12 (`fabf1b0`):
+  `affiliateWrap` exists in `providers.ts`, wired into all 3 render sites, has its own test
+  file. Closed Done with a comment; remaining step (Adtraction account signup) is Malin's
+  ops, not tracked here.
+
+## Post-sprint steps
+
+1. `cfg.verify.analyzeCommand` (`npm run typecheck`) across all touched files.
+2. File Linear follow-ups for anything deferred mid-implementation.
+3. Commit through the review gates (code/security/test markers as triggered), conventional
+   commit referencing all ticket ids.
+4. Push (deploys on push) → poll `deploy.yml` → purge Cloudflare.
+5. Transition: Tier A build + all-pass → Done. BIN-514 (build-review) → In Review regardless
+   of pass/fail, with a note on what to look at.
+
+## Deviation log
+
+(none yet — filled in during execution)
+
+---
+
+# Archive — BIN-505 full plan (still in progress, not archived-as-done; kept here for
+# continuity so it isn't lost if this file is next overwritten)
+
+# BIN-505 — public-profile + watchlist-notes PII leak (APPROVED, in progress)
+
+Full design + panel record: `tasks/bin-505-plan.md`. Router tier `top`; full panel
+(Security #4, Legal/GDPR #5, DPO #6, DBA #27) convened + conditions folded. Malin
+decisions 2026-07-14: **one full push** + **hide `myProviders` from everyone**.
+
+## Approach (two tracks)
+- **Track A — profile:** lock `users/{uid}` read to owner-only; serve public/friend
+  viewers a positive-whitelist projection `publicProfiles/{uid}` (display fields only).
+  Visibility gated LIVE via privileged `get(users/{uid})` in the projection read rule →
+  no stale-public window. Owner best-effort sync via `updateUserField` funnel + load-time
+  backfill. All ~12 foreign `users/{uid}` reads migrated to the projection helper.
+- **Track B — notes:** move free-text `notes` off the public/friends-readable watchlist
+  doc into owner-only `users/{uid}/watchlistNotes/{tmdbId}` (BIN-164 mirror). Atomic
+  write (subcollection set + inline `deleteField`); rules block re-introducing a note;
+  bounded eager migration on load.
+
+## Progress
+- [x] firestore.rules: owner-lock users read; `publicProfiles` match (live-gated read +
+      value-bound write); `watchlistNotes` match; watchlist create/update notes-null guard.
+- [x] `src/lib/firebase/publicProfile.ts` — projection read/write/backfill helper.
+- [x] AuthContext owner sync + backfill effect.
+- [x] Migrated 12 foreign reads: usePublicProfile, UserProfilePageClient, userSearch,
+      username.ts (lookupUserByHandle + ResolvedUser), friends.ts listFriends, feed,
+      useFollowList, TopbarActions, FriendsPageClient, ListPageClient, grupper,
+      useFriendsWhoSaw.
+- [x] WatchlistContext notes track (listener + join + atomic updateNotes + eager migration
+      + removeItem cascade).
+- [~] GDPR: userData.ts wiring (watchlistNotes subcollection + publicProfiles top-level) —
+      IN PROGRESS; then dataExport export + accountDeletion erasure + dedicated tests.
+- [ ] Eager admin backfill of `publicProfiles` for existing users (avoid blank profiles).
+- [ ] Rules tests (firestore-rules.test.ts) — stranger/friend deny + projection allow.
+- [ ] Docs: data-retention-policy, data-export-format, dated breach-assessment record.
+- [ ] Gates (code/security/test review + /code-review + typecheck + tests + rules tests).
+- [ ] Deploy: rules first (manual) → backfill → hosting workflow_dispatch → verify → purge.
+
+## Acceptance criteria (panel conditions) — see tasks/bin-505-plan.md "CONDITIONS folded"
+Unauthenticated read of users/{uid} DENIED; projection has no email/costs/hemkommun/
+myProviders; watchlist read exposes no notes; owner still sees own data; export+erasure
+cover publicProfiles + watchlistNotes (dedicated tests); breach record written.

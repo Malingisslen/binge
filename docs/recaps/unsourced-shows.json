@@ -10,5 +10,23 @@
     "title": "Sweet Magnolias (S1 E2-9, S2 E3-19, S3 E2-10, all S4+S5 - Wikipedia has no per-episode plot summaries, only titles/credits; Fandom 402-blocked)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-13T18:53:37.778Z"
+  },
+  {
+    "tmdbId": 128904,
+    "title": "Dark Winds S2 E1-6, S3 E1-8, S4 E1-8 (all 22) - Wikipedia's Dark Winds article has titles/credits/air-dates only for these seasons, ShortSummary field empty for every episode 7-28 in raw wikitext; Fandom dark-winds.fandom.com 402-blocked (license unverifiable). Only S1 (E1-6) has usable per-episode synopsis text.",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-15T20:20:09.570Z"
+  },
+  {
+    "tmdbId": 127235,
+    "title": "Invasion (S1 E1-10, S2 E1-10, S3 E1-10 - all 30 episodes) - English Wikipedia's Invasion (2021 TV series) article has a full episode table (titles/directors/writers/air-dates) but every ShortSummary field is the empty MOS:TVPLOT placeholder comment across all 3 seasons; no separate List-of-episodes article exists. Swedish Wikipedia has only series-level premise, no per-episode text. Fandom invasion.fandom.com 402-blocked (license unverifiable).",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-16T06:20:22.571Z"
+  },
+  {
+    "tmdbId": 1409,
+    "title": "Bainne (S3E11)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-16T07:06:35.302Z"
   }
 ]
