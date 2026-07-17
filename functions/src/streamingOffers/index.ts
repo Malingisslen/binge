@@ -5,20 +5,35 @@ import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth } from './logic';
 import { fetchOffers, RATE_LIMITED } from './motn';
-import { reserveSlot } from './budget';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
+import { motnBillingCycleId } from '../util/dayId';
+import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
 import type { IntentItem, ExistingOffer, Offer } from './types';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
 const ADMIN_UID = defineSecret('ADMIN_UID');
 
-// BIN-320: MOTN free tier is 100 calls/day. DAILY_BUDGET caps a single run's
-// batch; HARD_DAILY_CAP is the absolute ceiling across runs/retries within one
-// UTC day (enforced by the persisted motnBudget/{utcDay} counter). 10-call
-// buffer under 100 absorbs the UTC-midnight straddle + the crash-retry path
-// (failed calls still burn vendor quota, so they count against the cap too).
-const DAILY_BUDGET = 85;
-const HARD_DAILY_CAP = 90;
+// BIN-541 (2026-07-17): MOTN's real Basic plan is 500 requests/MONTH, hard limit
+// — BIN-320's "100/day" was never verified and was wrong on both period and
+// size. STREAMING_HARD_CYCLE_CAP is this job's own slice of a conservative
+// ~450-of-500 combined safe pool shared with leavingRollup (its other consumer
+// of the same vendor account, functions/src/leavingRollup — sees its own
+// LEAVING_HARD_CYCLE_CAP=150 there); 300 here leaves headroom for library
+// growth while keeping the combined total well under the vendor's real cap.
+//
+// PER_RUN_SELECT bounds how many titles a single run attempts. Code review
+// (2026-07-17): this MUST be sized so the cycle cap survives the WHOLE cycle,
+// not just part of it — the first version set it to 20 "for catch-up headroom"
+// without checking that 20/run × ~15 runs already exhausts 300, going dark for
+// the back half of every cycle. A billing cycle anchored on a given day can run
+// up to 31 days (e.g. Dec 21 → Jan 21), so PER_RUN_SELECT × 31 must stay ≤
+// STREAMING_HARD_CYCLE_CAP: 9 × 31 = 279 ≤ 300, with a bit of slack left over.
+// This same value also feeds computeHealth() below as the real sustainable
+// per-day throughput (it used to receive this same constant back when the
+// vendor cap really was daily and the two concepts were still the same
+// number — that coupling is intentional, not a leftover to "fix").
+const STREAMING_HARD_CYCLE_CAP = 300;
+const PER_RUN_SELECT = 9;
 const PAGE_SIZE = 2000;
 
 /** Scan all watchlist docs, narrowed, and keep only intent titles, deduped. */
@@ -67,19 +82,26 @@ async function readExisting(): Promise<ExistingOffer[]> {
   });
 }
 
-async function notifyAdmin(status: 'warn' | 'critical', intervalDays: number, users: number): Promise<void> {
-  const adminUid = process.env.ADMIN_UID;
-  if (!adminUid) return;
-  const db = getFirestore();
-  await db.collection('users').doc(adminUid).collection('notifications').add({
-    kind: 'system',
-    title: status === 'critical' ? 'Streaming-data: gratistaket nått' : 'Streaming-data närmar sig gratistaket',
-    body: `Uppdateringstakt ~${intervalDays} dagar (≈${users} användare). Överväg MOTN Pro ($39/mån) för veckovis uppdatering.`,
-    actionUrl: '/insikter',
-    read: false,
-    createdAt: FieldValue.serverTimestamp(),
-  });
+async function notifyAdmin(status: 'warn' | 'critical', intervalDays: number, users: number): Promise<boolean> {
+  return sendAdminSystemNotification(
+    status === 'critical' ? 'Streaming-data: gratistaket nått' : 'Streaming-data närmar sig gratistaket',
+    `Uppdateringstakt ~${intervalDays} dagar (≈${users} användare). Överväg MOTN Pro ($39/mån) för veckovis uppdatering.`,
+  );
   // FCM push reuses the existing sendPushToUser helper if desired (see episodeNotify).
+}
+
+/**
+ * BIN-541 security review: the "already exhausted" early-return used to skip
+ * any admin signal entirely — harmless when the cap was daily (next run just
+ * retried ~24h later), but now that the cap is monthly, that silent window
+ * could last up to ~a month. Fired via the shared notifyOnceForCycle helper
+ * (functions/src/util/notifyOnce.ts) so it happens exactly once per cycle.
+ */
+async function notifyAdminStreamingStale(): Promise<boolean> {
+  return sendAdminSystemNotification(
+    'Streaming-data: MOTN-kvot slut för perioden',
+    'streamingOffersRefresh kunde inte hämta ny data — kvoten för denna faktureringsperiod är slut. Titlarnas tillgänglighet visar tills vidare senaste kända data.',
+  );
 }
 
 /** Cloud Scheduler is at-least-once; skip if we already ran within the last 20 hours. */
@@ -99,48 +121,50 @@ export const streamingOffersRefresh = onSchedule(
       return;
     }
 
-    // BIN-320: daily MOTN-quota counter keyed by UTC day. MOTN's 100/day resets
-    // on RapidAPI's clock = UTC, so this MUST be a UTC day-id — deliberately
-    // NOT the Stockholm day-id askbinge uses (that's a product-facing per-day
-    // budget; this mirrors the vendor's UTC reset window). Don't "harmonize".
-    const motnDay = new Date(nowMs).toISOString().slice(0, 10);
-    const budgetRef = db.collection('motnBudget').doc(motnDay);
-    const usedToday = ((await budgetRef.get()).get('count') as number | undefined) ?? 0;
-    if (usedToday >= HARD_DAILY_CAP) {
-      logger.warn('streamingOffersRefresh: MOTN daily cap already reached — skipping run', { motnDay, usedToday });
+    // BIN-541: MOTN-quota counter keyed by the vendor's billing cycle (monthly,
+    // anchored to the subscription's start date — NOT a UTC calendar month, and
+    // NOT the Stockholm day-id askbinge uses). See motnBillingCycleId's doc
+    // comment for why the anchor is a working assumption, not a confirmed fact.
+    const motnCycle = motnBillingCycleId(new Date(nowMs));
+    const budgetRef = db.collection('motnBudget').doc(motnCycle);
+    const budgetSnap = await budgetRef.get();
+    const usedThisCycle = (budgetSnap.get('count') as number | undefined) ?? 0;
+    if (usedThisCycle >= STREAMING_HARD_CYCLE_CAP) {
+      logger.warn('streamingOffersRefresh: MOTN cycle cap already reached — skipping run', { motnCycle, usedThisCycle });
+      await notifyOnceForCycle(budgetRef, notifyAdminStreamingStale);
       return;
     }
 
     const workSet = await readWorkSet();
     const existing = await readExisting();
-    const batch = selectRefreshBatch(workSet, existing, nowMs, DAILY_BUDGET);
+    const batch = selectRefreshBatch(workSet, existing, nowMs, PER_RUN_SELECT);
 
     const mediaById = new Map(workSet.map((w) => [w.tmdbId, w.mediaType]));
     let written = 0;
+    let sawRateLimited = false;
+    let sawClean = false; // at least one real (non-429, non-null) vendor response this run
     for (const tmdbId of batch) {
-      // Reserve a MOTN slot for the UTC day BEFORE spending the call (a crash +
-      // Scheduler retry can't overshoot 100). Never refunded on failure — the
-      // vendor counts the request, not the success.
-      const granted = await db.runTransaction(async (tx) => {
-        const used = ((await tx.get(budgetRef)).get('count') as number | undefined) ?? 0;
-        const d = reserveSlot(used, HARD_DAILY_CAP);
-        if (d.granted) tx.set(budgetRef, { count: d.next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        return d.granted;
-      });
+      // Reserve a MOTN slot for this billing cycle BEFORE spending the call (a
+      // crash + Scheduler retry can't overshoot the cap). Never refunded on
+      // failure — the vendor counts the request, not the success.
+      const granted = await reserveMotnSlot(budgetRef, STREAMING_HARD_CYCLE_CAP);
       if (!granted) {
-        logger.warn('streamingOffersRefresh: MOTN daily cap reached mid-run — stopping', { motnDay });
+        logger.warn('streamingOffersRefresh: MOTN cycle cap reached mid-run — stopping', { motnCycle });
         break;
       }
       const mediaType = mediaById.get(tmdbId)!;
       const result = await fetchOffers(tmdbId, mediaType);
       if (result === RATE_LIMITED) {
-        // 429: quota/rate gone for the day. Burn the bucket to the cap so a
-        // Scheduler retry won't resume hammering into the rate limit.
-        await budgetRef.set({ count: HARD_DAILY_CAP, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        logger.warn('streamingOffersRefresh: MOTN 429 — bucket burned, stopping run', { motnDay });
+        // 429: could be the real monthly quota gone, or a transient trip of the
+        // vendor's separate hourly rate limit. Don't burn the bucket here —
+        // reserveThrottleSignal below only confirms exhaustion (and burns to
+        // the cap) once a SECOND run in a row also sees a 429.
+        sawRateLimited = true;
+        logger.warn('streamingOffersRefresh: MOTN 429 — stopping this run (confirms after a repeat)', { motnCycle });
         break;
       }
       if (result === null) continue; // per-title failure -> retry next run
+      sawClean = true;
       const offers = result;
       await db.collection('streamingOffers').doc(String(tmdbId)).set({
         tmdbId, mediaType, offers, checkedAt: nowMs, source: 'motn',
@@ -159,7 +183,15 @@ export const streamingOffersRefresh = onSchedule(
       }
     }
 
-    const health = computeHealth(workSet.length, DAILY_BUDGET, new Date(nowMs).toISOString());
+    // BIN-541: persist the 429 streak; only burn the bucket to the cap once
+    // confirmed across two runs (see reserveThrottleSignal's doc comment).
+    // Code review: an empty batch or all-per-title-failures run (sawClean
+    // stays false, sawRateLimited stays false) proves nothing about the
+    // vendor's quota and must not reset an in-progress confirmation streak.
+    const observation = sawRateLimited ? 'rate_limited' : sawClean ? 'clean' : 'no_signal';
+    await applyThrottleObservation(budgetRef, observation, STREAMING_HARD_CYCLE_CAP, notifyAdminStreamingStale, { motnCycle });
+
+    const health = computeHealth(workSet.length, PER_RUN_SELECT, new Date(nowMs).toISOString());
     const prev = (await db.collection('streamingHealth').doc('current').get()).data();
     await db.collection('streamingHealth').doc('current').set({ ...health, lastRunAt: nowMs });
     if ((health.status === 'warn' || health.status === 'critical') && prev?.status !== health.status) {

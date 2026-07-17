@@ -2,8 +2,18 @@
 import type { IntentItem, ExistingOffer, HealthDoc, HealthStatus } from './types';
 
 const NEAR_EXPIRY_DAYS = 5;
-const WARN_DAYS = 14;
-const CRITICAL_DAYS = 21;
+// BIN-541 code review (2026-07-17): these used to be calibrated against the
+// ~85-95/day budget from when the vendor cap was believed to reset daily.
+// PER_RUN_SELECT is now 9 (paced to survive a whole ~31-day billing cycle —
+// see streamingOffers/index.ts), so the "how many days to fully refresh the
+// library" metric this feeds needs its own thresholds tied to the NEW model:
+// warn once a full pass can't complete within one billing cycle (worth
+// watching), critical once it can't complete within two (seriously stale,
+// time to consider MOTN Pro). Not re-tuning these after the budget cut ~89%
+// would trip 'critical' near-permanently at realistic future library sizes
+// even though the system is behaving exactly as designed.
+const WARN_DAYS = 31;
+const CRITICAL_DAYS = 62;
 const DAY_MS = 86_400_000;
 
 /** A title is "intent" iff: film in vill_se OR tv in mina, AND currently on a provider. */

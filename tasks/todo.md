@@ -1,3 +1,125 @@
+# PLAN — BIN-541: MOTN vendor quota is monthly (500/mo hard limit), not daily (100/day) — 2026-07-17
+
+**Class:** `functions/**` (sensitive domain, router tier `medium`, owning role #13
+Data/Integrations Engineer). Blind critique from #13 obtained 2026-07-17 (endorse-with-
+changes, 3 blocking concerns folded in below). Awaiting Malin's go-ahead + one missing fact
+(exact vendor reset-cycle date) before any Edit/Write.
+
+## Trigger
+RapidAPI "quota 85% used" email (2026-07-16) turned out to be real: Malin's dashboard check
+(2026-07-17) shows the actual MOTN/RapidAPI Basic plan is **$0.00/mo, 500 API requests/MONTH,
+Hard Limit** (calls rejected once exhausted — no overage billing risk, but the vendor
+integration goes dark for the rest of the billing period). Code assumed 100/day resetting
+UTC daily (BIN-320, docs/org/adr/0006). That assumption was never verified against the real
+plan terms and is wrong on both axes: wrong period (monthly, not daily) and wrong size
+relationship (an 85-90/day allowance against a 500/month pool can exhaust the month in ~6
+days if ever fully used).
+
+## Verified facts
+- `functions/src/streamingOffers/index.ts` (BIN-320): reserves slots against
+  `motnBudget/{utcDay}`, `HARD_DAILY_CAP=90`, `DAILY_BUDGET=85`. Today's actual usage was
+  only ~16 calls (`streamingHealth/current.workSetSize: 16`) — this job alone isn't the
+  problem at current library size.
+- `functions/src/leavingRollup/index.ts` + `motnChanges.ts` (BIN-178): calls MOTN's
+  `/changes` endpoint daily, paginated up to `MAX_PAGES=20` — **zero quota-safety counter**.
+  Up to 20 calls/day, completely unmetered — the likelier actual driver of the 85%-used
+  alert.
+- Vendor "Rate Limit: 1000 requests/hour" is a non-issue at these volumes — not worth gating.
+
+## Fix (role #13 critique folded in)
+1. **Do not port the existing 429→"burn to cap" behavior verbatim to a monthly counter.**
+   Today a 429 zeroes the *daily* remainder (worst case: one bad day lost). At monthly
+   granularity the same logic would zero the *whole month's* remaining budget on a single
+   transient hourly-rate-limit 429, which is a different failure and much worse. Must
+   distinguish "hourly throttle, retry next run" from "monthly quota actually exhausted"
+   (e.g. inspect a `Retry-After`/reset-window header if RapidAPI sends one, or treat repeat
+   429s across N consecutive runs as real exhaustion, not the first one).
+2. **Fold `leavingRollup` into the SAME shared reservation counter for real** — add an actual
+   `reserveSlot`-style check inside `motnChanges.ts`'s pagination loop (per page, before each
+   fetch), not just after-the-fact attribution. Both jobs must draw from one Firestore counter
+   that reflects true combined vendor usage.
+3. **Give each job an explicit sub-allocation, not a free-for-all draw** — e.g. leavingRollup
+   gets a fixed small daily/monthly ceiling (it doesn't need much — it's one rollup doc), and
+   streamingOffersRefresh gets the remainder. Prevents either job from silently starving the
+   other.
+4. **Confirm the real reset-cycle boundary before hardcoding a `YYYY-MM` UTC key** — the
+   dashboard screenshot shows "500/Month" but not the reset day. If it's a rolling 30-day
+   window anchored to signup date rather than a UTC calendar month, a naive calendar-month
+   key can either falsely show budget available right after the real reset, or double-spend
+   across the mismatch window. **Needs Malin to check** the RapidAPI/Nokia account billing
+   page for the actual renewal date (usually shown near the plan/subscription details).
+5. **Add a staleness/admin-alert signal for leavingRollup**, mirroring what
+   `streamingOffers` already has (`notifyAdmin`/`streamingHealth`) — today leavingRollup has
+   no equivalent, so if its slice of the budget runs out, "vad försvinner" goes silently
+   stale with no signal.
+6. **Rename `DAILY_BUDGET`/`HARD_DAILY_CAP`** to something that names the real unit (e.g.
+   `MONTHLY_BUDGET`/`HARD_MONTHLY_CAP`) — role #13: the stale name is exactly how this got
+   miscalibrated once already.
+7. Leave a new dated decision note (append-only, per repo convention) superseding BIN-320's
+   "100/day" assumption — NOT a silent rewrite of ADR-0006 (which is about timezone choice,
+   still probably fine) or the BIN-320 comments (historical record of what was believed at
+   the time).
+
+## Explicitly not doing
+- Not adding any paid tier / clicking "Upgrade Plan" — that's Malin's call alone, not bundled
+  into this fix.
+- Not building an hourly rate-limit gate (1000/hr is not a real constraint at binge's volume).
+
+## Open question for Malin — RESOLVED 2026-07-17
+Subscription was created **2026-06-21**; Malin isn't 100% certain but has no evidence of a
+calendar-month reset. **Working assumption: rolling window anchored to the 21st of each
+month** (not UTC calendar month). Counter key = the current billing-cycle start date (the
+most recent 21st-of-month on/before today), not `YYYY-MM`. Kept a generous buffer (~10%
+under 500) regardless, since the anchor-date belief isn't independently confirmed — if a
+future run gets rejected well before the next 21st, that's a signal this assumption is wrong
+and the anchor needs correcting (log the vendor's actual rejection date if it happens).
+
+## Acceptance criteria (draft — will firm up once reset-date question resolves)
+- [ ] One shared Firestore counter reflects combined MOTN usage from BOTH
+      `streamingOffersRefresh` and `leavingRollup`, keyed to the vendor's real reset cycle.
+- [ ] `leavingRollup`'s `/changes` pagination reserves a slot per page before each call (not
+      after-the-fact accounting).
+- [ ] A stray 429 no longer zeroes the full month's remaining budget — distinguishes
+      transient/hourly throttling from real monthly exhaustion.
+- [ ] Each job has an explicit sub-allocation; neither can silently starve the other.
+- [ ] leavingRollup gets an admin-visible staleness signal when its allocation is exhausted,
+      matching streamingOffers' existing pattern.
+- [ ] Constants renamed to name the real unit (monthly, not daily).
+- [ ] New/updated tests cover: shared-counter reservation across both jobs, 429 handling that
+      doesn't over-burn, sub-allocation isolation.
+- [ ] Dated decision note added (not a silent rewrite of BIN-320/ADR-0006).
+- [ ] `functions/**` → binge-security-reviewer + binge-code-reviewer gates; Tier-D manual
+      `firebase deploy --only functions` (deploy.yml doesn't deploy functions).
+
+## Open questions
+No architecture-changing unknowns remain — the one substantive open question (billing-cycle
+reset date) was resolved via AskUserQuestion earlier (see "Open question for Malin —
+RESOLVED" above: rolling window anchored to the 21st, working assumption, safety buffer
+applied). Everything since is fix-forward work under this SAME approved plan, driven by the
+`functions/**` review gates this plan itself required (binge-security-reviewer,
+binge-test-reviewer, `/code-review xhigh`) — three review rounds each found real defects,
+fixed in turn, no new scope or design decision introduced:
+- Round 1 (8 findings): PER_RUN_SELECT/cycle-cap pacing mismatch, 429-vs-budget write gating
+  on `streamingLeaving/current`, `computeHealth` conflation, `staleNotified` swallow-on-no-op,
+  throttle-streak-reset-by-no-signal, `dayId.ts` short-month anchor bug, duplicated
+  `markStaleOnce`.
+- Round 2 (9 findings): leavingRollup's incomplete-run guard firing the shared alert on an
+  UNCONFIRMED single 429 (bypassing the 2-run confirmation the round-1 fix built), a
+  mid-pagination non-429 failure not caught by the completeness guard, missing Scheduler
+  idempotency guard, `notify()`-throws-skips-budget-write coupling, redundant double-notify,
+  missing tests for the extracted `notifyOnceForCycle`, `computeHealth` thresholds
+  uncalibrated for the new `PER_RUN_SELECT`, triplicated notification boilerplate.
+- Round 3 (7 distinct findings, session hit its usage limit mid-review — sweep/synthesize
+  steps didn't complete, fixing the verified findings by hand): `complete` flag incorrectly
+  true on `hasMore:true` + missing `nextCursor` (OR-logic bug), `lastRunAt` idempotency marker
+  written BEFORE risky pagination instead of after (unlike streamingOffersRefresh's actual
+  pattern), `notifyOnceForCycle`'s check-then-act race under Cloud Scheduler's at-least-once
+  delivery, duplicated throttle-confirmation block between the two jobs. One round-3 finding
+  (streamingOffers no longer burns the bucket on a single 429) is NOT a regression — it's
+  restating round 1's deliberate, security-reviewed fix; not changed.
+
+---
+
 # PLAN — BIN-509: Tillsammans session write rules (caller binding) — 2026-07-16
 
 **Class:** firestore.rules (sensitive domain, router tier `top`). Full panel convened

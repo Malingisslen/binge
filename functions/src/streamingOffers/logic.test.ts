@@ -100,25 +100,30 @@ describe('selectRefreshBatch', () => {
   });
 });
 
+// BIN-541 code review (2026-07-17): thresholds recalibrated 14/21 → 31/62
+// (one/two billing cycles) after PER_RUN_SELECT dropped from ~95 to 9 — see
+// logic.ts's WARN_DAYS/CRITICAL_DAYS comment. `budget` stays an arbitrary
+// generic test value (95) since computeHealth is a pure function independent
+// of the production constant; only the day-boundary math below changed.
 describe('computeHealth', () => {
   it('ok when interval is short', () => {
     const h = computeHealth(700, 95, '2026-06-20T00:00:00Z');
     expect(h.refreshIntervalDays).toBe(8); // ceil(700/95)
     expect(h.status).toBe('ok');
   });
-  it('warns past 14 days', () => {
-    expect(computeHealth(1400, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
+  it('warns past 31 days', () => {
+    expect(computeHealth(3000, 95, '2026-06-20T00:00:00Z').status).toBe('warn'); // ceil(3000/95) = 32
   });
-  it('critical past 21 days', () => {
-    expect(computeHealth(2100, 95, '2026-06-20T00:00:00Z').status).toBe('critical');
+  it('critical past 62 days', () => {
+    expect(computeHealth(6000, 95, '2026-06-20T00:00:00Z').status).toBe('critical'); // ceil(6000/95) = 64
   });
-  it('exactly 14 days is still ok (boundary)', () => {
-    // ceil(1330/95) = 14
-    expect(computeHealth(1330, 95, '2026-06-20T00:00:00Z').status).toBe('ok');
+  it('exactly 31 days is still ok (boundary)', () => {
+    // ceil(2945/95) = 31
+    expect(computeHealth(2945, 95, '2026-06-20T00:00:00Z').status).toBe('ok');
   });
-  it('exactly 21 days is still warn not critical (boundary)', () => {
-    // ceil(1995/95) = 21
-    expect(computeHealth(1995, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
+  it('exactly 62 days is still warn not critical (boundary)', () => {
+    // ceil(5890/95) = 62
+    expect(computeHealth(5890, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
   });
   it('zero budget returns MAX_SAFE_INTEGER interval (not Infinity) and status critical', () => {
     const h = computeHealth(100, 0, '2026-06-20T00:00:00Z');
