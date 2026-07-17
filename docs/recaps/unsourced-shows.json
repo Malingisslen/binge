@@ -28,5 +28,107 @@
     "title": "Bainne (S3E11)",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-16T07:06:35.302Z"
+  },
+  {
+    "tmdbId": 62852,
+    "title": "Billions (season 1, episode 12: The Conversation)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-16T22:09:41.541Z"
+  },
+  {
+    "tmdbId": 125282,
+    "title": "The Cleaning Lady (season 1, episode 5, The Icebox)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-16T22:10:43.707Z"
+  },
+  {
+    "tmdbId": 72071,
+    "title": "The Chi",
+    "reason": "no-wiki: main Wikipedia article has all 88 ShortSummary fields empty across all 8 seasons (verified via raw wikitext), no separate season/episode-list articles exist, and the Chi Fandom wiki 402-blocks fetches (licence unverifiable per pipeline rule)",
+    "checkedAt": "2026-07-16T22:16:11.786Z"
+  },
+  {
+    "tmdbId": 7225,
+    "title": "Merlin (season 2, episode 9 – The Lady of the Lake; episode 13 – The Last Dragonlord) - English Wikipedia's series-2 episode table gives only thin setup sentences for both (no resolution: Freya's fate in E9, the Dragon/Gaius revelation outcome in E13); Fandom merlin.fandom.com 402-blocked (license unverifiable), TV Tropes is CC BY-NC-SA (NonCommercial, incompatible)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-16T22:30:02.481Z"
+  },
+  {
+    "tmdbId": 286709,
+    "title": "The Westies",
+    "reason": "no-wiki: premiered 2026-07-12 (5 days old, only 2/8 S1 episodes aired); en.wikipedia.org main article has premise/cast/episode-table only, no per-episode synopses, no separate List-of-episodes article; only per-episode recap coverage found is on copyrighted entertainment-journalism sites (horrorgeeklife, screenrant, thekoalition, tvbrittanyf, icecreamconvos) and a Fandom wiki that 402-blocks (license unverifiable). Re-check once Wikipedia's episode table gains synopses or a dedicated episode-list article appears.",
+    "checkedAt": "2026-07-16T22:35:14.561Z"
+  },
+  {
+    "tmdbId": 290856,
+    "title": "Marshals",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-16T22:36:51.183Z"
+  },
+  {
+    "tmdbId": 277439,
+    "title": "Cape Fear (season 1, episode 4 - Pierced)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-16T22:37:02.007Z"
+  },
+  {
+    "tmdbId": 97951,
+    "title": "Mayor of Kingstown (no per-episode plot summaries exist on English Wikipedia — main article has only a metadata table (title/director/writer/air date) with no synopsis text; no separate season/episode-list articles exist; the Mayor of Kingstown fandom wiki 402-blocks WebFetch so its CC BY-SA license cannot be verified)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T09:50:37.131Z"
+  },
+  {
+    "tmdbId": 54650,
+    "title": "Power (all 6 seasons/63 episodes — English Wikipedia has only a season-level premise overview + episode title/date table; every per-episode ShortSummary field is an unfilled editor placeholder, not real content; fan wiki licence page 402-blocked)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T09:51:46.745Z"
+  },
+  {
+    "tmdbId": 67384,
+    "title": "Goliath (season 4, all 8 episodes: Hadleyville through It's Time) - English Wikipedia's season 4 episode table has only titles/directors/writers/air-dates, zero plot-summary text for any of the 8 episodes; no separate List-of-episodes or season-4 article exists; goliath.fandom.com 402-blocks WebFetch (license unverifiable).",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T10:47:24.454Z"
+  },
+  {
+    "tmdbId": 1432,
+    "title": "Veronica Mars season 4 (2019 Hulu revival, 8 episodes) - Wikipedia's episode table only has one-sentence loglines per episode, no full episode-by-episode plot prose; the season-level Plot section covers the overall arc (bombing mystery, Penn as copycat bomber, Logan's death) but doesn't map specific developments to specific episodes, so a self-contained per-episode story-so-far recap can't be written without guessing which episode a beat belongs to",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-17T10:56:32.228Z"
+  },
+  {
+    "tmdbId": 227975,
+    "title": "Fatal Seduction (no dedicated English Wikipedia article exists; only passing mentions of the show in unrelated actor-biography articles, no episode or season plot summaries; South African Netflix thriller, 3 seasons, all fully aired)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T11:32:46.961Z"
+  },
+  {
+    "tmdbId": 61378,
+    "title": "Madam Secretary season 6 (all 10 episodes) - no Wikipedia plot summaries exist for this final season (season page + List_of_Madam_Secretary_episodes both confirmed table-only, no prose synopses); only usable enrichment source is the Madam Secretary Fandom wiki, which 402-blocks WebFetch (license unverifiable)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T18:12:42.087Z"
+  },
+  {
+    "tmdbId": 236621,
+    "title": "Kin (Singaporean TV series, Mediacorp, 2018-2022) - 854 episodes over 4 seasons; English Wikipedia article (Kin (Singaporean TV series)) has only a single overall plot summary, no per-season or per-episode breakdown; its 4 references are copyrighted journalism (RICE Media, 8 Days, CNA Lifestyle), not usable sources anyway; no CC BY-SA fan wiki found",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T18:16:47.425Z"
+  },
+  {
+    "tmdbId": 316830,
+    "title": "Seeking Persephone (2026 4-episode Prime Video miniseries) — no Wikipedia article exists for the show or its source novel; TMDB has zero episode overviews; only other write-ups are EverybodyWiki (403-blocked, license unverifiable), Grokipedia (AI-generated, non-CC), IMDb, and Amazon/Goodreads marketing copy, all excluded by the CC BY-SA sourcing rule",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T18:17:35.613Z"
+  },
+  {
+    "tmdbId": 223438,
+    "title": "Alla våra hemligheter (The Couple Next Door): Wikipedia has only a one-paragraph series-level synopsis per season (S1: Evie/Pete/Danny/Becka affair; S2: Charlotte/Jacob/Mia hospital story) - episode tables list only titles/dates/directors/writers, no per-episode plot text for any of the 12 episodes across both fully-aired seasons. No CC BY-SA source found with episode-by-episode coverage; only copyrighted journalism (Collider ending-explained, nerdsthatgeek.com recap) and IMDB have episode-level detail, both excluded by source policy. Fandom wiki pages found (starz-archives, channel-4-schedule-archive) have general info only, no episode recaps to even enrich with.",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-17T18:17:44.868Z"
+  },
+  {
+    "tmdbId": 80054,
+    "title": "Truth Be Told (S1E5 Graveyard Love, S1E6 Not Buried Planted, S3E5 Freedom Is Never Given; It Is Won, S3E6 From My Hand the Poisoned Apple, S3E7 The Luxury in Self-Reproach, S3E9 Only Little Secrets: Wikipedia episode table has zero/blank summary text for these episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T21:40:52.912Z"
   }
 ]
