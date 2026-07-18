@@ -1,5 +1,7 @@
 /**
- * BIN-178 — "vad försvinner" rollup. onSchedule daily (europe-west1). Queries
+ * BIN-178 — "vad försvinner" rollup. onSchedule every 96h (BIN-543, europe-west1
+ * — was daily until a MOTN vendor-quota rework made a slower cadence necessary,
+ * see the LEAVING_HARD_CYCLE_CAP comment below). Queries
  * MOTN's /changes endpoint for what's EXPIRING in SE within ~31 days (the right
  * source — it returns the actual leaving list per service, not gated by which
  * titles we track per-title), collapses it into ONE small public doc
@@ -16,6 +18,7 @@ import { fetchExpiringChanges } from './motnChanges';
 import { buildLeavingRollupFromChanges } from './logic';
 import { stockholmDayId, motnBillingCycleId } from '../util/dayId';
 import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
+import { LEAVING_HARD_CYCLE_CAP, CADENCE_HOURS } from './config';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
 const ADMIN_UID = defineSecret('ADMIN_UID');
@@ -25,31 +28,32 @@ const WINDOW_DAYS = 31; // MOTN caps the changes window at 31 days ahead
 // BIN-541 (2026-07-17): this job shares MOTN's real 500-requests/MONTH vendor
 // account with streamingOffers (see functions/src/streamingOffers/index.ts for
 // the full quota story) but, until now, spent it with NO accounting at all —
-// up to MAX_PAGES (20, see motnChanges.ts) unmetered calls a day.
+// up to MAX_PAGES (see motnChanges.ts) unmetered calls a day.
 // LEAVING_HARD_CYCLE_CAP is this job's own slice of the conservative ~450-of-500
 // combined safe pool (streamingOffers takes the other 300) — its own Firestore
 // counter, separate from streamingOffers', so neither job can starve the other.
 //
-// Known residual (code review, 2026-07-17, filed as a follow-up rather than
-// fixed here — BIN-543): unlike streamingOffers' per-title batch (which can
-// shrink its per-run selection without losing correctness — each title's
-// write is independently complete), this job needs a FULL pagination pass to
-// produce one meaningful snapshot. A hard per-run page cap sized to survive
-// the whole ~31-day cycle (150/31 ≈ 5 pages/run) would make any day with
-// genuinely more than ~5 pages of real expiring content permanently
-// "incomplete" — under the completeness guard below, that would silently
-// freeze the public rollup forever instead of just going stale sometimes,
-// which is worse than the bug it would fix. A correct fix needs a persisted
-// pagination cursor so a run can RESUME across days instead of restarting
-// from page 0 — a real redesign, not a constant tweak. Until then: MAX_PAGES
-// (motnChanges.ts) stays as a safety ceiling only; LEAVING_HARD_CYCLE_CAP is
-// what actually bounds vendor spend (never exceeded, by construction of the
-// reservation gate below), and if genuine daily demand is high enough to
-// exhaust it before the cycle resets, the rollup goes stale for the rest of
-// that cycle rather than overspending.
-const LEAVING_HARD_CYCLE_CAP = 150;
+// BIN-543 (2026-07-18, ADR 0016): the ORIGINAL follow-up plan here was a
+// persisted multi-day pagination cursor so a run could RESUME instead of
+// restarting from page 0 — REJECTED by review. MOTN's /changes window is a
+// MOVING 31-day window, so accumulating pages fetched across different days'
+// `from/to` values produces a plausible-looking but silently WRONG snapshot
+// (some titles expired before publish, others that entered the window on a
+// later day never fetched at all) — worse than the "stale sometimes" status
+// quo this was meant to fix. Built the simpler alternative instead: run LESS
+// OFTEN (CADENCE_HOURS=96 instead of daily, see ./config.ts) so each run's
+// existing single-day full-or-nothing pass (unchanged `complete` semantics,
+// see below) gets more of the cycle budget per attempt without ever needing
+// to remember state across runs. Arithmetic (pinned as a live import in
+// motnChanges.test.ts, not just this comment — test review, 2026-07-18):
+// MAX_PAGES(18) × ceil(31 days × 24h / CADENCE_HOURS) = 18 × 8 = 144 ≤
+// LEAVING_HARD_CYCLE_CAP(150) — survives the full ~31-day cycle even in the
+// worst case (every single run maxes out MAX_PAGES), mirroring streamingOffers'
+// own PER_RUN_SELECT × cycle-length ≤ cap proof. LEAVING_HARD_CYCLE_CAP and
+// CADENCE_HOURS live in ./config.ts (admin-free) specifically so the test can
+// import the REAL values instead of hand-duplicating them.
 
-/** Cloud Scheduler is at-least-once; skip if we already ran within the last 20 hours (mirrors streamingOffersRefresh). */
+/** Cloud Scheduler is at-least-once; skip if we already ran within the last 20 hours (mirrors streamingOffersRefresh — this doesn't need to scale with the 96h cadence, it only guards against a same-trigger-instant retry). */
 const IDEMPOTENCY_WINDOW_MS = 20 * 60 * 60 * 1000;
 
 async function notifyAdminLeavingStale(): Promise<boolean> {
@@ -60,7 +64,9 @@ async function notifyAdminLeavingStale(): Promise<boolean> {
 }
 
 export const leavingRollup = onSchedule(
-  { schedule: 'every 24 hours', region: 'europe-west1', timeoutSeconds: 300, memory: '256MiB', secrets: [MOTN_API_KEY, ADMIN_UID] },
+  // BIN-543: reduced from daily to CADENCE_HOURS (96h / 4 days, see ./config.ts)
+  // — see the cadence/budget arithmetic proof above LEAVING_HARD_CYCLE_CAP.
+  { schedule: `every ${CADENCE_HOURS} hours`, region: 'europe-west1', timeoutSeconds: 300, memory: '256MiB', secrets: [MOTN_API_KEY, ADMIN_UID] },
   async () => {
     const db = getFirestore();
     const nowMs = Date.now();
