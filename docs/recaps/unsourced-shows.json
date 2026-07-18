@@ -772,5 +772,311 @@
     "title": "Inside No. 9 (season 4 episodes 3/5/6; seasons 5, 6, 7, 9 entire; season 8 episodes 1-4 and 6 - 32 of 53 aired episodes have no dedicated Wikipedia article with a Plot section, only a one-two sentence table blurb on the main list page, too thin to paraphrase into a self-contained recap without fabricating detail)",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-18T21:36:24.109Z"
+  },
+  {
+    "tmdbId": 20598,
+    "title": "Vita lögner (såpopera, 7 säsonger / 619 avsnitt, TV3 1997-2001) — inga per-avsnitt-sammanfattningar tillgängliga",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:58:25.007Z"
+  },
+  {
+    "tmdbId": 314138,
+    "title": "Hundarna (season 1, episode 1: \"Nu kör vi!\")",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:58:35.928Z"
+  },
+  {
+    "tmdbId": 64518,
+    "title": "Gåsmamman (all 7 seasons / 56 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:59:12.817Z"
+  },
+  {
+    "tmdbId": 155648,
+    "title": "Lust (season 1, all episodes 1-8)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:59:26.375Z"
+  },
+  {
+    "tmdbId": 70748,
+    "title": "Bonusfamiljen (all 4 seasons, 38 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:59:27.769Z"
+  },
+  {
+    "tmdbId": 261551,
+    "title": "Trolösa (season 1, episodes 1-6: David / Erbjudandet / Susanna / Scandinavian freedom / Markus och Marianne / Isabelle)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:59:30.348Z"
+  },
+  {
+    "tmdbId": 262299,
+    "title": "The Pirate Bay (all 6 episodes, season 1 — SVT 2024 miniseries)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:59:52.315Z"
+  },
+  {
+    "tmdbId": 321808,
+    "title": "Trion (season 1, episodes 1-6): sv.wikipedia has only a series-level overview, no per-episode/avsnitt breakdown; no English Wikipedia article; no novel article either",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:02:38.864Z"
+  },
+  {
+    "tmdbId": 322401,
+    "title": "Tills döden skiljer oss (season 1, episode 1-2: only whole-series synopsis on sv.wikipedia, no per-episode coverage — show premiered 2026-07-17)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:03:02.783Z"
+  },
+  {
+    "tmdbId": 219802,
+    "title": "Strula (SVT teen drama, 9 säsonger / 115 avsnitt) — no per-episode source",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:03:13.602Z"
+  },
+  {
+    "tmdbId": 109311,
+    "title": "Muren",
+    "reason": "not-narrative-quiz-show",
+    "checkedAt": "2026-07-18T22:03:15.789Z"
+  },
+  {
+    "tmdbId": 319456,
+    "title": "Skilsmässobarn (season 1, episodes 1-8: Olyckan/Hemligheten/Kundmiddagen/Äppelmosdagen/När katten är borta/Mycket att fira/Arkitektgalan/Hämnden)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:03:53.341Z"
+  },
+  {
+    "tmdbId": 241585,
+    "title": "Sanningen (samtliga 12 avsnitt, säsong 1-2)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:04:38.839Z"
+  },
+  {
+    "tmdbId": 228034,
+    "title": "Ondskan (season 1, episodes 1-6)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:04:49.435Z"
+  },
+  {
+    "tmdbId": 121072,
+    "title": "Festen (all seasons/episodes — no per-episode plot source available)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:06:40.675Z"
+  },
+  {
+    "tmdbId": 244207,
+    "title": "Helikopterrånet (8-episode Netflix miniseries, 2024) — svenska Wikipedia + engelska Wikipedia (The Helicopter Heist (miniseries)) both confirmed CC BY-SA 4.0 but only carry a series-level plot synopsis (Rami/Michel setup + real 2009 Västberga robbery background); no per-episode plot breakdown exists on either Wikipedia article, and no CC-licensed fan wiki exists for the show, so none of the 8 episode boundaries can be safely paraphrased into self-contained per-episode recaps",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:08:14.851Z"
+  },
+  {
+    "tmdbId": 119565,
+    "title": "Snabba Cash (all 12 episodes, seasons 1-2)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:09:37.150Z"
+  },
+  {
+    "tmdbId": 72453,
+    "title": "Alex (hela serien, säsong 1-2) — inget CC BY-SA-avsnittsmaterial hittat",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:12:34.617Z"
+  },
+  {
+    "tmdbId": 51976,
+    "title": "Maria Wern (seasons 4-8, episodes 1-36: no Wikipedia plot synopsis exists for any 2013-2023 film — only cast/crew metadata, confirmed via film-specific pages, novel pages, and web search)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:14:39.046Z"
+  },
+  {
+    "tmdbId": 92739,
+    "title": "Fartblinda (season 2-3, episodes 9-22: no per-episode plot text on sv/en Wikipedia, only titles/dates)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:15:39.369Z"
+  },
+  {
+    "tmdbId": 77516,
+    "title": "Advokaten (whole show, both seasons — no per-episode or per-season Wikipedia/CC BY-SA coverage exists)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:15:40.672Z"
+  },
+  {
+    "tmdbId": 87833,
+    "title": "Eagles (SVT Play, 2019-2022, 4 seasons/38 episodes)",
+    "reason": "partial-coverage: sv.wikipedia.org and en.wikipedia.org both have only series-level premise + cast + episode titles/air-dates, no per-episode or per-season plot text to paraphrase; icehockey.fandom.com wiki 402-blocked (license unverifiable); no other CC BY-SA source found for any of the 38 aired episodes",
+    "checkedAt": "2026-07-18T22:16:24.685Z"
+  },
+  {
+    "tmdbId": 74731,
+    "title": "Vår tid är nu (säsong 2 avsnitt 1-10, säsong 3 avsnitt 1-8, säsong 4 avsnitt 1-4: inga avsnittssammanfattningar finns på sv/en Wikipedia, ShortSummary-fälten är tomma)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:16:37.577Z"
+  },
+  {
+    "tmdbId": 219721,
+    "title": "Strandhotellet (all seasons/episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:16:54.683Z"
+  },
+  {
+    "tmdbId": 43058,
+    "title": "Äkta människor S1E7 Blind kärlek, S1E8 Raska på, S2E3, S2E7, S2E8 - inga per-avsnittssynopser hittades på sv/en/de/fr Wikipedia (endast säsongsöversikter); Fandom-wikin 402-blockerad",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:17:29.894Z"
+  },
+  {
+    "tmdbId": 301258,
+    "title": "Färjan (season 1, episodes 1-6: sv.wikipedia.org and en.wikipedia.org (Blood Cruise) both give only an overall series plot summary, no per-episode breakdown; no CC BY-SA fan wiki found)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:18:36.700Z"
+  },
+  {
+    "tmdbId": 64023,
+    "title": "Modus (both seasons, all 16 episodes): sv+en Wikipedia have only 1-paragraph season-level plot summaries, no per-episode breakdown; Fandom wiki 402-blocked (licence unverifiable)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:18:46.912Z"
+  },
+  {
+    "tmdbId": 92891,
+    "title": "Kalifat (season 1, episodes 3-8: no per-episode synopsis on Wikipedia, only series-wide plot summary)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:20:22.721Z"
+  },
+  {
+    "tmdbId": 303799,
+    "title": "Vi kommer i fred (säsong 1, avsnitt 1-6 — hela säsongen)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:21:29.334Z"
+  },
+  {
+    "tmdbId": 233351,
+    "title": "Familjen Andersson (hela serien, s1-2, avsnitt 1-20): sv.wikipedia-artikeln har bara rollista/produktionsfakta, ingen avsnitts- eller sasongshandling; fan-wikin (sunebert.fandom.com) 402-blockerar hamtning sa licensen gar inte att verifiera; ingen engelsk Wikipedia-artikel finns",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:21:31.269Z"
+  },
+  {
+    "tmdbId": 274379,
+    "title": "Blindspår (miniseries, 4 avsnitt, säsong 1)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:23:47.254Z"
+  },
+  {
+    "tmdbId": 275388,
+    "title": "Glaskupan (miniseries, 6 episodes — svenska/engelska Wikipedia har bara en 2-3 meningars serie-logline, ingen avsnittsindelad handling)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:24:07.462Z"
+  },
+  {
+    "tmdbId": 281352,
+    "title": "Bara Sex (2 säsonger, 9 avsnitt totalt — inget per-avsnitt källmaterial)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:24:16.288Z"
+  },
+  {
+    "tmdbId": 68681,
+    "title": "Black Widows (hela serien, säsong 1 avsnitt 1-8 och säsong 2 avsnitt 1-8)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:24:20.547Z"
+  },
+  {
+    "tmdbId": 283432,
+    "title": "Tidstjuven (SVT julkalender 2025, 24 avsnitt)",
+    "reason": "no-wiki-per-episode-coverage-only-overall-series-synopsis-on-sv-and-en-wikipedia-no-episode-list-page-fandom-wiki-403-blocked",
+    "checkedAt": "2026-07-18T22:25:16.328Z"
+  },
+  {
+    "tmdbId": 211535,
+    "title": "Vuxna människor (2022 TV series, season 1, all 8 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:27:07.771Z"
+  },
+  {
+    "tmdbId": 9293,
+    "title": "Cleo (hela serien, säsong 1-3, avsnitt 1-9 vardera)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:31:11.345Z"
+  },
+  {
+    "tmdbId": 66100,
+    "title": "Portkod (all 18 episodes across seasons 1-2: Portkod 1321 + Portkod 1525) — svenska Wikipedia has only season-level plot summaries and an episode title list, no per-episode plot content for any of the 18 episodes; no English Wikipedia article exists; no CC BY-SA fan wiki found",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:31:12.180Z"
+  },
+  {
+    "tmdbId": 55270,
+    "title": "Morden i Sandhamn (season 8-11, episodes 32-55: Angelica/Lili/Olivia/Nadia/Esther/Max/Madeleine/Nikki & Evelina/Birgitta/Linnea/Rakel/Amanda)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:31:18.928Z"
+  },
+  {
+    "tmdbId": 55234,
+    "title": "Johan Falk (season 2, episodes 2-6: De 107 patrioterna, Alla råns moder, Organizatsija Karayan, Barninfiltratören, Kodnamn Lisa)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:33:07.605Z"
+  },
+  {
+    "tmdbId": 213344,
+    "title": "Springfloden (both seasons, all 20 episodes: only season-level plot summaries exist on sv.wikipedia.org and en.wikipedia.org's Spring Tide article; no per-episode breakdown, episode titles are all generic 'Avsnitt N'; no verified CC BY-SA source with per-episode detail found)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:33:28.932Z"
+  },
+  {
+    "tmdbId": 224021,
+    "title": "Åremorden (season 1, all 5 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:33:54.382Z"
+  },
+  {
+    "tmdbId": 245441,
+    "title": "Veronika (season 2-3, episodes 9-20): no Wikipedia/wiki episode coverage exists for either season",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:34:03.693Z"
+  },
+  {
+    "tmdbId": 111820,
+    "title": "Lyckoviken (all seasons/episodes — no per-episode or per-season Wikipedia coverage exists)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:35:47.300Z"
+  },
+  {
+    "tmdbId": 57392,
+    "title": "Irene Huss (season 2, episodes 3-6: En man med litet ansikte, Tystnadens cirkel, I skydd av skuggorna, Jagat vittne)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:38:03.384Z"
+  },
+  {
+    "tmdbId": 82855,
+    "title": "Sthlm Rekviem (season 1, all 10 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:38:13.532Z"
+  },
+  {
+    "tmdbId": 252080,
+    "title": "Allt och Eva (season 1, all 6 episodes — sv.wikipedia article is a 186-word premise-only paragraph, no per-episode content; no English Wikipedia article exists)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:39:30.281Z"
+  },
+  {
+    "tmdbId": 65344,
+    "title": "Tjockare Än Vatten (all 3 seasons / 27 episodes: only an overall series plot + one season-3 premise paragraph exist on sv/en Wikipedia, no per-episode or per-season summaries; no CC BY-SA fan wiki found)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:39:33.974Z"
+  },
+  {
+    "tmdbId": 285396,
+    "title": "Halva halva (2024 Viaplay-original, 6 avsnitt, S1 — ingen Wikipedia-artikel finns)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:40:00.914Z"
+  },
+  {
+    "tmdbId": 70337,
+    "title": "Innan vi dör (all 18 episodes, S1-S2)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T22:41:24.625Z"
+  },
+  {
+    "tmdbId": 85197,
+    "title": "Dips (season 2-3, episodes 1-6 each: Svensk Wikipedia has only a series-overview article with no per-episode content; English Wikipedia's Dips article covers only season 1's 6 episodes; no CC BY-SA fan wiki exists for the show)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T22:45:04.810Z"
   }
 ]

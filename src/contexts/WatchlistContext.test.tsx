@@ -593,6 +593,20 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     return setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path.startsWith(pathPrefix));
   }
 
+  // BIN-533: the eager migration's async IIFE (`await fsdb()` then `await
+  // batch.commit()`, both no-internal-await mocks) needs a couple of
+  // microtask ticks to register its setDoc calls — act() only flushes work
+  // that drives a React state update, and this async tail drives none. The
+  // old `vi.waitFor` polled with REAL timers to catch it, which could rarely
+  // miss under CI load (~1/31 runs). Draining a fixed number of microtask
+  // ticks is deterministic — no wall-clock dependency — while still waiting
+  // for the exact same completion signal.
+  async function flushMigration() {
+    await act(async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+  }
+
   it('updateNotes writes the note to the owner-only subcollection and strips the inline note WITHOUT bumping updatedAt', async () => {
     // Legacy title: inline note still on the doc, visibility never stamped →
     // the item-doc write is needed (strip + visibility re-stamp) but must not
@@ -604,9 +618,19 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
         <Harness />
       </WatchlistProvider>,
     );
+    // BIN-533: land the notes subcollection snapshot BEFORE the watchlist
+    // items snapshot. Both used to fire in the same act() in the opposite
+    // order, relying on React auto-batching both setState calls into a
+    // single render — if a rare scheduling hiccup rendered them separately,
+    // the intermediate render (item has an inline note, notesByTmdbId still
+    // empty) would trip the eager migration for real, and its async tail
+    // could land its writes inside a LATER act() and intermittently double
+    // up the updateNotes assertions below. With notes landing first, no
+    // ordering of the two setState calls can ever produce that intermediate
+    // state — deterministic regardless of batching.
     await act(async () => {
-      snapshotCallback!(snap([seedDoc({ tmdbId: 21, notes: 'gammal inline-anteckning' })]));
       notesSnapshotCallback!({ size: 1, docs: [{ id: '21', data: () => ({ note: 'gammal inline-anteckning' }) }] });
+      snapshotCallback!(snap([seedDoc({ tmdbId: 21, notes: 'gammal inline-anteckning' })]));
     });
     expect(setDoc).not.toHaveBeenCalled(); // migration correctly idle
 
@@ -657,7 +681,8 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
   it('eager migration moves inline notes to watchlistNotes and strips them WITHOUT bumping updatedAt', async () => {
     await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat om en vän' })]);
 
-    await vi.waitFor(() => expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1));
+    await flushMigration();
+    expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1);
     expect(callsTo('users/u1/watchlistNotes/50')[0][1]).toEqual({ note: 'privat om en vän' });
 
     const itemCalls = callsTo('users/u1/watchlist/50');
@@ -670,7 +695,8 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
   it('eager migration never writes a previous account\'s notes under the new uid (itemsUidRef cross-account guard)', async () => {
     // Account A (u1) has a legacy inline note; its migration runs.
     const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'A:s privata anteckning' })]);
-    await vi.waitFor(() => expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1));
+    await flushMigration();
+    expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1);
     setDoc.mockClear();
 
     // Same-session switch A→B: uid flips but B's watchlist snapshot has NOT
@@ -695,7 +721,8 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     await act(async () => {
       snapshotCallback!(snap([seedDoc({ tmdbId: 60, notes: 'B:s egen anteckning' })]));
     });
-    await vi.waitFor(() => expect(callsTo('users/u2/watchlistNotes/60')).toHaveLength(1));
+    await flushMigration();
+    expect(callsTo('users/u2/watchlistNotes/60')).toHaveLength(1);
     expect(callsTo('users/u1/')).toHaveLength(0); // and nothing leaks back to A
   });
 });

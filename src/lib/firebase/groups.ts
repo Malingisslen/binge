@@ -16,10 +16,73 @@ import type {
   MediaType,
 } from '@/types';
 
+// BIN-510/536: cap på "mina grupper"-queries (array-contains på memberUids).
+// OBS: firestore.rules:983/1000 begränsar memberUids.size() <= 100 PER GRUPP
+// (max antal MEDLEMMAR i en grupp) — den säger inget om hur många OLIKA
+// grupper en enskild uid kan vara med i. Det finns ingen regel som sätter
+// tak på det. 100 är ett produktval (rimligt antal grupper per användare vid
+// launch-skala), inte en rules-garanti. Delad mellan groups.ts fyra queries
+// och AuthContext.tsx:s updateProviders (BIN-536) — importeras dynamiskt
+// därifrån istället för en egen lokal kopia, så de aldrig kan divergera.
+export const MY_GROUPS_LIMIT = 100;
+
+// BIN-510: kort TTL-cache av det FAKTISKA senaste query-resultatet (grupp-id:n
+// jag är medlem i) — inte en separat "är jag med i någon grupp"-flagga.
+// Skrivs av varje lyckad bounded query eller live-subscription
+// (cacheMyGroups) och rivs (invalidateMyGroupsCache, se nedan) av de tre
+// ställen i filen som lägger till en uid i memberUids: createGroup,
+// joinGroupViaToken, acceptGroupInvite. (2026-07-18 tillägg — utan detta
+// hoppar syncProgressToGroups deterministiskt över en nyss-skapad/joinad
+// grupp i upp till TTL-fönstret om cachen redan var varm, inte bara i en
+// sällsynt race.) Läses via getFreshMyGroups. Om en invalideringsplats
+// missas är värsta fallet fortfarande best-effort-synk (samma resonemang
+// som originaldesignen) — inte en krasch eller felaktig data.
+const MY_GROUPS_TTL_MS = 5 * 60 * 1000;
+const myGroupsCache = new Map<string, { groupIds: string[]; at: number }>();
+
+function cacheMyGroups(uid: string, groupIds: string[]): void {
+  myGroupsCache.set(uid, { groupIds, at: Date.now() });
+}
+
+function getFreshMyGroups(uid: string): string[] | null {
+  const entry = myGroupsCache.get(uid);
+  if (!entry) return null;
+  if (Date.now() - entry.at >= MY_GROUPS_TTL_MS) return null;
+  return entry.groupIds;
+}
+
+// Rivs vid varje medlemskaps-TILLÄGG (create/join/accept — de tre ställen i
+// filen som lägger till en uid i memberUids). Håller INTE reda på den fulla
+// nya grupp-id-listan (skulle kräva att känna till hela den gamla listan
+// eller ett extra read) — river bara cachen så nästa getFreshMyGroups-läsning
+// (t.ex. nästa syncProgressToGroups-anrop) tvingar en färsk bounded query.
+// Medlemskaps-BORTTAG (removeMember/deleteGroup) river inte cachen med
+// avsikt: en stale post där gör högst att syncProgressToGroups försöker
+// skriva progress till en grupp man precis lämnat — det failar tyst
+// (per-grupp try/catch, se syncProgressToGroups) och är ofarligt.
+function invalidateMyGroupsCache(uid: string): void {
+  myGroupsCache.delete(uid);
+}
+
 // Skapar en grupp och returnerar både groupId och plaintext-tokenet. Tokenet
 // hashas (sha256) innan det persisteras — plaintext finns BARA hos klienten
 // och i URL:n som ägaren delar. Caller ansvarar för att cacha plaintext (t.ex.
 // localStorage) ifall ägaren vill se länken igen utan att rotera.
+//
+// BIN-532 (reverterad 2026-07-18): ett försök att skriva grupp-doc:et och
+// ägarens member-doc atomiskt i EN writeBatch verifierades BRYTA all
+// grupp-skapande i produktion. members/{memberUid}-create-regeln
+// (firestore.rules) läser `get(groups/$(groupId)).data.memberUids` — och
+// Firestore Security Rules löser get()/exists() mot databasens tillstånd
+// FÖRE hela batchen/transaktionen, inte mot andra writes köade i SAMMA
+// commit. Grupp-doc:et existerar alltså inte ännu ur regelns perspektiv när
+// member-doc:ets create-regel utvärderas, även om det står tidigare i samma
+// batch → permission-denied för varje ny grupp. Detsamma gäller
+// runTransaction (samma get()-semantik). Tillbaka till två separata
+// awaitade writes: en ägarlös grupp om det andra writet failar är en känd,
+// liten regression jämfört med "riktig" atomicitet — men det är det enda
+// som faktiskt fungerar från en klient. Riktig atomicitet kräver en
+// Cloud Function (admin SDK, förbi klient-regler).
 export async function createGroup(params: {
   ownerUid: string;
   ownerDisplayName: string;
@@ -54,6 +117,8 @@ export async function createGroup(params: {
     notifications: true,
     joinedAt: serverTimestamp(),
   });
+
+  invalidateMyGroupsCache(params.ownerUid);
 
   return { groupId: groupRef.id, inviteToken };
 }
@@ -103,10 +168,16 @@ export async function disableInviteToken(groupId: string): Promise<void> {
 // 1. Skriv joinAttempts/{uid} med plaintext-tokenet. Firestore-regeln hashar
 //    plaintext server-side och jämför mot inviteTokenHash på grupp-doc:et.
 //    Om hash matchar accepteras dokumentet — annars permission-denied.
-// 2. Uppdatera grupp-doc:et: lägg till sig själv i memberUids + skapa
-//    members/{uid}-doc. Grupp-update-regeln verifierar bara att joinAttempts-
-//    doc:et existerar för request.auth.uid; den bevisar att hash-checken
-//    passerade.
+// 2. Uppdatera grupp-doc:et: lägg till sig själv i memberUids, DÄREFTER (som
+//    en egen awaitad write, inte samma batch) skapa members/{uid}-doc.
+//    Grupp-update-regeln verifierar bara att joinAttempts-doc:et existerar
+//    för request.auth.uid; den bevisar att hash-checken passerade.
+//    members/{memberUid}-create-regeln kräver i sin tur att uid:et redan
+//    finns i grupp-doc:ets memberUids — och (samma get()-före-batch-
+//    semantik som BIN-532, se createGroup) ett get() i en Security Rule
+//    ser ALDRIG en sibling-write köad i samma batch/transaktion. Låg dessa
+//    två writes i en batch skulle steg 2 permission-denyas identiskt med
+//    det som brutit createGroup. Två separata awaitade writes löser det.
 //
 // Om steg 1 redan finns från tidigare misslyckad join, ta bort och försök igen
 // (självborttag är tillåtet).
@@ -119,7 +190,7 @@ export async function joinGroupViaToken(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' }> {
-  const { db, doc, getDoc, setDoc, deleteDoc, writeBatch, arrayUnion, serverTimestamp } = await fsdb();
+  const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return { ok: false, reason: 'not_found' };
@@ -146,15 +217,15 @@ export async function joinGroupViaToken(params: {
     return { ok: false, reason: 'invalid_token' };
   }
 
-  // Steg 2 — uppdatera grupp + lägg till member-doc. Rule:n verifierar att
-  // joinAttempts/{auth.uid} existerar (vilket den nu gör efter steg 1).
+  // Steg 2 — uppdatera grupp, DÄREFTER (separat write) lägg till member-doc.
+  // Rule:n verifierar att joinAttempts/{auth.uid} existerar (vilket den nu
+  // gör efter steg 1).
   try {
-    const batch = writeBatch(db);
-    batch.update(ref, {
+    await updateDoc(ref, {
       memberUids: arrayUnion(params.uid),
       updatedAt: serverTimestamp(),
     });
-    batch.set(doc(db, 'groups', params.groupId, 'members', params.uid), {
+    await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
       uid: params.uid,
       displayName: params.displayName,
       username: params.username,
@@ -164,11 +235,12 @@ export async function joinGroupViaToken(params: {
       notifications: true,
       joinedAt: serverTimestamp(),
     });
-    await batch.commit();
   } catch (err) {
     console.error('group update rejected', err);
     return { ok: false, reason: 'invalid_token' };
   }
+
+  invalidateMyGroupsCache(params.uid);
 
   // Best-effort: städa upp joinAttempt-doc:et nu när vi är medlem. Inte
   // säkerhetskritiskt — token är ändå "spent" (om den roteras blir hashen
@@ -201,9 +273,18 @@ export async function inviteMemberByUid(params: {
 }
 
 // Mål-användaren accepterar en inbjudan: lägger till sig själv i memberUids,
-// skriver sin member-doc och raderar inbjudan — allt atomiskt i en batch.
-// Firestore-regeln tillåter self-add eftersom groupInvites/{groupId} existerar
-// (exists() läser pre-commit-state, så raderingen i samma batch är OK).
+// skriver därefter sin member-doc, raderar sist inbjudan — tre separata
+// awaitade writes, INTE en batch. (Reverterad 2026-07-18, samma orsak som
+// createGroup/joinGroupViaToken: members/{memberUid}-create-regeln kräver
+// att uid:et redan finns i grupp-doc:ets memberUids, och ett get() i en
+// Security Rule ser aldrig en sibling-write köad i samma batch/transaktion
+// — bara ett get()/exists() mot state FÖRE hela batchen. Att köra
+// group-update:en som en egen, redan committad write löser det.)
+// groupInvites/{groupId} raderas sist (efter att medlemskapet är på plats)
+// — inte säkerhetskritiskt i vilken ordning det sker (delete-regeln är bara
+// isOwner(uid), oberoende av grupp-state), men görs sist så ett avbrutet
+// flöde (t.ex. nätverksfel efter steg 1) lämnar inbjudan kvar för en ny
+// accept-försök istället för att tyst tappa bort den.
 export async function acceptGroupInvite(params: {
   groupId: string;
   uid: string;
@@ -212,13 +293,12 @@ export async function acceptGroupInvite(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<void> {
-  const { db, doc, writeBatch, arrayUnion, serverTimestamp } = await fsdb();
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'groups', params.groupId), {
+  const { db, doc, setDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } = await fsdb();
+  await updateDoc(doc(db, 'groups', params.groupId), {
     memberUids: arrayUnion(params.uid),
     updatedAt: serverTimestamp(),
   });
-  batch.set(doc(db, 'groups', params.groupId, 'members', params.uid), {
+  await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
     uid: params.uid,
     displayName: params.displayName,
     username: params.username,
@@ -228,8 +308,8 @@ export async function acceptGroupInvite(params: {
     notifications: true,
     joinedAt: serverTimestamp(),
   });
-  batch.delete(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
-  await batch.commit();
+  invalidateMyGroupsCache(params.uid);
+  await deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
 }
 
 // Avböj inbjudan — raderar bara invite-doc:et utan att bli medlem.
@@ -350,6 +430,13 @@ export async function setMemberRating(params: {
   });
 }
 
+// BIN-532: merge-write utan memberRatings-fältet. Ett tidigare icke-merge
+// setDoc skrev alltid memberRatings:{} — så ett race mellan två medlemmar,
+// eller ett remove+re-add, nollställde tyst redan satta betyg. watchlist-
+// DocToObject defaultar redan saknat memberRatings till {} vid läsning
+// (rad ~630), så att utelämna fältet här är korrekt för BÅDE förstagångs-
+// tillägg (fältet finns inte alls — samma effekt som {}) och re-add
+// (merge rör inte ett befintligt memberRatings-fält).
 export async function addToGroupWatchlist(params: {
   groupId: string;
   uid: string;
@@ -368,8 +455,7 @@ export async function addToGroupWatchlist(params: {
     releaseYear: params.releaseYear,
     addedBy: params.uid,
     addedAt: serverTimestamp(),
-    memberRatings: {},
-  });
+  }, { merge: true });
 }
 
 export async function removeFromGroupWatchlist(groupId: string, tmdbId: number): Promise<void> {
@@ -474,7 +560,11 @@ export async function getRecentSessionPicksAcrossGroups(
 }>> {
   const { db, collection, getDocs, query, where, orderBy, limit: queryLimit, Timestamp } = await fsdb();
   const groupsSnap = await getDocs(
-    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+    query(
+      collection(db, 'groups'),
+      where('memberUids', 'array-contains', uid),
+      queryLimit(MY_GROUPS_LIMIT),
+    ),
   );
   if (groupsSnap.empty) return [];
 
@@ -549,6 +639,13 @@ export async function getGroupSessionHistory(groupId: string, limit = 10): Promi
   });
 }
 
+// BIN-510: körs på VARJE avsnitts-toggle (fire-and-forget från
+// WatchlistContext.updateProgress) — den vanligaste anropsvägen i hela
+// filen. Två skydd: (1) den bakomliggande "mina grupper"-queryn är bounded
+// (MY_GROUPS_LIMIT) istället för en obegränsad collection-scan; (2) en
+// TTL-cache av senaste kända grupp-id:n (myGroupsCache, se toppen av filen)
+// gör att en användare utan grupper — det vanligaste fallet — bara betalar
+// EN bounded query per TTL-fönster istället för en per toggle.
 export async function syncProgressToGroups(params: {
   uid: string;
   tmdbId: number;
@@ -557,18 +654,28 @@ export async function syncProgressToGroups(params: {
   status?: string | null;
 }): Promise<void> {
   try {
-    const { db, doc, getDoc, collection, getDocs, query, where } = await fsdb();
-    const groupsSnap = await getDocs(
-      query(collection(db, 'groups'), where('memberUids', 'array-contains', params.uid)),
-    );
-    if (groupsSnap.empty) return;
-    await Promise.all(groupsSnap.docs.map(async groupDoc => {
+    let groupIds = getFreshMyGroups(params.uid);
+    if (groupIds == null) {
+      const { db, collection, getDocs, query, where, limit: queryLimit } = await fsdb();
+      const groupsSnap = await getDocs(
+        query(
+          collection(db, 'groups'),
+          where('memberUids', 'array-contains', params.uid),
+          queryLimit(MY_GROUPS_LIMIT),
+        ),
+      );
+      groupIds = groupsSnap.docs.map(d => d.id);
+      cacheMyGroups(params.uid, groupIds);
+    }
+    if (groupIds.length === 0) return;
+    const { db, doc, getDoc } = await fsdb();
+    await Promise.all(groupIds.map(async groupId => {
       try {
-        const itemRef = doc(db, 'groups', groupDoc.id, 'watchlist', String(params.tmdbId));
+        const itemRef = doc(db, 'groups', groupId, 'watchlist', String(params.tmdbId));
         const itemSnap = await getDoc(itemRef);
         if (!itemSnap.exists()) return;
         await setGroupMemberProgress({
-          groupId: groupDoc.id,
+          groupId,
           tmdbId: params.tmdbId,
           uid: params.uid,
           lastWatchedSeason: params.lastWatchedSeason,
@@ -577,7 +684,7 @@ export async function syncProgressToGroups(params: {
         });
       } catch (err) {
         // Logga per grupp så en flaky grupp inte tystar de andra.
-        console.warn('[group-progress-sync]', groupDoc.id, err);
+        console.warn('[group-progress-sync]', groupId, err);
       }
     }));
   } catch (err) {
@@ -745,9 +852,13 @@ export async function refreshMyHouseholdContributions(
     providerCampaigns: Record<number, ProviderCampaign>;
   },
 ): Promise<void> {
-  const { db, collection, doc, getDoc, getDocs, query, where } = await fsdb();
+  const { db, collection, doc, getDoc, getDocs, query, where, limit: queryLimit } = await fsdb();
   const groupsSnap = await getDocs(
-    query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)),
+    query(
+      collection(db, 'groups'),
+      where('memberUids', 'array-contains', uid),
+      queryLimit(MY_GROUPS_LIMIT),
+    ),
   );
   await Promise.all(groupsSnap.docs.map(async g => {
     try {
@@ -770,14 +881,26 @@ export async function refreshMyHouseholdContributions(
   }));
 }
 
+// BIN-510: bounded query + refreshar myGroupsCache på varje snapshot — den
+// live-mekanism som gör syncProgressToGroups' TTL-cache färsk "gratis" när
+// någon gruppyta (t.ex. grupplistan) råkar vara monterad, utan att någon
+// mutationsfunktion behöver komma ihåg att invalidera manuellt.
 export function subscribeToMyGroups(
   uid: string,
   cb: (groups: Group[]) => void,
 ): () => void {
-  return lazySubscribe(({ db, collection, query, where, onSnapshot }) =>
-    onSnapshot(query(collection(db, 'groups'), where('memberUids', 'array-contains', uid)), snap => {
-      cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
-    }));
+  return lazySubscribe(({ db, collection, query, where, limit, onSnapshot }) =>
+    onSnapshot(
+      query(
+        collection(db, 'groups'),
+        where('memberUids', 'array-contains', uid),
+        limit(MY_GROUPS_LIMIT),
+      ),
+      snap => {
+        cacheMyGroups(uid, snap.docs.map(d => d.id));
+        cb(snap.docs.map(d => groupDocToObject(d.id, d.data())));
+      },
+    ));
 }
 
 export async function getGroupOnce(groupId: string): Promise<Group | null> {

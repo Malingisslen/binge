@@ -1385,6 +1385,95 @@ describe('groups invite-accept (BIN-327)', () => {
   });
 });
 
+// BIN-532/BIN-533: members/{memberUid} create rule (firestore.rules) gates on
+// `request.auth.uid in get(groups/{groupId}).data.memberUids` — a get() that
+// resolves against the database state BEFORE the whole batch/transaction,
+// never a sibling write queued in the SAME commit. Direct proof (against the
+// real emulator, not a mock) that a client writeBatch combining "add uid to
+// memberUids" + "create members/{uid}" in one commit is permission-denied,
+// while the same two writes done as separate awaited operations succeed —
+// this is exactly the class of bug that broke createGroup's short-lived
+// atomic-batch version and would have broken joinGroupViaToken/
+// acceptGroupInvite identically had they been batched the same way.
+// groups.ts's own suite mocks firebase/firestore and is structurally blind
+// to this; only a real-rules test can catch it.
+describe('groups members/{memberUid} create — batch vs sequential (BIN-532/BIN-533)', () => {
+  it('CANNOT create in one batch: group-doc CREATE (owner self-add) + owner member-doc CREATE together', async () => {
+    // Mirrors createGroup's pre-fix shape: brand-new group + owner's member
+    // doc, both queued in a single client batch.
+    const db = ownerDb();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'groups', 'newgrp'), {
+      ownerUid: OWNER, memberUids: [OWNER], name: 'Ny grupp',
+      defaults: { region: 'SE' }, inviteTokenHash: null, inviteTokenRotatedAt: null,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, 'groups', 'newgrp', 'members', OWNER), {
+      uid: OWNER, role: 'owner', notifications: true, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+  });
+
+  it('CAN create sequentially: group-doc CREATE (owner self-add), THEN (separate awaited write) owner member-doc CREATE', async () => {
+    const db = ownerDb();
+    await assertSucceeds(setDoc(doc(db, 'groups', 'newgrp2'), {
+      ownerUid: OWNER, memberUids: [OWNER], name: 'Ny grupp', defaults: { region: 'SE' },
+      inviteTokenHash: null, inviteTokenRotatedAt: null,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(db, 'groups', 'newgrp2', 'members', OWNER), {
+      uid: OWNER, role: 'owner', notifications: true, joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('CANNOT join in one batch: group-doc UPDATE (add self via sealed joinAttempt) + member-doc CREATE together', async () => {
+    // Mirrors joinGroupViaToken step 2's pre-fix shape.
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    const db = otherDb();
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] });
+    batch.set(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+  });
+
+  it('CAN join sequentially: group-doc UPDATE, THEN (separate awaited write) member-doc CREATE', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await sealJoinAttempt('other_uid');
+    const db = otherDb();
+    await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+    }));
+  });
+
+  it('CANNOT accept-invite in one batch: group-doc UPDATE (add self via invite) + member-doc CREATE together', async () => {
+    // Mirrors acceptGroupInvite's pre-fix shape (invite-delete omitted — not
+    // the mechanism under test here).
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    const db = otherDb();
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] });
+    batch.set(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+  });
+
+  it('CAN accept-invite sequentially: group-doc UPDATE, THEN (separate awaited write) member-doc CREATE', async () => {
+    await seedGroup({ memberUids: [OWNER] });
+    await seedInvite('other_uid');
+    const db = otherDb();
+    await assertSucceeds(updateDoc(doc(db, 'groups', GROUP), { memberUids: [OWNER, 'other_uid'] }));
+    await assertSucceeds(setDoc(doc(db, 'groups', GROUP, 'members', 'other_uid'), {
+      uid: 'other_uid', role: 'member', notifications: true, joinedAt: serverTimestamp(),
+    }));
+  });
+});
+
 describe('groups sessionHistory pickedByUid anti-forge', () => {
   const validPick = {
     sessionId: 's1', pickedByUid: 'other_uid', pickedTmdbId: 603, mediaType: 'movie',
