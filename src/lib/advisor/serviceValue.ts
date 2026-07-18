@@ -78,13 +78,29 @@ export function watchedForValueFromItems(
 // dead-weight verdict and is excluded here. Uses the persisted-fields-only
 // librarySubState (no extra TMDB fan-out); a finished show whose tmdbStatus
 // hasn't lazy-backfilled reads as 'paborjad' and is conservatively left shielded.
-export function tvActiveProviderIdsFromItems(items: readonly WatchlistItem[]): number[] {
+//
+// BIN-527 (2026-07-18): a title on 2+ owned services used to credit ALL of
+// them, so a show available on both Viaplay and Max wrongly shielded both from
+// the dead-weight verdict even though the user only ever watches it on one.
+// Reuses `attributeProvider()` — the same deterministic lowest-canonical-id
+// tiebreak already accepted for the film side — so each title credits exactly
+// ONE owned provider, not every one it happens to be available on. Panel note
+// (Monetization Lead review): this tiebreak isn't neutral — the lowest-id
+// provider always wins credit for every co-licensed title, a structural (not
+// per-title-random) advantage. Accepted for now (no cheap per-title
+// last-watched-provider signal exists on WatchlistItem); revisit the tiebreak
+// if a post-ship spot-check shows attribution skewing lopsidedly.
+export function tvActiveProviderIdsFromItems(
+  items: readonly WatchlistItem[],
+  ownedProviderIds: number[],
+): number[] {
   const out: number[] = [];
   for (const it of items) {
     if (it.mediaType !== 'tv') continue;
     if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
     if (librarySubState(it) === 'avslutad') continue;
-    for (const p of it.providers ?? []) out.push(p);
+    const attributed = attributeProvider(it.providers ?? [], ownedProviderIds);
+    if (attributed != null) out.push(attributed);
   }
   return out;
 }

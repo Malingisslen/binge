@@ -37,7 +37,7 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
     // will-see anchor. The value lens above is films-only, so these must be fed
     // in to stop an actively-used TV service reading as dead weight. A finished
     // 'avslutad' series is NOT active use and is excluded (see helper).
-    const tvActiveProviderIds = tvActiveProviderIdsFromItems(items);
+    const tvActiveProviderIds = tvActiveProviderIdsFromItems(items, owned);
 
     const rows = rollupServiceValue({
       watched,

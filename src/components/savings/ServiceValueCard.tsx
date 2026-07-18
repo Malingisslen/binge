@@ -31,6 +31,11 @@ export default function ServiceValueCard({ nowMs }: { nowMs: number }) {
         <h2 className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-3">Behåll eller säg upp?</h2>
         <span className="text-xxs text-ink-3">Värde i {monthLabel} · film du sett</span>
       </div>
+      {/* BIN-527: a followed serie som finns på flera tjänster räknas bara mot EN — hedge
+          eftersom TMDB:s tillgänglighetsdata är per titel, inte per säsong/avsnitt. */}
+      <p className="text-xxs text-ink-3 mb-[6px]">
+        En serie du följer räknas mot en tjänst — inte alla den råkar finnas på.
+      </p>
       <div className="bg-surface border border-rule rounded-sm overflow-hidden">
         <table className="w-full border-collapse">
           <SrOnlyTableHeader columns={['Tjänst', 'Sett', 'Månadskostnad', 'Värde']} />

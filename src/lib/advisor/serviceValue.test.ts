@@ -145,45 +145,45 @@ describe('tvActiveProviderIdsFromItems (BIN-513)', () => {
   it('EXCLUDES a finished Ended+caught-up series (avslutad) — it must stay dead-weight-eligible', () => {
     const ids = tvActiveProviderIdsFromItems([
       tv({ tmdbStatus: 'Ended', totalSeasons: 3, lastWatchedSeason: 3, providers: [76] }),
-    ]);
+    ], [76]);
     expect(ids).not.toContain(76);
     expect(ids).toHaveLength(0);
   });
 
   it('INCLUDES a followed-but-unstarted series (ej_paborjad)', () => {
-    const ids = tvActiveProviderIdsFromItems([tv({ lastWatchedSeason: null, providers: [76] })]);
+    const ids = tvActiveProviderIdsFromItems([tv({ lastWatchedSeason: null, providers: [76] })], [76]);
     expect(ids).toContain(76);
   });
 
   it('INCLUDES a behind-on-aired ended series (ligger_efter)', () => {
     const ids = tvActiveProviderIdsFromItems([
       tv({ tmdbStatus: 'Ended', totalSeasons: 3, lastWatchedSeason: 1, providers: [384] }),
-    ]);
+    ], [384]);
     expect(ids).toContain(384);
   });
 
   it('INCLUDES an in-progress ongoing series (paborjad)', () => {
     const ids = tvActiveProviderIdsFromItems([
       tv({ tmdbStatus: 'Returning Series', totalSeasons: 2, lastWatchedSeason: 1, providers: [8] }),
-    ]);
+    ], [8]);
     expect(ids).toContain(8);
   });
 
   it('INCLUDES a TV will-see anchor (vill_se)', () => {
-    const ids = tvActiveProviderIdsFromItems([tv({ status: 'vill_se', providers: [119] })]);
+    const ids = tvActiveProviderIdsFromItems([tv({ status: 'vill_se', providers: [119] })], [119]);
     expect(ids).toContain(119);
   });
 
   it('EXCLUDES a dropped series (avbruten) — giving up is not a reason to keep paying', () => {
     // Pins the shared BIN-528 status guard at this surface.
-    const ids = tvActiveProviderIdsFromItems([tv({ status: 'avbruten', providers: [76] })]);
+    const ids = tvActiveProviderIdsFromItems([tv({ status: 'avbruten', providers: [76] })], [76]);
     expect(ids).toHaveLength(0);
   });
 
   it('ignores films entirely', () => {
     // status 'vill_se' would pass the status guard, so only the mediaType check
     // can exclude it — makes this a real test of the film/TV guard.
-    const ids = tvActiveProviderIdsFromItems([tv({ mediaType: 'movie', status: 'vill_se', providers: [76] })]);
+    const ids = tvActiveProviderIdsFromItems([tv({ mediaType: 'movie', status: 'vill_se', providers: [76] })], [76]);
     expect(ids).toHaveLength(0);
   });
 
@@ -194,9 +194,22 @@ describe('tvActiveProviderIdsFromItems (BIN-513)', () => {
       ownedProviderIds: [76],
       costFor: (id) => (id === 76 ? 699 : 0),
       monthStartMs: monthStart, monthEndMs: monthEnd,
-      tvActiveProviderIds: tvActiveProviderIdsFromItems(items),
+      tvActiveProviderIds: tvActiveProviderIdsFromItems(items, [76]),
     });
     expect(rows.find((r) => r.providerId === 76)!.isDeadWeight).toBe(true);
+  });
+
+  // BIN-527: a title on 2+ owned services must credit exactly ONE, not all —
+  // otherwise a co-licensed show wrongly shields every service it's on.
+  it('a title on 2 owned services credits only ONE (same lowest-canonical-id tiebreak as attributeProvider)', () => {
+    const ids = tvActiveProviderIdsFromItems([tv({ providers: [384, 76] })], [76, 384]);
+    expect(ids).toEqual([76]); // attributeProvider picks the lowest canonical id
+    expect(ids).not.toContain(384);
+  });
+
+  it('does not credit a provider the user does not own', () => {
+    const ids = tvActiveProviderIdsFromItems([tv({ providers: [8] })], [76]);
+    expect(ids).toHaveLength(0);
   });
 });
 
