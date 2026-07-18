@@ -586,5 +586,191 @@
     "title": "Grantchester (season 5 episodes 2,4,5,6; season 6 episodes 1,2,3,4,8) - List of Grantchester episodes Wikipedia article has these episodes in the table with titles/directors/writers/air-dates but the plot-summary field is empty for each; no separate per-episode or per-series Wikipedia articles exist for series 5-6 to fill the gap",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-18T19:37:49.321Z"
+  },
+  {
+    "tmdbId": 234377,
+    "title": "Boat Story (season 1 — no per-episode Wikipedia coverage, only a one-paragraph series synopsis)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T20:55:31.560Z"
+  },
+  {
+    "tmdbId": 61555,
+    "title": "The Missing (season 1, episodes 1-8: no per-episode plot detail on English or French Wikipedia)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T20:56:22.951Z"
+  },
+  {
+    "tmdbId": 241100,
+    "title": "Mr Bates vs The Post Office (season 1, episodes 1-4: no per-episode plot source)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:00:48.556Z"
+  },
+  {
+    "tmdbId": 157064,
+    "title": "Litvinenko (season 1, all 4 episodes: no per-episode plot breakdown available — en.wikipedia.org article has only series-level synopsis, ShortSummary fields blank in episode table; historical-films.fandom.com 402-blocked, licence unverifiable)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:02:57.719Z"
+  },
+  {
+    "tmdbId": 155243,
+    "title": "Sherwood (Series 2, episodes 1-6: no per-episode plot detail on English Wikipedia beyond a one-line premise per episode, insufficient to safely paraphrase self-contained recaps; no CC BY-SA fan wiki exists for the BBC drama)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:03:53.608Z"
+  },
+  {
+    "tmdbId": 217700,
+    "title": "Best Interests (season 1, episodes 1-4)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:04:42.983Z"
+  },
+  {
+    "tmdbId": 79053,
+    "title": "The Split (season 2, episodes 1-6: no per-episode plot summaries)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:05:52.892Z"
+  },
+  {
+    "tmdbId": 86735,
+    "title": "Baptiste (season 2, episode 2: Episode 2)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:05:59.440Z"
+  },
+  {
+    "tmdbId": 90768,
+    "title": "The Longest Day in Chang'an (season 1, all 48 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:11:42.824Z"
+  },
+  {
+    "tmdbId": 128068,
+    "title": "Gone for Good / Disparu à jamais (season 1, all 5 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:12:06.510Z"
+  },
+  {
+    "tmdbId": 285136,
+    "title": "Nirvana in Fire 2 (all 50 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:12:47.849Z"
+  },
+  {
+    "tmdbId": 50878,
+    "title": "Empresses in the Palace (season 1, episode 1: no per-episode Wikipedia coverage exists for any of the 76 episodes; only a season-level plot summary is available on en/zh Wikipedia, and the only fan wiki with an episode list 402-blocks fetches)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:13:20.482Z"
+  },
+  {
+    "tmdbId": 130368,
+    "title": "Love Between Fairy and Devil (all 36 episodes, season 1)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:13:24.411Z"
+  },
+  {
+    "tmdbId": 119362,
+    "title": "Word of Honor (season 1, episodes 1-36: no per-episode Wikipedia coverage; only fan wikis have episode content and both 402-block fetch, licence unverifiable)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:14:23.842Z"
+  },
+  {
+    "tmdbId": 210733,
+    "title": "Hidden Love (season 1, episodes 1-25: no per-episode CC BY-SA source)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:14:46.471Z"
+  },
+  {
+    "tmdbId": 80884,
+    "title": "Ashes of Love (all 63 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:15:56.044Z"
+  },
+  {
+    "tmdbId": 244243,
+    "title": "Missing You (season 1, episodes 3-5: Never Too Much / Don't You Forget About Me / Chain Reaction)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:16:56.762Z"
+  },
+  {
+    "tmdbId": 69316,
+    "title": "Eternal Love (all 58 episodes, season 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:18:07.011Z"
+  },
+  {
+    "tmdbId": 153496,
+    "title": "Reborn Rich (season 1, all 16 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:18:16.310Z"
+  },
+  {
+    "tmdbId": 116612,
+    "title": "Beyond Evil (all 16 episodes, season 1: only aggregate series synopsis available on en/ko Wikipedia, no per-episode plot summaries; fan wiki candidate 402-blocked)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:19:11.511Z"
+  },
+  {
+    "tmdbId": 92983,
+    "title": "Vagabond (2019, 16 episodes): only a whole-series synopsis exists on English/Korean Wikipedia, no per-episode or per-season plot breakdown; Fandom drama wiki 402-blocked, DramaWiki has no plot content, Namu Wiki is CC BY-NC-SA (incompatible, non-commercial clause)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:19:38.411Z"
+  },
+  {
+    "tmdbId": 117378,
+    "title": "Mouse (2021, tvN, 20 episodes) — no per-episode plot coverage on any CC BY-SA source",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:21:35.218Z"
+  },
+  {
+    "tmdbId": 139280,
+    "title": "Queenmaker (season 1, all 11 episodes — no per-episode CC BY-SA source found)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:23:40.318Z"
+  },
+  {
+    "tmdbId": 119772,
+    "title": "The Devil Judge (season 1, all 16 episodes: no per-episode plot coverage found)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:24:17.222Z"
+  },
+  {
+    "tmdbId": 81133,
+    "title": "Story of Yanxi Palace (season 1, mid-arc episodes 1-6,8-26,28-35,37-39,41,43-56,59-69: Wikipedia only covers this show at story-arc granularity, not per-episode; boundary docs written at each arc's ending episode, nearest-earlier fallback covers the rest)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:24:46.621Z"
+  },
+  {
+    "tmdbId": 108284,
+    "title": "Tale of the Nine Tailed (season 1, episodes 1-16) — no per-episode plot summaries found on en/ko/zh Wikipedia; Fandom wikis 402-block (licence unverifiable)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:25:24.541Z"
+  },
+  {
+    "tmdbId": 89959,
+    "title": "Strangers from Hell (season 1, episodes 1-10)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:26:09.017Z"
+  },
+  {
+    "tmdbId": 95842,
+    "title": "Joy of Life (season 2, episodes 1-36): no per-episode Wikipedia coverage, only a season-level synopsis paragraph",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:31:27.582Z"
+  },
+  {
+    "tmdbId": 96648,
+    "title": "Sweet Home (season 2 ep 1-8, season 3 ep 1-8: no episode titles, Netflix K-drama)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T21:33:06.347Z"
+  },
+  {
+    "tmdbId": 64197,
+    "title": "Nirvana in Fire (season 2 / Nirvana in Fire 2 - The Wind Blows in Chang Lin, 50 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:35:58.978Z"
+  },
+  {
+    "tmdbId": 61746,
+    "title": "Inside No. 9 (season 4 episodes 3/5/6; seasons 5, 6, 7, 9 entire; season 8 episodes 1-4 and 6 - 32 of 53 aired episodes have no dedicated Wikipedia article with a Plot section, only a one-two sentence table blurb on the main list page, too thin to paraphrase into a self-contained recap without fabricating detail)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T21:36:24.109Z"
   }
 ]
