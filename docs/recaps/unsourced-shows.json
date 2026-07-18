@@ -292,5 +292,149 @@
     "title": "American Sports Story: Aaron Hernandez",
     "reason": "no-wiki",
     "checkedAt": "2026-07-18T08:35:36.109Z"
+  },
+  {
+    "tmdbId": 124394,
+    "title": "Power Book III: Raising Kanan (all seasons)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T14:06:54.769Z"
+  },
+  {
+    "tmdbId": 126280,
+    "title": "Sex/Life (season 1, episode 6: Somewhere Only We Know)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:13:15.369Z"
+  },
+  {
+    "tmdbId": 71715,
+    "title": "Good Girls (season 4, episode 16: Nevada)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T14:25:55.097Z"
+  },
+  {
+    "tmdbId": 63248,
+    "title": "Show Me a Hero (2015 HBO miniseries, all 6 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T14:29:53.279Z"
+  },
+  {
+    "tmdbId": 87771,
+    "title": "Chimerica (all episodes — no per-episode source)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:34:03.754Z"
+  },
+  {
+    "tmdbId": 87984,
+    "title": "State of the Union",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:34:57.053Z"
+  },
+  {
+    "tmdbId": 91545,
+    "title": "Young Wallander (season 2, episode 1: Episode 1)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:34:59.500Z"
+  },
+  {
+    "tmdbId": 69158,
+    "title": "The Good Fight (season 5, episode 10: And the Violence Spread.)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T14:38:16.040Z"
+  },
+  {
+    "tmdbId": 45016,
+    "title": "The Bridge (Bron/Broen) — entire show, all seasons",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:43:43.390Z"
+  },
+  {
+    "tmdbId": 32368,
+    "title": "The Killing (Forbrydelsen) (season 2 episodes 1-10, season 3 episodes 1-10: English and Danish Wikipedia only have a season-level plot summary, no per-episode breakdown to anchor spoiler-safe boundaries)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:53:34.935Z"
+  },
+  {
+    "tmdbId": 56017,
+    "title": "Shtisel",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T14:57:33.283Z"
+  },
+  {
+    "tmdbId": 79720,
+    "title": "When Heroes Fly (whole show, season 1, 9 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T14:57:50.593Z"
+  },
+  {
+    "tmdbId": 88358,
+    "title": "Wisting (season 4, episode 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:01:36.556Z"
+  },
+  {
+    "tmdbId": 63867,
+    "title": "Occupied / Okkupert (all 3 seasons, 24 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T15:07:11.314Z"
+  },
+  {
+    "tmdbId": 76892,
+    "title": "Bad Banks (season 2, episode 2: The New Adversary)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:09:02.916Z"
+  },
+  {
+    "tmdbId": 64852,
+    "title": "Trapped / Ófærð (entire series, seasons 1-3)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:09:18.336Z"
+  },
+  {
+    "tmdbId": 76669,
+    "title": "Elite (season 8, episode 1: Alumni)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T15:10:06.919Z"
+  },
+  {
+    "tmdbId": 106651,
+    "title": "Hellbound (Korean Netflix series, all seasons — no per-episode Wikipedia coverage)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:12:26.546Z"
+  },
+  {
+    "tmdbId": 65466,
+    "title": "Marseille (season 1, episode 3: Crocodile)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:12:38.925Z"
+  },
+  {
+    "tmdbId": 110534,
+    "title": "D.P. (whole show, seasons 1-2, 12 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:13:02.822Z"
+  },
+  {
+    "tmdbId": 91557,
+    "title": "Ragnarok (season 3, episode 1: War Is Over)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:14:46.818Z"
+  },
+  {
+    "tmdbId": 249906,
+    "title": "Tokyo Swindlers (entire show, season 1, episodes 1-7)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T15:16:26.681Z"
+  },
+  {
+    "tmdbId": 88236,
+    "title": "How to Sell Drugs Online (Fast) (season 3 episodes 1-6 + season 4 episodes 1-6, 12 episodes)",
+    "reason": "partial-coverage for season 3 (only a thin season-level German Wikipedia summary exists, too thin to split into 6 accurate per-episode boundaries); no-wiki for season 4 (no plot summary at all beyond release date); fan wiki mydrugs.fandom.com 402-blocked so licence unverifiable",
+    "checkedAt": "2026-07-18T15:21:14.033Z"
+  },
+  {
+    "tmdbId": 69557,
+    "title": "Fauda (season 5, episode 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T15:22:56.767Z"
   }
 ]
