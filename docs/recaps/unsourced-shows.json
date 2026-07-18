@@ -130,5 +130,41 @@
     "title": "Truth Be Told (S1E5 Graveyard Love, S1E6 Not Buried Planted, S3E5 Freedom Is Never Given; It Is Won, S3E6 From My Hand the Poisoned Apple, S3E7 The Luxury in Self-Reproach, S3E9 Only Little Secrets: Wikipedia episode table has zero/blank summary text for these episodes)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-17T21:40:52.912Z"
+  },
+  {
+    "tmdbId": 100010,
+    "title": "Big Sky season 2 episodes 7-18 (Little Boxes through Catch a Few Fish)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-17T22:33:37.789Z"
+  },
+  {
+    "tmdbId": 79618,
+    "title": "City on a Hill (all 3 seasons, 26 episodes) — no Wikipedia plot content exists at all: the main TV-series article's Episodes section is a bare title/air-date/director/writer table with zero plot summaries; no 'List of City on a Hill episodes' or per-season Wikipedia article exists (both 404); the only fan wiki is Fandom-hosted and 402-blocks WebFetch, so its license (likely CC BY-SA but unverifiable) cannot be confirmed",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T05:50:42.907Z"
+  },
+  {
+    "tmdbId": 70128,
+    "title": "Genius: MLK/X (season 4, TMDB season 4, episodes 1-8) - English Wikipedia's episode table for this season has an entirely empty ShortSummary field for all 8 episodes (verified via raw wikitext); only a single one-sentence season-level synopsis exists ('The fourth season chronicles the lives of Martin Luther King Jr. and Malcolm X.') which is too thin to paraphrase into per-episode self-contained recaps. No CC BY-SA fan wiki with per-episode plot summaries was found. Non-Wikipedia sources found (Moviefone, TVGuide, TheWrap, ComingSoon, Sportskeeda) are copyrighted journalism, not usable.",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T05:53:15.937Z"
+  },
+  {
+    "tmdbId": 72039,
+    "title": "Escape at Dannemora (all 7 episodes, Part 1-7) - English Wikipedia's main article has only a high-level, non-linear overall plot summary (not decomposed by episode) plus a bare episode table (director/writer/air-date/viewership only, no synopsis text per episode); no separate List-of-episodes article exists. Fandom escape-at-dannemora.fandom.com 402-blocked (license unverifiable).",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T06:15:01.248Z"
+  },
+  {
+    "tmdbId": 88166,
+    "title": "I Know This Much Is True (HBO miniseries, 6 episodes) — English Wikipedia has only an overall series synopsis + character bios + episode air-date/viewership table, no per-episode plot summaries at all; no List-of-episodes article exists; the one fan wiki candidate (iknowthismuchistrue.fandom.com) 402-blocks WebFetch so its CC BY-SA status can't be verified. No sourceable basis exists to distinguish what happens in E1 vs E2 vs...E6, so no boundary-specific recaps can be written without fabricating scene-to-episode attribution.",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T06:16:34.542Z"
+  },
+  {
+    "tmdbId": 64199,
+    "title": "Sneaky Pete Season 3 (10 episodes, aired 2019-05-10)",
+    "reason": "partial-coverage: Wikipedia's Sneaky Pete (TV series) article lists only season 3 episode titles/air dates, no plot synopses; the show's Fandom wiki (sneakypete.fandom.com) 402-blocks WebFetch so its CC BY-SA license cannot be verified, per pipeline rules it must be skipped rather than force-read",
+    "checkedAt": "2026-07-18T06:28:28.936Z"
   }
 ]
