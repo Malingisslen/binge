@@ -166,5 +166,131 @@
     "title": "Sneaky Pete Season 3 (10 episodes, aired 2019-05-10)",
     "reason": "partial-coverage: Wikipedia's Sneaky Pete (TV series) article lists only season 3 episode titles/air dates, no plot synopses; the show's Fandom wiki (sneakypete.fandom.com) 402-blocks WebFetch so its CC BY-SA license cannot be verified, per pipeline rules it must be skipped rather than force-read",
     "checkedAt": "2026-07-18T06:28:28.936Z"
+  },
+  {
+    "tmdbId": 206829,
+    "title": "The Regime (2024 HBO miniseries, all 6 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T07:16:56.938Z"
+  },
+  {
+    "tmdbId": 124067,
+    "title": "Winning Time: The Rise of the Lakers Dynasty",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T07:18:55.510Z"
+  },
+  {
+    "tmdbId": 137893,
+    "title": "Griselda (miniseries, all 6 episodes)",
+    "reason": "partial-coverage: English/Spanish Wikipedia only have a single whole-series Plot paragraph, no per-episode synopses; Griselda/Narcos Fandom wikis 403-blocked (licence unverifiable)",
+    "checkedAt": "2026-07-18T07:25:29.243Z"
+  },
+  {
+    "tmdbId": 111800,
+    "title": "The Old Man (all seasons/episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:30:19.392Z"
+  },
+  {
+    "tmdbId": 91746,
+    "title": "American Rust (entire series, 2 seasons/19 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:34:10.474Z"
+  },
+  {
+    "tmdbId": 216089,
+    "title": "Fellow Travelers (season 1, episode 2: Bulletproof)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T07:37:20.722Z"
+  },
+  {
+    "tmdbId": 71951,
+    "title": "Get Shorty (entire show)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:38:23.676Z"
+  },
+  {
+    "tmdbId": 79086,
+    "title": "Godfather of Harlem (entire show, seasons 1-4)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:39:50.332Z"
+  },
+  {
+    "tmdbId": 138971,
+    "title": "Billy the Kid (all 3 seasons, 24 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:45:08.922Z"
+  },
+  {
+    "tmdbId": 70484,
+    "title": "Britannia (entire show — seasons 1-3, 27 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T07:45:27.683Z"
+  },
+  {
+    "tmdbId": 107114,
+    "title": "The Girl from Plainville (entire series — no per-episode plot content on Wikipedia; only cast/production/premise; fan wiki 402-blocked, license unverifiable)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:49:33.472Z"
+  },
+  {
+    "tmdbId": 117821,
+    "title": "WeCrashed (entire show)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:49:53.061Z"
+  },
+  {
+    "tmdbId": 107407,
+    "title": "Gaslit (2022 miniseries) — all 8 episodes",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:50:48.143Z"
+  },
+  {
+    "tmdbId": 95665,
+    "title": "Inventing Anna (entire show — all 9 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:52:50.696Z"
+  },
+  {
+    "tmdbId": 126301,
+    "title": "Super Pumped (season 1, episode 6: Delete Uber)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:54:49.273Z"
+  },
+  {
+    "tmdbId": 72597,
+    "title": "Manhunt (season 2, episode 1: Centbom)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T07:55:27.142Z"
+  },
+  {
+    "tmdbId": 157368,
+    "title": "The New Look (whole series — no per-episode Wikipedia coverage, no List of episodes article, fan wiki 402-blocked)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T07:56:08.283Z"
+  },
+  {
+    "tmdbId": 203744,
+    "title": "Sugar (season 2, episode 1: Home Away from Home)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T08:00:18.675Z"
+  },
+  {
+    "tmdbId": 61112,
+    "title": "Manhattan (whole show, all 23 episodes across 2 seasons)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T08:01:22.263Z"
+  },
+  {
+    "tmdbId": 245256,
+    "title": "Say Nothing (2024 FX/Hulu miniseries, all 9 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T08:32:09.750Z"
+  },
+  {
+    "tmdbId": 131141,
+    "title": "American Sports Story: Aaron Hernandez",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T08:35:36.109Z"
   }
 ]
