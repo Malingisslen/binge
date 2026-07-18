@@ -574,5 +574,17 @@
     "title": "Follow the Money (Bedrag)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-18T19:11:44.838Z"
+  },
+  {
+    "tmdbId": 211564,
+    "title": "Sullivan's Crossing (season 2, episode 1: Guilt Trip)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:32:55.285Z"
+  },
+  {
+    "tmdbId": 61457,
+    "title": "Grantchester (season 5 episodes 2,4,5,6; season 6 episodes 1,2,3,4,8) - List of Grantchester episodes Wikipedia article has these episodes in the table with titles/directors/writers/air-dates but the plot-summary field is empty for each; no separate per-episode or per-series Wikipedia articles exist for series 5-6 to fill the gap",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T19:37:49.321Z"
   }
 ]
