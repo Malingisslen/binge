@@ -1,3 +1,417 @@
+# Sprint 2026-07-18 — decision-queue tail, planned
+
+All 4 items from the 2026-07-17 decision queue (see project memory
+`project_decision_queue_2026-07-18.md`) resolved via direct Q&A with Malin, then cast
+through the role-org (router + targeted critiques, one per ticket — `via: manual` for
+3, full `/stakeholder-review` for BIN-521) before writing acceptance criteria, per the
+CLAUDE.md working-agreement's "cast stakeholders before planning" rule. All 4 review
+events logged (`docs/org/metrics/events.jsonl`). One conflict → ADR 0016.
+
+## Batch: streaming (advisor TV one-service attribution)
+
+Router: `node docs/org/route.mjs src/lib/advisor/serviceValue.ts` → **medium**,
+Monetization/Partnerships Lead (#24). Verdict: **endorse-with-changes**.
+
+- [ ] **BIN-527** [Tier A/B] `build` — Apply the same `attributeProvider()`-style
+      single-provider selection already used for films to `tvActiveProviderIdsFromItems()`
+      in `src/lib/advisor/serviceValue.ts` — an active TV title currently credits EVERY
+      owned provider it's available on as "actively used" (shielding all of them from the
+      dead-weight verdict); it should credit exactly ONE, same deterministic
+      lowest-canonical-id tiebreak as `attributeProvider`. Confirmed: no cheap
+      last-watched-provider signal exists on `WatchlistItem` to do better without the
+      declined bigger build (real watch-recency) — lowest-id is the accepted approximation.
+      Re-verify the ticket's secondary claim ("+ unstarted shields indefinitely") against
+      current `main` at Step 0 — original ticket text was not preserved verbatim through
+      the decision-queue update, confirm it's still present before fixing it.
+      Files: `src/lib/advisor/serviceValue.ts` (+ tests). Stakeholders: single · #24.
+      requiresPlanMode: no (single file, client-only, no data/schema implications).
+  - [ ] `tvActiveProviderIdsFromItems` credits exactly one owned provider per active TV
+        title (same tiebreak function/logic as `attributeProvider`, not a duplicate
+        implementation).
+  - [ ] **Binding (panel condition):** the UI copy that surfaces this shielded/dead-weight
+        verdict carries the "tillgänglig via" hedge in the SAME change (per the
+        2026-07-16 decision queue's existing precedent for this exact tradeoff) — not
+        deferred to a follow-up.
+  - [ ] **Binding (panel condition):** close-out note states whether attribution came out
+        lopsided toward one provider id across the test/seed data (a systemic bias risk
+        the panel flagged, since `Math.min()` always favors the same provider for every
+        co-licensed show) — if clearly lopsided, flag for a tiebreak change (e.g. hash on
+        titleId) as a fast-follow; don't silently ship a directional bias unnoted.
+  - [ ] New/updated tests cover: a TV title on 2 owned services credits only one; the
+        BIN-513 film-path parity (same shape of tradeoff, applied to TV).
+
+## Batch: data (recap coverage-gap logging)
+
+Router: `node docs/org/route.mjs src/hooks/useRecap.ts src/lib/analytics.ts` → **medium**,
+Product Manager (#9). Verdict: **endorse-with-changes — BLOCKING change to the original
+plan's data store.**
+
+- [ ] **BIN-544** [Tier C — new Firestore collection, expanded plan required] `build` —
+      **NOT a Plausible event as originally scoped.** Panel found Plausible can't answer
+      "which shows need backfill most" (aggregate event counts only, not a sortable/
+      queryable list) — use a small Firestore counter doc instead:
+      `recapCoverageGaps/{tmdbId}` with `count: FieldValue.increment(1)` +
+      `lastMissedAt: serverTimestamp()`, aggregated per-SHOW (not per-episode — the
+      backfill decision is "which show," episode-level granularity just produces hundreds
+      of rows to hand-aggregate later). Fire from `src/hooks/useRecap.ts`'s queryFn when it
+      resolves to a genuine miss (`{recap: null, coveredBoundary: null}`) — RECAPS_ENABLED
+      on, not still loading. New Firestore collection → needs `firestore.rules` (write-only
+      for authenticated-or-anon clients, admin-read; no client read needed) — sensitive
+      domain, full written plan + Malin's go-ahead required before touching rules.
+      Files: `src/hooks/useRecap.ts`, `firestore.rules` (+ tests, + rules tests).
+      Stakeholders: single · #9. requiresPlanMode: **yes** (firestore.rules + new schema).
+  - [ ] Firestore write path is `recapCoverageGaps/{tmdbId}`, incrementing a counter +
+        timestamp, NOT a Plausible `trackEvent` call.
+  - [ ] Aggregation key is `tmdbId` (show-level), not per-episode.
+  - [ ] `firestore.rules` allows the increment-write from any client (no auth requirement group
+        — recap misses can happen for anonymous browsing) but denies client reads (admin-only
+        surface, read via Console or a future /insikter panel, not by users).
+  - [ ] **Binding (panel condition):** the write path is rate-limit-considered before real
+        launch — pre-launch with zero users, a raw client Firestore write is acceptable
+        for now, but the close-out note must flag "convert to a rate-limited callable
+        Function before public launch" as a tracked follow-up, not silently accepted
+        indefinitely.
+  - [ ] No UI/UX change — the existing "no recap" render is unchanged; this is silent
+        instrumentation only.
+  - [ ] New tests cover: the increment write fires only on a genuine resolved miss (not
+        while loading, not when RECAPS_ENABLED is false); rules tests prove write-allowed
+        + read-denied for a non-admin client.
+
+## Batch: infra (leavingRollup pacing — redesigned per ADR 0016)
+
+Router: `node docs/org/route.mjs functions/src/leavingRollup/index.ts
+functions/src/leavingRollup/motnChanges.ts functions/src/streamingOffers/index.ts` →
+ownership-map gap on the newer leavingRollup/util paths (resolves to **skip** — a mapping
+artifact, not a real signal); manually cast **medium**, Data/Integrations Engineer (#13,
+same role that owns BIN-541). Verdict: **BLOCK the originally-proposed cursor design; build
+the simpler alternative instead — see ADR 0016.**
+
+- [ ] **BIN-543** [Tier C — functions/** trigger, expanded plan required] `build` —
+      **Design changed from the original ticket** (resumable multi-day pagination cursor
+      → rejected, see `docs/org/adr/0016-leavingrollup-resumable-cursor-rejected.md`: window
+      drift makes multi-day accumulation silently WRONG, not just stale, and MOTN cursor
+      validity across days is unverified). Build instead: widen `leavingRollup`'s per-run
+      page budget and reduce run frequency (e.g. every 3-4 days instead of daily), keeping
+      the existing single-day full-or-nothing pass and the unchanged `complete: boolean`
+      completeness guard untouched. Before sizing the new page budget: check whether
+      `streamingOffers`' 300-of-450 slice of the combined MOTN cycle budget has headroom to
+      reallocate toward leavingRollup's 150 — the BIN-541 split isn't necessarily final.
+      Zero new persisted state beyond what BIN-541 already added.
+      Files: `functions/src/leavingRollup/index.ts` (schedule cadence),
+      `functions/src/leavingRollup/motnChanges.ts` (MAX_PAGES, if widened),
+      possibly `functions/src/streamingOffers/index.ts` (if the 300/150 split is
+      rebalanced) (+ tests). Stakeholders: single · #13. requiresPlanMode: **yes**
+      (functions/** sensitive domain, regardless of router's "skip" — CLAUDE.md always
+      requires this for Cloud Functions changes).
+  - [ ] No persisted pagination cursor, no staging/accumulation doc — confirms the ADR
+        0016 pivot was actually followed, not the original cursor design.
+  - [ ] `complete: boolean` semantics in `motnChanges.ts` are UNCHANGED (still true only on
+        a genuine single-run natural end) — this ticket must not touch that guard's logic.
+  - [ ] Scheduled cadence is reduced (e.g. `every 72 hours` or `every 96 hours`) OR the
+        per-run page budget is widened within the existing single-day model — close-out
+        note states which lever was pulled and the arithmetic showing it stays within
+        LEAVING_HARD_CYCLE_CAP (150) or its rebalanced replacement across the full ~31-day
+        cycle, mirroring BIN-541's own PER_RUN_SELECT × cycle-length ≤ cap proof.
+  - [ ] If the 300/150 streamingOffers/leavingRollup split is rebalanced, `STREAMING_HARD_CYCLE_CAP`
+        + `LEAVING_HARD_CYCLE_CAP` are updated together with an explicit comment update
+        (mirrors the existing BIN-541 comment style) — never one changed silently while the
+        other's own "combined ~450-of-500" claim goes stale.
+  - [ ] New/updated tests cover the new cadence/budget arithmetic (pure logic, same pattern
+        as BIN-541's `dayId.test.ts`/`budget.test.ts`).
+
+## Not ready to plan as a build ticket — needs its own design pass
+
+- **BIN-521** — Bundle-rådgivare proactive nudge. Routed through the full
+  `/stakeholder-review` flow (router: single, Recommendations/Scoring-Integrity Engineer
+  #28). Verdict: **approve-with-conditions**, but the conditions themselves ARE the
+  brainstorm this ticket already said it needed — not yet a buildable spec:
+  - Must respect `BundleSuggestion.stale` (no proactive push on unverified >180d-old
+    pricing) with the caveat given EQUAL visual weight to the savings headline, not
+    demoted to fine print in a compressed nudge format.
+  - Must reuse `detectBundleArbitrage`/`selectBundleSuggestions` output as-is — no
+    duplicated pricing/comparison logic for the nudge surface.
+  - Needs dismiss/frequency-cap state before going proactive (today's card is a pull
+    surface that can re-show every visit; a push surface can't nag).
+  - Needs an explicit decision on how the nudge relates to `useSubscriptionAdvisor`'s
+    existing single-slot `primaryAction` cascade (pause > catchup > subscribe > idle) —
+    additive banner, or competing for that same slot.
+  - Copy must stay comparative/generic given single-vendor (Telia-only) seed data — no
+    wording reading as vendor endorsement; a future affiliate wrap (BIN-173 precedent)
+    needs its own disclosure pass, not bundled in here.
+  Next step: a real design session (not a code sprint) working through these 5 points,
+  THEN a build plan. Malin already confirmed this path (2026-07-18 Q&A).
+
+## Post-sprint steps (once built)
+
+1. `npm run typecheck` + relevant `npm test` scoped to touched files.
+2. BIN-544 + BIN-543 touch `functions/**`/`firestore.rules` respectively → confirm Tier-D
+   manual deploy needs (rules and/or functions; deploy.yml ships hosting only).
+3. Commit through the review gates; conventional commit referencing ticket ids.
+4. Transition tickets: Done for clean acceptance-criteria passes; In Review for anything
+   with an unresolved close-out note (e.g. BIN-527's lopsided-attribution check, BIN-544's
+   rate-limit-follow-up flag).
+
+---
+
+# Sprint 2026-07-17 — selection
+
+Linear available (scoped to project "Binge" throughout, per the shared-team isolation
+rule). 10 tickets selected (`build`), clustered into 5 disjoint-file batches. 1 obsolete
+(BIN-541 — grep-of-main confirmed already shipped under 12b88f4, ticket never transitioned).
+4 needs-approval (BIN-527, BIN-521 carried; BIN-544, BIN-543 new this round) — reasoning below.
+
+**Two batches (data, rules) touch surfaces from the 2026-07-16 sprint's REVERTED tickets
+(BIN-523, BIN-510) — both failed outcome verification last time and were force-reverted
+before deploy.** This round's acceptance criteria explicitly require the retry not to repeat
+the same failure mode (cited per-ticket below). Treat these two batches with extra care:
+re-verify against current `main`, not the old attempt's diff.
+
+## Batch: social (groups.ts fan-out + correctness)
+
+Router: `node docs/org/route.mjs src/lib/firebase/groups.ts` → **top** (full-panel), Security
+Architect (#4). requiresPlanMode: **yes** for both tickets (same file, same panel).
+
+- [ ] **BIN-510** [Tier C — full-panel, expanded plan required] `build` — RETRY (previous
+      attempt reverted 2026-07-16 for failed correctness verification: a per-uid 5-min TTL
+      cache seeded by first scan/subscription, invalidated by in-module membership mutations,
+      did not hold up). `syncProgressToGroups` and its sibling `array-contains` group queries
+      in `groups.ts` (verified still unbounded at :477, :562, :750, :778 on current `main`)
+      have no `limit()`. Add a bounded limit (mirror `useFollow.ts`'s `FOLLOWING_LIMIT`
+      pattern) to all four call sites; skip the sync entirely when the user has zero groups,
+      without a full collection scan — but this time the skip mechanism must independently
+      re-verify correctness (don't reuse the exact prior TTL-cache shape without confirming
+      its invalidation is airtight, or pick a simpler mechanism, e.g. read the bounded query
+      result itself rather than a separately-cached membership flag).
+      Explicitly NOT in scope: `AuthContext.tsx:443`'s `updateProviders` group query has the
+      same unbounded shape — that's BIN-536, in the auth batch below, kept disjoint from this
+      file. Files: `src/lib/firebase/groups.ts` (+ tests).
+  - [ ] All four `array-contains` group queries in `groups.ts` (:477, :562, :750, :778) carry
+        a bounded `limit()`.
+  - [ ] `syncProgressToGroups` (or its caller) skips the group-fan-out query entirely for a
+        user known to be in zero groups, without a full collection scan.
+  - [ ] A new test proves the query is bounded (a user "in" more groups than the limit still
+        only reads up to the limit).
+  - [ ] Close-out note explicitly states how this attempt's skip-mechanism differs from (or
+        re-verifies) the reverted attempt's TTL-cache approach.
+
+- [ ] **BIN-532** [Tier A] `build` — Two correctness bugs verified present in `groups.ts`:
+      (1) `addToGroupWatchlist` (:353) does a non-merge `setDoc` including `memberRatings: {}`,
+      so re-adding an already-present title (race between two members, or a remove+re-add)
+      silently zeroes existing member ratings; (2) `createGroup` (:23) writes the group doc
+      (`addDoc`) then the owner's member doc (`setDoc`) as two separate non-atomic writes — a
+      failure after the first leaves an ownerless group doc. Files: `src/lib/firebase/groups.ts`
+      (+ tests, same file as BIN-510 above — sequence these two tickets' edits, don't let them
+      collide on the same functions).
+  - [ ] `addToGroupWatchlist` no longer resets `memberRatings` to `{}` when the watchlist item
+        already exists (merge write or equivalent that preserves existing ratings).
+  - [ ] `createGroup`'s two writes are made atomic (batch/transaction), or — if a generated
+        `addDoc` id makes a single-batch write impractical — a documented compensating step
+        exists so a mid-failure never leaves a group with no owner member doc.
+  - [ ] New tests cover: re-add preserves existing `memberRatings`; the atomicity fix (or its
+        documented fallback) is exercised.
+
+## Batch: data (availableNotify / priceDropNotify mediaType collision)
+
+Router: `node docs/org/route.mjs functions/src/availableNotify/index.ts
+functions/src/priceDropNotify/index.ts` → **medium** (single), Data/Integrations Engineer
+(#13). requiresPlanMode: **yes** (security label on BIN-523 + `functions/**` is a
+`tierCTrigger` regardless of router tier).
+
+- [ ] **BIN-523** [Tier C — functions/** trigger, expanded plan required] `build` — RETRY
+      (previous attempt reverted 2026-07-16 for failed verification on TWO specific points —
+      both must be addressed this time, not just re-attempted the same way):
+      (a) a plain doc-id rename orphans live per-user dedup markers in the 3-day catch-up
+      window → double pushes; (b) the header-comment claim that `priceDropNotify` is
+      "movie-only at the query, so safe" was verification-REJECTED — `priceHistory/{tmdbId}`
+      is written by `streamingOffers/logic.ts`, which dedupes by bare `tmdbId` and carries the
+      SAME collision; a query-side guard doesn't protect the write side. Movie N and TV N
+      currently collapse into one `availableNotifyState`/`releaseNotifyState` doc (keyed on
+      bare `tmdbId`, confirmed still bare on current `main`) and one `processTitle` group.
+      Files: `functions/src/availableNotify/index.ts`, `functions/src/priceDropNotify/index.ts`,
+      `functions/src/streamingOffers/logic.ts` (+ tests).
+  - [ ] State-doc ids are namespaced by media type (or an equivalent fix) WITHOUT orphaning
+        existing per-user dedup markers in the 3-day catch-up window — close-out note explains
+        the chosen migration/compat approach explicitly.
+  - [ ] `processTitle` groups watchlist rows by `(mediaType, tmdbId)`, not `tmdbId` alone.
+  - [ ] A new test proves a user holding movie N and TV N gets two independent notify/dedup
+        entries.
+  - [ ] `streamingOffers/logic.ts`'s `priceHistory/{tmdbId}` write path is fixed for the same
+        collision (not just the `priceDropNotify` read side) — this is the specific gap the
+        prior attempt's header-comment claim missed.
+
+- [ ] **BIN-529** [Tier A, same file as BIN-523 above] `build` — Residual: the FCM tag
+      (`available-${tmdbId}`) and inbox notification doc id (`${tmdbId}-${providerId}`) in
+      `functions/src/availableNotify/index.ts` still collide bare-tmdbId across mediaType.
+      Fold into the same diff as BIN-523 (same file, same session) rather than a separate pass.
+      Files: `functions/src/availableNotify/index.ts` (+ tests).
+  - [ ] The FCM tag and/or inbox notification doc id include `mediaType` so a movie and TV
+        show sharing a numeric id don't merge-overwrite each other's inbox card / push tag.
+  - [ ] A new test proves a user holding movie N and TV N receives two distinct inbox
+        notification docs.
+
+## Batch: auth (AuthContext.tsx follow-ups)
+
+Router: `node docs/org/route.mjs src/contexts/AuthContext.tsx` → **top** (full-panel), Legal/
+GDPR Counsel (#5) + DBA (#27). requiresPlanMode: **yes** for all three tickets (same
+high-stakes file — CLAUDE.md's working-agreement also names AuthContext.tsx directly as a
+sensitive-domain path).
+
+- [ ] **BIN-531** [Tier A] `build` — `setProviderRenewalDay` (verified at :536-542) mutates
+      `providerRenewalDaysRef` before the Firestore write resolves and never reverts on
+      failure — the exact mirror-ref-poisoning pattern BIN-516 already fixed in its siblings
+      `setProviderCost`/`setProviderCampaign` (same file, lines ~464-500, rollback pattern
+      confirmed present there). Files: `src/contexts/AuthContext.tsx` (+ test).
+  - [ ] `setProviderRenewalDay` reverts `providerRenewalDaysRef` to its pre-edit value (or
+        equivalent non-ref-poisoning fix) when the Firestore write throws.
+  - [ ] A new test forces the write to reject, then performs a second successful edit to a
+        different provider, and asserts the rejected value is NOT included in that second
+        write's payload.
+  - [ ] `setProviderCost`/`setProviderCampaign`'s existing test assertions are unmodified.
+
+- [ ] **BIN-535** [Tier A] `build` — Follow-up from the BIN-517 security review (Low,
+      non-blocking): a broader `register()`/`ensureUserProfile` profile-doc overwrite race
+      remains beyond the username sub-case BIN-517 already closed. Re-read the exact review
+      finding via `get_issue` on BIN-535 before coding — Step-0 premise check first, since this
+      is a follow-up to already-shipped code. Files: `src/contexts/AuthContext.tsx` (+ test).
+  - [ ] The race identified in the BIN-517 review is closed, or the close-out documents why
+        it's not exploitable (Step-0 finding it's already moot is an acceptable outcome).
+  - [ ] A new test demonstrates the fix (or the premise-gone note stands in for it).
+  - [ ] BIN-517's existing username-fix tests are unmodified.
+
+- [ ] **BIN-536** [Tier A] `build` — `updateProviders`' group query (verified at :448) has the
+      same unbounded `array-contains` shape as BIN-510's four call sites, deliberately left out
+      of that ticket to keep batches disjoint. Low-frequency (provider-list edit), but the fix
+      is mechanical — mirror `FOLLOWING_LIMIT`/BIN-510's bound. Files: `src/contexts/AuthContext.tsx`
+      (+ test).
+  - [ ] `updateProviders`' group query carries a bounded `limit()`, mirroring BIN-510's pattern.
+  - [ ] A new test proves the query is bounded.
+  - [ ] No behavior change to which groups get a provider update within the limit (existing
+        successful-path tests unmodified).
+
+## Batch: watchlist (flaky test stabilization)
+
+Router: `node docs/org/route.mjs src/contexts/WatchlistContext.test.tsx` → **skip** (test-only,
+no owning role). requiresPlanMode: **no**.
+
+- [ ] **BIN-533** [Tier A] `build` — The BIN-522 notes-migration describe block in
+      `WatchlistContext.test.tsx` (verified present, lines ~571-794) fails under rare timing
+      (~1/31 runs per the reviewing agent's observation) — test-reliability, not a security or
+      production-behavior issue. Files: `src/contexts/WatchlistContext.test.tsx`.
+  - [ ] The affected test(s) no longer rely on real-timer / timing-race behavior (deterministic
+        fake timers or awaited microtask ordering instead).
+  - [ ] No assertion on the notes-migration invariants (the `updatedAt`-omission checks etc.)
+        is weakened — same behavior pinned, just made deterministic.
+  - [ ] Close-out note states how flake-freedom was verified (e.g. N repeated local runs).
+
+## Batch: rules (Tillsammans veto/isHost hardening + BIN-509 cleanup)
+
+Router: `node docs/org/route.mjs firestore.rules` → **top** (full-panel), Security Architect
+(#4) + DPO (#6) + DBA (#27). requiresPlanMode: **yes** — AND this is a `firestore.rules`
+change, which is CLAUDE.md's standing working-agreement exception: **written plan + Malin's
+explicit go-ahead FIRST**, same as BIN-509's process, before any Edit/Write. Both tickets here
+were pre-scoped as deliberate follow-ups by the BIN-509 panel itself (2026-07-16) — mandate is
+established, but the rules-change ceremony still applies in full.
+
+- [ ] **BIN-540** [Tier C — firestore.rules, full-panel, WRITTEN PLAN + GO-AHEAD REQUIRED
+      before any edit] `build` — `vetoRemaining`/`isHost` are listed in the participants
+      `hasOnly()` field set (verified at :828-829) but have NO value validation — any
+      participant can self-write `vetoRemaining: 999` or `isHost: true`. The BIN-509 panel
+      explicitly flagged this as "its own small ticket" (deliberately kept out of BIN-509's
+      scope). Files: `firestore.rules`, `src/test/rules/firestore-rules.test.ts`.
+  - [ ] `vetoRemaining` and `isHost` are no longer client-writable to arbitrary values (value
+        validation added — e.g. `vetoRemaining` bounded to its starting allowance, `isHost`
+        can't be self-granted by a non-owner participant).
+  - [ ] New DENY tests: a participant cannot set `isHost:true` on their own write; cannot set
+        `vetoRemaining` above its starting allowance.
+  - [ ] Existing BIN-24/BIN-509 participant tests still pass unmodified in intent (legitimate
+        own-slot writes remain allowed).
+
+- [ ] **BIN-542** [Tier C — firestore.rules, full-panel, WRITTEN PLAN + GO-AHEAD REQUIRED
+      before any edit] `build` — Cleanup-severity, no correctness impact (found by
+      `/code-review xhigh` during the BIN-509 ship, deliberately deferred out of that diff):
+      `anonVoteAddOk()` (verified at :794-797) recomputes `votes.diff(resource.data.votes)`
+      per call instead of binding it once; note the caveat that `addedKeys()` returns a
+      non-indexable Set (relevant to how the simplification is written). Files:
+      `firestore.rules` (+ `src/test/rules/firestore-rules.test.ts` if the refactor touches
+      test-visible behavior, which it should not).
+  - [ ] `anonVoteAddOk()` binds `votes.diff()` once and reuses it, instead of recomputing per
+        call.
+  - [ ] Pure simplification — the full sessions/swipes rules test suite passes UNMODIFIED
+        (no behavior change).
+  - [ ] The `addedKeys()`-is-a-non-indexable-Set caveat from the original finding is either
+        resolved in the simplified code or explicitly left as a documented non-issue.
+
+## Needs you (mandate gate — not selected, see reasoning)
+
+- **BIN-527** — Advisor dead-weight TV shield keys on availability, not actual per-title watch
+  location. Carried from the 2026-07-16 sprint's needs-approval queue (self-declared "needs a
+  product decision... no clean code fix without that call", 3 options laid out in the ticket).
+  Unchanged reasoning: recommend **(b) tighten to attribute-one-service**, for consistency with
+  the film path (BIN-513 already accepted that tradeoff), when you're ready to sign off — not
+  urgent, client-only advisor logic, adjustable anytime.
+- **BIN-521** — Bundle-rådgivare nudge (multi-service → cheaper operator bundle). Carried,
+  self-declared "ren idé, kräver egen brainstorm/design innan bygge." Recommend its own
+  `/stakeholder-review` (Monetization + Data/Integrations) before any code.
+- **BIN-544** (new) — Cache-miss logging for the recap feature, to prioritize coverage backfill
+  by real demand instead of guesswork. Reasonable idea, but it's speculative pre-launch (zero
+  users yet, so "real demand" signal doesn't exist to log against today) and adds an analytics
+  surface without a clear near-term consumer. Recommend: **hold** until there's real traffic to
+  measure — revisit alongside BIN-419's SEO re-measurement (~2026-08-28) when there's usage to
+  look at. Not urgent.
+- **BIN-543** (new) — `leavingRollup` resumable MOTN pagination cursor, to avoid a mid-cycle
+  blackout "under sustained demand." Real engineering hardening, but the risk it prevents is
+  explicitly conditional on demand binge doesn't have yet pre-launch (BIN-541 already gave this
+  job its own small `LEAVING_HARD_CYCLE_CAP = 150` allocation, well under the 500/mo pool) — and
+  the fix touches `functions/**` pagination logic (Tier C, real complexity: cursor persistence +
+  resume semantics). Recommend: **defer** until `leavingRollup` is actually observed hitting its
+  cap in production (the health/staleness signal BIN-541 added would surface that) — building
+  resumability against a hypothetical load now risks the same kind of over-engineering-vs-actual-
+  behavior mismatch that caused this sprint's two reverts. Not urgent.
+
+## Deferred, no new judgment needed (already-decided in memory, left in Backlog)
+
+BIN-402/454/468 (TMDB ToS sweep — mutateEnabled deliberately deferred to a real-traffic gate
+~Aug). BIN-170 (Binge Wrapped — booked Nov). BIN-189 (Seasonal challenges — panel-approved for
+Aug/Sept build, not now). BIN-419 (SEO re-measurement, not due until 2026-08-28). BIN-520
+(BIN-507 orchestration-test follow-up — low priority, already deferred last sprint; re-verified
+via grep, its intended resolution was never actually committed — leaving deferred, low value).
+**BIN-534** (CI runs the full test suite twice after BIN-525's coverage step) — legitimate small
+tech-debt fix, but dropped for this sprint's capacity (10 tickets already selected); carry to
+next sprint, no judgment issue.
+
+## Obsolete (git/code shows already done, Linear still open)
+
+- **BIN-541** — MOTN vendor quota monthly-vs-daily fix. Verified via grep of current `main`:
+  `functions/src/streamingOffers/index.ts` and `functions/src/leavingRollup/index.ts` both use
+  renamed `STREAMING_HARD_CYCLE_CAP`/`LEAVING_HARD_CYCLE_CAP` constants with a shared
+  `reserveMotnSlot`/`motnCycle` budget-reservation mechanism — exactly the fix BIN-541
+  specified. Shipped under commit `12b88f4` (2026-07-17). Ticket was never transitioned to
+  Done; recommend closing it citing that commit rather than re-implementing.
+
+## Post-sprint steps
+
+1. `npm run typecheck` across all touched files.
+2. **Rules batch (BIN-540/542) is plan-gated per the working agreement** — write the expanded
+   plan, get Malin's explicit go-ahead, THEN implement. Do not Edit/Write firestore.rules before
+   that go-ahead lands.
+3. File Linear follow-ups for anything deferred mid-implementation.
+4. Commit through the review gates (code/security/test markers as triggered — note ALL five
+   batches trigger `binge-code-reviewer`; social/data/auth/rules batches additionally trigger
+   `binge-security-reviewer` per their file patterns). Conventional commit(s) referencing all
+   ticket ids. Given the rules batch is plan-gated separately, consider a SEPARATE commit for
+   BIN-540/542 once approved, rather than bundling with the other four batches.
+5. Push (deploys hosting on push) → poll `deploy.yml` → purge Cloudflare. BIN-523/529 touch
+   `functions/**` (manual `firebase deploy --only functions` required — deploy.yml doesn't cover
+   it). BIN-540/542 touch `firestore.rules` (manual `firebase deploy --only firestore:rules`
+   required, AFTER Malin's go-ahead).
+6. Transition: Tier A build + all-pass → Done. BIN-510/523's Tier C status + prior-revert
+   history means any unresolved verification concern parks them In Review rather than Done, even
+   if the code compiles and tests pass — the bar this round is "doesn't repeat the specific
+   failure mode that got them reverted last time," not just "green tests."
+7. Close BIN-541 as obsolete, citing `12b88f4`.
+
+---
+
 # PLAN — BIN-541: MOTN vendor quota is monthly (500/mo hard limit), not daily (100/day) — 2026-07-17
 
 **Class:** `functions/**` (sensitive domain, router tier `medium`, owning role #13
@@ -240,210 +654,13 @@ value validation; one-veto cap is client-only). Adjacent, real, but its own smal
 
 ---
 
-# Sprint 2026-07-16 — selection
+# Archive — Sprint 2026-07-16 (shipped, 2 reverted)
 
-Linear available. 7 tickets selected (`build`), clustered into 6 disjoint-file batches.
-0 obsolete (all 7 candidate bugs/gaps re-verified present in current `main` before
-selecting — grep-of-main premise check per the skill). 3 needs-approval this round
-(BIN-509, BIN-527, BIN-521 carried) — all three get a plain-language reasoning below;
-none selected into a batch.
-
-## Batch: streaming (advisor dedup)
-
-- [ ] **BIN-528** [Tier A] `build` — Extract the shared "which watch-statuses count as a
-      live reason to keep a service" guard clause out of three separate copies
-      (`tvActiveProviderIdsFromItems` in serviceValue.ts, `buildHouseholdContribution` in
-      householdAggregate.ts, the active-set derivation in spendSnapshot.ts) into one small
-      helper the three consume; keep each surface's extra local filters (e.g. serviceValue's
-      `mediaType==='tv'` + `avslutad`-exclusion) local, not folded into the shared helper.
-      Files: `src/lib/advisor/serviceValue.ts`, `src/lib/advisor/householdAggregate.ts`,
-      `src/lib/spendSnapshot.ts` (+ their `.test.ts` files). Stakeholders: single ·
-      #24 Monetization/Partnerships. requiresPlanMode: no.
-  - [ ] A single shared helper (new export) encodes the common "which statuses qualify as
-        active" rule; all three call sites use it instead of duplicating the status list.
-  - [ ] serviceValue's TV-only filter and `avslutad`-exclusion (BIN-513) still apply and are
-        NOT moved into the shared helper (they stay local to serviceValue.ts).
-  - [ ] All three modules' existing test suites pass unmodified in their assertions — this
-        is a pure refactor, not a behavior change to any of the three dead-weight/household/
-        spend verdicts.
-
-## Batch: infra (test coverage measurement)
-
-- [ ] **BIN-525** [Tier A] `build` — Run vitest with `--coverage` once, record the measured
-      percentage, and wire a report-only (non-blocking) coverage step into CI. Do NOT add a
-      blocking coverage floor/threshold — that decision is explicitly Malin's, deferred.
-      Files: `package.json`, `vitest.config.ts` (or equivalent), `.github/workflows/ci.yml`.
-      Stakeholders: single · #8 DevOps/SRE. requiresPlanMode: **yes** (3-file CI/tooling
-      change — working-agreement "large change" threshold).
-  - [ ] CI runs a coverage pass and the measured overall percentage is recorded (Linear
-        comment on BIN-525 + this ticket's close-out note).
-  - [ ] No blocking floor/threshold is added anywhere (`--coverage` reporting only) — CI
-        does not go red purely because of a coverage number.
-  - [ ] The floor-or-not decision itself is explicitly left open for Malin (surfaced, not
-        pre-decided) in the close-out comment.
-
-## Batch: auth (AuthContext bug fixes)
-
-- [ ] **BIN-517** [Tier A] `build` — Stop `register()`'s `setDoc(..., {username: null},
-      {merge:true})` from clobbering `ensureUserProfile`'s auto-claimed username (drop
-      `username` from `register()`'s payload entirely — merge:true then leaves whatever
-      `ensureUserProfile` claimed intact). Files: `src/contexts/AuthContext.tsx` (+ new
-      test). Stakeholders: full-panel (AuthContext.tsx high-stakes path) · #5 Legal/GDPR,
-      #27 DBA. requiresPlanMode: **yes**.
-  - [ ] `register()`'s `setDoc` payload no longer includes a `username` key (or otherwise
-        provably can't overwrite a just-claimed username back to null).
-  - [ ] A new test proves a registered user ends with a non-null `username` AND exactly one
-        `usernames/{name}` reservation (no orphan).
-  - [ ] `setProviderCost`/`setProviderCampaign` (BIN-516, same file/batch) are untouched by
-        this criterion's diff — the two fixes stay independently reviewable.
-
-- [ ] **BIN-516** [Tier A] `build` — `setProviderCost`/`setProviderCampaign` mutate their
-      mirror ref before the Firestore write resolves and never revert on failure, so a
-      rejected value silently persists via the next successful edit. Revert the ref (or
-      rebuild the payload from committed state) on write failure, for both. Files:
-      `src/contexts/AuthContext.tsx` (+ new test). Stakeholders: full-panel (AuthContext.tsx
-      high-stakes path) · #5 Legal/GDPR, #27 DBA. requiresPlanMode: **yes**.
-  - [ ] Both `setProviderCost` and `setProviderCampaign` revert their ref to the pre-edit
-        value (or equivalent non-ref-poisoning fix) when the Firestore write throws.
-  - [ ] A new test forces the write to reject, then performs a second successful edit to a
-        DIFFERENT provider, and asserts the rejected value is NOT included in that second
-        write's payload.
-  - [ ] The existing successful-write path test assertions are unmodified.
-
-## Batch: watchlist (BIN-505 follow-up tests + cleanup)
-
-- [ ] **BIN-522** [Tier A] `build` — Pin the four test-coverage gaps BIN-505's reviewers
-      verified by manual trace only (updatedAt-omission on notes migration/updateNotes,
-      cross-account `itemsUidRef` guard, `useFollowList`'s real 'Privat användare' fallback
-      replacing the stale 'ghost'-branch test, `syncMyPublicProfile` field clamping), and fix
-      `updateNotes`' unconditional no-op write when there's no legacy inline note and
-      `visFields` is empty. Files: `src/contexts/WatchlistContext.tsx` (+ test),
-      `src/hooks/useFollowList.helpers.test.ts`, `src/lib/firebase/publicProfile.ts` (+ test).
-      Stakeholders: single · #14 Software Architect. requiresPlanMode: **yes** (multi-file,
-      privacy-adjacent follow-up to a PII fix).
-  - [ ] New tests assert `'updatedAt' in payload === false` for both the eager notes
-        migration and `updateNotes` (mirrors the `nextAirReadRepair` pattern).
-  - [ ] A new test simulates a mid-session uid switch A→B and asserts the notes migration
-        does NOT write A's notes under B.
-  - [ ] `useFollowList.helpers.test.ts`'s stale `'ghost'`-branch assertion is replaced with a
-        test for the real 'Privat användare' fallback row; no test still asserts `'ghost'`.
-  - [ ] `updateNotes` skips the item-level write when there's no legacy inline note AND
-        `visFields` is empty (no behavior change to the notes-subcollection write itself).
-
-## Batch: data (availableNotify/priceDropNotify mediaType collision)
-
-- [ ] **BIN-523** [Tier C — functions/** trigger, expanded plan required] `build` — Movie N
-      and TV N currently collapse into one `availableNotifyState`/`releaseNotifyState` doc
-      (keyed on bare `tmdbId`) and one `processTitle` group, producing wrong/suppressed
-      pushes for that overlap. Namespace state-doc ids by media type (`movie_${tmdbId}` /
-      `tv_${tmdbId}`) and group `processTitle` by `(mediaType, tmdbId)`; apply the same fix
-      to `priceDropNotify` if it shares the pattern. Files:
-      `functions/src/availableNotify/index.ts`, `functions/src/priceDropNotify/index.ts`
-      (+ tests). Stakeholders: single · #13 Data/Integrations Engineer. requiresPlanMode:
-      **yes** (security-labeled + functions/** tierCTrigger).
-  - [ ] State-doc ids (both `availableNotifyState` and `releaseNotifyState`) are namespaced
-        by media type — a movie and a TV show sharing the same numeric tmdbId get separate
-        docs.
-  - [ ] `processTitle` groups watchlist rows by `(mediaType, tmdbId)`, not `tmdbId` alone.
-  - [ ] A new test proves a user holding movie N and TV N gets two independent notify/dedup
-        entries (neither suppresses or mis-types the other).
-  - [ ] `priceDropNotify` is checked for the same keying bug; fixed if present, or the ticket
-        close-out states explicitly why it doesn't apply.
-
-## Batch: social (groups fan-out cap)
-
-- [ ] **BIN-510** [Tier C — full-panel, expanded plan required] `build` — `syncProgressToGroups`
-      (fired on every episode/progress write) and its sibling `array-contains` group queries
-      in `groups.ts` (4 call sites: :477, :562, :750, :778) have no `limit()`, unlike
-      `useFollow.ts`'s `FOLLOWING_LIMIT = 500` pattern for the analogous following query — a
-      direct Blaze-budget risk for heavy group users. Add a bounded limit (mirror
-      `FOLLOWING_LIMIT`) to all four call sites; skip the sync entirely when the user has zero
-      groups without a collection scan. Files: `src/lib/firebase/groups.ts` (+ tests).
-      Explicitly NOT in scope: `AuthContext.tsx:443`'s `updateProviders` group query has the
-      same unbounded shape but is a low-frequency (provider-list-edit) call, not the
-      per-episode hot path — leave it alone this round (note it in the close-out for a
-      possible follow-up ticket). Stakeholders: full-panel · #27 DBA, #4 Security Architect,
-      #14 Software Architect. requiresPlanMode: **yes**.
-  - [ ] All four `array-contains` group queries in `groups.ts` (:477, :562, :750, :778) carry
-        a bounded `limit()`.
-  - [ ] `syncProgressToGroups` (or its caller) skips the group-fan-out query entirely for a
-        user known to be in zero groups, without a full collection scan.
-  - [ ] A new test proves the query is bounded (a user "in" more groups than the limit still
-        only reads up to the limit).
-  - [ ] `AuthContext.tsx:443` is explicitly left unchanged — no edits to `AuthContext.tsx` in
-        this ticket's diff (keeps it disjoint from the auth batch above).
-
-## Needs you (mandate gate — not selected, see reasoning)
-
-- **BIN-509** — Tillsammans session write-rules forgery fix (swipes/participant slot not
-  bound to the caller). Real, verified-still-present security bug in a live feature — but
-  it's a `firestore.rules` change, and the working agreement's one standing exception is
-  that Firestore rules/schema changes get **a written plan and an explicit go-ahead FIRST**,
-  not an auto-build that parks in review after already being live (this repo's push-triggers-
-  deploy means "In Review" would happen only after the rules are already serving traffic).
-  Router confirms full-panel (Security Architect, DPO, DBA). Recommend: **do it** — it's a
-  real integrity hole (any link-holder can forge another participant's vote or hijack their
-  slot) — but run it as its own `/stakeholder-review` + written plan next, with your sign-off
-  before the rules deploy, same as BIN-505's process. Not urgent (data is anonymous/ephemeral,
-  7-day TTL, no PII), so safe to schedule rather than rush.
-- **BIN-527** — Advisor TV dead-weight shield keys on availability, not actual per-title
-  watch location (a show available on 2 owned services shields both, even though the user
-  only watches it on one). The ticket itself says "needs a product decision... no clean code
-  fix without that call" and lays out 3 options (accept as-is / tighten to attribute-one-
-  service like films / require real watch-recency — bigger). This is exactly your call, not
-  an engineering one. Recommend: **(b) — tighten to attribute-one-service**, for consistency
-  with the film path (BIN-513 already accepted that same false-positive/false-negative
-  tradeoff for films), but only when you're ready to sign off on it — not urgent, client-only
-  advisor logic, adjustable anytime.
-- **BIN-521** — Bundle-rådgivare nudge (multi-service → cheaper operator bundle). Carried
-  from the prior sprint's needs-approval queue; ticket self-declares "ren idé, kräver egen
-  brainstorm/design innan bygge." Recommend its own `/stakeholder-review`
-  (Monetization + Data/Integrations) before any code — unchanged reasoning from 2026-07-15.
-
-## Deferred, no new judgment needed (already-decided in memory, left in Backlog)
-
-BIN-520 (BIN-507 orchestration-test follow-up — low priority, already attempted once this
-sprint cycle and dropped for failed verification; description records the intended
-"accept pure-helper-only" resolution but it was never actually committed to `index.ts` —
-re-verified via grep, the header comment doesn't exist on main. Leaving deferred rather than
-re-attempting immediately; low value (doc comment + criteria downgrade only, job stays in
-count-only mode regardless)). BIN-402/454/468 (TMDB ToS sweep — mutateEnabled deliberately
-deferred to a real-traffic gate ~Aug). BIN-170 (Binge Wrapped — booked Nov). BIN-189
-(Seasonal challenges — panel-approved for Aug/Sept build, not now). BIN-419 (SEO
-re-measurement, not due until 2026-08-28).
-
-## Post-sprint steps
-
-1. `npm run typecheck` across all touched files.
-2. File Linear follow-ups for anything deferred mid-implementation (e.g. the
-   `AuthContext.tsx:443` unbounded query noted under BIN-510, if worth its own ticket).
-3. Commit through the review gates (code/security/test markers as triggered), conventional
-   commit referencing all ticket ids (BIN-528/525/517/516/522/523/510).
-4. Push (deploys on push) → poll `deploy.yml` → purge Cloudflare. BIN-523/510 touch
-   `functions/**` respectively `src/lib/firebase/groups.ts` — confirm whether either needs a
-   manual `firebase deploy --only functions` (deploy.yml only deploys hosting).
-5. Transition: Tier A build + all-pass → Done. Any Tier C ticket with an unresolved
-   full-panel conflict or a failed/unclear acceptance criterion → In Review instead, with a
-   note on what to look at.
-
-## Deviation log (filled post-sprint 2026-07-16)
-
-- BIN-528: no host file named for the shared helper → watchStatus.ts is the semantic home but plan-gated + outside the batch fileset → hosted in `src/lib/spendSnapshot.ts` (oldest surface, defines the concept, no import cycles).
-- BIN-528: householdAggregate.test.ts already pins the guard ('sedd' exclusion case) → left untouched, no redundant coverage.
-- BIN-525: functions/src admin entrypoints fail v8 coverage remap (PARSE_ERROR, silently excluded) → coverage.include scoped to `src/**/*.{ts,tsx}` with WHY comment — denominator declared, not accidental.
-- BIN-522: 'Privat användare' fallback tests already existed; the genuinely stale part was the dead 'ghost' union member (unreachable since BIN-505) → retired 'ghost' from FollowProfile/resolveFollowRows, tests pin null→fallback + order/count.
-- BIN-522: publicProfile.ts clamping already shipped in d6ff035 → tests only, no production change there.
-- BIN-522: WatchlistContext test gaps live in WatchlistContext.test.tsx, not useFollowList.helpers.test.ts as ticketed.
-- BIN-522: mutation-verification `git checkout --` wiped the real edit → re-applied + re-verified; lesson filed (tasks/lessons.md + digest).
-**BIN-523 + BIN-510 were REVERTED before deploy (2026-07-16) — failed verification.** The
-notes below record what the sprint *attempted*; none of it is in the code. Read them as
-rework input for the returned tickets, NOT as shipped fact. The code is back at `fd4b14e`.
-
-- BIN-523 [REVERTED]: attempted — releaseNotifyState doc ids deliberately NOT namespaced (movie-only by construction; renaming orphans live per-user dedup markers → double pushes in the 3-day catch-up window).
-- BIN-523 [REVERTED]: attempted — priceDropNotifyState verified movie-only at the query → no change, invariant claimed in a header comment. **The verification rejected exactly this claim:** the query filter only protects priceDropNotify's READ side; `priceHistory/{tmdbId}` is written by `streamingOffers`, which dedupes by bare tmdbId and carries the SAME collision. The header comment (now reverted away) asserted a safety property that does not hold. Any rework must fix `streamingOffers/logic.ts` too, or drop the claim.
-- BIN-523 [REVERTED]: attempted — FCM tag `available-${tmdbId}` shared the collision → include mediaType in the namespaced key. Residual: inbox doc id still bare → BIN-529.
-- BIN-510 [REVERTED]: attempted — zero-groups skip via per-uid 5-min TTL cache seeded by first scan/subscription, invalidated by in-module membership mutations. Failed correctness/intent verification.
-- BIN-510 [REVERTED]: attempted — refreshMyHouseholdContributions got the bounded limit() only, not the skip (low-frequency caller). Bounded-query test missing → BIN-530; AuthContext:443 → BIN-536.
+Full detail: `git show 84e7f4d:tasks/todo.md`. Shipped BIN-528/525/517/516/522 + BIN-509
+(cae9541) + BIN-541 (12b88f4, now marked obsolete above — never Done'd in Linear).
+BIN-523/510 REVERTED before deploy (3644a22, failed sprint verification) — both re-selected
+as retries in this sprint's "social" and "data" batches above, with the specific failure
+modes cited so the retries don't repeat them.
 
 ---
 
