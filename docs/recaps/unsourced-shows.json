@@ -436,5 +436,143 @@
     "title": "Fauda (season 5, episode 1)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-18T15:22:56.767Z"
+  },
+  {
+    "tmdbId": 128839,
+    "title": "La Brea (season 1, episode 2: Day Two)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T17:48:56.523Z"
+  },
+  {
+    "tmdbId": 67883,
+    "title": "Insecure (season 3, episode 1: Better-Like)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T17:59:52.138Z"
+  },
+  {
+    "tmdbId": 62816,
+    "title": "Quantico (season 3, episode 1: The Conscience Code)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:01:56.209Z"
+  },
+  {
+    "tmdbId": 4330,
+    "title": "Millennium (season 2, episode 10: Midnight of the Century)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T18:03:31.091Z"
+  },
+  {
+    "tmdbId": 199001,
+    "title": "My Life with the Walter Boys (season 1, episode 5: Thanksgiving)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:12:35.934Z"
+  },
+  {
+    "tmdbId": 61345,
+    "title": "Z Nation (season 3, episode 14: Everybody Dies in the End)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T18:17:50.523Z"
+  },
+  {
+    "tmdbId": 213306,
+    "title": "Cross (season 2, episodes 1-8: Harrow, Scatter, Feed, Harden, Climb, Gather, Winnow, Quemar)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:22:16.338Z"
+  },
+  {
+    "tmdbId": 87017,
+    "title": "P-Valley (entire show)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:25:36.033Z"
+  },
+  {
+    "tmdbId": 4271,
+    "title": "Farscape — most episodes (83 of 88) have only a 1-2 sentence blurb on the Wikipedia episode list, too thin to paraphrase into self-contained recaps; only 5 episodes (S1E1, S1E2, S2E4, S3E1, S4E22) have dedicated Wikipedia articles with real plot detail. Fandom's Farscape Encyclopedia Project claims CC BY-SA but 402-blocks fetch, so it's unusable per policy.",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T18:46:09.653Z"
+  },
+  {
+    "tmdbId": 44606,
+    "title": "Beauty and the Beast (2012) (season 3, episode 1: The Beast of Wall Street)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T18:46:50.223Z"
+  },
+  {
+    "tmdbId": 88324,
+    "title": "Virgin River (season 4 episode 2: Father Knows Best...?; season 5 episodes 9-12: Angel's Peak, Labor Day, The More the Merrier, Father Christmas; season 6 episodes 4-10: Brothers & Sisters, Love Story, Ghosts, I Climbed a Mountain and I Turned Around, Going Overboard, Prelude to a Kiss, The Big Day; season 7 episodes 1-10 (whole season): The Afterglow, Beautiful Child, The Match, Pipe Dreams, Always Anywhere Forever, No Regrets, It Takes A Village, Back In The Saddle, La Luna De Miel, David and Goliath) - English Wikipedia's main article (Virgin_River_(TV_series)) has full per-episode synopses for seasons 1-3 and most of seasons 4-5, but the ShortSummary field is empty/copyright-boilerplate-only for these 22 episodes (verified via raw wikitext); no separate List-of-episodes or per-season articles exist. Virgin River Fandom wiki 402-blocks WebFetch (license unverifiable). Seasons 1-3 fully sourced+uploaded; seasons 4-6 partially covered (missing episodes logged here, no season doc written for 4/5/6); season 7 entirely unsourced.",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:48:33.390Z"
+  },
+  {
+    "tmdbId": 13796,
+    "title": "Underbelly (season 1, episode 1-13: full season, no per-episode Wikipedia coverage)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:48:41.444Z"
+  },
+  {
+    "tmdbId": 73544,
+    "title": "Warrior (season 3, episode 7: Gotta Be Crooked to Get Along in a Crooked World)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:50:58.332Z"
+  },
+  {
+    "tmdbId": 82798,
+    "title": "1983 (all 8 episodes, season 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:54:39.658Z"
+  },
+  {
+    "tmdbId": 112745,
+    "title": "Ethos (Bir Başkadır) — whole show",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T18:56:11.898Z"
+  },
+  {
+    "tmdbId": 130219,
+    "title": "Furia (whole show, seasons 1-2, 14 episodes)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T18:56:20.393Z"
+  },
+  {
+    "tmdbId": 62858,
+    "title": "Colony (season 3, episode 4: Hospitium)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:06:38.297Z"
+  },
+  {
+    "tmdbId": 76662,
+    "title": "My Mister (whole show, all 16 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:08:29.803Z"
+  },
+  {
+    "tmdbId": 61678,
+    "title": "Misaeng: Incomplete Life (whole show, 20 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:09:01.510Z"
+  },
+  {
+    "tmdbId": 74821,
+    "title": "Prison Playbook",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:09:31.502Z"
+  },
+  {
+    "tmdbId": 86943,
+    "title": "Girls from Ipanema (Coisa Mais Linda) — all episodes, seasons 1-2",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-18T19:10:30.016Z"
+  },
+  {
+    "tmdbId": 113268,
+    "title": "The Uncanny Counter (season 2, episode 1: Episode 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:11:02.071Z"
+  },
+  {
+    "tmdbId": 64726,
+    "title": "Follow the Money (Bedrag)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-18T19:11:44.838Z"
   }
 ]
