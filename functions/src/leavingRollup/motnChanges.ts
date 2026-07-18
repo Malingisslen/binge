@@ -13,16 +13,17 @@
 
 import { logger } from 'firebase-functions/v2';
 import type { ChangeItem, ShowRef } from './logic';
+import { MAX_PAGES } from './config';
 
 const HOST = 'streaming-availability.p.rapidapi.com';
 // BIN-543: 18, not 20 — sized so a worst-case run (every run maxes this out)
 // still survives the full ~31-day cycle under the new 96h cadence, see the
 // arithmetic proof on LEAVING_HARD_CYCLE_CAP in index.ts (18 × 8 runs = 144 ≤
 // 150). 25 changes/page → up to 450 expiring titles per run; still ample for SE/31d.
-// Exported so motnChanges.test.ts can pin this against LEAVING_HARD_CYCLE_CAP's
-// value (that constant itself can't be imported here — index.ts pulls in
-// firebase-admin, which the root vitest toolchain doesn't have).
-export const MAX_PAGES = 18;
+// Lives in ./config.ts (admin-free) so motnChanges.test.ts can import it
+// without transitively pulling in this file's 'firebase-functions/v2' import
+// — that import isn't resolvable under the root CI vitest toolchain's `npm
+// ci` (same class of gap previously only seen for firebase-admin).
 
 interface RawChange {
   showId?: string;

@@ -12,3 +12,13 @@ export const LEAVING_HARD_CYCLE_CAP = 150;
 
 /** Cloud Scheduler cadence, in hours — see index.ts's onSchedule for the arithmetic proof against LEAVING_HARD_CYCLE_CAP. */
 export const CADENCE_HOURS = 96;
+
+// Lives here (not motnChanges.ts) for the same reason as the two constants
+// above: motnChanges.ts imports `logger` from 'firebase-functions/v2', which
+// the root CI vitest toolchain's `npm ci` doesn't install (same "Functions
+// test import gotcha" class previously only seen for firebase-admin) — a
+// test importing MAX_PAGES from motnChanges.ts directly resolves locally
+// (dev node_modules has it) but fails in CI's fresh checkout. motnChanges.ts
+// imports this for its own internal use.
+/** MOTN /changes pagination cap per run — sized against LEAVING_HARD_CYCLE_CAP/CADENCE_HOURS, see motnChanges.ts's doc comment for the arithmetic. */
+export const MAX_PAGES = 18;
