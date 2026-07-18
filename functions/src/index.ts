@@ -213,6 +213,14 @@ export { askBingeParse } from './askbinge/parse';
 // Hämtar IMDb-score, Rotten Tomatoes och Metacritic från OMDb API.
 export { titleRatings } from './titleRatings';
 
+// ── Recap coverage-gap recorder (BIN-544) ────────────────────────────────────
+// logRecapMiss: callable som inkrementerar recapCoverageGaps/{tmdbId} varje gång
+// en användare stöter på en titel utan spoiler-safe recap — prioriterar vilka
+// serier som ska källsökas härnäst utifrån faktisk efterfrågan. Enda skrivaren
+// — recapCoverageGaps är låst för klienter i firestore.rules. App Check ELLER
+// inloggad krävs (samma mönster som recordAskBinge).
+export { logRecapMiss } from './recapCoverage';
+
 // ── Streaming offers refresh (MOTN) ──────────────────────────────────────────
 // streamingOffersRefresh: daglig schemalagd collectionGroup-scan → MOTN-fetch
 // för intent-titlar (film/vill_se + tv/mina med providers) → skriver

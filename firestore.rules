@@ -696,6 +696,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Recap coverage-gap counters (BIN-544) — per-show counts of "user hit a
+    // title with no spoiler-safe recap available," written EXCLUSIVELY by the
+    // logRecapMiss callable (Admin SDK bypasses rules). Sealed: clients can
+    // never read or forge counters directly. Validation lives in the callable.
+    match /recapCoverageGaps/{tmdbId} {
+      allow read, write: if false;
+    }
+
     // Cineasterna availability catalog — written by the cineasternaCatalogSync cron
     // (Admin SDK bypasses rules), public read (it's catalog data, no PII).
     match /cineasternaCatalog/{doc} {

@@ -1,9 +1,11 @@
+import { useEffect } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { recapDocId, seasonRecapDocId, type EpisodeRef } from '@/lib/recaps/boundary';
 import { recapIndexDocId, parseRecapIndex, nearestCoveredBoundary } from '@/lib/recaps/coverage';
 import { RECAPS_ENABLED } from '@/lib/recaps/config';
+import { logRecapMiss } from '@/lib/recaps/coverageGap';
 import { isSeasonRecapLoading } from './useRecap.helpers';
 import type { RecapDoc, RecapSource, SeasonRecapDoc } from '@/lib/recaps/types';
 
@@ -94,16 +96,17 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
   const baseEnabled = RECAPS_ENABLED && tmdbId != null;
 
   // 1) Per-show coverage index — cached across boundary changes (1h), absent → not seeded.
-  const { data: covered } = useQuery({
+  const coveredQuery = useQuery({
     queryKey: ['recap-index', tmdbId],
     enabled: baseEnabled,
     staleTime: 1000 * 60 * 60,
     queryFn: async () => parseRecapIndex(await getDocWithTimeout(recapIndexDocId(tmdbId!))),
   });
+  const covered = coveredQuery.data;
 
   // 2) The recap at the exact-or-nearest-earlier covered boundary. On a drifted index
   //    (doc missing for an indexed boundary) walk back a bounded number of steps.
-  const { data } = useQuery({
+  const recapQuery = useQuery({
     queryKey: ['recap', tmdbId, boundary?.season, boundary?.episode],
     enabled: baseEnabled && boundary != null && covered != null && covered.length > 0,
     staleTime: 1000 * 60 * 60, // recaps are immutable once generated
@@ -122,6 +125,40 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
       return { recap: null, coveredBoundary: null };
     },
   });
+  const data = recapQuery.data;
+
+  // BIN-544: log a genuine coverage gap for backfill prioritization — either
+  // "this show has no index at all" (never seeded) or "the walk-back found no
+  // covered boundary." Gated on `isSuccess`, NOT just "data is falsy" — an
+  // errored/timed-out fetch (getDocWithTimeout's 10s race can reject) must
+  // never masquerade as "no recap exists" (the same false-negative class
+  // already documented on SeasonRecapResult.isLoading below). React Query
+  // returns a stable reference for unchanged cached data, so this only
+  // re-fires on a genuine transition, not every render.
+  //
+  // Code review (2026-07-18): depend on boundary's PRIMITIVE fields, not the
+  // object itself — both queries above already key on
+  // `boundary?.season, boundary?.episode`, not the object reference, but a
+  // useEffect dep array compares by reference. A value-equal-but-new-identity
+  // `boundary` (e.g. the parent's Firestore onSnapshot firing twice for one
+  // write — an optimistic-echo + server-ack pair is common) wouldn't refetch
+  // either query, but WOULD re-run this effect against the same settled data,
+  // double-firing logRecapMiss for a miss that was already logged.
+  useEffect(() => {
+    // boundary?.season == null (not `boundary == null`) — checking a primitive
+    // field instead of the object itself means this effect never needs to
+    // reference `boundary` directly, so its dep array below can key on the
+    // same primitives the queries above use without an exhaustive-deps fight.
+    if (!baseEnabled || boundary?.season == null || tmdbId == null) return;
+    if (coveredQuery.isSuccess && covered!.length === 0) {
+      void logRecapMiss(tmdbId);
+      return;
+    }
+    if (recapQuery.isSuccess && data!.recap === null) {
+      void logRecapMiss(tmdbId);
+    }
+  }, [baseEnabled, boundary?.season, boundary?.episode, tmdbId, coveredQuery.isSuccess, covered, recapQuery.isSuccess, data]);
+
   return data ?? { recap: null, coveredBoundary: null };
 }
 
