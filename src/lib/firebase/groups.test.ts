@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => {
   }));
   const setDocMock = vi.fn((..._args: unknown[]) => Promise.resolve());
   const updateDocMock = vi.fn((..._args: unknown[]) => Promise.resolve());
+  const deleteDocMock = vi.fn((..._args: unknown[]) => Promise.resolve());
   const addDocMock = vi.fn((coll: unknown, _data: unknown) => {
     const id = `auto-id-${++autoIdCounter}`;
     return Promise.resolve({ _path: `${(coll as { _path: string })._path}/${id}`, id });
@@ -37,7 +38,7 @@ const mocks = vi.hoisted(() => {
     return { _path: path.join('/'), id: path[path.length - 1] };
   });
   return {
-    setMock, deleteMock, updateMock, commitMock, writeBatchMock, setDocMock, updateDocMock, addDocMock,
+    setMock, deleteMock, updateMock, commitMock, writeBatchMock, setDocMock, updateDocMock, deleteDocMock, addDocMock,
     getDocMock, getDocsMock,
     queryMock, whereMock, limitMock, orderByMock, docMock,
   };
@@ -61,6 +62,7 @@ vi.mock('firebase/firestore', () => ({
   doc: (...args: unknown[]) => mocks.docMock(...(args as [unknown, ...unknown[]])),
   setDoc: (...args: unknown[]) => mocks.setDocMock(...(args as [unknown, ...unknown[]])),
   updateDoc: (...args: unknown[]) => mocks.updateDocMock(...(args as [unknown, ...unknown[]])),
+  deleteDoc: (...args: unknown[]) => mocks.deleteDocMock(...(args as [unknown])),
   addDoc: (...args: unknown[]) => mocks.addDocMock(...(args as [unknown, unknown])),
   getDoc: (...args: unknown[]) => mocks.getDocMock(...args),
   getDocs: (...args: unknown[]) => mocks.getDocsMock(...args),
@@ -78,7 +80,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 const {
-  setMock, writeBatchMock, commitMock, setDocMock, updateDocMock, addDocMock, getDocMock, getDocsMock,
+  setMock, writeBatchMock, commitMock, setDocMock, updateDocMock, deleteDocMock, addDocMock, getDocMock, getDocsMock,
   queryMock, limitMock, docMock,
 } = mocks;
 
@@ -89,6 +91,8 @@ import {
   subscribeToMyGroups,
   getRecentSessionPicksAcrossGroups,
   refreshMyHouseholdContributions,
+  joinGroupViaToken,
+  acceptGroupInvite,
   MY_GROUPS_LIMIT,
 } from './groups';
 
@@ -101,8 +105,12 @@ beforeEach(() => {
   setMock.mockClear();
   writeBatchMock.mockClear();
   commitMock.mockClear();
-  setDocMock.mockClear();
-  updateDocMock.mockClear();
+  setDocMock.mockReset();
+  setDocMock.mockImplementation(async () => {});
+  updateDocMock.mockReset();
+  updateDocMock.mockImplementation(async () => {});
+  deleteDocMock.mockReset();
+  deleteDocMock.mockImplementation(async () => {});
   addDocMock.mockClear();
   getDocMock.mockReset();
   getDocsMock.mockReset();
@@ -276,5 +284,69 @@ describe('BIN-510: bounded array-contains queries', () => {
     const constraints = groupsQueryConstraints();
     expect(constraints).toBeDefined();
     expect(constraints).toContainEqual({ _type: 'limit', n: MY_GROUPS_LIMIT });
+  });
+});
+
+// Code review (2026-07-18, high-effort pass): joinGroupViaToken/
+// acceptGroupInvite's BIN-532 revert to two separate awaited writes
+// reintroduced a partial-write hazard the old writeBatch made impossible —
+// if the memberUids update succeeds but the member-doc write then fails, the
+// uid becomes a permanent "ghost member" (full group read access via
+// memberUids, but no member doc) with no way to self-heal, since
+// joinGroupViaToken's own already_member guard blocks any retry. Both
+// functions now roll back the memberUids add (arrayRemove) if the
+// member-doc write fails.
+describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write failure', () => {
+  it('joinGroupViaToken rullar tillbaka memberUids-tillägget om member-doc-writen failar, så retry inte blir permanent utelåst', async () => {
+    getDocMock.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ memberUids: [], inviteTokenHash: 'hash-abc' }),
+    });
+    setDocMock
+      .mockResolvedValueOnce(undefined) // steg 1: joinAttempt-skrivningen lyckas
+      .mockRejectedValueOnce(new Error('permission-denied')); // steg 2: member-doc:et failar
+
+    const result = await joinGroupViaToken({
+      groupId: 'g1',
+      token: 'plaintext-token',
+      uid: 'user-join',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'invalid_token' });
+
+    // Rollback: en ANDRA updateDoc mot samma grupp-ref som drar tillbaka
+    // memberUids-tillägget — inte bara den ursprungliga arrayUnion-writen.
+    const groupRefUpdateCalls = updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g1');
+    expect(groupRefUpdateCalls).toHaveLength(2);
+    const [, rollbackPayload] = groupRefUpdateCalls[1];
+    expect((rollbackPayload as Record<string, unknown>).memberUids).toEqual({ _type: 'arrayRemove', vals: ['user-join'] });
+  });
+
+  it('acceptGroupInvite rullar tillbaka memberUids-tillägget om member-doc-writen failar', async () => {
+    setDocMock.mockRejectedValueOnce(new Error('network error'));
+
+    await expect(acceptGroupInvite({
+      groupId: 'g2',
+      uid: 'user-accept',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    })).rejects.toThrow('network error');
+
+    const groupRefUpdateCalls = updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g2');
+    expect(groupRefUpdateCalls).toHaveLength(2);
+    const [, rollbackPayload] = groupRefUpdateCalls[1];
+    expect((rollbackPayload as Record<string, unknown>).memberUids).toEqual({ _type: 'arrayRemove', vals: ['user-accept'] });
+
+    // Inbjudan raderas ALDRIG om medlemskapet inte gick igenom — annars
+    // tappas möjligheten att försöka igen.
+    expect(deleteDocMock).not.toHaveBeenCalled();
   });
 });

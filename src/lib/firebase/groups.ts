@@ -190,7 +190,7 @@ export async function joinGroupViaToken(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' }> {
-  const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } = await fsdb();
+  const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return { ok: false, reason: 'not_found' };
@@ -225,6 +225,19 @@ export async function joinGroupViaToken(params: {
       memberUids: arrayUnion(params.uid),
       updatedAt: serverTimestamp(),
     });
+  } catch (err) {
+    console.error('group update rejected', err);
+    return { ok: false, reason: 'invalid_token' };
+  }
+
+  // Code review (2026-07-18, high-effort pass): member-doc:et i ett EGET
+  // try/catch, inte samma block som memberUids-updateDoc:en ovan. Om DEN
+  // här writen faller (nätverksfel/tab-close mellan de två awaits) måste
+  // memberUids-tillägget rullas tillbaka — annars blir uid:et en permanent
+  // "spöke-medlem" (full läsbehörighet till gruppen via memberUids, men
+  // ingen member-doc) OCH funktionens egen already_member-guard (ovan) låser
+  // ute varje framtida retry-försök, för alltid.
+  try {
     await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
       uid: params.uid,
       displayName: params.displayName,
@@ -236,7 +249,10 @@ export async function joinGroupViaToken(params: {
       joinedAt: serverTimestamp(),
     });
   } catch (err) {
-    console.error('group update rejected', err);
+    console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
+    await updateDoc(ref, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
+      console.error('rollback of memberUids ALSO failed — uid is now a ghost member, needs manual Firestore fix', rollbackErr);
+    });
     return { ok: false, reason: 'invalid_token' };
   }
 
@@ -293,21 +309,40 @@ export async function acceptGroupInvite(params: {
   photoURL: string | null;
   providers: number[];
 }): Promise<void> {
-  const { db, doc, setDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } = await fsdb();
-  await updateDoc(doc(db, 'groups', params.groupId), {
+  const { db, doc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
+  const groupRef = doc(db, 'groups', params.groupId);
+  await updateDoc(groupRef, {
     memberUids: arrayUnion(params.uid),
     updatedAt: serverTimestamp(),
   });
-  await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
-    uid: params.uid,
-    displayName: params.displayName,
-    username: params.username,
-    photoURL: params.photoURL,
-    providers: params.providers,
-    role: 'member',
-    notifications: true,
-    joinedAt: serverTimestamp(),
-  });
+
+  // Code review (2026-07-18, high-effort pass): egen try/catch, samma
+  // motivering som joinGroupViaToken — om DEN här writen faller (nätverksfel
+  // mellan de två awaits) måste memberUids-tillägget rullas tillbaka, annars
+  // blir uid:et en spöke-medlem (full läsbehörighet via memberUids, ingen
+  // member-doc). Till skillnad från joinGroupViaToken har acceptGroupInvite
+  // ingen egen "already_member"-guard som skulle permanent-låsa en retry —
+  // groupInvites-doc:et står kvar (raderas sist) så ett nytt accept-försök
+  // fungerar — men utan rollback är gruppen ändå trasig tills dess.
+  try {
+    await setDoc(doc(db, 'groups', params.groupId, 'members', params.uid), {
+      uid: params.uid,
+      displayName: params.displayName,
+      username: params.username,
+      photoURL: params.photoURL,
+      providers: params.providers,
+      role: 'member',
+      notifications: true,
+      joinedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('member doc write failed after memberUids update — rolling back to allow retry', err);
+    await updateDoc(groupRef, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
+      console.error('rollback of memberUids ALSO failed — uid is now a ghost member, needs manual Firestore fix', rollbackErr);
+    });
+    throw err;
+  }
+
   invalidateMyGroupsCache(params.uid);
   await deleteDoc(doc(db, 'users', params.uid, 'groupInvites', params.groupId));
 }
