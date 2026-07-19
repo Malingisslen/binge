@@ -130,64 +130,71 @@ async function tryAutoClaimUsername(firebaseUser: User): Promise<string | null> 
   }
 }
 
+// Bygger en UserProfile från en redan-existerande users/{uid}-doc. Delad av
+// båda ensureUserProfile-vägarna som kan mötas av en existerande doc: den
+// vanliga (första getDoc:en ser den) och BIN-535-racefallet (doc:en dök upp
+// MELLAN vår getDoc och create-transaktionen — se ensureUserProfile nedan).
+async function buildExistingProfile(data: Record<string, unknown>, firebaseUser: User): Promise<UserProfile> {
+  const isPublicLegacy = (data.isPublic as boolean) ?? false;
+  const existing: UserProfile = {
+    displayName: (data.displayName as string) ?? firebaseUser.displayName ?? '',
+    email: (data.email as string) ?? firebaseUser.email ?? '',
+    photoURL: (data.photoURL as string | null) ?? firebaseUser.photoURL,
+    username: (data.username as string) ?? null,
+    bio: (data.bio as string) ?? '',
+    // Lazy migration: legacy isPublic-boolean → tre-state defaultVisibility.
+    // Skrivs aldrig tillbaka här — bara nästa gång användaren ändrar något.
+    defaultVisibility: (data.defaultVisibility as ItemVisibility) ?? (isPublicLegacy ? 'public' : 'private'),
+    isPublic: isPublicLegacy,
+    myProviders: (data.myProviders as number[]) ?? [],
+    defaultView: (data.defaultView as UserProfile['defaultView']) ?? 'table',
+    hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
+    hiddenCountries: (data.hiddenCountries as string[]) ?? [],
+    providerCosts: (data.providerCosts as Record<number, number>) ?? {},
+    providerTiers: (data.providerTiers as Record<number, string>) ?? {},
+    providerCampaigns: (data.providerCampaigns as UserProfile['providerCampaigns']) ?? {},
+    providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
+    providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
+    calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
+    hemkommun: (data.hemkommun as string | null) ?? null,
+    createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
+    updatedAt: (data.updatedAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(),
+    termsAcceptedAt: (data.termsAcceptedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
+    termsVersion: data.termsVersion as string | undefined,
+    ageConfirmedAt: (data.ageConfirmedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
+    onboardingCompletedAt: (data.onboardingCompletedAt as { toDate?: () => Date } | undefined)?.toDate?.(),
+    lastNotificationsSeenAt: (data.lastNotificationsSeenAt as { toDate?: () => Date } | undefined)?.toDate?.(),
+    isAdmin: (data.isAdmin as boolean) ?? false,
+    notificationSettings: {
+      newEpisodes: (data.notificationSettings as UserProfile['notificationSettings'])?.newEpisodes ?? true,
+      availableOnMyServices: (data.notificationSettings as UserProfile['notificationSettings'])?.availableOnMyServices ?? true,
+      pushEnabled: (data.notificationSettings as UserProfile['notificationSettings'])?.pushEnabled ?? false,
+      episodeReleases: (data.notificationSettings as UserProfile['notificationSettings'])?.episodeReleases ?? true,
+      priceDrops: (data.notificationSettings as UserProfile['notificationSettings'])?.priceDrops ?? false,
+      rotationReminders: (data.notificationSettings as UserProfile['notificationSettings'])?.rotationReminders ?? false,
+      weeklyDigest: (data.notificationSettings as UserProfile['notificationSettings'])?.weeklyDigest ?? false,
+    },
+    rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
+  };
+
+  // Backfill för existing Google-konton som loggade in före auto-suggest:en
+  // landade. Försöket är idempotent — vid lyckad claim sätts username och
+  // nästa sign-in skippar grenen helt. Misslyckas tyst.
+  if (existing.username === null) {
+    const claimed = await tryAutoClaimUsername(firebaseUser);
+    if (claimed) existing.username = claimed;
+  }
+
+  return existing;
+}
+
 async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
-  const { db, doc, getDoc, setDoc, serverTimestamp } = await fsdb();
+  const { db, doc, getDoc, runTransaction, serverTimestamp } = await fsdb();
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
-    const data = snap.data();
-    const isPublicLegacy = (data.isPublic as boolean) ?? false;
-    const existing: UserProfile = {
-      displayName: data.displayName ?? firebaseUser.displayName ?? '',
-      email: data.email ?? firebaseUser.email ?? '',
-      photoURL: data.photoURL ?? firebaseUser.photoURL,
-      username: (data.username as string) ?? null,
-      bio: (data.bio as string) ?? '',
-      // Lazy migration: legacy isPublic-boolean → tre-state defaultVisibility.
-      // Skrivs aldrig tillbaka här — bara nästa gång användaren ändrar något.
-      defaultVisibility: (data.defaultVisibility as ItemVisibility) ?? (isPublicLegacy ? 'public' : 'private'),
-      isPublic: isPublicLegacy,
-      myProviders: data.myProviders ?? [],
-      defaultView: data.defaultView ?? 'table',
-      hideNonLatinTitles: (data.hideNonLatinTitles as boolean) ?? false,
-      hiddenCountries: (data.hiddenCountries as string[]) ?? [],
-      providerCosts: (data.providerCosts as Record<number, number>) ?? {},
-      providerTiers: (data.providerTiers as Record<number, string>) ?? {},
-      providerCampaigns: (data.providerCampaigns as UserProfile['providerCampaigns']) ?? {},
-      providerRenewalDays: (data.providerRenewalDays as Record<number, number>) ?? {},
-      providerPauses: (data.providerPauses as UserProfile['providerPauses']) ?? {},
-      calibrationGenres: (data.calibrationGenres as Record<number, number> | null) ?? null,
-      hemkommun: (data.hemkommun as string | null) ?? null,
-      createdAt: data.createdAt?.toDate() ?? new Date(),
-      updatedAt: data.updatedAt?.toDate() ?? new Date(),
-      termsAcceptedAt: data.termsAcceptedAt?.toDate(),
-      termsVersion: data.termsVersion as string | undefined,
-      ageConfirmedAt: data.ageConfirmedAt?.toDate(),
-      onboardingCompletedAt: data.onboardingCompletedAt?.toDate(),
-      lastNotificationsSeenAt: data.lastNotificationsSeenAt?.toDate(),
-      isAdmin: (data.isAdmin as boolean) ?? false,
-      notificationSettings: {
-        newEpisodes: data.notificationSettings?.newEpisodes ?? true,
-        availableOnMyServices: data.notificationSettings?.availableOnMyServices ?? true,
-        pushEnabled: data.notificationSettings?.pushEnabled ?? false,
-        episodeReleases: data.notificationSettings?.episodeReleases ?? true,
-        priceDrops: data.notificationSettings?.priceDrops ?? false,
-        rotationReminders: data.notificationSettings?.rotationReminders ?? false,
-        weeklyDigest: data.notificationSettings?.weeklyDigest ?? false,
-      },
-      rotationSchedule: (data.rotationSchedule as UserProfile['rotationSchedule']) ?? undefined,
-    };
-
-    // Backfill för existing Google-konton som loggade in före auto-suggest:en
-    // landade. Försöket är idempotent — vid lyckad claim sätts username och
-    // nästa sign-in skippar grenen helt. Misslyckas tyst.
-    if (existing.username === null) {
-      const claimed = await tryAutoClaimUsername(firebaseUser);
-      if (claimed) existing.username = claimed;
-    }
-
-    return existing;
+    return buildExistingProfile(snap.data(), firebaseUser);
   }
 
   const profile: UserProfile = {
@@ -227,13 +234,31 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
     },
   };
 
-  await setDoc(ref, {
-    ...profile,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    termsAcceptedAt: serverTimestamp(),
-    ageConfirmedAt: serverTimestamp(),
+  // BIN-535: the getDoc above is NOT atomic with register()'s own setDoc —
+  // createUserWithEmailAndPassword fires onAuthStateChanged (→ this function)
+  // on the same tick register() is still awaiting updateProfile()/fsdb()
+  // before its own write. A plain setDoc here would blindly overwrite
+  // register()'s termsVersion/termsAcceptedAt/notificationSettings back to
+  // Google-sign-in defaults if it lands second. Wrapping the check+create in
+  // a transaction closes the gap: Firestore re-reads the doc inside the
+  // transaction (and retries the callback if it changes before commit), so a
+  // doc that appeared since our getDoc is caught here instead of clobbered.
+  const racedData = await runTransaction(db, async (tx) => {
+    const txSnap = await tx.get(ref);
+    if (txSnap.exists()) return txSnap.data();
+    tx.set(ref, {
+      ...profile,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      termsAcceptedAt: serverTimestamp(),
+      ageConfirmedAt: serverTimestamp(),
+    });
+    return null;
   });
+
+  if (racedData) {
+    return buildExistingProfile(racedData, firebaseUser);
+  }
 
   // Auto-föreslå username från Google displayName / email-localpart. Triggar
   // bara på doc-creation (existing-grenen kör samma helper inline).
@@ -443,9 +468,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Provider-drift (Fas 2): propagera ändringen till gruppmedlemskap så
     // gruppens intersect/union hålls aktuell utan att medlemmen behöver
     // gå in i varje grupp och uppdatera.
-    const { updateMemberProviders } = await import('@/lib/firebase/groups');
-    const { db, collection: col, getDocs: get, query: q, where } = await fsdb();
-    const snap = await get(q(col(db, 'groups'), where('memberUids', 'array-contains', uid)));
+    const { updateMemberProviders, MY_GROUPS_LIMIT } = await import('@/lib/firebase/groups');
+    const { db, collection: col, getDocs: get, query: q, where, limit: lim } = await fsdb();
+    // BIN-536: samma read-cap-mönster som groups.ts fyra motsvarande queries
+    // (BIN-510) — obegränsad array-contains-query är ett latent read-bomb-hot
+    // mot Blaze-taket. Delar groups.ts:s MY_GROUPS_LIMIT-konstant (importerad,
+    // inte en egen lokal kopia) så de två inte kan divergera.
+    const snap = await get(q(col(db, 'groups'), where('memberUids', 'array-contains', uid), lim(MY_GROUPS_LIMIT)));
     await Promise.all(
       snap.docs.map(d => updateMemberProviders(d.id, uid, providers).catch(() => {})),
     );
@@ -534,11 +563,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const providerRenewalDaysRef = useRef<Record<number, number>>({});
   useEffect(() => { providerRenewalDaysRef.current = user?.providerRenewalDays ?? {}; }, [user?.providerRenewalDays]);
   const setProviderRenewalDay = useCallback(async (providerId: number, day: number | null) => {
-    const next = { ...providerRenewalDaysRef.current };
+    const prev = providerRenewalDaysRef.current;
+    const next = { ...prev };
     if (day == null) delete next[providerId];
     else next[providerId] = day;
     providerRenewalDaysRef.current = next;
-    await updateUserField('providerRenewalDays', next);
+    try {
+      await updateUserField('providerRenewalDays', next);
+    } catch (err) {
+      // BIN-531: samma rollback-mönster som setProviderCost/setProviderCampaign
+      // (BIN-516) — writen nådde aldrig Firestore, så rulla tillbaka spegeln
+      // innan den avvisade dagen smygpersistas via nästa edits spread.
+      if (providerRenewalDaysRef.current === next) providerRenewalDaysRef.current = prev;
+      throw err;
+    }
   }, [updateUserField]);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;

@@ -63,6 +63,27 @@ vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 const setDoc = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const profileDocData: { current: Record<string, unknown> | null } = { current: null };
 
+// BIN-535: default runTransaction stub re-reads the SAME profileDocData
+// mirror the plain getDoc above uses — so the normal (non-racing) create path
+// behaves exactly like the old plain setDoc. Individual tests override this
+// with mockImplementationOnce to simulate a doc appearing mid-transaction.
+const runTransaction = vi.fn(
+  async (_db: unknown, updateFn: (tx: { get: (ref: unknown) => Promise<{ exists: () => boolean; data: () => Record<string, unknown> }>; set: (ref: unknown, data: Record<string, unknown>) => void }) => Promise<unknown>) =>
+    updateFn({
+      get: async () => ({
+        exists: () => profileDocData.current !== null,
+        data: () => profileDocData.current ?? {},
+      }),
+      set: (ref: unknown, data: Record<string, unknown>) => { setDoc(ref, data); },
+    }),
+);
+
+// BIN-536: stub the array-contains query chain updateProviders drives —
+// query/where/limit are recorded so a test can assert the bound is applied;
+// getDocs always resolves empty (no groups) unless a test overrides it.
+const limitCalls: unknown[] = [];
+const getDocsMock = vi.fn<(q: unknown) => Promise<{ docs: { id: string }[] }>>(async () => ({ docs: [] }));
+
 vi.mock('@/lib/firebase/db', () => ({
   fsdb: async () => ({
     db: {},
@@ -72,6 +93,12 @@ vi.mock('@/lib/firebase/db', () => ({
       data: () => profileDocData.current ?? {},
     }),
     setDoc,
+    runTransaction,
+    collection: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
+    getDocs: (q: unknown) => getDocsMock(q),
+    query: (...args: unknown[]) => args,
+    where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+    limit: (n: number) => { limitCalls.push(n); return { _limit: n }; },
     serverTimestamp: () => 'ts',
   }),
   getDb: async () => ({}),
@@ -88,6 +115,11 @@ vi.mock('@/lib/firebase/accountDeletion', () => ({
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
   refreshMyHouseholdContributions: vi.fn(async () => {}),
+  // BIN-536: real value re-declared here (not re-exported from the actual
+  // module) since @/lib/firebase/groups is fully mocked in this file —
+  // must match groups.ts's real MY_GROUPS_LIMIT so the assertion below
+  // stays meaningful instead of testing the mock against itself.
+  MY_GROUPS_LIMIT: 100,
 }));
 
 // Auto-claim-kedjan (dynamisk import i tryAutoClaimUsername): deterministisk
@@ -143,6 +175,10 @@ function userDocWrites() {
 beforeEach(() => {
   setDoc.mockReset();
   setDoc.mockImplementation(async () => {});
+  runTransaction.mockClear();
+  getDocsMock.mockClear();
+  getDocsMock.mockImplementation(async () => ({ docs: [] }));
+  limitCalls.length = 0;
   createUserWithEmailAndPassword.mockClear();
   sendEmailVerification.mockClear();
   updateProfileMock.mockClear();
@@ -265,5 +301,110 @@ describe('AuthContext — setProviderCost/setProviderCampaign rollback vid write
 
     const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
     expect(payload.providerCosts).toEqual({ 8: 100, 76: 129, 337: 109 });
+  });
+});
+
+// BIN-531: setProviderRenewalDay shared the same mirror-ref-poisoning pattern
+// BIN-516 fixed in setProviderCost/setProviderCampaign — same test shape.
+describe('AuthContext — setProviderRenewalDay rollback vid write-fel (BIN-531)', () => {
+  it('a rejected renewal day is excluded from the next successful write to a DIFFERENT provider', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerRenewalDays: { 8: 5 } });
+
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+    await act(async () => {
+      await expect(ctx!.setProviderRenewalDay(76, 20)).rejects.toThrow('permission-denied');
+    });
+
+    await act(async () => {
+      await ctx!.setProviderRenewalDay(8, 12);
+    });
+
+    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
+    const days = payload.providerRenewalDays as Record<number, number>;
+    expect(days).toEqual({ 8: 12 }); // det avvisade 76:20 är borta
+    expect(76 in days).toBe(false);
+  });
+
+  it('the successful-write happy path still merges against the latest mirror', async () => {
+    renderAuth();
+    await login({ username: 'malin', providerRenewalDays: { 8: 5 } });
+
+    await act(async () => {
+      await ctx!.setProviderRenewalDay(76, 20);
+      await ctx!.setProviderRenewalDay(337, 1);
+    });
+
+    const [, payload] = setDoc.mock.calls.at(-1)! as [unknown, Record<string, unknown>];
+    expect(payload.providerRenewalDays).toEqual({ 8: 5, 76: 20, 337: 1 });
+  });
+});
+
+// BIN-535: the create-branch of ensureUserProfile races register()'s own
+// setDoc on the same users/{uid} doc (createUserWithEmailAndPassword fires
+// onAuthStateChanged before register()'s write lands). The transaction wrap
+// must detect a doc that appeared since the initial getDoc and fall back to
+// the existing-profile path instead of overwriting it.
+describe('AuthContext — ensureUserProfile create-branch race (BIN-535)', () => {
+  it('creates a fresh profile via transaction when no doc exists and no race occurs', async () => {
+    renderAuth();
+    await login(null); // no doc at all — exercises the create branch end to end
+
+    expect(ctx!.user?.displayName).toBe('Malin');
+    expect(ctx!.user?.username).toBe('malin'); // auto-claimed on creation
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    const writes = userDocWrites();
+    expect(writes.length).toBeGreaterThan(0); // the tx.set() write landed
+  });
+
+  it('a doc concurrently created (e.g. by register()) between the initial read and the transaction is never overwritten', async () => {
+    renderAuth();
+    await act(async () => {});
+
+    // Initial getDoc (outside the transaction) sees no doc.
+    profileDocData.current = null;
+    authObj.currentUser = fakeUser;
+
+    // Simulate register()'s write landing exactly as the transaction starts:
+    // its data reaches Firestore between our getDoc and the transaction's
+    // own read, so tx.get() must see it — and must NOT be overwritten.
+    const racedDoc = {
+      displayName: 'Malin',
+      email: 'malin@example.com',
+      photoURL: null,
+      // An OLDER version than CURRENT_TERMS_VERSION proves this is register()'s
+      // real value surviving, not ensureUserProfile's Google-sign-in default.
+      termsVersion: '2025-11',
+    };
+    runTransaction.mockImplementationOnce(async (_db: unknown, updateFn: (tx: { get: () => Promise<{ exists: () => boolean; data: () => Record<string, unknown> }>; set: () => void }) => Promise<unknown>) =>
+      updateFn({
+        get: async () => ({ exists: () => true, data: () => racedDoc }),
+        set: () => { throw new Error('must not write — would clobber the concurrently-created doc'); },
+      }),
+    );
+
+    await act(async () => { authCallback!(fakeUser); });
+    await act(async () => {});
+
+    expect(ctx!.user?.termsVersion).toBe('2025-11'); // register()'s value survived
+    expect(ctx!.user?.displayName).toBe('Malin');
+  });
+});
+
+// BIN-536: updateProviders' array-contains group query had the same unbounded
+// shape BIN-510 flagged in groups.ts, and now shares groups.ts's real
+// MY_GROUPS_LIMIT constant (imported via the dynamic import) instead of a
+// separately-invented value, so the two call sites can't drift apart.
+describe('AuthContext — updateProviders group query bound (BIN-536)', () => {
+  it('bounds the array-contains group query with the shared MY_GROUPS_LIMIT', async () => {
+    renderAuth();
+    await login({ username: 'malin', myProviders: [] });
+
+    await act(async () => {
+      await ctx!.updateProviders([8, 76]);
+    });
+
+    expect(limitCalls).toContain(100);
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
   });
 });
