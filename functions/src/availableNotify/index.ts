@@ -18,7 +18,8 @@
  *        reaps it after 30 days (its GDPR Art. 17 erasure path — admin-only, out
  *        of the client deletion cascade's reach).
  * 2. AVAILABILITY PHASE (BIN-60) — scans vill_se + mina, fetches SE flatrate per
- *    unique title, diffs against availableNotifyState/{tmdbId}.lastFlatrate, and
+ *    unique (mediaType, tmdbId) title (BIN-523: TMDB movie/TV ids are independent
+ *    namespaces), diffs against availableNotifyState/{movie|tv}_{tmdbId}.lastFlatrate, and
  *    pushes followers who (a) subscribe to a newly-added provider, (b) have
  *    availableOnMyServices on. First observation only sets the baseline (no
  *    first-run blast). Marker advances every run (idempotent). SKIPS any
@@ -44,7 +45,7 @@ import {
   isLegacyReleaseCard,
   type ReleaseDateCache,
 } from '../releaseNotify/logic';
-import { diffNewProviders, qualifyingProviders, canonicalProviderId, type WatchlistTitleLite, type UserNotifSettings } from './logic';
+import { diffNewProviders, qualifyingProviders, canonicalProviderId, normalizeMediaType, availableStateDocId, inboxNotifId, type WatchlistTitleLite, type UserNotifSettings } from './logic';
 
 const TMDB_API_KEY = defineSecret('TMDB_API_KEY');
 
@@ -89,15 +90,49 @@ async function readWatchlistTitles(): Promise<WatchlistTitleLite[]> {
   return out;
 }
 
-async function readLastFlatrate(tmdbId: number): Promise<number[] | null> {
-  const snap = await getFirestore().collection('availableNotifyState').doc(String(tmdbId)).get();
-  const v = snap.data()?.lastFlatrate;
+// stateId = availableStateDocId(mediaType, tmdbId) — media-type-namespaced
+// (BIN-523).
+//
+// xhigh /code-review (2026-07-19) caught a real gap in the ORIGINAL BIN-523
+// framing: "legacy bare-tmdbId docs are orphaned on purpose" is only true
+// for titles that actually COLLIDED (their old doc's lastFlatrate may
+// genuinely mix both media's providers). For the much larger set of titles
+// that never collided, the old doc's data is perfectly valid — but keying
+// purely on the new stateId meant EVERY title's first post-deploy run saw
+// `last === null` regardless, silently swallowing any real "now streaming"
+// transition that happened to land in that one run (diffNewProviders takes
+// the baseline-only branch on a null `last`, by design, to avoid a false
+// first-run blast). Reading `tmdbId` (the legacy key) as a fallback ONLY
+// when the namespaced doc doesn't exist yet fixes the common (non-colliding)
+// case at the cost of reintroducing the ORIGINAL (already-accepted, already
+// self-correcting) mixed-baseline risk for the rare colliding case — for one
+// SUCCESSFUL run only. `writeMarker` (below) always writes forward to the
+// namespaced doc once a fetch actually succeeds, so every subsequent
+// successful run reads clean, correctly-scoped state. A title whose fetch
+// keeps FAILING never even reaches this function — processTitle returns
+// early on a null fetch, before readLastFlatrate is called — so it's not a
+// repeated-fallback case at all, just an unrelated, pre-existing "skip this
+// run" outcome.
+async function readLastFlatrate(stateId: string, legacyTmdbId: number): Promise<number[] | null> {
+  const stateSnap = await getFirestore().collection('availableNotifyState').doc(stateId).get();
+  if (stateSnap.exists) {
+    const v = stateSnap.data()?.lastFlatrate;
+    return Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number') : null;
+  }
+  const legacySnap = await getFirestore().collection('availableNotifyState').doc(String(legacyTmdbId)).get();
+  const v = legacySnap.data()?.lastFlatrate;
   return Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number') : null;
 }
 
 // BIN-463: per-title cache of the resolved SE digital dates. Top-level, admin-only
 // state (mirrors availableNotifyState) — no firestore.rules change needed, and it
 // is NOT user-owned so it stays out of the GDPR export/delete path. Movie-only.
+// BIN-523: doc ids here stay UN-namespaced (bare tmdbId) on purpose — the release
+// phase filters to mediaType === 'movie' before ever touching this collection, so
+// no TV id can collide, and renaming would orphan the live per-user dedup markers
+// (releaseNotifyState/{tmdbId}/notified/{uid}) → double "släpps idag" pushes for
+// releases inside the catch-up window. Keep the movie-only invariant if you add
+// writers.
 async function readReleaseCache(tmdbId: number): Promise<ReleaseDateCache | null> {
   const snap = await getFirestore().collection('releaseNotifyState').doc(String(tmdbId)).get();
   if (!snap.exists) return null;
@@ -174,9 +209,12 @@ async function readUserData(uid: string): Promise<{ myProviders: number[]; setti
 // would wrongly suppress the unrelated TV show's availability push.
 const skipKey = (uid: string, mediaType: string, tmdbId: number): string => `${uid}:${mediaType}:${tmdbId}`;
 
-async function processTitle(tmdbId: number, items: WatchlistTitleLite[], releaseSkip: Set<string>): Promise<number> {
+async function processTitle(stateId: string, items: WatchlistTitleLite[], releaseSkip: Set<string>): Promise<number> {
   const db = getFirestore();
-  const mediaType = items[0]?.mediaType || 'tv';
+  // Groups are keyed on availableStateDocId(mediaType, tmdbId), so every item
+  // shares one (mediaType, tmdbId) — items[0] is authoritative, not arbitrary.
+  const { tmdbId } = items[0];
+  const mediaType = normalizeMediaType(items[0].mediaType);
   const providers = await fetchSeFlatrate(tmdbId, mediaType);
   if (providers === null) return 0; // fetch failed → skip, don't touch the marker
   // Canonicalise provider ids (TMDB aliases → one id), matching how the client
@@ -187,16 +225,16 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[], release
     if (!nameById.has(cid)) nameById.set(cid, p.name);
   }
   const currentIds = [...nameById.keys()];
-  const last = await readLastFlatrate(tmdbId);
+  const last = await readLastFlatrate(stateId, tmdbId);
   const newIds = diffNewProviders(currentIds, last);
 
   const writeMarker = () =>
-    db.collection('availableNotifyState').doc(String(tmdbId))
+    db.collection('availableNotifyState').doc(stateId)
       .set({ lastFlatrate: currentIds, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
   if (newIds.length === 0) { await writeMarker(); return 0; }
 
-  const actionUrl = `/${mediaType === 'movie' ? 'movie' : 'tv'}/${tmdbId}/`;
+  const actionUrl = `/${mediaType}/${tmdbId}/`;
   let notified = 0;
   await Promise.allSettled(items.map(async (it) => {
     // Overlap day: the release phase already sent this user "släpps idag" for this
@@ -220,8 +258,10 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[], release
     const providerName = nameById.get(providerId) ?? 'en av dina tjänster';
     // Shape + id MATCH the client/inbox `provider_available` model
     // (useNotifications.ts): kind, providerId (canonical), providerName, and
-    // the `${tmdbId}-${canonicalId}` doc id so the inbox renders + dedupes it.
-    const notifId = `${tmdbId}-${providerId}`;
+    // the media-type-namespaced `${stateId}-${canonicalId}` doc id (BIN-529)
+    // so a movie and TV show sharing a tmdbId + provider can't merge-overwrite
+    // one inbox card.
+    const notifId = inboxNotifId(mediaType, tmdbId, providerId);
     await db.collection('users').doc(it.uid).collection('notifications').doc(notifId).set({
       tmdbId, mediaType, title: it.title, kind: 'provider_available',
       providerId, providerName, read: false, createdAt: FieldValue.serverTimestamp(),
@@ -229,7 +269,9 @@ async function processTitle(tmdbId: number, items: WatchlistTitleLite[], release
     await sendPushToUser(it.uid, {
       title: `Nu på din ${providerName}`,
       body: `${it.title} går att streama där nu`,
-      actionUrl, tag: `available-${tmdbId}`,
+      // Tag rides the namespaced stateId too — a bare-tmdbId tag would let a
+      // movie-N push visually replace an unrelated TV-N push in the browser.
+      actionUrl, tag: `available-${stateId}`,
     }, { pushEnabled: u.settings.pushEnabled });
     notified += 1;
   }));
@@ -373,12 +415,18 @@ export const availableNotify = onSchedule(
     catch (err) { logger.error('releaseNotify phase failed', err); }
 
     // Phase 2: availability transitions, skipping release-owned (uid,tmdbId).
-    const byTitle = new Map<number, WatchlistTitleLite[]>();
-    for (const it of titles) { const arr = byTitle.get(it.tmdbId); if (arr) arr.push(it); else byTitle.set(it.tmdbId, [it]); }
+    // Grouped by (mediaType, tmdbId) via availableStateDocId (BIN-523) — TMDB
+    // movie and TV ids are independent namespaces, so bare-tmdbId grouping
+    // collapsed movie N + TV N into one title with an arbitrary mediaType.
+    const byTitle = new Map<string, WatchlistTitleLite[]>();
+    for (const it of titles) {
+      const key = availableStateDocId(it.mediaType, it.tmdbId);
+      const arr = byTitle.get(key); if (arr) arr.push(it); else byTitle.set(key, [it]);
+    }
     let totalNotified = 0;
-    for (const [tmdbId, items] of byTitle) {
-      try { totalNotified += await processTitle(tmdbId, items, releaseSkip); }
-      catch (err) { logger.error(`availableNotify: title ${tmdbId} failed`, err); }
+    for (const [stateId, items] of byTitle) {
+      try { totalNotified += await processTitle(stateId, items, releaseSkip); }
+      catch (err) { logger.error(`availableNotify: title ${stateId} failed`, err); }
     }
     logger.info('availableNotify done', {
       watchlistDocs: titles.length, uniqueTitles: byTitle.size,

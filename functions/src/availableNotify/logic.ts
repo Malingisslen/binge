@@ -33,7 +33,9 @@ export interface UserNotifSettings {
 // myProviders + the notif inbox keys on the canonical id, so the server must
 // canonicalise too — otherwise it (a) misses titles on an aliased provider the
 // user has, and (b) writes a notif id that won't dedupe against the inbox's
-// `${tmdbId}-${canonicalId}` convention.
+// `${stateId}-${canonicalId}` convention (BIN-529: stateId is the
+// media-type-namespaced `${mediaType}_${tmdbId}`, not bare tmdbId — see
+// inboxNotifId below).
 // Exported (frozen) so the root-vitest parity test in
 // src/lib/tmdb/providerAliasParity.test.ts can assert this mirror still matches
 // SWEDISH_PROVIDERS.aliases and fail CI on any future drift (BIN-420). Frozen so
@@ -52,6 +54,45 @@ export const ALIAS_TO_CANONICAL: Readonly<Record<number, number>> = Object.freez
 
 export function canonicalProviderId(id: number): number {
   return ALIAS_TO_CANONICAL[id] ?? id;
+}
+
+/**
+ * TMDB movie ids and TV ids are INDEPENDENT namespaces — movie N and TV N are
+ * unrelated titles. Anything keyed per-title must therefore key on
+ * (mediaType, tmdbId), never tmdbId alone (BIN-523). Unknown/blank mediaType
+ * normalizes to 'tv', matching the long-standing fetch/actionUrl fallback.
+ */
+export type NotifyMediaType = 'movie' | 'tv';
+
+export function normalizeMediaType(raw: string): NotifyMediaType {
+  return raw === 'movie' ? 'movie' : 'tv';
+}
+
+/**
+ * Doc id for availableNotifyState AND the phase-2 grouping key (BIN-523):
+ * `movie_${tmdbId}` / `tv_${tmdbId}`. Before this, movie N and TV N collapsed
+ * into one group keyed on bare tmdbId — one arbitrary mediaType won the TMDB
+ * fetch and both media shared a lastFlatrate baseline.
+ *
+ * Reading behavior for legacy bare-`${tmdbId}` docs is NOT decided here —
+ * see `readLastFlatrate` in index.ts (2026-07-19) for the authoritative,
+ * current answer: a one-successful-run fallback read, not a permanent
+ * orphan. Don't restate the tradeoff in this file; it drifts.
+ */
+export function availableStateDocId(mediaType: string, tmdbId: number): string {
+  return `${normalizeMediaType(mediaType)}_${tmdbId}`;
+}
+
+/**
+ * Inbox notification doc id under users/{uid}/notifications (BIN-529). Rides
+ * the same media-type-namespaced stateId as availableStateDocId/the FCM tag —
+ * before this fix a movie and a TV show sharing a tmdbId AND gaining the same
+ * provider would merge-overwrite one inbox card (mediaType/title flip,
+ * read-state reset). Old bare-`${tmdbId}-${providerId}` docs are just
+ * already-delivered cards; no migration needed.
+ */
+export function inboxNotifId(mediaType: string, tmdbId: number, providerId: number): string {
+  return `${availableStateDocId(mediaType, tmdbId)}-${providerId}`;
 }
 
 /**
