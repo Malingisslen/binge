@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { recapIndexDocId, parseRecapIndex, nearestCoveredBoundary, missingEpisodeCount } from './coverage';
+import {
+  recapIndexDocId, parseRecapIndex, parseSeasonOnlySeasons, nearestCoveredBoundary, missingEpisodeCount,
+} from './coverage';
 import type { SeasonEpisodes } from './boundary';
 
 describe('recapIndexDocId', () => {
@@ -25,6 +27,18 @@ describe('parseRecapIndex', () => {
   });
   it('drops season-0 / episode-0 entries (specials are never fallback targets)', () => {
     expect(parseRecapIndex({ boundaries: ['0_5', '1_0', '1_1'] })).toEqual([{ season: 1, episode: 1 }]);
+  });
+});
+
+describe('parseSeasonOnlySeasons', () => {
+  it('parses a valid seasonOnlySeasons array, sorted and deduped', () => {
+    expect(parseSeasonOnlySeasons({ seasonOnlySeasons: [3, 1, 1, 2] })).toEqual([1, 2, 3]);
+  });
+  it('drops non-positive-integer junk and returns [] for missing/invalid docs', () => {
+    expect(parseSeasonOnlySeasons({ seasonOnlySeasons: [1, 0, -1, 1.5, 'x', null, 2] })).toEqual([1, 2]);
+    expect(parseSeasonOnlySeasons(null)).toEqual([]);
+    expect(parseSeasonOnlySeasons({})).toEqual([]);
+    expect(parseSeasonOnlySeasons({ seasonOnlySeasons: 'nope' })).toEqual([]);
   });
 });
 

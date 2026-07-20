@@ -101,16 +101,33 @@ export default function RecapPanel({
   boundary: EpisodeRef | null;
   inventory: SeasonEpisodes;
 }) {
-  const { recap, coveredBoundary } = useRecap(tmdbId, boundary);
+  const { recap, coveredBoundary, seasonOnlySeasons } = useRecap(tmdbId, boundary);
   const [open, setOpen] = useState(false);
   const [openFull, setOpenFull] = useState(false);
   const [expandedSeasons, setExpandedSeasons] = useState<number[]>([]);
 
-  // Prior COMPLETED seasons, derived from the recap's actual covered boundary (never the user's
-  // raw boundary — on a fallback hit those can differ, and a season node must only ever be
-  // offered for a season the cached recap itself has fully passed). Returned ascending; rendered
-  // descending below the boundary so the most recently finished season sits nearest "du är här".
-  const priorSeasons = coveredBoundary ? priorSeasonNumbers(coveredBoundary) : [];
+  // Prior COMPLETED seasons — the UNION of two independent sources, not a choice between them
+  // (code review, 2026-07-20: a show can legitimately have BOTH some per-episode-covered seasons
+  // AND a later season-only-sourced one — e.g. a long-running series whose Wikipedia detail
+  // trails off partway through, a pattern RUNBOOK.md itself documents as common. Treating the two
+  // as mutually exclusive silently dropped the season-only season whenever ANY per-episode
+  // boundary recap also existed for the show):
+  //  1. From the recap's actual COVERED boundary (never the user's raw boundary — on a fallback
+  //     hit those can differ, and a season node must only ever be offered for a season the cached
+  //     STORY itself has fully passed; locked by an existing test — do not change this half).
+  //  2. From the user's REAL watched boundary, intersected with `seasonOnlySeasons` (from the
+  //     index, so no read is wasted probing seasons that were never season-only-sourced) — covers
+  //     any season-only season the first source can't see, because `coveredBoundary` only ever
+  //     reflects PER-EPISODE coverage. Reuses `priorSeasonNumbers`'s existing guarantee (every
+  //     season it returns is strictly BEFORE the user's current one, and `boundary` is already
+  //     the CONTIGUOUS watched frontier per `contiguousWatchedBoundary`, so every one of those
+  //     seasons is provably fully watched) rather than inventing a new derivation — fail-closed
+  //     by construction: `boundary` is only ever null when the user hasn't started the show,
+  //     which correctly yields no seasons from this source.
+  const priorSeasons = [...new Set([
+    ...(coveredBoundary ? priorSeasonNumbers(coveredBoundary) : []),
+    ...(boundary ? priorSeasonNumbers(boundary).filter((s) => seasonOnlySeasons.includes(s)) : []),
+  ])].sort((a, b) => a - b);
 
   // Fetch the prior-season docs when the panel is OPEN (the deliberate expand — never on the
   // default show view). Only seasons with a valid, attributed, plain-text recap become nodes,
@@ -122,31 +139,47 @@ export default function RecapPanel({
       s.recap != null && s.recap.sources.length > 0 && validateRecapText(s.recap.text).ok,
   );
 
-  // Surface nothing unless we have a boundary, a cached recap, its CC BY-SA attribution
+  // The "du är här" node needs a boundary, a cached per-episode recap, its CC BY-SA attribution
   // (mandatory per ADR 0011 — never show unattributed derived text), and text that passes the
   // plain-text guard on read (defense-in-depth; the batch validates on write, we re-check here).
-  if (!boundary || !recap || !coveredBoundary) return null;
-  if (recap.sources.length === 0) return null;
-  if (!validateRecapText(recap.text).ok) return null;
+  // A season-only-sourced show has none of this — `coveredBoundary`/`recap` are always null for
+  // it (no boundary doc was ever written) — but MAY still have prior-season nodes above, so the
+  // panel only bails out entirely when there's neither.
+  //
+  // CRITICAL: this gate (and therefore whether the toggle BUTTON itself renders at all) must key
+  // on `priorSeasons`, NOT `loadedSeasons`. `loadedSeasons` comes from `useSeasonRecaps`, which is
+  // only ENABLED once the panel is already open (`open` starts `false`) — for a season-only show,
+  // that's always `[]` before the user has ever seen a button to click, so gating on it here
+  // would make the button permanently unreachable (code review, 2026-07-20). `priorSeasons` is
+  // safe to gate on before open: the boundary-derived half comes from a per-episode boundary
+  // doc's presence (unchanged, existing behavior), and the season-only half comes from
+  // `seasonOnlySeasons`, part of the index doc that's ALWAYS fetched regardless of `open`.
+  const hasBoundaryRecap = Boolean(
+    boundary && recap && coveredBoundary && recap.sources.length > 0 && validateRecapText(recap.text).ok,
+  );
+  if (!hasBoundaryRecap && priorSeasons.length === 0) return null;
 
   // Fallback gap: the recap covers an EARLIER boundary (never later — spoiler-safe by
   // construction). Tell the user honestly how many of their watched episodes it misses.
-  const missing = missingEpisodeCount(inventory, coveredBoundary, boundary);
+  // Only meaningful when there IS a "här" node — a season-only show has no boundary recap to
+  // compare against at all.
+  const missing = hasBoundaryRecap ? missingEpisodeCount(inventory, coveredBoundary!, boundary!) : 0;
 
   // textFull is absent on older (schemaVersion 1) or not-yet-regenerated recaps — degrade
   // silently, never show an empty disclosure.
-  const fullText = recap.textFull && validateRecapText(recap.textFull).ok ? recap.textFull : null;
+  const fullText = hasBoundaryRecap && recap!.textFull && validateRecapText(recap!.textFull).ok ? recap!.textFull : null;
 
   const toggleSeason = (s: number) =>
     setExpandedSeasons((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
   // The user's boundary node — always open, so its AI disclosure stays visible for the whole
-  // panel (EU AI Act Art. 50) and its story-so-far is the primary content.
-  const hereContent = (
+  // panel (EU AI Act Art. 50) and its story-so-far is the primary content. null on a season-only
+  // show with no per-episode boundary recap — the timeline then opens directly on prior seasons.
+  const hereContent = hasBoundaryRecap ? (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-semibold text-ink">
-          Säsong {boundary.season}, avsnitt {boundary.episode}
+          Säsong {boundary!.season}, avsnitt {boundary!.episode}
         </span>
         <span className="rounded bg-acc-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-acc-deep">
           Du är här
@@ -154,12 +187,12 @@ export default function RecapPanel({
       </div>
       {missing > 0 && (
         <div className="text-[12px] text-ink-2 mt-1">
-          Sammanfattningen täcker till och med S{coveredBoundary.season}E{coveredBoundary.episode} —
+          Sammanfattningen täcker till och med S{coveredBoundary!.season}E{coveredBoundary!.episode} —
           {' '}informationen från {missing === 1 ? 'det senaste avsnittet' : `de ${missing} senaste avsnitten`} du sett saknas.
         </div>
       )}
       <div className="mt-1.5">
-        <DisclosedRecapProse text={recap.text} sources={recap.sources} />
+        <DisclosedRecapProse text={recap!.text} sources={recap!.sources} />
       </div>
 
       {fullText && (
@@ -177,13 +210,13 @@ export default function RecapPanel({
           </button>
           {openFull && (
             <div className="mt-2">
-              <DisclosedRecapProse text={fullText} sources={recap.sources} />
+              <DisclosedRecapProse text={fullText} sources={recap!.sources} />
             </div>
           )}
         </div>
       )}
     </div>
-  );
+  ) : null;
 
   return (
     <div className="mt-3 rounded-md border border-rule bg-surface overflow-hidden">
@@ -208,11 +241,17 @@ export default function RecapPanel({
               them, and there is no structural swap between the loading and loaded states. No
               loading spinner by design: a season read that errors keeps isLoading sticky-true, so
               a spinner could hang forever on the all-error (offline) path — an offline user still
-              gets their story-so-far, just without the prior-season nodes. */}
+              gets their story-so-far, just without the prior-season nodes.
+              A season-only-sourced show (no `hereContent` at all — see `hasBoundaryRecap` above)
+              has no "här" node to anchor on; the timeline then opens directly on prior seasons,
+              which is why `last` below is computed from array position rather than assuming a
+              "här" node always occupies index 0. */}
           <ol className="mt-1">
-            <NodeRow dot={hereDot} last={loadedSeasons.length === 0}>
-              {hereContent}
-            </NodeRow>
+            {hereContent && (
+              <NodeRow dot={hereDot} last={loadedSeasons.length === 0}>
+                {hereContent}
+              </NodeRow>
+            )}
             {[...loadedSeasons].reverse().map(({ season, recap: seasonRecap }, i, arr) => {
               const isOpen = expandedSeasons.includes(season);
               return (

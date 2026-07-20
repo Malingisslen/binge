@@ -47,6 +47,13 @@ Per show, I:
   only) — see SKILL.md steps 4–5 for the exact shape and the self-contained-text requirement.
 - **No usable CC BY-SA source?** Don't stretch to copyrighted sites — log it:
   `node functions/scripts/recap-upload.mjs --unsourced <tmdbId> "<title>" <no-wiki|partial-coverage|incompatible-license>`
+- **Season-level source but no per-episode breakdown at all?** (whole-season/whole-series
+  summary only — a real, common Wikipedia shape, not a bug in the pipeline.) Do NOT guess which
+  plot beat belongs to which episode — that's a spoiler risk if guessed wrong. Write ONE
+  `kind:'season'` entry from the season-level text and upload it with `--season-only` (§3) instead
+  of writing any boundary entries for that season. A season that's genuinely a mix (some episodes
+  sourced, most not) still goes through `--unsourced` for the gap, same as always — `--season-only`
+  is only for a season with ZERO usable per-episode source.
 - **Spot-check** a sample of the batch before upload (cached forever — a bad one is public to all).
 - Emit a `scripts/recaps/<show>.local.json` array of `{ tmdbId, season, episode, text, model, sources }`.
 
@@ -63,6 +70,19 @@ Season entries (`kind: 'season'`) are refused unless every episode 1..`episodeCo
 already has a boundary doc (in this batch or previously indexed), and are written ONCE — a season doc
 that already exists is skipped unless you pass `--force` (season regen is non-deterministic; don't
 let an accidental rerun silently overwrite one with different output).
+
+**`--season-only`** (BIN-185 follow-up): pass this flag when a season entry has ZERO backing boundary
+docs by design (the source was only ever season-level — see §2). It's the ONE exception to the
+completeness guard above — a PARTIAL mix (some but not all episodes covered) is still always refused,
+flag or not. The doc is stamped `episodeCoverage: 'none'` (vs the ordinary `'full'`) and its season
+number is recorded in the coverage index's `seasonOnlySeasons`, so the client can offer it without
+waiting for the panel to open. The client only ever surfaces a season-only doc for a season the user
+has ALREADY fully finished — same rule as an ordinary season doc, never their current one. If a
+per-episode source turns up later and full coverage becomes possible, uploading it does NOT silently
+replace the season-only doc — it's refused with an explicit "use --force to upgrade" message, so the
+upgrade is always a deliberate, visible step. The reverse (accidentally passing `--season-only`
+alongside `--force` for a season that already has full per-episode coverage) is refused the same
+way, with its own distinct "downgrade" message — neither direction ever happens silently.
 
 **NOTE:** the script lives at `functions/scripts/recap-upload.mjs` (not `scripts/`) so it resolves
 `firebase-admin` from `functions/node_modules` — the repo root deliberately has no firebase-admin. Run it

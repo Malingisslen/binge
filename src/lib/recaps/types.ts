@@ -67,4 +67,10 @@ export interface SeasonRecapDoc {
   license: string;
   generatedAt: Date;
   schemaVersion: number;
+  /** 'full' = every episode in this season also has its own `recaps/{tmdbId}_{s}_{e}` boundary
+   * doc (the ordinary case). 'none' = this show's source only ever had a season-level summary —
+   * no per-episode breakdown exists, so no boundary docs were ever written for this season at
+   * all (a partial mix is never allowed; see `docs/recaps/RUNBOOK.md`). Absent on docs written
+   * before this field existed — always full coverage, since 'none' was impossible until now. */
+  episodeCoverage: 'full' | 'none';
 }

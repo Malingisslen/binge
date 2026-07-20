@@ -3,7 +3,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { recapDocId, seasonRecapDocId, type EpisodeRef } from '@/lib/recaps/boundary';
-import { recapIndexDocId, parseRecapIndex, nearestCoveredBoundary } from '@/lib/recaps/coverage';
+import { recapIndexDocId, parseRecapIndex, parseSeasonOnlySeasons, nearestCoveredBoundary } from '@/lib/recaps/coverage';
 import { RECAPS_ENABLED } from '@/lib/recaps/config';
 import { logRecapMiss } from '@/lib/recaps/coverageGap';
 import { isSeasonRecapLoading } from './useRecap.helpers';
@@ -55,6 +55,9 @@ function docToSeasonRecap(data: Record<string, unknown>): SeasonRecapDoc {
     license: String(data.license ?? 'CC BY-SA 4.0'),
     generatedAt: data.generatedAt ? toDate(data.generatedAt) : new Date(0),
     schemaVersion: Number(data.schemaVersion ?? 1),
+    // Absent on docs written before this field existed — those are always full coverage
+    // (episodeCoverage:'none' was impossible until the season-only upload path shipped).
+    episodeCoverage: data.episodeCoverage === 'none' ? 'none' : 'full',
   };
 }
 
@@ -73,11 +76,23 @@ async function getDocWithTimeout(docId: string): Promise<Record<string, unknown>
   }
 }
 
-export interface RecapResult {
+/** The exact-or-nearest-earlier boundary lookup only — the internal shape `recapQuery` itself
+ * resolves to. Kept separate from the public `RecapResult` so the fallback-walk queryFn below
+ * doesn't also need to know about `seasonOnlySeasons` (that comes from the index query, not the
+ * boundary walk). */
+interface BoundaryLookup {
   recap: RecapDoc | null;
   /** The boundary the recap actually covers — equals the request on an exact hit, an
    * EARLIER boundary on a fallback (never later; spoiler-safe by construction). */
   coveredBoundary: EpisodeRef | null;
+}
+
+export interface RecapResult extends BoundaryLookup {
+  /** Season numbers with a season-only `SeasonRecapDoc` (episodeCoverage:'none' — no backing
+   * boundary docs at all). From the same always-fetched index read as `coveredBoundary`, so a
+   * season-only show's "Visa tidigare säsonger" entry point can appear WITHOUT waiting for the
+   * user to open the panel first (the season doc itself still only fetches lazily on open). */
+  seasonOnlySeasons: number[];
 }
 
 /** On an index/doc drift (indexed boundary whose doc is missing) walk back at most this
@@ -96,13 +111,19 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
   const baseEnabled = RECAPS_ENABLED && tmdbId != null;
 
   // 1) Per-show coverage index — cached across boundary changes (1h), absent → not seeded.
+  //    Carries both the per-episode boundary index AND which seasons (if any) only ever got a
+  //    season-only summary (episodeCoverage:'none') — one doc read serves both, since neither
+  //    needs to wait for the panel to open (that gate is only on the season DOC read itself).
   const coveredQuery = useQuery({
     queryKey: ['recap-index', tmdbId],
     enabled: baseEnabled,
     staleTime: 1000 * 60 * 60,
-    queryFn: async () => parseRecapIndex(await getDocWithTimeout(recapIndexDocId(tmdbId!))),
+    queryFn: async () => {
+      const raw = await getDocWithTimeout(recapIndexDocId(tmdbId!));
+      return { boundaries: parseRecapIndex(raw), seasonOnlySeasons: parseSeasonOnlySeasons(raw) };
+    },
   });
-  const covered = coveredQuery.data;
+  const covered = coveredQuery.data?.boundaries;
 
   // 2) The recap at the exact-or-nearest-earlier covered boundary. On a drifted index
   //    (doc missing for an indexed boundary) walk back a bounded number of steps.
@@ -110,7 +131,7 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
     queryKey: ['recap', tmdbId, boundary?.season, boundary?.episode],
     enabled: baseEnabled && boundary != null && covered != null && covered.length > 0,
     staleTime: 1000 * 60 * 60, // recaps are immutable once generated
-    queryFn: async (): Promise<RecapResult> => {
+    queryFn: async (): Promise<BoundaryLookup> => {
       let cursor: EpisodeRef | null = boundary!;
       for (let step = 0; step < MAX_FALLBACK_STEPS && cursor; step++) {
         const target: EpisodeRef | null = nearestCoveredBoundary(covered!, cursor);
@@ -144,22 +165,30 @@ export function useRecap(tmdbId: number | undefined, boundary: EpisodeRef | null
   // write — an optimistic-echo + server-ack pair is common) wouldn't refetch
   // either query, but WOULD re-run this effect against the same settled data,
   // double-firing logRecapMiss for a miss that was already logged.
+  //
+  // Code review (2026-07-20, season-only follow-up): "zero per-episode
+  // boundaries" is NOT the same as "no coverage at all" for a season-only
+  // show — it may have real `SeasonRecapDoc`s even though `covered` (the
+  // per-episode boundary list) is empty. Logging a miss anyway would tell the
+  // backfill pipeline this show still needs work when it may already be
+  // fully covered at the season level, wasting a future regeneration pass.
+  const seasonOnlySeasons = coveredQuery.data?.seasonOnlySeasons;
   useEffect(() => {
     // boundary?.season == null (not `boundary == null`) — checking a primitive
     // field instead of the object itself means this effect never needs to
     // reference `boundary` directly, so its dep array below can key on the
     // same primitives the queries above use without an exhaustive-deps fight.
     if (!baseEnabled || boundary?.season == null || tmdbId == null) return;
-    if (coveredQuery.isSuccess && covered!.length === 0) {
+    if (coveredQuery.isSuccess && covered!.length === 0 && (seasonOnlySeasons?.length ?? 0) === 0) {
       void logRecapMiss(tmdbId);
       return;
     }
     if (recapQuery.isSuccess && data!.recap === null) {
       void logRecapMiss(tmdbId);
     }
-  }, [baseEnabled, boundary?.season, boundary?.episode, tmdbId, coveredQuery.isSuccess, covered, recapQuery.isSuccess, data]);
+  }, [baseEnabled, boundary?.season, boundary?.episode, tmdbId, coveredQuery.isSuccess, covered, seasonOnlySeasons, recapQuery.isSuccess, data]);
 
-  return data ?? { recap: null, coveredBoundary: null };
+  return { ...(data ?? { recap: null, coveredBoundary: null }), seasonOnlySeasons: coveredQuery.data?.seasonOnlySeasons ?? [] };
 }
 
 export interface SeasonRecapResult {

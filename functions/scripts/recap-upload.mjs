@@ -22,6 +22,16 @@
 // unless every episode 1..episodeCount for that season already has a boundary doc (in this
 // batch or previously indexed) — a season doc claiming to cover episodes that were never
 // actually recapped is worse than no season doc (Security condition, BIN-185 redesign).
+//
+// `--season-only`: BIN-185 follow-up for shows whose source ONLY ever had a whole-season (or
+// whole-series) summary, never a per-episode breakdown — so no boundary docs can exist for that
+// season at all. Pass this flag to allow a season doc with ZERO backing boundary docs (never a
+// PARTIAL mix — that stays refused regardless of the flag). Written with `episodeCoverage:
+// 'none'` instead of `'full'`, and its season number is recorded in the per-show index's
+// `seasonOnlySeasons` so the client can offer it WITHOUT waiting for the panel to open (see
+// src/hooks/useRecap.ts). If a per-episode source is found later and full coverage becomes
+// available, the upload REFUSES the upgrade without `--force` — see `seasonUploadDecision` in
+// recap-upload.helpers.mjs for the exact tier-transition rules.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -34,32 +44,42 @@ import {
   seasonRecapDocId,
   recapIndexDocId,
   missingEpisodesForSeason,
+  seasonUploadDecision,
 } from './recap-upload.helpers.mjs';
 
 const UNSOURCED_PATH = resolve('docs/recaps/unsourced-shows.json');
 
 /**
- * Merge the batch's boundary keys ("s_e") into the per-show coverage index
- * `recaps/{tmdbId}_index` ({ boundaries: [...] } sorted). The client reads it with a
- * direct doc get to find the exact-or-nearest-earlier covered boundary (the fallback
- * recap) — never a Firestore query. The doc id can't collide with recap ids (int_int_int).
- * Returns the merged array — the season-completeness guard below reuses it instead of a
- * second read.
+ * Merge the batch's boundary keys ("s_e") — and/or season-only season numbers — into the
+ * per-show coverage index `recaps/{tmdbId}_index` ({ boundaries: [...], seasonOnlySeasons: [...]
+ * } sorted). The client reads it with a direct doc get to find the exact-or-nearest-earlier
+ * covered boundary (the fallback recap) AND which seasons have season-only coverage (BIN-185
+ * follow-up) — never a Firestore query. The doc id can't collide with recap ids (int_int_int).
+ * Returns the merged boundaries array — the season-completeness guard below reuses it instead of
+ * a second read. Safe to call with an empty `boundaryKeys` (a pure season-only batch has none).
  */
-async function updateIndex(db, tmdbId, boundaryKeys) {
+async function updateIndex(db, tmdbId, boundaryKeys, seasonOnlySeasonsToAdd = [], seasonOnlySeasonsToRemove = []) {
   const ref = db.doc(`recaps/${recapIndexDocId(tmdbId)}`);
   const snap = await ref.get();
-  const existing = snap.exists && Array.isArray(snap.data().boundaries) ? snap.data().boundaries : [];
-  const merged = [...new Set([...existing, ...boundaryKeys])]
+  const existingBoundaries = snap.exists && Array.isArray(snap.data().boundaries) ? snap.data().boundaries : [];
+  const existingSeasonOnly = snap.exists && Array.isArray(snap.data().seasonOnlySeasons) ? snap.data().seasonOnlySeasons : [];
+  const mergedBoundaries = [...new Set([...existingBoundaries, ...boundaryKeys])]
     .filter((k) => /^\d+_\d+$/.test(k))
     .sort((a, b) => {
       const [as, ae] = a.split('_').map(Number);
       const [bs, be] = b.split('_').map(Number);
       return as - bs || ae - be;
     });
-  await ref.set({ tmdbId: Number(tmdbId), boundaries: merged, updatedAt: FieldValue.serverTimestamp() });
-  console.log(`index updated: recaps/${recapIndexDocId(tmdbId)} (${merged.length} boundaries)`);
-  return merged;
+  const removeSet = new Set(seasonOnlySeasonsToRemove);
+  const mergedSeasonOnly = [...new Set([...existingSeasonOnly, ...seasonOnlySeasonsToAdd])]
+    .filter((s) => Number.isInteger(s) && s >= 1 && !removeSet.has(s))
+    .sort((a, b) => a - b);
+  await ref.set({
+    tmdbId: Number(tmdbId), boundaries: mergedBoundaries, seasonOnlySeasons: mergedSeasonOnly,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  console.log(`index updated: recaps/${recapIndexDocId(tmdbId)} (${mergedBoundaries.length} boundaries, ${mergedSeasonOnly.length} season-only)`);
+  return mergedBoundaries;
 }
 
 function appendUnsourced(tmdbId, title, reason) {
@@ -88,11 +108,15 @@ async function main() {
   // effect on boundary docs, which are always overwritten (that's how a regeneration pass works).
   const force = args.includes('--force');
   args = args.filter((a) => a !== '--force');
+  // --season-only: BIN-185 follow-up — allow a season doc for a season with ZERO backing
+  // boundary docs (the source only ever had whole-season-level prose). See seasonUploadDecision.
+  const seasonOnly = args.includes('--season-only');
+  args = args.filter((a) => a !== '--season-only');
   // --index-only <recaps.json>: (re)build the coverage index from a batch file without
   // rewriting the recap docs (backfill for batches uploaded before indexing existed).
   const indexOnly = args[0] === '--index-only';
   const inputPath = indexOnly ? args[1] : args[0];
-  if (!inputPath) { console.error('usage: node functions/scripts/recap-upload.mjs [--force] [--index-only] <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
+  if (!inputPath) { console.error('usage: node functions/scripts/recap-upload.mjs [--force] [--season-only] [--index-only] <recaps.json> | --unsourced <tmdbId> <title> <reason>'); process.exit(1); }
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     console.error('GOOGLE_APPLICATION_CREDENTIALS is not set — point it at the least-privilege recaps-writer service-account key.');
     process.exit(1);
@@ -170,6 +194,7 @@ async function main() {
   // present unless --force (season regen is non-deterministic; an accidental rerun must not
   // silently overwrite a season doc with different LLM output).
   for (const r of validSeason) {
+    if (indexOnly) continue; // --index-only never writes recap/season docs (no season-only doc can predate this feature to backfill)
     let covered = coveredByShow.get(r.tmdbId);
     if (!covered) {
       // Not touched by the boundary-upload loop above (this batch has season entries for a
@@ -180,25 +205,39 @@ async function main() {
       coveredByShow.set(r.tmdbId, covered);
     }
     const missing = missingEpisodesForSeason(covered, r.season, r.episodeCount);
-    if (missing.length > 0) {
-      console.warn(`SKIP season ${r.tmdbId}_season_${r.season}: missing boundary docs for episode(s) ${missing.join(', ')} — a season doc needs full coverage first`);
-      continue;
-    }
-    if (indexOnly) continue; // --index-only never writes recap/season docs
     const ref = db.doc(`recaps/${seasonRecapDocId(r.tmdbId, r.season)}`);
-    if (!force) {
-      const existing = await ref.get();
-      if (existing.exists) {
-        console.warn(`SKIP season ${r.tmdbId}_season_${r.season}: already exists (use --force to refresh)`);
-        continue;
-      }
+    const existingSnap = await ref.get();
+    const existingCoverage = existingSnap.exists ? (existingSnap.data().episodeCoverage ?? 'full') : null;
+    const decision = seasonUploadDecision({
+      missingCount: missing.length, episodeCount: r.episodeCount,
+      seasonOnlyFlag: seasonOnly, existingCoverage, force,
+    });
+    if (!decision.allow) {
+      console.warn(`SKIP season ${r.tmdbId}_season_${r.season}: ${decision.reason}`);
+      continue;
     }
     await ref.set({
       tmdbId: r.tmdbId, season: r.season,
       text: r.text, lang: 'sv', model: String(r.model ?? 'claude-sonnet-5'),
       sources: r.sources.map((s) => ({ name: s.name, url: s.url, license: s.license })),
       license: 'CC BY-SA 4.0', generatedAt: FieldValue.serverTimestamp(), schemaVersion: RECAP_SCHEMA_VERSION,
+      episodeCoverage: decision.coverage,
     });
+    if (decision.upgraded) {
+      console.log(`season doc UPGRADED from season-only to full coverage: recaps/${seasonRecapDocId(r.tmdbId, r.season)}`);
+      // The season is no longer season-only — prune the now-stale entry so the client's cheap
+      // pre-open signal doesn't keep pointing at a season that's actually fully covered now.
+      await updateIndex(db, r.tmdbId, [], [], [r.season]);
+    }
+    if (decision.downgraded) {
+      console.log(`season doc DOWNGRADED from full to season-only coverage: recaps/${seasonRecapDocId(r.tmdbId, r.season)} — verify this was intentional`);
+    }
+    if (decision.coverage === 'none') {
+      // Record it in the index so the client can offer this season WITHOUT the user opening the
+      // panel first (see src/hooks/useRecap.ts) — the boundary-upload loop above never touches
+      // this show's index if the batch has no boundary entries for it at all.
+      await updateIndex(db, r.tmdbId, [], [r.season]);
+    }
     console.log(`season doc written: recaps/${seasonRecapDocId(r.tmdbId, r.season)}`);
   }
 

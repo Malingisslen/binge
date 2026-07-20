@@ -34,6 +34,21 @@ export function parseRecapIndex(data: unknown): EpisodeRef[] {
 }
 
 /**
+ * Parse the index doc's `seasonOnlySeasons` field — season numbers that have a
+ * `SeasonRecapDoc` with NO backing boundary docs at all (episodeCoverage:'none'). This is the
+ * cheap, always-fetched signal `RecapPanel` needs to know whether a season-only show has
+ * anything to show at all — before the user opens the panel, since the season doc itself is
+ * only fetched lazily on open (DBA "no default-view reads" rule). Junk/non-positive entries
+ * dropped; a missing/invalid field yields [] (no season-only coverage known).
+ */
+export function parseSeasonOnlySeasons(data: unknown): number[] {
+  const raw = (data as { seasonOnlySeasons?: unknown } | null | undefined)?.seasonOnlySeasons;
+  if (!Array.isArray(raw)) return [];
+  const seasons = raw.filter((s): s is number => Number.isInteger(s) && s >= 1);
+  return [...new Set(seasons)].sort((a, b) => a - b);
+}
+
+/**
  * The exact boundary if covered, else the nearest covered boundary STRICTLY BEFORE it,
  * else null. Never returns a boundary past `boundary` (the spoiler invariant).
  */

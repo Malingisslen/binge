@@ -77,3 +77,49 @@ export function missingEpisodesForSeason(coveredKeys, season, episodeCount) {
   }
   return missing;
 }
+
+/**
+ * BIN-185 follow-up — season-only-sourced shows: decide whether a season-doc upload is allowed
+ * and which `episodeCoverage` tier to stamp it with. Pure so the coverage-tier decision (a real
+ * write-safety gate, not just cosmetic) is unit-tested independent of firebase-admin.
+ *
+ * Rules (in order):
+ *  - A PARTIAL mix (some but not all episodes covered) is NEVER allowed, `--season-only` or not —
+ *    only fully-covered or genuinely-zero-covered seasons may get a doc (Security condition,
+ *    original BIN-185 redesign: a doc claiming coverage it doesn't have is worse than no doc).
+ *  - Zero coverage requires the explicit `seasonOnlyFlag` (the `--season-only` CLI flag) — a
+ *    forgotten flag must refuse, not silently write an empty-source doc.
+ *  - `existingCoverage` is `null` (no doc yet), `'full'`, or `'none'`. Without `--force`, any
+ *    existing doc blocks a rewrite. A TIER CHANGE — 'none'→'full' (an upgrade: a per-episode
+ *    source was found later) OR 'full'→'none' (a downgrade: e.g. `--season-only` passed by
+ *    mistake alongside `--force` for an already-fully-covered season) — gets its OWN refusal
+ *    message naming which direction, symmetric in both directions, so an operator is never left
+ *    guessing why a routine-looking write was skipped (DBA condition, generalized by test review
+ *    2026-07-20: neither direction may ever happen silently).
+ */
+export function seasonUploadDecision({ missingCount, episodeCount, seasonOnlyFlag, existingCoverage, force }) {
+  const wouldBeCoverage = missingCount === 0
+    ? 'full'
+    : (missingCount === episodeCount && seasonOnlyFlag ? 'none' : null);
+  if (wouldBeCoverage === null) {
+    return {
+      allow: false,
+      reason: missingCount === episodeCount
+        ? 'no boundary docs at all for this season — pass --season-only if the source is genuinely season-level only'
+        : `missing boundary docs for ${missingCount} episode(s) — a season doc needs full coverage first`,
+    };
+  }
+  const tierChange = existingCoverage !== null && existingCoverage !== wouldBeCoverage
+    ? (existingCoverage === 'none' ? 'upgraded' : 'downgraded')
+    : null;
+  if (existingCoverage !== null && !force) {
+    if (tierChange === 'upgraded') {
+      return { allow: false, reason: "existing season doc is season-only (episodeCoverage:'none') but full per-episode coverage now exists — use --force to upgrade it" };
+    }
+    if (tierChange === 'downgraded') {
+      return { allow: false, reason: "DOWNGRADE: existing season doc has FULL per-episode coverage but this upload would replace it with a season-only (episodeCoverage:'none') doc — use --force only if this is genuinely intentional" };
+    }
+    return { allow: false, reason: 'already exists (use --force to refresh)' };
+  }
+  return { allow: true, coverage: wouldBeCoverage, upgraded: tierChange === 'upgraded', downgraded: tierChange === 'downgraded' };
+}
