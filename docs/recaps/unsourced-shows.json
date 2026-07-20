@@ -1078,5 +1078,281 @@
     "title": "Dips (season 2-3, episodes 1-6 each: Svensk Wikipedia has only a series-overview article with no per-episode content; English Wikipedia's Dips article covers only season 1's 6 episodes; no CC BY-SA fan wiki exists for the show)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-18T22:45:04.810Z"
+  },
+  {
+    "tmdbId": 78647,
+    "title": "Sjölyckan (all 4 seasons, 32 episodes: svenska Wikipedia has premise/cast list only, no per-episode or per-season plot content; no separate avsnittslista article; no English Wikipedia article exists)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:31:34.320Z"
+  },
+  {
+    "tmdbId": 93027,
+    "title": "Heder (hela serien, säsong 1-3, 22 avsnitt: inga per-avsnitts-handlingar på sv/en Wikipedia, ingen fan wiki hittad)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:31:48.525Z"
+  },
+  {
+    "tmdbId": 208932,
+    "title": "Cell 8 (2022, all 6 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:32:06.587Z"
+  },
+  {
+    "tmdbId": 279283,
+    "title": "Genombrottet (season 1, all 4 episodes: E1-E4)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:32:09.391Z"
+  },
+  {
+    "tmdbId": 235806,
+    "title": "Noll kontroll (season 1, episode 1: Ingen vanlig frukost)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:32:14.346Z"
+  },
+  {
+    "tmdbId": 218685,
+    "title": "Kapningen (svensk Wikipedia har bara premiss/rollista, inget avsnittsvis handlingsavsnitt; ingen engelsk Wikipedia-artikel finns, bara Wikidata)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:32:25.609Z"
+  },
+  {
+    "tmdbId": 282505,
+    "title": "Gränsfall (2025, SVT/TV2 Echo miniseries, 7 episodes) — svenska Wikipedia only has premise/cast, no per-episode plot section; no English Wikipedia article; no verifiable CC BY-SA fan wiki found",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:32:30.775Z"
+  },
+  {
+    "tmdbId": 232331,
+    "title": "Börje - The Journey of a Legend (säsong 1, samtliga 6 avsnitt: sv.wikipedia har bara premiss/rollista, inget per-avsnitt-handlingsavsnitt; ingen engelsk Wikipedia-artikel finns; EverybodyWiki 403-blockerar hämtning)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:32:33.161Z"
+  },
+  {
+    "tmdbId": 52229,
+    "title": "Arn (season 1, episodes 1-6 — TV4 miniseries, no per-episode plot source found)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:32:48.732Z"
+  },
+  {
+    "tmdbId": 218131,
+    "title": "Händelser vid vatten (Blackwater, säsong 1, alla 6 avsnitt)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:33:24.321Z"
+  },
+  {
+    "tmdbId": 157739,
+    "title": "Herr Talman (season 1, episode 1: Avsnitt 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:34:57.454Z"
+  },
+  {
+    "tmdbId": 157814,
+    "title": "Harmonica (5 episodes, season 1) — svenska Wikipedia has premise/cast/reception only, no per-episode plot section; no English Wikipedia article exists; no CC BY-SA fan wiki found",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:35:36.220Z"
+  },
+  {
+    "tmdbId": 213328,
+    "title": "Nattryttarna (season 1, episode 4: odaterad)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:36:02.618Z"
+  },
+  {
+    "tmdbId": 81308,
+    "title": "Agnes (2001, säsong 1 — samtliga 12 avsnitt)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:36:16.166Z"
+  },
+  {
+    "tmdbId": 100768,
+    "title": "Andra åket (whole show, 2 seasons/16 episodes) — svenska Wikipedia is premise/cast-only (no episode-level plot, no Lista över avsnitt page); no English Wikipedia article exists",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:36:26.994Z"
+  },
+  {
+    "tmdbId": 274061,
+    "title": "Whiskey on the Rocks (season 1, all 6 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:36:44.762Z"
+  },
+  {
+    "tmdbId": 277292,
+    "title": "Selmas saga (season 1: no per-episode Wikipedia coverage, premise/cast-only article)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:36:52.378Z"
+  },
+  {
+    "tmdbId": 98982,
+    "title": "Tunn is (hela säsong 1 — endast premiss/rollista på sv+en Wikipedia, ingen avsnittshandling)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:37:01.864Z"
+  },
+  {
+    "tmdbId": 309400,
+    "title": "Vaka (season 1, episodes 2-6: Bakom Stängda Dörrar / Tjockare än vatten / Dämpa fallet / För allmänhetens bästa / Kapa och spring)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:38:00.870Z"
+  },
+  {
+    "tmdbId": 50915,
+    "title": "Sjätte dagen (hela serien, 4 säsonger / 48 avsnitt)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:38:26.580Z"
+  },
+  {
+    "tmdbId": 220136,
+    "title": "Svenska Hjärtan (season 1, episode 1: Kräftskivan)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:38:55.108Z"
+  },
+  {
+    "tmdbId": 137140,
+    "title": "Knutby (all 12 episodes, S1-S2: no per-episode Wikipedia plot coverage, premise/cast article only)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:39:57.163Z"
+  },
+  {
+    "tmdbId": 63763,
+    "title": "Den fjärde mannen (season 1, episode 1: Avsnitt 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:40:35.759Z"
+  },
+  {
+    "tmdbId": 153248,
+    "title": "Mörkt hjärta (all 5 episodes, season 1 — no per-episode plot content on any Wikipedia language edition; only premise-level synopsis)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:41:52.293Z"
+  },
+  {
+    "tmdbId": 225152,
+    "title": "Barracuda Queens (all episodes, season 1-2: no per-episode plot coverage on sv/en Wikipedia, only premise+cast; fan wiki 402-blocked)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:42:24.112Z"
+  },
+  {
+    "tmdbId": 154144,
+    "title": "Möbelhandlarens dotter (7 avsnitt, säsong 1) — svenska Wikipedia har bara serie-premiss/rollista, inga avsnittshandlingar",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:42:27.055Z"
+  },
+  {
+    "tmdbId": 215796,
+    "title": "Meningen med livet (hela serien, säsong 1-2, avsnitt 1-8 vardera — endast premiss/rollista på svenska Wikipedia, ingen avsnittsnivå-handling, ingen engelsk artikel finns)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:43:36.502Z"
+  },
+  {
+    "tmdbId": 73750,
+    "title": "Bibliotekstjuven (miniserie, 3 avsnitt, season 1) - svenska Wikipedia-artikeln har bara premiss/rollista, ingen avsnittsindelad handling",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:44:11.001Z"
+  },
+  {
+    "tmdbId": 84498,
+    "title": "Dubbelliv (hela serien, 2 säsonger x 12 avsnitt) — svenska Wikipedia har bara säsongsnivå-handling (Handling > Första/Andra säsongen), ingen avsnittslista eller per-avsnitt-handling; ingen engelsk Wikipedia-artikel finns; ingen verifierad CC BY-SA fan-wiki hittades (SVT Play-beskrivningarna är TMDB-overview-text, ej tillåtet källmaterial)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:44:56.674Z"
+  },
+  {
+    "tmdbId": 116944,
+    "title": "Tunna blå linjen",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:45:54.809Z"
+  },
+  {
+    "tmdbId": 197712,
+    "title": "Lea (SVT boxningsdrama, 6 avsnitt, 2022) — ingen Wikipedia-artikel funnen",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:46:48.294Z"
+  },
+  {
+    "tmdbId": 84000,
+    "title": "Jägarna (season 2, episodes 1-6: no per-episode plot summary on svenska Wikipedia; no English Wikipedia article for the TV series; only copyrighted news/recension coverage found)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:47:26.538Z"
+  },
+  {
+    "tmdbId": 274476,
+    "title": "Scener efter ett äktenskap (season 1, all 8 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:47:26.635Z"
+  },
+  {
+    "tmdbId": 283296,
+    "title": "Paradis City (6-episode season 1, 2025) — svenska Wikipedia has only a one-paragraph premise/cast summary, no per-episode plot section; no English Wikipedia article exists; no CC BY-SA fan wiki found",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:47:52.943Z"
+  },
+  {
+    "tmdbId": 73770,
+    "title": "Kronprinsessan (season 1, episode 1: Avsnitt 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:50:24.370Z"
+  },
+  {
+    "tmdbId": 308640,
+    "title": "Jag for ner till bror (season 1, episode 2: Avsnitt 2)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:50:47.514Z"
+  },
+  {
+    "tmdbId": 63813,
+    "title": "Blå Ögon (season 1, all 10 episodes)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:51:14.559Z"
+  },
+  {
+    "tmdbId": 78443,
+    "title": "Helt perfekt (season 2, episode 1)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:51:53.922Z"
+  },
+  {
+    "tmdbId": 213628,
+    "title": "Hårt väder (dokumentärserie, David Batra, 5 avsnitt) — inget Wikipedia-baserat källmaterial",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:54:02.121Z"
+  },
+  {
+    "tmdbId": 52988,
+    "title": "Gösta Berlings saga (season 1, all 6 episodes: TV-serie 1986)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:54:20.810Z"
+  },
+  {
+    "tmdbId": 77682,
+    "title": "Höök (season 1, episode 1: Ryssguldet)",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T11:57:38.014Z"
+  },
+  {
+    "tmdbId": 70742,
+    "title": "Rebecka Martinsson (season 2, episodes 1-8: Rendrängen/Husgrunden/Lögnen/Varningstriangeln)",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T11:58:16.615Z"
+  },
+  {
+    "tmdbId": 51697,
+    "title": "Snoken",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T12:05:04.058Z"
+  },
+  {
+    "tmdbId": 68360,
+    "title": "Hassel",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T12:05:57.416Z"
+  },
+  {
+    "tmdbId": 39127,
+    "title": "Kontoret",
+    "reason": "partial-coverage",
+    "checkedAt": "2026-07-20T12:07:44.875Z"
+  },
+  {
+    "tmdbId": 15372,
+    "title": "Svensson, Svensson S2E11 - Det hemliga vapnet",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-20T12:19:10.825Z"
   }
 ]
