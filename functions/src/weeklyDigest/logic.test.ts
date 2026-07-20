@@ -2,11 +2,21 @@ import { describe, it, expect } from 'vitest';
 import {
   daysUntilLeaving,
   buildLeavingDigest,
+  digestOfferKey,
   digestPushBody,
   hasDigestContent,
   type DigestOffer,
   type DigestTitle,
 } from './logic';
+
+/**
+ * Offers map keyed the way production keys it — `${mediaType}_${tmdbId}`
+ * (BIN-523). mediaType defaults to 'movie' to match the `title` helper below.
+ */
+const omap = (
+  rows: Array<[number, DigestOffer[], ('movie' | 'tv')?]>,
+): Map<string, DigestOffer[]> =>
+  new Map(rows.map(([tmdbId, os, mediaType]) => [digestOfferKey({ tmdbId, mediaType: mediaType ?? 'movie' }), os]));
 
 const NOW = Date.parse('2026-07-01T12:00:00Z');
 
@@ -42,23 +52,23 @@ describe('buildLeavingDigest', () => {
   const myProviders = [8, 384]; // Netflix + Max (canonical)
 
   it('includes a subscription title leaving soon on a provider the user has', () => {
-    const map = new Map([[1, offers({ providerId: 8, leaving: '2026-07-06' })]]);
+    const map = omap([[1, offers({ providerId: 8, leaving: '2026-07-06' })]]);
     const out = buildLeavingDigest([title(1, 'Dune')], map, myProviders, NOW);
     expect(out).toEqual([{ tmdbId: 1, title: 'Dune', mediaType: 'movie', leaving: '2026-07-06', daysLeft: 5 }]);
   });
 
   it('excludes a title leaving on a provider the user does NOT subscribe to', () => {
-    const map = new Map([[1, offers({ providerId: 119, leaving: '2026-07-06' })]]); // Prime, not owned
+    const map = omap([[1, offers({ providerId: 119, leaving: '2026-07-06' })]]); // Prime, not owned
     expect(buildLeavingDigest([title(1, 'Dune')], map, myProviders, NOW)).toEqual([]);
   });
 
   it('excludes rent/buy offers — only a SUBSCRIPTION leaving counts', () => {
-    const map = new Map([[1, offers({ providerId: 8, type: 'rent', leaving: '2026-07-06' })]]);
+    const map = omap([[1, offers({ providerId: 8, type: 'rent', leaving: '2026-07-06' })]]);
     expect(buildLeavingDigest([title(1, 'Dune')], map, myProviders, NOW)).toEqual([]);
   });
 
   it('excludes titles leaving outside the window or already past', () => {
-    const map = new Map([
+    const map = omap([
       [1, offers({ providerId: 8, leaving: '2026-07-21' })], // 20d out, > 14
       [2, offers({ providerId: 8, leaving: '2026-06-30' })], // already past
     ]);
@@ -66,14 +76,14 @@ describe('buildLeavingDigest', () => {
   });
 
   it('is inclusive at the window edge (14d in, 15d out)', () => {
-    const at = new Map([[10, offers({ providerId: 8, leaving: '2026-07-15' })]]); // exactly 14d
+    const at = omap([[10, offers({ providerId: 8, leaving: '2026-07-15' })]]); // exactly 14d
     expect(buildLeavingDigest([title(10, 'Edge')], at, myProviders, NOW)).toHaveLength(1);
-    const over = new Map([[11, offers({ providerId: 8, leaving: '2026-07-16' })]]); // 15d
+    const over = omap([[11, offers({ providerId: 8, leaving: '2026-07-16' })]]); // 15d
     expect(buildLeavingDigest([title(11, 'Over')], over, myProviders, NOW)).toHaveLength(0);
   });
 
   it('includes a title leaving today (0d) and sorts it first', () => {
-    const map = new Map([
+    const map = omap([
       [1, offers({ providerId: 8, leaving: '2026-07-03' })], // 2d
       [2, offers({ providerId: 8, leaving: '2026-07-01' })], // today, 0d
     ]);
@@ -83,7 +93,7 @@ describe('buildLeavingDigest', () => {
   });
 
   it('picks the soonest-leaving owned provider when a title has several', () => {
-    const map = new Map([[1, offers(
+    const map = omap([[1, offers(
       { providerId: 8, leaving: '2026-07-10' },   // 9d
       { providerId: 384, leaving: '2026-07-04' }, // 3d — sooner
     )]]);
@@ -94,14 +104,14 @@ describe('buildLeavingDigest', () => {
 
   it('matches an aliased provider id against the canonical the user stored', () => {
     // User has canonical Max (384); the offer is under alias 1899.
-    const map = new Map([[1, offers({ providerId: 1899, leaving: '2026-07-05' })]]);
+    const map = omap([[1, offers({ providerId: 1899, leaving: '2026-07-05' }), 'tv']]);
     const out = buildLeavingDigest([title(1, 'Max show', 'tv')], map, [384], NOW);
     expect(out).toHaveLength(1);
     expect(out[0].daysLeft).toBe(4);
   });
 
   it('sorts nearest-deadline-first across titles', () => {
-    const map = new Map([
+    const map = omap([
       [1, offers({ providerId: 8, leaving: '2026-07-12' })], // 11d
       [2, offers({ providerId: 8, leaving: '2026-07-03' })], // 2d
       [3, offers({ providerId: 8, leaving: '2026-07-08' })], // 7d
@@ -110,8 +120,17 @@ describe('buildLeavingDigest', () => {
     expect(out.map((i) => i.title)).toEqual(['B', 'C', 'A']);
   });
 
+  // BIN-523 discriminating oracle: keyed on bare tmdbId, the TV show's offers
+  // were handed to the movie too, inventing a "leaving soon" warning for a title
+  // that isn't leaving anything.
+  it('does not give movie N the offers belonging to TV N', () => {
+    const map = omap([[1, offers({ providerId: 8, leaving: '2026-07-06' }), 'tv']]);
+    const out = buildLeavingDigest([title(1, 'Serien', 'tv'), title(1, 'Filmen', 'movie')], map, myProviders, NOW);
+    expect(out.map((i) => i.title)).toEqual(['Serien']);
+  });
+
   it('returns empty when a title has no offers doc', () => {
-    expect(buildLeavingDigest([title(99, 'Unknown')], new Map(), myProviders, NOW)).toEqual([]);
+    expect(buildLeavingDigest([title(99, 'Unknown')], omap([]), myProviders, NOW)).toEqual([]);
   });
 });
 

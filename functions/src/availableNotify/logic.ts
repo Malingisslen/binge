@@ -14,6 +14,8 @@
  *     individual push success (same as episodeNotify) — idempotent, no retry.
  */
 
+import { mediaTypeDocId, normalizeMediaType, type MediaType } from '../shared/mediaTypeDocId';
+
 export interface WatchlistTitleLite {
   uid: string;
   tmdbId: number;
@@ -59,14 +61,13 @@ export function canonicalProviderId(id: number): number {
 /**
  * TMDB movie ids and TV ids are INDEPENDENT namespaces — movie N and TV N are
  * unrelated titles. Anything keyed per-title must therefore key on
- * (mediaType, tmdbId), never tmdbId alone (BIN-523). Unknown/blank mediaType
- * normalizes to 'tv', matching the long-standing fetch/actionUrl fallback.
+ * (mediaType, tmdbId), never tmdbId alone (BIN-523). The rule itself now lives
+ * once in ../shared/mediaTypeDocId (BIN-560); these are this module's names for
+ * it, kept so the many call sites below don't all have to change.
  */
-export type NotifyMediaType = 'movie' | 'tv';
+export type NotifyMediaType = MediaType;
 
-export function normalizeMediaType(raw: string): NotifyMediaType {
-  return raw === 'movie' ? 'movie' : 'tv';
-}
+export { normalizeMediaType };
 
 /**
  * Doc id for availableNotifyState AND the phase-2 grouping key (BIN-523):
@@ -80,7 +81,7 @@ export function normalizeMediaType(raw: string): NotifyMediaType {
  * orphan. Don't restate the tradeoff in this file; it drifts.
  */
 export function availableStateDocId(mediaType: string, tmdbId: number): string {
-  return `${normalizeMediaType(mediaType)}_${tmdbId}`;
+  return mediaTypeDocId(mediaType, tmdbId);
 }
 
 /**

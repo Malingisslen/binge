@@ -3,12 +3,13 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
-import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth } from './logic';
+import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId } from './logic';
 import { fetchOffers, RATE_LIMITED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 import { motnBillingCycleId } from '../util/dayId';
 import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
-import type { IntentItem, ExistingOffer, Offer } from './types';
+import type { IntentItem, ExistingOffer, Offer, WorkItem } from './types';
 
 const MOTN_API_KEY = defineSecret('MOTN_API_KEY');
 const ADMIN_UID = defineSecret('ADMIN_UID');
@@ -37,7 +38,7 @@ const PER_RUN_SELECT = 9;
 const PAGE_SIZE = 2000;
 
 /** Scan all watchlist docs, narrowed, and keep only intent titles, deduped. */
-async function readWorkSet(): Promise<{ tmdbId: number; mediaType: 'movie' | 'tv' }[]> {
+async function readWorkSet(): Promise<WorkItem[]> {
   const db = getFirestore();
   const items: IntentItem[] = [];
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
@@ -67,19 +68,44 @@ async function readWorkSet(): Promise<{ tmdbId: number; mediaType: 'movie' | 'tv
   return dedupeIntent(items);
 }
 
-/** Read current streamingOffers state for prioritization (acceptable full read at this scale). */
+/**
+ * Read current streamingOffers state for prioritization (acceptable full read at
+ * this scale).
+ *
+ * BIN-523: identity comes from the doc's `tmdbId`/`mediaType` FIELDS, never from
+ * parsing the doc id. That's what lets legacy bare-`${tmdbId}` docs keep counting
+ * as "already checked" after the id scheme changed — without it every title in
+ * the library would look never-checked at once and the governor would burn the
+ * whole 300-call monthly MOTN budget re-fetching data it already has.
+ */
 async function readExisting(): Promise<ExistingOffer[]> {
   const db = getFirestore();
-  const snap = await db.collection('streamingOffers').select('checkedAt', 'offers').get();
-  return snap.docs.map((d) => {
+  const snap = await db.collection('streamingOffers').select('checkedAt', 'offers', 'tmdbId', 'mediaType').get();
+  const out: ExistingOffer[] = [];
+  for (const d of snap.docs) {
+    // Recover the media type from the doc ID when the field is missing or junk —
+    // the same defence the tmdbId line below already had. Dropping the row
+    // instead (the pre-2026-07-20 behaviour) silently reclassified the title as
+    // tier-0 "never checked", the HIGHEST refresh priority, so a handful of
+    // malformed docs could burn the month's MOTN budget re-fetching data we
+    // already hold. Only a bare-id doc with an unusable field is truly
+    // unattributable, and that is the one case we still have to skip.
+    const field = d.get('mediaType');
+    const fromId = d.id.startsWith('movie_') ? 'movie' : d.id.startsWith('tv_') ? 'tv' : null;
+    const mediaType = field === 'movie' || field === 'tv' ? field : fromId;
+    if (mediaType === null) continue;
+    const tmdbId = Number(d.get('tmdbId') ?? Number(d.id));
+    if (!Number.isFinite(tmdbId)) continue;
     const offers = (d.get('offers') as Offer[] | undefined) ?? [];
     const leavings = offers.map((o) => o.leaving).filter((l): l is string => !!l).sort();
-    return {
-      tmdbId: Number(d.id),
+    out.push({
+      tmdbId,
+      mediaType,
       checkedAt: Number(d.get('checkedAt') ?? 0),
       nextLeaving: leavings[0] ?? null,
-    };
-  });
+    });
+  }
+  return out;
 }
 
 async function notifyAdmin(status: 'warn' | 'critical', intervalDays: number, users: number): Promise<boolean> {
@@ -139,11 +165,13 @@ export const streamingOffersRefresh = onSchedule(
     const existing = await readExisting();
     const batch = selectRefreshBatch(workSet, existing, nowMs, PER_RUN_SELECT);
 
-    const mediaById = new Map(workSet.map((w) => [w.tmdbId, w.mediaType]));
+    // BIN-545: the batch carries (tmdbId, mediaType) pairs. It used to be bare
+    // ids resolved through a tmdbId-keyed Map, which re-collapsed movie N and
+    // TV N right after dedupeIntent had been fixed to keep them apart.
     let written = 0;
     let sawRateLimited = false;
     let sawClean = false; // at least one real (non-429, non-null) vendor response this run
-    for (const tmdbId of batch) {
+    for (const { tmdbId, mediaType } of batch) {
       // Reserve a MOTN slot for this billing cycle BEFORE spending the call (a
       // crash + Scheduler retry can't overshoot the cap). Never refunded on
       // failure — the vendor counts the request, not the success.
@@ -152,7 +180,6 @@ export const streamingOffersRefresh = onSchedule(
         logger.warn('streamingOffersRefresh: MOTN cycle cap reached mid-run — stopping', { motnCycle });
         break;
       }
-      const mediaType = mediaById.get(tmdbId)!;
       const result = await fetchOffers(tmdbId, mediaType);
       if (result === RATE_LIMITED) {
         // 429: could be the real monthly quota gone, or a transient trip of the
@@ -166,17 +193,50 @@ export const streamingOffersRefresh = onSchedule(
       if (result === null) continue; // per-title failure -> retry next run
       sawClean = true;
       const offers = result;
-      await db.collection('streamingOffers').doc(String(tmdbId)).set({
+      await db.collection('streamingOffers').doc(streamingOffersDocId(mediaType, tmdbId)).set({
         tmdbId, mediaType, offers, checkedAt: nowMs, source: 'motn',
       });
       written += 1;
+
+      // The namespaced doc now supersedes the legacy bare-id one, so retire it.
+      // Without this, readExisting's full-collection scan carries ~2 rows per
+      // title FOREVER — it runs unpaginated every 24h, so it is the worst
+      // standing cost in the pipeline. Gated on the legacy doc's own mediaType:
+      // a movie and a show sharing a tmdbId want the SAME bare doc, and deleting
+      // one unconditionally would destroy the sibling's only data path.
+      const legacyRef = db.collection('streamingOffers').doc(String(tmdbId));
+      const legacySnap = await legacyRef.get();
+      if (legacySnap.exists && legacySnap.get('mediaType') === mediaType) {
+        await legacyRef.delete();
+      }
 
       // BIN-180: capture cheapest-rent price history (shared, global, write-on-
       // change). Builds the price-graph asset that can't be backfilled. One read
       // + (only on a price change) one write per batched title — bounded by the
       // daily budget, so negligible cost.
-      const histRef = db.collection('priceHistory').doc(String(tmdbId));
-      const points = ((await histRef.get()).get('points') as PricePoint[] | undefined) ?? [];
+      //
+      // BIN-562 (2026-07-20): priceHistory is namespaced by (mediaType, tmdbId)
+      // like every other per-title collection. It was the LAST bare-keyed one,
+      // and leaving it that way was actively harmful, not merely untidy:
+      // priceDropNotify scans only films, so a movie's push quoted whatever the
+      // same-numeric-id TV show had last recorded. Writer and BOTH readers
+      // (priceDropNotify, usePriceHistory) changed together — shipping the write
+      // alone would take every price chart dark for a refresh cycle.
+      const histRef = db.collection('priceHistory').doc(mediaTypeDocId(mediaType, tmdbId));
+      // Seed from the legacy bare-id doc on the FIRST namespaced write, using the
+      // same mediaType gate the readers use. Without this the new doc starts
+      // empty, appendPricePoint has no `last` to compare against, and the title's
+      // whole accumulated series is orphaned the moment the namespaced doc exists
+      // (both readers stop falling back). Price history is the one asset here
+      // that cannot be backfilled — see this module's header.
+      let points = (await histRef.get()).get('points') as PricePoint[] | undefined;
+      if (points === undefined) {
+        const legacyHist = await db.collection('priceHistory').doc(String(tmdbId)).get();
+        if (legacyHist.exists && legacyHist.get('mediaType') === mediaType) {
+          points = legacyHist.get('points') as PricePoint[] | undefined;
+        }
+      }
+      points = points ?? [];
       const nextPoints = appendPricePoint(points, cheapestRent(offers), nowMs);
       if (nextPoints) {
         await histRef.set({ tmdbId, mediaType, points: nextPoints, updatedAt: FieldValue.serverTimestamp() }, { merge: true });

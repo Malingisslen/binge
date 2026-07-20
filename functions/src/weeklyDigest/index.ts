@@ -30,6 +30,7 @@ import { sendPushToUser } from '../push';
 import { stockholmDayId } from '../util/dayId';
 import {
   buildLeavingDigest,
+  digestOfferKey,
   digestPushBody,
   hasDigestContent,
   type DigestOffer,
@@ -52,23 +53,66 @@ async function readLibraryTitles(uid: string): Promise<DigestTitle[]> {
     return {
       tmdbId: Number(x.tmdbId ?? Number(d.id)),
       title: String(x.title ?? ''),
-      mediaType: (x.mediaType === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv',
+      // A missing mediaType used to collapse to 'movie', which since BIN-523
+      // made the offers lookup miss for TV — the show silently lost its
+      // "leaving soon" warning. status is already in this projection and is a
+      // high-confidence signal: per the watch-status model 'mina' is TV-only
+      // and 'vill_se' is film-only, so use it rather than a fixed literal.
+      mediaType: (x.mediaType === 'tv' ? 'tv'
+        : x.mediaType === 'movie' ? 'movie'
+          : x.status === 'mina' ? 'tv' : 'movie') as 'movie' | 'tv',
     };
   });
 }
 
-/** Batch-read streamingOffers for the given title ids → offers per tmdbId. */
-async function readOffers(tmdbIds: number[]): Promise<Map<number, DigestOffer[]>> {
+/**
+ * Batch-read streamingOffers for the given titles → offers per `digestOfferKey`.
+ *
+ * BIN-523: the docs are keyed `${mediaType}_${tmdbId}` now. Titles whose
+ * namespaced doc doesn't exist yet get ONE fallback lookup at the legacy bare
+ * `${tmdbId}` id, accepted only when that doc's own `mediaType` field matches
+ * the title we asked for — otherwise we'd hand a movie the TV show's leaving
+ * dates, which is precisely the bug being fixed. The fallback disappears title
+ * by title as the refresh cron rewrites each doc under the new id; without it
+ * the digest would go quiet for months (the cron refreshes ~9 titles a day).
+ */
+async function readOffers(titles: DigestTitle[]): Promise<Map<string, DigestOffer[]>> {
   const db = getFirestore();
-  const map = new Map<number, DigestOffer[]>();
-  const ids = [...new Set(tmdbIds)];
-  for (let i = 0; i < ids.length; i += 300) {
-    const refs = ids.slice(i, i + 300).map((id) => db.collection('streamingOffers').doc(String(id)));
-    const snaps = await db.getAll(...refs);
+  const map = new Map<string, DigestOffer[]>();
+  const byKey = new Map<string, DigestTitle>();
+  for (const t of titles) byKey.set(digestOfferKey(t), t);
+  const keys = [...byKey.keys()];
+
+  // Pass 1 — the namespaced ids. Results are matched by doc id, not by array
+  // position, so this never depends on getAll's ordering.
+  for (let i = 0; i < keys.length; i += 300) {
+    const chunk = keys.slice(i, i + 300);
+    const snaps = await db.getAll(...chunk.map((k) => db.collection('streamingOffers').doc(k)));
+    for (const s of snaps) {
+      if (s.exists) map.set(s.id, (s.get('offers') as DigestOffer[] | undefined) ?? []);
+    }
+  }
+
+  // Pass 2 — legacy bare ids, for the titles pass 1 didn't find. A movie and a
+  // TV show sharing a tmdbId want the SAME bare doc, so ids are deduped and the
+  // doc's mediaType decides which of them (at most one) may claim it.
+  const wantBare = new Map<string, DigestTitle[]>();
+  for (const key of keys) {
+    if (map.has(key)) continue;
+    const t = byKey.get(key)!;
+    const bare = String(t.tmdbId);
+    (wantBare.get(bare) ?? wantBare.set(bare, []).get(bare)!).push(t);
+  }
+  const bareIds = [...wantBare.keys()];
+  for (let i = 0; i < bareIds.length; i += 300) {
+    const chunk = bareIds.slice(i, i + 300);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection('streamingOffers').doc(id)));
     for (const s of snaps) {
       if (!s.exists) continue;
       const offers = (s.get('offers') as DigestOffer[] | undefined) ?? [];
-      map.set(Number(s.id), offers);
+      for (const t of wantBare.get(s.id) ?? []) {
+        if (s.get('mediaType') === t.mediaType) map.set(digestOfferKey(t), offers);
+      }
     }
   }
   return map;
@@ -101,7 +145,7 @@ async function processUser(uid: string, data: FirebaseFirestore.DocumentData, no
     : [];
 
   const titles = await readLibraryTitles(uid);
-  const offers = await readOffers(titles.map((t) => t.tmdbId));
+  const offers = await readOffers(titles);
   const leaving = buildLeavingDigest(titles, offers, myProviders, nowMs, LEAVING_WINDOW_DAYS);
   const newCount = await countNewArrivals(uid, nowMs);
 

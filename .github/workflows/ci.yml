@@ -59,18 +59,22 @@ jobs:
       - name: Workflow map linter self-tests
         run: node --test scripts/check-workflow-map.test.mjs
 
-      - name: Test
-        run: npm test
-
-      # Coverage report — informational ONLY, never gates the build (BIN-525).
-      # continue-on-error keeps this step from ever failing CI; there are no
-      # coverage thresholds in vitest.config.ts either. Adding a blocking floor
-      # is a founder decision, deliberately deferred.
+      # ONE run of the suite, with coverage attached (BIN-534). This used to be
+      # two steps — `npm test` plus a second `npm run test:coverage` — which ran
+      # every test twice per CI run for a report-only number.
+      #
+      # Blocking semantics are unchanged in both directions:
+      #   * TEST FAILURES still fail CI — this step has no continue-on-error, and
+      #     `vitest run --coverage` exits non-zero on a failing test exactly like
+      #     plain `vitest run`.
+      #   * COVERAGE is still report-only and never gates the build — there are
+      #     deliberately NO `thresholds` in vitest.config.ts (BIN-525), so the
+      #     coverage instrumentation cannot fail this step on its own. Adding a
+      #     blocking floor is a founder decision, deliberately deferred.
       # Baseline at introduction (2026-07-16, src/** statements): 33.1%
       # (branches 30.7%, functions 26.4%, lines 32.3%).
-      - name: Coverage report (non-blocking)
+      - name: Test (with non-blocking coverage report)
         run: npm run test:coverage
-        continue-on-error: true
 
       - name: Build (smoke)
         run: npm run build

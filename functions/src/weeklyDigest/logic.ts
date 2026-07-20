@@ -17,6 +17,7 @@
  */
 
 import { canonicalProviderId } from '../availableNotify/logic';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 
 export interface DigestOffer {
   providerId: number;
@@ -40,6 +41,11 @@ export interface LeavingItem {
 
 const DAY_MS = 86_400_000;
 
+/** Key for the per-title offers map — (mediaType, tmdbId), never bare tmdbId (BIN-523). */
+export function digestOfferKey(title: Pick<DigestTitle, 'tmdbId' | 'mediaType'>): string {
+  return mediaTypeDocId(title.mediaType, title.tmdbId);
+}
+
 /**
  * Whole-day countdown to a leaving date. A bare YYYY-MM-DD is read as UTC
  * midnight and compared against `nowMs` floored to UTC day, so a title leaving
@@ -57,14 +63,16 @@ export function daysUntilLeaving(leaving: string | null, nowMs: number): number 
 }
 
 /**
- * Build the leaving-soon list for one user. `offersByTmdbId` holds the offers
- * from each title's streamingOffers doc; `myProviders` is the user's subscribed
- * set. Each title contributes at most once (its soonest-leaving owned provider);
- * result is sorted nearest-deadline-first.
+ * Build the leaving-soon list for one user. `offersByKey` holds the offers from
+ * each title's streamingOffers doc, keyed by `digestOfferKey` — BIN-523: it used
+ * to be keyed on bare tmdbId, so a movie and a TV show sharing a numeric id
+ * showed each other's "leaving soon" dates. `myProviders` is the user's
+ * subscribed set. Each title contributes at most once (its soonest-leaving owned
+ * provider); result is sorted nearest-deadline-first.
  */
 export function buildLeavingDigest(
   titles: readonly DigestTitle[],
-  offersByTmdbId: ReadonlyMap<number, readonly DigestOffer[]>,
+  offersByKey: ReadonlyMap<string, readonly DigestOffer[]>,
   myProviders: readonly number[],
   nowMs: number,
   withinDays = 14,
@@ -72,7 +80,7 @@ export function buildLeavingDigest(
   const mine = new Set(myProviders.map(canonicalProviderId));
   const out: LeavingItem[] = [];
   for (const t of titles) {
-    const offers = offersByTmdbId.get(t.tmdbId) ?? [];
+    const offers = offersByKey.get(digestOfferKey(t)) ?? [];
     let best: LeavingItem | null = null;
     for (const o of offers) {
       if (o.type !== 'subscription' || !o.leaving) continue;

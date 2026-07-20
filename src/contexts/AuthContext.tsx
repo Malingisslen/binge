@@ -25,6 +25,7 @@ import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
+import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import type { ItemVisibility, UserProfile } from '@/types';
 
 interface AuthState {
@@ -485,48 +486,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateHomeMunicipality = useCallback((kommun: string | null) => updateUserField('hemkommun', kommun), [updateUserField]);
   // BIN-181: persist the rotation-calendar snapshot the reminder function reads.
   const updateRotationSchedule = useCallback((schedule: NonNullable<UserProfile['rotationSchedule']>) => updateUserField('rotationSchedule', schedule), [updateUserField]);
-  // Spegel av user.providerCosts som uppdateras SYNKRONT i setProviderCost (före
-  // await) så att tabbning från provider A:s kostnad till B:s inte skriver två
-  // blur:ar mot samma stale render-snapshot och tappar A:s värde (BIN-40).
-  const providerCostsRef = useRef<Record<number, number>>({});
-  useEffect(() => { providerCostsRef.current = user?.providerCosts ?? {}; }, [user?.providerCosts]);
-  const setProviderCost = useCallback(async (providerId: number, cost: number | null) => {
-    const prev = providerCostsRef.current;
-    const next = { ...prev };
-    if (cost == null) delete next[providerId];
-    else next[providerId] = cost;
-    providerCostsRef.current = next;
-    try {
-      await updateUserField('providerCosts', next);
-    } catch (err) {
-      // BIN-516: writen nådde aldrig Firestore — rulla tillbaka spegeln så
-      // det avvisade värdet inte smygpersistas via nästa edits spread.
-      // Identity-check: klobbra inte en senare concurrent edit (eller
-      // profil-sync-effekten) som redan hunnit byta ref:en.
-      if (providerCostsRef.current === next) providerCostsRef.current = prev;
-      throw err;
-    }
-  }, [updateUserField]);
-  // BIN-417: same synchronous-mirror pattern for campaigns. Stores the RAW
-  // { monthlyCost, endDate } keyed by CANONICAL id (so an alias id and its
-  // canonical resolve the same entry, matching resolveEffectiveMonthlyCost).
-  const providerCampaignsRef = useRef<Record<number, ProviderCampaign>>({});
-  useEffect(() => { providerCampaignsRef.current = user?.providerCampaigns ?? {}; }, [user?.providerCampaigns]);
-  const setProviderCampaign = useCallback(async (providerId: number, campaign: ProviderCampaign | null) => {
-    const key = canonicalProviderId(providerId);
-    const prev = providerCampaignsRef.current;
-    const next = { ...prev };
-    if (campaign == null) delete next[key];
-    else next[key] = campaign;
-    providerCampaignsRef.current = next;
-    try {
-      await updateUserField('providerCampaigns', next);
-    } catch (err) {
-      // BIN-516: samma rollback-mönster som setProviderCost ovan.
-      if (providerCampaignsRef.current === next) providerCampaignsRef.current = prev;
-      throw err;
-    }
-  }, [updateUserField]);
+  // BIN-561: de tre provider-map-setter:na (kostnad, kampanj, förnyelsedag)
+  // delar spegel-plus-rollback-mönstret via useOptimisticMirrorField — se den
+  // hooken för VARFÖR spegeln uppdateras synkront (BIN-40/46) och rullas
+  // tillbaka identity-checkat vid write-fel (BIN-516/531).
+  const commitProviderCosts = useCallback(
+    (next: Record<number, number>) => updateUserField('providerCosts', next),
+    [updateUserField],
+  );
+  const setProviderCost = useOptimisticMirrorField(user?.providerCosts, commitProviderCosts);
+  // BIN-417: kampanjer lagrar RÅA { monthlyCost, endDate } keyed by CANONICAL
+  // id (så ett alias-id och dess kanoniska träffar samma post, i linje med
+  // resolveEffectiveMonthlyCost). Kanoniseringen sker här, inte i hooken.
+  const commitProviderCampaigns = useCallback(
+    (next: Record<number, ProviderCampaign>) => updateUserField('providerCampaigns', next),
+    [updateUserField],
+  );
+  const setCampaignByKey = useOptimisticMirrorField(user?.providerCampaigns, commitProviderCampaigns);
+  const setProviderCampaign = useCallback(
+    (providerId: number, campaign: ProviderCampaign | null) =>
+      setCampaignByKey(canonicalProviderId(providerId), campaign),
+    [setCampaignByKey],
+  );
 
   // BIN-184: hushålls-fan-out — när kostnadsrelaterade profilfält ÄNDRAS
   // uppdateras användarens opt-in-bidrag i alla grupper (dirty-checkat, så en
@@ -558,26 +539,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, hhProviders, hhCosts, hhTiers, hhCampaigns]);
-  // Samma synkrona-spegel-mönster som providerCosts (BIN-46) så tabbning mellan
-  // fält inte skriver mot en stale render-snapshot och tappar ett värde.
-  const providerRenewalDaysRef = useRef<Record<number, number>>({});
-  useEffect(() => { providerRenewalDaysRef.current = user?.providerRenewalDays ?? {}; }, [user?.providerRenewalDays]);
-  const setProviderRenewalDay = useCallback(async (providerId: number, day: number | null) => {
-    const prev = providerRenewalDaysRef.current;
-    const next = { ...prev };
-    if (day == null) delete next[providerId];
-    else next[providerId] = day;
-    providerRenewalDaysRef.current = next;
-    try {
-      await updateUserField('providerRenewalDays', next);
-    } catch (err) {
-      // BIN-531: samma rollback-mönster som setProviderCost/setProviderCampaign
-      // (BIN-516) — writen nådde aldrig Firestore, så rulla tillbaka spegeln
-      // innan den avvisade dagen smygpersistas via nästa edits spread.
-      if (providerRenewalDaysRef.current === next) providerRenewalDaysRef.current = prev;
-      throw err;
-    }
-  }, [updateUserField]);
+  const commitProviderRenewalDays = useCallback(
+    (next: Record<number, number>) => updateUserField('providerRenewalDays', next),
+    [updateUserField],
+  );
+  const setProviderRenewalDay = useOptimisticMirrorField(user?.providerRenewalDays, commitProviderRenewalDays);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;
     const { getProvider } = await import('@/lib/tmdb/providers');

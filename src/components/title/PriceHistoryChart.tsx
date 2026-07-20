@@ -16,8 +16,10 @@ const WINDOW_DAYS = 180; // "senaste 6 mån"
 // rebuilt per render.
 const dateFmt = new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' });
 
-export default function PriceHistoryChart({ tmdbId, nowMs }: { tmdbId: number; nowMs: number }) {
-  const { data: points } = usePriceHistory(tmdbId);
+export default function PriceHistoryChart(
+  { tmdbId, mediaType, nowMs }: { tmdbId: number; mediaType: 'movie' | 'tv'; nowMs: number },
+) {
+  const { data: points } = usePriceHistory(tmdbId, mediaType);
   const stats = useMemo(() => computePriceStats(points, WINDOW_DAYS, nowMs), [points, nowMs]);
   const geo = useMemo(() => priceChartGeometry(stats?.points ?? null), [stats]);
   const [hover, setHover] = useState<number | null>(null);

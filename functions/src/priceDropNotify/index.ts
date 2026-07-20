@@ -21,6 +21,7 @@ import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
 import { detectPriceDrop } from '../streamingOffers/priceDrop';
 import type { PricePoint } from '../streamingOffers/priceHistory';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 
 interface WantedFilm {
   uid: string;
@@ -87,7 +88,18 @@ async function processTitle(
   tmdbId: number, items: WantedFilm[], nowMs: number, settingsByUid: Map<string, NotifySettings>,
 ): Promise<number> {
   const db = getFirestore();
-  const histSnap = await db.collection('priceHistory').doc(String(tmdbId)).get();
+  // BIN-562: priceHistory is namespaced by (mediaType, tmdbId). This function
+  // only ever handles films, so read `movie_${tmdbId}` and fall back to a legacy
+  // bare-id doc ONCE — and only when that doc's own mediaType says it really is
+  // the film's series. Before namespacing, TV deterministically won the shared
+  // bare key, so an ungated fallback is exactly how a film's push came to quote
+  // an unrelated show's rent price.
+  const histRef = db.collection('priceHistory').doc(mediaTypeDocId('movie', tmdbId));
+  let histSnap = await histRef.get();
+  if (!histSnap.exists) {
+    const legacy = await db.collection('priceHistory').doc(String(tmdbId)).get();
+    if (legacy.exists && legacy.get('mediaType') === 'movie') histSnap = legacy;
+  }
   const points = (histSnap.get('points') as PricePoint[] | undefined) ?? [];
 
   const signal = detectPriceDrop(points, { nowMs });

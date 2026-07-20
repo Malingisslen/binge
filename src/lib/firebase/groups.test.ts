@@ -304,7 +304,9 @@ describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write fa
     });
     setDocMock
       .mockResolvedValueOnce(undefined) // steg 1: joinAttempt-skrivningen lyckas
-      .mockRejectedValueOnce(new Error('permission-denied')); // steg 2: member-doc:et failar
+      // steg 2: member-doc:et failar på nätverket (scenariot rollbacken finns
+      // för — tab-close/tapp mellan de två awaits), inte på behörighet.
+      .mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 'unavailable' }));
 
     const result = await joinGroupViaToken({
       groupId: 'g1',
@@ -316,7 +318,12 @@ describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write fa
       providers: [8],
     });
 
-    expect(result).toEqual({ ok: false, reason: 'invalid_token' });
+    // 2026-07-20 (xhigh code review): detta returnerade tidigare 'invalid_token'
+    // — token var vid det här laget redan BEVISAT giltig (steg 1 och 2 gick
+    // igenom), så att rapportera "ogiltig länk" var direkt felaktigt och sköt
+    // dessutom anroparens omförsök i sank. Se den nya discrimination-testen
+    // nedan: en ÄKTA permission-denied ger fortfarande 'invalid_token'.
+    expect(result).toEqual({ ok: false, reason: 'transient' });
 
     // Rollback: en ANDRA updateDoc mot samma grupp-ref som drar tillbaka
     // memberUids-tillägget — inte bara den ursprungliga arrayUnion-writen.
@@ -348,5 +355,160 @@ describe('joinGroupViaToken / acceptGroupInvite — rollback on partial write fa
     // Inbjudan raderas ALDRIG om medlemskapet inte gick igenom — annars
     // tappas möjligheten att försöka igen.
     expect(deleteDocMock).not.toHaveBeenCalled();
+  });
+});
+
+// xhigh code review 2026-07-20: joinGroupViaToken svalde ALLA fel i sina
+// catch-block och returnerade 'invalid_token'. Ett nätverksfel rapporterades
+// därför som "länken är ogiltig eller har dragits tillbaka" — användaren bad
+// ägaren rotera en token som aldrig var trasig — och anroparens retry-gren,
+// som bara triggar på ett KASTAT fel, blev död kod. Testerna nedan är
+// diskriminerande: de failar om de två felklasserna slås ihop igen.
+describe('joinGroupViaToken — transient failures are not reported as a bad token', () => {
+  const joinArgs = {
+    groupId: 'g1',
+    token: 'plaintext-token',
+    uid: 'user-join',
+    displayName: 'Malin',
+    username: 'malin',
+    photoURL: null,
+    providers: [8],
+  };
+  const groupExists = () => getDocMock.mockResolvedValueOnce({
+    exists: () => true,
+    data: () => ({ memberUids: [], inviteTokenHash: 'hash-abc' }),
+  });
+
+  it('en ÄKTA permission-denied på joinAttempt betyder fel token', async () => {
+    groupExists();
+    setDocMock.mockRejectedValueOnce(
+      Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }),
+    );
+
+    await expect(joinGroupViaToken(joinArgs)).resolves.toEqual({ ok: false, reason: 'invalid_token' });
+  });
+
+  it('ett nätverksfel på joinAttempt är övergående, INTE fel token', async () => {
+    groupExists();
+    setDocMock.mockRejectedValueOnce(
+      Object.assign(new Error('The service is currently unavailable.'), { code: 'unavailable' }),
+    );
+
+    await expect(joinGroupViaToken(joinArgs)).resolves.toEqual({ ok: false, reason: 'transient' });
+  });
+
+  it('ett fel helt utan felkod behandlas som övergående, inte som fel token', async () => {
+    groupExists();
+    setDocMock.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(joinGroupViaToken(joinArgs)).resolves.toEqual({ ok: false, reason: 'transient' });
+  });
+});
+
+// BIN-556: the rollback tests above only exercise the FAILURE path. Two things
+// stayed unguarded: (1) the same no-batch guard createGroup has — the
+// members/{uid} create rule does get(groups/{id}).memberUids, and a Security
+// Rule's get() never sees a sibling write queued in the same batch, so
+// re-introducing writeBatch here would permission-deny in production while
+// every existing test still passed; and (2) proof that the compensating
+// arrayRemove does NOT fire on a clean success (a rollback that runs on the
+// happy path would silently strip a valid membership).
+describe('joinGroupViaToken / acceptGroupInvite — no batch + clean happy path (BIN-556)', () => {
+  it('joinGroupViaToken skriver SEKVENTIELLA writes, aldrig en batch', async () => {
+    getDocMock.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ memberUids: [], inviteTokenHash: 'hash-abc' }),
+    });
+
+    const result = await joinGroupViaToken({
+      groupId: 'g-nb',
+      token: 'plaintext-token',
+      uid: 'user-nb',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(writeBatchMock).not.toHaveBeenCalled();
+    expect(commitMock).not.toHaveBeenCalled();
+  });
+
+  it('joinGroupViaToken rullar INTE tillbaka memberUids när member-doc-writen lyckas', async () => {
+    getDocMock.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ memberUids: ['someone-else'], inviteTokenHash: 'hash-abc' }),
+    });
+
+    const result = await joinGroupViaToken({
+      groupId: 'g-happy',
+      token: 'plaintext-token',
+      uid: 'user-happy',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(result).toEqual({ ok: true });
+
+    // Exakt EN write mot grupp-doc:et — arrayUnion. Ingen kompenserande
+    // arrayRemove får ha körts.
+    const groupRefUpdateCalls = updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-happy');
+    expect(groupRefUpdateCalls).toHaveLength(1);
+    expect((groupRefUpdateCalls[0][1] as Record<string, unknown>).memberUids)
+      .toEqual({ _type: 'arrayUnion', vals: ['user-happy'] });
+    expect(updateDocMock.mock.calls.some(([, payload]) =>
+      (payload as Record<string, unknown>).memberUids
+        && ((payload as Record<string, unknown>).memberUids as { _type?: string })._type === 'arrayRemove',
+    )).toBe(false);
+
+    // Member-doc:et skrevs på rätt väg.
+    const memberWrite = setDocMock.mock.calls.find(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-happy/members/user-happy');
+    expect(memberWrite).toBeDefined();
+    expect(memberWrite?.[1]).toMatchObject({ uid: 'user-happy', role: 'member' });
+  });
+
+  it('acceptGroupInvite skriver SEKVENTIELLA writes, aldrig en batch', async () => {
+    await acceptGroupInvite({
+      groupId: 'g-nb2',
+      uid: 'user-nb2',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    expect(writeBatchMock).not.toHaveBeenCalled();
+    expect(commitMock).not.toHaveBeenCalled();
+  });
+
+  it('acceptGroupInvite rullar INTE tillbaka memberUids när member-doc-writen lyckas, och raderar inbjudan', async () => {
+    await acceptGroupInvite({
+      groupId: 'g-happy2',
+      uid: 'user-happy2',
+      displayName: 'Malin',
+      username: 'malin',
+      photoURL: null,
+      providers: [8],
+    });
+
+    const groupRefUpdateCalls = updateDocMock.mock.calls.filter(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-happy2');
+    expect(groupRefUpdateCalls).toHaveLength(1);
+    expect((groupRefUpdateCalls[0][1] as Record<string, unknown>).memberUids)
+      .toEqual({ _type: 'arrayUnion', vals: ['user-happy2'] });
+
+    const memberWrite = setDocMock.mock.calls.find(([ref]) =>
+      (ref as { _path: string })._path === 'groups/g-happy2/members/user-happy2');
+    expect(memberWrite).toBeDefined();
+
+    // Inbjudan städas bort FÖRST när medlemskapet är på plats.
+    expect(deleteDocMock).toHaveBeenCalledWith(
+      expect.objectContaining({ _path: 'users/user-happy2/groupInvites/g-happy2' }),
+    );
   });
 });

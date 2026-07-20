@@ -60,7 +60,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // så TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
   // till "Filmen hittades inte." nedan.
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
-  const { offers } = useStreamingOffers(movie?.id);
+  const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
   const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
   const { user } = useAuth();
@@ -430,7 +430,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
               {/* BIN-354: rent price-history stat row (option C). Lazy — only
                   fetches priceHistory/{id} when this disclosure is expanded. */}
-              <PriceHistoryChart tmdbId={movie.id} nowMs={now} />
+              <PriceHistoryChart tmdbId={movie.id} mediaType="movie" nowMs={now} />
               {buy.length > 0 && (
                 <div>
                   <span style={{ letterSpacing: 0.12, textTransform: 'uppercase', marginRight: 6 }}>Köp:</span>

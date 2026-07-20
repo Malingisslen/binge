@@ -799,10 +799,14 @@ service cloud.firestore {
       // egen redan lagda röst (går inte att skilja från förfalskning av en
       // annan anonym plats) — recordSwipe lägger bara första-röster, så inget
       // legitimt flöde träffar det.
+      // BIN-542: diff() bunden EN gång (d). `added` måste däremot vara
+      // List-formen keys().removeAll(...) — d.addedKeys() är en Set och kan
+      // inte indexeras med [0].
       function anonVoteAddOk() {
+        let d = request.resource.data.votes.diff(resource.data.votes);
         let added = request.resource.data.votes.keys().removeAll(resource.data.votes.keys());
-        return request.resource.data.votes.diff(resource.data.votes).changedKeys().size() == 0
-          && request.resource.data.votes.diff(resource.data.votes).removedKeys().size() == 0
+        return d.changedKeys().size() == 0
+          && d.removedKeys().size() == 0
           && added.size() == 1
           && validVote(request.resource.data.votes[added[0]])
           && voteKeyIsAnonSlot(added[0]);
@@ -839,7 +843,53 @@ service cloud.firestore {
           && request.resource.data.displayName is string
           && request.resource.data.displayName.size() <= 80
           && request.resource.data.providers is list
-          && request.resource.data.providers.size() <= 100;
+          && request.resource.data.providers.size() <= 100
+          // BIN-540: fälten fanns i hasOnly-listan men hade inga VÄRDEN
+          // validerade — en länk-innehavare kunde sätta vetoRemaining till
+          // vad som helst (obegränsat veto) eller göra isHost till en sträng.
+          // vetoRemaining: 1 vid join, 0 efter använt veto — inget annat.
+          && request.resource.data.vetoRemaining is int
+          && request.resource.data.vetoRemaining >= 0
+          && request.resource.data.vetoRemaining <= 1
+          // ...och "inget annat" måste vara en SPÄRR, inte bara ett intervall:
+          // utan spärr kunde en deltagare skriva tillbaka sin egen förbrukade
+          // plats (0) till 1 hur många gånger som helst och veto:a obegränsat
+          // (recordSwipe är app-konvention, inte gräns). Budgeten får bara
+          // räknas NED. Default 1 = plats utan fältet räknas som oförbrukad.
+          // Taket måste tåla ett FELTYPAT lagrat värde, inte bara ett saknat.
+          // Före BIN-540 validerades inga värden, så en länk-innehavare kunde
+          // plantera vetoRemaining: 'many' på NÅGON ANNANS anonyma plats. Utan
+          // is-int-vakten nedan blir jämförelsen 0 <= 'many' — ett typfel som
+          // fäller HELA allow-uttrycket, varje gång, för den platsen. Offret
+          // kunde då varken heartbeata, veto:a eller gå med igen under
+          // sessionens 7 dagar, utan någon väg tillbaka i klienten. Skräpvärde
+          // behandlas därför som frånvarande (= 1, oförbrukad).
+          && request.resource.data.vetoRemaining <= (
+            resource == null || !(resource.data.get('vetoRemaining', 1) is int)
+              ? 1
+              : resource.data.get('vetoRemaining', 1)
+          )
+          // isHost är kosmetisk (★ i deltagarlistan), men ska ändå vara bool
+          // och oföränderlig efter create — ingen kan promota sig till värd i
+          // listan. Bindning mot sessionens hostUid skulle kräva en get() per
+          // skrivning (kostnad) och ger inget utöver detta.
+          && request.resource.data.isHost is bool
+          // Samma försvar som vetoRemaining ovan, i två steg. En SAKNAD isHost
+          // ger default false via .get(), så oföränderligheten håller. Men ett
+          // närvarande men FELTYPAT värde ('yes') returneras som det är av
+          // .get() — då skulle en ren likhetsjämförelse fälla varje framtida
+          // skrivning och låsa platsen permanent (planJoinFields skriver
+          // isHost:false för att läka, men false == 'yes' nekas). Därför: är det
+          // lagrade värdet ett giltigt bool gäller oföränderlighet; är det skräp
+          // måste det nya värdet vara false — den enda säkra läkningen, så ingen
+          // kan promota sig till värd via glappet.
+          && (
+            resource == null
+              ? true
+              : resource.data.get('isHost', false) is bool
+                ? request.resource.data.isHost == resource.data.get('isHost', false)
+                : request.resource.data.isHost == false
+          );
         allow delete: if isSignedIn()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.hostUid == request.auth.uid;
       }

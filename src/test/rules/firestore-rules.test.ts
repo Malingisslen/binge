@@ -832,6 +832,208 @@ describe('sessions/{id}/participants — slot hijack (BIN-509)', () => {
   });
 });
 
+// BIN-540 — participant field VALUE validation. `vetoRemaining` and `isHost`
+// were listed in the hasOnly() key contract but never value-checked, so any
+// link-holder could grant themselves unlimited vetoes or write junk types.
+describe('sessions/{id}/participants — vetoRemaining/isHost values (BIN-540)', () => {
+  function participant(overrides: Record<string, unknown> = {}) {
+    return {
+      uid: null, displayName: 'Spelare', providers: [], vetoRemaining: 1,
+      isHost: false, joinedAt: serverTimestamp(), lastActiveAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+  it('rejects a create with vetoRemaining above the 1-veto budget', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 99 }),
+    ));
+  });
+  it('rejects a create with negative vetoRemaining', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: -1 }),
+    ));
+  });
+  it('rejects a non-int vetoRemaining', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 'many' }),
+    ));
+  });
+  it('rejects a non-bool isHost', async () => {
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ isHost: 'yes' }),
+    ));
+  });
+  it('rejects re-granting a spent veto (0 → 1) on update', async () => {
+    // The real abuse: veto is a once-per-session budget, spent by recordSwipe
+    // writing vetoRemaining: 0. Going back up is not a legitimate flow.
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 0 }),
+    ));
+    // 1 is INSIDE the allowed range, so only the spend-down ratchet can stop
+    // this — the range check alone lets a spent slot re-arm itself forever.
+    await assertFails(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 1 },
+    ));
+    // Out-of-range re-grant stays blocked too (range check).
+    await assertFails(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 5 },
+    ));
+    // Rewriting the spent value is still fine (heartbeats re-send the field).
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 0, lastActiveAt: serverTimestamp() },
+    ));
+  });
+  it('rejects promoting yourself to host after create', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ isHost: false }),
+    ));
+    await assertFails(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { isHost: true },
+    ));
+  });
+  it('rejects demoting an existing host slot', async () => {
+    await assertSucceeds(setDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
+      participant({ uid: OWNER, isHost: true }),
+    ));
+    await assertFails(updateDoc(
+      doc(ownerDb(), 'sessions', 's1', 'participants', OWNER),
+      { isHost: false },
+    ));
+  });
+  it('still allows the real flows: join with 1 veto, then spend it', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 1 }),
+    ));
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 0, lastActiveAt: serverTimestamp() },
+    ));
+  });
+
+  // Security Architect panel, 2026-07-20. The two guards above are only half a
+  // fix: a slot can ALREADY hold junk, because the pre-BIN-540 rule validated
+  // no values at all and the anon write-gate lets any link-holder write another
+  // anon participant's slot. Comparing an int against a stored string is a TYPE
+  // ERROR, which fails the whole allow expression — so shipping BIN-540 without
+  // these guards would let a hostile link-holder plant a value TODAY that
+  // permanently bricks a victim's slot the moment the rule deploys. The seeds
+  // below therefore bypass the rules (withSecurityRulesDisabled), exactly as a
+  // pre-fix client could have.
+  it('a slot carrying a junk vetoRemaining is still writable by its owner', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`sessions/s1/participants/${ANON1}`).set({
+        uid: null, displayName: 'Offer', providers: [],
+        vetoRemaining: 'many', isHost: false,
+      });
+    });
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 0, lastActiveAt: serverTimestamp() },
+    ));
+  });
+
+  it('a slot with NO isHost field is still writable by its owner', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`sessions/s1/participants/${ANON1}`).set({
+        uid: null, displayName: 'Offer', providers: [], vetoRemaining: 1,
+      });
+    });
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { isHost: false, lastActiveAt: serverTimestamp() },
+    ));
+  });
+
+  it('a slot carrying a JUNK-TYPED isHost is healed to false by its owner', async () => {
+    // .get('isHost', false) only defaults an ABSENT key — a present 'yes' comes
+    // back as-is, so a plain equality would deny every future write and brick
+    // the slot. planJoinFields writes isHost:false to heal; the rule must accept
+    // that when the stored value isn't a bool.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`sessions/s1/participants/${ANON1}`).set({
+        uid: null, displayName: 'Offer', providers: [], vetoRemaining: 1, isHost: 'yes',
+      });
+    });
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { isHost: false, lastActiveAt: serverTimestamp() },
+    ));
+  });
+
+  it('a junk-typed isHost slot may only heal to false, never true (no self-promotion)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`sessions/s1/participants/${ANON1}`).set({
+        uid: null, displayName: 'Offer', providers: [], vetoRemaining: 1, isHost: 'yes',
+      });
+    });
+    await assertFails(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { isHost: true, lastActiveAt: serverTimestamp() },
+    ));
+  });
+
+  it('an isHost-less slot still cannot be promoted to host', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`sessions/s1/participants/${ANON1}`).set({
+        uid: null, displayName: 'Offer', providers: [], vetoRemaining: 1,
+      });
+    });
+    await assertFails(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { isHost: true },
+    ));
+  });
+
+  // R3 (same panel): joinSession used to merge `vetoRemaining: 1` on EVERY
+  // call, so re-opening a session on a second device after spending the veto
+  // was denied by the ratchet and locked the user out of a session they were
+  // already in. sessions.ts now omits the field on a rejoin — this pins the
+  // rule side of that contract.
+  it('a rejoin that omits vetoRemaining is allowed on a spent slot', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 1 }),
+    ));
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 0, lastActiveAt: serverTimestamp() },
+    ));
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { uid: null, displayName: 'Spelare', providers: [], lastActiveAt: serverTimestamp() },
+      { merge: true },
+    ));
+  });
+
+  it('a rejoin may NOT re-arm the veto by writing vetoRemaining back to 1', async () => {
+    await assertSucceeds(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 1 }),
+    ));
+    await assertSucceeds(updateDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      { vetoRemaining: 0, lastActiveAt: serverTimestamp() },
+    ));
+    await assertFails(setDoc(
+      doc(anonDb(), 'sessions', 's1', 'participants', ANON1),
+      participant({ vetoRemaining: 1 }),
+      { merge: true },
+    ));
+  });
+});
+
 // BIN-509 — swipe vote binding. Signed-in votes are bound to the caller's own
 // key (forgeable by NO ONE); anon-slot votes are add-only single-key writes
 // verified against the participant doc (uid == null), so a signed-in

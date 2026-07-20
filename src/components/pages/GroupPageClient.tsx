@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -44,6 +44,13 @@ const GroupSettingsModal = dynamic(
   { ssr: false },
 );
 
+// BIN-557: the auto-join effect re-runs every time `joining` flips back to
+// false, so a join that keeps throwing (offline, Firestore hiccup) used to
+// retry forever — a tight write loop against the Blaze cap. Cap the attempts
+// and space them out, reusing queryClient's exponential retryDelay shape.
+const MAX_JOIN_ATTEMPTS = 3;
+const joinBackoffMs = (attempt: number) => Math.min(1000 * 2 ** attempt, 10_000);
+
 export default function GroupPageClient({ id }: { id: string }) {
   return <AuthGuard><GroupContent id={id} /></AuthGuard>;
 }
@@ -63,8 +70,17 @@ function GroupContent({ id }: { id: string }) {
   // Auto-join via invite link
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
+  const joinAttemptsRef = useRef(0);
+  // En NY inbjudningslänk förtjänar en ny budget. Utan det här ignorerades en
+  // färsk, giltig länk tyst om en tidigare (roterad) länk redan bränt försöken
+  // — klick på den nya länken är bara en SPA-navigering, komponenten monteras
+  // aldrig om, så ref:en satt kvar på MAX.
+  useEffect(() => { joinAttemptsRef.current = 0; }, [inviteParam]);
   useEffect(() => {
     if (!inviteParam || !uid || !user || !group || isMember || joining) return;
+    if (joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS) return;
+    const attempt = joinAttemptsRef.current;
+    joinAttemptsRef.current = attempt + 1;
     setJoining(true);
     joinGroupViaToken({
       groupId: id,
@@ -75,17 +91,45 @@ function GroupContent({ id }: { id: string }) {
       photoURL: user.photoURL,
       providers: user.myProviders,
     }).then(res => {
-      if (!res.ok) {
-        setJoinError(
-          res.reason === 'invalid_token'
+      // 'transient' är det ENDA resolved-utfallet som är värt ett omförsök —
+      // joinGroupViaToken fångar nätverksfel internt och resolvar, så före
+      // 2026-07-20 landade de i den terminala grenen och användaren fick höra
+      // att en fullt giltig länk dragits tillbaka.
+      if (!res.ok && res.reason === 'transient') {
+        const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
+        setJoinError(exhausted
+          ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
+          : 'Kunde inte gå med i gruppen. Försöker igen…');
+        if (exhausted) { setJoining(false); return; }
+        setTimeout(() => setJoining(false), joinBackoffMs(attempt));
+        return;
+      }
+      // Övriga resolved-utfall är terminala: en trasig token förblir trasig, en
+      // saknad grupp förblir saknad, och ett lyckat join behöver bara att
+      // grupp-prenumerationen hinner ikapp. Bränn budgeten så effekten inte
+      // återfyrar.
+      joinAttemptsRef.current = MAX_JOIN_ATTEMPTS;
+      // Nolla ett kvarhängande retry-fel — annars står "Försöker igen…" kvar
+      // som röd ruta efter att omförsöket faktiskt lyckats.
+      setJoinError(
+        res.ok
+          ? null
+          : res.reason === 'invalid_token'
             ? 'Inbjudningslänken är ogiltig eller har dragits tillbaka.'
             : res.reason === 'not_found'
               ? 'Gruppen hittades inte.'
               : 'Du är redan medlem.',
-        );
-      }
-    }).catch(() => setJoinError('Kunde inte gå med i gruppen.'))
-      .finally(() => setJoining(false));
+      );
+      setJoining(false);
+    }).catch(() => {
+      // Only a THROWN error (network/Firestore) is worth retrying.
+      const exhausted = joinAttemptsRef.current >= MAX_JOIN_ATTEMPTS;
+      setJoinError(exhausted
+        ? 'Kunde inte gå med i gruppen. Ladda om sidan och försök igen.'
+        : 'Kunde inte gå med i gruppen. Försöker igen…');
+      if (exhausted) { setJoining(false); return; }
+      setTimeout(() => setJoining(false), joinBackoffMs(attempt));
+    });
   }, [inviteParam, uid, user, group, isMember, joining, id]);
 
   if (loading) {

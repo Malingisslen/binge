@@ -1,5 +1,22 @@
 // functions/src/streamingOffers/logic.ts
-import type { IntentItem, ExistingOffer, HealthDoc, HealthStatus } from './types';
+import { mediaTypeDocId, normalizeMediaType, type MediaType } from '../shared/mediaTypeDocId';
+import type { IntentItem, ExistingOffer, WorkItem, HealthDoc, HealthStatus } from './types';
+
+/**
+ * Doc id for the shared streamingOffers document (BIN-523). Movie N and TV N
+ * are unrelated titles, so the primary offers doc is namespaced by media type
+ * exactly like availableNotifyState.
+ *
+ * LEGACY bare-`${tmdbId}` docs are NOT migrated or deleted. Both readers
+ * (src/hooks/useStreamingOffers.ts and weeklyDigest's readOffers) fall back to
+ * the bare id and accept it only when its stored `mediaType` field matches what
+ * they asked for — so a title keeps showing its last known offers until the
+ * refresh cron rewrites it under the namespaced id. Rewriting the collection
+ * eagerly would spend MOTN quota (the scarce resource) for zero user value.
+ */
+export function streamingOffersDocId(mediaType: string, tmdbId: number): string {
+  return mediaTypeDocId(mediaType, tmdbId);
+}
 
 const NEAR_EXPIRY_DAYS = 5;
 // BIN-541 code review (2026-07-17): these used to be calibrated against the
@@ -24,16 +41,29 @@ export function isIntentTitle(item: IntentItem): boolean {
   return false;
 }
 
-export function dedupeIntent(
-  items: IntentItem[],
-): { tmdbId: number; mediaType: 'movie' | 'tv' }[] {
-  const seen = new Map<number, 'movie' | 'tv'>();
+/**
+ * Collapse the same title tracked by many users into one work item.
+ *
+ * BIN-545: this used to key on bare tmdbId, so a movie and a TV show sharing a
+ * TMDB numeric id collapsed into ONE entry. Combined with the caller's
+ * `orderBy('status')` scan the winner was deterministic, not random — the same
+ * media type won every single run, permanently excluding the other one from
+ * refresh. Keyed on (mediaType, tmdbId) both now get their own entry.
+ */
+export function dedupeIntent(items: IntentItem[]): WorkItem[] {
+  const seen = new Map<string, WorkItem>();
   for (const it of items) {
-    if (!seen.has(it.tmdbId)) {
-      seen.set(it.tmdbId, it.mediaType === 'tv' ? 'tv' : 'movie');
-    }
+    // Use the shared normalizer rather than a local ternary with the OPPOSITE
+    // default — a writer and its readers disagreeing about where an unknown
+    // media type lives is the exact drift the shared helper exists to prevent.
+    // Behaviour-neutral on real traffic: isIntentTitle has already rejected
+    // anything that isn't exactly 'movie'/'tv', so this only guards direct
+    // callers and tests.
+    const mediaType: MediaType = normalizeMediaType(it.mediaType);
+    const key = mediaTypeDocId(mediaType, it.tmdbId);
+    if (!seen.has(key)) seen.set(key, { tmdbId: it.tmdbId, mediaType });
   }
-  return [...seen.entries()].map(([tmdbId, mediaType]) => ({ tmdbId, mediaType }));
+  return [...seen.values()];
 }
 
 /**
@@ -41,16 +71,28 @@ export function dedupeIntent(
  *   1. never-checked (no existing doc)
  *   2. leaving within NEAR_EXPIRY_DAYS (re-confirm before it goes)
  *   3. stalest checkedAt
+ *
+ * BIN-523: both sides are matched on (mediaType, tmdbId) — pairing movie N's
+ * work item with TV N's existing doc would report the wrong staleness and could
+ * starve one of the two of refreshes.
  */
 export function selectRefreshBatch(
-  workSet: { tmdbId: number; mediaType: 'movie' | 'tv' }[],
+  workSet: WorkItem[],
   existing: ExistingOffer[],
   nowMs: number,
   budget: number,
-): number[] {
-  const byId = new Map(existing.map((e) => [e.tmdbId, e]));
-  const tier = (tmdbId: number): number => {
-    const e = byId.get(tmdbId);
+): WorkItem[] {
+  // During the id-scheme transition a title can have BOTH a legacy bare-id doc
+  // and a new namespaced one. Keep the freshest so a stale leftover can't drag a
+  // just-refreshed title back to the front of the queue (BIN-523).
+  const byKey = new Map<string, ExistingOffer>();
+  for (const e of existing) {
+    const key = mediaTypeDocId(e.mediaType, e.tmdbId);
+    const prev = byKey.get(key);
+    if (!prev || e.checkedAt > prev.checkedAt) byKey.set(key, e);
+  }
+  const tier = (w: WorkItem): number => {
+    const e = byKey.get(mediaTypeDocId(w.mediaType, w.tmdbId));
     if (!e) return 0; // never checked
     if (e.nextLeaving) {
       const delta = Date.parse(e.nextLeaving) - nowMs;
@@ -60,17 +102,16 @@ export function selectRefreshBatch(
     }
     return 2;
   };
-  const sortKey = (tmdbId: number): number => byId.get(tmdbId)?.checkedAt ?? 0;
+  const sortKey = (w: WorkItem): number => byKey.get(mediaTypeDocId(w.mediaType, w.tmdbId))?.checkedAt ?? 0;
 
   return [...workSet]
     .sort((a, b) => {
-      const ta = tier(a.tmdbId);
-      const tb = tier(b.tmdbId);
-      if (ta !== tb) return ta - tb;            // lower tier first
-      return sortKey(a.tmdbId) - sortKey(b.tmdbId); // older checkedAt first
+      const ta = tier(a);
+      const tb = tier(b);
+      if (ta !== tb) return ta - tb;    // lower tier first
+      return sortKey(a) - sortKey(b);   // older checkedAt first
     })
-    .slice(0, budget)
-    .map((x) => x.tmdbId);
+    .slice(0, budget);
 }
 
 export function computeHealth(workSetSize: number, budget: number, nowIso: string): HealthDoc {

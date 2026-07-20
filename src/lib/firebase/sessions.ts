@@ -1,5 +1,6 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken } from './utils';
+import { planJoinFields } from './sessions.joinPayload';
 import type {
   SessionConfig,
   SessionCandidate,
@@ -78,16 +79,29 @@ export async function joinSession(params: {
   displayName: string;
   providers: number[];
 }): Promise<void> {
-  const { db, doc, setDoc, serverTimestamp } = await fsdb();
-  await setDoc(doc(db, 'sessions', params.sessionId, 'participants', params.participantId), {
+  const { db, doc, getDoc, setDoc, serverTimestamp } = await fsdb();
+  const ref = doc(db, 'sessions', params.sessionId, 'participants', params.participantId);
+
+  // Ett ÅTERinträde (samma plats, ny enhet eller rensad site-data) får inte
+  // skriva om vetoRemaining/isHost. BIN-540:s spärr tillåter bara nedräkning,
+  // så ett ovillkorligt `vetoRemaining: 1` mot en förbrukad plats (0) blir
+  // permission-denied — användaren låstes ute ur en session hen redan var med
+  // i, på varje enhet utom den ursprungliga. Ett FÖRSTA inträde måste däremot
+  // ha med fälten, annars faller create-grenens is-int/is-bool-krav.
+  // Extra-läsningen är billig: joins är sällsynta och sessionsavgränsade.
+  const existing = await getDoc(ref);
+  const identity = {
     uid: params.uid,
     displayName: params.displayName,
     providers: params.providers,
-    vetoRemaining: 1,
-    isHost: false,
-    joinedAt: serverTimestamp(),
     lastActiveAt: serverTimestamp(),
-  }, { merge: true });
+  };
+  // planJoinFields (pure, unit-tested) decides veto/host handling per the slot's
+  // stored state — first-join arms, valid-rejoin leaves alone, junk-slot heals.
+  const plan = planJoinFields(existing.exists() ? existing.data() : null);
+  await setDoc(ref, plan.firstJoin
+    ? { ...identity, vetoRemaining: 1, isHost: false, joinedAt: serverTimestamp() }
+    : { ...identity, ...plan.heal }, { merge: true });
 }
 
 export async function updateParticipantActivity(sessionId: string, participantId: string): Promise<void> {

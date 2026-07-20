@@ -63,7 +63,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // TMDB-anropet aldrig avfyras (undviker 404 → Sentry) och sidan faller ner
   // till "Serien hittades inte." nedan.
   const { data: show, isLoading } = useTVShow(Number.isFinite(showId) ? showId : null, initialData);
-  const { offers } = useStreamingOffers(show?.id);
+  const { offers } = useStreamingOffers(show?.id, 'tv');
   const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
   const { user } = useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
@@ -382,7 +382,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               )}
               {/* BIN-354: rent price-history stat row, same as the film page —
                   lazy (only when this disclosure is open). */}
-              <PriceHistoryChart tmdbId={show.id} nowMs={now} />
+              <PriceHistoryChart tmdbId={show.id} mediaType="tv" nowMs={now} />
             </div>
           )}
 

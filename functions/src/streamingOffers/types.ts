@@ -1,4 +1,5 @@
 // functions/src/streamingOffers/types.ts
+import type { MediaType } from '../shared/mediaTypeDocId';
 
 /** Offer category as normalized from MOTN's `type`. */
 export type OfferType = 'subscription' | 'rent' | 'buy' | 'free';
@@ -18,7 +19,7 @@ export interface Offer {
   leaving: string | null;
 }
 
-/** The shared per-title document at streamingOffers/{tmdbId}. */
+/** The shared per-title document at streamingOffers/{mediaType}_{tmdbId} (BIN-523). */
 export interface StreamingOffersDoc {
   tmdbId: number;
   mediaType: 'movie' | 'tv';
@@ -50,9 +51,17 @@ export interface IntentItem {
   providers: number[];
 }
 
+/** One title the governor may refresh, identified by (mediaType, tmdbId) — BIN-545. */
+export interface WorkItem {
+  tmdbId: number;
+  mediaType: MediaType;
+}
+
 /** Existing streamingOffers doc state the governor reads to prioritize. */
 export interface ExistingOffer {
   tmdbId: number;
+  /** Read from the doc's own field, so legacy bare-id docs still match (BIN-523). */
+  mediaType: MediaType;
   checkedAt: number;
   /** Earliest leaving date across offers, or null. */
   nextLeaving: string | null;

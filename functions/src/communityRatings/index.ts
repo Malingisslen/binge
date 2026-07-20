@@ -20,6 +20,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 import { ratingDelta, isNoOp } from './logic';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 
 export const communityRatingMaintain = onDocumentWritten(
   'users/{uid}/watchlist/{tmdbId}',
@@ -36,7 +37,10 @@ export const communityRatingMaintain = onDocumentWritten(
       return;
     }
 
-    const docId = `${mediaType}_${event.params.tmdbId}`;
+    // Guarded above, so the shared helper's unknown→'tv' normalization can never
+    // fire here — this call site deliberately SKIPS an unknown media type rather
+    // than guessing one for an aggregate that can't be un-drifted (BIN-560).
+    const docId = mediaTypeDocId(mediaType, event.params.tmdbId);
     const ref = getFirestore().collection('titleRatingsAggregate').doc(docId);
     try {
       // BIN-148: onDocumentWritten is at-least-once — a redelivered event would

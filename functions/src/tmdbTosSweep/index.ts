@@ -34,6 +34,38 @@
  * ~50k docs is a single sub-cent monthly run. If N ever exceeds MAX_DOCS_PER_RUN
  * the cursor throttles it across runs. Fill the live N + SEK line into BIN-402
  * from the first dry-run's `docsScanned` before flipping mutateEnabled.
+ *
+ * TEST COVERAGE (BIN-520) — read this before flipping `mutateEnabled`.
+ * Two of BIN-507's four acceptance criteria are proven at the PURE-HELPER layer
+ * only; there is no unit or emulator test that drives this orchestrator itself,
+ * and that is an accepted decision, not an oversight:
+ *  • #1 "a thrown q.get()/batch.commit() still writes the lastRun audit" — proven
+ *    by `buildLastRunAudit(error)` + `errorToMessage` in ./logic.test.ts
+ *    ("a thrown run flags the record with error + errorMessage and keeps partial
+ *    counts", "errorToMessage (BIN-507 audit error string)"). The try/catch →
+ *    write-lastRun → re-throw wiring below is review-gated, not test-gated.
+ *  • #2 "a second dry-run invocation resumes where the first stopped" — proven by
+ *    `cursorFieldFor` / `resolveStartCursor` / `shouldResetCursor` in
+ *    ./logic.test.ts ("mutate and dry-run keep separate cursors", "each mode
+ *    resumes its OWN cursor"). No test drives two real invocations.
+ * Why accepted — CORRECTED 2026-07-20 (Legal panel; the previous rationale here
+ * was factually wrong on both counts and must not be relied on again):
+ *  • It claimed "this repo runs NO functions test runner". FALSE — vitest.config.ts
+ *    has an include glob covering `functions/src` test files, and ./logic.test.ts
+ *    (cited above) runs in exactly that runner.
+ *  • It claimed "neither firebase-functions-test nor @firebase/rules-unit-testing
+ *    is installed". FALSE — @firebase/rules-unit-testing is a devDependency with
+ *    a wired `npm run test:rules` and a large emulator suite.
+ * What is ACTUALLY true: this file imports firebase-admin entrypoints the root
+ * suite cannot load, so covering the orchestrator means EXTENDING the existing
+ * emulator harness — incremental work on infrastructure that already exists, not
+ * the net-new build the old note claimed.
+ * The decision: Malin's call 2026-07-20 — extend that harness BEFORE `mutateEnabled`
+ * is ever flipped (BIN-566). This function writes to EVERY user's watchlist, so
+ * "review-gated, not test-gated" is not good enough for the mutating mode.
+ * Dry-run (count-only) stays shippable as-is. Recorded dated in
+ * .claude/rules/accepted-deviations.md — that file, not this comment, is where
+ * the standing decision lives.
  */
 
 import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';

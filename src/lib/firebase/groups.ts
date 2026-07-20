@@ -181,6 +181,18 @@ export async function disableInviteToken(groupId: string): Promise<void> {
 //
 // Om steg 1 redan finns från tidigare misslyckad join, ta bort och försök igen
 // (självborttag är tillåtet).
+
+// Bara permission-denied bevisar att token faktiskt är fel. Allt annat
+// (unavailable, deadline-exceeded, offline …) är infrastruktur och GÅR över.
+// Att slå ihop dem — som koden gjorde före 2026-07-20 — betydde att en dålig
+// mobiluppkoppling rapporterades som "länken är ogiltig eller har dragits
+// tillbaka": användaren gav upp och bad ägaren rotera en fungerande token,
+// och anroparens retry-gren var i praktiken död kod eftersom den bara triggar
+// på ett KASTAT fel.
+function isPermissionDenied(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'permission-denied';
+}
+
 export async function joinGroupViaToken(params: {
   groupId: string;
   token: string;
@@ -189,7 +201,7 @@ export async function joinGroupViaToken(params: {
   username: string | null;
   photoURL: string | null;
   providers: number[];
-}): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' }> {
+}): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'invalid_token' | 'already_member' | 'transient' }> {
   const { db, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp } = await fsdb();
   const ref = doc(db, 'groups', params.groupId);
   const snap = await getDoc(ref);
@@ -212,9 +224,9 @@ export async function joinGroupViaToken(params: {
       createdAt: serverTimestamp(),
     });
   } catch (err) {
-    // Permission-denied = hash matchade inte
+    // Permission-denied = hash matchade inte. Nätverksfel ≠ fel token.
     console.error('joinAttempt rejected', err);
-    return { ok: false, reason: 'invalid_token' };
+    return { ok: false, reason: isPermissionDenied(err) ? 'invalid_token' : 'transient' };
   }
 
   // Steg 2 — uppdatera grupp, DÄREFTER (separat write) lägg till member-doc.
@@ -227,7 +239,7 @@ export async function joinGroupViaToken(params: {
     });
   } catch (err) {
     console.error('group update rejected', err);
-    return { ok: false, reason: 'invalid_token' };
+    return { ok: false, reason: isPermissionDenied(err) ? 'invalid_token' : 'transient' };
   }
 
   // Code review (2026-07-18, high-effort pass): member-doc:et i ett EGET
@@ -253,7 +265,11 @@ export async function joinGroupViaToken(params: {
     await updateDoc(ref, { memberUids: arrayRemove(params.uid), updatedAt: serverTimestamp() }).catch(rollbackErr => {
       console.error('rollback of memberUids ALSO failed — uid is now a ghost member, needs manual Firestore fix', rollbackErr);
     });
-    return { ok: false, reason: 'invalid_token' };
+    // Token är redan bevisat giltig här (steg 1 + 2 gick igenom), så det här är
+    // per definition infrastruktur — och rollbacken ovan gör ett omförsök
+    // säkert. 'transient' är alltså både sannare och det som faktiskt låter
+    // anroparen försöka igen.
+    return { ok: false, reason: 'transient' };
   }
 
   invalidateMyGroupsCache(params.uid);
