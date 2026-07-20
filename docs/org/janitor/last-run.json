@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-07-13",
+  "lastRun": "2026-07-20",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
-  "retroDue": false,
+  "retroDue": true,
   "acceptRate": null,
-  "notes": "No docs/org/dossier-staleness/ dir (skipped, expected). World-watch: security-architect was due (lastScan 2026-07-04, weekly) and was scanned this run — no material findings. Firebase JS SDK released 12.16.0 (2026-07-09); checked its App Check/Auth changes against src/lib/firebase/appCheck.ts — Binge already uses an explicit ReCaptchaV3Provider (not Enterprise), so no action needed; installed version stays 12.12.1. legal-gdpr-counsel + data-protection-officer not due until 2026-07-27. Shakedown retro already logged 2026-07-04 (plus a same-day correction); full retro not due until 2026-07-25. No tasks/*-plan.md found to sweep. accept-rate metric is butlery-only, skipped here."
+  "notes": "No docs/org/dossier-staleness/ dir (skipped, expected — binge keeps staleness flags in gitignored local state). World-watch: security-architect due (lastScan 2026-07-13, weekly) and scanned this run — MATERIAL FINDING filed as GitHub issue #44: Next.js announced a new monthly security-release program, first scheduled release targets 2026-07-20 for the 16.2.x/15.5.x line (4 high + 5 medium severity); Binge's package-lock.json resolves next@16.2.9, squarely in the affected line. Exact CVE/GHSA IDs not yet published at scan time (advance-notice model) — recommend a follow-up bump once patched versions land. legal-gdpr-counsel + data-protection-officer (monthly) not due until 2026-07-27. RETRO DUE: the 'shakedown' retro (afterDays=4 from goLive 2026-06-27, i.e. due 2026-07-01) has NEVER been run in binge — only a 'bootstrap' mode retro event exists in events.jsonl. Flagged for Malin; retros are interactive by design, not run here. Cruft sweep: tasks/bin-505-plan.md left in place (22 unchecked checkboxes — BIN-505's rules-lock ship landed but Stage 2 + panel conditions are still open). accept-rate metric is butlery-only, skipped here."
 }
