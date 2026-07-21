@@ -79,21 +79,15 @@
   },
   {
     "tmdbId": 54650,
-    "title": "Power (all 6 seasons/63 episodes — English Wikipedia has only a season-level premise overview + episode title/date table; every per-episode ShortSummary field is an unfilled editor placeholder, not real content; fan wiki licence page 402-blocked)",
+    "title": "Power (seasons 5-6, 25 episodes) - verified directly against Wikipedia's raw wikitext: seasons 1-4 had real season-specific prose (now seeded as season-only recaps) but seasons 5 and 6 have ZERO plot text at all - the article jumps straight from the season header to the episode table with nothing in between. Main show article only has a generic whole-series premise, no season 5/6 detail.",
     "reason": "no-wiki",
-    "checkedAt": "2026-07-17T09:51:46.745Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 67384,
     "title": "Goliath (season 4, all 8 episodes: Hadleyville through It's Time) - English Wikipedia's season 4 episode table has only titles/directors/writers/air-dates, zero plot-summary text for any of the 8 episodes; no separate List-of-episodes or season-4 article exists; goliath.fandom.com 402-blocks WebFetch (license unverifiable).",
     "reason": "no-wiki",
     "checkedAt": "2026-07-17T10:47:24.454Z"
-  },
-  {
-    "tmdbId": 1432,
-    "title": "Veronica Mars season 4 (2019 Hulu revival, 8 episodes) - Wikipedia's episode table only has one-sentence loglines per episode, no full episode-by-episode plot prose; the season-level Plot section covers the overall arc (bombing mystery, Penn as copycat bomber, Logan's death) but doesn't map specific developments to specific episodes, so a self-contained per-episode story-so-far recap can't be written without guessing which episode a beat belongs to",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-17T10:56:32.228Z"
   },
   {
     "tmdbId": 227975,
@@ -121,9 +115,9 @@
   },
   {
     "tmdbId": 223438,
-    "title": "Alla våra hemligheter (The Couple Next Door): Wikipedia has only a one-paragraph series-level synopsis per season (S1: Evie/Pete/Danny/Becka affair; S2: Charlotte/Jacob/Mia hospital story) - episode tables list only titles/dates/directors/writers, no per-episode plot text for any of the 12 episodes across both fully-aired seasons. No CC BY-SA source found with episode-by-episode coverage; only copyrighted journalism (Collider ending-explained, nerdsthatgeek.com recap) and IMDB have episode-level detail, both excluded by source policy. Fandom wiki pages found (starz-archives, channel-4-schedule-archive) have general info only, no episode recaps to even enrich with.",
+    "title": "Alla våra hemligheter (The Couple Next Door) - re-verified for the season-only path: both en and sv Wikipedia only have a single one-sentence logline per season (S1: Evie/Pete/Danny/Becka; S2: Charlotte/Jacob/Mia), not a real season-arc summary - too thin to paraphrase into a self-contained season recap without fabricating plot progression/resolution. Confirmed too thin at season level, not just missing per-episode.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-17T18:17:44.868Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 80054,
@@ -150,18 +144,6 @@
     "checkedAt": "2026-07-18T05:53:15.937Z"
   },
   {
-    "tmdbId": 72039,
-    "title": "Escape at Dannemora (all 7 episodes, Part 1-7) - English Wikipedia's main article has only a high-level, non-linear overall plot summary (not decomposed by episode) plus a bare episode table (director/writer/air-date/viewership only, no synopsis text per episode); no separate List-of-episodes article exists. Fandom escape-at-dannemora.fandom.com 402-blocked (license unverifiable).",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T06:15:01.248Z"
-  },
-  {
-    "tmdbId": 88166,
-    "title": "I Know This Much Is True (HBO miniseries, 6 episodes) — English Wikipedia has only an overall series synopsis + character bios + episode air-date/viewership table, no per-episode plot summaries at all; no List-of-episodes article exists; the one fan wiki candidate (iknowthismuchistrue.fandom.com) 402-blocks WebFetch so its CC BY-SA status can't be verified. No sourceable basis exists to distinguish what happens in E1 vs E2 vs...E6, so no boundary-specific recaps can be written without fabricating scene-to-episode attribution.",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T06:16:34.542Z"
-  },
-  {
     "tmdbId": 64199,
     "title": "Sneaky Pete Season 3 (10 episodes, aired 2019-05-10)",
     "reason": "partial-coverage: Wikipedia's Sneaky Pete (TV series) article lists only season 3 episode titles/air dates, no plot synopses; the show's Fandom wiki (sneakypete.fandom.com) 402-blocks WebFetch so its CC BY-SA license cannot be verified, per pipeline rules it must be skipped rather than force-read",
@@ -178,12 +160,6 @@
     "title": "Winning Time: The Rise of the Lakers Dynasty",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-18T07:18:55.510Z"
-  },
-  {
-    "tmdbId": 137893,
-    "title": "Griselda (miniseries, all 6 episodes)",
-    "reason": "partial-coverage: English/Spanish Wikipedia only have a single whole-series Plot paragraph, no per-episode synopses; Griselda/Narcos Fandom wikis 403-blocked (licence unverifiable)",
-    "checkedAt": "2026-07-18T07:25:29.243Z"
   },
   {
     "tmdbId": 111800,
@@ -348,12 +324,6 @@
     "checkedAt": "2026-07-18T14:43:43.390Z"
   },
   {
-    "tmdbId": 32368,
-    "title": "The Killing (Forbrydelsen) (season 2 episodes 1-10, season 3 episodes 1-10: English and Danish Wikipedia only have a season-level plot summary, no per-episode breakdown to anchor spoiler-safe boundaries)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T14:53:34.935Z"
-  },
-  {
     "tmdbId": 56017,
     "title": "Shtisel",
     "reason": "partial-coverage",
@@ -427,9 +397,9 @@
   },
   {
     "tmdbId": 88236,
-    "title": "How to Sell Drugs Online (Fast) (season 3 episodes 1-6 + season 4 episodes 1-6, 12 episodes)",
-    "reason": "partial-coverage for season 3 (only a thin season-level German Wikipedia summary exists, too thin to split into 6 accurate per-episode boundaries); no-wiki for season 4 (no plot summary at all beyond release date); fan wiki mydrugs.fandom.com 402-blocked so licence unverifiable",
-    "checkedAt": "2026-07-18T15:21:14.033Z"
+    "title": "How to Sell Drugs Online (Fast) season 4, all 6 episodes (season 3 resolved via season-only recap) - no plot summary at all beyond release date on German Wikipedia; fan wiki mydrugs.fandom.com 402-blocked so licence unverifiable",
+    "reason": "no-wiki",
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 69557,
@@ -589,9 +559,9 @@
   },
   {
     "tmdbId": 234377,
-    "title": "Boat Story (season 1 — no per-episode Wikipedia coverage, only a one-paragraph series synopsis)",
+    "title": "Boat Story (season 1, all 6 episodes) - re-verified for the season-only path: both en and sv Wikipedia have only a ~200-character two-sentence premise (no character fates, no resolution, no twist structure). Confirmed too thin at season level, not just missing per-episode.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T20:55:31.560Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 61555,
@@ -607,9 +577,9 @@
   },
   {
     "tmdbId": 157064,
-    "title": "Litvinenko (season 1, all 4 episodes: no per-episode plot breakdown available — en.wikipedia.org article has only series-level synopsis, ShortSummary fields blank in episode table; historical-films.fandom.com 402-blocked, licence unverifiable)",
+    "title": "Litvinenko (season 1, all 4 episodes) - re-verified for the season-only path: en.wikipedia.org's entire plot content is one generic sentence about the investigation; everything else is cast/production/reception. Confirmed too thin at season level (not just per-episode) - do not use the real-world Alexander Litvinenko poisoning article as a substitute, it doesn't describe this dramatization's on-screen choices.",
     "reason": "no-wiki",
-    "checkedAt": "2026-07-18T21:02:57.719Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 155243,
@@ -654,12 +624,6 @@
     "checkedAt": "2026-07-18T21:12:47.849Z"
   },
   {
-    "tmdbId": 50878,
-    "title": "Empresses in the Palace (season 1, episode 1: no per-episode Wikipedia coverage exists for any of the 76 episodes; only a season-level plot summary is available on en/zh Wikipedia, and the only fan wiki with an episode list 402-blocks fetches)",
-    "reason": "no-wiki",
-    "checkedAt": "2026-07-18T21:13:20.482Z"
-  },
-  {
     "tmdbId": 130368,
     "title": "Love Between Fairy and Devil (all 36 episodes, season 1)",
     "reason": "partial-coverage",
@@ -702,18 +666,6 @@
     "checkedAt": "2026-07-18T21:18:16.310Z"
   },
   {
-    "tmdbId": 116612,
-    "title": "Beyond Evil (all 16 episodes, season 1: only aggregate series synopsis available on en/ko Wikipedia, no per-episode plot summaries; fan wiki candidate 402-blocked)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T21:19:11.511Z"
-  },
-  {
-    "tmdbId": 92983,
-    "title": "Vagabond (2019, 16 episodes): only a whole-series synopsis exists on English/Korean Wikipedia, no per-episode or per-season plot breakdown; Fandom drama wiki 402-blocked, DramaWiki has no plot content, Namu Wiki is CC BY-NC-SA (incompatible, non-commercial clause)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T21:19:38.411Z"
-  },
-  {
     "tmdbId": 117378,
     "title": "Mouse (2021, tvN, 20 episodes) — no per-episode plot coverage on any CC BY-SA source",
     "reason": "partial-coverage",
@@ -748,12 +700,6 @@
     "title": "Strangers from Hell (season 1, episodes 1-10)",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-18T21:26:09.017Z"
-  },
-  {
-    "tmdbId": 95842,
-    "title": "Joy of Life (season 2, episodes 1-36): no per-episode Wikipedia coverage, only a season-level synopsis paragraph",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T21:31:27.582Z"
   },
   {
     "tmdbId": 96648,
@@ -817,9 +763,9 @@
   },
   {
     "tmdbId": 321808,
-    "title": "Trion (season 1, episodes 1-6): sv.wikipedia has only a series-level overview, no per-episode/avsnitt breakdown; no English Wikipedia article; no novel article either",
+    "title": "Trion (season 1, all 6 episodes) - re-verified for the season-only path via raw wikitext: sv.wikipedia's entire Handling section is ~230 characters / one sentence (Hugo confronted by his past). No English Wikipedia article exists. Confirmed too thin at season level, not just missing per-episode/avsnitt breakdown.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:02:38.864Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 322401,
@@ -862,12 +808,6 @@
     "title": "Festen (all seasons/episodes — no per-episode plot source available)",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-18T22:06:40.675Z"
-  },
-  {
-    "tmdbId": 244207,
-    "title": "Helikopterrånet (8-episode Netflix miniseries, 2024) — svenska Wikipedia + engelska Wikipedia (The Helicopter Heist (miniseries)) both confirmed CC BY-SA 4.0 but only carry a series-level plot synopsis (Rami/Michel setup + real 2009 Västberga robbery background); no per-episode plot breakdown exists on either Wikipedia article, and no CC-licensed fan wiki exists for the show, so none of the 8 episode boundaries can be safely paraphrased into self-contained per-episode recaps",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:08:14.851Z"
   },
   {
     "tmdbId": 119565,
@@ -925,15 +865,9 @@
   },
   {
     "tmdbId": 301258,
-    "title": "Färjan (season 1, episodes 1-6: sv.wikipedia.org and en.wikipedia.org (Blood Cruise) both give only an overall series plot summary, no per-episode breakdown; no CC BY-SA fan wiki found)",
+    "title": "Färjan (Blood Cruise) (season 1, all 6 episodes) - re-verified for the season-only path: sv.wikipedia's Handling section (~350 chars) and en.wikipedia's lead sentence are both just the marketing premise (ferry, vampire Edith and son Walter boarding), not an actual season recap - no infection spread, evacuation, character fates, or ending described anywhere. TMDB's own per-episode overviews do have real plot content but are off-limits as an LLM source (TMDB ToS). Confirmed too thin at season level, not just missing per-episode.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:18:36.700Z"
-  },
-  {
-    "tmdbId": 64023,
-    "title": "Modus (both seasons, all 16 episodes): sv+en Wikipedia have only 1-paragraph season-level plot summaries, no per-episode breakdown; Fandom wiki 402-blocked (licence unverifiable)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:18:46.912Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 92891,
@@ -997,9 +931,9 @@
   },
   {
     "tmdbId": 66100,
-    "title": "Portkod (all 18 episodes across seasons 1-2: Portkod 1321 + Portkod 1525) — svenska Wikipedia has only season-level plot summaries and an episode title list, no per-episode plot content for any of the 18 episodes; no English Wikipedia article exists; no CC BY-SA fan wiki found",
+    "title": "Portkod (all 18 episodes across seasons 1-2: Portkod 1321 + Portkod 1525) - re-verified for the season-only path: both 'Portkod 1321' and 'Portkod 1525' Wikipedia URLs resolve to the SAME single article (not two season-level pages as previously logged), whose combined Handling section gives only ~400 characters for season 1 and ~150 characters for season 2 - both too thin to paraphrase safely. No separate/longer sv article and no English Wikipedia article exist.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:31:12.180Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 55270,
@@ -1012,12 +946,6 @@
     "title": "Johan Falk (season 2, episodes 2-6: De 107 patrioterna, Alla råns moder, Organizatsija Karayan, Barninfiltratören, Kodnamn Lisa)",
     "reason": "no-wiki",
     "checkedAt": "2026-07-18T22:33:07.605Z"
-  },
-  {
-    "tmdbId": 213344,
-    "title": "Springfloden (both seasons, all 20 episodes: only season-level plot summaries exist on sv.wikipedia.org and en.wikipedia.org's Spring Tide article; no per-episode breakdown, episode titles are all generic 'Avsnitt N'; no verified CC BY-SA source with per-episode detail found)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:33:28.932Z"
   },
   {
     "tmdbId": 224021,
@@ -1057,9 +985,9 @@
   },
   {
     "tmdbId": 65344,
-    "title": "Tjockare Än Vatten (all 3 seasons / 27 episodes: only an overall series plot + one season-3 premise paragraph exist on sv/en Wikipedia, no per-episode or per-season summaries; no CC BY-SA fan wiki found)",
+    "title": "Tjockare Än Vatten (season 3, all 7 episodes) - re-verified for the season-only path: neither en nor sv Wikipedia has a season-3-specific plot section at all - the one Handling paragraph describes season 1's setup, plus production trivia (air date, episode count, a cast-trivia line). A richer-sounding season-3 synopsis found via web search traces back to non-Wikipedia review sites, not Wikipedia itself, so it's excluded by the CC BY-SA sourcing rule. Confirmed no genuine season-3 text exists anywhere on Wikipedia, contradicting the prior premise that one did.",
     "reason": "partial-coverage",
-    "checkedAt": "2026-07-18T22:39:33.974Z"
+    "checkedAt": "2026-07-21T18:52:04.565Z"
   },
   {
     "tmdbId": 285396,
@@ -1246,12 +1174,6 @@
     "title": "Bibliotekstjuven (miniserie, 3 avsnitt, season 1) - svenska Wikipedia-artikeln har bara premiss/rollista, ingen avsnittsindelad handling",
     "reason": "partial-coverage",
     "checkedAt": "2026-07-20T11:44:11.001Z"
-  },
-  {
-    "tmdbId": 84498,
-    "title": "Dubbelliv (hela serien, 2 säsonger x 12 avsnitt) — svenska Wikipedia har bara säsongsnivå-handling (Handling > Första/Andra säsongen), ingen avsnittslista eller per-avsnitt-handling; ingen engelsk Wikipedia-artikel finns; ingen verifierad CC BY-SA fan-wiki hittades (SVT Play-beskrivningarna är TMDB-overview-text, ej tillåtet källmaterial)",
-    "reason": "partial-coverage",
-    "checkedAt": "2026-07-20T11:44:56.674Z"
   },
   {
     "tmdbId": 116944,
