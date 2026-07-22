@@ -262,6 +262,18 @@ describe('users/{uid}/watchlistTags/{id} (BIN-164)', () => {
     await assertFails(setDoc(ref, { tags: many }));
     await assertSucceeds(setDoc(ref, { tags: many.slice(0, 15) }));
   });
+  // media-type doc-id migration: mediaType is an OPTIONAL-but-validated field.
+  it('allows a tag doc carrying a valid mediaType (the post-cutover shape)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', 'movie_603');
+    await assertSucceeds(setDoc(ref, { tags: ['mysrys'], mediaType: 'movie' }));
+  });
+  it('rejects a tag doc with a garbage mediaType value', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistTags', 'movie_603');
+    await assertFails(setDoc(ref, { tags: ['mysrys'], mediaType: 'lol' }));
+    // Non-string type too: `in ['movie','tv']` is type-safe, so a number can never
+    // satisfy it — pin that so a future guard refactor (e.g. `==`) can't silently drift.
+    await assertFails(setDoc(ref, { tags: ['mysrys'], mediaType: 42 }));
+  });
   it('never lets another user read or write the tags (private-to-owner)', async () => {
     // Seed as owner via the privileged context (bypasses rules).
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -366,6 +378,15 @@ describe('BIN-505 users/{uid}/watchlistNotes/{id} owner-only', () => {
     await assertFails(setDoc(ref, { note: 'ok', evil: 'x' }));
     await assertFails(setDoc(ref, { note: 'x'.repeat(5001) }));
   });
+  // media-type doc-id migration: mediaType is an OPTIONAL-but-validated field.
+  it('allows a note doc carrying a valid mediaType (the post-cutover shape)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistNotes', 'movie_603');
+    await assertSucceeds(setDoc(ref, { note: 'privat', mediaType: 'movie' }));
+  });
+  it('rejects a note doc with a garbage mediaType value', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlistNotes', 'movie_603');
+    await assertFails(setDoc(ref, { note: 'privat', mediaType: 'lol' }));
+  });
   it('never readable/writable by another user, even on a public profile', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlistNotes', '603'), { note: 'hemlig' });
@@ -463,6 +484,21 @@ describe('users/{uid}/episodeProgress/{id} field whitelist', () => {
     const ref = doc(ownerDb(), 'users', OWNER, 'episodeProgress', '1399');
     await assertFails(setDoc(ref, { tmdbId: 1399, seasons: {}, junk: 'x' }));
   });
+  // media-type doc-id migration: mediaType is an OPTIONAL-but-validated field.
+  it('allows an episodeProgress doc carrying a valid mediaType (post-cutover shape)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'episodeProgress', 'tv_1399');
+    await assertSucceeds(setDoc(ref, {
+      tmdbId: 1399, mediaType: 'tv',
+      seasons: { '1': { '1': { watched: true, watchedAt: serverTimestamp() } } },
+    }));
+  });
+  it('rejects an episodeProgress doc with a garbage mediaType value', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'episodeProgress', 'tv_1399');
+    await assertFails(setDoc(ref, {
+      tmdbId: 1399, mediaType: 'lol',
+      seasons: { '1': { '1': { watched: true, watchedAt: serverTimestamp() } } },
+    }));
+  });
 });
 
 describe('users/{uid}/notInterested/{id} field whitelist', () => {
@@ -473,6 +509,11 @@ describe('users/{uid}/notInterested/{id} field whitelist', () => {
   it('rejects a notInterested write with an unknown field', async () => {
     const ref = doc(ownerDb(), 'users', OWNER, 'notInterested', '603');
     await assertFails(setDoc(ref, { tmdbId: 603, mediaType: 'movie', addedAt: serverTimestamp(), spam: 1 }));
+  });
+  // media-type doc-id migration sibling: mediaType was allowed but never value-checked.
+  it('rejects a notInterested write with a garbage mediaType value', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'notInterested', 'movie_603');
+    await assertFails(setDoc(ref, { tmdbId: 603, mediaType: 'lol', addedAt: serverTimestamp() }));
   });
 });
 

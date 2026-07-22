@@ -158,6 +158,18 @@ service cloud.firestore {
           || (d.providersCheckedAt is timestamp && d.providersCheckedAt <= request.time));
     }
 
+    // media-type doc-id migration: shared optional-but-validated mediaType guard for
+    // the four personal-library validators below (tags/notes/episodeProgress/
+    // notInterested). Keeps the ['movie','tv'] allow-list in ONE place so all four
+    // surfaces stay provably identical — add a third media type once, not four times.
+    // Docs are keyed `${mediaType}_${tmdbId}` and carry mediaType as a redundant
+    // field. Optional presence is deliberate (matches the isValidReview rating idiom):
+    // the pre-cutover client writes these docs WITHOUT mediaType and must keep passing
+    // while rules ship LIVE before Phase 4.
+    function validOptionalMediaType(d) {
+      return !('mediaType' in d) || d.mediaType in ['movie', 'tv'];
+    }
+
     // BIN-164: owner-only per-title tags. Free-text tags capture third-party
     // personal data ("med mamma") so they must NEVER be readable by other users
     // — they live in this separate subcollection (NOT on the publicly-readable
@@ -165,8 +177,9 @@ service cloud.firestore {
     // editors.size() bound); per-tag string length is enforced client-side
     // (normalizeTags) since rules can't iterate list elements.
     function isValidTagDoc(d) {
-      return d.keys().hasOnly(['tags'])
-        && d.tags is list && d.tags.size() <= 15;
+      return d.keys().hasOnly(['tags', 'mediaType'])
+        && d.tags is list && d.tags.size() <= 15
+        && validOptionalMediaType(d);
     }
 
     // BIN-505: owner-only per-title free-text notes. Same reasoning as tags
@@ -174,8 +187,9 @@ service cloud.firestore {
     // public/friends-readable watchlist doc into this owner-only subcollection.
     // Shape { note: string } (or null to clear); bounded length.
     function isValidNoteDoc(d) {
-      return d.keys().hasOnly(['note'])
-        && (d.note == null || (d.note is string && d.note.size() <= 5000));
+      return d.keys().hasOnly(['note', 'mediaType'])
+        && (d.note == null || (d.note is string && d.note.size() <= 5000))
+        && validOptionalMediaType(d);
     }
 
     // BIN-505: public profile PROJECTION contract. users/{uid} is owner-locked
@@ -281,12 +295,18 @@ service cloud.firestore {
     match /users/{uid}/episodeProgress/{itemId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['tmdbId', 'seasons']);
+        // media-type doc-id migration — shared optional-but-validated guard.
+        && request.resource.data.keys().hasOnly(['tmdbId', 'seasons', 'mediaType'])
+        && validOptionalMediaType(request.resource.data);
     }
     match /users/{uid}/notInterested/{itemId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['tmdbId', 'mediaType', 'addedAt']);
+        && request.resource.data.keys().hasOnly(['tmdbId', 'mediaType', 'addedAt'])
+        // media-type doc-id migration sibling: this collection already ALLOWED
+        // mediaType but never value-checked it — route through the shared guard so a
+        // garbage type can't land on the one sibling already carrying the field.
+        && validOptionalMediaType(request.resource.data);
     }
 
     // Sparbeslut-historik för Streamingrådgivaren. Skrivs av resumeProvider
