@@ -40,12 +40,12 @@ export function useMarkSeen() {
 
   return useCallback(async (input: MarkSeenInput) => {
     const { tmdbId, mediaType, title, posterPath, releaseYear } = input;
-    const current = getItem(tmdbId);
+    const current = getItem(mediaType, tmdbId);
 
     const promptRating = () => {
       if (shouldPromptRating('sedd', current?.rating ?? null)) {
         showRating(`Betygsätt ${title}?`, (rating) => {
-          void updateRating(tmdbId, rating);
+          void updateRating(mediaType, tmdbId, rating);
           trackEvent('rate_on_sedd', { mediaType });
         });
       } else {

@@ -12,6 +12,7 @@ import {
   isPoolExhausted,
   demoteExhaustedRows,
 } from './rowComposition';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowTitle, FilterState } from '@/types';
 
 function mkTitle(overrides: Partial<RowTitle> = {}): RowTitle {
@@ -35,12 +36,23 @@ function mkTitle(overrides: Partial<RowTitle> = {}): RowTitle {
 describe('dedupeAndExclude', () => {
   it('drops duplicates and excluded ids', () => {
     const items = [mkTitle({ id: 1 }), mkTitle({ id: 2 }), mkTitle({ id: 1 }), mkTitle({ id: 3 })];
-    expect(dedupeAndExclude(items, new Set([3])).map(t => t.id)).toEqual([1, 2]);
+    // Composite-keyed exclusion (all fixtures default to media_type 'movie').
+    expect(dedupeAndExclude(items, new Set([mediaTypeDocId('movie', 3)])).map(t => t.id)).toEqual([1, 2]);
   });
 
   it('treats movie/tv with same id as distinct', () => {
     const items = [mkTitle({ id: 5, media_type: 'movie' }), mkTitle({ id: 5, media_type: 'tv' })];
     expect(dedupeAndExclude(items, new Set())).toHaveLength(2);
+  });
+
+  // BIN-560 Phase 4: the collision this migration exists to prevent — excluding a
+  // MOVIE with tmdbId 5 must NOT also exclude a same-numbered TV show (bare-id
+  // matching would drop both).
+  it('excluding movie_5 leaves a same-numbered tv show visible (cross-type non-collision)', () => {
+    const items = [mkTitle({ id: 5, media_type: 'movie' }), mkTitle({ id: 5, media_type: 'tv' })];
+    const kept = dedupeAndExclude(items, new Set([mediaTypeDocId('movie', 5)]));
+    expect(kept).toHaveLength(1);
+    expect(kept[0].media_type).toBe('tv');
   });
 });
 

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getWeekStart, getWeekNumber, useCalendarEntries, type CalendarEntry } from '@/hooks/useCalendar';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import type { MediaType } from '@/types';
 
 // The persistent 7-day strip that sits at the top of every page. Today wears
 // the plum picker wash + 2px plum rule (semantic = "where in time the user
@@ -26,6 +28,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 const DAY_LABELS = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'] as const;
 
 interface DaySeries {
+  mediaType: MediaType;
   tmdbId: number;
   title: string;
   episodes: number;
@@ -34,24 +37,28 @@ interface DaySeries {
 
 function aggregateByDay(
   entries: CalendarEntry[],
-  ratingFor: (tmdbId: number) => number | null,
+  ratingFor: (mediaType: MediaType, tmdbId: number) => number | null,
 ): Record<string, DaySeries[]> {
-  const byDay = new Map<string, Map<number, DaySeries>>();
+  // BIN-560 Phase 4: inner map keyed by composite doc id — entries mix TV
+  // episodes and movie releases, so a movie/TV tmdbId clash must not merge.
+  const byDay = new Map<string, Map<string, DaySeries>>();
   for (const e of entries) {
     let day = byDay.get(e.airDate);
     if (!day) {
       day = new Map();
       byDay.set(e.airDate, day);
     }
-    const existing = day.get(e.tmdbId);
+    const key = mediaTypeDocId(e.mediaType, e.tmdbId);
+    const existing = day.get(key);
     if (existing) {
       existing.episodes += 1;
     } else {
-      day.set(e.tmdbId, {
+      day.set(key, {
+        mediaType: e.mediaType,
         tmdbId: e.tmdbId,
         title: e.title,
         episodes: 1,
-        rating: ratingFor(e.tmdbId),
+        rating: ratingFor(e.mediaType, e.tmdbId),
       });
     }
   }
@@ -95,7 +102,7 @@ export default function WeekStrip() {
   const { entries, isLoading } = useCalendarEntries({ enabled: calendarEnabled });
   const { getItem } = useWatchlist();
   const seriesByDay = useMemo(
-    () => aggregateByDay(entries, (id) => getItem(id)?.rating ?? null),
+    () => aggregateByDay(entries, (mt, id) => getItem(mt, id)?.rating ?? null),
     [entries, getItem],
   );
 
@@ -189,7 +196,7 @@ export default function WeekStrip() {
               <div className="day-pop" role="presentation">
                 <ul>
                   {series.map(s => (
-                    <li key={s.tmdbId}>
+                    <li key={mediaTypeDocId(s.mediaType, s.tmdbId)}>
                       <span className="pop-title">{s.title}</span>
                       {s.episodes > 1 && <span className="pop-x"> ×{s.episodes}</span>}
                     </li>

@@ -21,6 +21,7 @@ import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
 import { RowExhaustionContext, type ReportExhaustion } from './rowExhaustionContext';
 import { demoteExhaustedRows } from '@/lib/recommendations/rowComposition';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
 
@@ -70,9 +71,10 @@ export default function RecommendationsHub() {
   }, [userHideNonLatin, userHiddenCountries]);
 
   const excludedIds = useMemo(() => {
-    const s = new Set<number>();
-    for (const i of items) s.add(i.tmdbId);
-    for (const n of ni) s.add(n.tmdbId);
+    // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — see RecommendationsExpanded.
+    const s = new Set<string>();
+    for (const i of items) s.add(mediaTypeDocId(i.mediaType, i.tmdbId));
+    for (const n of ni) s.add(mediaTypeDocId(n.mediaType, n.tmdbId));
     return s;
   }, [items, ni]);
 
@@ -205,7 +207,7 @@ export default function RecommendationsHub() {
 interface DispatchProps {
   spec: RowSpec;
   index: number;
-  excludedIds: ReadonlySet<number>;
+  excludedIds: ReadonlySet<string>;
   filters: FilterState;
   myProviders: number[];
   topGenreIds: number[];

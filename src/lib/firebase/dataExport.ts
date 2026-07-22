@@ -16,7 +16,15 @@ import type { QuerySnapshot } from 'firebase/firestore';
 //     squarely Art. 20 scope.
 // 1.3 (BIN-505): additive — new `watchlistNotes` array (your private per-title notes,
 //     moved off the public watchlist doc) + `publicProfile` (the public projection doc).
-export const SCHEMA_VERSION = '1.3' as const;
+// 2.0 (BIN-560, 2026-07-22): MAJOR — CHANGE OF FIELD MEANING (not additive). The `id`
+//     on every personal-library doc (watchlist, watchlistTags, watchlistNotes,
+//     episodeProgress, notInterested) now encodes BOTH the media type and the TMDB id
+//     as `${mediaType}_${tmdbId}` (e.g. "movie_603", "tv_1399") instead of the bare
+//     numeric tmdbId. A consumer that parsed `id` as a number will break — split on the
+//     first "_" to recover mediaType + tmdbId (or read the `tmdbId`/`mediaType` fields in
+//     the doc body, which carry them explicitly). Bumped MAJOR so old parsers fail loudly
+//     rather than silently mis-key a movie as a same-numbered show.
+export const SCHEMA_VERSION = '2.0' as const;
 
 export interface ExportDoc {
   id: string;
@@ -94,6 +102,13 @@ Filen innehåller:
 
 Datumfält serialiseras som Firestore-timestamps; om du re-importerar måste
 de konverteras tillbaka. Schema-version framgår i "schemaVersion".
+
+OBS (schema 2.0): "id"-fältet på dina titel-poster (watchlist, watchlistTags,
+watchlistNotes, episodeProgress, notInterested) kodar nu BÅDE medietyp och
+TMDB-id som "\${medietyp}_\${tmdbId}" — t.ex. "movie_603" eller "tv_1399" — i
+stället för bara siffran. Det beror på att en film och en serie kan dela samma
+TMDB-nummer; det här håller dem åtskilda. Vill du ha bara siffran: dela på det
+första "_". Fälten "tmdbId" och "mediaType" i själva posten innehåller dem också.
 
 Metadata om filmer och serier (titel, poster, genrer etc.) kommer från
 TMDB och är inte dina personuppgifter — vi cachear dem på watchlist-items

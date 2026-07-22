@@ -84,7 +84,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     return Array.from(new Set(ids));
   }, [credits]);
   const directedMeter = useMemo(
-    () => filmographyCompletion(directedFilmIds, tmdbId => getItem(tmdbId)?.status === 'sedd'),
+    () => filmographyCompletion(directedFilmIds, tmdbId => getItem('movie', tmdbId)?.status === 'sedd'),
     [directedFilmIds, getItem],
   );
   // BIN-206 — gör mätaren aktionerbar: lista de osedda regisserade filmerna
@@ -96,7 +96,7 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     // media_type-guard: TMDB-id:n är inte unika över medietyper, så en serie
     // personen spelat i med samma numeriska id som en regisserad film får inte
     // läcka in i "regisserade filmer" (directedIdSet bär bara numret).
-    () => roles.filter(r => r.media_type === 'movie' && directedIdSet.has(r.id) && getItem(r.id)?.status !== 'sedd'),
+    () => roles.filter(r => r.media_type === 'movie' && directedIdSet.has(r.id) && getItem('movie', r.id)?.status !== 'sedd'),
     [roles, directedIdSet, getItem],
   );
 

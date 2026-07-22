@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { discoverTV, getTVShowLite } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useWatchlist } from './useWatchlist';
 import { useNotInterested } from '@/contexts/NotInterestedContext';
 import {
@@ -49,9 +50,13 @@ export function useDiscoveryPremieres(
 
   // Exkludera allt i biblioteket (vilken status som helst) plus avfärdade titlar.
   const excludedIds = useMemo(() => {
-    const set = new Set<number>();
-    for (const it of items) if (it.mediaType === 'tv') set.add(it.tmdbId);
-    for (const ni of notInterested) set.add(ni.tmdbId);
+    // BIN-560 Phase 4: composite-keyed (mediaTypeDocId). This ALSO fixes a latent
+    // partial bug: notInterested was previously added by bare tmdbId, so a movie
+    // marked "not interested" could suppress a same-numbered TV premiere. Now a
+    // movie's key ('movie_X') can never match this TV-only feed's checks ('tv_X').
+    const set = new Set<string>();
+    for (const it of items) if (it.mediaType === 'tv') set.add(mediaTypeDocId(it.mediaType, it.tmdbId));
+    for (const ni of notInterested) set.add(mediaTypeDocId(ni.mediaType, ni.tmdbId));
     return set;
   }, [items, notInterested]);
 
@@ -112,7 +117,7 @@ export function useDiscoveryPremieres(
     const seen = new Set<number>();
     const ids: number[] = [];
     for (const r of poolResults) {
-      if (excludedIds.has(r.id) || seen.has(r.id)) continue;
+      if (excludedIds.has(mediaTypeDocId('tv', r.id)) || seen.has(r.id)) continue;
       seen.add(r.id);
       ids.push(r.id);
       if (ids.length >= CANDIDATE_CAP) break;

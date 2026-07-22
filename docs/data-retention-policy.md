@@ -364,3 +364,12 @@ Policy ska omvärderas om:
 - **Moderation-runbook** (`docs/moderation.md`, pending sprint 5) —
   samma delete-cascade används när admin tar bort en användare för
   policy-brott.
+
+## Ändringslogg
+
+- **2026-07-22 (BIN-560)** — Personliga bibliotekets Firestore-doc-id:n
+  namespacas till `${mediaType}_${tmdbId}` (t.ex. `movie_603`/`tv_1399`).
+  Radering och GDPR-export är oförändrade i täckning (de skannar hela
+  subcollections via doc-referens, inte via rekonstruerad sökväg) — samma
+  fem ägar-ägda collections städas/exporteras. Export-schemat bumpades till
+  MAJOR 2.0 (id-fältets betydelse ändrades). Se ADR 0017.

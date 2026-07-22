@@ -7,7 +7,7 @@ import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, s
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
-import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { buildStatusUpdate, normalizeTags } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
@@ -64,21 +64,25 @@ interface WatchlistState {
    */
   loading: boolean;
   addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
-  updateVisibility: (tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
-  updateStatus: (tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>;
-  updateWatchedAt: (tmdbId: number, watchedAt: Date) => Promise<void>;
-  updateRating: (tmdbId: number, rating: number | null) => Promise<void>;
-  updateNotes: (tmdbId: number, notes: string | null) => Promise<void>;
-  updateProgress: (tmdbId: number, season: number, episode: number) => Promise<void>;
-  updateTmdbStatus: (tmdbId: number, tmdbStatus: string | null) => Promise<void>;
-  setRuntime: (tmdbId: number, runtime: number | null) => Promise<void>;
+  // BIN-560 Phase 4: every per-title mutator takes mediaType so it can (a) address
+  // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
+  // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
+  // already have mediaType in scope; the breaking signature is compiler-enforced.
+  updateVisibility: (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
+  updateStatus: (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>;
+  updateWatchedAt: (mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<void>;
+  updateRating: (mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<void>;
+  updateNotes: (mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>;
+  updateProgress: (mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>;
+  updateTmdbStatus: (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<void>;
+  setRuntime: (mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>;
   // BIN-402: title-page lazy-refresh of the denormalized TMDB block + freshness
   // stamp (repopulates a swept-clean doc; keeps a viewed title from being swept).
-  refreshTmdbFields: (tmdbId: number, fields: TmdbDenormFields) => Promise<void>;
-  updateTags: (tmdbId: number, tags: string[]) => Promise<void>;
-  removeItem: (tmdbId: number) => Promise<void>;
+  refreshTmdbFields: (mediaType: MediaType, tmdbId: number, fields: TmdbDenormFields) => Promise<void>;
+  updateTags: (mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>;
+  removeItem: (mediaType: MediaType, tmdbId: number) => Promise<void>;
   getByStatus: (status: WatchStatus, mediaType?: MediaType) => WatchlistItem[];
-  getItem: (tmdbId: number) => WatchlistItem | null;
+  getItem: (mediaType: MediaType, tmdbId: number) => WatchlistItem | null;
 }
 
 const WatchlistContext = createContext<WatchlistState>({
@@ -112,14 +116,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const refreshedThisSession = useRef<Set<string>>(new Set());
   // BIN-164: tags live in a SEPARATE owner-only subcollection (never on the
   // publicly-readable watchlist doc), so they arrive on their own subscription
-  // and are joined onto items in-memory below. Map keyed by tmdbId.
-  const [tagsByTmdbId, setTagsByTmdbId] = useState<Record<number, string[]>>({});
+  // and are joined onto items in-memory below. BIN-560 Phase 4: keyed by the
+  // COMPOSITE doc id `mediaTypeDocId(mediaType, tmdbId)` (== the doc's own id), not
+  // bare tmdbId — else a movie_123 and tv_123 tag doc collide onto one key.
+  const [tagsByTmdbId, setTagsByTmdbId] = useState<Record<string, string[]>>({});
   // BIN-505: per-title notes now live in the owner-only watchlistNotes
-  // subcollection (moved OFF the public/friends-readable watchlist doc).
-  const [notesByTmdbId, setNotesByTmdbId] = useState<Record<number, string>>({});
+  // subcollection (moved OFF the public/friends-readable watchlist doc). BIN-560
+  // Phase 4: same composite-doc-id keying as tagsByTmdbId.
+  const [notesByTmdbId, setNotesByTmdbId] = useState<Record<string, string>>({});
   // Session guard for the eager notes migration so a mid-run re-render can't
   // re-issue the same batch (echo-proof; mirrors refreshTmdbFields' dedup).
-  const migratedNotesRef = useRef<Set<number>>(new Set());
+  // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) so a movie/TV tmdbId clash
+  // can't false-share the "already migrated / handled" mark.
+  const migratedNotesRef = useRef<Set<string>>(new Set());
   useEffect(() => { migratedNotesRef.current = new Set(); }, [uid]);
   // Which uid the current `items` were loaded for — set by the watchlist listener
   // when a snapshot lands. The migration gates on this so it never runs against a
@@ -207,13 +216,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) { setTagsByTmdbId({}); return; }
     return lazySubscribe(({ db, collection, onSnapshot }) =>
       onSnapshot(collection(db, 'users', uid, 'watchlistTags'), (snap) => {
-        const map: Record<number, string[]> = {};
+        const map: Record<string, string[]> = {};
         snap.docs.forEach(d => {
           const tags = (d.data().tags as string[] | undefined) ?? [];
-          // parseTmdbIdFromDocId, not Number(d.id): once these docs are
-          // namespaced (movie_/tv_) a bare Number() would be NaN. Phase 4
-          // re-keys this map to be mediaType-aware; this keeps it parse-safe.
-          if (tags.length > 0) map[parseTmdbIdFromDocId(d.id)] = tags;
+          // BIN-560 Phase 4: key by the namespaced doc id itself (movie_/tv_),
+          // which is exactly `mediaTypeDocId(mediaType, tmdbId)` — the composite
+          // key the in-memory join looks the entry up by. No parse needed.
+          if (tags.length > 0) map[d.id] = tags;
         });
         setTagsByTmdbId(map);
       }));
@@ -228,10 +237,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) { setNotesByTmdbId({}); return; }
     return lazySubscribe(({ db, collection, onSnapshot }) =>
       onSnapshot(collection(db, 'users', uid, 'watchlistNotes'), (snap) => {
-        const map: Record<number, string> = {};
+        const map: Record<string, string> = {};
         snap.docs.forEach(d => {
           const note = d.data().note as string | undefined;
-          if (note) map[parseTmdbIdFromDocId(d.id)] = note;
+          // BIN-560 Phase 4: key by the namespaced doc id (== composite key).
+          if (note) map[d.id] = note;
         });
         setNotesByTmdbId(map);
       }));
@@ -243,11 +253,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // Note source of truth: the subcollection wins; the legacy inline note
   // (docToItem) is the fallback until the item is migrated.
   const itemsWithTags = useMemo(
-    () => items.map(i => ({
-      ...i,
-      tags: tagsByTmdbId[i.tmdbId] ?? [],
-      notes: notesByTmdbId[i.tmdbId] ?? i.notes,
-    })),
+    () => items.map(i => {
+      const key = mediaTypeDocId(i.mediaType, i.tmdbId);
+      return {
+        ...i,
+        tags: tagsByTmdbId[key] ?? [],
+        notes: notesByTmdbId[key] ?? i.notes,
+      };
+    }),
     [items, tagsByTmdbId, notesByTmdbId],
   );
 
@@ -268,13 +281,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (itemsUidRef.current !== uid) return;
     const legacy = items
       .filter(i => i.notes != null
-        && notesByTmdbId[i.tmdbId] === undefined
-        && !migratedNotesRef.current.has(i.tmdbId))
+        && notesByTmdbId[mediaTypeDocId(i.mediaType, i.tmdbId)] === undefined
+        && !migratedNotesRef.current.has(mediaTypeDocId(i.mediaType, i.tmdbId)))
       .slice(0, NOTES_MIGRATE_CAP);
     if (legacy.length === 0) return;
     // Mark in-progress BEFORE the async write so a re-render inside the same
-    // session can't re-select the same titles (echo-proof).
-    legacy.forEach(i => migratedNotesRef.current.add(i.tmdbId));
+    // session can't re-select the same titles (echo-proof). Composite-keyed.
+    legacy.forEach(i => migratedNotesRef.current.add(mediaTypeDocId(i.mediaType, i.tmdbId)));
     let cancelled = false;
     void (async () => {
       const { db, doc, writeBatch, deleteField } = await fsdb();
@@ -283,13 +296,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const batch = writeBatch(db);
         for (const it of chunk) {
           const note = String(it.notes).slice(0, NOTE_MAX_LEN);
-          batch.set(doc(db, 'users', uid, 'watchlistNotes', String(it.tmdbId)), { note });
+          // BIN-560 Phase 4: namespaced doc id + self-describing mediaType field.
+          const docId = mediaTypeDocId(it.mediaType, it.tmdbId);
+          batch.set(doc(db, 'users', uid, 'watchlistNotes', docId), { note, mediaType: it.mediaType });
           // Delete the inline note ONLY — never bump updatedAt. This is a
           // system-only cleanup, not user activity; a serverTimestamp here would
           // surface every migrated title as fake "activity" at the top of every
           // follower's feed (feed queries order by updatedAt). Same invariant as
           // nextAirReadRepair / refreshTmdbFields.
-          batch.update(doc(db, 'users', uid, 'watchlist', String(it.tmdbId)), {
+          batch.update(doc(db, 'users', uid, 'watchlist', docId), {
             notes: deleteField(),
           });
         }
@@ -313,13 +328,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(item.tmdbId));
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
     // BIN-349: addItem is ALSO a merge-write re-mark path (useMarkSeen /
     // StatusButton / QuickAddButton re-mark an in-library title, passing
     // rating: current?.rating). So compare against the current rating and stamp
     // ratedAt only on a genuinely new/changed rating — a blind stamp would
     // re-bump recency on every re-mark, the exact drift this fix removes.
-    const currentForRating = items.find(i => i.tmdbId === item.tmdbId);
+    const currentForRating = items.find(i => i.tmdbId === item.tmdbId && i.mediaType === item.mediaType);
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
     //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
     //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
@@ -387,10 +402,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
   }, [uid, user?.defaultVisibility, items]);
 
-  const updateVisibility = useCallback(async (tmdbId: number, visibility: ItemVisibility | null) => {
+  const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // visibility=null → ta bort override och fall tillbaka till profilens
     // defaultVisibility. Vi skickar bara fältet (Firestore har ingen
     // "delete field" från klienten utan deleteField; istället skriver vi
@@ -404,11 +419,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
   }, [uid, user?.defaultVisibility]);
 
-  const updateStatus = useCallback(async (tmdbId: number, status: WatchStatus, watchedAt?: Date) => {
+  const updateStatus = useCallback(async (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    const currentItem = items.find(i => i.tmdbId === tmdbId);
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
+    const currentItem = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, buildStatusUpdate(status, {
       now: serverTimestamp(),
@@ -418,26 +433,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // BIN-91: backdaterat sett-datum (film). undefined → faller tillbaka på now.
       watchedAtOverride: watchedAt ? Timestamp.fromDate(watchedAt) : undefined,
     }), { merge: true });
-    trackEvent('status_changed', { mediaType: currentItem?.mediaType ?? 'movie', status });
+    trackEvent('status_changed', { mediaType, status });
   }, [uid, items, effectiveVisibilityNow]);
 
   // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
   // — det tolkas som en omtitt (isRewatch = sedd→sedd) och räknar upp rewatchCount
   // varje gång man justerar datumet. Detta rör bara watchedAt + updatedAt.
-  const updateWatchedAt = useCallback(async (tmdbId: number, watchedAt: Date) => {
+  const updateWatchedAt = useCallback(async (mediaType: MediaType, tmdbId: number, watchedAt: Date) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, { watchedAt: Timestamp.fromDate(watchedAt), ...visFields, updatedAt: serverTimestamp() }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
 
-  const updateRating = useCallback(async (tmdbId: number, rating: number | null) => {
+  const updateRating = useCallback(async (mediaType: MediaType, tmdbId: number, rating: number | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     // BIN-143: klampa till 0–5 (watchlist-betygsskalan är 0.5–5, ×2 vid visning;
     // defense-in-depth bakom firestore.rules-gränsen) så ett buggigt anrop aldrig
@@ -458,20 +473,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // watchlist doc (writeBatch → no half-state where the note lives in both). The
   // watchlist doc keeps getting its visibility re-stamped (lazy-on-write) so the
   // effectiveVisibility cascade is unaffected.
-  const updateNotes = useCallback(async (tmdbId: number, notes: string | null) => {
+  const updateNotes = useCallback(async (mediaType: MediaType, tmdbId: number, notes: string | null) => {
     if (!uid) return;
+    const docId = mediaTypeDocId(mediaType, tmdbId);
     // A user-authored note is the source of truth — mark this title "handled" so
     // the eager migration can never overwrite it with a stale captured inline note.
-    migratedNotesRef.current.add(tmdbId);
+    migratedNotesRef.current.add(docId);
     const { db, doc, writeBatch, deleteField } = await fsdb();
-    const noteRef = doc(db, 'users', uid, 'watchlistNotes', String(tmdbId));
-    const itemRef = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const noteRef = doc(db, 'users', uid, 'watchlistNotes', docId);
+    const itemRef = doc(db, 'users', uid, 'watchlist', docId);
     const trimmed = notes?.trim();
     const clean = trimmed ? trimmed.slice(0, NOTE_MAX_LEN) : null;
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     const batch = writeBatch(db);
-    if (clean) batch.set(noteRef, { note: clean });
+    if (clean) batch.set(noteRef, { note: clean, mediaType });
     else batch.delete(noteRef);
     // Strip any legacy inline note + re-stamp visibility, but NEVER bump
     // updatedAt: a note now lives in the owner-only subcollection, so a note
@@ -490,20 +506,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // isn't permanently excluded from the eager migration this session — which
       // would leave that inline note (PII) readable to friends/public until the
       // next session. The mark is only meaningful once the write has committed.
-      migratedNotesRef.current.delete(tmdbId);
+      migratedNotesRef.current.delete(docId);
       throw e;
     }
   }, [uid, items, effectiveVisibilityNow]);
 
-  const updateProgress = useCallback(async (tmdbId: number, season: number, episode: number) => {
+  const updateProgress = useCallback(async (mediaType: MediaType, tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // Progress ändrar aldrig status: TV bor redan i 'mina' (vill_se för TV är
     // avskaffat och normaliseras vid läsning), och sub-state (ej_paborjad →
     // aktiv/ikapp) härleds — inget statusbyte behövs när första avsnittet
     // markeras. (Gamla auto-promote-flytten vill_se→mina togs bort 2026-06.)
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, {
       lastWatchedSeason: season,
@@ -525,11 +541,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     );
   }, [uid, items, effectiveVisibilityNow]);
 
-  const updateTmdbStatus = useCallback(async (tmdbId: number, tmdbStatus: string | null) => {
+  const updateTmdbStatus = useCallback(async (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlist', String(tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
   }, [uid, items, effectiveVisibilityNow]);
@@ -538,9 +554,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // title is already in the library and runtime is still unknown — and never
   // bumps updatedAt (it's a silent denormalisation, not a user edit, so it must
   // not reorder "senast ändrad").
-  const setRuntime = useCallback(async (tmdbId: number, runtime: number | null) => {
+  const setRuntime = useCallback(async (mediaType: MediaType, tmdbId: number, runtime: number | null) => {
     if (!uid || runtime == null) return;
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     if (!current || current.runtime != null) return;
     const { db, doc, setDoc } = await fsdb();
     // Best-effort denormalisering: anropas fire-and-forget (`void setRuntime`)
@@ -548,7 +564,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // INTE bubbla upp som en ofångad promise-rejection → Sentry-brus. Sväljs
     // tyst; nästa titelvisning försöker igen.
     try {
-      await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), { runtime }, { merge: true });
+      await setDoc(doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId)), { runtime }, { merge: true });
     } catch (err) {
       console.warn('[watchlist] runtime-backfill misslyckades:', err);
     }
@@ -562,14 +578,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // doc and keeps a viewed title from ever reaching the sweep's 5-month clear line.
   // NEVER bumps updatedAt (continueWatching sorts on it). Swallows failures like
   // setRuntime — best-effort, next view retries.
-  const refreshTmdbFields = useCallback(async (tmdbId: number, fields: TmdbDenormFields) => {
+  const refreshTmdbFields = useCallback(async (mediaType: MediaType, tmdbId: number, fields: TmdbDenormFields) => {
     if (!uid) return;
     // Echo-proof dedupe (keyed by uid so an account switch doesn't suppress the new
     // user): once written this session, never re-fire — the pending serverTimestamp
     // reads back null and would otherwise re-trip the gate.
-    const dedupeKey = `${uid}:${tmdbId}`;
+    const dedupeKey = `${uid}:${mediaTypeDocId(mediaType, tmdbId)}`;
     if (refreshedThisSession.current.has(dedupeKey)) return;
-    const current = items.find(i => i.tmdbId === tmdbId);
+    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     if (!current) return; // only titles in the library carry the stamp / get swept
     // BIN-468: the static group and the providers group are gated INDEPENDENTLY —
     // a stale providers group must repair even when the static stamp is fresh
@@ -593,45 +609,47 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     );
     if (!payload) return; // gated above; defensive
     try {
-      await setDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)), payload, { merge: true });
+      await setDoc(doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId)), payload, { merge: true });
     } catch (err) {
       console.warn('[watchlist] tmdb-fields lazy-refresh misslyckades:', err);
     }
   }, [uid, items]);
 
-  const removeItem = useCallback(async (tmdbId: number) => {
+  const removeItem = useCallback(async (mediaType: MediaType, tmdbId: number) => {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
-    await deleteDoc(doc(db, 'users', uid, 'watchlist', String(tmdbId)));
+    const docId = mediaTypeDocId(mediaType, tmdbId);
+    await deleteDoc(doc(db, 'users', uid, 'watchlist', docId));
     // Best-effort: drop the sibling tags + notes docs so they never orphan
     // (their own owner-only collections aren't cascaded by the watchlist delete).
     try {
-      await deleteDoc(doc(db, 'users', uid, 'watchlistTags', String(tmdbId)));
+      await deleteDoc(doc(db, 'users', uid, 'watchlistTags', docId));
     } catch { /* no tags doc for this title — fine */ }
     try {
-      await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', String(tmdbId)));
+      await deleteDoc(doc(db, 'users', uid, 'watchlistNotes', docId));
     } catch { /* no notes doc for this title — fine */ }
   }, [uid]);
 
   // BIN-164: write the owner-only tags doc. normalizeTags enforces the per-tag
   // length + dedup + count caps (the rules bound the array size server-side but
   // can't iterate elements). Empty result → delete the doc rather than store [].
-  const updateTags = useCallback(async (tmdbId: number, tags: string[]) => {
+  const updateTags = useCallback(async (mediaType: MediaType, tmdbId: number, tags: string[]) => {
     if (!uid) return;
     const clean = normalizeTags(tags);
     const { db, doc, setDoc, deleteDoc } = await fsdb();
-    const ref = doc(db, 'users', uid, 'watchlistTags', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'watchlistTags', mediaTypeDocId(mediaType, tmdbId));
     if (clean.length === 0) { await deleteDoc(ref); return; }
-    // Full replace (the doc's only field is `tags`) — not a merge.
-    await setDoc(ref, { tags: clean });
+    // Full replace — the doc carries `tags` + the self-describing `mediaType`
+    // (BIN-560 Phase 4; the Phase-3 rules allow the optional mediaType field).
+    await setDoc(ref, { tags: clean, mediaType });
   }, [uid]);
 
   const getByStatus = useCallback((status: WatchStatus, mediaType?: MediaType) => {
     return itemsWithTags.filter(i => i.status === status && (!mediaType || i.mediaType === mediaType));
   }, [itemsWithTags]);
 
-  const getItem = useCallback((tmdbId: number) => {
-    return itemsWithTags.find(i => i.tmdbId === tmdbId) ?? null;
+  const getItem = useCallback((mediaType: MediaType, tmdbId: number) => {
+    return itemsWithTags.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType) ?? null;
   }, [itemsWithTags]);
 
   const value = useMemo(() => ({

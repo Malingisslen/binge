@@ -20,7 +20,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 import { ratingDelta, isNoOp } from './logic';
-import { mediaTypeDocId } from '../shared/mediaTypeDocId';
+import { mediaTypeDocId, parseMediaTypeFromDocId } from '../shared/mediaTypeDocId';
 
 export const communityRatingMaintain = onDocumentWritten(
   'users/{uid}/watchlist/{tmdbId}',
@@ -31,16 +31,33 @@ export const communityRatingMaintain = onDocumentWritten(
     const delta = ratingDelta(before?.rating, after?.rating);
     if (isNoOp(delta)) return;
 
-    const mediaType = (after?.mediaType ?? before?.mediaType) as string | undefined;
-    if (mediaType !== 'movie' && mediaType !== 'tv') {
-      logger.warn(`communityRatings: skipping ${event.params.tmdbId} — unknown mediaType`);
-      return;
+    // BIN-560 Phase 4 — the aggregate doc id is derived from the watchlist doc's
+    // PATH, never its body. This is the vote-stuffing invariant the rules comment
+    // (`titleRatingsAggregate` is "never client-written"): Firestore enforces one doc
+    // per path, so a path-derived aggregate key = at most one rating per account per
+    // title. Reading the tmdbId from the user-writable BODY (which rules whitelist but
+    // never value-bind) would decouple the key from the unique path — a user could
+    // create N docs under different itemIds, each carrying a spoofed `{tmdbId: X}`, and
+    // each would independently increment titleRatingsAggregate/X. Post-cutover the doc
+    // id already IS `${mediaType}_${tmdbId}`, so it is the aggregate id verbatim.
+    const docIdRaw = event.params.tmdbId;
+    const pathMediaType = parseMediaTypeFromDocId(docIdRaw);
+    let docId: string;
+    if (pathMediaType != null) {
+      docId = docIdRaw; // namespaced doc id == aggregate id (path-unique → no stuffing)
+    } else {
+      // Legacy bare-numeric doc id (pre-cutover; the Fork-A reset means none exist —
+      // defense-in-depth). Preserve the ORIGINAL trust model: tmdbId from the PATH
+      // (docIdRaw, still path-unique), prefix from the body's mediaType. A wrong body
+      // mediaType only mis-buckets that one doc's single vote; it cannot stuff a real
+      // aggregate, because the id part is still the unique path segment.
+      const bodyMediaType = (after?.mediaType ?? before?.mediaType) as string | undefined;
+      if (bodyMediaType !== 'movie' && bodyMediaType !== 'tv') {
+        logger.warn(`communityRatings: skipping ${docIdRaw} — unknown mediaType`);
+        return;
+      }
+      docId = mediaTypeDocId(bodyMediaType, docIdRaw);
     }
-
-    // Guarded above, so the shared helper's unknown→'tv' normalization can never
-    // fire here — this call site deliberately SKIPS an unknown media type rather
-    // than guessing one for an aggregate that can't be un-drifted (BIN-560).
-    const docId = mediaTypeDocId(mediaType, event.params.tmdbId);
     const ref = getFirestore().collection('titleRatingsAggregate').doc(docId);
     try {
       // BIN-148: onDocumentWritten is at-least-once — a redelivered event would

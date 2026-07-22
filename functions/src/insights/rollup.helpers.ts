@@ -5,6 +5,7 @@
 // rollup.ts imports these for use in the scheduled function.
 
 import type { RollupData, MediaType } from './types';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 
 // Alias→canonical provider map, mirrored from SWEDISH_PROVIDERS in
 // src/lib/tmdb/providers.ts (functions can't import @/ aliases). KEEP IN SYNC
@@ -44,20 +45,26 @@ export interface WatchlistLite {
   genreIds: number[];
 }
 
-/** Top tracked titles, keyed by tmdbId so we can carry the denormalized title. */
+/**
+ * Top tracked titles. BIN-560 Phase 4: keyed by the composite `${mediaType}_${tmdbId}`,
+ * NOT bare tmdbId — a movie and a TV show sharing a TMDB number are distinct titles
+ * and must not fold into one row with a bogus summed count + first-seen label.
+ */
 export function topTitles(
   items: WatchlistLite[],
   limit: number,
 ): RollupData['topTitles'] {
-  const byId = new Map<number, { tmdbId: number; mediaType: MediaType; title: string; count: number }>();
+  const byId = new Map<string, { tmdbId: number; mediaType: MediaType; title: string; count: number }>();
   for (const it of items) {
-    const existing = byId.get(it.tmdbId);
+    const mediaType: MediaType = it.mediaType === 'tv' ? 'tv' : 'movie';
+    const key = mediaTypeDocId(mediaType, it.tmdbId);
+    const existing = byId.get(key);
     if (existing) {
       existing.count += 1;
     } else {
-      byId.set(it.tmdbId, {
+      byId.set(key, {
         tmdbId: it.tmdbId,
-        mediaType: (it.mediaType === 'tv' ? 'tv' : 'movie') as MediaType,
+        mediaType,
         title: it.title,
         count: 1,
       });

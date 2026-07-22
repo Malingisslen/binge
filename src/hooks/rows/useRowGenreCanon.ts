@@ -62,7 +62,7 @@ function genreIdsForQueries(
 
 export function useRowGenreCanon(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const genreId = rowSpec.id.kind === 'genre-canon' ? rowSpec.id.genreId : undefined;

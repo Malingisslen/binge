@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { MediaType } from '@/types';
 
 export interface NotInterestedItem {
@@ -16,9 +17,12 @@ interface NotInterestedState {
   // tioner) gate:ar på den så avfärdade titlar inte blinkar in på kall laddning
   // medan has() ännu returnerar false för allt (BIN-37).
   loading: boolean;
-  add: (tmdbId: number, mediaType: MediaType) => Promise<void>;
-  remove: (tmdbId: number) => Promise<void>;
-  has: (tmdbId: number) => boolean;
+  // BIN-560 Phase 4: all three take (mediaType, tmdbId) — mediaType is needed to
+  // address the namespaced doc id and disambiguate a movie from a same-numbered TV
+  // show, and the arg order matches the WatchlistContext mutator convention.
+  add: (mediaType: MediaType, tmdbId: number) => Promise<void>;
+  remove: (mediaType: MediaType, tmdbId: number) => Promise<void>;
+  has: (mediaType: MediaType, tmdbId: number) => boolean;
 }
 
 const NotInterestedContext = createContext<NotInterestedState>({
@@ -47,10 +51,10 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
       }));
   }, [uid]);
 
-  const add = useCallback(async (tmdbId: number, mediaType: MediaType) => {
+  const add = useCallback(async (mediaType: MediaType, tmdbId: number) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'notInterested', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'notInterested', mediaTypeDocId(mediaType, tmdbId));
     await setDoc(ref, {
       tmdbId,
       mediaType,
@@ -58,14 +62,15 @@ export function NotInterestedProvider({ children }: { children: ReactNode }) {
     }, { merge: true });
   }, [uid]);
 
-  const remove = useCallback(async (tmdbId: number) => {
+  const remove = useCallback(async (mediaType: MediaType, tmdbId: number) => {
     if (!uid) return;
     const { db, doc, deleteDoc } = await fsdb();
-    await deleteDoc(doc(db, 'users', uid, 'notInterested', String(tmdbId)));
+    await deleteDoc(doc(db, 'users', uid, 'notInterested', mediaTypeDocId(mediaType, tmdbId)));
   }, [uid]);
 
-  const idSet = useMemo(() => new Set(items.map(i => i.tmdbId)), [items]);
-  const has = useCallback((tmdbId: number) => idSet.has(tmdbId), [idSet]);
+  // Composite-keyed set so a movie/TV tmdbId clash can't false-share "not interested".
+  const idSet = useMemo(() => new Set(items.map(i => mediaTypeDocId(i.mediaType, i.tmdbId))), [items]);
+  const has = useCallback((mediaType: MediaType, tmdbId: number) => idSet.has(mediaTypeDocId(mediaType, tmdbId)), [idSet]);
 
   const value = useMemo(() => ({ items, loading, add, remove, has }), [items, loading, add, remove, has]);
 

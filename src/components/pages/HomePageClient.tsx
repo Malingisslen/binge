@@ -26,6 +26,7 @@ import GrupperTile from '@/components/home/GrupperTile';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { TMDBSearchResult } from '@/types';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
@@ -205,8 +206,10 @@ function Dashboard() {
   // en render-väg, två datakällor.
   const effectiveEntries = useMemo(() => {
     if (!calendarLoading) return calendarEntries;
-    const liveIds = new Set(calendarEntries.map(e => e.tmdbId));
-    const seeds = seedCalendarEntries(items).filter(s => !liveIds.has(s.tmdbId));
+    // Composite-keyed (BIN-560 Phase 4): calendarEntries mix TV episodes + movie
+    // releases, so a movie/TV tmdbId clash must not drop a seed of the other type.
+    const liveIds = new Set(calendarEntries.map(e => mediaTypeDocId(e.mediaType, e.tmdbId)));
+    const seeds = seedCalendarEntries(items).filter(s => !liveIds.has(mediaTypeDocId(s.mediaType, s.tmdbId)));
     return [...calendarEntries, ...seeds];
   }, [calendarLoading, calendarEntries, items]);
 

@@ -58,3 +58,4 @@ put to Malin and her answer.>
 - [0014](0014-seo-lighthouse-tradeoffs.md) — SEO/AI-search: accept Lighthouse 93–96, and what NOT to build for AI
 - [0015](0015-tillsammans-write-binding-scope.md) — Tillsammans write binding: anon-forgery residual accepted (A1); expiry gate re-declined (BIN-24 re-affirmed)
 - [0016](0016-leavingrollup-resumable-cursor-rejected.md) — BIN-543: resumable MOTN pagination cursor rejected (window drift = silently wrong, not just stale) in favor of a slower single-day cadence
+- [0017](0017-media-type-doc-id-namespacing.md) — BIN-560: personal-library doc ids namespaced `${mediaType}_${tmdbId}`; reset-not-backfill (Fork A) + store-mediaType-as-field (Fork B); export schema → MAJOR 2.0

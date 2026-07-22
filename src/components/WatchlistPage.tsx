@@ -37,8 +37,14 @@ import {
 import FilterRow from '@/components/watchlist/FilterRow';
 import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
 import type { WatchStatus, WatchlistItem } from '@/types';
+
+// BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
+// `mediaTypeDocId(mediaType, tmdbId)`, not bare tmdbId — a movie and a TV show
+// sharing a tmdbId must not share a checkbox, a next-air date, or a bulk action.
+const keyOf = (i: Pick<WatchlistItem, 'mediaType' | 'tmdbId'>) => mediaTypeDocId(i.mediaType, i.tmdbId);
 
 type SortKey = 'updatedAt' | 'addedAt' | 'watchedAt' | 'title' | 'rating' | 'releaseYear';
 
@@ -112,16 +118,18 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const tableColCount =
     6 + (showTypeCol ? 1 : 0) + (showAddedCol ? 1 : 0) + (showWatchedCol ? 1 : 0);
   const [view, setView] = useState<ViewMode>(status === 'mina' ? 'cards' : 'grid');
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Composite doc-id keys (mediaTypeDocId), not bare tmdbId — see keyOf above.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   // BIN-153: bulk-åtgärder (Ta bort / Flytta) får ALDRIG röra titlar som är
-  // bortfiltrerade av sök/filter. Bekräftelse innan radering (data-loss).
-  const [confirmDelete, setConfirmDelete] = useState<number[] | null>(null);
+  // bortfiltrerade av sök/filter. Bekräftelse innan radering (data-loss). We
+  // snapshot the actual items so the delete carries mediaType + tmdbId.
+  const [confirmDelete, setConfirmDelete] = useState<WatchlistItem[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   // BIN-42: "Välj"-läge togglar kryssrutor i kort/rutnät (tabellen har egna).
   const [selectMode, setSelectMode] = useState(false);
-  const toggleSelect = (id: number) => setSelected(prev => {
+  const toggleSelect = (key: string) => setSelected(prev => {
     const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
   const [searchQuery, setSearchQuery] = useState('');
@@ -132,13 +140,16 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
-    const m = new Map<number, string>();
+    // Composite-keyed (mediaTypeDocId): calendarEntries mix TV episode air-dates
+    // and movie release-dates, so a movie/TV tmdbId clash must not collide here.
+    const m = new Map<string, string>();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     for (const e of calendarEntries) {
       if (new Date(e.airDate) < today) continue;
-      const prev = m.get(e.tmdbId);
-      if (!prev || e.airDate < prev) m.set(e.tmdbId, e.airDate);
+      const key = mediaTypeDocId(e.mediaType, e.tmdbId);
+      const prev = m.get(key);
+      if (!prev || e.airDate < prev) m.set(key, e.airDate);
     }
     return m;
   }, [calendarEntries]);
@@ -246,9 +257,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   // Annars kan en titel markeras, filtreras bort, och sen raderas av bulk-"Ta
   // bort" trots att den inte är synlig — och "N markerade" skulle överräkna.
   useEffect(() => {
-    const visibleIds = new Set(displayItems.map(i => i.tmdbId));
+    const visibleIds = new Set(displayItems.map(keyOf));
     setSelected(prev => {
-      const next = new Set([...prev].filter(id => visibleIds.has(id)));
+      const next = new Set([...prev].filter(key => visibleIds.has(key)));
       return next.size === prev.size ? prev : next;
     });
   }, [displayItems]);
@@ -462,7 +473,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           {status === 'sedd' && (
             <button
               onClick={async () => {
-                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'vill_se')));
+                await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'vill_se')));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border-none rounded-sm cursor-pointer bg-acc-deep text-white font-[inherit]"
@@ -477,7 +488,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           {status === 'mina' && (
             <button
               onClick={async () => {
-                await Promise.all(Array.from(selected).map(id => updateStatus(id, 'avbruten')));
+                await Promise.all(displayItems.filter(i => selected.has(keyOf(i))).map(i => updateStatus(i.mediaType, i.tmdbId, 'avbruten')));
                 setSelected(new Set());
               }}
               className="px-2 py-[2px] text-xs border border-rule rounded-sm cursor-pointer bg-surface text-ink-2 font-[inherit]"
@@ -487,7 +498,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             </button>
           )}
           <button
-            onClick={() => { if (selected.size > 0) setConfirmDelete(Array.from(selected)); }}
+            onClick={() => { if (selected.size > 0) setConfirmDelete(displayItems.filter(i => selected.has(keyOf(i)))); }}
             className="px-2 py-[2px] text-xs border border-danger rounded-sm cursor-pointer bg-surface text-danger-ink font-[inherit]"
           >
             Ta bort
@@ -510,7 +521,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           onConfirm={async () => {
             setDeleting(true);
             try {
-              await Promise.all(confirmDelete.map(id => removeItem(id)));
+              await Promise.all(confirmDelete.map(item => removeItem(item.mediaType, item.tmdbId)));
               setSelected(new Set());
             } finally {
               setDeleting(false);
@@ -527,19 +538,19 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
             sections={followingSections}
             nextAirByTmdbId={nextAirByTmdbId}
             selectMode={selectMode}
-            isSelected={id => selected.has(id)}
-            onToggleSelect={toggleSelect}
+            isSelected={item => selected.has(keyOf(item))}
+            onToggleSelect={item => toggleSelect(keyOf(item))}
           />
         ) : (
           <div className={CARD_GRID_CLASS}>
             {visibleItems.map(item => (
               <WatchlistCard
-                key={item.tmdbId}
+                key={keyOf(item)}
                 item={item}
-                nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+                nextAirDate={nextAirByTmdbId.get(keyOf(item))}
                 selectMode={selectMode}
-                selected={selected.has(item.tmdbId)}
-                onToggleSelect={() => toggleSelect(item.tmdbId)}
+                selected={selected.has(keyOf(item))}
+                onToggleSelect={() => toggleSelect(keyOf(item))}
               />
             ))}
             {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
@@ -562,7 +573,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                     aria-label="Välj alla"
                     checked={displayItems.length > 0 && selected.size === displayItems.length}
                     onChange={e => {
-                      if (e.target.checked) setSelected(new Set(displayItems.map(i => i.tmdbId)));
+                      if (e.target.checked) setSelected(new Set(displayItems.map(keyOf)));
                       else setSelected(new Set());
                     }}
                     className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
@@ -584,16 +595,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                 const href = titleHref(item.mediaType, item.tmdbId);
                 const Icon = item.mediaType === 'tv' ? Tv : Film;
                 return (
-                  <tr key={item.tmdbId} className={`cursor-pointer hover:[&>td]:bg-bg-2 ${idx % 2 === 1 ? 'bg-bg-2/40' : ''}`}>
+                  <tr key={keyOf(item)} className={`cursor-pointer hover:[&>td]:bg-bg-2 ${idx % 2 === 1 ? 'bg-bg-2/40' : ''}`}>
                     <td className="px-2 py-[5px] border-b border-border-table" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         aria-label={`Välj ${item.title}`}
-                        checked={selected.has(item.tmdbId)}
+                        checked={selected.has(keyOf(item))}
                         onChange={() => setSelected(prev => {
                           const next = new Set(prev);
-                          if (next.has(item.tmdbId)) next.delete(item.tmdbId);
-                          else next.add(item.tmdbId);
+                          const k = keyOf(item);
+                          if (next.has(k)) next.delete(k);
+                          else next.add(k);
                           return next;
                         })}
                         className="accent-acc-deep w-[13px] h-[13px] cursor-pointer"
@@ -641,7 +653,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       <span className="inline-flex items-center gap-[4px]">
                         <RatingStars
                           rating={item.rating}
-                          onChange={r => updateRating(item.tmdbId, r)}
+                          onChange={r => updateRating(item.mediaType, item.tmdbId, r)}
                           size="sm"
                           dim={item.rating === null}
                         />
@@ -672,7 +684,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               const poster = posterUrl(item.posterPath, 'w342');
               const href = titleHref(item.mediaType, item.tmdbId);
               const Icon = item.mediaType === 'tv' ? Tv : Film;
-              const isSel = selected.has(item.tmdbId);
+              const isSel = selected.has(keyOf(item));
               const inner = (
                 <>
                   <div className={`poster duo-${toneForId(item.tmdbId)} mb-[3px] ${selectMode && isSel ? 'outline outline-2 outline-acc-deep' : ''}`}>
@@ -701,18 +713,18 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
               );
               return selectMode ? (
                 <div
-                  key={item.tmdbId}
+                  key={keyOf(item)}
                   role="checkbox"
                   aria-checked={isSel}
                   aria-label={`Välj ${item.title}`}
                   tabIndex={0}
-                  onClick={() => toggleSelect(item.tmdbId)}
+                  onClick={() => toggleSelect(keyOf(item))}
                   className="cursor-pointer text-ink"
                 >
                   {inner}
                 </div>
               ) : (
-                <Link key={item.tmdbId} href={href} className="no-underline text-ink">
+                <Link key={keyOf(item)} href={href} className="no-underline text-ink">
                   {inner}
                 </Link>
               );

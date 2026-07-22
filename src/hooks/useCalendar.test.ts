@@ -59,7 +59,7 @@ vi.mock('@tanstack/react-query', () => ({ useQueries: () => [] }));
 
 import { useCalendarEntries } from './useCalendar';
 
-const anUpdate: NextAirUpdate = { tmdbId: 1, delta: { nextAirDate: '2026-08-01' } };
+const anUpdate: NextAirUpdate = { mediaType: 'tv', tmdbId: 1, delta: { nextAirDate: '2026-08-01' } };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -127,7 +127,7 @@ describe('useCalendar — next-air read-repair effect (BIN-508)', () => {
   // buildRepairPayload; here we prove it survives the full hook → flush wiring.
   it('the real flush writes a payload with no updatedAt (BIN-519)', async () => {
     authState.uid = 'ainv';
-    mockUpdates = [{ tmdbId: 999, delta: { nextAirDate: '2026-08-01' } }];
+    mockUpdates = [{ mediaType: 'tv', tmdbId: 999, delta: { nextAirDate: '2026-08-01' } }];
     renderHook(() => useCalendarEntries());
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
 
@@ -143,7 +143,7 @@ describe('useCalendar — next-air read-repair effect (BIN-508)', () => {
   // regression that dropped the debounce and wrote once per render (cost churn).
   it('coalesces multiple re-renders within the debounce window into one flush (BIN-519)', async () => {
     authState.uid = 'brender';
-    mockUpdates = [{ tmdbId: 7, delta: { nextAirDate: '2026-08-01' } }];
+    mockUpdates = [{ mediaType: 'tv', tmdbId: 7, delta: { nextAirDate: '2026-08-01' } }];
     const { rerender } = renderHook(() => useCalendarEntries());
 
     // Re-render three times, each 300 ms apart (900 ms total). Every re-run

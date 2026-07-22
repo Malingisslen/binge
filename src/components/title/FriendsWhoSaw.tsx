@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import { useFriendsWhoSaw, type FriendWhoSaw } from '@/hooks/useFriendsWhoSaw';
+import type { MediaType } from '@/types';
 
 /**
  * BIN-97 — kompakt rad med personer man följer som har titeln publikt.
@@ -23,8 +24,8 @@ function label(f: FriendWhoSaw): string {
   }
 }
 
-export default function FriendsWhoSaw({ tmdbId }: { tmdbId: number }) {
-  const { data } = useFriendsWhoSaw(tmdbId);
+export default function FriendsWhoSaw({ mediaType, tmdbId }: { mediaType: MediaType; tmdbId: number }) {
+  const { data } = useFriendsWhoSaw(mediaType, tmdbId);
   if (!data || data.length === 0) return null;
 
   const visible = data.slice(0, MAX_VISIBLE);

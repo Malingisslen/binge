@@ -7,7 +7,7 @@ Filen är en JSON med följande top-level-struktur (se
 
 ```jsonc
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "2.0",
   "exportedAt": "2026-04-24T10:30:00.000Z",
   "userId": "firebase-uid",
   "readme": "…",
@@ -132,3 +132,12 @@ Dokumentera ändringar i CHANGELOG.md-sektionen nedan.
   projektionen andra ser) och `watchlistNotes` (dina privata anteckningar,
   flyttade av från den publikt läsbara watchlist-doc:en till en ägar-skyddad
   subcollection). Additiva fält → minor-bump 1.2 → 1.3.
+- **2.0 (2026-07-22, BIN-560)** — MAJOR: BETYDELSEÄNDRING av `id`-fältet (inte
+  additivt). `id` på varje personlig-bibliotek-doc (`watchlist`, `watchlistTags`,
+  `watchlistNotes`, `episodeProgress`, `notInterested`) kodar nu BÅDE medietyp
+  och TMDB-id som `${mediaType}_${tmdbId}` (t.ex. `movie_603`, `tv_1399`) i
+  stället för bara det numeriska tmdbId. En film och en serie kan dela samma
+  TMDB-nummer; namespacet håller dem åtskilda i dina egna poster. En consumer som
+  tolkade `id` som ett tal måste nu dela på första `_` (eller läsa `tmdbId`/
+  `mediaType`-fälten i doc-kroppen). Major-bump 1.3 → 2.0 så gamla parsers
+  failar högljutt i stället för att tyst mis-matcha en film mot en samnumrerad serie.

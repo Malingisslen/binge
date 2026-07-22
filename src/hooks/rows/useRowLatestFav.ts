@@ -18,7 +18,7 @@ const POOL_TARGET = 100;
 export function useRowLatestFav(
   rowSpec: RowSpec,
   seed: { tmdbId: number; mediaType: MediaType } | null,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const queries = useQueries({

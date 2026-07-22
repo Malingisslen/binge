@@ -3,7 +3,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { useAuth } from '@/contexts/AuthContext';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { EpisodeProgress } from '@/types';
+
+// BIN-560 Phase 4: episodeProgress is a TV-ONLY concept (movies have no episodes),
+// so the namespaced doc id is always `tv_${tmdbId}` — hardcoded, never threaded.
 
 export function useEpisodeProgress(tmdbId: number) {
   const { uid } = useAuth();
@@ -14,7 +18,7 @@ export function useEpisodeProgress(tmdbId: number) {
     if (!uid) { setProgress(null); setProgressLoading(false); return; }
     setProgressLoading(true);
     return lazySubscribe(({ db, doc, onSnapshot }) =>
-      onSnapshot(doc(db, 'users', uid, 'episodeProgress', String(tmdbId)), (snap) => {
+      onSnapshot(doc(db, 'users', uid, 'episodeProgress', mediaTypeDocId('tv', tmdbId)), (snap) => {
         if (snap.exists()) {
           const raw = snap.data();
           // Filter out corrupted dot-notation keys (e.g. "seasons.1.5") from old bug
@@ -37,9 +41,10 @@ export function useEpisodeProgress(tmdbId: number) {
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'episodeProgress', mediaTypeDocId('tv', tmdbId));
     await setDoc(ref, {
       tmdbId,
+      mediaType: 'tv',
       seasons: {
         [String(season)]: {
           [String(episode)]: {
@@ -54,13 +59,14 @@ export function useEpisodeProgress(tmdbId: number) {
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'episodeProgress', mediaTypeDocId('tv', tmdbId));
     const seasonData: Record<string, { watched: boolean; watchedAt: unknown }> = {};
     for (let i = 1; i <= episodeCount; i++) {
       seasonData[String(i)] = { watched: true, watchedAt: serverTimestamp() };
     }
     await setDoc(ref, {
       tmdbId,
+      mediaType: 'tv',
       seasons: { [String(season)]: seasonData },
     }, { merge: true });
   }, [uid, tmdbId]);
@@ -70,13 +76,14 @@ export function useEpisodeProgress(tmdbId: number) {
   const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
     if (!uid) return;
     const { db, doc, setDoc } = await fsdb();
-    const ref = doc(db, 'users', uid, 'episodeProgress', String(tmdbId));
+    const ref = doc(db, 'users', uid, 'episodeProgress', mediaTypeDocId('tv', tmdbId));
     const seasonData: Record<string, { watched: boolean; watchedAt: unknown }> = {};
     for (const ep of episodeNumbers) {
       seasonData[String(ep)] = { watched: false, watchedAt: null };
     }
     await setDoc(ref, {
       tmdbId,
+      mediaType: 'tv',
       seasons: { [String(season)]: seasonData },
     }, { merge: true });
   }, [uid, tmdbId]);

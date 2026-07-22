@@ -78,7 +78,7 @@ function ImportContent() {
           return { row, match: null, duplicate: false, status: null };
         }
         const mediaType = best.media_type as MediaType;
-        const duplicate = !!getItem(best.id);
+        const duplicate = !!getItem(mediaType, best.id);
         const date = best.release_date || best.first_air_date || '';
         return {
           row,

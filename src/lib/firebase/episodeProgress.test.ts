@@ -24,6 +24,7 @@ describe('clearEpisodeProgress', () => {
   it('raderar episodeProgress-docen för titeln', async () => {
     await clearEpisodeProgress('user-1', 1438);
     expect(mocks.deleteDocMock).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteDocMock).toHaveBeenCalledWith({ _path: 'users/user-1/episodeProgress/1438' });
+    // BIN-560 Phase 4: episodeProgress is TV-only → namespaced doc id tv_1438.
+    expect(mocks.deleteDocMock).toHaveBeenCalledWith({ _path: 'users/user-1/episodeProgress/tv_1438' });
   });
 });

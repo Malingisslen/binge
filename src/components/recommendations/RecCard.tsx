@@ -31,7 +31,7 @@ export default function RecCard({ item, providers }: Props) {
   const tone = item.genre_ids && item.genre_ids.length > 0
     ? toneForGenreIds(item.genre_ids)
     : toneForId(item.id);
-  const isTracked = isTrackable && !!getItem(item.id);
+  const isTracked = isTrackable && !!getItem(item.media_type as MediaType, item.id);
   const [imgError, setImgError] = useState(false);
 
   const sub = item.media_type === 'tv' ? 'serie' : 'film';

@@ -27,6 +27,7 @@ import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 
 interface Props {
   rowKeyParam: string;
@@ -71,9 +72,11 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
   }, [userHideNonLatin, userHiddenCountries]);
 
   const excludedIds = useMemo(() => {
-    const s = new Set<number>();
-    for (const i of items) s.add(i.tmdbId);
-    for (const n of ni) s.add(n.tmdbId);
+    // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) so a tracked movie can't
+    // exclude a same-numbered TV recommendation (or vice versa).
+    const s = new Set<string>();
+    for (const i of items) s.add(mediaTypeDocId(i.mediaType, i.tmdbId));
+    for (const n of ni) s.add(mediaTypeDocId(n.mediaType, n.tmdbId));
     return s;
   }, [items, ni]);
 
@@ -152,7 +155,7 @@ export default function RecommendationsExpanded({ rowKeyParam }: Props) {
 
 interface DispatchProps {
   spec: RowSpec;
-  excludedIds: ReadonlySet<number>;
+  excludedIds: ReadonlySet<string>;
   filters: FilterState;
   sort: SortKey;
   myProviders: number[];

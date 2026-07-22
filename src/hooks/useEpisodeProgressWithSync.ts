@@ -29,11 +29,11 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
     if (watched) {
       await Promise.all([
         markEpisode(season, episode, watched),
-        updateProgress(tmdbId, season, episode),
+        updateProgress('tv', tmdbId, season, episode),
       ]);
       // Auto-advance: if this was the last episode of the season, point to next season
       if (episodeCount !== undefined && episode >= episodeCount) {
-        await updateProgress(tmdbId, season + 1, 0);
+        await updateProgress('tv', tmdbId, season + 1, 0);
       }
     } else {
       await markEpisode(season, episode, watched);
@@ -45,9 +45,9 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
       // just avmarkerade). Nollställ till 0,0 om inga avsnitt är sedda kvar.
       const highest = highestWatchedPosition(progressRef.current, { season, episode });
       if (highest) {
-        await updateProgress(tmdbId, highest.season, highest.episode);
+        await updateProgress('tv', tmdbId, highest.season, highest.episode);
       } else {
-        await updateProgress(tmdbId, 0, 0);
+        await updateProgress('tv', tmdbId, 0, 0);
       }
     }
   }, [markEpisode, updateProgress, tmdbId]);
@@ -55,7 +55,7 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
     await Promise.all([
       markSeason(season, episodeCount),
-      updateProgress(tmdbId, season, episodeCount),
+      updateProgress('tv', tmdbId, season, episodeCount),
     ]);
   }, [markSeason, updateProgress, tmdbId]);
 
@@ -69,7 +69,7 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
     await markSeasonUnwatchedBase(season, episodeNumbers);
     const highest = highestWatchedPosition(progressRef.current, undefined, season);
-    await updateProgress(tmdbId, highest?.season ?? 0, highest?.episode ?? 0);
+    await updateProgress('tv', tmdbId, highest?.season ?? 0, highest?.episode ?? 0);
   }, [markSeasonUnwatchedBase, updateProgress, tmdbId]);
 
   return {

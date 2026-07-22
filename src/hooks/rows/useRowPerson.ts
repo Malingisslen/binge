@@ -14,7 +14,7 @@ const POOL_TARGET = 60;
 
 export function useRowPerson(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const personId = rowSpec.id.kind === 'person' ? rowSpec.id.personId : undefined;

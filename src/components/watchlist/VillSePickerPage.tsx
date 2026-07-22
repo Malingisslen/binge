@@ -40,7 +40,7 @@ export default function VillSePickerPage() {
   // från 'vill_se', vilket är feedbacken; toasten bekräftar i klartext.
   const markSeen = useCallback(
     async (item: WatchlistItem) => {
-      await updateStatus(item.tmdbId, 'sedd');
+      await updateStatus(item.mediaType, item.tmdbId, 'sedd');
       toast(`Markerad som sedd: ${item.title}`);
     },
     [updateStatus, toast]

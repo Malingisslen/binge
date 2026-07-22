@@ -1,7 +1,8 @@
 import { getNextAirInfo, streamingProviderName } from '@/lib/calendar/nextAir';
 import { pickSwedishDigitalRelease } from '@/lib/calendar/releaseDate';
 import { stampOlderThan } from '@/lib/watchlist/tmdbFieldsRefresh';
-import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import type { TMDBTVShow, TMDBMovie, WatchlistItem, MediaType } from '@/types';
 
 // Instant week (2026-07): tyst read-repair av denormaliserade next-air-fält på
 // watchlist-docs. Regler (bindande, från stakeholder-panelen):
@@ -49,6 +50,10 @@ export function nextAirDelta(
 }
 
 export interface NextAirUpdate {
+  // BIN-560 Phase 4: mediaType rides along so the flush addresses the namespaced
+  // watchlist doc `mediaTypeDocId(mediaType, tmdbId)` and the session-dedup key
+  // can't collide a movie with a same-numbered TV show.
+  mediaType: MediaType;
   tmdbId: number;
   delta: Partial<Record<RepairableKey, string | null>>;
 }
@@ -106,9 +111,9 @@ function updateForItem(
   now: number,
 ): NextAirUpdate | null {
   const delta = nextAirDelta(item, computed);
-  if (delta) return { tmdbId: item.tmdbId, delta };
+  if (delta) return { mediaType: item.mediaType, tmdbId: item.tmdbId, delta };
   if (hasNextAirData(item) && nextAirStampStale(item.nextAirUpdatedAt, now)) {
-    return { tmdbId: item.tmdbId, delta: {} };
+    return { mediaType: item.mediaType, tmdbId: item.tmdbId, delta: {} };
   }
   return null;
 }
@@ -119,16 +124,18 @@ export function collectNextAirUpdates(
   movies: TMDBMovie[],
   now: number,
 ): NextAirUpdate[] {
-  const byId = new Map(items.map(i => [i.tmdbId, i]));
+  // BIN-560 Phase 4: composite-keyed so a movie and a same-numbered TV show don't
+  // clobber each other in this lookup (last-writer-wins would drop one's repair).
+  const byId = new Map(items.map(i => [mediaTypeDocId(i.mediaType, i.tmdbId), i]));
   const updates: NextAirUpdate[] = [];
   for (const show of shows) {
-    const item = byId.get(show.id);
+    const item = byId.get(mediaTypeDocId('tv', show.id));
     if (!item || item.mediaType !== 'tv') continue;
     const u = updateForItem(item, computeNextAirFields(show), now);
     if (u) updates.push(u);
   }
   for (const movie of movies) {
-    const item = byId.get(movie.id);
+    const item = byId.get(mediaTypeDocId('movie', movie.id));
     if (!item || item.mediaType !== 'movie') continue;
     const u = updateForItem(item, computeMovieReleaseFields(movie), now);
     if (u) updates.push(u);
@@ -146,7 +153,7 @@ export function collectNextAirUpdates(
 const writtenThisSession = new Set<string>();
 
 export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]): Promise<void> {
-  const keyOf = (u: NextAirUpdate) => `${uid}:${u.tmdbId}`;
+  const keyOf = (u: NextAirUpdate) => `${uid}:${mediaTypeDocId(u.mediaType, u.tmdbId)}`;
   const pending = updates.filter(u => !writtenThisSession.has(keyOf(u)));
   if (pending.length === 0) return;
   pending.forEach(u => writtenThisSession.add(keyOf(u)));
@@ -162,7 +169,7 @@ export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]):
       const batch = writeBatch(db);
       for (const u of chunk) {
         batch.set(
-          doc(db, 'users', uid, 'watchlist', String(u.tmdbId)),
+          doc(db, 'users', uid, 'watchlist', mediaTypeDocId(u.mediaType, u.tmdbId)),
           // OBS: ALDRIG updatedAt här — payload-byggaren är testlåst på det.
           buildRepairPayload(u.delta, serverTimestamp()),
           { merge: true },

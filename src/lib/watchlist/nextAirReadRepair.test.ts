@@ -21,7 +21,9 @@ vi.mock('@/lib/firebase/db', () => ({
     writeBatch: () => {
       const ids: number[] = [];
       return {
-        set: (ref: { id: string }) => { ids.push(Number(ref.id)); },
+        // BIN-560 Phase 4: doc ids are now namespaced (tv_451) — recover the numeric
+        // tmdbId so the chunk assertions still read the tmdbIds attempted per batch.
+        set: (ref: { id: string }) => { ids.push(Number(ref.id.split('_').pop())); },
         commit: async () => {
           attemptedChunks.push([...ids]);
           const outcome = commitOutcomes[commitIndex++] ?? 'ok';
@@ -197,7 +199,7 @@ describe('flushNextAirWrites — a rejected chunk rolls back its dedupe marks (B
   });
 
   const mkUpdate = (tmdbId: number): NextAirUpdate => ({
-    tmdbId, delta: { nextAirDate: '2026-08-01' },
+    mediaType: 'tv', tmdbId, delta: { nextAirDate: '2026-08-01' },
   });
 
   it("a failed chunk's items retry on the next flush; a committed chunk's items don't", async () => {

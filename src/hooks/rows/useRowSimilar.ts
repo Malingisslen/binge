@@ -12,7 +12,7 @@ const POOL_TARGET = 100;
 
 export function useRowSimilar(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const seedTmdbId = rowSpec.id.kind === 'similar' ? rowSpec.id.tmdbId : null;

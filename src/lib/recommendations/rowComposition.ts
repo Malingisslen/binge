@@ -1,15 +1,21 @@
 import { hasNonLatinTitle, isFromHiddenCountry } from '@/lib/utils/titleFilter';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowTitle, FilterState } from '@/types';
 
-/** Drop duplicates and any title whose id is in `excludedIds`. */
+/**
+ * Drop duplicates and any title in `excludedIds`. BIN-560 Phase 4: excludedIds is
+ * keyed by the composite `mediaTypeDocId(media_type, id)`, not bare id — otherwise a
+ * movie the user has seen would wrongly exclude a same-numbered TV show (the dedup
+ * key one line below was already media-type-aware; the exclusion check now matches).
+ */
 export function dedupeAndExclude(
   items: readonly RowTitle[],
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
 ): RowTitle[] {
   const seen = new Set<string>();
   const result: RowTitle[] = [];
   for (const t of items) {
-    if (excludedIds.has(t.id)) continue;
+    if (excludedIds.has(mediaTypeDocId(t.media_type, t.id))) continue;
     const key = `${t.media_type}-${t.id}`;
     if (seen.has(key)) continue;
     seen.add(key);

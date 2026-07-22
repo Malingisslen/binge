@@ -80,7 +80,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const movieRuntime = movie?.runtime ?? null;
   useEffect(() => {
     if (!mounted || !movie || movieRuntime == null) return;
-    void setRuntime(movie.id, movieRuntime);
+    void setRuntime('movie', movie.id, movieRuntime);
   }, [mounted, movie, movieRuntime, setRuntime]);
 
   // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
@@ -100,7 +100,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             .map(p => canonicalProviderId(p.provider_id)),
         ))
       : undefined;
-    void refreshTmdbFields(movie.id, {
+    void refreshTmdbFields('movie', movie.id, {
       // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(movie.title, movie.original_title) || undefined,
@@ -146,7 +146,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
   const onCineasterna = cineasterna.has(movie.id);
   const cineRental = cineasterna.rentalFor(movie.id);
-  const watchlistItem = mounted ? getItem(movie.id) : undefined;
+  const watchlistItem = mounted ? getItem('movie', movie.id) : undefined;
   const poster = posterUrl(movie.poster_path, 'w500');
   const tone = toneForGenreIds(movie.genres.map(g => g.id));
   const providers = movie['watch/providers']?.results?.SE;
@@ -303,7 +303,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           <RatingsRow ratings={ratings} imdbId={movie.imdb_id ?? ''} tmdb={movie.vote_average} />
 
           <ClientOnly>
-            <FriendsWhoSaw tmdbId={movie.id} />
+            <FriendsWhoSaw mediaType="movie" tmdbId={movie.id} />
           </ClientOnly>
 
           <ClientOnly>
@@ -325,7 +325,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 )}
                 <RatingStars
                   rating={watchlistItem?.rating ?? null}
-                  onChange={r => watchlistItem && updateRating(movie.id, r)}
+                  onChange={r => watchlistItem && updateRating('movie', movie.id, r)}
                   readonly={!watchlistItem}
                   size="lg"
                 />
@@ -343,7 +343,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             {watchlistItem?.status === 'sedd' && (
               <WatchedDateEditor
                 watchedAt={watchlistItem.watchedAt ?? null}
-                onChange={d => updateWatchedAt(movie.id, d)}
+                onChange={d => updateWatchedAt('movie', movie.id, d)}
               />
             )}
           </ClientOnly>
@@ -498,10 +498,10 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
             <div className="head">
               <h2>Din anteckning</h2>
             </div>
-            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(movie.id, notes)} />
+            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes('movie', movie.id, notes)} />
             <TagEditor
               tags={watchlistItem.tags ?? []}
-              onChange={t => updateTags(movie.id, t)}
+              onChange={t => updateTags('movie', movie.id, t)}
               suggestions={tagsInLibrary(items)}
             />
           </section>

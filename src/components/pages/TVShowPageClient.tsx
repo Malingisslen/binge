@@ -90,7 +90,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const showRuntime = show?.episode_run_time?.[0] ?? null;
   useEffect(() => {
     if (!mounted || !show || showRuntime == null) return;
-    void setRuntime(show.id, showRuntime);
+    void setRuntime('tv', show.id, showRuntime);
   }, [mounted, show, showRuntime, setRuntime]);
 
   // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
@@ -109,7 +109,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             .map(p => canonicalProviderId(p.provider_id)),
         ))
       : undefined;
-    void refreshTmdbFields(show.id, {
+    void refreshTmdbFields('tv', show.id, {
       // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(show.name, show.original_name) || undefined,
@@ -154,7 +154,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     indexable: !!show,
   });
 
-  const watchlistItem = mounted && show ? getItem(show.id) : null;
+  const watchlistItem = mounted && show ? getItem('tv', show.id) : null;
   const itemExists = !!watchlistItem;
   const cachedTmdbStatus = watchlistItem?.tmdbStatus ?? null;
   const showStatus = show?.status ?? null;
@@ -162,7 +162,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   useEffect(() => {
     if (!itemExists || showIdForEffect == null || showStatus == null) return;
     if (cachedTmdbStatus !== showStatus) {
-      updateTmdbStatus(showIdForEffect, showStatus);
+      updateTmdbStatus('tv', showIdForEffect, showStatus);
     }
   }, [itemExists, showIdForEffect, showStatus, cachedTmdbStatus, updateTmdbStatus]);
 
@@ -284,7 +284,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           <RatingsRow ratings={ratings} imdbId={imdbId ?? ''} tmdb={show.vote_average} />
 
           <ClientOnly>
-            <FriendsWhoSaw tmdbId={show.id} />
+            <FriendsWhoSaw mediaType="tv" tmdbId={show.id} />
           </ClientOnly>
 
           <ClientOnly>
@@ -298,7 +298,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
                 )}
                 <RatingStars
                   rating={watchlistItem?.rating ?? null}
-                  onChange={r => watchlistItem && updateRating(show.id, r)}
+                  onChange={r => watchlistItem && updateRating('tv', show.id, r)}
                   readonly={!watchlistItem}
                   size="lg"
                 />
@@ -512,10 +512,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             <div className="head">
               <h2>Din anteckning</h2>
             </div>
-            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes(show.id, notes)} />
+            <NotesBlock notes={watchlistItem.notes} onChange={notes => updateNotes('tv', show.id, notes)} />
             <TagEditor
               tags={watchlistItem.tags ?? []}
-              onChange={t => updateTags(show.id, t)}
+              onChange={t => updateTags('tv', show.id, t)}
               suggestions={tagsInLibrary(items)}
             />
           </section>

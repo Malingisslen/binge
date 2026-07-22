@@ -78,7 +78,7 @@ export default function CollectionSection({
     if (!mounted) return new Set<number>();
     const s = new Set<number>();
     for (const p of parts) {
-      if (getItem(p.id)?.status === 'sedd') s.add(p.id);
+      if (getItem('movie', p.id)?.status === 'sedd') s.add(p.id);
     }
     return s;
   }, [mounted, parts, getItem]);
@@ -91,7 +91,7 @@ export default function CollectionSection({
   // Gate på getItem (inte bara status): en film som redan ligger som vill_se/
   // avbruten ska inte röras (addItem är en set-doc och skulle nollställa addedAt).
   const unseenNotInLibrary = useMemo(
-    () => (mounted ? unseen.filter(p => !getItem(p.id)) : []),
+    () => (mounted ? unseen.filter(p => !getItem('movie', p.id)) : []),
     [mounted, unseen, getItem],
   );
 

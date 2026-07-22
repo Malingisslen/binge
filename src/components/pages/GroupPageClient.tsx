@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGroup } from '@/hooks/useGroups';
 import { joinGroupViaToken, deleteGroup } from '@/lib/firebase/groups';
 import { createSession, setSessionCandidates } from '@/lib/firebase/sessions';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import {
   computeSessionProviders,
   generateCandidates,
@@ -238,7 +239,7 @@ function GroupView({
       // watchlists är inte läsbara klient-sidigt (Firestore-rules) — gruppens
       // watchlist är proxyn för "det vi redan känner till tillsammans".
       const excludeTmdbIds = libraryExclusionIds(myLibrary);
-      for (const item of watchlist) excludeTmdbIds.add(item.tmdbId);
+      for (const item of watchlist) excludeTmdbIds.add(mediaTypeDocId(item.mediaType, item.tmdbId));
       const candidates = await generateCandidates({ config, providers: seedProviders, excludeTmdbIds });
       await setSessionCandidates(sessionId, candidates);
       router.push(`/tillsammans/${sessionId}`);

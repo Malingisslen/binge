@@ -30,7 +30,7 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
   const year = getReleaseYear(item);
   const poster = posterUrl(item.poster_path, 'w342');
   const myProviders = user?.myProviders ?? [];
-  const isTracked = isTrackable && !!getItem(item.id);
+  const isTracked = isTrackable && !!getItem(item.media_type as MediaType, item.id);
   const Icon = item.media_type === 'tv' ? Tv : Film;
   const [imgError, setImgError] = useState(false);
 

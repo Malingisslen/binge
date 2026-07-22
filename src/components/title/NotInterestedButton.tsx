@@ -15,16 +15,16 @@ interface NotInterestedButtonProps {
 export default function NotInterestedButton({ tmdbId, mediaType, title, variant = 'full' }: NotInterestedButtonProps) {
   const { has, add, remove } = useNotInterested();
   const { show: toast } = useToast();
-  const marked = has(tmdbId);
+  const marked = has(mediaType, tmdbId);
 
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (marked) {
-      remove(tmdbId);
+      remove(mediaType, tmdbId);
       toast(`${title} — visas i rekommendationer igen`);
     } else {
-      add(tmdbId, mediaType);
+      add(mediaType, tmdbId);
       toast(`${title} — visas inte igen`);
     }
   }

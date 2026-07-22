@@ -17,6 +17,7 @@ import {
 } from '@/lib/recommendations/seedAnalysis';
 import { prioritizeRows } from '@/lib/recommendations/cascadePrioritizer';
 import { localIsoDate } from '@/lib/utils';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowSpec } from '@/types';
 
 const FIVE_STAR_WINDOW_DAYS = 30;
@@ -99,24 +100,27 @@ export function useRecommendationsCascade(): CascadeOutput {
   return useMemo(() => {
     const isLoadingDetection = detailLoadingKey === 1 || keywordLoadingKey === 1;
 
-    // Build SeedCredits map from the standalone /credits responses ({cast, crew})
-    const credits = new Map<number, SeedCredits>();
+    // Build SeedCredits map from the standalone /credits responses ({cast, crew}).
+    // BIN-560 Phase 4: keyed by composite mediaTypeDocId — seeds mix movie ('sedd')
+    // and TV ('mina'), so a shared tmdbId must not attribute one title's cast to the
+    // other.
+    const credits = new Map<string, SeedCredits>();
     strongForFetch.forEach((s, i) => {
       const data = creditsQueries[i]?.data;
       if (!data) return;
       const crew = data.crew ?? [];
       const directorEntry = crew.find(c => c.job === 'Director');
-      credits.set(s.tmdbId, {
+      credits.set(mediaTypeDocId(s.mediaType, s.tmdbId), {
         cast: (data.cast ?? []).map(c => ({ id: c.id, name: c.name })),
         director: directorEntry ? { id: directorEntry.id, name: directorEntry.name } : null,
       });
     });
 
-    // Build keyword map
-    const keywordsByTmdb = new Map<number, { id: number; name: string }[]>();
+    // Build keyword map (composite-keyed, same reason as credits above).
+    const keywordsByTmdb = new Map<string, { id: number; name: string }[]>();
     seedsForFetch.forEach((s, i) => {
       const data = keywordQueries[i]?.data;
-      if (data) keywordsByTmdb.set(s.tmdbId, data);
+      if (data) keywordsByTmdb.set(mediaTypeDocId(s.mediaType, s.tmdbId), data);
     });
 
     const recurringPeople = detectRecurringPeople(strongForFetch, credits, 3);

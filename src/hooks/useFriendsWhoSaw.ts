@@ -6,6 +6,8 @@ import { getPublicProfileCard } from '@/lib/firebase/publicProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFollowing } from '@/hooks/useFollow';
 import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import type { MediaType } from '@/types';
 
 /**
  * BIN-97 — "vänner som sett detta" social proof.
@@ -35,7 +37,7 @@ export interface FriendWhoSaw {
   photoURL: string | null;
 }
 
-export function useFriendsWhoSaw(tmdbId: number | null) {
+export function useFriendsWhoSaw(mediaType: MediaType, tmdbId: number | null) {
   const { uid } = useAuth();
   const { followingUids } = useFollowing();
   const { blockedUids } = useBlockedUsers();
@@ -46,7 +48,7 @@ export function useFriendsWhoSaw(tmdbId: number | null) {
   return useQuery({
     // capped.join(',') (inte array-referensen) → stabil nyckel, ingen refetch-
     // storm vid re-render eller snabb follow/unfollow-cykel.
-    queryKey: ['friends-saw', tmdbId, capped.join(',')],
+    queryKey: ['friends-saw', mediaType, tmdbId, capped.join(',')],
     enabled: !!uid && tmdbId != null && capped.length > 0,
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<FriendWhoSaw[]> => {
@@ -54,7 +56,7 @@ export function useFriendsWhoSaw(tmdbId: number | null) {
       const { db, doc, getDoc } = await fsdb();
       const settled = await Promise.allSettled(
         capped.map(async (followedUid): Promise<FriendWhoSaw | null> => {
-          const snap = await getDoc(doc(db, 'users', followedUid, 'watchlist', String(tmdbId)));
+          const snap = await getDoc(doc(db, 'users', followedUid, 'watchlist', mediaTypeDocId(mediaType, tmdbId)));
           if (!snap.exists()) return null;
           const data = snap.data() as { status?: string; rating?: number | null };
           // Profil-läsning först här — bara för de som faktiskt har titeln.

@@ -1,6 +1,7 @@
 import type { CalendarEntry, EpisodeEntry } from './types';
 import { entryKey } from './entry';
 import { getDisplayTitle } from '@/lib/tmdb/client';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { TMDBSearchResult, TMDBTVShow, WatchlistItem } from '@/types';
 
 // "Premiärer & finaler" — kvartalshorisonten (13 veckor) av landmärken:
@@ -205,7 +206,10 @@ export interface DiscoveryPremiere {
  */
 export function selectDiscoveryPremieres(
   results: readonly TMDBSearchResult[],
-  excludedIds: ReadonlySet<number>,
+  // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — these are TV discovery
+  // results, so we probe the set with the 'tv_' key; a same-numbered movie in the
+  // exclude set can't shadow a TV premiere.
+  excludedIds: ReadonlySet<string>,
   window: PremiereWindow,
   cap = 12,
 ): DiscoveryPremiere[] {
@@ -215,7 +219,7 @@ export function selectDiscoveryPremieres(
     if (out.length >= cap) break;
     const firstAir = r.first_air_date;
     if (!firstAir || !inWindow(firstAir, window)) continue;
-    if (excludedIds.has(r.id)) continue;
+    if (excludedIds.has(mediaTypeDocId('tv', r.id))) continue;
     if (!r.poster_path) continue;
     if (seen.has(r.id)) continue;
     seen.add(r.id);
@@ -242,7 +246,7 @@ export function selectDiscoveryPremieres(
  */
 export function selectSeasonPremiereDiscoveries(
   shows: readonly TMDBTVShow[],
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>, // composite-keyed; probed with 'tv_' (BIN-560 Phase 4)
   window: PremiereWindow,
   cap = 12,
 ): DiscoveryPremiere[] {
@@ -254,7 +258,7 @@ export function selectSeasonPremiereDiscoveries(
     if (!next) continue;
     if (next.season_number < 2 || next.episode_number !== 1) continue;
     if (!next.air_date || !inWindow(next.air_date, window)) continue;
-    if (excludedIds.has(show.id)) continue;
+    if (excludedIds.has(mediaTypeDocId('tv', show.id))) continue;
     if (!show.poster_path) continue;
     if (seen.has(show.id)) continue;
     seen.add(show.id);

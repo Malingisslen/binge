@@ -35,7 +35,7 @@ function tvParams(keywordId: number | undefined, tvDateParams: Record<string, st
 
 export function useRowThematic(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const keywordId = rowSpec.id.kind === 'thematic' ? rowSpec.id.keywordId : undefined;

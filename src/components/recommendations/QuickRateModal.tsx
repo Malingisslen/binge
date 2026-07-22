@@ -57,10 +57,11 @@ export default function QuickRateModal({ open, onClose }: Props) {
   const titles = (data?.results ?? []).slice(0, 50);
 
   const markRated = async (t: TMDBSearchResult, rating: number | null) => {
-    const existing = getItem(t.id);
+    // Movie-only modal (discoverMovies + buildItemFromTmdb hardcodes 'movie').
+    const existing = getItem('movie', t.id);
     if (existing) {
-      if (rating !== null) await updateRating(t.id, rating);
-      await updateStatus(t.id, 'sedd');
+      if (rating !== null) await updateRating('movie', t.id, rating);
+      await updateStatus('movie', t.id, 'sedd');
     } else {
       await addItem(buildItemFromTmdb(t, 'sedd', rating));
     }

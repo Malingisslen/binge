@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeSessionProviders, libraryExclusionIds, rankCandidates } from './candidates';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { SessionCandidate } from '@/types';
 
 function candidate(partial: Partial<SessionCandidate> & { tmdbId: number }): SessionCandidate {
@@ -20,20 +21,21 @@ function candidate(partial: Partial<SessionCandidate> & { tmdbId: number }): Ses
 describe('libraryExclusionIds', () => {
   it('exkluderar sedd/avbruten/påbörjad mina men behåller vill_se + ej påbörjad mina', () => {
     const ids = libraryExclusionIds([
-      { tmdbId: 1, status: 'mina', lastWatchedSeason: 2 },
-      { tmdbId: 2, status: 'sedd', lastWatchedSeason: null },
-      { tmdbId: 3, status: 'avbruten', lastWatchedSeason: null },
-      { tmdbId: 4, status: 'vill_se', lastWatchedSeason: null },
-      { tmdbId: 5, status: 'mina', lastWatchedSeason: null },
-      { tmdbId: 6, status: 'mina', lastWatchedSeason: 0 },
+      { mediaType: 'tv', tmdbId: 1, status: 'mina', lastWatchedSeason: 2 },
+      { mediaType: 'movie', tmdbId: 2, status: 'sedd', lastWatchedSeason: null },
+      { mediaType: 'tv', tmdbId: 3, status: 'avbruten', lastWatchedSeason: null },
+      { mediaType: 'movie', tmdbId: 4, status: 'vill_se', lastWatchedSeason: null },
+      { mediaType: 'tv', tmdbId: 5, status: 'mina', lastWatchedSeason: null },
+      { mediaType: 'tv', tmdbId: 6, status: 'mina', lastWatchedSeason: 0 },
     ]);
-    expect(ids.has(1)).toBe(true);
-    expect(ids.has(2)).toBe(true);
-    expect(ids.has(3)).toBe(true);
+    // BIN-560 Phase 4: the set holds composite `${mediaType}_${tmdbId}` keys.
+    expect(ids.has(mediaTypeDocId('tv', 1))).toBe(true);
+    expect(ids.has(mediaTypeDocId('movie', 2))).toBe(true);
+    expect(ids.has(mediaTypeDocId('tv', 3))).toBe(true);
     // vill_se är prima sessions-kandidater — den som vill se titeln röstar ja.
-    expect(ids.has(4)).toBe(false);
-    expect(ids.has(5)).toBe(false); // ej påbörjad — prima sessionskandidat
-    expect(ids.has(6)).toBe(true);  // säsong 0 (Specials) är progress
+    expect(ids.has(mediaTypeDocId('movie', 4))).toBe(false);
+    expect(ids.has(mediaTypeDocId('tv', 5))).toBe(false); // ej påbörjad — prima sessionskandidat
+    expect(ids.has(mediaTypeDocId('tv', 6))).toBe(true);  // säsong 0 (Specials) är progress
   });
 
   it('tom lista → tom mängd', () => {
@@ -44,7 +46,8 @@ describe('libraryExclusionIds', () => {
 describe('rankCandidates', () => {
   it('filtrerar bort exkluderade tmdbIds', () => {
     const pool = [candidate({ tmdbId: 1 }), candidate({ tmdbId: 2 }), candidate({ tmdbId: 3 })];
-    const result = rankCandidates(pool, new Set([2]));
+    // Candidates default to 'movie'; exclude by composite key.
+    const result = rankCandidates(pool, new Set([mediaTypeDocId('movie', 2)]));
     expect(result.map(c => c.tmdbId)).toEqual([1, 3]);
   });
 
@@ -55,6 +58,15 @@ describe('rankCandidates', () => {
       candidate({ tmdbId: 1, mediaType: 'tv' }),
     ];
     expect(rankCandidates(pool)).toHaveLength(2);
+  });
+
+  // BIN-560 Phase 4: excluding a seen MOVIE (id 5) must NOT drop a same-numbered TV
+  // candidate from the swipe deck (bare-id exclusion would collide the two).
+  it('exkluderar bara den medietyp som faktiskt är i biblioteket (film ≠ serie med samma id)', () => {
+    const pool = [candidate({ tmdbId: 5, mediaType: 'movie' }), candidate({ tmdbId: 5, mediaType: 'tv' })];
+    const result = rankCandidates(pool, new Set([mediaTypeDocId('movie', 5)]));
+    expect(result).toHaveLength(1);
+    expect(result[0].mediaType).toBe('tv');
   });
 
   it('sorterar fallande på voteAverage och cappar till 30', () => {

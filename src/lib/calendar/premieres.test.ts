@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { CalendarEntry, EpisodeEntry, MovieEntry } from './types';
 import type { TMDBEpisode, TMDBSearchResult, TMDBTVShow, WatchlistItem } from '@/types';
 import {
@@ -307,7 +308,7 @@ describe('selectDiscoveryPremieres', () => {
       searchResult({ id: 4, first_air_date: '2026-08-01', poster_path: null }), // no poster
       searchResult({ id: 5, first_air_date: undefined }),              // no date
     ];
-    const out = selectDiscoveryPremieres(results, new Set([2]), WINDOW);
+    const out = selectDiscoveryPremieres(results, new Set([mediaTypeDocId('tv', 2)]), WINDOW);
     expect(out.map(d => d.tmdbId)).toEqual([1]);
   });
 
@@ -382,7 +383,7 @@ describe('selectSeasonPremiereDiscoveries', () => {
       tvShow({ id: 2, next_episode_to_air: tvEpisode({ season_number: 2, episode_number: 1, air_date: '2026-06-01' }) }), // before window
       tvShow({ id: 3, next_episode_to_air: inWindowPremiere }), // excluded below
       tvShow({ id: 4, poster_path: null, next_episode_to_air: inWindowPremiere }),
-    ], new Set([3]), WINDOW);
+    ], new Set([mediaTypeDocId('tv', 3)]), WINDOW);
     expect(out).toHaveLength(0);
   });
 

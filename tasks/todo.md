@@ -122,3 +122,76 @@ whole version (e.g. 2.0) with a changelog entry.
 Each phase is its own commit through the normal gates. Both Malin decisions RESOLVED
 2026-07-21; no open conflict. NOT YET APPROVED TO BUILD — awaiting Malin's go on starting
 Phase 0/1 (or parking the plan as ready).
+
+---
+
+# Phase 4 EXECUTION CHECKLIST (2026-07-22 — Malin approved "build it all now")
+
+Phases 0-3 SHIPPED (9c9d6d1 / 38c1680 / 0aae24e — rules LIVE). Phase 4 = the cutover, ONE
+reviewed commit (storage + in-memory together, Architect criterion 6). Blast radius confirmed
+via 3 read-only scouts to be ~30 files / 100+ compiler-checked edits — full mutator API, not
+just getItem. TypeScript is the completeness oracle. Nothing ships until typecheck+test green +
+3 commit reviewers + xhigh /code-review. Destructive dev-data RESET is a SEPARATE confirm-gated
+step right before deploy (criterion 10 — re-confirm no real users, ask Malin).
+
+## A. WatchlistContext.tsx (keystone — API + internal maps)
+- [ ] Interface + impl: add `mediaType` param to getItem, updateVisibility, updateStatus,
+      updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime,
+      refreshTmdbFields, updateTags, removeItem. Convention: `(mediaType, tmdbId, ...rest)`.
+- [ ] Every write ref `String(tmdbId)` → `mediaTypeDocId(mediaType, tmdbId)`.
+- [ ] Every `items.find(i => i.tmdbId === tmdbId)` → `&& i.mediaType === mediaType`.
+- [ ] addItem: 0-hop (item.mediaType).
+- [ ] tagsByTmdbId / notesByTmdbId: `Record<string,...>` keyed by `mediaTypeDocId(mt,id)` (build
+      from d.id directly — the doc-id IS the composite key); join + eager-migration filter (line
+      ~271) look up via `mediaTypeDocId(i.mediaType, i.tmdbId)`.
+- [ ] migratedNotesRef: `Set<string>` composite.
+- [ ] eager notes-migration effect: namespaced writes (it.mediaType, 0-hop) + composite dedup.
+
+## B. getItem call sites (14 — all have mediaType)
+- [ ] WeekStrip.tsx (plumb mediaType through aggregateByDay's ratingFor), RecCard, QuickRateModal
+      ('movie'), TVShowPageClient ('tv'), PersonPageClient ×2 ('movie'), MoviePageClient ('movie'),
+      TitleCard, StatusButton (prop), useMarkSeen, CollectionSection ×2 ('movie'), QuickAddButton
+      (prop), settings/import/page.
+
+## C. Mutator call sites (compiler-forced fan-out) — StatusButton, useMarkSeen, QuickAddButton,
+      title pages, WatchlistPage bulk actions (updateStatus/removeItem over selected), etc.
+
+## D. NotInterestedContext — has/remove signature (+ mediaType), NotInterestedButton call site,
+      add 0-hop, remove write → mediaTypeDocId.
+
+## E. In-memory bypass maps
+- [ ] diary showById: FOLD FIX — filter items to mediaType==='tv' before building (episodeProgress
+      is TV-only; WatchedEpisode has no mediaType). src/lib/diary.ts buildDiary.
+- [ ] WeekStrip aggregateByDay: inner Map<string>, DaySeries key, ratingFor(mt,id) signature.
+- [ ] nextAirByTmdbId: WatchlistPage build + FollowingCardSections prop type → Map<string>.
+- [ ] excludedIds ×4 (useDiscoveryPremieres, RecommendationsExpanded, RecommendationsHub,
+      ask/page) → Set<string>; rowComposition.dedupeAndExclude exclusion check → composite
+      (dedup key already is); ~8 row-hook param types Set<number>→Set<string>.
+- [ ] libraryExclusionIds (together/candidates.ts) → Set<string> + rankCandidates check + 2 callers.
+- [ ] useRecommendationsCascade credits/keywordsByTmdb Map<string> + seedAnalysis consumers.
+- [ ] WatchlistPage selected/confirmDelete → composite-keyed local state.
+
+## F. episodeProgress (TV-only, hardcode 'tv')
+- [ ] useEpisodeProgress.ts (subscribe + markEpisodeWatched/markSeasonWatched/markSeasonUnwatched),
+      clearEpisodeProgress (episodeProgress.ts).
+
+## G. nextAirReadRepair — NextAirUpdate gains mediaType; flush write → mediaTypeDocId;
+      writtenThisSession key composite.
+
+## H. Server
+- [ ] communityRatings/index.ts:43 — read `Number(after?.tmdbId ?? before?.tmdbId)` from BODY +
+      `Number.isFinite` guard + skip-log (plan-specified). SOLE trigger site (confirmed).
+- [ ] insights/rollup.helpers.ts topTitles — Map<string> composite key.
+
+## I. Export / docs / ADR
+- [ ] SCHEMA_VERSION 1.3→2.0 + dated changelog (id-semantics change) in dataExport.ts.
+- [ ] In-export README_TEXT disclosure: id now encodes `${mediaType}_${tmdbId}`.
+- [ ] docs/data-export-format.md same change; data-retention-policy.md one-line dated note.
+- [ ] ADR (docs/org/adr/) recording Fork A reset + Fork B add-field + no-backfill.
+- [ ] Confirm-in-PR: userData.ts KNOWN_USER_SUBCOLLECTIONS unchanged (all 5 already listed — checked).
+
+## J. Gates + cutover
+- [ ] typecheck + npm test green; grep completeness re-sweep (bare .tmdbId as key).
+- [ ] 3 commit reviewers + xhigh /code-review (criterion 9: hunt second-writer/orphaning).
+- [ ] RESET dev data (criterion 10 — re-confirm no real users, ASK MALIN) → then deploy.
+- [ ] Deploy: functions (communityRatings) manual + rules already live + hosting via dispatch.

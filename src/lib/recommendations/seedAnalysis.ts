@@ -6,6 +6,7 @@ import type {
   DominantGenre,
   MediaType,
 } from '@/types';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 
 /** Minimal credit shape consumed by detection. Caller assembles from TMDB. */
 export interface SeedCredits {
@@ -76,24 +77,27 @@ export function detectLatestFiveStar(
 
 export function detectRecurringPeople(
   strongSeeds: readonly Seed[],
-  creditsByTmdb: ReadonlyMap<number, SeedCredits>,
+  // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — seeds mix movie + TV, so a
+  // shared tmdbId must not fold one title's credits into the other's.
+  creditsByTmdb: ReadonlyMap<string, SeedCredits>,
   threshold: number,
 ): RecurringPerson[] {
-  type Bucket = { id: number; name: string; titles: Set<number>; everDirector: boolean };
+  type Bucket = { id: number; name: string; titles: Set<string>; everDirector: boolean };
   const buckets = new Map<number, Bucket>();
 
   for (const seed of strongSeeds) {
-    const credits = creditsByTmdb.get(seed.tmdbId);
+    const seedKey = mediaTypeDocId(seed.mediaType, seed.tmdbId);
+    const credits = creditsByTmdb.get(seedKey);
     if (!credits) continue;
     for (const c of credits.cast.slice(0, 5)) {
-      const b = buckets.get(c.id) ?? { id: c.id, name: c.name, titles: new Set<number>(), everDirector: false };
-      b.titles.add(seed.tmdbId);
+      const b = buckets.get(c.id) ?? { id: c.id, name: c.name, titles: new Set<string>(), everDirector: false };
+      b.titles.add(seedKey);
       buckets.set(c.id, b);
     }
     if (credits.director) {
       const d = credits.director;
-      const b = buckets.get(d.id) ?? { id: d.id, name: d.name, titles: new Set<number>(), everDirector: false };
-      b.titles.add(seed.tmdbId);
+      const b = buckets.get(d.id) ?? { id: d.id, name: d.name, titles: new Set<string>(), everDirector: false };
+      b.titles.add(seedKey);
       b.everDirector = true;
       buckets.set(d.id, b);
     }
@@ -117,16 +121,18 @@ export function detectRecurringPeople(
 
 export function detectRecurringKeywords(
   seeds: readonly Seed[],
-  keywordsByTmdb: ReadonlyMap<number, { id: number; name: string }[]>,
+  // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — see detectRecurringPeople.
+  keywordsByTmdb: ReadonlyMap<string, { id: number; name: string }[]>,
   threshold: number,
 ): RecurringKeyword[] {
-  const buckets = new Map<number, { id: number; name: string; titles: Set<number> }>();
+  const buckets = new Map<number, { id: number; name: string; titles: Set<string> }>();
   for (const seed of seeds) {
-    const ks = keywordsByTmdb.get(seed.tmdbId);
+    const seedKey = mediaTypeDocId(seed.mediaType, seed.tmdbId);
+    const ks = keywordsByTmdb.get(seedKey);
     if (!ks) continue;
     for (const k of ks) {
-      const b = buckets.get(k.id) ?? { id: k.id, name: k.name, titles: new Set<number>() };
-      b.titles.add(seed.tmdbId);
+      const b = buckets.get(k.id) ?? { id: k.id, name: k.name, titles: new Set<string>() };
+      b.titles.add(seedKey);
       buckets.set(k.id, b);
     }
   }

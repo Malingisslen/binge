@@ -60,7 +60,11 @@ function filmEntries(items: WatchlistItem[]): DiaryEntry[] {
 }
 
 function episodeDiaryEntries(items: WatchlistItem[], episodes: WatchedEpisode[]): DiaryEntry[] {
-  const showById = new Map(items.map(i => [i.tmdbId, i]));
+  // BIN-560 Phase 4 (fold-fix): WatchedEpisode carries no mediaType, but episodes
+  // can only ever belong to a TV show — so filter to TV BEFORE keying by tmdbId.
+  // Without this, a movie sharing an episode's tmdbId could shadow the real show
+  // (the map has no discriminant, so it's a source-filter fix, not a key-shape one).
+  const showById = new Map(items.filter(i => i.mediaType === 'tv').map(i => [i.tmdbId, i]));
   const out: DiaryEntry[] = [];
   for (const ep of episodes) {
     const show = showById.get(ep.tmdbId);

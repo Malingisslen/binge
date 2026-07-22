@@ -7,7 +7,12 @@ import {
   detectRecurringKeywords,
   detectDominantGenres,
 } from './seedAnalysis';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { WatchlistItem, Seed } from '@/types';
+
+// BIN-560 Phase 4: detection maps are composite-keyed; mkSeed defaults to 'movie',
+// so a fixture key for tmdbId N is mediaTypeDocId('movie', N).
+const mk = (tmdbId: number) => mediaTypeDocId('movie', tmdbId);
 
 function mkItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   return {
@@ -168,10 +173,10 @@ describe('detectRecurringPeople', () => {
   it('returns persons appearing in ≥3 strong seeds', () => {
     const seeds = [mkSeed({ tmdbId: 1 }), mkSeed({ tmdbId: 2, rating: 4 }), mkSeed({ tmdbId: 3 }), mkSeed({ tmdbId: 4 })];
     const credits = new Map([
-      [1, { cast: [{ id: 100, name: 'Bong' }, { id: 200, name: 'Other' }], director: { id: 100, name: 'Bong' } }],
-      [2, { cast: [{ id: 100, name: 'Bong' }], director: null }],
-      [3, { cast: [{ id: 100, name: 'Bong' }], director: { id: 300, name: 'Director3' } }],
-      [4, { cast: [{ id: 200, name: 'Other' }], director: null }],
+      [mk(1), { cast: [{ id: 100, name: 'Bong' }, { id: 200, name: 'Other' }], director: { id: 100, name: 'Bong' } }],
+      [mk(2), { cast: [{ id: 100, name: 'Bong' }], director: null }],
+      [mk(3), { cast: [{ id: 100, name: 'Bong' }], director: { id: 300, name: 'Director3' } }],
+      [mk(4), { cast: [{ id: 200, name: 'Other' }], director: null }],
     ]);
     const people = detectRecurringPeople(seeds, credits, 3);
     expect(people).toHaveLength(1);
@@ -180,12 +185,12 @@ describe('detectRecurringPeople', () => {
   });
 
   it('returns empty when threshold not met', () => {
-    expect(detectRecurringPeople([mkSeed({ tmdbId: 1 })], new Map([[1, { cast: [{ id: 100, name: 'X' }], director: null }]]), 3)).toEqual([]);
+    expect(detectRecurringPeople([mkSeed({ tmdbId: 1 })], new Map([[mk(1), { cast: [{ id: 100, name: 'X' }], director: null }]]), 3)).toEqual([]);
   });
 
   it('caps at top 5 by recurrence', () => {
     const seeds = Array.from({ length: 6 }, (_, i) => mkSeed({ tmdbId: i + 1 }));
-    const credits = new Map(seeds.map(s => [s.tmdbId, {
+    const credits = new Map(seeds.map(s => [mediaTypeDocId(s.mediaType, s.tmdbId), {
       cast: [
         { id: 100, name: 'A' }, { id: 200, name: 'B' }, { id: 300, name: 'C' },
         { id: 400, name: 'D' }, { id: 500, name: 'E' }, { id: 600, name: 'F' },
@@ -198,9 +203,9 @@ describe('detectRecurringPeople', () => {
   it('director gets tie-break priority over cast at same recurrence', () => {
     const seeds = [mkSeed({ tmdbId: 1 }), mkSeed({ tmdbId: 2 }), mkSeed({ tmdbId: 3 })];
     const credits = new Map([
-      [1, { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
-      [2, { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
-      [3, { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
+      [mk(1), { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
+      [mk(2), { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
+      [mk(3), { cast: [{ id: 100, name: 'CastOnly' }], director: { id: 200, name: 'Dir' } }],
     ]);
     const people = detectRecurringPeople(seeds, credits, 3);
     expect(people[0].id).toBe(200);
@@ -212,10 +217,10 @@ describe('detectRecurringKeywords', () => {
   it('returns keywords in ≥3 distinct titles', () => {
     const seeds = [1, 2, 3, 4].map(id => mkSeed({ tmdbId: id, rating: id <= 2 ? 5 : 3 }));
     const keywords = new Map([
-      [1, [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
-      [2, [{ id: 10, name: 'cult-classic' }]],
-      [3, [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
-      [4, [{ id: 20, name: 'small-town' }]],
+      [mk(1), [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
+      [mk(2), [{ id: 10, name: 'cult-classic' }]],
+      [mk(3), [{ id: 10, name: 'cult-classic' }, { id: 20, name: 'small-town' }]],
+      [mk(4), [{ id: 20, name: 'small-town' }]],
     ]);
     const r = detectRecurringKeywords(seeds, keywords, 3);
     expect(r.map(k => k.id)).toContain(10);
@@ -223,7 +228,7 @@ describe('detectRecurringKeywords', () => {
 
   it('caps at 3 keyword rows', () => {
     const seeds = Array.from({ length: 4 }, (_, i) => mkSeed({ tmdbId: i + 1 }));
-    const keywords = new Map(seeds.map(s => [s.tmdbId, [
+    const keywords = new Map(seeds.map(s => [mediaTypeDocId(s.mediaType, s.tmdbId), [
       { id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 3, name: 'c' },
       { id: 4, name: 'd' }, { id: 5, name: 'e' },
     ]]));

@@ -37,7 +37,7 @@ export function useRowUpcoming(
   rowSpec: RowSpec,
   myProviders: readonly number[],
   topGenreIds: readonly number[],
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const today = localIsoDate(new Date());

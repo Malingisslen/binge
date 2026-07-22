@@ -134,14 +134,14 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // alltid på den SENASTE closuren (de återskapas när items-state ändras), så ett
 // anrop efter en seedad snapshot ser de seedade titlarna (BIN-332).
 let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>) | null = null;
-let updateStatusRef: ((tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
-let updateProgressRef: ((tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
-let setRuntimeRef: ((tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
-let removeItemRef: ((tmdbId: number) => Promise<void>) | null = null;
-let updateTagsRef: ((tmdbId: number, tags: string[]) => Promise<void>) | null = null;
-let updateRatingRef: ((tmdbId: number, rating: number | null) => Promise<void>) | null = null;
-let updateNotesRef: ((tmdbId: number, notes: string | null) => Promise<void>) | null = null;
-let refreshTmdbFieldsRef: ((tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
+let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
+let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
+let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
+let removeItemRef: ((mediaType: MediaType, tmdbId: number) => Promise<void>) | null = null;
+let updateTagsRef: ((mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>) | null = null;
+let updateRatingRef: ((mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<void>) | null = null;
+let updateNotesRef: ((mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>) | null = null;
+let refreshTmdbFieldsRef: ((mediaType: MediaType, tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
 
 function Harness() {
   const wl = useWatchlist();
@@ -389,7 +389,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount: 2 })]);
 
     await act(async () => {
-      await updateStatusRef!(42, 'sedd');
+      await updateStatusRef!('movie', 42, 'sedd');
     });
 
     expect(buildStatusUpdate).toHaveBeenCalledTimes(1);
@@ -407,12 +407,12 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 7, runtime: null })]);
 
     await act(async () => {
-      await setRuntimeRef!(7, 95);
+      await setRuntimeRef!('tv', 7, 95);
     });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
     const [ref, payload, opts] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>, unknown];
-    expect(ref._path).toBe('users/u1/watchlist/7');
+    expect(ref._path).toBe('users/u1/watchlist/tv_7');
     expect(payload).toEqual({ runtime: 95 }); // ren denormalisering — INGEN updatedAt
     expect(opts).toEqual({ merge: true });
   });
@@ -420,7 +420,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   it('setRuntime skip-guard: no write when runtime is already known', async () => {
     await mountSeeded([seedDoc({ tmdbId: 7, runtime: 120 })]);
     await act(async () => {
-      await setRuntimeRef!(7, 95);
+      await setRuntimeRef!('tv', 7, 95);
     });
     expect(setDoc).not.toHaveBeenCalled();
   });
@@ -428,7 +428,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   it('setRuntime skip-guard: no write when the title is not in the library', async () => {
     await mountSeeded([]);
     await act(async () => {
-      await setRuntimeRef!(999, 95);
+      await setRuntimeRef!('tv', 999, 95);
     });
     expect(setDoc).not.toHaveBeenCalled();
   });
@@ -437,12 +437,12 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
 
     await act(async () => {
-      await updateProgressRef!(5, 2, 3);
+      await updateProgressRef!('tv', 5, 2, 3);
     });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
     const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
-    expect(ref._path).toBe('users/u1/watchlist/5');
+    expect(ref._path).toBe('users/u1/watchlist/tv_5');
     expect(payload.lastWatchedSeason).toBe(2);
     expect(payload.lastWatchedEpisode).toBe(3);
     // Progress ändrar ALDRIG status (regeln: status härleds, skrivs inte).
@@ -461,15 +461,15 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
     await act(async () => {
-      await removeItemRef!(9);
+      await removeItemRef!('tv', 9);
     });
 
     // The watchlist doc + the owner-only tags AND notes docs are removed so
     // neither orphans (their own collections aren't cascaded by the watchlist delete).
     expect(deleteDoc).toHaveBeenCalledTimes(3);
-    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlist/9');
-    expect((deleteDoc.mock.calls[1][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
-    expect((deleteDoc.mock.calls[2][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/9');
+    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlist/tv_9');
+    expect((deleteDoc.mock.calls[1][0] as { _path: string })._path).toBe('users/u1/watchlistTags/tv_9');
+    expect((deleteDoc.mock.calls[2][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/tv_9');
     expect(setDoc).not.toHaveBeenCalled();
   });
 
@@ -482,7 +482,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await act(async () => {
       await addItemRef!({ ...newTitle(77), notes: 'en privat anteckning' });
     });
-    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/77');
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_77');
     expect(call).toBeDefined();
     expect('notes' in (call![1] as Record<string, unknown>)).toBe(false);
   });
@@ -492,25 +492,26 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
 
     await act(async () => {
       // Duplicate + whitespace → normalizeTags collapses to one clean tag.
-      await updateTagsRef!(9, ['  Mysrys ', 'mysrys']);
+      await updateTagsRef!('tv', 9, ['  Mysrys ', 'mysrys']);
     });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
     const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
-    expect(ref._path).toBe('users/u1/watchlistTags/9');
-    expect(payload).toEqual({ tags: ['Mysrys'] });
+    expect(ref._path).toBe('users/u1/watchlistTags/tv_9');
+    // BIN-560 Phase 4: the tags doc carries the self-describing mediaType field.
+    expect(payload).toEqual({ tags: ['Mysrys'], mediaType: 'tv' });
   });
 
   it('updateTags deletes the tags doc when cleared to empty (BIN-164)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
     await act(async () => {
-      await updateTagsRef!(9, ['   ']); // normalizes to []
+      await updateTagsRef!('tv', 9, ['   ']); // normalizes to []
     });
 
     expect(setDoc).not.toHaveBeenCalled();
     expect(deleteDoc).toHaveBeenCalledTimes(1);
-    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistTags/9');
+    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistTags/tv_9');
   });
 
   // BIN-349: ratedAt stamps rating-recency; the serverTimestamp mock returns 'ts'.
@@ -518,11 +519,11 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 9, rating: null })]);
 
     await act(async () => {
-      await updateRatingRef!(9, 5);
+      await updateRatingRef!('tv', 9, 5);
     });
 
     const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
-    expect(ref._path).toBe('users/u1/watchlist/9');
+    expect(ref._path).toBe('users/u1/watchlist/tv_9');
     expect(payload.rating).toBe(5);
     expect(payload.ratedAt).toBe('ts'); // serverTimestamp sentinel
   });
@@ -531,7 +532,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 9, rating: 4 })]);
 
     await act(async () => {
-      await updateRatingRef!(9, null);
+      await updateRatingRef!('tv', 9, null);
     });
 
     const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
@@ -629,23 +630,23 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     // ordering of the two setState calls can ever produce that intermediate
     // state — deterministic regardless of batching.
     await act(async () => {
-      notesSnapshotCallback!({ size: 1, docs: [{ id: '21', data: () => ({ note: 'gammal inline-anteckning' }) }] });
+      notesSnapshotCallback!({ size: 1, docs: [{ id: 'tv_21', data: () => ({ note: 'gammal inline-anteckning' }) }] });
       snapshotCallback!(snap([seedDoc({ tmdbId: 21, notes: 'gammal inline-anteckning' })]));
     });
     expect(setDoc).not.toHaveBeenCalled(); // migration correctly idle
 
     await act(async () => {
-      await updateNotesRef!(21, '  ny anteckning  ');
+      await updateNotesRef!('tv', 21, '  ny anteckning  ');
     });
 
-    // Owner-only subcollection gets the trimmed note.
-    const noteCalls = callsTo('users/u1/watchlistNotes/21');
+    // Owner-only subcollection gets the trimmed note (+ self-describing mediaType).
+    const noteCalls = callsTo('users/u1/watchlistNotes/tv_21');
     expect(noteCalls).toHaveLength(1);
-    expect(noteCalls[0][1]).toEqual({ note: 'ny anteckning' });
+    expect(noteCalls[0][1]).toEqual({ note: 'ny anteckning', mediaType: 'tv' });
 
     // The public/friends-readable watchlist doc: inline note stripped +
     // visibility stamped, and INVARIANT — no updatedAt (feed orders by it).
-    const itemCalls = callsTo('users/u1/watchlist/21');
+    const itemCalls = callsTo('users/u1/watchlist/tv_21');
     expect(itemCalls).toHaveLength(1);
     const payload = itemCalls[0][1] as Record<string, unknown>;
     expect(payload.notes).toBe('DELETE_FIELD');
@@ -657,24 +658,24 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     await mountSeeded([seedDoc({ tmdbId: 22, visibility: 'private' })]);
 
     await act(async () => {
-      await updateNotesRef!(22, 'en anteckning');
+      await updateNotesRef!('tv', 22, 'en anteckning');
     });
 
     // Exactly ONE write: the owner-only note doc. No touch of the watchlist doc.
     expect(setDoc).toHaveBeenCalledTimes(1);
-    expect((setDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/22');
-    expect(callsTo('users/u1/watchlist/22')).toHaveLength(0);
+    expect((setDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/tv_22');
+    expect(callsTo('users/u1/watchlist/tv_22')).toHaveLength(0);
   });
 
   it('updateNotes(null) deletes the owner-only note doc (and still skips a no-op item write)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 23, visibility: 'private' })]);
 
     await act(async () => {
-      await updateNotesRef!(23, '   '); // whitespace-only → cleared
+      await updateNotesRef!('tv', 23, '   '); // whitespace-only → cleared
     });
 
     expect(deleteDoc).toHaveBeenCalledTimes(1);
-    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/23');
+    expect((deleteDoc.mock.calls[0][0] as { _path: string })._path).toBe('users/u1/watchlistNotes/tv_23');
     expect(setDoc).not.toHaveBeenCalled();
   });
 
@@ -682,10 +683,10 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat om en vän' })]);
 
     await flushMigration();
-    expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1);
-    expect(callsTo('users/u1/watchlistNotes/50')[0][1]).toEqual({ note: 'privat om en vän' });
+    expect(callsTo('users/u1/watchlistNotes/tv_50')).toHaveLength(1);
+    expect(callsTo('users/u1/watchlistNotes/tv_50')[0][1]).toEqual({ note: 'privat om en vän', mediaType: 'tv' });
 
-    const itemCalls = callsTo('users/u1/watchlist/50');
+    const itemCalls = callsTo('users/u1/watchlist/tv_50');
     expect(itemCalls).toHaveLength(1);
     // System-only cleanup, not user activity: the inline field is deleted and
     // NOTHING else is written — no updatedAt, no visibility churn.
@@ -696,7 +697,7 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     // Account A (u1) has a legacy inline note; its migration runs.
     const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'A:s privata anteckning' })]);
     await flushMigration();
-    expect(callsTo('users/u1/watchlistNotes/50')).toHaveLength(1);
+    expect(callsTo('users/u1/watchlistNotes/tv_50')).toHaveLength(1);
     setDoc.mockClear();
 
     // Same-session switch A→B: uid flips but B's watchlist snapshot has NOT
@@ -722,7 +723,7 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
       snapshotCallback!(snap([seedDoc({ tmdbId: 60, notes: 'B:s egen anteckning' })]));
     });
     await flushMigration();
-    expect(callsTo('users/u2/watchlistNotes/60')).toHaveLength(1);
+    expect(callsTo('users/u2/watchlistNotes/tv_60')).toHaveLength(1);
     expect(callsTo('users/u1/')).toHaveLength(0); // and nothing leaks back to A
   });
 });
@@ -752,12 +753,12 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     await mountSeeded([seedDoc({ tmdbId: 77, title: 'Old', posterPath: null })]);
 
     await act(async () => {
-      await refreshTmdbFieldsRef!(77, { title: 'Fresh', posterPath: '/p.jpg', genreIds: [18], tmdbStatus: 'Ended' });
+      await refreshTmdbFieldsRef!('tv', 77, { title: 'Fresh', posterPath: '/p.jpg', genreIds: [18], tmdbStatus: 'Ended' });
     });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
     const [ref, payload, opts] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>, unknown];
-    expect(ref._path).toBe('users/u1/watchlist/77');
+    expect(ref._path).toBe('users/u1/watchlist/tv_77');
     expect(opts).toEqual({ merge: true });
     // Static block re-written + re-stamped from the detail the title page already had.
     expect(payload.title).toBe('Fresh');
@@ -773,14 +774,14 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     await mountSeeded([seedDoc({ tmdbId: 78 })]);
 
     await act(async () => {
-      await refreshTmdbFieldsRef!(78, { title: 'A' });
+      await refreshTmdbFieldsRef!('tv', 78, { title: 'A' });
     });
     expect(setDoc).toHaveBeenCalledTimes(1);
 
     // The pending serverTimestamp reads back null on the echo snapshot, which would
     // re-trip the staleness gate — the session dedupe must suppress the re-fire.
     await act(async () => {
-      await refreshTmdbFieldsRef!(78, { title: 'A' });
+      await refreshTmdbFieldsRef!('tv', 78, { title: 'A' });
     });
     expect(setDoc).toHaveBeenCalledTimes(1);
   });
@@ -788,7 +789,7 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
   it('does nothing when the title is not in the library (only library titles carry the stamp)', async () => {
     await mountSeeded([]);
     await act(async () => {
-      await refreshTmdbFieldsRef!(999, { title: 'Ghost' });
+      await refreshTmdbFieldsRef!('tv', 999, { title: 'Ghost' });
     });
     expect(setDoc).not.toHaveBeenCalled();
   });
@@ -797,7 +798,7 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     const now = new Date();
     await mountSeeded([seedDoc({ tmdbId: 79, tmdbFieldsRefreshedAt: now, providersCheckedAt: now })]);
     await act(async () => {
-      await refreshTmdbFieldsRef!(79, { title: 'B', providers: [8] });
+      await refreshTmdbFieldsRef!('tv', 79, { title: 'B', providers: [8] });
     });
     expect(setDoc).not.toHaveBeenCalled();
   });
@@ -808,7 +809,7 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     await mountSeeded([seedDoc({ tmdbId: 80, tmdbFieldsRefreshedAt: new Date() })]);
 
     await act(async () => {
-      await refreshTmdbFieldsRef!(80, { title: 'C', providers: [8, 9] });
+      await refreshTmdbFieldsRef!('tv', 80, { title: 'C', providers: [8, 9] });
     });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
@@ -828,7 +829,28 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     // Must resolve, not reject — a rejected best-effort write would surface as an
     // unhandled promise rejection (Sentry noise), the setRuntime-pattern this follows.
     await act(async () => {
-      await expect(refreshTmdbFieldsRef!(81, { title: 'D' })).resolves.toBeUndefined();
+      await expect(refreshTmdbFieldsRef!('tv', 81, { title: 'D' })).resolves.toBeUndefined();
     });
+  });
+
+  // BIN-560 Phase 4 COLLISION GUARD: a movie and a TV show sharing one tmdbId must
+  // each get their own refresh in a session — the session-dedup key must be composite,
+  // not bare `${uid}:${tmdbId}` (a bare key would let the first-viewed title starve the
+  // second's sweep-protection stamp for the rest of the session).
+  it('refreshes BOTH a movie and a same-numbered tv show in one session (composite dedup)', async () => {
+    await mountSeeded([
+      seedDoc({ tmdbId: 100, mediaType: 'movie' }),
+      seedDoc({ tmdbId: 100, mediaType: 'tv' }),
+    ]);
+
+    await act(async () => {
+      await refreshTmdbFieldsRef!('movie', 100, { title: 'M' });
+      await refreshTmdbFieldsRef!('tv', 100, { title: 'T' });
+    });
+
+    // Two DISTINCT writes — one per namespaced doc — not one suppressed by a shared key.
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    const paths = setDoc.mock.calls.map(c => (c[0] as { _path: string })._path).sort();
+    expect(paths).toEqual(['users/u1/watchlist/movie_100', 'users/u1/watchlist/tv_100']);
   });
 });

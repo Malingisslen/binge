@@ -12,7 +12,7 @@ const POOL_TARGET = 100;
 
 export function useRowTrending(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const queries = useQueries({

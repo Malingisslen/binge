@@ -45,7 +45,7 @@ function tvParams(tvDateParams: Record<string, string>, voteParam: Record<string
 
 export function useRowFreePublic(
   rowSpec: RowSpec,
-  excludedIds: ReadonlySet<number>,
+  excludedIds: ReadonlySet<string>,
   filters: FilterState,
 ): RowResult {
   const wantMovies = filters.mediaType !== 'tv';

@@ -30,6 +30,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { trackEvent } from '@/lib/analytics';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowTitle, TMDBSearchResult } from '@/types';
 
 const EXAMPLES = [
@@ -39,7 +40,7 @@ const EXAMPLES = [
   'sci-fi-serie på mina tjänster',
 ];
 
-const EMPTY_SET: ReadonlySet<number> = new Set();
+const EMPTY_SET: ReadonlySet<string> = new Set();
 const VISIBLE_CAP = 60;
 
 export default function AskPage() {
@@ -126,12 +127,14 @@ export default function AskPage() {
   // Titles the user has already seen / started / dropped / hidden — only used when
   // the query asked to exclude them.
   const excludedIds = useMemo(() => {
-    const s = new Set<number>();
+    // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — a movie/TV tmdbId clash
+    // must not cross-exclude in the Ask-Binge recommendation filter.
+    const s = new Set<string>();
     for (const it of watchlist) {
-      if (it.status === 'sedd' || it.status === 'avbruten') s.add(it.tmdbId);
-      else if (it.mediaType === 'tv' && it.status === 'mina' && it.lastWatchedSeason != null) s.add(it.tmdbId);
+      if (it.status === 'sedd' || it.status === 'avbruten') s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
+      else if (it.mediaType === 'tv' && it.status === 'mina' && it.lastWatchedSeason != null) s.add(mediaTypeDocId(it.mediaType, it.tmdbId));
     }
-    for (const n of notInterested) s.add(n.tmdbId);
+    for (const n of notInterested) s.add(mediaTypeDocId(n.mediaType, n.tmdbId));
     return s;
   }, [watchlist, notInterested]);
 

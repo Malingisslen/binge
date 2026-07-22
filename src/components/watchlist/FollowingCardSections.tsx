@@ -8,14 +8,19 @@ import {
   type LibrarySubState,
 } from '@/lib/libraryView';
 import type { WatchlistItem } from '@/types';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
 
 const CARD_GRID_CLASS = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[10px]';
 
+// BIN-560 Phase 4: select callbacks take the whole item (which carries mediaType)
+// so the parent can key its selection state by the composite `mediaTypeDocId`,
+// and nextAirByTmdbId is composite-keyed — a movie and a TV show sharing a tmdbId
+// must not share a checkbox or a next-air date.
 interface SelectProps {
   selectMode?: boolean;
-  isSelected?: (id: number) => boolean;
-  onToggleSelect?: (id: number) => void;
+  isSelected?: (item: WatchlistItem) => boolean;
+  onToggleSelect?: (item: WatchlistItem) => void;
 }
 
 function SectionGrid({
@@ -27,7 +32,7 @@ function SectionGrid({
   onToggleSelect,
 }: {
   items: WatchlistItem[];
-  nextAirByTmdbId: Map<number, string>;
+  nextAirByTmdbId: Map<string, string>;
   subState: LibrarySubState;
 } & SelectProps) {
   const { visible, hasMore, sentinelRef } = useIncrementalList(items);
@@ -36,13 +41,13 @@ function SectionGrid({
       <div className={CARD_GRID_CLASS}>
         {visible.map(item => (
           <WatchlistCard
-            key={item.tmdbId}
+            key={mediaTypeDocId(item.mediaType, item.tmdbId)}
             item={item}
-            nextAirDate={nextAirByTmdbId.get(item.tmdbId)}
+            nextAirDate={nextAirByTmdbId.get(mediaTypeDocId(item.mediaType, item.tmdbId))}
             subState={subState}
             selectMode={selectMode}
-            selected={isSelected?.(item.tmdbId) ?? false}
-            onToggleSelect={() => onToggleSelect?.(item.tmdbId)}
+            selected={isSelected?.(item) ?? false}
+            onToggleSelect={() => onToggleSelect?.(item)}
           />
         ))}
       </div>
@@ -88,7 +93,7 @@ export function FollowingCardSections({
   onToggleSelect,
 }: {
   sections: CardSections;
-  nextAirByTmdbId: Map<number, string>;
+  nextAirByTmdbId: Map<string, string>;
 } & SelectProps) {
   const [avslutadOpen, setAvslutadOpen] = useState(false);
   const total = LIBRARY_SUB_STATE_ORDER.reduce((sum, key) => sum + sections[key].length, 0);

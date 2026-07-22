@@ -39,7 +39,7 @@ export default function StatusButton({
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const current = getItem(tmdbId);
+  const current = getItem(mediaType, tmdbId);
   const options = statusOptionsFor(mediaType);
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
@@ -83,7 +83,7 @@ export default function StatusButton({
     const ownerUid = uid;
     const hadProgress =
       mediaType === 'tv' && ownerUid != null && current?.lastWatchedSeason != null;
-    void removeItem(tmdbId);
+    void removeItem(mediaType, tmdbId);
     if (hadProgress && ownerUid) {
       toast(`${title} borttagen. Avsnittshistoriken sparas.`, {
         label: 'Rensa helt',

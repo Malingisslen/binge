@@ -1,5 +1,7 @@
 import { discoverMovies, discoverTV, extractYear, getDisplayTitle } from '@/lib/tmdb/client';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type {
+  MediaType,
   ProviderMode,
   SessionCandidate,
   SessionConfig,
@@ -18,13 +20,16 @@ const MAX_CANDIDATES = 30;
  * (== null, inte falsy: säsong 0/Specials räknas som påbörjad.)
  */
 export function libraryExclusionIds(
-  items: ReadonlyArray<{ tmdbId: number; status: WatchStatus; lastWatchedSeason?: number | null }>,
-): Set<number> {
-  const out = new Set<number>();
+  items: ReadonlyArray<{ mediaType: MediaType; tmdbId: number; status: WatchStatus; lastWatchedSeason?: number | null }>,
+): Set<string> {
+  // BIN-560 Phase 4: composite-keyed (mediaTypeDocId) — a 'both'-mode session mixes
+  // movie + TV candidates, so a seen/dropped movie must not exclude a same-numbered
+  // TV show from the swipe deck (or vice versa).
+  const out = new Set<string>();
   for (const item of items) {
     if (item.status === 'vill_se') continue;
     if (item.status === 'mina' && item.lastWatchedSeason == null) continue;
-    out.add(item.tmdbId);
+    out.add(mediaTypeDocId(item.mediaType, item.tmdbId));
   }
   return out;
 }
@@ -36,12 +41,12 @@ export function libraryExclusionIds(
  */
 export function rankCandidates(
   candidates: ReadonlyArray<SessionCandidate>,
-  excludeTmdbIds?: ReadonlySet<number>,
+  excludeTmdbIds?: ReadonlySet<string>,
 ): SessionCandidate[] {
   const seen = new Set<string>();
   const deduped: SessionCandidate[] = [];
   for (const c of candidates) {
-    if (excludeTmdbIds?.has(c.tmdbId)) continue;
+    if (excludeTmdbIds?.has(mediaTypeDocId(c.mediaType, c.tmdbId))) continue;
     const key = `${c.mediaType}-${c.tmdbId}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -83,10 +88,10 @@ export function computeSessionProviders(
 export async function generateCandidates(params: {
   config: SessionConfig;
   providers: number[];
-  // Tmdb-ids som inte ska föreslås — deltagarnas bibliotek + gruppens
+  // Composite doc-id keys (mediaTypeDocId) — deltagarnas bibliotek + gruppens
   // gemensamma watchlist (G4). Discover hämtar en sida per medietyp
   // (20+20 titlar) så poolen tål normal exkludering utan extra fetch.
-  excludeTmdbIds?: ReadonlySet<number>;
+  excludeTmdbIds?: ReadonlySet<string>;
 }): Promise<SessionCandidate[]> {
   const { config, providers, excludeTmdbIds } = params;
   const candidates: SessionCandidate[] = [];
