@@ -1,5 +1,5 @@
 import type { WatchlistItem } from '@/types';
-import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
+import { resolveTmdbId } from '@/lib/mediaTypeDocId';
 
 // BIN-103 — activity diary. Merges FILM watched-dates (WatchlistItem.watchedAt,
 // already in the loaded watchlist) with TV per-episode watched-dates
@@ -32,7 +32,7 @@ export function flattenEpisodeProgress(docs: RawProgressDoc[]): WatchedEpisode[]
     // Prefer the stored field; parse the doc id as fallback (parse-safe once
     // episodeProgress ids are namespaced tv_123 in Phase 4 — bare Number('tv_123')
     // would be NaN and drop the whole doc's watched episodes from the diary).
-    const tmdbId = d.tmdbId != null ? Number(d.tmdbId) : parseTmdbIdFromDocId(d.id);
+    const tmdbId = resolveTmdbId(d.tmdbId as number | string | null | undefined, d.id);
     if (!Number.isFinite(tmdbId)) continue;
     const seasons = d.seasons;
     if (!seasons || typeof seasons !== 'object') continue;

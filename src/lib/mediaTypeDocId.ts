@@ -47,3 +47,33 @@ export function parseTmdbIdFromDocId(docId: string): number {
   // title-id-0 doc past every downstream `Number.isFinite` guard.
   return /^[0-9]+$/.test(numeric) ? Number(numeric) : NaN;
 }
+
+/**
+ * Recover the media type from a namespaced doc id. The STRICT inverse of the
+ * prefix that `mediaTypeDocId` writes: only `movie_…`/`tv_…` resolve; a bare
+ * legacy `123` (or anything else) returns `null` — it is genuinely
+ * unattributable, and callers must decide whether to skip or default. This is
+ * intentionally NOT `normalizeMediaType` (which defaults unknown → 'tv'): a doc
+ * id either carries a recognised prefix or it doesn't. Mirror of the paired
+ * mediaTypeDocId module — keep the two in sync.
+ */
+export function parseMediaTypeFromDocId(docId: string): MediaType | null {
+  if (docId.startsWith('movie_')) return 'movie';
+  if (docId.startsWith('tv_')) return 'tv';
+  return null;
+}
+
+/**
+ * The one canonical "recover the numeric tmdbId" resolver: prefer the doc's
+ * stored `tmdbId` field, else parse it off the (possibly namespaced) doc id.
+ * Replaces the field-or-parse idiom the read sites used to hand-roll. Returns
+ * NaN when neither source yields a usable id (callers guard with
+ * Number.isFinite). The field branch is guarded the SAME way parseTmdbIdFromDocId
+ * guards its own — `Number('')`/`Number(null)` are 0, so an empty/absent/junk
+ * field must fall through to the doc id, never slip past a finite check as a
+ * phantom id-0. Mirror of the paired mediaTypeDocId module — keep the two in sync.
+ */
+export function resolveTmdbId(field: number | string | null | undefined, docId: string): number {
+  const fromField = Number(field);
+  return Number.isInteger(fromField) && fromField > 0 ? fromField : parseTmdbIdFromDocId(docId);
+}

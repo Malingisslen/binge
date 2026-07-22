@@ -14,7 +14,7 @@
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
+import { resolveTmdbId } from '../shared/mediaTypeDocId';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import {
@@ -62,7 +62,7 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
         mediaType: String(x.mediaType ?? ''),
         rating: typeof x.rating === 'number' ? x.rating : null,
         title: String(x.title ?? ''),
-        tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)),
+        tmdbId: resolveTmdbId(x.tmdbId as number | string | null | undefined, d.id),
         providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
         genreIds: Array.isArray(x.genreIds) ? (x.genreIds as number[]) : [],
       });

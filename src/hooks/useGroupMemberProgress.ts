@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
-import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
+import { resolveTmdbId } from '@/lib/mediaTypeDocId';
 
 export interface MemberProgress {
   lastWatchedSeason: number | null;
@@ -37,7 +37,7 @@ export function useGroupMemberProgress(groupId: string): Map<string, Map<number,
         // N+1 läsningarna inte upprepas vid varje rendering/navigering.
         const watchlistSnap = await getDocs(collection(db, 'groups', groupId, 'watchlist'));
         await Promise.all(watchlistSnap.docs.map(async itemDoc => {
-          const tmdbId = (itemDoc.data().tmdbId as number) ?? parseTmdbIdFromDocId(itemDoc.id);
+          const tmdbId = resolveTmdbId(itemDoc.data().tmdbId as number | string | null | undefined, itemDoc.id);
           if (!Number.isFinite(tmdbId)) return;
           // Build the progress subpath from the ACTUAL doc id, not String(tmdbId):
           // once group watchlist ids are namespaced (movie_123) in Phase 5,

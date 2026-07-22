@@ -1,6 +1,6 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
-import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
+import { resolveTmdbId } from '@/lib/mediaTypeDocId';
 import {
   buildHouseholdContribution,
   contributionContentEquals,
@@ -781,7 +781,7 @@ export function watchlistDocToObject(id: string, data: Record<string, unknown>):
   return {
     // Prefer the stored field; parse the doc id as fallback. Once group watchlist
     // ids are namespaced (movie_123) in Phase 5, a bare Number(id) would be NaN.
-    tmdbId: (data.tmdbId as number) ?? parseTmdbIdFromDocId(id),
+    tmdbId: resolveTmdbId(data.tmdbId as number | string | null | undefined, id),
     mediaType: (data.mediaType as MediaType) ?? 'movie',
     title: (data.title as string) ?? '',
     posterPath: (data.posterPath as string | null) ?? null,
