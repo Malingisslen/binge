@@ -26,6 +26,8 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
+import RelatedSeriesStrip from '@/components/tv/RelatedSeriesStrip';
+import { relatedSeriesFor } from '@/lib/tv/relatedSeries';
 import { seasonCompletion } from '@/lib/tmdb/seasonCompletion';
 import NotesBlock from '@/components/title/NotesBlock';
 import TagEditor from '@/components/title/TagEditor';
@@ -196,6 +198,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // memoised) to always reflect the latest episode progress.
   const seasonMeter = seasonCompletion(show.seasons, (s, ec) => getSeasonProgress(s, ec).watched);
   const nextEp = show.next_episode_to_air;
+  // "Samma serie" — other TMDB entries for the same fictional show (split franchises
+  // like Doctor Who). Static/curated; empty for the vast majority of shows.
+  const relatedSeries = relatedSeriesFor(show.id);
   const creators = show.credits?.crew?.filter(c => c.job === 'Creator' || c.department === 'Creator') ?? [];
   const trailer = show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer')
     ?? show.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Teaser');
@@ -416,6 +421,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
             </div>
           )}
         </ClientOnly>
+        {/* "Samma serie" — cross-links to other eras of a split franchise. Static data,
+            rendered outside ClientOnly so the links are crawlable (small SEO win). */}
+        <RelatedSeriesStrip entries={relatedSeries} />
       </div>
       {/* Säsonger — episode list + progress (preview surface, raw).
           Säsongs-progress är watchlist-beroende (Firestore) så vi ClientOnly-
