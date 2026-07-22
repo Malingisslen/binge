@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { Offer, StreamingOffersDoc } from '@/lib/streaming/offers';
 
 /**
@@ -23,6 +24,7 @@ export function useStreamingOffers(
     enabled: tmdbId != null,
     staleTime: 1000 * 60 * 60, // 1h client cache; source refreshes daily server-side
     queryFn: async () => {
+      if (tmdbId == null) return null; // enabled-gated; narrows for mediaTypeDocId
       const { db, doc, getDoc } = await fsdb();
       // BIN-157: bind läsningen mot en 10s-timeout. getDoc har ingen egen
       // tidsgräns, så ett hängande nät kunde låta offers-queryn aldrig settla
@@ -33,7 +35,7 @@ export function useStreamingOffers(
         timer = setTimeout(() => reject(new Error('streamingOffers timeout')), 10_000);
       });
       const read = async (): Promise<StreamingOffersDoc | null> => {
-        const snap = await getDoc(doc(db, 'streamingOffers', `${mediaType}_${tmdbId}`));
+        const snap = await getDoc(doc(db, 'streamingOffers', mediaTypeDocId(mediaType, tmdbId)));
         if (snap.exists()) return snap.data() as StreamingOffersDoc;
         const legacy = await getDoc(doc(db, 'streamingOffers', String(tmdbId)));
         if (!legacy.exists()) return null;

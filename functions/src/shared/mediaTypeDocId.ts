@@ -32,3 +32,23 @@ export function normalizeMediaType(raw: string | null | undefined): MediaType {
 export function mediaTypeDocId(mediaType: string | null | undefined, tmdbId: number | string): string {
   return `${normalizeMediaType(mediaType)}_${tmdbId}`;
 }
+
+/**
+ * Recover the numeric tmdbId from a per-title doc id, accepting BOTH the legacy
+ * bare `123` shape and the namespaced `movie_123` / `tv_123` shape. Returns NaN
+ * for anything unparseable (callers already guard with Number.isFinite).
+ *
+ * This exists because ~9 call sites fall back to `Number(docId)` when a doc's
+ * `tmdbId` field is absent — and a bare `Number('tv_123')` is NaN, which would
+ * silently drop the doc the moment the personal-library collections get
+ * namespaced. Parsing off the prefix keeps that fallback working across the
+ * mixed-format transition and after it.
+ */
+export function parseTmdbIdFromDocId(docId: string): number {
+  const underscore = docId.indexOf('_');
+  const numeric = underscore === -1 ? docId : docId.slice(underscore + 1);
+  // Strict digits only: an empty suffix (`movie_`, `_`, ``) or junk (`movie_1_2`,
+  // `tv_xyz`) must be NaN, NOT 0 — `Number('')` is 0, which would slip a phantom
+  // title-id-0 doc past every downstream `Number.isFinite` guard.
+  return /^[0-9]+$/.test(numeric) ? Number(numeric) : NaN;
+}

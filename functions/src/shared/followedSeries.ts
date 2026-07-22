@@ -17,6 +17,7 @@
  */
 
 import { getFirestore, FieldPath } from 'firebase-admin/firestore';
+import { parseTmdbIdFromDocId } from './mediaTypeDocId';
 import type { WatchlistLite } from '../episodeNotify/logic';
 
 const PAGE_SIZE = 2000;
@@ -38,7 +39,7 @@ export async function readFollowedSeries(): Promise<WatchlistLite[]> {
       const x = d.data();
       const uid = d.ref.parent.parent?.id ?? '';
       out.push({
-        uid, tmdbId: Number(x.tmdbId ?? Number(d.id)), mediaType: String(x.mediaType ?? ''),
+        uid, tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)), mediaType: String(x.mediaType ?? ''),
         status: String(x.status ?? ''), title: String(x.title ?? ''),
         lastWatchedSeason: typeof x.lastWatchedSeason === 'number' ? x.lastWatchedSeason : null,
         lastWatchedEpisode: typeof x.lastWatchedEpisode === 'number' ? x.lastWatchedEpisode : null,

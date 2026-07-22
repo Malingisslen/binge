@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 
 // BIN-104: read the public per-title community-rating aggregate
 // (titleRatingsAggregate/{mediaType}_{tmdbId} = {count, sum}). One cached doc
@@ -15,8 +16,9 @@ export function useCommunityRating(mediaType: 'movie' | 'tv', tmdbId: number | u
     enabled: !!tmdbId,
     staleTime: 10 * 60 * 1000,
     queryFn: async (): Promise<CommunityRating | null> => {
+      if (tmdbId == null) return null; // enabled-gated; narrows for mediaTypeDocId
       const { db, doc, getDoc } = await fsdb();
-      const snap = await getDoc(doc(db, 'titleRatingsAggregate', `${mediaType}_${tmdbId}`));
+      const snap = await getDoc(doc(db, 'titleRatingsAggregate', mediaTypeDocId(mediaType, tmdbId)));
       if (!snap.exists()) return null;
       const d = snap.data();
       const count = typeof d.count === 'number' ? d.count : 0;

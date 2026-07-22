@@ -21,7 +21,7 @@ import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
 import { detectPriceDrop } from '../streamingOffers/priceDrop';
 import type { PricePoint } from '../streamingOffers/priceHistory';
-import { mediaTypeDocId } from '../shared/mediaTypeDocId';
+import { mediaTypeDocId, parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
 
 interface WantedFilm {
   uid: string;
@@ -56,7 +56,7 @@ async function readWantedFilms(): Promise<WantedFilm[]> {
       const x = d.data();
       out.push({
         uid: d.ref.parent.parent?.id ?? '',
-        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)),
         title: String(x.title ?? ''),
       });
     }

@@ -30,6 +30,7 @@
  */
 
 import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
+import { parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
@@ -78,7 +79,7 @@ async function readWatchlistTitles(): Promise<WatchlistTitleLite[]> {
       const uid = d.ref.parent.parent?.id ?? '';
       out.push({
         uid,
-        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)),
         mediaType: String(x.mediaType ?? ''),
         status: String(x.status ?? ''),
         title: String(x.title ?? ''),

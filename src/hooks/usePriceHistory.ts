@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { PricePoint } from '@/lib/streaming/priceStats';
 
 /**
@@ -21,8 +22,9 @@ export function usePriceHistory(tmdbId: number | undefined, mediaType: 'movie' |
   return useQuery({
     queryKey: ['price-history', mediaType, tmdbId],
     queryFn: async (): Promise<PricePoint[]> => {
+      if (tmdbId == null) return []; // enabled-gated; narrows for mediaTypeDocId
       const { db, doc, getDoc } = await fsdb();
-      const snap = await getDoc(doc(db, 'priceHistory', `${mediaType}_${tmdbId}`));
+      const snap = await getDoc(doc(db, 'priceHistory', mediaTypeDocId(mediaType, tmdbId)));
       const hit = snap.exists()
         ? snap
         : await (async () => {

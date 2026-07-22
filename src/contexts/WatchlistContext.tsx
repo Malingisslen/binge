@@ -7,6 +7,7 @@ import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, s
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
+import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
 import { buildStatusUpdate, normalizeTags } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
@@ -209,7 +210,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const map: Record<number, string[]> = {};
         snap.docs.forEach(d => {
           const tags = (d.data().tags as string[] | undefined) ?? [];
-          if (tags.length > 0) map[Number(d.id)] = tags;
+          // parseTmdbIdFromDocId, not Number(d.id): once these docs are
+          // namespaced (movie_/tv_) a bare Number() would be NaN. Phase 4
+          // re-keys this map to be mediaType-aware; this keeps it parse-safe.
+          if (tags.length > 0) map[parseTmdbIdFromDocId(d.id)] = tags;
         });
         setTagsByTmdbId(map);
       }));
@@ -227,7 +231,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const map: Record<number, string> = {};
         snap.docs.forEach(d => {
           const note = d.data().note as string | undefined;
-          if (note) map[Number(d.id)] = note;
+          if (note) map[parseTmdbIdFromDocId(d.id)] = note;
         });
         setNotesByTmdbId(map);
       }));

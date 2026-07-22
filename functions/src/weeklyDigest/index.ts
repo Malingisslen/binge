@@ -24,6 +24,7 @@
  */
 
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { sendPushToUser } from '../push';
@@ -51,7 +52,7 @@ async function readLibraryTitles(uid: string): Promise<DigestTitle[]> {
   return snap.docs.map((d) => {
     const x = d.data();
     return {
-      tmdbId: Number(x.tmdbId ?? Number(d.id)),
+      tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)),
       title: String(x.title ?? ''),
       // A missing mediaType used to collapse to 'movie', which since BIN-523
       // made the offers lookup miss for TV — the show silently lost its

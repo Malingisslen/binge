@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
+import { parseTmdbIdFromDocId } from '@/lib/mediaTypeDocId';
 
 export interface MemberProgress {
   lastWatchedSeason: number | null;
@@ -36,10 +37,18 @@ export function useGroupMemberProgress(groupId: string): Map<string, Map<number,
         // N+1 läsningarna inte upprepas vid varje rendering/navigering.
         const watchlistSnap = await getDocs(collection(db, 'groups', groupId, 'watchlist'));
         await Promise.all(watchlistSnap.docs.map(async itemDoc => {
-          const tmdbId = (itemDoc.data().tmdbId as number) ?? Number(itemDoc.id);
-          if (!tmdbId) return;
+          const tmdbId = (itemDoc.data().tmdbId as number) ?? parseTmdbIdFromDocId(itemDoc.id);
+          if (!Number.isFinite(tmdbId)) return;
+          // Build the progress subpath from the ACTUAL doc id, not String(tmdbId):
+          // once group watchlist ids are namespaced (movie_123) in Phase 5,
+          // String(tmdbId) would be the bare "123" and read an empty/wrong subcollection.
+          // NOTE — this is only the READ half. The WRITE half in
+          // src/lib/firebase/groups.ts (syncProgressToGroups / setGroupMemberProgress)
+          // still addresses these docs by String(tmdbId); the two agree ONLY while ids
+          // are bare. Phase 5 must namespace both halves together, or writes land on
+          // `123` while reads look under `movie_123`.
           const progSnap = await getDocs(
-            collection(db, 'groups', groupId, 'watchlist', String(tmdbId), 'progress'),
+            collection(db, 'groups', groupId, 'watchlist', itemDoc.id, 'progress'),
           );
           for (const p of progSnap.docs) {
             const uid = p.id;

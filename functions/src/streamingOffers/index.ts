@@ -6,7 +6,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId } from './logic';
 import { fetchOffers, RATE_LIMITED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
-import { mediaTypeDocId } from '../shared/mediaTypeDocId';
+import { mediaTypeDocId, parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
 import { motnBillingCycleId } from '../util/dayId';
 import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
 import type { IntentItem, ExistingOffer, Offer, WorkItem } from './types';
@@ -55,7 +55,7 @@ async function readWorkSet(): Promise<WorkItem[]> {
     for (const d of snap.docs) {
       const x = d.data();
       const it: IntentItem = {
-        tmdbId: Number(x.tmdbId ?? Number(d.id)),
+        tmdbId: Number(x.tmdbId ?? parseTmdbIdFromDocId(d.id)),
         mediaType: String(x.mediaType ?? ''),
         status: String(x.status ?? ''),
         providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
@@ -94,7 +94,7 @@ async function readExisting(): Promise<ExistingOffer[]> {
     const fromId = d.id.startsWith('movie_') ? 'movie' : d.id.startsWith('tv_') ? 'tv' : null;
     const mediaType = field === 'movie' || field === 'tv' ? field : fromId;
     if (mediaType === null) continue;
-    const tmdbId = Number(d.get('tmdbId') ?? Number(d.id));
+    const tmdbId = Number(d.get('tmdbId') ?? parseTmdbIdFromDocId(d.id));
     if (!Number.isFinite(tmdbId)) continue;
     const offers = (d.get('offers') as Offer[] | undefined) ?? [];
     const leavings = offers.map((o) => o.leaving).filter((l): l is string => !!l).sort();
