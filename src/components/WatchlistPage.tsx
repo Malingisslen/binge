@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Search, Film, Tv, X, Check } from 'lucide-react';
+import { Search, Film, Tv, X, Check, SlidersHorizontal } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -138,6 +138,17 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   const [minRating, setMinRating] = useState<number | null>(null);
   // BIN-164: taggfilter (OR-match, som genre), klient-sidigt.
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  // BIN-UX: genre/betyg/tagg-filtren bor nu i en infällbar panel (togglas av
+  // Filter-knappen) istället för en alltid-synlig vägg. Aktiva filter visas som
+  // borttagbara pills när panelen är stängd.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const activeFilterCount = genreFilter.length + (minRating != null ? 1 : 0) + tagFilter.length;
+  const clearAllFilters = () => {
+    setGenreFilter([]);
+    setMinRating(null);
+    setTagFilter([]);
+    setSelected(new Set());
+  };
   const { entries: calendarEntries } = useCalendarEntries();
   const nextAirByTmdbId = useMemo(() => {
     // Composite-keyed (mediaTypeDocId): calendarEntries mix TV episode air-dates
@@ -212,6 +223,9 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
     () => tagsInLibrary(status ? items.filter(i => i.status === status && (status !== 'mina' || !i.dropped)) : items),
     [items, status],
   );
+  // FilterRow/panelen renderar bara Genre/Betyg/Taggar när det finns genrer eller
+  // taggar (Betyg ensamt räcker inte) — Filter-knappen speglar samma villkor.
+  const hasFilterOptions = availableGenres.length > 0 || availableTags.length > 0;
 
   const totalCount = useMemo(
     () => status
@@ -428,11 +442,33 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           </div>
         )}
 
+        {hasFilterOptions && (
+          <button
+            type="button"
+            onClick={() => setFilterOpen(o => !o)}
+            className={`chip${filterOpen || activeFilterCount > 0 ? ' is-on' : ''}`}
+            style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            aria-expanded={filterOpen}
+          >
+            <SlidersHorizontal size={13} />
+            Filter
+            {activeFilterCount > 0 && (
+              // Sitter på en is-on (mörk) chip → ljus badge.
+              <span style={{
+                background: 'var(--bg)', color: 'var(--ink)',
+                fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '0 6px', lineHeight: '15px',
+              }}>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => { setSelectMode(m => !m); setSelected(new Set()); }}
           className={`chip${selectMode ? ' is-on' : ''}`}
-          style={{ marginLeft: 'auto' }}
+          style={hasFilterOptions ? undefined : { marginLeft: 'auto' }}
         >
           {selectMode ? 'Klar' : 'Välj'}
         </button>
@@ -450,22 +486,35 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         </div>
       </div>
 
-      <FilterRow
-        genres={availableGenres}
-        genreFilter={genreFilter}
-        onToggleGenre={id => {
-          setGenreFilter(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
-          setSelected(new Set());
-        }}
-        minRating={minRating}
-        onSetMinRating={r => { setMinRating(r); setSelected(new Set()); }}
-        tags={availableTags}
-        tagFilter={tagFilter}
-        onToggleTag={t => {
-          setTagFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-          setSelected(new Set());
-        }}
-      />
+      {/* Aktiva filter som borttagbara pills — bara när panelen är stängd (öppen
+          panel visar valen i sina chips). Snabb överblick + ett-klicks-rensa. */}
+      {activeFilterCount > 0 && !filterOpen && (
+        <div className="flex items-center gap-[6px] flex-wrap mt-[10px]">
+          {genreFilter.map(id => (
+            <RemovableFilterChip
+              key={`g-${id}`}
+              label={availableGenres.find(g => g.id === id)?.name ?? 'Genre'}
+              onRemove={() => { setGenreFilter(prev => prev.filter(g => g !== id)); setSelected(new Set()); }}
+            />
+          ))}
+          {minRating != null && (
+            <RemovableFilterChip
+              label={`${minRating}+★`}
+              onRemove={() => { setMinRating(null); setSelected(new Set()); }}
+            />
+          )}
+          {tagFilter.map(t => (
+            <RemovableFilterChip
+              key={`t-${t}`}
+              label={t}
+              onRemove={() => { setTagFilter(prev => prev.filter(x => x !== t)); setSelected(new Set()); }}
+            />
+          ))}
+          <button type="button" onClick={clearAllFilters} className="chip" style={{ borderStyle: 'dashed' }}>
+            Rensa alla
+          </button>
+        </div>
+      )}
 
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-2 px-2 py-[5px] bg-acc-deep/10 border border-acc-deep/20 rounded-sm">
@@ -532,6 +581,50 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         />
       )}
 
+      <div className={filterOpen ? 'grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 mt-4' : 'mt-4'}>
+        {filterOpen && (
+          <aside className="bg-surface border border-rule rounded-md p-4 self-start">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[11px] uppercase tracking-[0.5px] text-ink-3">Filter</span>
+              <button
+                type="button"
+                onClick={() => setFilterOpen(false)}
+                className="topbar-icon-btn text-ink-3"
+                aria-label="Stäng filter"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <FilterRow
+              vertical
+              genres={availableGenres}
+              genreFilter={genreFilter}
+              onToggleGenre={id => {
+                setGenreFilter(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
+                setSelected(new Set());
+              }}
+              minRating={minRating}
+              onSetMinRating={r => { setMinRating(r); setSelected(new Set()); }}
+              tags={availableTags}
+              tagFilter={tagFilter}
+              onToggleTag={t => {
+                setTagFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+                setSelected(new Set());
+              }}
+            />
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="chip mt-4"
+                style={{ borderStyle: 'dashed', width: '100%', justifyContent: 'center' }}
+              >
+                Rensa alla filter
+              </button>
+            )}
+          </aside>
+        )}
+        <div>
       {view === 'cards' ? (
         followingSections ? (
           <FollowingCardSections
@@ -741,6 +834,8 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           )}
         </div>
       )}
+        </div>
+      </div>
 
       {totalCount > 0 && (
         <div style={{ marginTop: 16 }}>
@@ -748,6 +843,22 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         </div>
       )}
     </>
+  );
+}
+
+// En aktiv-filter-pill: accent-chip med titel + kryss, klick tar bort filtret.
+// Delas av genre/betyg/tagg-pillsen så etikett + layout bor på ett ställe.
+function RemovableFilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="chip acc inline-flex items-center gap-[5px]"
+      aria-label={`Ta bort filter: ${label}`}
+    >
+      {label}
+      <X size={11} />
+    </button>
   );
 }
 

@@ -19,6 +19,9 @@ export default function FilterRow({
   tags = [],
   tagFilter = [],
   onToggleTag,
+  // BIN-UX: `vertical` staplar grupperna med block-etiketter så raden kan bo i den
+  // infällbara filterpanelen (smal kolumn). Default = den gamla horisontella raden.
+  vertical = false,
 }: {
   genres: { id: number; name: string }[];
   genreFilter: number[];
@@ -28,55 +31,68 @@ export default function FilterRow({
   tags?: string[];
   tagFilter?: string[];
   onToggleTag?: (t: string) => void;
+  vertical?: boolean;
 }) {
   if (genres.length === 0 && tags.length === 0) return null;
 
-  const groupLabel = 'text-[11px] uppercase tracking-[0.5px] text-ink-3 mr-1 shrink-0';
+  const groupLabel = vertical
+    ? 'block text-[11px] uppercase tracking-[0.5px] text-ink-3 mb-[6px]'
+    : 'text-[11px] uppercase tracking-[0.5px] text-ink-3 mr-1 shrink-0';
+  const rowClass = vertical ? 'flex flex-col gap-4 items-stretch' : 'flex items-start gap-[10px] flex-wrap mt-[10px]';
+  // Vertical: label ovanför en egen chip-wrap. Horisontellt: label + chip-wrap i rad.
+  const groupClass = vertical ? 'flex flex-col items-start' : 'flex items-center gap-[6px] flex-wrap';
+  const chipsWrap = 'flex flex-wrap gap-[6px]';
 
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, flexWrap: 'wrap' }}>
+    <div className={rowClass}>
       {genres.length > 0 && (
-        <div className="flex items-center gap-[6px] flex-wrap">
+        <div className={groupClass}>
           <span className={groupLabel}>Genre</span>
-          {genres.map(g => (
+          <div className={chipsWrap}>
+            {genres.map(g => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => onToggleGenre(g.id)}
+                className={`chip${genreFilter.includes(g.id) ? ' is-on' : ''}`}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className={groupClass}>
+        <span className={groupLabel}>Betyg</span>
+        <div className={chipsWrap}>
+          {RATING_STEPS.map(r => (
             <button
-              key={g.id}
+              key={r}
               type="button"
-              onClick={() => onToggleGenre(g.id)}
-              className={`chip${genreFilter.includes(g.id) ? ' is-on' : ''}`}
+              // Toggle: klick på aktivt steg rensar betygsfiltret.
+              onClick={() => onSetMinRating(minRating === r ? null : r)}
+              className={`chip${minRating === r ? ' is-on' : ''}`}
             >
-              {g.name}
+              {r}+★
             </button>
           ))}
         </div>
-      )}
-      <div className="flex items-center gap-[6px]">
-        <span className={groupLabel}>Betyg</span>
-        {RATING_STEPS.map(r => (
-          <button
-            key={r}
-            type="button"
-            // Toggle: klick på aktivt steg rensar betygsfiltret.
-            onClick={() => onSetMinRating(minRating === r ? null : r)}
-            className={`chip${minRating === r ? ' is-on' : ''}`}
-          >
-            {r}+★
-          </button>
-        ))}
       </div>
       {tags.length > 0 && onToggleTag && (
-        <div className="flex items-center gap-[6px] flex-wrap">
+        <div className={groupClass}>
           <span className={groupLabel}>Taggar</span>
-          {tags.map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => onToggleTag(t)}
-              className={`chip${tagFilter.includes(t) ? ' is-on' : ''}`}
-            >
-              {t}
-            </button>
-          ))}
+          <div className={chipsWrap}>
+            {tags.map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onToggleTag(t)}
+                className={`chip${tagFilter.includes(t) ? ' is-on' : ''}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
