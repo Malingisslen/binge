@@ -176,6 +176,17 @@ describe('addToGroupWatchlist (BIN-532: bevarar memberRatings vid re-add)', () =
     expect(payload).not.toHaveProperty('memberRatings');
     expect(payload).toMatchObject({ tmdbId: 1438, addedBy: 'me' });
   });
+
+  // BIN-560 Phase 5: the collision this cutover prevents — a movie and a TV show
+  // sharing a TMDB number must land in DISTINCT namespaced group-watchlist docs.
+  it('a movie and a same-numbered tv show write to distinct namespaced docs (movie_5 / tv_5)', async () => {
+    const base = { groupId: 'g1', uid: 'me', title: 'X', posterPath: null, releaseYear: 2024 };
+    await addToGroupWatchlist({ ...base, tmdbId: 5, mediaType: 'movie' });
+    await addToGroupWatchlist({ ...base, tmdbId: 5, mediaType: 'tv' });
+    const paths = setDocMock.mock.calls.map(([ref]) => (ref as { _path: string })._path);
+    expect(paths).toContain('groups/g1/watchlist/movie_5');
+    expect(paths).toContain('groups/g1/watchlist/tv_5');
+  });
 });
 
 describe('BIN-510: bounded array-contains queries', () => {
@@ -183,6 +194,7 @@ describe('BIN-510: bounded array-contains queries', () => {
     getDocsMock.mockResolvedValueOnce({ empty: true, docs: [] });
     await syncProgressToGroups({
       uid: 'user-a',
+      mediaType: 'tv',
       tmdbId: 1,
       lastWatchedSeason: 1,
       lastWatchedEpisode: 1,
@@ -194,11 +206,11 @@ describe('BIN-510: bounded array-contains queries', () => {
 
   it('syncProgressToGroups hoppar över en ANDRA collection-scan inom TTL-fönstret för en nolgrupp-användare', async () => {
     getDocsMock.mockResolvedValueOnce({ empty: true, docs: [] });
-    await syncProgressToGroups({ uid: 'user-b', tmdbId: 1, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    await syncProgressToGroups({ uid: 'user-b', mediaType: 'tv', tmdbId: 1, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
     expect(getDocsMock).toHaveBeenCalledTimes(1);
 
     // Andra anropet omedelbart efter — cachen är känd-tom, ingen ny query.
-    await syncProgressToGroups({ uid: 'user-b', tmdbId: 2, lastWatchedSeason: 1, lastWatchedEpisode: 2 });
+    await syncProgressToGroups({ uid: 'user-b', mediaType: 'tv', tmdbId: 2, lastWatchedSeason: 1, lastWatchedEpisode: 2 });
     expect(getDocsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -209,7 +221,7 @@ describe('BIN-510: bounded array-contains queries', () => {
   // the original code-review FAIL was about.
   it('createGroup river cachen så nästa syncProgressToGroups-anrop tvingar en FÄRSK query, inte den gamla cachade (tomma) listan', async () => {
     getDocsMock.mockResolvedValueOnce({ empty: true, docs: [] });
-    await syncProgressToGroups({ uid: 'user-cache', tmdbId: 1, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    await syncProgressToGroups({ uid: 'user-cache', mediaType: 'tv', tmdbId: 1, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
     expect(getDocsMock).toHaveBeenCalledTimes(1); // cache nu varm och tom
 
     await createGroup({
@@ -226,11 +238,11 @@ describe('BIN-510: bounded array-contains queries', () => {
     // testet ovan) och missa den nyss skapade gruppen i upp till 5 min.
     getDocsMock.mockResolvedValueOnce({ empty: false, docs: [{ id: 'the-new-group' }] });
     getDocMock.mockResolvedValueOnce({ exists: () => true });
-    await syncProgressToGroups({ uid: 'user-cache', tmdbId: 2, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
+    await syncProgressToGroups({ uid: 'user-cache', mediaType: 'tv', tmdbId: 2, lastWatchedSeason: 1, lastWatchedEpisode: 1 });
     expect(getDocsMock).toHaveBeenCalledTimes(2); // FÄRSK query, inte cache-hit
 
     const progressWrite = setDocMock.mock.calls.find(([ref]) =>
-      (ref as { _path: string })._path === 'groups/the-new-group/watchlist/2/progress/user-cache');
+      (ref as { _path: string })._path === 'groups/the-new-group/watchlist/tv_2/progress/user-cache');
     expect(progressWrite).toBeDefined();
   });
 
@@ -242,6 +254,7 @@ describe('BIN-510: bounded array-contains queries', () => {
 
     await syncProgressToGroups({
       uid: 'user-c',
+      mediaType: 'tv',
       tmdbId: 99,
       lastWatchedSeason: 2,
       lastWatchedEpisode: 3,
@@ -249,10 +262,10 @@ describe('BIN-510: bounded array-contains queries', () => {
 
     // Bara g1 (som har titeln) får en progress-write.
     const progressWrite = setDocMock.mock.calls.find(([ref]) =>
-      (ref as { _path: string })._path === 'groups/g1/watchlist/99/progress/user-c');
+      (ref as { _path: string })._path === 'groups/g1/watchlist/tv_99/progress/user-c');
     expect(progressWrite).toBeDefined();
     const noProgressWrite = setDocMock.mock.calls.find(([ref]) =>
-      (ref as { _path: string })._path === 'groups/g2/watchlist/99/progress/user-c');
+      (ref as { _path: string })._path === 'groups/g2/watchlist/tv_99/progress/user-c');
     expect(noProgressWrite).toBeUndefined();
   });
 

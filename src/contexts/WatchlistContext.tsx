@@ -533,6 +533,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     void import('@/lib/firebase/groups').then(({ syncProgressToGroups }) =>
       syncProgressToGroups({
         uid,
+        mediaType,
         tmdbId,
         lastWatchedSeason: season,
         lastWatchedEpisode: episode,

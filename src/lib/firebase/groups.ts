@@ -1,6 +1,6 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
-import { resolveTmdbId } from '@/lib/mediaTypeDocId';
+import { mediaTypeDocId, resolveTmdbId } from '@/lib/mediaTypeDocId';
 import {
   buildHouseholdContribution,
   contributionContentEquals,
@@ -150,9 +150,9 @@ export async function rotateInviteToken(groupId: string): Promise<string> {
   return inviteToken;
 }
 
-export async function hasInGroupWatchlist(groupId: string, tmdbId: number): Promise<boolean> {
+export async function hasInGroupWatchlist(mediaType: MediaType, groupId: string, tmdbId: number): Promise<boolean> {
   const { db, doc, getDoc } = await fsdb();
-  const snap = await getDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
+  const snap = await getDoc(doc(db, 'groups', groupId, 'watchlist', mediaTypeDocId(mediaType, tmdbId)));
   return snap.exists();
 }
 
@@ -471,12 +471,13 @@ export async function updateMemberProviders(
 
 export async function setMemberRating(params: {
   groupId: string;
+  mediaType: MediaType;
   tmdbId: number;
   uid: string;
   rating: number | null;
 }): Promise<void> {
   const { db, doc, updateDoc, deleteField } = await fsdb();
-  const ref = doc(db, 'groups', params.groupId, 'watchlist', String(params.tmdbId));
+  const ref = doc(db, 'groups', params.groupId, 'watchlist', mediaTypeDocId(params.mediaType, params.tmdbId));
   await updateDoc(ref, {
     [`memberRatings.${params.uid}`]: params.rating == null ? deleteField() : params.rating,
   });
@@ -499,7 +500,7 @@ export async function addToGroupWatchlist(params: {
   releaseYear: number | null;
 }): Promise<void> {
   const { db, doc, setDoc, serverTimestamp } = await fsdb();
-  await setDoc(doc(db, 'groups', params.groupId, 'watchlist', String(params.tmdbId)), {
+  await setDoc(doc(db, 'groups', params.groupId, 'watchlist', mediaTypeDocId(params.mediaType, params.tmdbId)), {
     tmdbId: params.tmdbId,
     mediaType: params.mediaType,
     title: params.title,
@@ -510,9 +511,9 @@ export async function addToGroupWatchlist(params: {
   }, { merge: true });
 }
 
-export async function removeFromGroupWatchlist(groupId: string, tmdbId: number): Promise<void> {
+export async function removeFromGroupWatchlist(mediaType: MediaType, groupId: string, tmdbId: number): Promise<void> {
   const { db, doc, deleteDoc } = await fsdb();
-  await deleteDoc(doc(db, 'groups', groupId, 'watchlist', String(tmdbId)));
+  await deleteDoc(doc(db, 'groups', groupId, 'watchlist', mediaTypeDocId(mediaType, tmdbId)));
 }
 
 // Skriver min progress på en titel i en specifik grupp. Subcollection-path:
@@ -525,6 +526,7 @@ export async function removeFromGroupWatchlist(groupId: string, tmdbId: number):
 // gruppmedlemskap, inte profil-publik-flagga).
 export async function setGroupMemberProgress(params: {
   groupId: string;
+  mediaType: MediaType;
   tmdbId: number;
   uid: string;
   lastWatchedSeason: number | null;
@@ -533,7 +535,7 @@ export async function setGroupMemberProgress(params: {
 }): Promise<void> {
   const { db, doc, setDoc, serverTimestamp } = await fsdb();
   const ref = doc(
-    db, 'groups', params.groupId, 'watchlist', String(params.tmdbId),
+    db, 'groups', params.groupId, 'watchlist', mediaTypeDocId(params.mediaType, params.tmdbId),
     'progress', params.uid,
   );
   await setDoc(ref, {
@@ -700,6 +702,7 @@ export async function getGroupSessionHistory(groupId: string, limit = 10): Promi
 // EN bounded query per TTL-fönster istället för en per toggle.
 export async function syncProgressToGroups(params: {
   uid: string;
+  mediaType: MediaType;
   tmdbId: number;
   lastWatchedSeason: number | null;
   lastWatchedEpisode: number | null;
@@ -723,11 +726,12 @@ export async function syncProgressToGroups(params: {
     const { db, doc, getDoc } = await fsdb();
     await Promise.all(groupIds.map(async groupId => {
       try {
-        const itemRef = doc(db, 'groups', groupId, 'watchlist', String(params.tmdbId));
+        const itemRef = doc(db, 'groups', groupId, 'watchlist', mediaTypeDocId(params.mediaType, params.tmdbId));
         const itemSnap = await getDoc(itemRef);
         if (!itemSnap.exists()) return;
         await setGroupMemberProgress({
           groupId,
+          mediaType: params.mediaType,
           tmdbId: params.tmdbId,
           uid: params.uid,
           lastWatchedSeason: params.lastWatchedSeason,

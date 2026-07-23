@@ -7,6 +7,7 @@ import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { removeFromGroupWatchlist, setMemberRating } from '@/lib/firebase/groups';
 import { toneForId } from '@/lib/duotone';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { GroupMember, GroupWatchlistItem } from '@/types';
 
@@ -74,7 +75,7 @@ export function GroupWatchlistTable({
               // (Fas 2b) — `?fromGroup={id}` läses av TVShowPageClient.
               const href = titleHref(item.mediaType, item.tmdbId, { fromGroup: groupId });
               return (
-                <tr key={item.tmdbId} className="border-t border-rule-2 hover:bg-rule-2/30">
+                <tr key={mediaTypeDocId(item.mediaType, item.tmdbId)} className="border-t border-rule-2 hover:bg-rule-2/30">
                   <td className="px-3 py-[6px]">
                     <div className="flex items-center gap-2">
                       {item.posterPath && (
@@ -120,7 +121,7 @@ export function GroupWatchlistTable({
                           <RatingPicker
                             value={r}
                             onChange={async v => {
-                              await setMemberRating({ groupId, tmdbId: item.tmdbId, uid: myUid, rating: v });
+                              await setMemberRating({ groupId, mediaType: item.mediaType, tmdbId: item.tmdbId, uid: myUid, rating: v });
                             }}
                           />
                         ) : (
@@ -157,7 +158,7 @@ export function GroupWatchlistTable({
           body={`"${itemToRemove.title}" tas bort från gruppens gemensamma bibliotek, inklusive allas betyg på den.`}
           confirmLabel="Ta bort"
           onConfirm={() => {
-            void removeFromGroupWatchlist(groupId, itemToRemove.tmdbId);
+            void removeFromGroupWatchlist(itemToRemove.mediaType, groupId, itemToRemove.tmdbId);
             setItemToRemove(null);
           }}
           onCancel={() => setItemToRemove(null)}

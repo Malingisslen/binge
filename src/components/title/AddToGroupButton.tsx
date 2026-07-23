@@ -34,10 +34,10 @@ export default function AddToGroupButton({
 
   const refreshPresence = useCallback(async () => {
     const checks = await Promise.all(
-      groups.map(async g => [g.id, await hasInGroupWatchlist(g.id, tmdbId)] as const),
+      groups.map(async g => [g.id, await hasInGroupWatchlist(mediaType, g.id, tmdbId)] as const),
     );
     setPresence(Object.fromEntries(checks));
-  }, [groups, tmdbId]);
+  }, [groups, mediaType, tmdbId]);
 
   const onOpen = () => {
     setOpen(v => {
@@ -71,7 +71,7 @@ export default function AddToGroupButton({
                   setWorking(g.id);
                   try {
                     if (isIn) {
-                      await removeFromGroupWatchlist(g.id, tmdbId);
+                      await removeFromGroupWatchlist(mediaType, g.id, tmdbId);
                       setPresence(p => ({ ...p, [g.id]: false }));
                     } else {
                       await addToGroupWatchlist({
