@@ -1,9 +1,12 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Search, Film, Tv, X, Check, SlidersHorizontal } from 'lucide-react';
+import {
+  Search, Film, Tv, X, Check, SlidersHorizontal, ChevronDown, Library,
+  Rows3, LayoutGrid, Grid3x3,
+} from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
@@ -39,6 +42,7 @@ import { pluralSv } from '@/lib/utils';
 import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
+import { useClickOutside } from '@/hooks/useClickOutside';
 import type { WatchStatus, WatchlistItem } from '@/types';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
@@ -385,18 +389,16 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           en inkonsekvens. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 22, flexWrap: 'wrap' }}>
         {!singleMediaStatus && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['all', 'tv', 'movie'] as const).map(f => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => { setMediaFilter(f); setSelected(new Set()); }}
-                className={`chip${mediaFilter === f ? ' is-on' : ''}`}
-              >
-                {f === 'all' ? 'Alla' : f === 'tv' ? 'Serier' : 'Film'}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            ariaLabel="Filtrera på medietyp"
+            value={mediaFilter}
+            onChange={f => { setMediaFilter(f); setSelected(new Set()); }}
+            options={[
+              { value: 'all', label: 'Alla' },
+              { value: 'tv', label: 'Serier' },
+              { value: 'movie', label: 'Film' },
+            ]}
+          />
         )}
 
         <select
@@ -472,18 +474,16 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         >
           {selectMode ? 'Klar' : 'Välj'}
         </button>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['table', 'cards', 'grid'] as const).map(v => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`chip${view === v ? ' is-on' : ''}`}
-            >
-              {v === 'table' ? 'Tabell' : v === 'cards' ? 'Kort' : 'Rutnät'}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          ariaLabel="Vyläge"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'table', icon: <Rows3 size={15} />, title: 'Tabell' },
+            { value: 'cards', icon: <LayoutGrid size={15} />, title: 'Kort' },
+            { value: 'grid', icon: <Grid3x3 size={15} />, title: 'Rutnät' },
+          ]}
+        />
       </div>
 
       {/* Aktiva filter som borttagbara pills — bara när panelen är stängd (öppen
@@ -846,6 +846,58 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
   );
 }
 
+// Segmentkontroll (variant 2): en bordad grupp där exakt ett val är aktivt (ink-
+// fyllt). Semantiskt rätt för ömsesidigt uteslutande val (medietyp, vyläge) och
+// kompaktare än fristående chips. Ikon-only-segment får title/aria-label.
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { value: T; label?: string; icon?: React.ReactNode; title?: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      style={{ display: 'inline-flex', border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden', background: 'var(--surface)' }}
+    >
+      {options.map((o, i) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={active}
+            // Ikon-only-segment behöver namn för skärmläsare/tooltip; text-segment
+            // har redan sin etikett synlig, så inget redundant title/aria där.
+            aria-label={o.label ? undefined : o.title}
+            title={o.label ? undefined : o.title}
+            onClick={() => onChange(o.value)}
+            className="inline-flex items-center gap-[5px] cursor-pointer"
+            style={{
+              padding: o.label ? '5px 11px' : '6px 9px',
+              fontFamily: 'inherit',
+              fontSize: 12.5,
+              border: 0,
+              borderLeft: i > 0 ? '1px solid var(--rule)' : undefined,
+              background: active ? 'var(--ink)' : 'transparent',
+              color: active ? 'var(--bg)' : 'var(--ink-2)',
+            }}
+          >
+            {o.icon}
+            {o.label && <span>{o.label}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // En aktiv-filter-pill: accent-chip med titel + kryss, klick tar bort filtret.
 // Delas av genre/betyg/tagg-pillsen så etikett + layout bor på ett ställe.
 function RemovableFilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -879,25 +931,64 @@ const LIBRARY_VIEWS: { label: string; href: string; status: WatchStatus | null; 
   { label: 'Dagbok',   href: '/my/diary/',    status: null, key: 'diary' },
 ];
 
+// Kompakt dropdown-vy-väljare (variant 2): ersätter den 6-chips-breda flikraden
+// med en liten meny. Behåller riktiga <Link>:ar (delbara URL:er) + aktivmarkering.
+// Stäng på click-outside + Escape (samma mönster som UgcActionsMenu).
 export function LibrarySubnav({ status, activeKey }: { status?: WatchStatus; activeKey?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, () => setOpen(false));
+  // useClickOutside täcker mousedown-utanför; Escape har ingen delad hook — behåll
+  // den lilla lyssnaren, gated på open så den inte ligger på globalt.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  const isActive = (view: (typeof LIBRARY_VIEWS)[number]) =>
+    view.key ? view.key === activeKey : !activeKey && (status ?? null) === view.status;
+  // find(isActive) matchar alltid en vy (varje status/activeKey har en rad); render
+  // faller ändå tillbaka på 'Alla' om något oväntat inte matchar.
+  const activeView = LIBRARY_VIEWS.find(isActive);
+
   return (
-    <nav aria-label="Biblioteksvyer" style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
-      {LIBRARY_VIEWS.map(view => {
-        const active = view.key
-          ? view.key === activeKey
-          : !activeKey && (status ?? null) === view.status;
-        return (
-          <Link
-            key={view.href}
-            href={view.href}
-            aria-current={active ? 'page' : undefined}
-            className={`chip no-underline${active ? ' is-on' : ''}`}
-          >
-            {view.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div ref={ref} className="relative inline-block mt-[14px]">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="chip inline-flex items-center gap-[6px]"
+        aria-expanded={open}
+        aria-label="Byt biblioteksvy"
+      >
+        <Library size={13} className="text-ink-3" />
+        <span className="font-semibold">{activeView?.label ?? 'Alla'}</span>
+        <ChevronDown size={13} className={`text-ink-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <nav
+          aria-label="Biblioteksvyer"
+          className="absolute left-0 top-full mt-[3px] bg-surface border border-rule rounded-md shadow-pop min-w-[180px] z-30 py-1"
+        >
+          {LIBRARY_VIEWS.map(view => {
+            const active = isActive(view);
+            return (
+              <Link
+                key={view.href}
+                href={view.href}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => setOpen(false)}
+                className={`flex items-center justify-between gap-3 px-3 py-[6px] text-sm no-underline hover:bg-bg-2 ${active ? 'text-ink font-semibold' : 'text-ink-2'}`}
+              >
+                {view.label}
+                {active && <Check size={13} className="text-acc-deep" />}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
+    </div>
   );
 }
 
