@@ -26,6 +26,7 @@ import TagEditor from '@/components/title/TagEditor';
 import { tagsInLibrary } from '@/lib/libraryView';
 import RecCard from '@/components/recommendations/RecCard';
 import CollectionSection from '@/components/title/CollectionSection';
+import CompanionSection from '@/components/franchise/CompanionSection';
 import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -532,6 +533,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
           <CollectionSection collectionId={movie.belongs_to_collection.id} currentMovieId={movie.id} />
         </ClientOnly>
       )}
+
+      {/* Kompanjonserie (+ ev. systerfilmer) — filmen bygger på en TV-serie (curated,
+          cross-type). Kan samexistera med TMDB-samlingen ovan: samling = film→film,
+          kompanjon = film→serie. Renderar inget för omappade filmer. */}
+      <CompanionSection anchorMediaType="movie" anchorId={movie.id} />
 
       {/* Similar films — back to duotone (navigation surface) */}
       {mappedRecs.length > 0 && (

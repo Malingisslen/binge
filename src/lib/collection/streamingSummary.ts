@@ -8,7 +8,7 @@
  * användarens egna tjänster → en sammanfattning UI:t kan formulera.
  */
 
-import { canonicalProviderId } from '@/lib/tmdb/providers';
+import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
 import type { TMDBMovie } from '@/types';
 
 /** Kanoniska SE-abonnemangsleverantörer (flatrate) för en film-lite-detalj. */
@@ -80,4 +80,34 @@ export function summarizeCollectionStreaming(
     topProviderCount,
     topProviderIsOwned: topProviderId != null && mine.has(topProviderId),
   };
+}
+
+/** Human label for a provider id (short name preferred, then full name). */
+export function providerLabel(id: number): string {
+  const p = getProvider(id);
+  return p?.shortName ?? p?.name ?? 'okänd tjänst';
+}
+
+/**
+ * One-line Swedish rendering of a CollectionStreamingSummary. Shared by
+ * CollectionSection and CompanionSection so the wording (incl. the singular
+ * "Finns på X" case) stays in one place. Empty string when nothing considered.
+ */
+export function streamingSummaryText(s: CollectionStreamingSummary): string {
+  if (s.considered === 0) return '';
+  if (s.commonProviderId != null) {
+    return s.considered === 1
+      ? `Finns på ${providerLabel(s.commonProviderId)}`
+      : `${s.considered} osedda — alla på ${providerLabel(s.commonProviderId)}`;
+  }
+  const bits: string[] = [];
+  if (s.onYourServices > 0) bits.push(`${s.onYourServices} på tjänster du har`);
+  // Visa bara topp-tjänsten om den INTE redan ingår i "tjänster du har" —
+  // annars dubbelräknas samma filmer i meningen.
+  if (s.topProviderId != null && s.topProviderCount > 0 && !s.topProviderIsOwned) {
+    bits.push(`${s.topProviderCount} på ${providerLabel(s.topProviderId)}`);
+  }
+  const noProv = s.considered - s.withAnyProvider;
+  if (noProv > 0) bits.push(`${noProv} att hyra eller saknas`);
+  return `${s.considered} osedda — ${bits.join(' · ')}`;
 }

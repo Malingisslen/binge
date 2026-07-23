@@ -9,10 +9,9 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
 import { getMovieLite, posterUrl } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
-import { getProvider } from '@/lib/tmdb/providers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { summarizeCollectionStreaming, seFlatrateProviderIds, type CollectionStreamingSummary } from '@/lib/collection/streamingSummary';
+import { summarizeCollectionStreaming, seFlatrateProviderIds, streamingSummaryText } from '@/lib/collection/streamingSummary';
 
 /**
  * BIN-94 — franchise/collection completion tracking + BIN-135 streaming-summary.
@@ -30,27 +29,6 @@ import { summarizeCollectionStreaming, seFlatrateProviderIds, type CollectionStr
 const STREAM_CAP = 12;
 const ADD_UNSEEN_CAP = 50;
 
-function providerLabel(id: number): string {
-  const p = getProvider(id);
-  return p?.shortName ?? p?.name ?? 'okänd tjänst';
-}
-
-function summaryText(s: CollectionStreamingSummary): string {
-  if (s.considered === 0) return '';
-  if (s.commonProviderId != null) {
-    return `${s.considered} osedda — alla på ${providerLabel(s.commonProviderId)}`;
-  }
-  const bits: string[] = [];
-  if (s.onYourServices > 0) bits.push(`${s.onYourServices} på tjänster du har`);
-  // Visa bara topp-tjänsten om den INTE redan ingår i "tjänster du har" —
-  // annars dubbelräknas samma filmer i meningen.
-  if (s.topProviderId != null && s.topProviderCount > 0 && !s.topProviderIsOwned) {
-    bits.push(`${s.topProviderCount} på ${providerLabel(s.topProviderId)}`);
-  }
-  const noProv = s.considered - s.withAnyProvider;
-  if (noProv > 0) bits.push(`${noProv} att hyra eller saknas`);
-  return `${s.considered} osedda — ${bits.join(' · ')}`;
-}
 export default function CollectionSection({
   collectionId,
   currentMovieId,
@@ -188,7 +166,7 @@ export default function CollectionSection({
                 <span className="text-ink-3">Ingen abonnemangstillgänglighet hittad i Sverige.</span>
               ) : (
                 <span>
-                  {summaryText(streamSummary)}
+                  {streamingSummaryText(streamSummary)}
                   {unseen.length > STREAM_CAP && (
                     <span className="text-ink-3"> · visar {STREAM_CAP} av {unseen.length}</span>
                   )}

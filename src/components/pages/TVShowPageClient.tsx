@@ -27,6 +27,7 @@ import { NotFound } from '@/components/ui/NotFound';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import SeasonList from '@/components/tv/SeasonList';
 import RelatedSeriesStrip from '@/components/tv/RelatedSeriesStrip';
+import CompanionSection from '@/components/franchise/CompanionSection';
 import { relatedSeriesFor } from '@/lib/tv/relatedSeries';
 import { seasonCompletion } from '@/lib/tmdb/seasonCompletion';
 import NotesBlock from '@/components/title/NotesBlock';
@@ -532,6 +533,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
           <ReviewList tmdbId={show.id} mediaType="tv" title={displayTitle} posterPath={show.poster_path} />
         </section>
       </ClientOnly>
+
+      {/* Kompanjonfilm(er) — en serie som fortsätter som film (curated, cross-type).
+          Ovanför generiska "liknande serier" eftersom kopplingen är exakt, inte gissad.
+          Renderar inget för de ~99% av serier som inte är mappade. */}
+      <CompanionSection anchorMediaType="tv" anchorId={show.id} />
 
       {/* Similar series — back to duotone (navigation surface) */}
       {mappedRecs.length > 0 && (
