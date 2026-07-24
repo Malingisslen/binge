@@ -36,6 +36,12 @@ Per show, I:
   (`/discover/tv`, `watch_region=SE`, excludes talk/news/reality/documentary) so coverage keeps growing
   toward "all relevant shows" rather than stalling once the watchlist snapshot is exhausted — see
   `.claude/skills/recap/SKILL.md` for the exact query and skip-list mechanics.
+- **Default execution mode (decided 2026-07-24): a parallel `Workflow` batch, one subagent per
+  show, not one agent working through shows serially.** Skip-checking is done via a committed
+  coverage manifest (`docs/recaps/covered-shows.json`, regenerated from Firestore truth by
+  `node functions/scripts/recap-coverage-manifest.mjs` — cheap `listDocuments()` scan, not billed
+  reads) instead of one `recaps/{tmdbId}_index` read per candidate. See SKILL.md "Default mode" for
+  the exact batch-building + Workflow-script mechanics.
 - For **each** boundary `(s,e)`: read **per-episode** summaries for episodes **≤ (s,e)** from Wikipedia and
   other **CC BY-SA-compatible** wikis (verify each source's licence footer; SKIP all-rights-reserved). Stay
   strictly on episode-specific pages ≤ the boundary — never character/overall-plot pages (they span the
