@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { searchMulti, findByImdbId, posterUrl } from '@/lib/tmdb/client';
 import { parseWatchlistCsv, type ImportRow, type ImportFormat } from '@/lib/import/parseWatchlistCsv';
 import { pickBestMatch, titleOf, importStatus } from '@/lib/import/matchTitle';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import type { MediaType, WatchStatus } from '@/types';
 
 /**
@@ -112,7 +113,7 @@ function ImportContent() {
       // BIN-150: per-titel try/catch — en misslyckad skrivning (offline/regel)
       // får inte avbryta resten eller sväljas tyst. Räkna + visa misslyckade.
       try {
-        await addItem({
+        await addItem(buildWatchlistAddPayload({
           tmdbId: a.match.tmdbId,
           mediaType: a.match.mediaType,
           status: a.status,
@@ -120,14 +121,11 @@ function ImportContent() {
           posterPath: a.match.posterPath,
           releaseYear: a.match.year,
           rating: a.row.rating,
-          notes: null,
-          totalSeasons: null,
-          lastWatchedSeason: null,
-          lastWatchedEpisode: null,
-          providers: [],
           genreIds: a.match.genreIds,
-          tmdbStatus: null,
-        });
+          // New add from a CSV row — no provider data here. Explicit [] keeps the
+          // created doc's array contract intact (see OnboardingFlow for the rule).
+          providers: [],
+        }));
         n++;
         setImported(n);
       } catch {

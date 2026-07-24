@@ -473,6 +473,78 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(setDoc).not.toHaveBeenCalled();
   });
 
+  // The batch's only user-visible data-model change. The pure helper cannot
+  // preserve anything on its own — `addItem` is what writes — so these assertions
+  // have to live here. Both stamps were previously UNCONDITIONAL; mutation-proven
+  // that reverting either leaves every other test in this file green.
+  it('addItem does NOT rewrite addedAt when re-marking a title already in the library', async () => {
+    // addedAt drives Bibliotek's "Tillagd" sort, backlogResurface's oldest-first
+    // ranking, taste/stats' 30-day counter and the GDPR export's "added" value.
+    // Re-stamping it on a status change silently re-dated a years-old title.
+    await mountSeeded([seedDoc({ tmdbId: 9 })]);
+
+    await act(async () => {
+      await addItemRef!({ ...newTitle(9), status: 'avbruten' });
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_9');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    // ABSENT, not null — addItem merges, so an omitted key preserves the stored date.
+    expect('addedAt' in payload).toBe(false);
+    // …and the same re-mark must not re-certify carried-forward TMDB data as fresh,
+    // which would make the static field group un-sweepable for another 5 months.
+    expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
+  });
+
+  it('addItem DOES stamp addedAt + tmdbFieldsRefreshedAt on a genuine new add', async () => {
+    // The other half of the guard: omitting these on a real first add would leave a
+    // doc that sorts nowhere (toDate(undefined) re-dates it on every read) and that
+    // the ToS sweep would treat as stale.
+    await mountSeeded([]);
+
+    await act(async () => {
+      await addItemRef!(newTitle(77));
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_77');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    expect(payload.addedAt).toBe('ts'); // serverTimestamp sentinel
+    expect(payload.tmdbFieldsRefreshedAt).toBe('ts');
+  });
+
+  it('COLD LOAD: the two stamps deliberately DIVERGE — addedAt is written, tmdbFieldsRefreshedAt is not', async () => {
+    // The branch the production comment defends, and the reason it says "do not
+    // unify these guards". Both new tests above run with the snapshot SETTLED, so a
+    // refactor collapsing the two conditions either way would leave them green.
+    //
+    // The asymmetry: `addedAt` is gated on `currentForRating` alone, so during a cold
+    // load (items === []) it still writes — a doc landing without addedAt sorts
+    // nowhere and never recovers. `tmdbFieldsRefreshedAt` additionally requires the
+    // snapshot to have settled, so it stays SILENT here — an absent freshness stamp
+    // is repaired by the title-page lazy refresh, whereas a false-fresh one would
+    // suppress that repair for 90 days.
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    expect(screen.getByText('ready')).toBeTruthy();
+    // Deliberately do NOT invoke snapshotCallback — this is the unsettled window.
+    expect(snapshotCallback).not.toBeNull();
+
+    await act(async () => {
+      await addItemRef!(newTitle(101));
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_101');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    expect(payload.addedAt).toBe('ts');
+    expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
+  });
+
   it('BIN-505: addItem never writes a non-null inline note to the watchlist doc', async () => {
     // addItem is also the re-mark path (QuickAddButton/StatusButton/useMarkSeen
     // pass current?.notes to preserve it). notes now lives in watchlistNotes and

@@ -24,6 +24,7 @@ import { AvatarInitials } from '@/components/ui/AvatarInitials';
 import NotesBlock from '@/components/title/NotesBlock';
 import TagEditor from '@/components/title/TagEditor';
 import { tagsInLibrary } from '@/lib/libraryView';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import RecCard from '@/components/recommendations/RecCard';
 import CollectionSection from '@/components/title/CollectionSection';
 import CompanionSection from '@/components/franchise/CompanionSection';
@@ -63,7 +64,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
   const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
-  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
+  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
   const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -189,22 +190,21 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const todayStr = new Date(now).toISOString().slice(0, 10);
   const cinemaInfo = cinemaToStreaming(movie, todayStr);
   const handleBevaka = () => {
-    void addItem({
+    void addItem(buildWatchlistAddPayload({
       tmdbId: movie.id,
       mediaType: 'movie',
       status: 'vill_se',
-      rating: null,
-      notes: null,
       title: displayTitle,
       posterPath: movie.poster_path,
       releaseYear: parseInt(year, 10) || null,
-      totalSeasons: null,
-      lastWatchedSeason: null,
-      lastWatchedEpisode: null,
+      // Carries rating/progress forward if this somehow runs on a tracked title.
+      // NOT the cold-load defence — the CTA is gated on watchlistLoading for that,
+      // because `status` and `watchedAt` are written unconditionally and no payload
+      // shape can protect them.
+      current: watchlistItem,
       providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
       genreIds: movie.genres.map(g => g.id),
-      tmdbStatus: null,
-    });
+    }));
     toast(`Bevakar släppet av ${displayTitle}`);
   };
 
@@ -290,7 +290,16 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               library state (inLibrary) and isn't core SEO content. */}
           {cinemaInfo && (
             <ClientOnly>
-              <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
+              {/* Gated on the watchlist having SETTLED, not just on `watchlistItem`.
+                  While it's still loading, getItem returns undefined for a film the
+                  user may well have marked 'sedd' — and Bevaka hard-sets
+                  status: 'vill_se', which would demote a TERMINAL film status and
+                  erase its watchedAt. Hiding the CTA for that moment is the only
+                  thing that makes the click safe; the payload can't express "don't
+                  touch status". */}
+              {!watchlistLoading && (
+                <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
+              )}
             </ClientOnly>
           )}
 

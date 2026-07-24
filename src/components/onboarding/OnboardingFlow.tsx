@@ -12,6 +12,7 @@ import { fsdb } from '@/lib/firebase/db';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 /**
@@ -235,22 +236,20 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
     const status: WatchStatus = result.media_type === 'tv'
       ? 'mina'
       : (intent === 'plan' ? 'vill_se' : 'sedd');
-    await addItem({
+    await addItem(buildWatchlistAddPayload({
       tmdbId: result.id,
       mediaType: result.media_type,
       status,
       title,
       posterPath: result.poster_path,
       releaseYear: getReleaseYear(result),
-      totalSeasons: null,
-      lastWatchedSeason: null,
-      lastWatchedEpisode: null,
-      rating: null,
-      notes: null,
-      providers: [],
       genreIds: result.genre_ids ?? [],
-      tmdbStatus: null,
-    });
+      // Genuine new add with no `current` and no provider data on this surface.
+      // Explicit [] (not omitted) so the created doc satisfies WatchlistItem's
+      // non-optional array contract; taste/backfill owns filling it in later, and
+      // shouldStampProvidersAtAdd deliberately does not stamp on an empty list.
+      providers: [],
+    }));
   };
 
   return (

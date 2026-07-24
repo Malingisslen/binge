@@ -3,13 +3,15 @@
 import { useState, type CSSProperties } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Check, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { getMovieLite, posterUrl, titleHref } from '@/lib/tmdb/client';
+import { getMovieLite, titleHref } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import SeenPosterCard from '@/components/title/SeenPosterCard';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import {
   summarizeCollectionStreaming,
@@ -107,7 +109,7 @@ function ChipRow({ items, style }: { items: CompanionTitle[]; style?: CSSPropert
 function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const films = companions.filter((c) => c.mediaType === 'movie');
   const series = companions.filter((c) => c.mediaType === 'tv');
-  const { getItem, addItem } = useWatchlist();
+  const { getItem, addItem, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
   const [showStreaming, setShowStreaming] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
@@ -144,25 +146,24 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const streamingLoading = liteQueries.some((q) => q.isLoading);
 
   async function addOne(film: CompanionTitle, movie: TMDBMovie) {
-    if (addingId != null || getItem('movie', film.id)) return;
+    // watchlistLoading guard: before the snapshot lands getItem returns null for a
+    // film the user already tracks, so this would add it again — hard-writing
+    // status 'vill_se' over a 'sedd' film and erasing its watchedAt.
+    if (addingId != null || watchlistLoading || getItem('movie', film.id)) return;
     setAddingId(film.id);
     try {
-      await addItem({
+      await addItem(buildWatchlistAddPayload({
         tmdbId: film.id,
         mediaType: 'movie',
         status: 'vill_se',
         title: preferOriginalTitle(movie.title, movie.original_title) || movie.title || film.label,
         posterPath: movie.poster_path ?? null,
         releaseYear: movie.release_date ? parseInt(movie.release_date.slice(0, 4), 10) || null : null,
-        rating: null,
-        notes: null,
-        totalSeasons: null,
-        lastWatchedSeason: null,
-        lastWatchedEpisode: null,
-        providers: [],
         genreIds: movie.genres?.map((g) => g.id) ?? [],
-        tmdbStatus: null,
-      });
+        // New add; providers aren't fetched on this strip. Explicit [] — see
+        // OnboardingFlow for why a new doc must not omit the arrays.
+        providers: [],
+      }));
     } finally {
       setAddingId(null);
     }
@@ -203,43 +204,24 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
       {films.length > 0 && (
         <div className="similar-grid">
           {filmRows.map(({ film, movie, seen, inLibrary }) => {
-            const poster = movie ? posterUrl(movie.poster_path, 'w342') : null;
             const title = movie
               ? preferOriginalTitle(movie.title, movie.original_title) || movie.title || film.label
               : film.label;
-            const year = movie?.release_date ? movie.release_date.slice(0, 4) : '';
             return (
               <div key={`movie_${film.id}`}>
-                <Link
+                <SeenPosterCard
                   href={titleHref('movie', film.id)}
-                  style={{ textDecoration: 'none', color: 'inherit', position: 'relative', display: 'block' }}
-                >
-                  <div className="poster" style={{ opacity: seen ? 0.55 : 1 }}>
-                    {poster && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={poster} alt={title} loading="lazy" decoding="async" width={342} height={513} />
-                    )}
-                    {seen && (
-                      <span
-                        title="Sedd"
-                        style={{
-                          position: 'absolute', top: 6, right: 6,
-                          width: 22, height: 22, borderRadius: 999,
-                          background: 'var(--acc-deep)', color: 'white',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <Check size={13} strokeWidth={3} />
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 6, lineHeight: 1.25 }}>{title}</div>
-                  {year && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 1 }}>{year}</div>}
-                </Link>
+                  title={title}
+                  year={movie?.release_date ? movie.release_date.slice(0, 4) : ''}
+                  posterPath={movie?.poster_path ?? null}
+                  seen={seen}
+                />
                 {movie && !inLibrary && (
                   <button
                     onClick={() => addOne(film, movie)}
-                    disabled={addingId != null}
+                    // Also disabled while the watchlist loads: addOne early-returns in
+                    // that window, so an enabled button would be a silent dead click.
+                    disabled={addingId != null || watchlistLoading}
                     className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                     style={{ marginTop: 6 }}
                   >

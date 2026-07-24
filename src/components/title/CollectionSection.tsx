@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import Link from 'next/link';
-import { Check, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCollection } from '@/hooks/useTMDB';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
-import { getMovieLite, posterUrl } from '@/lib/tmdb/client';
+import { getMovieLite } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
+import SeenPosterCard from '@/components/title/SeenPosterCard';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { summarizeCollectionStreaming, seFlatrateProviderIds, streamingSummaryText } from '@/lib/collection/streamingSummary';
 
@@ -37,7 +38,7 @@ export default function CollectionSection({
   currentMovieId: number;
 }) {
   const { data: collection } = useCollection(collectionId);
-  const { getItem, addItem } = useWatchlist();
+  const { getItem, addItem, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -53,17 +54,22 @@ export default function CollectionSection({
   // Sett/osett härleds ur biblioteket — bara efter mount (Firestore/localStorage
   // finns inte på server; matchar resten av sidans mounted-mönster).
   const seenIds = useMemo(() => {
-    if (!mounted) return new Set<number>();
+    // `mounted` alone is NOT enough: it flips on the first effect, long before the
+    // Firestore watchlist snapshot lands. In that window getItem returns null for
+    // every already-tracked film, so "osedda" would include films the user has
+    // marked 'sedd' — and the bulk add hard-writes status: 'vill_se' over them,
+    // up to ADD_UNSEEN_CAP at a time. Wait for the snapshot before judging.
+    if (!mounted || watchlistLoading) return new Set<number>();
     const s = new Set<number>();
     for (const p of parts) {
       if (getItem('movie', p.id)?.status === 'sedd') s.add(p.id);
     }
     return s;
-  }, [mounted, parts, getItem]);
+  }, [mounted, watchlistLoading, parts, getItem]);
 
   const unseen = useMemo(
-    () => (mounted ? parts.filter(p => !seenIds.has(p.id)) : []),
-    [mounted, parts, seenIds],
+    () => (mounted && !watchlistLoading ? parts.filter(p => !seenIds.has(p.id)) : []),
+    [mounted, watchlistLoading, parts, seenIds],
   );
   // Osedda som inte ens ligger i biblioteket — kandidater för "lägg till alla".
   // Gate på getItem (inte bara status): en film som redan ligger som vill_se/
@@ -103,22 +109,18 @@ export default function CollectionSection({
       // cappa ändå så en patologiskt stor samling inte avfyrar hundratals
       // sekventiella Firestore-skrivningar.
       for (const p of unseenNotInLibrary.slice(0, ADD_UNSEEN_CAP)) {
-        await addItem({
+        await addItem(buildWatchlistAddPayload({
           tmdbId: p.id,
           mediaType: 'movie',
           status: 'vill_se',
           title: preferOriginalTitle(p.title, p.original_title) || p.title || '',
           posterPath: p.poster_path,
           releaseYear: p.release_date ? parseInt(p.release_date.slice(0, 4), 10) || null : null,
-          rating: null,
-          notes: null,
-          totalSeasons: null,
-          lastWatchedSeason: null,
-          lastWatchedEpisode: null,
-          providers: [],
           genreIds: p.genre_ids ?? [],
-          tmdbStatus: null,
-        });
+          // New add; the collection list carries no provider data. Explicit [] —
+          // see OnboardingFlow for why a new doc must not omit the arrays.
+          providers: [],
+        }));
       }
     } finally {
       setAdding(false);
@@ -130,7 +132,10 @@ export default function CollectionSection({
       <div className="head">
         <div>
           <h2>{collection.name}</h2>
-          {mounted && (
+          {/* Gated on the snapshot too: pre-settle seenCount is 0 for everyone, so
+              this would confidently tell a user who has seen the whole collection
+              that they have seen none of it. */}
+          {mounted && !watchlistLoading && (
             <div className="sub">
               {seenCount} av {parts.length} sedda
               {unseen.length > 0 && ` · ${unseen.length} kvar`}
@@ -182,45 +187,17 @@ export default function CollectionSection({
       )}
 
       <div className="similar-grid">
-        {parts.map(part => {
-          const title = preferOriginalTitle(part.title, part.original_title) || part.title || '';
-          const year = part.release_date ? part.release_date.slice(0, 4) : '';
-          const poster = posterUrl(part.poster_path, 'w342');
-          const isSeen = seenIds.has(part.id);
-          const isCurrent = part.id === currentMovieId;
-          return (
-            <Link
-              key={part.id}
-              href={`/movie/${part.id}/`}
-              style={{ textDecoration: 'none', color: 'inherit', position: 'relative', display: 'block' }}
-              aria-current={isCurrent ? 'page' : undefined}
-            >
-              <div className="poster" style={{ opacity: mounted && isSeen ? 0.55 : 1 }}>
-                {poster && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={poster} alt={title} loading="lazy" decoding="async" width={342} height={513} />
-                )}
-                {mounted && isSeen && (
-                  <span
-                    title="Sedd"
-                    style={{
-                      position: 'absolute', top: 6, right: 6,
-                      width: 22, height: 22, borderRadius: 999,
-                      background: 'var(--acc-deep)', color: 'white',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    <Check size={13} strokeWidth={3} />
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: 12.5, fontWeight: isCurrent ? 600 : 500, marginTop: 6, lineHeight: 1.25 }}>
-                {title}
-              </div>
-              {year && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 1 }}>{year}</div>}
-            </Link>
-          );
-        })}
+        {parts.map(part => (
+          <SeenPosterCard
+            key={part.id}
+            href={`/movie/${part.id}/`}
+            title={preferOriginalTitle(part.title, part.original_title) || part.title || ''}
+            year={part.release_date ? part.release_date.slice(0, 4) : ''}
+            posterPath={part.poster_path}
+            seen={mounted && seenIds.has(part.id)}
+            isCurrent={part.id === currentMovieId}
+          />
+        ))}
       </div>
     </section>
   );

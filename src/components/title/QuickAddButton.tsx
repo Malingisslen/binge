@@ -9,6 +9,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import type { WatchStatus, MediaType } from '@/types';
 
 interface QuickAddButtonProps {
@@ -44,17 +45,10 @@ export default function QuickAddButton({
       await markSeen({ tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds });
       return;
     }
-    await addItem({
+    await addItem(buildWatchlistAddPayload({
       tmdbId, mediaType, status, title, posterPath, releaseYear,
-      rating: current?.rating ?? null,
-      notes: current?.notes ?? null,
-      totalSeasons: current?.totalSeasons ?? null,
-      lastWatchedSeason: current?.lastWatchedSeason ?? null,
-      lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
-      providers: providers ?? current?.providers ?? [],
-      genreIds: genreIds ?? current?.genreIds ?? [],
-      tmdbStatus: current?.tmdbStatus ?? null,
-    });
+      current, providers, genreIds,
+    }));
     toast(`${title} — ${labelFor(status)}`);
   }
 

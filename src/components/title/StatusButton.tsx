@@ -9,6 +9,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -56,22 +57,13 @@ export default function StatusButton({
       });
       return;
     }
-    await addItem({
-      tmdbId,
-      mediaType,
-      status,
-      rating: current?.rating ?? null,
-      notes: current?.notes ?? null,
-      title,
-      posterPath,
-      releaseYear,
+    await addItem(buildWatchlistAddPayload({
+      tmdbId, mediaType, status, title, posterPath, releaseYear,
+      current, providers, genreIds, tmdbStatus,
+      // Explicit null (not omitted): this surface owns the season count from
+      // its own props, so an absent prop clears it rather than carrying over.
       totalSeasons: totalSeasons ?? null,
-      lastWatchedSeason: current?.lastWatchedSeason ?? null,
-      lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
-      providers: providers ?? current?.providers ?? [],
-      genreIds: genreIds ?? current?.genreIds ?? [],
-      tmdbStatus: tmdbStatus ?? current?.tmdbStatus ?? null,
-    });
+    }));
     toast(`${title} — ${labelFor(status)}`);
   }
 

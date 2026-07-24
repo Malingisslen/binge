@@ -35,13 +35,23 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
  *    rendering — linten stoppar det, med rätta.)
  */
 export function useOptimisticMirrorField<V>(
+  /** The account this mirror belongs to (uid). `null`/`undefined` = signed out. */
+  ownerKey: string | null | undefined,
   source: Record<number, V> | undefined,
   commit: (next: Record<number, V>) => Promise<void>,
 ): (key: number, value: V | null) => Promise<void> {
   const mirrorRef = useRef<Record<number, V>>({});
   const commitRef = useRef(commit);
 
-  useIsomorphicLayoutEffect(() => { mirrorRef.current = source ?? {}; }, [source]);
+  // BIN-592: `ownerKey` (the uid) is in the dep list because `source` ALONE cannot
+  // detect an account switch. A user who has never saved a price has
+  // `source === undefined`, and so does the next user — sign-out and sign-in both
+  // leave the dep unchanged, so this effect never re-ran and the previous account's
+  // map stayed in the ref. The next user's first edit then spread it into THEIR
+  // profile write, handing them a subscription cost they never entered (and
+  // Streamingrådgivaren then billed them for it). Keying on the account states the
+  // invariant directly instead of hoping the value happens to differ.
+  useIsomorphicLayoutEffect(() => { mirrorRef.current = source ?? {}; }, [ownerKey, source]);
   useIsomorphicLayoutEffect(() => { commitRef.current = commit; }, [commit]);
 
   return useCallback(async (key: number, value: V | null) => {

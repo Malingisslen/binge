@@ -8,6 +8,7 @@ import { statusLabel } from '@/lib/watchStatus';
 import { getTVShow } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { trackEvent } from '@/lib/analytics';
+import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { shouldPromptRating } from './useMarkSeen.helpers';
 import type { MediaType, TMDBTVShow } from '@/types';
 
@@ -61,17 +62,19 @@ export function useMarkSeen() {
           staleTime: TMDB_STALE.TV_DETAIL,
         });
         const last = tvShow.last_episode_to_air;
-        await addItem({
-          tmdbId, mediaType, status: 'mina', title, posterPath, releaseYear,
-          rating: current?.rating ?? null,
-          notes: current?.notes ?? null,
-          totalSeasons: tvShow.number_of_seasons ?? input.totalSeasons ?? current?.totalSeasons ?? null,
-          lastWatchedSeason: last?.season_number ?? current?.lastWatchedSeason ?? null,
-          lastWatchedEpisode: last?.episode_number ?? current?.lastWatchedEpisode ?? null,
-          providers: input.providers ?? current?.providers ?? [],
-          genreIds: input.genreIds ?? current?.genreIds ?? [],
-          tmdbStatus: tvShow.status ?? input.tmdbStatus ?? current?.tmdbStatus ?? null,
-        });
+        await addItem(buildWatchlistAddPayload({
+          tmdbId, mediaType, status: 'mina', title, posterPath, releaseYear, current,
+          // `?? undefined` is load-bearing: a null here must mean "we don't know,
+          // keep what's stored", NOT "clear it". The helper writes an explicit null
+          // straight through (StatusButton relies on that), so a call site that wants
+          // null to fall through has to say so.
+          totalSeasons: tvShow.number_of_seasons ?? input.totalSeasons ?? undefined,
+          lastWatchedSeason: last?.season_number,
+          lastWatchedEpisode: last?.episode_number,
+          providers: input.providers,
+          genreIds: input.genreIds,
+          tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
+        }));
       } catch {
         show('Kunde inte hämta serieinfo, försök igen');
         return;
@@ -80,17 +83,14 @@ export function useMarkSeen() {
       return;
     }
 
-    await addItem({
-      tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear,
-      rating: current?.rating ?? null,
-      notes: current?.notes ?? null,
-      totalSeasons: input.totalSeasons ?? current?.totalSeasons ?? null,
-      lastWatchedSeason: current?.lastWatchedSeason ?? null,
-      lastWatchedEpisode: current?.lastWatchedEpisode ?? null,
-      providers: input.providers ?? current?.providers ?? [],
-      genreIds: input.genreIds ?? current?.genreIds ?? [],
-      tmdbStatus: input.tmdbStatus ?? current?.tmdbStatus ?? null,
-    });
+    await addItem(buildWatchlistAddPayload({
+      tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear, current,
+      // See the TV branch: null means "unknown, preserve", not "clear".
+      totalSeasons: input.totalSeasons ?? undefined,
+      providers: input.providers,
+      genreIds: input.genreIds,
+      tmdbStatus: input.tmdbStatus ?? undefined,
+    }));
     promptRating();
   }, [getItem, addItem, updateRating, show, showRating, queryClient]);
 }

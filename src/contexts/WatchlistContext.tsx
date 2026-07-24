@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, useRef, useState, useCallback, useE
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, shouldStampProvidersAtAdd, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
+import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
@@ -63,7 +64,7 @@ interface WatchlistState {
    * till titlar"-state mot en användare som faktiskt har 100 serier.
    */
   loading: boolean;
-  addItem: (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>;
+  addItem: (item: WatchlistAddPayload) => Promise<void>;
   // BIN-560 Phase 4: every per-title mutator takes mediaType so it can (a) address
   // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
   // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
@@ -325,7 +326,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return { effectiveVisibility: eff, isPublic: eff === 'public' };
   }, [user?.defaultVisibility]);
 
-  const addItem = useCallback(async (item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => {
+  const addItem = useCallback(async (item: WatchlistAddPayload) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
@@ -358,26 +359,58 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
     // ärver default; per-item-override sätts via updateVisibility senare.
     const defaultVisibility = user?.defaultVisibility ?? 'private';
-    // BIN-505: notes now lives ONLY in the owner-only watchlistNotes subcollection,
-    // and the watchlist-doc rules REJECT a non-null inline `notes`. addItem is also
-    // the re-mark path (QuickAddButton/StatusButton/useMarkSeen pass current?.notes
-    // to preserve it) — so strip notes here or a re-mark of a NOTED title would be
-    // permission-denied. The note itself is untouched in its subcollection.
+    // BIN-505: notes lives ONLY in the owner-only watchlistNotes subcollection, and
+    // the watchlist-doc rules REJECT a non-null inline `notes` — so a re-mark of a
+    // NOTED title would be permission-denied if one rode along.
+    //
+    // Belt AND braces, deliberately. `WatchlistAddPayload` no longer accepts `notes`
+    // at all, which stops every type-checked caller; this runtime strip stays for the
+    // ones types can't reach (a cast, plain JS, a future refactor that widens the
+    // signature). BIN-505 made this a privacy invariant, not a convention, and
+    // WatchlistContext.test.tsx pins it by passing an off-type note on purpose.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { notes: _strippedNotes, ...itemFields } = item;
+    const { notes: _strippedNotes, ...itemFields } = item as WatchlistAddPayload & { notes?: unknown };
     await setDoc(ref, {
       ...itemFields,
       dropped: false,
       effectiveVisibility: defaultVisibility,
       isPublic: defaultVisibility === 'public',
-      addedAt: serverTimestamp(),
+      // Write addedAt only when this is NOT a re-mark. addItem is a merge-write, so
+      // an omitted key preserves the stored value — and re-stamping it on every
+      // status change rewrote the original add date, which Bibliotek's "Tillagd"
+      // sort, backlogResurface's oldest-first ranking, taste/stats' 30-day counter
+      // and the GDPR export all read as the truth.
+      //
+      // Deliberately gated on `currentForRating` ALONE — unlike
+      // shouldStampProvidersAtAdd below, which also requires the snapshot to have
+      // settled. The two conditions differ because the cost of guessing wrong is
+      // asymmetric per field: a genuinely new doc that lands WITHOUT addedAt sorts
+      // nowhere and never recovers, so during a cold load we must still stamp. Do
+      // not "unify" these guards.
+      ...(currentForRating ? {} : { addedAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
       watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
-      // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness. This write
-      // denormalizes the whole TMDB-derived block (title/posterPath/providers/
-      // genreIds/…) fresh from TMDB, so mark it fresh — else the ToS sweep, which
-      // treats an absent stamp as stale, would clear a freshly-added title's fields.
-      tmdbFieldsRefreshedAt: serverTimestamp(),
+      // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness on a genuine NEW
+      // add — that write really does denormalize the TMDB-derived block fresh from
+      // TMDB, and without the stamp the ToS sweep (which treats an absent stamp as
+      // stale) would clear a just-added title's fields.
+      //
+      // But NOT on a re-mark: those carry `current`'s cached values forward, so
+      // stamping there re-certified data that may be years old as freshly verified —
+      // making the static field-group permanently un-sweepable on exactly the titles
+      // users touch most, and defeating the 6-month TMDB ToS clearing the sweep
+      // exists to enforce.
+      //
+      // STRICTER gate than addedAt above — deliberately the OPPOSITE trade-off, and
+      // the same one shouldStampProvidersAtAdd makes below. The safe error inverts
+      // per field: a doc with no addedAt sorts nowhere and never recovers, so when
+      // in doubt we stamp it; an ABSENT freshness stamp just reads as stale and the
+      // title-page repair refills it, whereas a FALSE-fresh one suppresses that
+      // repair for 90 days. So when the snapshot hasn't settled and we cannot tell a
+      // new add from a re-mark, we say nothing.
+      ...(firstSnapshotSettledRef.current && !currentForRating
+        ? { tmdbFieldsRefreshedAt: serverTimestamp() }
+        : {}),
       // BIN-468: stamp the providers group ONLY on a genuine new add carrying real
       // providers. addItem is also the useMarkSeen re-mark path (cached/[] providers);
       // stamping there would falsely re-certify stale providers AND suppress

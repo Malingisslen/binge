@@ -9,6 +9,7 @@ import { X } from 'lucide-react';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
+import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 
 const MIN_QUICK_RATES = 5;
 
@@ -17,24 +18,36 @@ interface Props {
   onClose: () => void;
 }
 
-function buildItemFromTmdb(t: TMDBSearchResult, status: WatchlistItem['status'], rating: number | null): Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'> {
+function buildItemFromTmdb(
+  t: TMDBSearchResult,
+  status: WatchlistItem['status'],
+  rating: number | null,
+  current: WatchlistItem | null,
+): WatchlistAddPayload {
   const releaseYear = t.release_date ? Number(t.release_date.slice(0, 4)) : null;
-  return {
+  // Was the last call site still hand-filling the whole field list (BIN-582's
+  // acceptance). The TV-only fields it used to write as explicit nulls are simply
+  // omitted now — this flow only ever rates FILMS, so there is no season count or
+  // episode position to clear, and omitting means an already-tracked title keeps
+  // whatever it has instead of being reset by a quick rating.
+  return buildWatchlistAddPayload({
     tmdbId: t.id,
     mediaType: 'movie',
     status,
-    rating,
-    notes: null,
+    // `?? undefined` is the actual defence: no rating in this modal means "leave it
+    // alone", never "clear it", so an unsettled snapshot routing a tracked title
+    // through here can't null out its stored rating. `current` is null in this
+    // branch by construction (TS narrows it after the `if (existing)` above) — it is
+    // threaded through only so the signature stays honest if the branch ever changes.
+    current,
+    rating: rating ?? undefined,
     title: t.title ?? '',
     posterPath: t.poster_path ?? null,
     releaseYear: Number.isFinite(releaseYear) ? releaseYear : null,
-    totalSeasons: null,
-    lastWatchedSeason: null,
-    lastWatchedEpisode: null,
-    providers: [],
     genreIds: t.genre_ids ?? [],
-    tmdbStatus: null,
-  };
+    // New add from a search result — no provider data here (see OnboardingFlow).
+    providers: [],
+  });
 }
 
 export default function QuickRateModal({ open, onClose }: Props) {
@@ -63,7 +76,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
       if (rating !== null) await updateRating('movie', t.id, rating);
       await updateStatus('movie', t.id, 'sedd');
     } else {
-      await addItem(buildItemFromTmdb(t, 'sedd', rating));
+      await addItem(buildItemFromTmdb(t, 'sedd', rating, existing ?? null));
     }
     setRated(prev => new Set(prev).add(t.id));
   };

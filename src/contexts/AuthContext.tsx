@@ -494,7 +494,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (next: Record<number, number>) => updateUserField('providerCosts', next),
     [updateUserField],
   );
-  const setProviderCost = useOptimisticMirrorField(user?.providerCosts, commitProviderCosts);
+  const setProviderCost = useOptimisticMirrorField(uid, user?.providerCosts, commitProviderCosts);
   // BIN-417: kampanjer lagrar RÅA { monthlyCost, endDate } keyed by CANONICAL
   // id (så ett alias-id och dess kanoniska träffar samma post, i linje med
   // resolveEffectiveMonthlyCost). Kanoniseringen sker här, inte i hooken.
@@ -502,7 +502,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (next: Record<number, ProviderCampaign>) => updateUserField('providerCampaigns', next),
     [updateUserField],
   );
-  const setCampaignByKey = useOptimisticMirrorField(user?.providerCampaigns, commitProviderCampaigns);
+  const setCampaignByKey = useOptimisticMirrorField(uid, user?.providerCampaigns, commitProviderCampaigns);
   const setProviderCampaign = useCallback(
     (providerId: number, campaign: ProviderCampaign | null) =>
       setCampaignByKey(canonicalProviderId(providerId), campaign),
@@ -543,7 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (next: Record<number, number>) => updateUserField('providerRenewalDays', next),
     [updateUserField],
   );
-  const setProviderRenewalDay = useOptimisticMirrorField(user?.providerRenewalDays, commitProviderRenewalDays);
+  const setProviderRenewalDay = useOptimisticMirrorField(uid, user?.providerRenewalDays, commitProviderRenewalDays);
   const updateProviderTier = useCallback(async (providerId: number, tierId: string | null) => {
     if (!uid || !user) return;
     const { getProvider } = await import('@/lib/tmdb/providers');
