@@ -215,12 +215,13 @@ export function isUserWatchlistDocPath(path: string): boolean {
 /* ------------------------------------------------------------------------- *
  * Orchestration decisions (BIN-452).
  *
- * The tmdbFieldsSweep loop lives in index.ts (firebase-admin), but the
- * DECISIONS it makes — the dry-run gate, when the cursor may resume, the
- * per-doc skip/clear verdict, the per-run budget ceilings, and the shape of
- * the audit record — are pure and safety-critical, so they live here, tested
- * under the admin-free root runner. index.ts is left as thin Firestore glue
- * (query → classify → batch) around these predicates.
+ * The tmdbFieldsSweep loop lives in runSweep.ts (BIN-566 lifted it out of
+ * index.ts so an emulator test can drive it), but the DECISIONS it makes — the
+ * dry-run gate, when the cursor may resume, the per-doc skip/clear verdict, the
+ * per-run budget ceilings, and the shape of the audit record — are pure and
+ * safety-critical, so they live here, tested under the admin-free root runner.
+ * index.ts is now only the Admin-SDK port implementation (query → batch) that
+ * runSweep.ts drives.
  * ------------------------------------------------------------------------- */
 
 /**
@@ -323,8 +324,19 @@ export interface GroupClearTally {
 export interface SweepRunTally {
   mutateEnabled: boolean;
   scanned: number;
-  /** Docs that WOULD be (dry-run) / WERE (mutate) cleared (any group). */
+  /**
+   * Docs the loop JUDGED clearable (any group) — the verdict count, incremented
+   * per classified doc regardless of whether a write followed. Stays consistent
+   * with `wouldClearByGroup`, which is also verdict-based.
+   */
   clearable: number;
+  /**
+   * Docs whose clear DURABLY COMMITTED. Equals `clearable` on a clean mutate run
+   * and is 0 in dry-run. Tracked separately because a mid-page commit failure
+   * makes the two genuinely differ, and conflating them made a partially-failed
+   * run's audit contradict its own per-group breakdown.
+   */
+  cleared: number;
   skipped: number;
   budgetAbort: boolean;
   fullPassCompleted: boolean;
@@ -349,7 +361,9 @@ export interface SweepRunTally {
  * flags the failure (`error: true` + `errorMessage`) with whatever counts were
  * accumulated before the throw — a thrown run must still leave a `lastRun` record,
  * never a silent gap that reads as "the sweep didn't run this month". Omitted /
- * null `error` → no error fields (a clean run's shape is unchanged).
+ * null `error` → `error: false` + `errorMessage: null`, written EXPLICITLY. The
+ * record is merge-written and Firestore deep-merges nested maps, so omitting the
+ * keys on success would leave a previous failure's `error: true` standing forever.
  */
 export function buildLastRunAudit(
   tally: SweepRunTally,
@@ -360,17 +374,22 @@ export function buildLastRunAudit(
     at: serverTimestamp,
     dryRun: !tally.mutateEnabled,
     docsScanned: tally.scanned,
-    docsCleared: tally.mutateEnabled ? tally.clearable : 0,
+    docsCleared: tally.mutateEnabled ? tally.cleared : 0,
     docsWouldClear: tally.clearable,
     docsWouldClearByGroup: { ...tally.wouldClearByGroup },
     docsSkipped: tally.skipped,
     budgetAbort: tally.budgetAbort,
     fullPassCompleted: tally.fullPassCompleted,
   };
-  if (error !== undefined && error !== null) {
-    rec.error = true;
-    rec.errorMessage = errorToMessage(error);
-  }
+  // BIN-566 follow-up: write BOTH keys on EVERY run, never omit them on success.
+  // `lastRun` is merge-written onto the state doc and Firestore deep-merges nested
+  // maps, so an omitted key is not a cleared key — a single failed run's
+  // `error: true` would otherwise survive every later clean run and permanently
+  // misreport the sweep as broken. That record is exactly what BIN-454's runbook
+  // reads before enabling clearing across the whole database.
+  const failed = error !== undefined && error !== null;
+  rec.error = failed;
+  rec.errorMessage = failed ? errorToMessage(error) : null;
   return rec;
 }
 

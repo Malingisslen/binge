@@ -374,6 +374,7 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdo
   const tally = {
     scanned: 500,
     clearable: 12,
+    cleared: 12,
     skipped: 488,
     budgetAbort: false,
     fullPassCompleted: true,
@@ -392,6 +393,8 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdo
       docsSkipped: 488,
       budgetAbort: false,
       fullPassCompleted: true,
+      error: false,
+      errorMessage: null,
     });
   });
 
@@ -404,6 +407,26 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdo
     expect(rec.at).toBe(AT);
   });
 
+  it('a partial commit failure reports docsCleared < docsWouldClear, and the per-group breakdown stays the VERDICT count', () => {
+    // The two numbers legitimately diverge only here. docsWouldClear and
+    // docsWouldClearByGroup are verdicts (what the loop judged stale); docsCleared
+    // is what durably committed. Conflating them made a partially-failed run's
+    // audit contradict its own breakdown — on the record BIN-454's enable-gate reads.
+    const rec = buildLastRunAudit(
+      { ...tally, mutateEnabled: true, clearable: 12, cleared: 7 },
+      AT,
+    );
+    expect(rec.docsWouldClear).toBe(12);
+    expect(rec.docsCleared).toBe(7);
+    // The breakdown must mirror the VERDICT tally exactly — a >= check here was
+    // vacuous (a sum of three group counts trivially exceeds the doc count).
+    expect(rec.docsWouldClearByGroup).toEqual(tally.wouldClearByGroup);
+    // …and dry-run still reports zero written no matter what `cleared` says.
+    const dry = buildLastRunAudit({ ...tally, mutateEnabled: false, clearable: 12, cleared: 0 }, AT);
+    expect(dry.docsCleared).toBe(0);
+    expect(dry.docsWouldClear).toBe(12);
+  });
+
   it('carries the incomplete-run flags through so a budget abort is never a silent no-op', () => {
     const rec = buildLastRunAudit(
       { ...tally, mutateEnabled: true, budgetAbort: true, fullPassCompleted: false },
@@ -413,12 +436,24 @@ describe('buildLastRunAudit (honest dry-run vs mutate counts + per-group breakdo
     expect(rec.fullPassCompleted).toBe(false);
   });
 
-  it('no error passed → the record has NO error fields (clean-run shape unchanged) — BIN-507', () => {
+  it('a clean run writes error:false + errorMessage:null — it must CLEAR a prior failure, not omit', () => {
+    // This replaces an earlier assertion that the clean-run record has NO error
+    // fields. That shape was the defect, not the contract: `lastRun` is
+    // merge-written onto the state doc and Firestore DEEP-merges nested maps, so
+    // an omitted key leaves the previous value standing. A single failed run's
+    // `error: true` therefore survived every later clean run — permanently
+    // misreporting the sweep as broken on the exact record BIN-454's runbook
+    // reads before enabling clearing across the whole database.
     const rec = buildLastRunAudit({ ...tally, mutateEnabled: false }, AT);
-    expect(rec).not.toHaveProperty('error');
-    expect(rec).not.toHaveProperty('errorMessage');
+    expect(rec.error).toBe(false);
+    expect(rec.errorMessage).toBeNull();
     // omitting the arg and passing null are equivalent (both mean "no error")
-    expect(buildLastRunAudit({ ...tally, mutateEnabled: false }, AT, null)).not.toHaveProperty('error');
+    const explicitNull = buildLastRunAudit({ ...tally, mutateEnabled: false }, AT, null);
+    expect(explicitNull.error).toBe(false);
+    expect(explicitNull.errorMessage).toBeNull();
+    // The keys must be PRESENT — an absent key is what fails to clear on merge.
+    expect(Object.keys(rec)).toContain('error');
+    expect(Object.keys(rec)).toContain('errorMessage');
   });
 
   it('a thrown run flags the record with error + errorMessage and keeps partial counts — BIN-507', () => {
