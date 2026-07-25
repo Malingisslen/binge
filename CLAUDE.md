@@ -11,6 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Explain in product terms.** Malin directs the work but doesn't read code —
   describe changes by what they do for users and the trade-offs they carry, not by
   diff mechanics.
+- **Reply shape.** Answer in one or two lines, then bullets (five max, one line each),
+  then what she needs to do, then "also found" for anything you tripped over. No
+  preamble, no narration between tool calls, one topic per reply, no error logs unless
+  asked. On her own machine an output style enforces this; this bullet is what reaches
+  cloud and phone sessions, which never see `~/.claude`.
+- **Long answers become a page, not a wall.** Anything past ~15 lines — sprint recaps,
+  plans, reviews, audits, research — is written as one self-contained HTML page instead
+  of printed. Locally: write it under `C:/Users/malla/claude-reports/binge/` and open it.
+  In a cloud or phone session: publish it as an Artifact and give her the link.
 - **Minimize running costs.** Firebase is Blaze with a 25 SEK/mån cap. Prefer the
   lite TMDB queries on fan-out surfaces, respect the cache tiers, and flag anything
   that would add a paid service.
