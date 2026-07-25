@@ -83,6 +83,22 @@ describe('computeProfileStats — recent30 30-dagarsfönster (BIN-339)', () => {
     expect(stats.recent30).toEqual({ watched: 1, added: 1, rated: 1 });
   });
 
+  // BIN-593: watchedAt rensas inte längre när en titel lämnar 'sedd', så ett bart
+  // datum-filter räknade avbrutna/omlagda filmer som sedda på den PUBLIKA profilen.
+  // mkItem defaultar till status 'sedd', så fixturen MÅSTE variera statusen — annars
+  // hade testet varit grönt både med och utan grinden.
+  it('BIN-593: räknar bara titlar som FAKTISKT står som sedda, inte bara har ett sett-datum', () => {
+    const stats = computeProfileStats([
+      // Sedd + färskt datum → räknas.
+      mkItem({ tmdbId: 1, status: 'sedd', watchedAt: daysAgo(3), addedAt: daysAgo(100) }),
+      // Sedd i förrgår, sedan avbruten. Datumet ligger kvar — men den är inte sedd.
+      mkItem({ tmdbId: 2, status: 'avbruten', watchedAt: daysAgo(2), addedAt: daysAgo(100) }),
+      // Samma sak för en titel som lagts tillbaka i "vill se".
+      mkItem({ tmdbId: 3, status: 'vill_se', watchedAt: daysAgo(1), addedAt: daysAgo(100) }),
+    ]);
+    expect(stats.recent30.watched).toBe(1);
+  });
+
   it('rated kräver BÅDE en rating OCH en färsk updatedAt; null watchedAt räknas inte', () => {
     const stats = computeProfileStats([
       // Ingen rating → ej rated, även om updatedAt är färsk.

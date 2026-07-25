@@ -148,7 +148,9 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   async function addOne(film: CompanionTitle, movie: TMDBMovie) {
     // watchlistLoading guard: before the snapshot lands getItem returns null for a
     // film the user already tracks, so this would add it again — hard-writing
-    // status 'vill_se' over a 'sedd' film and erasing its watchedAt.
+    // status 'vill_se' over a 'sedd' film, demoting a terminal status.
+    // (BIN-593 stopped the write from ERASING watchedAt too; the status demotion
+    // is reason enough on its own, so the guard stays.)
     if (addingId != null || watchlistLoading || getItem('movie', film.id)) return;
     setAddingId(film.id);
     try {

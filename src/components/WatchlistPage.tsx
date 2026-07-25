@@ -56,6 +56,13 @@ function fmtDate(d: Date | null): string {
   if (!d) return '—';
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+// BIN-593: watchedAt är användarägd data och rensas INTE längre när en titel
+// lämnar 'sedd' — historiken finns kvar i dokumentet. Sedd-kolumnen och
+// "Sedd datum"-sorteringen visas även i den ofiltrerade /my/all-vyn, så utan
+// den här grinden skulle ett sett-datum plötsligt stå bredvid en rad som är
+// märkt "Avbruten" eller "Vill se". Samma status-grind som useServiceValue.
+const seenDate = (i: WatchlistItem): Date | null => (i.status === 'sedd' ? i.watchedAt : null);
 type ViewMode = 'table' | 'grid' | 'cards';
 type MediaFilter = 'all' | 'movie' | 'tv';
 
@@ -207,7 +214,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         case 'rating': return (b.rating ?? 0) - (a.rating ?? 0);
         case 'releaseYear': return (b.releaseYear ?? 0) - (a.releaseYear ?? 0);
         case 'addedAt': return b.addedAt.getTime() - a.addedAt.getTime();
-        case 'watchedAt': return (b.watchedAt?.getTime() ?? 0) - (a.watchedAt?.getTime() ?? 0);
+        case 'watchedAt': return (seenDate(b)?.getTime() ?? 0) - (seenDate(a)?.getTime() ?? 0);
         default: return b.updatedAt.getTime() - a.updatedAt.getTime();
       }
     });
@@ -412,8 +419,14 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
           <option value="rating">Betyg</option>
           <option value="releaseYear">År</option>
           <option value="addedAt">Tillagd</option>
-          {/* TV i 'mina' har aldrig watchedAt (film-only terminal) — dölj no-op-sorteringen där. */}
-          {status !== 'mina' && <option value="watchedAt">Sedd datum</option>}
+          {/* Samma villkor som Sedd-kolumnen: seenDate() ger null för allt som inte
+              står som sedd, så i en vy utan sedda rader (t.ex. /my/avbrutna eller
+              /my/series) vore det här valet en garanterad no-op. Erbjud det bara
+              där det gör något. (Den gamla motiveringen "TV i 'mina' har aldrig
+              watchedAt" gäller INTE längre — BIN-593 slutade rensa fältet, och
+              migrateStatus kan mappa gamla TV-dokument till 'mina' med datumet
+              kvar. Grinden är seenDate(), inte medietypen.) */}
+          {showWatchedCol && <option value="watchedAt">Sedd datum</option>}
         </select>
 
         {totalCount > 10 && (
@@ -737,7 +750,7 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
                       {fmtDate(item.addedAt)}
                     </td>}
                     {showWatchedCol && <td className="hidden md:table-cell px-2 py-[5px] border-b border-border-table text-xs text-ink-3">
-                      {fmtDate(item.watchedAt)}
+                      {fmtDate(seenDate(item))}
                     </td>}
                     <td className="hidden lg:table-cell px-2 py-[5px] border-b border-border-table">
                       <ProviderChips providers={item.providers} myProviders={user?.myProviders ?? []} providersCheckedAt={item.providersCheckedAt} />

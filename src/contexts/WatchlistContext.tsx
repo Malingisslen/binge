@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { buildStatusUpdate, normalizeTags } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -164,12 +164,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   //    för event-payloaden (en användare har bara EN första titel).
   const everNonEmptyRef = useRef(false);
   const firstSnapshotSettledRef = useRef(false);
+  // BIN-593: the snapshot's items as a LIVE ref, written in the same onSnapshot
+  // callback as firstSnapshotSettledRef below. The mutators await `fsdb()` (a dynamic import
+  // that can take hundreds of ms on first use) before deciding what to write, so
+  // reading the render-closure `items` alongside the live settled-ref could pair
+  // an EMPTY item list with settled===true when the first snapshot landed during
+  // that await — resolving "unknown" to "known-absent" and stamping over a stored
+  // watch date. Both must come from the same generation; refs give us the freshest.
+  //
+  // The pairing is upheld by both being assigned inside the SAME onSnapshot
+  // callback with no await between them — not by adjacency, they sit ~28 lines
+  // apart around the first_title_added bookkeeping. Anything added between them
+  // must stay synchronous, or the guard silently weakens.
+  const itemsRef = useRef<WatchlistItem[]>([]);
   const pendingAddCountRef = useRef(0);
   const pendingFirstMediaTypeRef = useRef<MediaType | null>(null);
 
   useEffect(() => {
     everNonEmptyRef.current = false;
     firstSnapshotSettledRef.current = false;
+    itemsRef.current = [];
     pendingAddCountRef.current = 0;
     pendingFirstMediaTypeRef.current = null;
     if (!uid) { setItems([]); setLoading(false); return; }
@@ -205,7 +219,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // Tag these items with the uid they belong to, so the notes migration
         // never runs against a previous account's rows on a same-session switch.
         itemsUidRef.current = uid;
-        setItems(snap.docs.map(d => docToItem(d.data())));
+        const next = snap.docs.map(d => docToItem(d.data()));
+        // Same onSnapshot callback as firstSnapshotSettledRef above, with no await
+        // between the two assignments — so a mutator reading both refs can never
+        // see "settled" paired with a pre-snapshot item list.
+        itemsRef.current = next;
+        setItems(next);
         setLoading(false);
       }));
   }, [uid]);
@@ -335,7 +354,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // rating: current?.rating). So compare against the current rating and stamp
     // ratedAt only on a genuinely new/changed rating — a blind stamp would
     // re-bump recency on every re-mark, the exact drift this fix removes.
-    const currentForRating = items.find(i => i.tmdbId === item.tmdbId && i.mediaType === item.mediaType);
+    // BIN-593: read the LIVE ref, not the render-closure `items` — see itemsRef's
+    // declaration. This runs after `await fsdb()`, so the closure value can be a
+    // whole snapshot out of date while firstSnapshotSettledRef has already flipped.
+    const currentForRating = itemsRef.current.find(i => i.tmdbId === item.tmdbId && i.mediaType === item.mediaType);
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
     //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
     //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
@@ -389,7 +411,34 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // not "unify" these guards.
       ...(currentForRating ? {} : { addedAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
-      watchedAt: item.status === 'sedd' ? serverTimestamp() : null,
+      // BIN-593: `watchedAt` is user-authored — Malin, 2026-07-25: "har man
+      // manuellt justerat 'sett' ska det bara ändras om man själv manuellt ändrar
+      // igen". This used to write `serverTimestamp()` on every 'sedd' re-mark
+      // (stomping a date backdated via WatchedDateEditor) and an explicit `null`
+      // on every other status (erasing the date outright the moment a film left
+      // 'sedd'). Now: stamp only the FIRST date on a title provably without one,
+      // and otherwise omit the key so the merge preserves it.
+      //
+      // STRICT gate, like tmdbFieldsRefreshedAt below and NOT like addedAt above —
+      // the cost of guessing wrong inverts per field. A missing watchedAt is
+      // user-fixable (the date picker); a stomped one is gone. So during a cold
+      // load, when `itemsRef` is still empty and a re-mark is indistinguishable
+      // from a new add, we say nothing. Do not "unify" this with the addedAt guard.
+      // Shares `canAutoStampWatchedAt`/`resolveCurrentWatchedAt` with
+      // buildStatusUpdate, so the "may we stamp?" rule can't drift between the two
+      // write paths. That predicate is ALL they share, deliberately spelled out:
+      //  - buildStatusUpdate also stamps on an explicit `watchedAtOverride`;
+      //    addItem has no such parameter and no equivalent branch. (That override
+      //    is currently reachable only from updateStatus's optional 4th argument,
+      //    which NO production caller passes — the real date picker goes through
+      //    updateWatchedAt. It is the BIN-91 signature, kept, not the live path.)
+      //  - addItem has never written `rewatchCount` at all, so a re-mark here is
+      //    not counted as a rewatch the way updateStatus counts one.
+      // Both asymmetries are pre-existing and untouched by BIN-593 — see BIN-598.
+      ...(item.status === 'sedd'
+        && canAutoStampWatchedAt(resolveCurrentWatchedAt(currentForRating, firstSnapshotSettledRef.current))
+        ? { watchedAt: serverTimestamp() }
+        : {}),
       // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness on a genuine NEW
       // add — that write really does denormalize the TMDB-derived block fresh from
       // TMDB, and without the stamp the ToS sweep (which treats an absent stamp as
@@ -433,7 +482,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (fireFirstNow) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-  }, [uid, user?.defaultVisibility, items]);
+    // BIN-593: `items` is deliberately NOT a dep — the lookup reads itemsRef, so
+    // this callback no longer needs to be recreated on every snapshot.
+  }, [uid, user?.defaultVisibility]);
 
   const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
@@ -456,7 +507,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
-    const currentItem = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
+    // BIN-593: live ref, not the render closure — same reason as addItem above.
+    const currentItem = itemsRef.current.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
     await setDoc(ref, buildStatusUpdate(status, {
       now: serverTimestamp(),
@@ -465,9 +517,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       currentRewatchCount: currentItem?.rewatchCount,
       // BIN-91: backdaterat sett-datum (film). undefined → faller tillbaka på now.
       watchedAtOverride: watchedAt ? Timestamp.fromDate(watchedAt) : undefined,
+      // BIN-593: tri-state — se StatusUpdateContext + resolveCurrentWatchedAt.
+      currentWatchedAt: resolveCurrentWatchedAt(currentItem, firstSnapshotSettledRef.current),
     }), { merge: true });
     trackEvent('status_changed', { mediaType, status });
-  }, [uid, items, effectiveVisibilityNow]);
+    // BIN-593: reads itemsRef, so `items` is no longer a dependency (see addItem).
+  }, [uid, effectiveVisibilityNow]);
 
   // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
   // — det tolkas som en omtitt (isRewatch = sedd→sedd) och räknar upp rewatchCount
@@ -654,6 +709,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const { db, doc, deleteDoc } = await fsdb();
     const docId = mediaTypeDocId(mediaType, tmdbId);
     await deleteDoc(doc(db, 'users', uid, 'watchlist', docId));
+    // BIN-593: drop it from the live ref immediately — REQUIRED, not defensive.
+    // The snapshot echo can take a moment (and this function awaits two more
+    // deletes before returning). Until it lands, both add-time guards would read
+    // the deleted row as a still-present title: the watchedAt guard reads it as
+    // proof a date is stored, and the addedAt guard reads it as a re-mark. A
+    // remove-then-re-add-as-'sedd' in that window would therefore create a fresh
+    // doc with NO watch date AND no addedAt — the latter sorts nowhere and never
+    // recovers. Pinned by "a title removed then immediately re-added as sedd gets
+    // a FRESH date" in WatchlistContext.test.tsx; deleting these lines fails it.
+    itemsRef.current = itemsRef.current.filter(
+      i => !(i.tmdbId === tmdbId && i.mediaType === mediaType),
+    );
     // Best-effort: drop the sibling tags + notes docs so they never orphan
     // (their own owner-only collections aren't cascaded by the watchlist delete).
     try {

@@ -49,23 +49,119 @@ export interface StatusUpdateContext {
   currentRewatchCount?: number;
   /**
    * BIN-91: optional backdated watch time for a 'sedd'-write (a Timestamp/Date
-   * sentinel from the caller). When absent, `watchedAt` falls back to `now`.
+   * sentinel from the caller). An explicit value here always wins over the
+   * protection below, because supplying one IS the user saying what the date is.
    * `updatedAt` always stays `now` — that's the real write time, only the
-   * *watched* moment is user-overridable.
+   * *watched* moment is overridable.
+   *
+   * NOTE: no production caller currently supplies it. It reaches here only via
+   * `updateStatus`'s optional 4th argument, and every call site passes three —
+   * the actual date picker (`WatchedDateEditor`) writes through `updateWatchedAt`
+   * instead. Treat this as the kept BIN-91 signature, not the live manual path.
    */
   watchedAtOverride?: unknown;
+  /**
+   * BIN-593 — the item's STORED watch date, as far as the caller knows. Three
+   * distinct meanings, all load-bearing:
+   *   - a value     → a date is already stored → NEVER auto-overwrite it
+   *   - `null`      → we positively know none is stored → safe to auto-stamp
+   *   - `undefined` → we don't know (cold load / not in the snapshot) → say nothing
+   *
+   * `watchedAt` is user-authored data (Malin, 2026-07-25: "har man manuellt
+   * justerat 'sett' ska det bara ändras om man själv manuellt ändrar igen"), so
+   * the only automatic write left is the FIRST stamp on a title that has none.
+   *
+   * Typed `Date | null` and NOT `unknown` like its siblings above: those carry
+   * Firestore FieldValue sentinels the app's types can't express, this one only
+   * ever comes from `WatchlistItem.watchedAt`. The whole guard rests on a strict
+   * `=== null`, so a stray truthy non-Date must not be able to reach it.
+   */
+  currentWatchedAt?: Date | null;
+}
+
+/**
+ * BIN-593 — resolve the tri-state above from what the caller actually has:
+ * the item as found in the watchlist snapshot (or `undefined` if not found),
+ * plus whether that snapshot has settled yet.
+ *
+ * Not-found + settled = genuinely new title → `null` (safe to stamp).
+ * Not-found + unsettled = cold load, a re-mark is indistinguishable from a new
+ * add → `undefined` (say nothing).
+ */
+export function resolveCurrentWatchedAt(
+  current: { watchedAt: Date | null } | undefined,
+  snapshotSettled: boolean,
+): Date | null | undefined {
+  if (current) return current.watchedAt;
+  return snapshotSettled ? null : undefined;
+}
+
+/**
+ * BIN-593 — the single definition of "may we stamp a watch date automatically?".
+ * Shared by `buildStatusUpdate` and `WatchlistContext.addItem` so the rule can't
+ * drift between the two write paths.
+ */
+export function canAutoStampWatchedAt(currentWatchedAt: Date | null | undefined): boolean {
+  return currentWatchedAt === null;
 }
 
 export function buildStatusUpdate(
   status: WatchStatus,
   ctx: StatusUpdateContext,
 ): Record<string, unknown> {
+  // BIN-593: this stays sedd→sedd ONLY. It was briefly broadened to count "a
+  // stored watch date exists" as evidence of a prior viewing — so that a
+  // sedd(2019) → vill_se → sedd(tonight) re-viewing would still be recorded once
+  // the date itself became protected. Reverted: since the same ticket stopped a
+  // status change from clearing watchedAt, a MIS-CLICK now also leaves a date
+  // behind. Undo the mis-click, genuinely watch the film later, and that broader
+  // rule counted a rewatch of a film seen exactly once — rendered as "x2" and
+  // permanent, since rewatchCount is editable nowhere. A preserved date cannot
+  // distinguish "watched" from "tapped by mistake", so it is not evidence.
+  //
+  // This rule is NOT a general defence against a wrong count: QuickRateModal
+  // re-marks already-'sedd' films without checking, so it increments on every
+  // pass. Pre-existing and unchanged here — see BIN-599.
+  //
+  // KNOWN COST — a real regression, escalated to Malin, not decided here. The
+  // code cannot tell a date SHE picked from one we auto-stamped (there is no
+  // watchedAtSource flag), so her "only a manual change may alter it" rule is
+  // implemented as "no automatic write may alter ANY stored date". Two paths pay:
+  //
+  //  - sedd -> sedd (the common one: re-mark an already-seen film). The rewatch
+  //    IS counted, but the date stays frozen at the first, possibly auto-stamped,
+  //    value. The row reads "x2 … Sedd: 2 apr 2019".
+  //  - vill_se/avbruten -> sedd (took it off the shelf to watch again). Recorded
+  //    NOWHERE: no rewatch (this rule) and no fresh date (stampWatchedAt below).
+  //    Before BIN-593 this transition wrote watchedAt: now.
+  //
+  // Either way Dagbok, Statistik's monthly activity and Streamingrådgivarens
+  // films-this-month lens all keep crediting the OLD month — so a service she
+  // actually used this month can read as unused. WatchedDateEditor is the way to
+  // re-date a re-viewing.
   const isRewatch = status === 'sedd' && ctx.currentStatus === 'sedd';
+  // BIN-593: `watchedAt` belongs to the user. Two ways it may be written here:
+  // an explicit override (the "markera sedd + välj datum" flow — a manual act),
+  // or the very first automatic stamp on a title that provably has no date yet.
+  // Anything else omits the key, so the merge-write preserves what's stored —
+  // including on a rewatch (see isRewatch above) and on any non-'sedd' status:
+  // leaving 'sedd' must not erase the history.
+  //
+  // CONSEQUENCE FOR EVERY READER: a stored date does NOT mean "currently seen".
+  // Gate on `status` first. `useServiceValue`, `DiaryPageClient` and `diary.ts`
+  // already did; THREE had to be fixed during BIN-593 — `taste/stats.ts` (which
+  // fed a PUBLIC profile counter), `app/stats/page.tsx`, and `WatchlistPage.tsx`,
+  // which needed its own per-row `seenDate()` helper because it renders rows of
+  // mixed status rather than a pre-filtered list. Do not treat this list as a
+  // closed set — BIN-598 tracks giving the rule one shared home.
+  const stampWatchedAt =
+    status === 'sedd' &&
+    (ctx.watchedAtOverride !== undefined || canAutoStampWatchedAt(ctx.currentWatchedAt));
   return {
     status,
     ...ctx.visFields,
     updatedAt: ctx.now,
-    ...(status === 'sedd' ? { watchedAt: ctx.watchedAtOverride ?? ctx.now } : {}),
+    ...(stampWatchedAt ? { watchedAt: ctx.watchedAtOverride ?? ctx.now } : {}),
     ...(isRewatch ? { rewatchCount: (ctx.currentRewatchCount ?? 0) + 1 } : {}),
     // BIN-35: clear the legacy v1/v2 `dropped` flag on any non-avbruten status.
     // migrateStatus lets `dropped:true` win unconditionally, so without this a

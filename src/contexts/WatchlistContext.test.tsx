@@ -543,6 +543,177 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     const payload = call![1] as Record<string, unknown>;
     expect(payload.addedAt).toBe('ts');
     expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
+    // BIN-593 joins the STRICT camp — a stomped watch date is unrecoverable, a
+    // missing one is user-fixable via the date picker. Three-way divergence now.
+    expect('watchedAt' in payload).toBe(false);
+  });
+
+  // ── BIN-593 — watchedAt is user-authored data ────────────────────────────────
+  // Malin, 2026-07-25: "har man manuellt justerat 'sett' ska det bara ändras om
+  // man själv manuellt ändrar igen". addItem is the re-mark path (useMarkSeen /
+  // StatusButton / QuickAddButton), and it used to write serverTimestamp() on
+  // every 'sedd' and an explicit null on every other status.
+
+  it('BIN-593: addItem does NOT rewrite watchedAt when the film already has one (re-mark)', async () => {
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    await mountSeeded([seedDoc({ tmdbId: 31, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
+
+    await act(async () => {
+      await addItemRef!(newTitle(31, 'movie')); // status 'sedd' — a rewatch re-mark
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_31');
+    expect(call).toBeDefined();
+    // ABSENT, not null — addItem merges, so an omitted key preserves the backdated date.
+    expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('BIN-593: addItem DOES stamp the first watchedAt (new add, and a seen-mark of a title that has none)', async () => {
+    // Both halves of "stamp only when we know there is none".
+    await mountSeeded([seedDoc({ tmdbId: 32, mediaType: 'movie', status: 'vill_se' })]);
+
+    await act(async () => {
+      await addItemRef!(newTitle(32, 'movie')); // vill_se → sedd, no stored date
+      await addItemRef!(newTitle(33, 'movie')); // genuinely new, status 'sedd'
+    });
+
+    for (const id of [32, 33]) {
+      const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === `users/u1/watchlist/movie_${id}`);
+      expect(call).toBeDefined();
+      expect((call![1] as Record<string, unknown>).watchedAt).toBe('ts');
+    }
+  });
+
+  it('BIN-593: addItem never writes a null watchedAt when the status is not sedd', async () => {
+    // The other data-loss half: the old code wrote `watchedAt: null` on every
+    // non-sedd status, erasing the date the moment a film left 'sedd'.
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    await mountSeeded([seedDoc({ tmdbId: 34, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
+
+    await act(async () => {
+      await addItemRef!({ ...newTitle(34, 'movie'), status: 'avbruten' });
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_34');
+    expect(call).toBeDefined();
+    expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('BIN-593: updateStatus forwards the stored watchedAt so the helper can protect it', async () => {
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    await mountSeeded([seedDoc({ tmdbId: 35, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
+
+    await act(async () => {
+      await updateStatusRef!('movie', 35, 'sedd');
+    });
+
+    const [, opts] = buildStatusUpdate.mock.calls[0] as [WatchStatus, Record<string, unknown>];
+    expect(opts.currentWatchedAt).toBe(STORED);
+  });
+
+  it('BIN-593: updateStatus reports a KNOWN-absent date as null — both when found dateless and when genuinely new', async () => {
+    // This is the `null` half of the tri-state only; the `undefined` (cold-load)
+    // half is pinned by the COLD LOAD test below, and collapsing the two is what
+    // the pair guards against. Named for what it asserts — an earlier name
+    // promised both directions while every assertion here checks null.
+    await mountSeeded([seedDoc({ tmdbId: 36, mediaType: 'movie', status: 'vill_se' })]);
+    await act(async () => {
+      await updateStatusRef!('movie', 36, 'sedd');
+    });
+    expect((buildStatusUpdate.mock.calls[0][1] as Record<string, unknown>).currentWatchedAt).toBe(null);
+
+    // A title absent from a SETTLED snapshot is genuinely new → null.
+    buildStatusUpdate.mockClear();
+    await act(async () => {
+      await updateStatusRef!('movie', 999, 'sedd');
+    });
+    expect((buildStatusUpdate.mock.calls[0][1] as Record<string, unknown>).currentWatchedAt).toBe(null);
+  });
+
+  it('BIN-593: COLD LOAD — updateStatus reports the watch date as unknown, not absent', async () => {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    expect(screen.getByText('ready')).toBeTruthy();
+    // Deliberately do NOT invoke snapshotCallback — the unsettled window.
+
+    await act(async () => {
+      await updateStatusRef!('movie', 37, 'sedd');
+    });
+
+    const opts = buildStatusUpdate.mock.calls[0][1] as Record<string, unknown>;
+    expect('currentWatchedAt' in opts).toBe(true);
+    expect(opts.currentWatchedAt).toBeUndefined();
+  });
+
+  it('BIN-593: a mutator reads the LIVE snapshot, not the render closure it was created in', async () => {
+    // The race the itemsRef exists for. addItem awaits fsdb() — a dynamic import
+    // that can take hundreds of ms — before deciding what to write, so the first
+    // snapshot can land mid-call. Reading the closure's `items` there would pair
+    // an EMPTY list with an already-flipped settled-ref, resolve "unknown" to
+    // "known-absent", and stamp over the backdated date. Capturing the closure
+    // BEFORE the snapshot and invoking it after reproduces exactly that pairing.
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    await mountSeeded([]); // settled, empty → this closure sees items === []
+    const staleAddItem = addItemRef!;
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 41, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]));
+    });
+
+    await act(async () => {
+      await staleAddItem(newTitle(41, 'movie')); // status 'sedd' — a re-mark
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_41');
+    expect(call).toBeDefined();
+    expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
+    // …and the same freshness must protect the sibling add-time stamps.
+    expect('addedAt' in (call![1] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('BIN-593: a title removed then immediately re-added as sedd gets a FRESH date', async () => {
+    // The write side of the itemsRef invariant (the test above covers the read
+    // side). removeItem deletes the doc, but the snapshot echo takes a moment —
+    // and it awaits two more sibling deletes before returning. Until the ref is
+    // pruned it still holds the deleted row WITH its 2019 date, so the guard would
+    // read that as "a date is stored", omit the key, and leave the brand-new doc
+    // dateless. Required finding from binge-test-reviewer: commenting out the
+    // prune left all other tests in this file green.
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    await mountSeeded([seedDoc({ tmdbId: 51, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
+
+    await act(async () => {
+      await removeItemRef!('movie', 51);
+      // Deliberately NO new snapshot in between — that is the window.
+      await addItemRef!(newTitle(51, 'movie')); // status 'sedd'
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_51');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    expect(payload.watchedAt).toBe('ts');
+    // …and it really is treated as a new doc, not a re-mark.
+    expect(payload.addedAt).toBe('ts');
+  });
+
+  it('BIN-593: COLD LOAD — addItem stays silent about watchedAt', async () => {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    expect(screen.getByText('ready')).toBeTruthy();
+
+    await act(async () => {
+      await addItemRef!(newTitle(38, 'movie')); // status 'sedd'
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_38');
+    expect(call).toBeDefined();
+    expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
   });
 
   it('BIN-505: addItem never writes a non-null inline note to the watchlist doc', async () => {

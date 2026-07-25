@@ -199,8 +199,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       releaseYear: parseInt(year, 10) || null,
       // Carries rating/progress forward if this somehow runs on a tracked title.
       // NOT the cold-load defence — the CTA is gated on watchlistLoading for that,
-      // because `status` and `watchedAt` are written unconditionally and no payload
-      // shape can protect them.
+      // because `status` is written unconditionally and no payload shape can
+      // protect it. (BIN-593 made watchedAt safe on its own; status still isn't.)
       current: watchlistItem,
       providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
       genreIds: movie.genres.map(g => g.id),
@@ -293,10 +293,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               {/* Gated on the watchlist having SETTLED, not just on `watchlistItem`.
                   While it's still loading, getItem returns undefined for a film the
                   user may well have marked 'sedd' — and Bevaka hard-sets
-                  status: 'vill_se', which would demote a TERMINAL film status and
-                  erase its watchedAt. Hiding the CTA for that moment is the only
-                  thing that makes the click safe; the payload can't express "don't
-                  touch status". */}
+                  status: 'vill_se', which would demote a TERMINAL film status.
+                  (BIN-593 stopped that write from erasing watchedAt as well, but
+                  the demotion alone still justifies the gate.) Hiding the CTA for
+                  that moment is the only thing that makes the click safe; the
+                  payload can't express "don't touch status". */}
               {!watchlistLoading && (
                 <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
               )}

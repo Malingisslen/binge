@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildStatusUpdate, normalizeTags, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH } from './watchlistWrites';
+import {
+  buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt,
+  MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
+} from './watchlistWrites';
 
 // A stand-in for the serverTimestamp() sentinel — the helper just passes it
 // through, so any recognisable value works.
@@ -24,28 +27,104 @@ describe('buildStatusUpdate', () => {
     expect('dropped' in buildStatusUpdate('avbruten', base)).toBe(false);
   });
 
-  it('sets watchedAt only for sedd', () => {
-    expect(buildStatusUpdate('sedd', base).watchedAt).toBe(TS);
-    expect('watchedAt' in buildStatusUpdate('mina', base)).toBe(false);
-    expect('watchedAt' in buildStatusUpdate('vill_se', base)).toBe(false);
+  it('sets watchedAt only for sedd (and only when none is stored)', () => {
+    expect(buildStatusUpdate('sedd', { ...base, currentWatchedAt: null }).watchedAt).toBe(TS);
+    expect('watchedAt' in buildStatusUpdate('mina', { ...base, currentWatchedAt: null })).toBe(false);
+    expect('watchedAt' in buildStatusUpdate('vill_se', { ...base, currentWatchedAt: null })).toBe(false);
   });
 
   // BIN-91 — backdating.
   it('uses watchedAtOverride for sedd when provided (updatedAt stays now)', () => {
     const OVERRIDE = '__backdated__';
-    const p = buildStatusUpdate('sedd', { ...base, watchedAtOverride: OVERRIDE });
+    const p = buildStatusUpdate('sedd', { ...base, currentWatchedAt: null, watchedAtOverride: OVERRIDE });
     expect(p.watchedAt).toBe(OVERRIDE);
     expect(p.updatedAt).toBe(TS); // write-time is always now, not the override
   });
 
   it('falls back to now when watchedAtOverride is absent or explicitly undefined', () => {
-    expect(buildStatusUpdate('sedd', base).watchedAt).toBe(TS);
+    expect(buildStatusUpdate('sedd', { ...base, currentWatchedAt: null }).watchedAt).toBe(TS);
     // The context passes `undefined` literally (watchedAt ? … : undefined) — pin that.
-    expect(buildStatusUpdate('sedd', { ...base, watchedAtOverride: undefined }).watchedAt).toBe(TS);
+    expect(
+      buildStatusUpdate('sedd', { ...base, currentWatchedAt: null, watchedAtOverride: undefined }).watchedAt,
+    ).toBe(TS);
   });
 
   it('ignores watchedAtOverride for non-sedd statuses (no watchedAt key)', () => {
     expect('watchedAt' in buildStatusUpdate('mina', { ...base, watchedAtOverride: '__x__' })).toBe(false);
+  });
+
+  // ── BIN-593 — watchedAt is user-authored data ────────────────────────────────
+  // Malin, 2026-07-25: "har man manuellt justerat 'sett' ska det bara ändras om
+  // man själv manuellt ändrar igen". These writes merge, so "leave it alone"
+  // means the key must be ABSENT — a null would destroy the stored date.
+
+  it('BIN-593: does NOT re-stamp watchedAt when the title already has one', () => {
+    const STORED = new Date('2019-04-02T00:00:00Z');
+    // The headline data-loss case: re-marking an already-seen film (a rewatch)
+    // must not overwrite a date the user backdated via WatchedDateEditor.
+    const p = buildStatusUpdate('sedd', {
+      ...base, currentStatus: 'sedd', currentWatchedAt: STORED,
+    });
+    expect('watchedAt' in p).toBe(false);
+    // …while the rewatch itself is still recorded.
+    expect(p.rewatchCount).toBe(1);
+  });
+
+  it('BIN-593: a stored watch date never, on its own, counts as a rewatch', () => {
+    // Guards against re-broadening isRewatch to "a date exists ⇒ seen before".
+    // That looks right until you remember this same ticket stopped a status change
+    // from CLEARING the date: a mis-click leaves one behind too. Undo the mis-click,
+    // watch the film for real later, and the broader rule renders "x2" on a film
+    // seen once — permanently, since rewatchCount is editable nowhere.
+    const p = buildStatusUpdate('sedd', {
+      ...base, currentStatus: 'vill_se', currentRewatchCount: 1,
+      currentWatchedAt: new Date('2019-04-02T00:00:00Z'),
+    });
+    expect('rewatchCount' in p).toBe(false);
+    // …and the date is still protected — that half is the ticket.
+    expect('watchedAt' in p).toBe(false);
+  });
+
+  it('BIN-593: a sedd re-mark of a DATELESS title supplies the first date (and still counts the rewatch)', () => {
+    // The combination the other cases miss: already 'sedd' but carrying no date —
+    // a legacy doc, or one created in the cold-load window (BIN-596). Both halves
+    // of the write must fire, and the stamp must not be suppressed just because
+    // the title was already sedd.
+    const p = buildStatusUpdate('sedd', {
+      ...base, currentStatus: 'sedd', currentRewatchCount: 0, currentWatchedAt: null,
+    });
+    expect(p.watchedAt).toBe(TS);
+    expect(p.rewatchCount).toBe(1);
+  });
+
+  it('BIN-593: a manual override still wins over a stored date', () => {
+    const p = buildStatusUpdate('sedd', {
+      ...base, currentWatchedAt: new Date('2019-04-02T00:00:00Z'), watchedAtOverride: '__picked__',
+    });
+    expect(p.watchedAt).toBe('__picked__');
+  });
+
+  it('BIN-593: stays SILENT when the current date is unknown (cold load)', () => {
+    // undefined ≠ null. During a cold load the caller cannot tell a new title from
+    // one carrying a backdated date, and stamping there is unrecoverable — so the
+    // key is omitted. `base` deliberately carries no currentWatchedAt at all, which
+    // is the same unknown state reached via an absent key.
+    expect('watchedAt' in buildStatusUpdate('sedd', base)).toBe(false);
+    expect('watchedAt' in buildStatusUpdate('sedd', { ...base, currentWatchedAt: undefined })).toBe(false);
+  });
+
+  it('BIN-593: leaving sedd omits watchedAt entirely (the date survives the status change)', () => {
+    // Honest scope: buildStatusUpdate NEVER wrote the destructive `watchedAt: null`
+    // — that lived in addItem, and its own test in WatchlistContext.test.tsx covers
+    // it. So this passes on pre-BIN-593 code too. It is here to pin the OTHER half
+    // of the same invariant: this function must not start writing one either.
+    //
+    // Consumers must therefore gate on `status` rather than on the date's presence.
+    // They defend against this survival; they don't depend on it.
+    for (const s of ['vill_se', 'mina', 'avbruten'] as const) {
+      const p = buildStatusUpdate(s, { ...base, currentStatus: 'sedd', currentWatchedAt: new Date('2019-04-02T00:00:00Z') });
+      expect('watchedAt' in p).toBe(false);
+    }
   });
 
   it('increments rewatchCount only when re-marking sedd over sedd', () => {
@@ -64,6 +143,32 @@ describe('buildStatusUpdate', () => {
     const p = buildStatusUpdate('mina', { ...base, visFields: { isPublic: true, effectiveVisibility: 'public' } });
     expect(p.isPublic).toBe(true);
     expect(p.effectiveVisibility).toBe('public');
+  });
+});
+
+// BIN-593 — the shared tri-state rule. Both write paths (buildStatusUpdate and
+// WatchlistContext.addItem) go through these, so the rule cannot drift apart.
+describe('resolveCurrentWatchedAt + canAutoStampWatchedAt', () => {
+  const D = new Date('2019-04-02T00:00:00Z');
+
+  it('reports the stored date when the title is in the snapshot', () => {
+    expect(resolveCurrentWatchedAt({ watchedAt: D }, true)).toBe(D);
+    // Found-but-dateless is KNOWN-absent, whether or not the snapshot settled.
+    expect(resolveCurrentWatchedAt({ watchedAt: null }, true)).toBe(null);
+    expect(resolveCurrentWatchedAt({ watchedAt: null }, false)).toBe(null);
+  });
+
+  it('distinguishes a genuinely new title (null) from a cold load (undefined)', () => {
+    expect(resolveCurrentWatchedAt(undefined, true)).toBe(null);
+    expect(resolveCurrentWatchedAt(undefined, false)).toBeUndefined();
+  });
+
+  it('permits an automatic stamp ONLY for known-absent', () => {
+    expect(canAutoStampWatchedAt(null)).toBe(true);
+    expect(canAutoStampWatchedAt(D)).toBe(false);
+    // The load-bearing one: unknown is not permission. A `== null` here would
+    // reopen the cold-load stomp that BIN-593 exists to close.
+    expect(canAutoStampWatchedAt(undefined)).toBe(false);
   });
 });
 

@@ -1,157 +1,257 @@
-# Remediation plan — 2026-07-24 sprint subset (BIN-582/581/566/563)
+# tasks/todo.md — scratch
 
-Fixing the 15 findings from the xhigh `/code-review` on the staged 4-ticket subset,
-then shipping what holds. Malin's direction 2026-07-24: "fixa allt nu och släpp det
-som håller."
+## ACTIVE PLAN — BIN-593: `watchedAt` is user-authored data
 
-Router: `tier: medium`, panel `[14 Software Architect]` (DBA #27 matched but dropped).
-→ one blind critique from #14 on the WatchlistContext write-path change before it lands.
+Approved by Malin 2026-07-25 ("bygg nu"), on her product decision, verbatim:
+> "har man manuellt justerat 'sett' ska det bara ändras om man själv manuellt ändrar igen"
 
-## Ship shape (finding #8 — deploy guard)
+Stakeholder routing: `node docs/org/route.mjs src/contexts/WatchlistContext.tsx
+src/lib/watchlistWrites.ts` → **tier `medium`**, owning role **#14 Software Architect**
+(DB-admin #27 dropped by the router). One blind critique dispatched; its conditions are
+folded in below under "Panel conditions".
 
-`deploy.yml`'s rules/functions drift guard fails the deploy job BEFORE the hosting
-step when `functions/**` changes are in the push range. So:
+### The rule
 
-* **Commit 1 — frontend only** (BIN-582/581/563 + their tests). Pushes, deploys hosting.
-* **Commit 2 — functions only** (BIN-566: `tmdbTosSweep/{index,runSweep}.ts` +
-  `src/test/rules/tmdb-sweep-orchestrator.test.ts`). Needs a manual
-  `firebase deploy --only functions:tmdbFieldsSweep`; deploy.yml never deploys functions.
+Auto-stamp `watchedAt` ONLY when we positively know none is stored. Never auto-overwrite,
+never write `null`. The date picker (`updateWatchedAt`) and an explicit `watchedAtOverride`
+are the manual paths and always win.
 
-Two commits, pushed separately, so the frontend work is not held hostage by the guard.
+These are `setDoc(..., {merge:true})` writes: an OMITTED key preserves the stored value, an
+explicit `null` DESTROYS it. So "don't touch it" means *omit the key*.
 
-## A. `buildWatchlistAddPayload` — invert the contract (#3, #10, #14)
+### Steps
 
-**The defect.** `addItem` writes with `setDoc(…, {merge:true})`: an OMITTED key
-preserves the stored value; an explicit `null` DESTROYS it. The helper never omits —
-it substitutes `current`'s client-cached value or a `null`/`[]` default. So when
-`current` is null (cold load), it writes nulls over a live rating and episode
-progress, while its own header promises the opposite.
+1. **`src/lib/watchlistWrites.ts`** — `buildStatusUpdate` gains `currentWatchedAt?: unknown`
+   with a tri-state contract: a value = stored (don't touch); `null` = known-absent (stamp);
+   `undefined` = unknown (stay silent). Stamp condition becomes
+   `status === 'sedd' && (watchedAtOverride !== undefined || currentWatchedAt === null)`.
+2. **`src/contexts/WatchlistContext.tsx` `updateStatus`** — pass
+   `currentItem ? (currentItem.watchedAt ?? null) : (firstSnapshotSettledRef.current ? null : undefined)`.
+3. **`src/contexts/WatchlistContext.tsx` `addItem` (line ~392)** — replace the unconditional
+   `watchedAt: item.status === 'sedd' ? serverTimestamp() : null` with the same three-way
+   rule, using the already-computed `currentForRating` + `firstSnapshotSettledRef`.
+   Removing the `: null` half is the other data-loss fix: leaving 'sedd' must not erase the
+   date (`useServiceValue.ts:30-32` already documents survival-after-status-change as the
+   intended reality).
+4. **`src/app/stats/page.tsx`** — `monthlyActivity` iterates ALL items and counts any with a
+   non-null `watchedAt`. Now that the date persists past 'sedd', gate it on the existing
+   `watched` (status==='sedd') array, matching `useServiceValue`/`DiaryPageClient`.
+5. **Tests** — `watchlistWrites.test.ts` (contract change: existing sedd cases must now seed
+   `currentWatchedAt: null`; add stored-date, unknown, and override cases) +
+   `WatchlistContext.test.tsx` (re-mark preserves; genuine new add stamps; cold load stays
+   silent; leaving 'sedd' writes no null). Mutation-verify each new assertion.
 
-**Fix.** Make the payload *partial*: omit a field entirely when the caller did not
-supply it AND `current` has nothing to carry. Merge then preserves whatever Firestore
-holds — which is the only correct answer when the client cache is cold.
+### The asymmetry that must NOT be "unified"
 
-* `WatchlistAddPayload` keeps the same `Omit<…>` base with the eight carry-able fields
-  optional.
-* `carry()` returns `undefined` (→ key omitted) instead of a `null`/`[]` default.
-* Restore `??` semantics so an explicit `null` falls through like the pre-diff
-  `X ?? current?.X ?? default` chains did (#10) — no caller passes an intentional
-  null today, and the migration must not change that behaviour silently.
-* Drop the `notes` tier entirely (#14): `addItem` strips `notes` at
-  `WatchlistContext.tsx:367` (BIN-505 — notes live in `watchlistNotes/`), so the
-  input, the carry and the test assertion all pin a value that cannot reach Firestore.
-* Rewrite the header to state the merge contract the right way round.
+`addedAt` (shipped `1c29882`, same function) stamps when UNSURE — a doc with no `addedAt`
+sorts nowhere and never recovers. `watchedAt` inverts: a missing date is user-fixable via the
+picker, a stomped one is gone forever. So `watchedAt` joins `tmdbFieldsRefreshedAt` and
+`providersCheckedAt` in the strict "stay silent when unsure" camp. Comment it at both sites
+and pin both directions in tests, or someone will collapse them.
 
-**Risk.** A genuinely NEW add must still write every field, or the doc lands without
-`providers`/`genreIds` and readers that assume arrays break. Guard: the new-add call
-sites all pass real values; verified per call site in step D, and the tests pin the
-exact key set (#11).
+### Open questions
 
-## B. `WatchlistContext.addItem` — stop clobbering on re-mark (#1, #5)
+No architecture-changing unknowns. Explicit assumptions:
+- **A genuine rewatch (sedd→sedd) no longer re-dates `watchedAt`.** `rewatchCount` still
+  increments, and the picker can set today's date. This is the direct consequence of the
+  decision; flagged to Malin rather than silently chosen.
+- **Consumers are safe.** `DiaryPageClient.tsx:39`, `useServiceValue.ts:30`,
+  `UserProfilePageClient.tsx:82`, `WatchlistPage.tsx:210/740` all gate on `status` already.
+  `src/app/stats/page.tsx:75` was the only `watchedAt != null` reader — step 4 fixes it.
+- **No rules/schema change.** `watchedAt` is an existing optional field; this only changes
+  which client writes touch it. No Firestore rules, indexes or migration.
 
-Both fixes use the idiom already established in this file at line 394 ("omit the key
-so the merge preserves the existing value"), keyed on the existing `currentForRating`
-lookup:
+### Panel conditions — #14 Software Architect (medium tier, blind critique)
 
-* **`addedAt` (#1)** — currently unconditional, so every status change rewrites the
-  original add date (Bibliotek's "Tillagd" sort, `backlogResurface`'s oldest-first
-  ranking, taste/stats' 30-day counter, and the GDPR export all read it). Change to
-  `…(currentForRating ? {} : { addedAt: serverTimestamp() })`.
-* **`tmdbFieldsRefreshedAt` (#5)** — currently unconditional, so a re-mark carrying
-  `current`'s cached TMDB values re-certifies stale data as fresh and makes the static
-  field-group permanently un-sweepable. Same guard.
+No BLOCKING findings. All three actionable items folded in and implemented:
 
-**Known residual (accept + document, do not silently ship):** during a COLD load
-`items` is `[]`, so `currentForRating` is undefined and a re-mark still looks like a
-new add. Stamping is then wrong but omitting is worse (a genuinely new doc would land
-with no `addedAt` at all and sort nowhere). This mirrors the same settled-vs-unsettled
-ambiguity the providers stamp already documents at lines 381-387. Strictly narrower
-than today's behaviour in every settled case; unchanged when unsettled.
+1. **SHOULD-FIX — `currentWatchedAt?: unknown` threw away a real guarantee.** Its siblings
+   (`now`, `watchedAtOverride`) are `unknown` because they carry Firestore FieldValue
+   sentinels; this one only ever comes from `WatchlistItem.watchedAt`. Now typed
+   `Date | null`, so no stray truthy non-Date can sail through the strict `=== null` as
+   "known, don't touch". **DONE** (`watchlistWrites.ts:74`).
+2. **NOTE → done — the rule existed in two hand-written forms.** `buildStatusUpdate`'s
+   `stampWatchedAt` and `addItem`'s inline ternary would have had to be kept in sync by eye,
+   unlike the sibling `shouldStampProvidersAtAdd`. Extracted to `resolveCurrentWatchedAt()` +
+   `canAutoStampWatchedAt()` in `watchlistWrites.ts`, used by BOTH paths, unit-tested
+   directly. **DONE**.
+3. **NOTE → done — a newly-exposed surface I had missed.** `/my/all` renders
+   `WatchlistPage` unfiltered, and `showWatchedCol` is true whenever no status is set. Since
+   the date now survives a status change, the "Sedd"-column and "Sedd datum"-sort would have
+   started showing a real historical date next to rows currently marked *Avbruten* / *Vill
+   se* — where they previously showed "—". Gated both on `status === 'sedd'` via a local
+   `seenDate()` helper, so that screen looks exactly as it does today. **DONE**
+   (`WatchlistPage.tsx`).
 
-## C. `MoviePageClient.handleBevaka` — pass `current` (#4)
+**Escalated to Malin, not silently chosen** (architect: "a product call worth a one-line
+confirmation, not a rework"): once ANY date is stored the code cannot tell *auto-stamped and
+never touched* from *deliberately backdated* — both are just a Date. So a plain rewatch
+(sedd→sedd, never opened the picker) now freezes the seen-date at the first stamp forever,
+changeable only via `WatchedDateEditor`. Distinguishing the two would need a new field. This
+is the conservative reading of her decision and the only one that doesn't reopen the exact
+stomping bug BIN-593 was filed for.
 
-The one migrated call site that omits `current: watchlistItem`, so a Bevaka click on a
-cold-loaded page rewrites an existing row (rating → null, status → `vill_se`,
-`watchedAt` → null). Pass `current`. Note this only fully closes once A lands — with a
-cold cache `watchlistItem` is undefined anyway, and A's omit-don't-null behaviour is
-what actually protects the stored values.
+### Review round 2 — `/code-review high` (17 agents) + specialists
 
-## D. Call-site re-verification
+The specialists passed the first diff (test-reviewer independently re-ran all 6 mutation
+claims and confirmed each). `/code-review high` then found four more things; three were real:
 
-Re-check all 8 migrated call sites against their pre-diff literals under the NEW
-omit-semantics, specifically: does any of them rely on a field being force-cleared?
-`StatusButton`'s deliberate explicit-null `totalSeasons` is the known one — it must
-keep clearing, so it passes an explicit `null` and A must honour that.
+5. **CONFIRMED — my consumer audit was WRONG.** `src/lib/taste/stats.ts:55` counts
+   `recent30.watched` from any item with a `watchedAt` inside 30 days, no status gate — and
+   it feeds the PUBLIC `ProfileStatsPanel`. With the date now surviving a status change, a
+   film marked seen and then dropped kept counting as watched on a public profile for 30
+   days, while the Statistik page fixed in step 4 excluded it. Two surfaces disagreeing about
+   the same library. **FIXED + tested** (the fixture varies `status`, so the test would have
+   been green either way without that).
+6. **CONFIRMED — a re-viewing from 'vill se' recorded nothing at all.** Seen 2019 → moved
+   back to "vill se" → marked sedd tonight: the date is protected (correct), but `isRewatch`
+   only tested sedd→sedd, so `rewatchCount` did not increment either. My own comment claimed
+   "rewatchCount records that" — true only for the sedd→sedd route. `isRewatch` now also
+   counts "a watch date already exists", which IS the evidence of a prior viewing. Unknown
+   (cold load) deliberately excluded — a phantom increment is as unrecoverable as a stomped
+   date. **FIXED + 3 tests**.
+7. **CONFIRMED — the tri-state could still collapse, in the exact scenario it guards.**
+   `items` is a render closure; `firstSnapshotSettledRef` is a live ref read AFTER
+   `await fsdb()` (a dynamic import, hundreds of ms on first use). If the first snapshot
+   landed during that await, the pair was `items=[]` + `settled=true` → "known-absent" →
+   stamp over a backdated date. Fixed by writing `itemsRef` in the same statement as
+   `firstSnapshotSettledRef` and having `addItem`/`updateStatus` read the live ref.
+   **FIXED + test** (captures the closure before the snapshot, invokes it after).
+8. Stale comments in `CompanionSection.tsx` / `MoviePageClient.tsx` asserted the now-reversed
+   invariant ("would erase its watchedAt"). Corrected — both guards still stand on the status
+   demotion alone.
 
-## E. `tmdbTosSweep` audit integrity (#6, #7) — the record that gates `mutateEnabled`
+**Filed, not fixed** (both pre-existing, both outside this ticket's domain):
+- **BIN-595** — `addItem` clobbers a per-title visibility override on every re-mark, flipping
+  a deliberately-hidden title world-readable. Privacy domain → own plan and panel.
+- **BIN-596** — `StatusButton`/`QuickAddButton` aren't gated on the watchlist snapshot, so a
+  cold-load "Sedd" lands with no date at all and nothing repairs it. This is the residual
+  cost of choosing silence over guessing; closing it makes that branch near-unreachable.
 
-* **#6** `lastRun` is written `set({lastRun}, {merge:true})` and Firestore deep-merges
-  nested maps, so `error: true` / `errorMessage` from a failed run are never cleared
-  by a later clean run (`buildLastRunAudit` omits those keys on success). Write them
-  explicitly `false`/`null` on success.
-* **#7** `clearable` is incremented only after `io.commitClears()` resolves for the
-  whole page, but the port commits up to 5 batches of 450 per 2000-doc page — a throw
-  in a later chunk records `docsCleared: 0` for clears that already landed
-  permanently. Count per COMMITTED chunk, not per page.
+### Review round 3 — `/code-review high` again, on round 2's fixes
 
-Both are audit-only (no user-data behaviour change), but BIN-454's runbook reads
-exactly this record to decide whether to enable clearing across the whole database.
+Both specialists passed round 2's diff. `/code-review high` then found three CONFIRMED
+defects — and the most important one was **my own round-2 fix**:
 
-## F. `.claude/rules/accepted-deviations.md` (#9)
+9. **CONFIRMED, self-inflicted — the broadened `isRewatch` fabricated rewatches.** Treating
+   "a stored date exists" as evidence of a prior viewing looks right until you remember this
+   same ticket stopped a status change from CLEARING the date: a **mis-click leaves one
+   behind too**. Tap Sedd by accident → undo it → genuinely watch the film later → the
+   library row renders "x2" for a film seen once, permanently, because `rewatchCount` is
+   editable nowhere. **REVERTED to the original sedd→sedd rule**, with a test that fails if
+   anyone re-broadens it. Accepted consequence, narrower and non-regressive: a re-viewing
+   routed through "vill se" isn't counted as a rewatch — it never was before either.
+10. **CONFIRMED — my comment oversold what is shared.** `addItem` was described as sharing
+    the predicate "so the two write paths can't drift apart"; only the STAMP half is shared.
+    `addItem` has never written `rewatchCount`, so whether a re-mark counts as a rewatch
+    still depends on which button was pressed. Comment corrected, asymmetry filed (BIN-598).
+11. **CONFIRMED — the date can now be overwritten but never removed** (BIN-597, filed). No
+    write path clears it, `updateWatchedAt` only accepts a Date, and `WatchedDateEditor` is
+    only rendered while status is 'sedd' — so it becomes unreachable the moment it would be
+    needed. On a public profile the date keeps being served in the raw doc even though every
+    UI now hides it. Needs a product call ("Rensa datum" in the picker vs strip it from the
+    public projection), so it is escalated, not guessed at.
 
-The in-code "do NOT flip mutateEnabled until BIN-566" stop sign was deleted; the rules
-file it named as the home of that standing decision still asserts the orchestrator is
-untested. Supersede that entry with a dated one recording that the emulator harness now
-covers it (append-only, per the file's own contract).
+**Judged and kept as-is:** the reviewer's argument that "Aktivitet per månad" now lets a later
+status edit rewrite June's history. True, but the alternative reintroduces exactly the
+mis-click phantom that finding 9 is about, and the sibling PUBLIC counter had to be
+status-gated (round-2 finding 5, CONFIRMED). Consistency wins; noted on BIN-598.
 
-## G. Tests
+**Also filed:** BIN-598 (two lookup idioms now coexist in `WatchlistContext`; the
+"sedd-gated watchedAt" rule is hand-copied at seven sites — two of which were WRONG and had
+to be fixed here, one of them feeding a public profile).
 
-* **#11** `buildAddPayload.test.ts` uses `toMatchObject`, so nothing pins the exact key
-  set — under the new omit-semantics that is the assertion that matters most. Switch
-  the carry-path cases to `toEqual` and add a case asserting omitted keys are ABSENT
-  (via `Object.keys`), not merely undefined.
-* **#12 / #2** `useOptimisticMirrorField.test.ts` is mutation-proved non-discriminating:
-  reverting `useIsomorphicLayoutEffect` to a plain `useEffect` leaves all 10 green,
-  because RTL's `rerender` is itself `act()`-wrapped. And the "account switch" case
-  holds `source` at the same object, so it exercises only the `commitRef` half.
-  Rewrite so the account-switch case varies the ACCOUNT while holding `source` at
-  `undefined` on both sides — the exact shape that reproduces **BIN-592**.
-* Every new/changed test must be mutation-verified: break the branch, confirm the test
-  fails, restore. Reasoning is not evidence (this is what the sprint's markers got
-  wrong). Snapshot the file before mutating — never `git checkout --` a file that also
-  carries real uncommitted work (lessons digest, 2026-07-16).
+### Review round 4 — `/code-review high`, third pass
 
-## H. BIN-592 — the live cross-account leak
+Both specialists passed round 3. `/code-review high` found ten more; the pattern shifted from
+logic to **comments claiming things the code does not do** — which is precisely what round 2's
+headline defect was, so they are treated as defects, not nits.
 
-Found by this review, filed, and **live on main** (the sprint touched only the test
-file). `mirrorRef` re-bases on `[source]`, and `source` is `undefined` on both sides of
-an account switch when neither user has saved a price — so one user's price map
-survives into the next user's write.
+12. **CONFIRMED — "Sedd datum"-sorteringen was a guaranteed no-op on `/my/avbrutna`.** My
+    `seenDate()` gate returns null for every non-sedd row, but the sort option was offered
+    for any status except 'mina'. Now gated on `showWatchedCol`, the same condition as the
+    column it sorts. Introduced by this ticket.
+13. **PLAUSIBLE, fixed — `removeItem` never cleared `itemsRef`.** Remove a film carrying a
+    2019 date, re-add it as 'sedd' before the delete's snapshot echo lands, and the guard
+    read the deleted row as proof a date was stored — creating a fresh doc with no date at
+    all. The ref is now pruned immediately after the delete.
+14. **CONFIRMED — three comments were wrong.** "written in the same statement as
+    firstSnapshotSettledRef" (they are ~28 lines apart; the real invariant is *same callback,
+    no await between*); "useServiceValue relies on this survival" (it does the **opposite** —
+    it defends against it by gating on status); "shared, not re-implemented, so the rule
+    can't drift" (only `canAutoStampWatchedAt` is shared — `buildStatusUpdate` also stamps on
+    an explicit override, a branch `addItem` has no equivalent of). All rewritten.
+15. **CONFIRMED — my revert comment overstated its own protection.** It justified the narrow
+    `isRewatch` as preventing phantom rewatches, but `QuickRateModal` re-marks already-'sedd'
+    films without checking and inflates the count anyway (pre-existing → **BIN-599**). And it
+    claimed "nothing regressed"; that was false. A re-viewing routed through 'vill se' is now
+    recorded NOWHERE, where pre-diff `updateStatus` wrote today's date. Comment corrected to
+    say so, and the cost is escalated to Malin rather than buried.
+16. **PLAUSIBLE, fixed — untested combination:** 'sedd' over 'sedd' with
+    `currentWatchedAt: null` (a re-mark supplying the FIRST date, e.g. a legacy or
+    BIN-596-created doc). Test added; both halves of the write must fire.
+17. Cross-file comment references pinned exact line numbers that rot on the first unrelated
+    edit. Line numbers dropped, names kept.
 
-**Decide in-flight:** fixing the hook is a one-line dep change but it is an auth/
-profile-write surface. If the fix lands here it goes in commit 1 with a regression
-test; if it needs AuthContext restructuring it stays as BIN-592 and the exposing test
-is held back rather than shipped failing.
+### Review round 5 — the specialists' own blocking findings
 
-## I. Housekeeping (#13, #15)
+18. **binge-test-reviewer, REQUIRED finding — `removeItem`'s `itemsRef` prune had zero
+    coverage.** It proved it rather than asserting it: commenting the line out left all 42
+    tests in the file green. Test added (remove a dated 'sedd' film, re-add it as 'sedd'
+    before the snapshot echo, assert the new doc gets a FRESH date and is treated as a new
+    add), mutation-verified — commenting the line out now fails exactly that one test.
+19. **binge-code-reviewer, BLOCKING — a comment that argued with itself.** The `itemsRef`
+    block still opened with "written in the same statement as firstSnapshotSettledRef" while
+    its own next paragraph corrected that ("not by adjacency, they sit ~28 lines apart"). The
+    correction had been added without touching the sentence it was correcting, and the false
+    phrasing was repeated at the write site. Both replaced with the actual invariant: same
+    `onSnapshot` callback, no await between the assignments.
 
-* **#13** `.claude/state/workflow-map-stale.json` names two files this diff edits
-  (`tmdbTosSweep/index.ts`, `settings/import/page.tsx`). Re-trace ONLY those flows in
-  `docs/workflow-map.html`'s `<script id="data">`, run
-  `node scripts/check-workflow-map.mjs`, clear the flag. Per the lessons digest this
-  goes in its OWN commit — never bundled with feature code.
-* **#15** `SeenPosterCard` conveys "Sedd" only as 55% opacity + a `title` on a
-  decorative span. Add an accessible name (visually-hidden text), since this component
-  now centralizes the gap for both franchise strips.
+### Review round 6 — `/code-review high`, fourth pass: eight documentation defects
 
-## Gates before commit
+No runtime bug. Every finding was a comment or test name asserting something the code does
+not do — a class that had now appeared in three consecutive rounds, so they were treated as
+defects, not nits. All eight fixed:
 
-1. `npm run lint`, `npm run typecheck` (root + functions), `npm test` — all green.
-2. `binge-code-reviewer` (opus) on the frontend diff; `binge-security-reviewer` (opus)
-   on the functions diff; `binge-test-reviewer` (opus) on every changed test file.
-   Markers must NAME the files reviewed — read the content, do not trust mtime.
-3. Re-run `/code-review xhigh`, rewrite (never bare-touch) `simplify-done.marker`.
-4. Rewrite `code-review-done.marker` so it names only what is actually committed — its
-   current first entry carries a placeholder `T00:00:00Z` timestamp and describes the
-   now-parked BIN-565/564 work, and one entry was flagged as written by an agent that
-   was not the reviewer.
+20. **The KNOWN COST note only described HALF the regression.** It named the
+    vill_se→sedd route but not the far more common sedd→sedd re-mark, which counts the
+    rewatch yet freezes the date. Root cause spelled out in-code now: there is no
+    `watchedAtSource` flag, so "only a manual change may alter it" is implemented as "no
+    automatic write may alter ANY stored date" — including one we auto-stamped. Named
+    consequence: Streamingrådgivarens films-this-month lens keeps crediting the OLD month,
+    so a service actually used this month can read as unused. **Escalated to Malin.**
+21. **`watchedAtOverride` was documented as "the MANUAL path" that "always wins" — but NO
+    production caller supplies it.** Every `updateStatus` call site passes three arguments;
+    the real picker writes through `updateWatchedAt`. Three comments justified the design by
+    pointing at an unreachable branch. Corrected to say what it actually is: the kept BIN-91
+    signature, not the live path.
+22. **The consumer roll-call was wrong in both directions** — said "two more had to be fixed"
+    when it was three, and none of the three sibling comments named `WatchlistPage`'s
+    `seenDate()`. That list is the only inventory of "who must gate on status", so an
+    incomplete one steers the next maintainer straight into an ungated read. Rewritten as one
+    accurate list that explicitly says it is NOT a closed set (→ BIN-598).
+23. **`WatchlistPage` still carried "TV i 'mina' har aldrig watchedAt"** — an invariant this
+    ticket abolishes (`migrateStatus` can map legacy TV docs to 'mina' with the date intact),
+    sitting above a condition that no longer keys on 'mina'.
+24. **`removeItem`'s prune called itself "belt and braces… the snapshot overwrites this
+    anyway"** — inviting removal of a line the tests now make mandatory. It also suppresses
+    `addedAt`, which never recovers. Both stated.
+25. **Two test names promised more than their assertions prove.** "forwards null vs undefined
+    distinctly" asserted null in both halves; "leaving sedd never writes a null" names a write
+    that never lived in `buildStatusUpdate` (it was `addItem`'s), so it passes on pre-BIN-593
+    code. Both renamed and re-commented to their honest scope rather than deleted — each
+    still pins a real half of the invariant.
+26. The `addItem` cold-load comment still said "`items` is []" after the code moved to
+    `itemsRef`.
+
+### Verification
+
+- `npx tsc --noEmit` clean; `npm test` 2128/2128 (was 2114 before this batch); eslint 0 errors.
+- **Mutation-verified, 6 mutations, each restored from a scratchpad snapshot:** bare
+  `status === 'sedd'` stamp guard; `=== null` → `== null` in both the inline and the extracted
+  predicate; the old unconditional `addItem` write; `firstSnapshotSettledRef` → `true`;
+  `updateStatus`'s tri-state collapsed to `?? null`. Every one failed exactly the tests
+  written to catch it, and nothing else.
+- **NOT test-covered, stated plainly:** the `stats/page.tsx` and `WatchlistPage.tsx` status
+  gates. Neither file has a test harness and both changes preserve today's visible behaviour
+  rather than introducing new behaviour; comments at both sites carry the reason.
