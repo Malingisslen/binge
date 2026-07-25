@@ -744,7 +744,7 @@
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "onSnapshot users/{uid}/watchlist → WatchlistItem docs · second onSnapshot on users/{uid}/watchlistTags (owner-only), joined in memory (BIN-164)",
+          "payload": "onSnapshot users/{uid}/watchlist → WatchlistItem docs · plus TWO more owner-only listeners joined in memory: users/{uid}/watchlistTags (BIN-164) and users/{uid}/watchlistNotes (BIN-505 — notes were moved OFF the friends/public-readable watchlist doc, and the rules now reject a non-null inline `notes`)",
           "transport": "Firestore listeners",
           "verified": true
         }
@@ -892,7 +892,7 @@
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "setDoc users/{uid}/watchlist/{tmdbId} — denormalized effectiveVisibility/isPublic so read rules skip the parent join",
+          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join",
           "transport": "Firestore write (merge)",
           "verified": true
         },
@@ -953,14 +953,14 @@
         {
           "from": "web-app",
           "to": "firestore",
-          "payload": "write users/{uid}/watchlist/{tmdbId} (device A)",
+          "payload": "write users/{uid}/watchlist/{mediaType}_{tmdbId} (device A)",
           "transport": "Firestore write",
           "verified": true
         },
         {
           "from": "firestore",
           "to": "watchlist-context",
-          "payload": "onSnapshot pushes the change into React state on device B (watchlist + watchlistTags)",
+          "payload": "onSnapshot pushes the change into React state on device B (watchlist + watchlistTags + watchlistNotes)",
           "transport": "Firestore listener",
           "verified": true
         }
@@ -1017,7 +1017,7 @@
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "setDoc users/{uid}/watchlist/{tmdbId} (merge) — same write path for CSV-import and onboarding adds",
+          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} (merge) — same write path for CSV-import and onboarding adds",
           "transport": "Firestore write (merge)",
           "verified": true
         },
@@ -1141,7 +1141,7 @@
         {
           "from": "user-profile-page",
           "to": "public-profile-hook",
-          "payload": "usePublicProfile(username): getDoc usernames/{username} → uid, then getDoc users/{uid} → {profile} | {isPrivate:true} | null",
+          "payload": "usePublicProfile(username): getDoc usernames/{username} → uid, then getPublicProfileCard(uid) → getDoc publicProfiles/{uid}. BIN-505 made users/{uid} OWNER-LOCKED — a visitor never reads it; rules gate the projection live against the source's visibility, so a readable card IS the proof of visibility. null → {isPrivate:true}",
           "transport": "Firestore read",
           "verified": true
         },
@@ -1239,7 +1239,7 @@
         {
           "from": "friends-who-saw",
           "to": "firestore",
-          "payload": "reads users/{uid}/following (via useFollowing), caps to MAX_FANOUT=30 non-blocked followed uids, then per uid: getDoc users/{followedUid}/watchlist/{tmdbId} — Promise.allSettled filters to public-visible items only (rules deny private/nonexistent); getDoc users/{followedUid} profile only for matches",
+          "payload": "reads users/{uid}/following (via useFollowing), caps to MAX_FANOUT=30 non-blocked followed uids, then per uid: getDoc users/{followedUid}/watchlist/{mediaType}_{tmdbId} — Promise.allSettled filters to public-visible items only (rules deny private/nonexistent); getDoc users/{followedUid} profile only for matches",
           "transport": "Firestore reads",
           "verified": true
         },
@@ -2040,14 +2040,14 @@
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "updateRating(tmdbId, rating) → setDoc users/{uid}/watchlist/{tmdbId} {rating: 0.5–5 or null, ratedAt} (merge)",
+          "payload": "updateRating(mediaType, tmdbId, rating) → setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} {rating: 0.5–5 or null, ratedAt} (merge)",
           "transport": "Firestore write",
           "verified": true
         },
         {
           "from": "firestore",
           "to": "cf-communityRatingMaintain",
-          "payload": "onDocumentWritten('users/{uid}/watchlist/{tmdbId}') fires on every watchlist write; ratingDelta(before.rating, after.rating) no-ops unless rating actually changed",
+          "payload": "onDocumentWritten('users/{uid}/watchlist/{tmdbId}') fires on every watchlist write — the wildcard NAME is unchanged but post-BIN-560 it captures the composite `movie_123`/`tv_123` id, which is used verbatim as the aggregate key (path-derived, never body-derived: that is the anti-vote-stuffing invariant); ratingDelta(before.rating, after.rating) no-ops unless rating actually changed",
           "transport": "Firestore trigger",
           "verified": true
         },
@@ -2085,7 +2085,7 @@
     {
       "id": "flow-titlepage",
       "label": "Title page assembly",
-      "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with five independently-cached Firestore-backed enrichments (streaming offers + price history, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment. BIN-422: a movie in a known franchise renders a crawlable static-HTML link to its /billigaste/[slug] hub — emitted outside ClientOnly and derived from build initialData (belongs_to_collection → franchiseByCollectionId), so Google follows it without JS. BIN-423 WP3: /person bakes the actor's filmography into the pre-rendered HTML — getPerson now appends combined_credits in the same single request, prunePersonSeed trims each credit to only the fields the cards render, and PersonPageClient reuses that seed instead of re-fetching /combined_credits (2→1 requests sitewide); WP4 adds breadcrumb JSON-LD on person pages. The /genre/[slug] hubs (BIN-461) are the same recipe at its leanest: one curated config (genreHubs.ts) drives generateStaticParams, sitemap and /guider links; each page makes at most two direct discover calls at build (never fetchForBuild — its cache is id-keyed for the title pipeline) and ships a resilient EmptyState 200 instead of notFound when both come back empty.",
+      "description": "/movie/[id] and /tv/[id] assemble a full TMDB detail fetch with five independently-cached Firestore-backed enrichments (streaming offers + price history, Cineasterna rental, external + community ratings, friends-who-saw) plus a personalised cheapest-path verdict; the lighter /person, /provider and /billigaste static routes reuse only the TMDB client with no per-title enrichment. Two curated cross-link strips also render on both title types, driven by hand-maintained maps rather than TMDB relations: CompanionSection (src/lib/franchise/companions.ts) links a film to its TV counterpart and back, fanning out getMovieLite/getTVShowLite per companion on the shared lite cache; RelatedSeriesStrip (src/lib/tv/relatedSeries.ts, TV only) cross-links the eras of a franchise TMDB splits into separate shows (Doctor Who). Both are link-not-merge by decision — no watchlist doc is joined — and their add buttons wait for the watchlist snapshot so a cold-load click cannot demote an already-seen title. BIN-422: a movie in a known franchise renders a crawlable static-HTML link to its /billigaste/[slug] hub — emitted outside ClientOnly and derived from build initialData (belongs_to_collection → franchiseByCollectionId), so Google follows it without JS. BIN-423 WP3: /person bakes the actor's filmography into the pre-rendered HTML — getPerson now appends combined_credits in the same single request, prunePersonSeed trims each credit to only the fields the cards render, and PersonPageClient reuses that seed instead of re-fetching /combined_credits (2→1 requests sitewide); WP4 adds breadcrumb JSON-LD on person pages. The /genre/[slug] hubs (BIN-461) are the same recipe at its leanest: one curated config (genreHubs.ts) drives generateStaticParams, sitemap and /guider links; each page makes at most two direct discover calls at build (never fetchForBuild — its cache is id-keyed for the title pipeline) and ships a resilient EmptyState 200 instead of notFound when both come back empty.",
       "covers": [
         "/movie/[id]",
         "/tv/[id]",
@@ -2141,7 +2141,14 @@
         {
           "from": "movie-tv-page",
           "to": "firestore",
-          "payload": "useFriendsWhoSaw(tmdbId) — per-followed-uid reads of users/{uid}/watchlist/{tmdbId}, capped fan-out, blocked users excluded",
+          "payload": "useFriendsWhoSaw(mediaType, tmdbId) — per-followed-uid reads of users/{uid}/watchlist/{mediaType}_{tmdbId}, capped fan-out, blocked users excluded",
+          "transport": "Firestore reads",
+          "verified": true
+        },
+        {
+          "from": "movie-tv-page",
+          "to": "tmdb-api",
+          "payload": "curated cross-link strips: companionsFor()/relatedSeriesFor() resolve a hand-maintained map to TMDB ids, then getMovieLite/getTVShowLite per entry (shared {movie,tv}-lite cache, TMDB_STALE.LITE_DETAIL) — no Firestore join, link-not-merge",
           "transport": "Firestore read",
           "verified": true
         },
@@ -2367,7 +2374,7 @@
         {
           "from": "data-export-lib",
           "to": "firestore",
-          "payload": "collectUserDataSnapshots(uid) — per-user-owned-collection reads (watchlist, tags, reviews, follows, sessions, groups, lists, ...), rules-gated to own uid",
+          "payload": "collectUserDataSnapshots(uid) — per-user-owned-collection reads (watchlist, watchlistTags, watchlistNotes (export schema 1.3, BIN-505), episodeProgress, reviews, follows, sessions, groups, lists, ...), rules-gated to own uid",
           "transport": "firestore-query",
           "verified": true
         },
