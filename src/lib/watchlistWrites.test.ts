@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt,
-  MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
+  shouldStampVisibility, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
 } from './watchlistWrites';
 
 // A stand-in for the serverTimestamp() sentinel — the helper just passes it
@@ -169,6 +169,34 @@ describe('resolveCurrentWatchedAt + canAutoStampWatchedAt', () => {
     // The load-bearing one: unknown is not permission. A `== null` here would
     // reopen the cold-load stomp that BIN-593 exists to close.
     expect(canAutoStampWatchedAt(undefined)).toBe(false);
+  });
+});
+
+// BIN-595 — a per-title privacy override must survive a status change.
+describe('shouldStampVisibility', () => {
+  it('refuses to re-stamp an item that carries an explicit override', () => {
+    // The bug: addItem wrote the PROFILE default over a title's own override, which
+    // WOULD republish a title the user had hidden on nothing more than a status
+    // change. Conditional, not past tense — no released version shipped a UI for the
+    // override, so no real data ever reached that state. This pins the guard for it.
+    expect(shouldStampVisibility({ visibility: 'private' })).toBe(false);
+    expect(shouldStampVisibility({ visibility: 'friends' })).toBe(false);
+    expect(shouldStampVisibility({ visibility: 'public' })).toBe(false);
+  });
+
+  it('still stamps an item with no override (the A4.3 lazy-on-write re-assert)', () => {
+    // Must not regress: this is how pre-cascade docs get the denormalised fields.
+    expect(shouldStampVisibility({ visibility: null })).toBe(true);
+  });
+
+  it('stamps a title we have not loaded — same as the six sibling mutators do today', () => {
+    // Deliberately NOT a "stay silent when unsure" guard. An earlier version was,
+    // and it was reverted: the override it protected has never been reachable, while
+    // a doc landing with no effectiveVisibility is missing from the owner's own
+    // public profile (the tier queries match that field by equality). This keeps
+    // `undefined` behaving exactly as `current?.visibility == null` already does
+    // everywhere else, so BIN-598 can tighten all seven writers at once.
+    expect(shouldStampVisibility(undefined)).toBe(true);
   });
 });
 

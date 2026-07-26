@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt, shouldStampVisibility } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -377,10 +377,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         pendingFirstMediaTypeRef.current = item.mediaType;
       }
     }
-    // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) på
-    // varje item så läsregeln slipper joina mot parent-user-doc. Nya items
-    // ärver default; per-item-override sätts via updateVisibility senare.
-    const defaultVisibility = user?.defaultVisibility ?? 'private';
+    // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) så läsregeln
+    // slipper joina mot parent-user-doc. Nya items ärver default; per-item-override
+    // sätts via updateVisibility. BIN-595: detta gäller INTE längre "varje item" —
+    // ett item med egen override lämnas orört. Se shouldStampVisibility nedan.
     // BIN-505: notes lives ONLY in the owner-only watchlistNotes subcollection, and
     // the watchlist-doc rules REJECT a non-null inline `notes` — so a re-mark of a
     // NOTED title would be permission-denied if one rode along.
@@ -395,8 +395,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     await setDoc(ref, {
       ...itemFields,
       dropped: false,
-      effectiveVisibility: defaultVisibility,
-      isPublic: defaultVisibility === 'public',
+      // BIN-595: only (re-)assert the two DENORMALISED visibility fields
+      // (effectiveVisibility + the legacy isPublic mirror — never the per-item
+      // `visibility` override itself, which updateVisibility alone writes) when the title
+      // has no per-item override — see shouldStampVisibility. addItem is ALSO the
+      // re-mark path (StatusButton/QuickAddButton/useMarkSeen), so writing the
+      // profile default unconditionally WOULD republish a title the user had
+      // deliberately hidden, on nothing more than a status change. Conditional, not
+      // past tense: no released version ever shipped a UI for the per-title
+      // override, so the state this protects has never existed in real data. The
+      // guard is here for when it does.
+      ...(shouldStampVisibility(currentForRating) ? effectiveVisibilityNow() : {}),
       // Write addedAt only when this is NOT a re-mark. addItem is a merge-write, so
       // an omitted key preserves the stored value — and re-stamping it on every
       // status change rewrote the original add date, which Bibliotek's "Tillagd"
@@ -484,7 +493,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
     // BIN-593: `items` is deliberately NOT a dep — the lookup reads itemsRef, so
     // this callback no longer needs to be recreated on every snapshot.
-  }, [uid, user?.defaultVisibility]);
+    // BIN-595: depend on effectiveVisibilityNow (which is itself memoised on
+    // user?.defaultVisibility), matching every sibling mutator, rather than
+    // repeating its input here.
+  }, [uid, effectiveVisibilityNow]);
 
   const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;

@@ -699,6 +699,80 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(payload.addedAt).toBe('ts');
   });
 
+  // ── BIN-595 — a per-title privacy override must survive a status change ──────
+  // addItem is also the re-mark path, and it wrote the PROFILE-WIDE default over
+  // the two denormalised visibility fields unconditionally. On a public profile that
+  // WOULD republish a title the user had deliberately hidden, on nothing more than a
+  // status change. Conditional, not past tense: no released version ever shipped a UI
+  // for the per-title override, so that state has never existed in real data — these
+  // tests pin the guard for when it does.
+
+  it('BIN-595: re-marking a title the user HID does not republish it', async () => {
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([seedDoc({
+      tmdbId: 61, mediaType: 'movie', status: 'vill_se',
+      visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+    })]);
+
+    await act(async () => {
+      await addItemRef!(newTitle(61, 'movie')); // status 'sedd' — an ordinary re-mark
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_61');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    // ABSENT, not 'private' — the write merges, so omitting preserves the stored
+    // value. Writing ANYTHING here is what leaked the title.
+    expect('effectiveVisibility' in payload).toBe(false);
+    expect('isPublic' in payload).toBe(false);
+  });
+
+  it('BIN-595: a title WITHOUT an override still gets the visibility re-assert (A4.3)', async () => {
+    // The other half. This lazy-on-write stamp is how pre-cascade docs acquire the
+    // denormalised fields at all — suppressing it wholesale would be its own bug.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([seedDoc({ tmdbId: 62, mediaType: 'movie', status: 'vill_se' })]);
+
+    await act(async () => {
+      await addItemRef!(newTitle(62, 'movie'));
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_62');
+    const payload = call![1] as Record<string, unknown>;
+    expect(payload.effectiveVisibility).toBe('public');
+    expect(payload.isPublic).toBe(true);
+  });
+
+  it('BIN-595: a title NOT in the local snapshot still gets the visibility fields', async () => {
+    // The most common real add path. It is NOT the only one where the live
+    // `itemsRef.current.find(...)` returns undefined — a re-mark during a cold load
+    // does too, since itemsRef is [] until the first snapshot lands, and THAT is the
+    // case BIN-598 has to reason about for the six sibling mutators. Both stamp
+    // today; the guard does not distinguish them. The two "should stamp" tests
+    // above both seed the title first, so end-to-end this branch was unexercised —
+    // a guard that refused to stamp new docs would have left every new title
+    // relying on the rules' legacy parent-profile fallback, and all of them stayed
+    // green.
+    //
+    // Deliberately NOT framed as "on a settled snapshot": shouldStampVisibility
+    // never reads firstSnapshotSettledRef, so this passes identically during a cold
+    // load. An earlier version of the guard DID branch on settledness and was
+    // reverted; the old name was a holdover that overclaimed sensitivity to
+    // snapshot timing.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]); // settled, and empty — nothing for the lookup to find
+
+    await act(async () => {
+      await addItemRef!(newTitle(64, 'movie'));
+    });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_64');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    expect(payload.effectiveVisibility).toBe('public');
+    expect(payload.isPublic).toBe(true);
+  });
+
   it('BIN-593: COLD LOAD — addItem stays silent about watchedAt', async () => {
     render(
       <WatchlistProvider>

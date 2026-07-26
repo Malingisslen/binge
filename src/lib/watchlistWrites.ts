@@ -1,4 +1,4 @@
-import type { WatchStatus } from '@/types';
+import type { WatchStatus, ItemVisibility } from '@/types';
 
 // BIN-164 — pure tag normalization for the owner-only watchlistTags store.
 // Firebase-free so it can be unit-tested; the rules cap array size server-side
@@ -103,6 +103,45 @@ export function resolveCurrentWatchedAt(
  */
 export function canAutoStampWatchedAt(currentWatchedAt: Date | null | undefined): boolean {
   return currentWatchedAt === null;
+}
+
+/**
+ * BIN-595 — may this write (re-)stamp the two DENORMALISED visibility fields
+ * (`effectiveVisibility` + the legacy `isPublic` mirror) from the PROFILE default?
+ *
+ * Two, never three. The per-item `visibility` override itself is NOT written here
+ * and must never be: it is in buildAddPayload's ServerOwned set precisely so no add
+ * path can touch it, and `updateVisibility` is its only writer. Writing it from
+ * addItem would destroy the exact user-authored field this guard exists to protect.
+ * (An earlier draft of this doc called the three a "trio", which invited exactly
+ * that mistake — hence the emphasis.)
+ *
+ *  - the item carries an explicit per-item override → NO. Writing the profile
+ *    default would silently reverse the user's choice, and on a public profile
+ *    that means republishing a title they deliberately hid. `visibility` (the
+ *    override) survives on the doc, but nothing reads it for access control —
+ *    both firestore.rules and usePublicProfile key on `effectiveVisibility`.
+ *  - anything else → YES. That covers a genuinely new title AND the A4.3
+ *    lazy-on-write re-assert that back-fills pre-cascade docs.
+ *
+ * This is deliberately the SAME rule the six sibling mutators already inline as
+ * `current?.visibility == null` — `undefined?.visibility == null` is true, so a
+ * title we haven't loaded yet is stamped exactly as it is today. Extracting it
+ * changes no behaviour; it gives the rule one name and one test so BIN-598 can
+ * tighten all seven writers together, once the per-title override actually ships.
+ *
+ * An earlier version of this helper ALSO refused to stamp during a cold load, to
+ * protect an override we might not have loaded yet. That was reverted: the
+ * override has never been reachable in any released version (no UI calls
+ * `updateVisibility`), so the branch protected nothing — while a doc landing with
+ * NEITHER field is missing from the owner's own public profile, because
+ * `usePublicWatchlist`'s tier queries match `effectiveVisibility` by EQUALITY and
+ * Firestore equality never matches an absent field. Real cost, no benefit.
+ */
+export function shouldStampVisibility(
+  current: { visibility: ItemVisibility | null } | undefined,
+): boolean {
+  return current?.visibility == null;
 }
 
 export function buildStatusUpdate(
