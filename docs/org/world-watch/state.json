@@ -13,7 +13,11 @@
       "title": "Security Architect",
       "cadence": "weekly",
       "authority": "auto-ticket",
-      "watchModes": ["compliance", "trend", "tooling-frontier"],
+      "watchModes": [
+        "compliance",
+        "trend",
+        "tooling-frontier"
+      ],
       "stakes": "high",
       "ownedPaths": [
         "firestore.rules",
@@ -32,30 +36,69 @@
         "Dependabot alert/grouping changes affecting how advisories reach the repo"
       ],
       "sources": [
-        { "id": "nextjs-advisories", "title": "Next.js security advisories", "url": "https://github.com/vercel/next.js/security/advisories", "type": "html", "note": "Primary framework CVE surface; no native RSS, poll the page." },
-        { "id": "ghsa-npm", "title": "GitHub Advisory Database (npm)", "url": "https://github.com/advisories?query=ecosystem%3Anpm", "type": "html", "note": "Master surface for any lockfile dependency." },
-        { "id": "firebase-js-sdk-releases", "title": "Firebase JS SDK releases", "url": "https://github.com/firebase/firebase-js-sdk/releases.atom", "type": "atom", "note": "App Check + reCAPTCHA-Enterprise-provider + Auth security changes land here." },
-        { "id": "firestore-rules-relnotes", "title": "Firebase Security Rules release notes", "url": "https://firebase.google.com/support/release-notes/security-rules", "type": "html", "note": "Rules-language changes that gate the field-whitelist + ownership checks." },
-        { "id": "recaptcha-enterprise-relnotes", "title": "reCAPTCHA Enterprise release notes", "url": "https://docs.cloud.google.com/recaptcha/docs/release-notes", "type": "html", "note": "Use docs.cloud.google.com host (301 from cloud.google.com)." },
-        { "id": "gh-changelog-dependabot", "title": "GitHub changelog — Dependabot", "url": "https://github.blog/changelog/label/dependabot/feed/", "type": "rss", "note": "How vuln alerts/grouping reach the repo." }
+        {
+          "id": "nextjs-advisories",
+          "title": "Next.js security advisories",
+          "url": "https://github.com/vercel/next.js/security/advisories",
+          "type": "html",
+          "note": "Primary framework CVE surface; no native RSS, poll the page."
+        },
+        {
+          "id": "ghsa-npm",
+          "title": "GitHub Advisory Database (npm)",
+          "url": "https://github.com/advisories?query=ecosystem%3Anpm",
+          "type": "html",
+          "note": "Master surface for any lockfile dependency."
+        },
+        {
+          "id": "firebase-js-sdk-releases",
+          "title": "Firebase JS SDK releases",
+          "url": "https://github.com/firebase/firebase-js-sdk/releases.atom",
+          "type": "atom",
+          "note": "App Check + reCAPTCHA-Enterprise-provider + Auth security changes land here."
+        },
+        {
+          "id": "firestore-rules-relnotes",
+          "title": "Firebase Security Rules release notes",
+          "url": "https://firebase.google.com/support/release-notes/security-rules",
+          "type": "html",
+          "note": "Rules-language changes that gate the field-whitelist + ownership checks."
+        },
+        {
+          "id": "recaptcha-enterprise-relnotes",
+          "title": "reCAPTCHA Enterprise release notes",
+          "url": "https://docs.cloud.google.com/recaptcha/docs/release-notes",
+          "type": "html",
+          "note": "Use docs.cloud.google.com host (301 from cloud.google.com)."
+        },
+        {
+          "id": "gh-changelog-dependabot",
+          "title": "GitHub changelog — Dependabot",
+          "url": "https://github.blog/changelog/label/dependabot/feed/",
+          "type": "rss",
+          "note": "How vuln alerts/grouping reach the repo."
+        }
       ],
-      "lastScan": "2026-07-20",
+      "lastScan": "2026-07-27",
       "snapshot": {
-        "nextjs-advisories": "[2026-07-20] MATERIAL, NEW: Next.js launched a formal monthly security-release program; its first scheduled release targeted 2026-07-20 (today) with coordinated patches for the 16.2.x and 15.5.x lines — 4 high + 5 medium severity fixes. Advance-notice model: exact GHSA IDs/fixed versions publish only when the patch ships, not retrievable at scan time (direct advisories-page WebFetch still only showed the May 6-7 batch, likely not yet re-indexed). Distinct from the already-ticketed May batch (BIN-213). Binge's package-lock.json resolves next@16.2.9 — inside the affected line. Filed as GitHub issue #44. (WebFetch direct + WebSearch corroboration across gbhackers/cybersecuritynews/digitalapplied/cyberpress.)",
-        "ghsa-npm": "[2026-07-20] No Next.js/React/Firebase JS SDK/firebase-functions advisories surfaced in the general npm feed this cycle (the new Next.js July release isn't GHSA-indexed yet, see nextjs-advisories). Prior transitive-dep CVEs (protobufjs CVE-2026-41242, fast-xml-parser CVE-2026-25128) remain non-issues — Binge's resolved lockfile versions unchanged (protobufjs 7.6.4/7.5.6, fast-xml-parser 5.7.2), already past fix versions. No change since last scan.",
-        "firebase-js-sdk-releases": "[2026-07-20] Newest release still firebase@12.16.0 (2026-07-09) — no new release since last scan. No change to the 2026-07-13 analysis: Binge's src/lib/firebase/appCheck.ts passes an explicit new ReCaptchaV3Provider(siteKey), not Enterprise, so the 0.12.0 auto-init-Enterprise-provider behavior still doesn't apply. Installed version remains 12.12.1 (^12.12.1 range, confirmed in package-lock.json).",
-        "firestore-rules-relnotes": "[2026-07-20] Page's own 'last updated' still 2026-01-21 — unchanged since last scan. No rules-language change this cycle. (WebFetch 403'd; WebSearch fallback used.)",
-        "recaptcha-enterprise-relnotes": "[2026-07-20] No v3-breaking change found this cycle; WebSearch surfaced only pre-existing/generic context (mobile WAF GA, fraud-prevention features, execute/getClient timeout param) — nothing new affecting Binge's ReCaptchaV3Provider usage. (WebFetch 403'd; WebSearch fallback used.)",
-        "gh-changelog-dependabot": "[2026-07-20] New entry since last scan: 'Default Package Cooldown' (2026-07-14) — Dependabot now waits 3+ days after a release before opening a version-update PR by default (security-update PRs still open immediately, unaffected). Binge's .github/dependabot.yml does use weekly npm version updates, so this will shift when non-security Dependabot PRs land by a few days — but it's a zero-config default with no security-path impact, so non-actionable; no ticket filed. (WebFetch 403'd; WebSearch fallback used.)"
+        "nextjs-advisories": "MATERIAL UPDATE to #44: July 2026 monthly security release published 2026-07-21 (1 day after 07-20 target). 9 CVEs total (4 High + 5 Medium), GHSA IDs now public: High = GHSA-p9j2-gv94-2wf4 (SSRF in rewrites via attacker-controlled hostname, CVE-2026-64645, CVSS 8.3), GHSA-89xv-2m56-2m9x (SSRF in Server Actions on custom servers), GHSA-6gpp-xcg3-4w24 (middleware/proxy bypass, Turbopack + single locale), GHSA-m99w-x7hq-7vfj (DoS via Server Actions in App Router). Medium = GHSA-4c39-4ccg-62r3 (unbounded Server Action payload, Edge runtime), GHSA-68g3-v927-f742 and GHSA-4633-3j49-mh5q (cache confusion of response bodies), GHSA-q8wf-6r8g-63ch (DoS via SVG in Image Optimization API), GHSA-955p-x3mx-jcvp (unauthenticated disclosure of internal Server Function endpoints). Patched versions: 16.2.11 (Active LTS) and 15.5.21 (Maintenance LTS); affected range for the flagship SSRF advisory is >=16.0.0 <16.2.11. Verified via package-lock.json: Binge's resolved next version is 16.2.9 (package.json pins ^16.2.9) — CONFIRMED VULNERABLE, needs bump to ^16.2.11. No secret-rotation requirement surfaced in any source checked. Commented on GitHub issue #44 with confirmed CVE list and required version bump on 2026-07-27.",
+        "ghsa-npm": "Next.js's 9 July-release advisories are now indexed with published GHSA IDs — no longer 'not yet GHSA-indexed'. No advisories surfaced this cycle for react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* packages. Prior transitive-dep CVEs (protobufjs, fast-xml-parser) remain non-issues, resolved versions already past fix.",
+        "firebase-js-sdk-releases": "Newest release still firebase@12.16.0 (2026-07-09) — no new release since last scan. appCheck.ts still passes an explicit ReCaptchaV3Provider(siteKey), so the Enterprise-default behavior doesn't apply. Installed version still 12.12.1 per package.json. No change.",
+        "firestore-rules-relnotes": "Direct fetch still 403's. WebSearch fallback found no entries dated after 2026-01-21. No rules-language change. No change.",
+        "recaptcha-enterprise-relnotes": "Direct fetch still 403's. WebSearch fallback found no July 2026 entries affecting ReCaptchaV3Provider usage or App Check integration. No change.",
+        "gh-changelog-dependabot": "Direct feed fetch 403'd this cycle. WebSearch fallback surfaced only older 2026 entries, none dated in the 07-20 to 07-27 window. Prior cycle's 'Default Package Cooldown' (2026-07-14) remains the latest relevant item, already recorded as non-actionable."
       },
-      "_lastScanCoverage": "6/6 sources covered (3 reachable directly via WebFetch: nextjs-advisories, ghsa-npm, firebase-js-sdk-releases; 3 via WebSearch fallback after 403: firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot). 0 unreachable. Cross-checked the new Next.js July 2026 security-release announcement against package-lock.json (next@16.2.9, inside the affected 16.2.x line) — material, filed as issue #44. Also cross-checked firebase-js-sdk 12.16.0 (no change from last cycle) against appCheck.ts, and the new Dependabot cooldown changelog entry against .github/dependabot.yml (applies but non-actionable, zero-config, security path unaffected)."
+      "_lastScanCoverage": "All 6 sources checked (2 direct WebFetch successes, 1 partial, 3 required WebSearch fallback after 403s); repo cross-checked via package-lock.json resolved-version parse, package.json, appCheck.ts, and dependabot.yml."
     },
     "legal-gdpr-counsel": {
       "roleNumber": 5,
       "title": "Legal / GDPR Counsel",
       "cadence": "monthly",
       "authority": "escalate-human",
-      "watchModes": ["compliance", "trend"],
+      "watchModes": [
+        "compliance",
+        "trend"
+      ],
       "stakes": "high",
       "ownedPaths": [
         "src/lib/firebase/dataExport.ts",
@@ -76,24 +119,61 @@
         "Any of the above forcing a Terms/Privacy re-version + re-acceptance"
       ],
       "sources": [
-        { "id": "edpb-news", "title": "EDPB news", "url": "https://www.edpb.europa.eu/news/news_en", "type": "html", "note": "Primary EU DP authority; poll (no clean RSS surfaced)." },
-        { "id": "imy-nyheter", "title": "IMY — Nyheter", "url": "https://www.imy.se/nyheter/", "type": "html", "note": "The Swedish DPA Binge answers to. RSS at /nyheter/rss." },
-        { "id": "ec-ai-act", "title": "EC — AI Act regulatory framework", "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai", "type": "html", "note": "Gemini exposure; tracks Digital Omnibus + deferred dates." },
-        { "id": "ec-dsa-enforcement", "title": "EC — DSA enforcement", "url": "https://digital-strategy.ec.europa.eu/en/policies/dsa-enforcement", "type": "html", "note": "Official DSA enforcement hub." },
-        { "id": "ec-news", "title": "EC — news (filterable)", "url": "https://commission.europa.eu/news_en", "type": "html", "note": "Catch-all with AI/data-protection/digital-services filters." }
+        {
+          "id": "edpb-news",
+          "title": "EDPB news",
+          "url": "https://www.edpb.europa.eu/news/news_en",
+          "type": "html",
+          "note": "Primary EU DP authority; poll (no clean RSS surfaced)."
+        },
+        {
+          "id": "imy-nyheter",
+          "title": "IMY — Nyheter",
+          "url": "https://www.imy.se/nyheter/",
+          "type": "html",
+          "note": "The Swedish DPA Binge answers to. RSS at /nyheter/rss."
+        },
+        {
+          "id": "ec-ai-act",
+          "title": "EC — AI Act regulatory framework",
+          "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
+          "type": "html",
+          "note": "Gemini exposure; tracks Digital Omnibus + deferred dates."
+        },
+        {
+          "id": "ec-dsa-enforcement",
+          "title": "EC — DSA enforcement",
+          "url": "https://digital-strategy.ec.europa.eu/en/policies/dsa-enforcement",
+          "type": "html",
+          "note": "Official DSA enforcement hub."
+        },
+        {
+          "id": "ec-news",
+          "title": "EC — news (filterable)",
+          "url": "https://commission.europa.eu/news_en",
+          "type": "html",
+          "note": "Catch-all with AI/data-protection/digital-services filters."
+        }
       ],
-      "lastScan": "2026-06-27",
+      "lastScan": "2026-07-27",
       "snapshot": {
-        "edpb-news": "newest: OSS case digest on right to object & erasure updated (2026-06-25) → escalated BIN-214",
-        "imy-nyheter": "newest: IMY marknadskontrollmyndighet för AI-förordningen (2026-06-15) + AI-bolagens ansvarsroller report (2026-06-10) → escalated BIN-215"
-      }
+        "edpb-news": "2026-07-27: no update to the right-to-object/erasure OSS case digest since the 2026-06-25 version already escalated as BIN-214. Newest EDPB activity is the 2026-07-16/17 Dublin meeting on cross-DPA/cross-regulator information sharing (institutional cooperation, not a rights-shape change) — nothing affecting Art.17/Art.20 export or erasure shape this cycle.",
+        "imy-nyheter": "2026-07-27: since the 2026-06-15 AI-Act-supervisor item (BIN-215, no change to that role this cycle), newest IMY items are: EDPB guidelines on web-scraping for generative-AI training (2026-07-08, IMY as rapporteur — N/A, Binge doesn't scrape to train models), EDPB guidelines on anonymisation and on blockchain processing (2026-07-09), an EU Court ruling on a Swedish publisher-credentialed search engine republishing criminal court decisions (2026-07-09, not analogous to Binge's UGC model), and the 2026-07-16/17 Dublin cross-DPA meeting. IMY's 2026 priorities (AI, children, law enforcement) unchanged.",
+        "ec-ai-act": "2026-07-27 (baseline, first scan): GPAI transparency duties (Art.50), AI Office enforcement powers and the penalty regime become active 2026-08-02; Art.50(2) machine-readable AI-content marking has a grace period to 2026-12-02. Digital Omnibus on AI signed 2026-07-08, pending Official Journal publication, defers only HIGH-RISK obligations (2026-08-02 to 2027-12-02) — Binge's Ask Binge (Gemini) and recap (Claude) features are limited-risk/GPAI-based, not Annex III high-risk. Repo already carries Art.50 user-facing disclosures.",
+        "ec-dsa-enforcement": "2026-07-27 (baseline, first scan): DSA enforcement maturing; child-protection-provision scrutiny trending toward smaller platforms, but reporting ties expansion to platforms with 50+ employees/EUR10M turnover. Binge (solo-founder) sits below that bar. Core DSA duties already covered by villkor/community-guidelines and the submitReport Cloud Function.",
+        "ec-news": "2026-07-27 (baseline, first scan): headline item is the Digital Omnibus AI track — final act signed 2026-07-08, awaiting Official Journal publication. Separate Data Omnibus (GDPR/ePrivacy/NIS2/DORA amendments) remains in negotiation, not adopted."
+      },
+      "_lastScanCoverage": "All 5 sources were geo-blocked/JS-rendered (403 on WebFetch) and covered via WebSearch fallback; 3 of 5 are first-time baselines."
     },
     "data-protection-officer": {
       "roleNumber": 6,
       "title": "Data Protection Officer",
       "cadence": "monthly",
       "authority": "escalate-human",
-      "watchModes": ["compliance", "trend"],
+      "watchModes": [
+        "compliance",
+        "trend"
+      ],
       "stakes": "high",
       "ownedPaths": [
         "src/lib/firebase/userData.ts",
@@ -109,18 +189,59 @@
         "Processor DPA version bumps altering data-handling commitments"
       ],
       "sources": [
-        { "id": "imy-nyheter-rss", "title": "IMY — Nyheter (RSS)", "url": "https://www.imy.se/nyheter/rss", "type": "rss", "note": "Rulings binding Binge directly." },
-        { "id": "edpb-news", "title": "EDPB news", "url": "https://www.edpb.europa.eu/news/news_en", "type": "html", "note": "EU-level guidance IMY applies (shared with Legal)." },
-        { "id": "ec-eu-us-transfers", "title": "EC — EU-US data transfers / DPF", "url": "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/eu-us-data-transfers_en", "type": "html", "note": "Adequacy decision underpinning transfers to Google/TMDB/Sentry." },
-        { "id": "sentry-subprocessors", "title": "Sentry subprocessors (RSS)", "url": "https://sentry.io/legal_subprocessors_rss.xml", "type": "rss", "note": "Versioned, 30-day notice, dedicated RSS — cleanest processor trigger." },
-        { "id": "firebase-subprocessors", "title": "Firebase subprocessors", "url": "https://firebase.google.com/terms/subprocessors/", "type": "html", "note": "Primary processor. Page may be edge-cached with a stale date — cross-check the GCP list." },
-        { "id": "gcp-subprocessors", "title": "Google Cloud subprocessors", "url": "https://cloud.google.com/terms/subprocessors", "type": "html", "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list." }
+        {
+          "id": "imy-nyheter-rss",
+          "title": "IMY — Nyheter (RSS)",
+          "url": "https://www.imy.se/nyheter/rss",
+          "type": "rss",
+          "note": "Rulings binding Binge directly."
+        },
+        {
+          "id": "edpb-news",
+          "title": "EDPB news",
+          "url": "https://www.edpb.europa.eu/news/news_en",
+          "type": "html",
+          "note": "EU-level guidance IMY applies (shared with Legal)."
+        },
+        {
+          "id": "ec-eu-us-transfers",
+          "title": "EC — EU-US data transfers / DPF",
+          "url": "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/eu-us-data-transfers_en",
+          "type": "html",
+          "note": "Adequacy decision underpinning transfers to Google/TMDB/Sentry."
+        },
+        {
+          "id": "sentry-subprocessors",
+          "title": "Sentry subprocessors (RSS)",
+          "url": "https://sentry.io/legal_subprocessors_rss.xml",
+          "type": "rss",
+          "note": "Versioned, 30-day notice, dedicated RSS — cleanest processor trigger."
+        },
+        {
+          "id": "firebase-subprocessors",
+          "title": "Firebase subprocessors",
+          "url": "https://firebase.google.com/terms/subprocessors/",
+          "type": "html",
+          "note": "Primary processor. Page may be edge-cached with a stale date — cross-check the GCP list."
+        },
+        {
+          "id": "gcp-subprocessors",
+          "title": "Google Cloud subprocessors",
+          "url": "https://cloud.google.com/terms/subprocessors",
+          "type": "html",
+          "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list."
+        }
       ],
-      "lastScan": "2026-06-27",
+      "lastScan": "2026-07-27",
       "snapshot": {
-        "sentry-subprocessors": "as of 2026-06-01: Intercom added; Functional Software GmbH addr changed (OpenAI moved to general list 2026-03-02) → escalated BIN-216",
-        "imy-nyheter-rss": "newest: IMY AI Act supervisor (2026-06-15); breach-notification template (2026-06-11)"
-      }
+        "sentry-subprocessors": "2026-07-27 (WebSearch, 403'd direct on both RSS and HTML): current published list still version 2.3.0 dated 2026-06-01 — same version already escalated as BIN-216. No new subprocessor change detected. Not re-filed.",
+        "imy-nyheter-rss": "2026-07-27 (WebSearch, 403'd direct): no new IMY item matching DPO watch items since the prior 2026-06-15/2026-06-11 items. New but Legal/AI-Act-adjacent, not filed here: IMY confirmed as AI Act market-surveillance authority; IMY lead rapporteur on EDPB's generative-AI web-scraping guidelines.",
+        "edpb-news": "2026-07-27 (WebSearch, 403'd direct): EDPB adopted Guidelines 02/2026 on Anonymisation v1.0 (2026-07-07, consultation to 2026-10-30) — updates WP29 Opinion 05/2014, incorporates CJEU C-413/23 P. Also finalized generative-AI web-scraping guidelines (2026-07-08) and blockchain guidelines (final). MATERIAL — filed as GitHub issue #46, directly on-topic for docs/data-retention-policy.md's hard-delete-not-anonymize decisions.",
+        "ec-eu-us-transfers": "First baseline, 2026-07-27 (WebSearch, 403'd direct): DPF adequacy decision formally still in force. Two live threats: (1) Latombe challenge now on appeal at CJEU as Case C-703/25 P (pending); (2) SCOTUS's Trump v. Slaughter (2026-06-29) eliminated FTC statutory independence, a cited safeguard — noyb sent Commission an 'orderly withdrawal' demand 2026-06-30, plans fresh CJEU challenge. MATERIAL — filed as GitHub issue #45, Binge's privacy policy cites SCC + DPF as transfer basis for Google/TMDB/Sentry.",
+        "firebase-subprocessors": "First baseline, 2026-07-27 (WebSearch, 403'd direct): page lists Accenture LLP, EPAM Systems Inc., Fastly Inc., Firebase Inc. with a last-visible-edit date around 2021-09-23 — confirms the page is edge-cached/stale, cross-checked against GCP list, no material gap found.",
+        "gcp-subprocessors": "First baseline, 2026-07-27 (WebSearch, 403'd direct): actively maintained changelog, most recent entries 2026-05-19, 2026-04-28, 2026-04-22, 2026-03-02, 2026-01-30 — no entry after 2026-05-19. Used as freshness cross-check for the stale Firebase list; no new subprocessor identified."
+      },
+      "_lastScanCoverage": "All 6 sources covered via WebSearch fallback after WebFetch 403'd on every URL; no source was skipped."
     }
   }
 }
