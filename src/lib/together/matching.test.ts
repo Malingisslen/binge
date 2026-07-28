@@ -228,3 +228,96 @@ describe('media-type namespacing of swipes (BIN-569)', () => {
     expect([m.yesCount, m.noCount]).toEqual([1, 0]);
   });
 });
+
+// BIN-608 — `swipes.votes` är en MAP som varje deltagare skriver in sin egen
+// nyckel i. En fallback på DOKUMENT-nivå ("finns namngivet doc? använd det,
+// annars legacy") betyder att den FÖRSTA rösten efter övergången skapar ett
+// namngivet doc med en enda röst i — och det dokumentet gömmer legacy-doc:et
+// där alla andras röster ligger. Testerna nedan seedar OLIKA deltagare i de
+// två dokumenten; annars kan de inte skilja dokument-val från värde-merge.
+describe('legacy and namespaced swipe docs merge per participant (BIN-608)', () => {
+  const movie42 = cand(42, [], 7, 'movie');
+  const tv42 = cand(42, [], 7, 'tv');
+
+  it('a post-cutover vote does not hide the pre-cutover votes on the same title', () => {
+    const [m] = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a'), part('b'), part('c')],
+      swipes: [
+        swipe(42, { b: 'yes', c: 'yes' }, null),   // före övergången
+        swipe(42, { a: 'yes' }, 'movie'),          // första rösten efter
+      ],
+    });
+    expect(m.yesCount).toBe(3);
+    expect(m.allVoted).toBe(true);
+    expect(m.missing).toEqual([]);
+  });
+
+  it('a participant who voted in both docs resolves to the namespaced (newer) vote', () => {
+    const [m] = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a'), part('b')],
+      swipes: [
+        swipe(42, { a: 'no', b: 'yes' }, null),
+        swipe(42, { a: 'yes' }, 'movie'),
+      ],
+    });
+    expect([m.yesCount, m.noCount]).toEqual([2, 0]);
+  });
+
+  it('a veto held only in the legacy doc still sinks the candidate', () => {
+    const [m] = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a'), part('b')],
+      swipes: [
+        swipe(42, { b: 'veto' }, null),
+        swipe(42, { a: 'yes' }, 'movie'),
+      ],
+    });
+    expect(m.vetoed).toBe(true);
+    expect(m.score).toBe(-Infinity);
+  });
+
+  it('a pre-cutover voter is not re-asked the same title after the cutover', () => {
+    const swipes = [
+      swipe(42, { b: 'yes' }, null),
+      swipe(42, { a: 'yes' }, 'movie'),
+    ];
+    expect(nextCandidate({ candidates: [movie42], swipes, participantId: 'b' })).toBeNull();
+    expect(participantSwipeProgress(swipes, [movie42], 'b')).toEqual({ done: 1, total: 1 });
+  });
+
+  it('namespaced votes stay apart per media type even when a legacy doc is merged in', () => {
+    const [m, t] = scoreCandidates({
+      candidates: [movie42, tv42],
+      participants: [part('a'), part('b'), part('c')],
+      swipes: [
+        swipe(42, { c: 'yes' }, null),             // tvetydig: kan ha gällt endera
+        swipe(42, { a: 'yes' }, 'movie'),
+        swipe(42, { a: 'no', b: 'no' }, 'tv'),
+      ],
+    });
+    // De namngivna rösterna delas ALDRIG mellan medietyperna (BIN-569 håller).
+    expect([m.yesCount, m.noCount]).toEqual([2, 0]);   // a (movie) + c (legacy)
+    expect([t.yesCount, t.noCount]).toEqual([1, 2]);   // c (legacy) + a, b (tv)
+  });
+
+  // Medveten kompromiss, inte drift: ett legacy-doc på bara `42` går inte att
+  // härleda till film eller serie — den tvetydigheten ÄR buggen BIN-569 rättade
+  // och ligger redan i skriven data. Vi slår in det i båda hellre än att slänga
+  // rösten. Detta är en skillnad mot mellanläget i 0c83c45, som tystade legacy-
+  // doc:et så fort ett namngivet doc fanns (och därmed tappade rösten helt).
+  it('an unattributable legacy veto sinks BOTH media types — accepted tradeoff', () => {
+    const [m, t] = scoreCandidates({
+      candidates: [movie42, tv42],
+      participants: [part('a'), part('b')],
+      swipes: [
+        swipe(42, { b: 'veto' }, null),
+        swipe(42, { a: 'yes' }, 'tv'),
+      ],
+    });
+    expect(m.vetoed).toBe(true);
+    expect(t.vetoed).toBe(true);
+    expect(t.votes).toEqual({ b: 'veto', a: 'yes' });
+  });
+});

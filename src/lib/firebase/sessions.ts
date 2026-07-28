@@ -178,7 +178,8 @@ export function participantDocToObject(id: string, data: Record<string, unknown>
 export function swipeDocToObject(id: string, data: Record<string, unknown>): SessionSwipe {
   // Läser BÅDA formerna: nya `movie_42`/`tv_42` och legacy `42` (skrivna före
   // BIN-569). mediaType blir null för legacy-doc:en — indexSwipes matchar dem
-  // på nummer allena tills sessionens 7-dagars TTL rensar bort dem.
+  // på nummer allena och slår ihop rösterna PER DELTAGARE med det namngivna
+  // doc:et (BIN-608), tills sessionens 7-dagars TTL rensar bort dem.
   return {
     tmdbId: parseTmdbIdFromDocId(id),
     mediaType: parseMediaTypeFromDocId(id),

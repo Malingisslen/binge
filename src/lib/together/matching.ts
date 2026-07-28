@@ -24,9 +24,25 @@ export type SwipeLookup = (candidate: { tmdbId: number; mediaType: string | null
 
 /**
  * Bygger uppslagningen en gång per render istället för en Map per anropare.
- * Ett namngivet dokument (`movie_42`) vinner alltid över ett legacy-dokument
- * på bara numret — legacy används bara som fallback så att en session som
- * pågick under övergången inte ser ut att tappa sina röster mitt i veckan.
+ *
+ * Sammanslagningen sker per DELTAGARE, inte per dokument. `votes` är en map som
+ * varje deltagare skriver sin egen nyckel i, så ett dokument-val ("finns
+ * namngivet doc? använd det, annars legacy") skulle låta den FÖRSTA rösten
+ * efter övergången — ett namngivet doc med en enda röst i — gömma legacy-doc:et
+ * där alla andras röster ligger. Ett förbrukat veto gick då inte att lägga om.
+ * (BIN-608)
+ *
+ * Den namngivna rösten vinner per nyckel: har någon röstat både före och efter
+ * övergången är den nyare den som gäller.
+ *
+ * Kvarstående tvetydighet: ett legacy-doc på bara `42` går inte att härleda till
+ * film 42 eller serie 42 — det ÄR kollisionen BIN-569 rättade, och den ligger
+ * redan i skriven data. Vi slår in det i båda, vilket är exakt vad koden gjorde
+ * före BIN-569; legacy-doc:et försvinner när sessionen gallras. Notera att detta
+ * INTE är oförändrat mot mellanläget i 0c83c45: där tystades legacy-doc:et så
+ * fort ett namngivet doc fanns, vilket "läkte" kollisionen genom att slänga
+ * rösten. Vi väljer att behålla användarens röst framför att gissa bort den.
+ * Kompromissen är fastnaglad i matching.test.ts (BIN-608).
  */
 export function indexSwipes(swipes: SessionSwipe[]): SwipeLookup {
   const byKey = new Map<string, SessionSwipe>();
@@ -35,10 +51,13 @@ export function indexSwipes(swipes: SessionSwipe[]): SwipeLookup {
     if (s.mediaType) byKey.set(candidateKey(s), s);
     else legacyByTmdbId.set(s.tmdbId, s);
   }
-  return candidate =>
-    byKey.get(candidateKey(candidate))?.votes
-    ?? legacyByTmdbId.get(candidate.tmdbId)?.votes
-    ?? {};
+  return candidate => {
+    const legacy = legacyByTmdbId.get(candidate.tmdbId)?.votes;
+    const current = byKey.get(candidateKey(candidate))?.votes;
+    if (!legacy) return current ?? {};
+    if (!current) return legacy;
+    return { ...legacy, ...current };
+  };
 }
 
 export interface CandidateResult {
