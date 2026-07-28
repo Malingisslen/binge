@@ -74,7 +74,16 @@ export default function QuickRateModal({ open, onClose }: Props) {
     const existing = getItem('movie', t.id);
     if (existing) {
       if (rating !== null) await updateRating('movie', t.id, rating);
-      await updateStatus('movie', t.id, 'sedd');
+      // BIN-599: only WRITE the status when it actually changes. updateStatus
+      // reads a 'sedd' → 'sedd' write as a rewatch and increments rewatchCount
+      // (see buildStatusUpdate's isRewatch), so re-marking a film that is
+      // already 'sedd' counted a viewing that never happened — once per pass
+      // through this modal, and permanently: rewatchCount is editable nowhere.
+      // This surface is a RATING pass ("Sett 4★"), not a viewing log, so the
+      // only thing an already-seen film needs from it is the rating above.
+      if (existing.status !== 'sedd') {
+        await updateStatus('movie', t.id, 'sedd');
+      }
     } else {
       await addItem(buildItemFromTmdb(t, 'sedd', rating, existing ?? null));
     }

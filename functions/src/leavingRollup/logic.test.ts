@@ -93,6 +93,33 @@ describe('buildLeavingRollupFromChanges', () => {
     expect(r.byProvider['8']).toEqual([{ tmdbId: 597, mediaType: 'movie', leaving: '2026-07-05' }]);
   });
 
+  it('keeps a movie and a tv show that share a tmdbId as separate titles (BIN-586)', () => {
+    const collidingShows: Record<string, ShowRef> = {
+      m: { tmdbId: 'movie/1396' },
+      t: { tmdbId: 'tv/1396' },
+    };
+    const r = buildLeavingRollupFromChanges([
+      change('m', { timestamp: ts('2026-07-20') }),
+      change('t', { timestamp: ts('2026-07-05') }),
+    ], collidingShows);
+    expect(r.byProvider['8']).toEqual([
+      { tmdbId: 1396, mediaType: 'tv', leaving: '2026-07-05' },
+      { tmdbId: 1396, mediaType: 'movie', leaving: '2026-07-20' },
+    ]);
+  });
+
+  it('sorts a same-id, same-date collision deterministically by media type', () => {
+    const collidingShows: Record<string, ShowRef> = {
+      m: { tmdbId: 'movie/1396' },
+      t: { tmdbId: 'tv/1396' },
+    };
+    const r = buildLeavingRollupFromChanges([
+      change('t'),
+      change('m'),
+    ], collidingShows);
+    expect(r.byProvider['8'].map((e) => e.mediaType)).toEqual(['movie', 'tv']);
+  });
+
   it('sorts each provider nearest-deadline-first', () => {
     const r = buildLeavingRollupFromChanges([
       change('a', { timestamp: ts('2026-07-20') }),

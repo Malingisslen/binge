@@ -82,7 +82,25 @@ const runTransaction = vi.fn(
 // query/where/limit are recorded so a test can assert the bound is applied;
 // getDocs always resolves empty (no groups) unless a test overrides it.
 const limitCalls: unknown[] = [];
-const getDocsMock = vi.fn<(q: unknown) => Promise<{ docs: { id: string }[] }>>(async () => ({ docs: [] }));
+// BIN-587: watchlist-cascaden läser hela collectionen och skriver i batchar —
+// docs bär därför ref + data() (som WatchlistContext-harnessen) så testen kan
+// pinna VILKA items som stämplas.
+type FakeDoc = { id: string; ref: { _path: string }; data: () => Record<string, unknown> };
+const getDocsMock = vi.fn<(q: unknown) => Promise<{ docs: FakeDoc[] }>>(async () => ({ docs: [] }));
+const batchSets: { ref: { _path: string }; data: Record<string, unknown> }[] = [];
+const batchCommit = vi.fn<() => Promise<void>>(async () => {});
+const writeBatch = vi.fn(() => ({
+  set: (ref: { _path: string }, data: Record<string, unknown>) => { batchSets.push({ ref, data }); },
+  commit: () => batchCommit(),
+}));
+
+function watchlistDoc(id: string, visibility?: string): FakeDoc {
+  return {
+    id,
+    ref: { _path: `users/u1/watchlist/${id}` },
+    data: () => (visibility ? { visibility } : {}),
+  };
+}
 
 vi.mock('@/lib/firebase/db', () => ({
   fsdb: async () => ({
@@ -100,6 +118,8 @@ vi.mock('@/lib/firebase/db', () => ({
     where: (field: string, op: string, value: unknown) => ({ field, op, value }),
     limit: (n: number) => { limitCalls.push(n); return { _limit: n }; },
     serverTimestamp: () => 'ts',
+    writeBatch: () => writeBatch(),
+    deleteField: () => '__delete__',
   }),
   getDb: async () => ({}),
   clearFirestorePersistence: vi.fn(async () => {}),
@@ -178,6 +198,12 @@ beforeEach(() => {
   runTransaction.mockClear();
   getDocsMock.mockClear();
   getDocsMock.mockImplementation(async () => ({ docs: [] }));
+  batchSets.length = 0;
+  batchCommit.mockReset();
+  batchCommit.mockImplementation(async () => {});
+  // mockReset (inte mockClear): ett test som byter ut batch-fabriken ska inte
+  // läcka den vidare till nästa — reset återställer vi.fn:ens original-impl.
+  writeBatch.mockReset();
   limitCalls.length = 0;
   createUserWithEmailAndPassword.mockClear();
   sendEmailVerification.mockClear();
@@ -388,6 +414,144 @@ describe('AuthContext — ensureUserProfile create-branch race (BIN-535)', () =>
 
     expect(ctx!.user?.termsVersion).toBe('2025-11'); // register()'s value survived
     expect(ctx!.user?.displayName).toBe('Malin');
+  });
+});
+
+// BIN-587: the visibility cascade used to swallow its own failure — the profile
+// said 'private' while every un-restamped item still carried
+// effectiveVisibility:'public', and the read rule trusts that field. The failure
+// must now be recorded (flag on the profile), surfaced, and retried on load.
+describe('AuthContext — failed visibility cascade no longer fails open (BIN-587)', () => {
+  function flagWrites() {
+    return userDocWrites()
+      .map(c => c[1] as Record<string, unknown>)
+      .filter(p => 'visibilitySyncPending' in p);
+  }
+
+  it('a successful downgrade stamps every override-free item and records no pending flag', async () => {
+    renderAuth();
+    await login({ username: 'malin', defaultVisibility: 'public', isPublic: true });
+    // m2 har en egen per-item-override och ska INTE röras av cascaden.
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1'), watchlistDoc('m2', 'public')] }));
+
+    await act(async () => { await ctx!.updateDefaultVisibility('private'); });
+
+    expect(batchSets).toEqual([
+      { ref: { _path: 'users/u1/watchlist/m1' }, data: { effectiveVisibility: 'private', isPublic: false } },
+    ]);
+    expect(ctx!.visibilitySyncPending).toBe(false);
+    expect(flagWrites()).toHaveLength(0); // ingen extra write på happy path
+  });
+
+  it('records visibilitySyncPending on the profile when the item cascade throws', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    await login({ username: 'malin', defaultVisibility: 'public', isPublic: true });
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+    batchCommit.mockRejectedValueOnce(new Error('unavailable'));
+
+    await act(async () => { await ctx!.updateDefaultVisibility('private'); });
+
+    expect(ctx!.visibilitySyncPending).toBe(true);
+    expect(flagWrites().map(p => p.visibilitySyncPending)).toEqual([true]);
+    // Profil-writen (steg 1) landade — det är just den som gör att UI:t annars
+    // hade påstått att användaren är privat.
+    const profileWrite = userDocWrites().map(c => c[1] as Record<string, unknown>)
+      .find(p => p.defaultVisibility === 'private');
+    expect(profileWrite?.isPublic).toBe(false);
+    // Ingen tight retry-loop i samma session: exakt EN cascade-läsning.
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+    errSpy.mockRestore();
+  });
+
+  it('retries the cascade on the next app load and clears the flag when it succeeds', async () => {
+    renderAuth();
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+    // Profilen bär flaggan från förra sessionen; defaultVisibility är sanningen.
+    await login({
+      username: 'malin',
+      defaultVisibility: 'private',
+      isPublic: false,
+      visibilitySyncPending: true,
+    });
+    await act(async () => {}); // låt retry-effekten köra klart
+
+    expect(batchSets).toEqual([
+      { ref: { _path: 'users/u1/watchlist/m1' }, data: { effectiveVisibility: 'private', isPublic: false } },
+    ]);
+    expect(ctx!.visibilitySyncPending).toBe(false);
+    expect(flagWrites().map(p => p.visibilitySyncPending)).toEqual(['__delete__']);
+  });
+
+  it('keeps the flag when the retry fails too, so a later load tries again', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderAuth();
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+    batchCommit.mockRejectedValue(new Error('unavailable'));
+    await login({
+      username: 'malin',
+      defaultVisibility: 'private',
+      isPublic: false,
+      visibilitySyncPending: true,
+    });
+    await act(async () => {});
+
+    expect(ctx!.visibilitySyncPending).toBe(true);
+    expect(flagWrites()).toHaveLength(0); // flaggan stod redan satt — ingen onödig write
+    errSpy.mockRestore();
+  });
+
+  // Auto-omförsöket och ett manuellt val stämplar SAMMA docs. Utan ordning
+  // avgörs slutvärdet av vilken batch som landar sist — omförsökets gamla
+  // 'public' kunde skriva över ett nyss valt 'private' OCH rensa varningen, dvs
+  // exakt det fails-open-läge BIN-587 stängde, återöppnat en nivå upp.
+  it('a newer manual choice wins over an in-flight auto-retry, and only it clears the flag', async () => {
+    const timeline: string[] = [];
+    renderAuth();
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+    // Håll omförsökets commit öppen så det manuella valet hinner göras medan
+    // den gamla stämplingen fortfarande är i luften. Varje batch spårar SINA
+    // egna sets, så tidslinjen märks med rätt värde även i det överlappande
+    // (trasiga) läget testet ska fånga.
+    let releaseRetry = () => {};
+    const retryCommit = new Promise<void>(res => { releaseRetry = () => res(); });
+    let batches = 0;
+    writeBatch.mockImplementation(() => {
+      const mine: Record<string, unknown>[] = [];
+      const isRetryBatch = ++batches === 1;
+      return {
+        set: (ref: { _path: string }, data: Record<string, unknown>) => {
+          mine.push(data);
+          batchSets.push({ ref, data });
+        },
+        commit: async () => {
+          if (isRetryBatch) await retryCommit;
+          timeline.push(`commit:${String(mine[0]?.effectiveVisibility)}`);
+        },
+      };
+    });
+    setDoc.mockImplementation(async (_ref: unknown, payload: unknown) => {
+      const p = payload as Record<string, unknown>;
+      if ('visibilitySyncPending' in p) timeline.push(`flag:${String(p.visibilitySyncPending)}`);
+    });
+
+    await login({
+      username: 'malin',
+      defaultVisibility: 'public',
+      isPublic: true,
+      visibilitySyncPending: true,
+    });
+
+    let manual: Promise<void>;
+    await act(async () => { manual = ctx!.updateDefaultVisibility('private'); });
+    releaseRetry();
+    await act(async () => { await manual; });
+
+    // Den gamla stämplingen får landa, men det VALDA värdet skrivs sist…
+    expect(timeline).toEqual(['commit:public', 'commit:private', 'flag:__delete__']);
+    // …och "synkat" rapporteras bara om det värdet, aldrig om det ersatta.
+    expect(batchSets[batchSets.length - 1].data).toEqual({ effectiveVisibility: 'private', isPublic: false });
+    expect(ctx!.visibilitySyncPending).toBe(false);
   });
 });
 

@@ -107,6 +107,23 @@ export const CATCHUP_THRESHOLD = 3;
 // (även om showen är "Returning Series" och nya avsnitt är på väg).
 // Användaren ser tillbaka-felet i Streamingrådgivaren när vi räknar
 // "påbörjade" som "behind", så denna funktion är källan till sanning.
+//
+// BIN-589 — säsong 0 (Specials) är ett EGET spår, inte "före säsong 1". Både
+// markören och TMDB:s last_episode_to_air kan peka på ett special: TMDB lägger
+// alla specials i säsong 0 oavsett sändningsdatum, och markEpisodeWatched
+// skriver exakt det avsnitt du bockade (en special-bock parkerar markören på
+// S0). En skalär markör kan därför ALDRIG bevisa att både en special-position
+// och en numrerad position är sedda. En jämförelse där bara ena sidan är
+// säsong 0 är alltså inget positivt bevis på ikapp-läge — och samma "kräver
+// POSITIVT bevis"-regel som isCaughtUpOnEndedShow lever på ger då "bakom":
+//   markör numrerad + frontier S0 → bakom (buggen: rå `3 < 0` gav "ikapp", och
+//     ett special som airade sist gömde serien under collapsed "Avslutade")
+//   markör S0 + frontier numrerad → bakom (oförändrat; `0 < N` gav redan detta)
+// Samma spår (båda S0, eller båda numrerade) jämförs numeriskt precis som förr.
+// Att i stället låta säsong 0 sortera EFTER numrerade säsonger vänder det andra
+// fallet och påstår "ikapp" för någon som bara sett Specials — det motsäger
+// highestWatchedPosition (som skriver markören och låter S0 förlora mot varje
+// säsong >= 1) och är exakt bortgömnings-felet kommentaren ovan varnar för.
 export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): boolean {
   // == null (inte falsy): säsong 0 (Specials) är giltig progress och får inte
   // kollapsas ihop med "ej börjat" (L3).
@@ -115,6 +132,9 @@ export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): bool
   if (!last) return false;
   const userS = item.lastWatchedSeason ?? 0;
   const userE = item.lastWatchedEpisode ?? 0;
+  const userOnSpecials = userS === 0;
+  const airedOnSpecials = last.season_number === 0;
+  if (userOnSpecials !== airedOnSpecials) return true; // olika spår → ikapp obevisbart
   if (userS < last.season_number) return true;
   if (userS === last.season_number && userE < last.episode_number) return true;
   return false;

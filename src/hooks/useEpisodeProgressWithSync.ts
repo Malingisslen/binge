@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useEpisodeProgress } from './useEpisodeProgress';
 import { useWatchlist } from './useWatchlist';
-import { highestWatchedPosition } from './useEpisodeProgressWithSync.helpers';
+import { highestWatchedPosition, isSeasonFullyWatched } from './useEpisodeProgressWithSync.helpers';
 
 /**
  * Wraps useEpisodeProgress with automatic watchlist sync.
@@ -31,8 +31,26 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
         markEpisode(season, episode, watched),
         updateProgress('tv', tmdbId, season, episode),
       ]);
-      // Auto-advance: if this was the last episode of the season, point to next season
-      if (episodeCount !== undefined && episode >= episodeCount) {
+      // Auto-advance: if this was the last episode of the season, point to next season.
+      //
+      // BIN-588: ticking the finale is NOT proof the season is done. Someone who
+      // opens a season and ticks only the last episode (or jumps ahead) used to
+      // land on säsong+1, avsnitt 0 — a pointer that says "hela säsongen sedd",
+      // which then reads as ikapp/avslutad and hides the episodes they never
+      // watched from Fortsätt titta and kalendern. So gate the jump on the
+      // season actually being complete, counted out of episodeProgress the same
+      // way the unwatch branch below recomputes from it (progressRef, plus the
+      // episode we just wrote — onSnapshot has not landed yet).
+      //
+      // Deliberately still ALSO requires the finale to be the episode just
+      // ticked: that keeps this a strict narrowing of the old rule. Completing a
+      // season out of order (finale first, then filling the gaps) never
+      // auto-advanced before and does not start doing so here.
+      if (
+        episodeCount !== undefined
+        && episode >= episodeCount
+        && isSeasonFullyWatched(progressRef.current, season, episodeCount, episode)
+      ) {
         await updateProgress('tv', tmdbId, season + 1, 0);
       }
     } else {

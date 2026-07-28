@@ -13,11 +13,12 @@ const VISIBILITY_OPTIONS: { value: ItemVisibility; label: string; description: s
 ];
 
 export function UsernameSection() {
-  const { user, updateUsername, updateBio, updateDefaultVisibility } = useAuth();
+  const { user, updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending } = useAuth();
   const { show: toast } = useToast();
   const [usernameInput, setUsernameInput] = useState(user?.username ?? '');
   const [bioInput, setBioInput] = useState(user?.bio ?? '');
   const [saving, setSaving] = useState(false);
+  const [retryingVisibility, setRetryingVisibility] = useState(false);
 
   if (!user) return null;
 
@@ -34,6 +35,17 @@ export function UsernameSection() {
       toast('Användarnamn sparat');
     } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
     setSaving(false);
+  };
+
+  // BIN-587: manuell reparation av en synlighets-ändring som bara hann spara
+  // profilen. Kör om SAMMA värde — steg 2 (stämplingen av varje titel) är det
+  // som saknas, och lyckas den rensas varningen.
+  const handleRetryVisibility = async () => {
+    setRetryingVisibility(true);
+    try {
+      await updateDefaultVisibility(user.defaultVisibility);
+    } catch { toast('Kunde inte spara. Försök igen om en stund.'); }
+    setRetryingVisibility(false);
   };
 
   return (
@@ -102,6 +114,22 @@ export function UsernameSection() {
               </label>
             ))}
           </div>
+          {visibilitySyncPending && (
+            <div className="mt-[6px] border border-danger bg-danger-soft rounded-sm px-2 py-[6px]">
+              <p className="text-xxs text-danger-ink leading-snug">
+                Synligheten är sparad på din profil men hann inte uppdateras på alla dina
+                titlar — några kan fortfarande visas enligt din tidigare inställning.
+                Binge försöker igen nästa gång du öppnar appen.
+              </p>
+              <button
+                onClick={handleRetryVisibility}
+                disabled={retryingVisibility}
+                className="btn btn-sm btn-danger-ghost mt-[4px] disabled:opacity-50"
+              >
+                {retryingVisibility ? 'Försöker…' : 'Försök igen nu'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </SettingsSection>

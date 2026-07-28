@@ -74,9 +74,16 @@ function FeedContent() {
               orderBy('updatedAt', 'desc'),
               limit(5),
             )),
+            // orderBy är inte kosmetiskt: utan det sorterar Firestore på
+            // __name__ (recensioner skapas med addDoc → slumpade id:n), så
+            // limit(10) plockade ett GODTYCKLIGT urval — en nyskriven
+            // recension föll oftast utanför och 14-dagarsfiltret nedan slängde
+            // resten. Samma form som useReviews.ts; index uid+createdAt finns
+            // redan i firestore.indexes.json. (BIN-600)
             getDocs(query(
               collection(db, 'reviews'),
               where('uid', '==', uid),
+              orderBy('createdAt', 'desc'),
               limit(10),
             )),
           ]);

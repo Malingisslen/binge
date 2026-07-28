@@ -1,6 +1,8 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken } from './utils';
 import { planJoinFields } from './sessions.joinPayload';
+import { mediaTypeDocId, parseTmdbIdFromDocId, parseMediaTypeFromDocId } from '@/lib/mediaTypeDocId';
+import type { MediaType } from '@/types';
 import type {
   SessionConfig,
   SessionCandidate,
@@ -114,11 +116,16 @@ export async function updateParticipantActivity(sessionId: string, participantId
 export async function recordSwipe(params: {
   sessionId: string;
   tmdbId: number;
+  mediaType: MediaType;
   participantId: string;
   vote: VoteKind;
 }): Promise<void> {
   const { db, doc, setDoc, updateDoc, serverTimestamp } = await fsdb();
-  const ref = doc(db, 'sessions', params.sessionId, 'swipes', String(params.tmdbId));
+  // Namngivet doc-id (`movie_42`/`tv_42`), inte bara numret: TMDB:s film- och
+  // serie-id:n är skilda nummerrymder, och en "Blandat"-session kan dela ut
+  // både film 42 och serie 42 i samma kortlek — på bara numret slogs deras
+  // röster ihop till ett gemensamt (fel) matchresultat. (BIN-569)
+  const ref = doc(db, 'sessions', params.sessionId, 'swipes', mediaTypeDocId(params.mediaType, params.tmdbId));
   // Atomär per-nyckel-skrivning utan föregående läsning. Tidigare
   // read-modify-write (getDoc → spread → setDoc) klobbade samtidiga röster:
   // två deltagare som läste samma snapshot och skrev tillbaka skulle skriva
@@ -169,8 +176,12 @@ export function participantDocToObject(id: string, data: Record<string, unknown>
 }
 
 export function swipeDocToObject(id: string, data: Record<string, unknown>): SessionSwipe {
+  // Läser BÅDA formerna: nya `movie_42`/`tv_42` och legacy `42` (skrivna före
+  // BIN-569). mediaType blir null för legacy-doc:en — indexSwipes matchar dem
+  // på nummer allena tills sessionens 7-dagars TTL rensar bort dem.
   return {
-    tmdbId: Number(id),
+    tmdbId: parseTmdbIdFromDocId(id),
+    mediaType: parseMediaTypeFromDocId(id),
     votes: (data.votes as Record<string, VoteKind>) ?? {},
     updatedAt: toDate(data.updatedAt),
   };

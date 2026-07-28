@@ -7,6 +7,39 @@ import type {
   VoteKind,
 } from '@/types';
 import { scoreCandidateForUser } from '@/lib/taste/similarity';
+import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+
+/**
+ * The one key a candidate is identified by across the whole Tillsammans
+ * surface — swipe-dokumentets id, React-nycklar och per-kandidat-state.
+ * Bara tmdbId räcker inte: film 42 och serie 42 är olika titlar och delade
+ * annars röstsammanräkning. (BIN-569)
+ */
+export function candidateKey(candidate: { tmdbId: number; mediaType: string | null }): string {
+  return mediaTypeDocId(candidate.mediaType, candidate.tmdbId);
+}
+
+/** Slår upp röstmapen för en kandidat, oavsett om dess swipe-doc är namngivet eller legacy. */
+export type SwipeLookup = (candidate: { tmdbId: number; mediaType: string | null }) => Record<string, VoteKind>;
+
+/**
+ * Bygger uppslagningen en gång per render istället för en Map per anropare.
+ * Ett namngivet dokument (`movie_42`) vinner alltid över ett legacy-dokument
+ * på bara numret — legacy används bara som fallback så att en session som
+ * pågick under övergången inte ser ut att tappa sina röster mitt i veckan.
+ */
+export function indexSwipes(swipes: SessionSwipe[]): SwipeLookup {
+  const byKey = new Map<string, SessionSwipe>();
+  const legacyByTmdbId = new Map<number, SessionSwipe>();
+  for (const s of swipes) {
+    if (s.mediaType) byKey.set(candidateKey(s), s);
+    else legacyByTmdbId.set(s.tmdbId, s);
+  }
+  return candidate =>
+    byKey.get(candidateKey(candidate))?.votes
+    ?? legacyByTmdbId.get(candidate.tmdbId)?.votes
+    ?? {};
+}
 
 export interface CandidateResult {
   candidate: SessionCandidate;
@@ -63,12 +96,12 @@ export function scoreCandidates(params: {
   aggregation?: AggregationStrategy;
 }): CandidateResult[] {
   const { candidates, participants, swipes, tasteByPid, aggregation = 'least_misery' } = params;
-  const swipeMap = new Map(swipes.map(s => [s.tmdbId, s]));
+  const votesFor = indexSwipes(swipes);
   const pids = participants.map(p => p.id);
   const penalty = votePenalty(aggregation);
 
   return candidates.map(c => {
-    const votes = swipeMap.get(c.tmdbId)?.votes ?? {};
+    const votes = votesFor(c);
     let yes = 0, no = 0, veto = false;
     for (const pid of pids) {
       const v = votes[pid];
@@ -118,12 +151,8 @@ export function nextCandidate(params: {
   swipes: SessionSwipe[];
   participantId: string;
 }): SessionCandidate | null {
-  const voted = new Set(
-    params.swipes
-      .filter(s => s.votes[params.participantId])
-      .map(s => s.tmdbId),
-  );
-  return params.candidates.find(c => !voted.has(c.tmdbId)) ?? null;
+  const votesFor = indexSwipes(params.swipes);
+  return params.candidates.find(c => !votesFor(c)[params.participantId]) ?? null;
 }
 
 export function participantSwipeProgress(
@@ -131,10 +160,10 @@ export function participantSwipeProgress(
   candidates: SessionCandidate[],
   participantId: string,
 ): { done: number; total: number } {
-  const swipeMap = new Map(swipes.map(s => [s.tmdbId, s]));
+  const votesFor = indexSwipes(swipes);
   let done = 0;
   for (const c of candidates) {
-    if (swipeMap.get(c.tmdbId)?.votes[participantId]) done++;
+    if (votesFor(c)[participantId]) done++;
   }
   return { done, total: candidates.length };
 }

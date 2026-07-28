@@ -340,6 +340,25 @@ describe('isUserBehindOnAired', () => {
     const show = makeShow({ last_episode_to_air: makeEpisode(1, 1) });
     expect(isUserBehindOnAired(item, show)).toBe(true);
   });
+
+  // BIN-589: TMDB lägger specials i säsong 0 oavsett sändningsdatum, så
+  // last_episode_to_air kan peka på ett special som airade EFTER finalen. Rå
+  // numerisk jämförelse (`3 < 0`) gjorde då bägge grenarna onåbara → "ikapp".
+  it('returns true when the newest aired episode is a Specials the marker cannot prove was seen (BIN-589)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 3, lastWatchedEpisode: 10 });
+    const show = makeShow({ last_episode_to_air: makeEpisode(0, 4) });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+
+  // Samma spår på båda sidor → vanlig avsnittsjämförelse, oförändrad. Pinnar
+  // att BIN-589-fixen inte gjorde "bakom" till ett permanent svar för specials.
+  it('compares episodes normally when BOTH the marker and the aired frontier are Specials (BIN-589)', () => {
+    const show = makeShow({ last_episode_to_air: makeEpisode(0, 4) });
+    const caughtUp = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const behind = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 2 });
+    expect(isUserBehindOnAired(caughtUp, show)).toBe(false);
+    expect(isUserBehindOnAired(behind, show)).toBe(true);
+  });
 });
 
 // --- isCaughtUpOnEndedShow ---
@@ -390,6 +409,14 @@ describe('isCaughtUpOnEndedShow', () => {
     // klassas som avslutad — annars göms en serie man ligger 4 säsonger efter på.
     const item = makeWatchlistItem({ lastWatchedSeason: 1, lastWatchedEpisode: 3 });
     const show = makeShow({ status: 'Ended', last_episode_to_air: null });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
+  });
+
+  it('returns false for an Ended show whose newest aired episode is an unproven Specials (BIN-589)', () => {
+    // Följdeffekten av BIN-589: utan fixen läste "S3E10 sedd, sist airade = S0E4"
+    // som ikapp → serien göms under collapsed "Avslutade" trots ett osett special.
+    const item = makeWatchlistItem({ lastWatchedSeason: 3, lastWatchedEpisode: 10 });
+    const show = makeShow({ status: 'Ended', last_episode_to_air: makeEpisode(0, 4) });
     expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
   });
 

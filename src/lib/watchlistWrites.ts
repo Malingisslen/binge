@@ -158,9 +158,11 @@ export function buildStatusUpdate(
   // permanent, since rewatchCount is editable nowhere. A preserved date cannot
   // distinguish "watched" from "tapped by mistake", so it is not evidence.
   //
-  // This rule is NOT a general defence against a wrong count: QuickRateModal
-  // re-marks already-'sedd' films without checking, so it increments on every
-  // pass. Pre-existing and unchanged here — see BIN-599.
+  // This rule is NOT a general defence against a wrong count — it only sees the
+  // stored status, so every caller owns the question "did a viewing actually
+  // happen?". QuickRateModal used to re-mark already-'sedd' films on every pass
+  // and inflate the count that way; BIN-599 fixed it at that call site (it now
+  // writes the status only when it changes), NOT here.
   //
   // KNOWN COST — a real regression, escalated to Malin, not decided here. The
   // code cannot tell a date SHE picked from one we auto-stamped (there is no

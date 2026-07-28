@@ -71,6 +71,12 @@ export interface SessionParticipant {
 
 export interface SessionSwipe {
   tmdbId: number;
+  // TMDB:s film- och serie-id:n är SKILDA nummerrymder — film 42 och serie 42
+  // är orelaterade titlar. Swipe-dokument namnges därför `movie_42`/`tv_42`.
+  // null = ett LEGACY-dokument som skrevs på bara numret innan BIN-569; det
+  // går inte att tillskriva en medietyp och matchas på nummer allena tills
+  // sessionen faller för sin 7-dagars TTL.
+  mediaType: MediaType | null;
   votes: Record<string, VoteKind>;
   updatedAt: Date;
 }

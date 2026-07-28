@@ -39,3 +39,13 @@
 {"ts":"2026-07-18T17:25:42.047Z","type":"trigger","fired":true,"signals":"auth,firestore.rules,functions/src,gdpr,pii,purge,subscription","ran":null}
 {"ts":"2026-07-18T17:54:36.166Z","type":"trigger","fired":true,"signals":"auth,firestore.rules,functions/src,gdpr,pii,purge,subscription","ran":null}
 {"ts":"2026-07-19T12:12:17.124Z","type":"review","tier":"full","panel":["security-architect","database-administrator","legal-gdpr-counsel","qa-test-engineer","data-integrations-engineer","codebase-archaeologist"],"outcome":"approve-with-conditions","must_haves":9,"conflicts":0,"escalations":0,"adrs":[],"rubber_stamp":false,"via":"manual","plan":"Sprint 2026-07-18b reconciliation — groups.ts/AuthContext.tsx/availableNotify ship, streamingOffers hold"}
+{"ts":"2026-07-22T15:29:51.784Z","type":"trigger","fired":true,"signals":"delete,deletion,firestore.rules,functions/src,gdpr,retention","ran":null}
+{"ts":"2026-07-22T15:33:18.098Z","type":"trigger","fired":true,"signals":"delete,deletion,firestore.rules,functions/src,gdpr,retention","ran":null}
+{"ts":"2026-07-22T18:21:44.086Z","type":"trigger","fired":true,"signals":"delete,deletion,firestore.rules,functions/src,gdpr,retention","ran":null}
+{"ts":"2026-07-22T18:27:35.466Z","type":"trigger","fired":true,"signals":"delete,deletion,firestore.rules,functions/src,gdpr,retention","ran":null}
+{"ts":"2026-07-22T21:44:19.614Z","type":"trigger","fired":true,"signals":"auth","ran":null}
+{"ts":"2026-07-22T21:57:47.150Z","type":"trigger","fired":true,"signals":"auth","ran":null}
+{"ts":"2026-07-23T09:08:14.874Z","type":"trigger","fired":true,"signals":"auth,gdpr","ran":null}
+{"ts":"2026-07-23T09:15:47.211Z","type":"trigger","fired":true,"signals":"auth,gdpr","ran":null}
+{"ts":"2026-07-23T09:19:26.122Z","type":"trigger","fired":true,"signals":"auth,cloud function,delete,firestore.rules","ran":null}
+{"ts":"2026-07-23T09:23:49.774Z","type":"trigger","fired":true,"signals":"auth,cloud function,delete,firestore.rules","ran":null}

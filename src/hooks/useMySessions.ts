@@ -6,6 +6,7 @@ import {
   subscribeToSession,
   subscribeToSwipes,
 } from '@/lib/firebase/sessions';
+import { indexSwipes } from '@/lib/together/matching';
 import type { SessionSwipe, TogetherSession } from '@/types';
 
 export interface MySessionSummary {
@@ -51,11 +52,10 @@ export function useMySessions(): MySessionSummary[] {
       if (!s || s.status !== 'active') return null;
       if (isSessionExpired(s)) return null;
 
-      const mySwipes = swipes[t.sessionId] ?? [];
-      const voted = new Set(
-        mySwipes.filter(sw => sw.votes[t.participantId]).map(sw => sw.tmdbId),
-      );
-      const pendingCount = s.candidates.filter(c => !voted.has(c.tmdbId)).length;
+      // Per medietyp, inte per nummer: en röstad film 42 dolde annars en
+      // oröstad serie 42 ur "kvar att svepa"-räknaren. (BIN-569)
+      const votesFor = indexSwipes(swipes[t.sessionId] ?? []);
+      const pendingCount = s.candidates.filter(c => !votesFor(c)[t.participantId]).length;
 
       const summary: MySessionSummary = {
         sessionId: t.sessionId,

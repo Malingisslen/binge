@@ -9,6 +9,7 @@
 // streamingLeaving/current.byProvider keyed by canonical TMDB provider id.
 
 import { canonicalProviderId } from '../availableNotify/logic';
+import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 
 export interface LeavingEntry {
   tmdbId: number;
@@ -79,13 +80,18 @@ export function isoFromUnix(sec: number): string {
  * subscription expirations with a known timestamp on a mapped service; resolves
  * the TMDB id via the shows map; soonest leaving wins per (provider, title);
  * each provider's list is sorted nearest-first and capped.
+ *
+ * "Title" here is (mediaType, tmdbId), never the bare tmdbId — TMDB's movie and
+ * tv id spaces are independent, so keying on the number alone would let a film
+ * and an unrelated series with the same id evict each other (BIN-586, same bug
+ * class as BIN-523 / BIN-529 / BIN-545).
  */
 export function buildLeavingRollupFromChanges(
   changes: readonly ChangeItem[],
   shows: Readonly<Record<string, ShowRef>>,
   capPerProvider = 80,
 ): LeavingRollup {
-  const byProviderMap = new Map<number, Map<number, LeavingEntry>>();
+  const byProviderMap = new Map<number, Map<string, LeavingEntry>>();
 
   for (const c of changes) {
     if (c.streamingOptionType !== 'subscription' || c.timestamp == null) continue;
@@ -98,16 +104,20 @@ export function buildLeavingRollupFromChanges(
     const leaving = isoFromUnix(c.timestamp);
     let perTitle = byProviderMap.get(pid);
     if (!perTitle) byProviderMap.set(pid, (perTitle = new Map()));
-    const existing = perTitle.get(ref.id);
+    const titleKey = mediaTypeDocId(ref.mediaType, ref.id);
+    const existing = perTitle.get(titleKey);
     if (!existing || leaving < existing.leaving) {
-      perTitle.set(ref.id, { tmdbId: ref.id, mediaType: ref.mediaType, leaving });
+      perTitle.set(titleKey, { tmdbId: ref.id, mediaType: ref.mediaType, leaving });
     }
   }
 
   const byProvider: Record<string, LeavingEntry[]> = {};
   for (const [pid, perTitle] of byProviderMap) {
     byProvider[String(pid)] = [...perTitle.values()]
-      .sort((a, b) => a.leaving.localeCompare(b.leaving) || a.tmdbId - b.tmdbId)
+      .sort((a, b) =>
+        a.leaving.localeCompare(b.leaving) ||
+        a.tmdbId - b.tmdbId ||
+        a.mediaType.localeCompare(b.mediaType))
       .slice(0, capPerProvider);
   }
   return { byProvider };

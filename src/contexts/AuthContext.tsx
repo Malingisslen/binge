@@ -68,6 +68,13 @@ interface AuthState {
   updateUsername: (username: string) => Promise<void>;
   updateBio: (bio: string) => Promise<void>;
   updateDefaultVisibility: (visibility: ItemVisibility) => Promise<void>;
+  /**
+   * BIN-587: true när profilens defaultVisibility ÄR sparad men stämplingen av
+   * watchlist-items inte gick igenom — dvs items kan fortfarande vara läsbara
+   * enligt den GAMLA (mer öppna) inställningen. Settings visar det för
+   * användaren; nästa app-load kör om stämplingen tills flaggan rensas.
+   */
+  visibilitySyncPending: boolean;
   markNotificationsSeen: () => Promise<void>;
   updateNotificationSettings: (patch: Partial<UserProfile['notificationSettings']>) => Promise<void>;
   /** @deprecated — använd updateDefaultVisibility. Kvar för UI som inte migrerats. */
@@ -103,6 +110,7 @@ const AuthContext = createContext<AuthState>({
   updateUsername: async () => {},
   updateBio: async () => {},
   updateDefaultVisibility: async () => {},
+  visibilitySyncPending: false,
   markNotificationsSeen: async () => {},
   updateNotificationSettings: async () => {},
   updateIsPublic: async () => {},
@@ -189,13 +197,67 @@ async function buildExistingProfile(data: Record<string, unknown>, firebaseUser:
   return existing;
 }
 
-async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
+// BIN-587: stämplar effectiveVisibility (+ legacy isPublic-spegeln) på varje
+// watchlist-item UTAN egen per-item-override. Bruten ut ur
+// updateDefaultVisibility så samma kod kan köras om som reparation vid nästa
+// app-load. KASTAR vid fel — anroparen avgör om det blir en pending-flagga
+// eller ett tyst omförsök; den får aldrig svälja felet igen (det var precis
+// det som lät en privat-ställning lämna items publikt läsbara).
+// `isCurrent` låter en stämpling som blivit ERSATT av ett nyare val avbryta
+// efter läsningen istället för att skriva sitt gamla värde (se
+// runVisibilityCascade).
+async function cascadeVisibilityToItems(
+  uid: string,
+  visibility: ItemVisibility,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
+  const { db, collection, getDocs, writeBatch } = await fsdb();
+  const isPublicMirror = visibility === 'public';
+  const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
+  // Användaren hann välja något nyare medan vi läste — då är VÅRT värde
+  // inaktuellt och batcharna ska inte skrivas alls.
+  if (!isCurrent()) return;
+  const updatable = snap.docs.filter(d => d.data().visibility == null);
+  const chunks: typeof updatable[] = [];
+  for (let i = 0; i < updatable.length; i += 450) {
+    chunks.push(updatable.slice(i, i + 450));
+  }
+  await Promise.all(chunks.map(chunk => {
+    const batch = writeBatch(db);
+    for (const d of chunk) {
+      batch.set(d.ref, {
+        effectiveVisibility: visibility,
+        isPublic: isPublicMirror,
+      }, { merge: true });
+    }
+    return batch.commit();
+  }));
+}
+
+// BIN-587: persistera "stämplingen är inte klar" på profil-docen. Fältet läses
+// vid nästa inloggning (ensureUserProfile) och driver både varningen i Settings
+// och omförsöket. Rensas med deleteField så docen inte samlar false-skräp.
+async function writeVisibilitySyncPending(uid: string, pending: boolean): Promise<void> {
+  const { db, doc, setDoc, serverTimestamp, deleteField } = await fsdb();
+  await setDoc(doc(db, 'users', uid), {
+    visibilitySyncPending: pending ? true : deleteField(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+async function ensureUserProfile(
+  firebaseUser: User,
+): Promise<{ profile: UserProfile; visibilitySyncPending: boolean }> {
   const { db, doc, getDoc, runTransaction, serverTimestamp } = await fsdb();
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
-    return buildExistingProfile(snap.data(), firebaseUser);
+    const data = snap.data();
+    return {
+      profile: await buildExistingProfile(data, firebaseUser),
+      visibilitySyncPending: data.visibilitySyncPending === true,
+    };
   }
 
   const profile: UserProfile = {
@@ -258,7 +320,10 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
   });
 
   if (racedData) {
-    return buildExistingProfile(racedData, firebaseUser);
+    return {
+      profile: await buildExistingProfile(racedData, firebaseUser),
+      visibilitySyncPending: racedData.visibilitySyncPending === true,
+    };
   }
 
   // Auto-föreslå username från Google displayName / email-localpart. Triggar
@@ -266,7 +331,7 @@ async function ensureUserProfile(firebaseUser: User): Promise<UserProfile> {
   const claimed = await tryAutoClaimUsername(firebaseUser);
   if (claimed) profile.username = claimed;
 
-  return profile;
+  return { profile, visibilitySyncPending: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -276,6 +341,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [emailVerified, setEmailVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  // BIN-587: speglad i en ref eftersom både auth-effekten (tom deps) och
+  // updateDefaultVisibility behöver LÄSA nuvarande värde utan att bindas om.
+  const [visibilitySyncPending, setVisibilitySyncPending] = useState(false);
+  const visibilitySyncPendingRef = useRef(false);
+  // Vilket uid vi redan gjort ett reparations-försök för i den här sessionen.
+  // Ett försök per app-load — annars skulle en cascade som failar konstant
+  // loopa mot Firestore (och kosta reads) hela sessionen.
+  const visibilityRetriedFor = useRef<string | null>(null);
+  // BIN-587: auto-omförsöket och ett manuellt val (radioknapp / "Försök igen
+  // nu") stämplar SAMMA watchlist-docs. Utan ordning avgörs slutvärdet av
+  // vilken batch som råkar LANDA sist — dvs en färsk "privat"-ställning kunde
+  // skrivas över av omförsökets äldre "publik", och den som resolvade sist
+  // rensade dessutom varningen. Tre delar håller ihop det:
+  //   epoken  — bumpas SYNKRONT när en stämpling begärs, så körningarna
+  //             rangordnas efter när användaren valde, inte efter nätverket;
+  //             en ersatt körning skriver inget och rör inte pending-flaggan.
+  //   kön     — serialiserar cascaderna så två aldrig är i luften mot samma
+  //             docs samtidigt.
+  //   in-flight — auto-omförsöket startar aldrig medan ett explicit val är på
+  //             väg ner (dess värde är per definition färskare än vårt).
+  const visibilityEpoch = useRef(0);
+  const visibilityQueue = useRef<Promise<void>>(Promise.resolve());
+  const visibilityWritesInFlight = useRef(0);
+  const markVisibilitySyncPending = useCallback(async (targetUid: string, pending: boolean) => {
+    if (visibilitySyncPendingRef.current === pending) return;
+    visibilitySyncPendingRef.current = pending;
+    setVisibilitySyncPending(pending);
+    try {
+      await writeVisibilitySyncPending(targetUid, pending);
+    } catch (err) {
+      // Flagg-writen kan falla på samma nätverksfel som cascaden. Lokalt state
+      // står kvar (varningen syns den här sessionen) — men vi låtsas inte att
+      // den överlevde till nästa load.
+      console.error('[visibilitySyncPending flag]', err);
+    }
+  }, []);
+
+  // Kör stämplingen i kön och bara så länge `epoch` fortfarande är den senast
+  // begärda. 'applied' = den här körningen är den som gäller (anroparen får
+  // röra pending-flaggan). 'superseded' = ett nyare val har tagit över och
+  // äger både skrivningen och flaggan — anroparen ska då INTE rapportera
+  // något utfall, varken lyckat eller misslyckat.
+  const runVisibilityCascade = useCallback(
+    (targetUid: string, visibility: ItemVisibility, epoch: number): Promise<'applied' | 'superseded'> => {
+      const isCurrent = () => visibilityEpoch.current === epoch;
+      const run = visibilityQueue.current.then(async () => {
+        if (!isCurrent()) return 'superseded' as const;
+        try {
+          await cascadeVisibilityToItems(targetUid, visibility, isCurrent);
+        } catch (err) {
+          // Ett fel i en redan ersatt körning säger inget om slutläget.
+          if (!isCurrent()) return 'superseded' as const;
+          throw err;
+        }
+        return isCurrent() ? 'applied' as const : 'superseded' as const;
+      });
+      // Kön får aldrig gå sönder av ett fel — nästa stämpling ska köra ändå.
+      visibilityQueue.current = run.then(() => {}, () => {});
+      return run;
+    },
+    [],
+  );
 
   useEffect(() => {
     // App Check måste vara initierad innan onAuthStateChanged subscribar —
@@ -313,10 +440,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
 
           void ensureUserProfile(firebaseUser)
-            .then((profile) => {
+            .then(({ profile, visibilitySyncPending: pending }) => {
               // Account-switch-skydd: skriv bara om samma användare
               // fortfarande är inloggad när profilen landar.
-              if (auth.currentUser?.uid === firebaseUser.uid) setUser(profile);
+              if (auth.currentUser?.uid !== firebaseUser.uid) return;
+              setUser(profile);
+              // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
+              // upp här och driver både varningen och omförsöks-effekten.
+              visibilitySyncPendingRef.current = pending;
+              setVisibilitySyncPending(pending);
             })
             .catch((err) => {
               console.error('Failed to load user profile:', err);
@@ -332,6 +464,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUid(null);
           setEmailVerified(false);
           setProfileLoading(false);
+          visibilitySyncPendingRef.current = false;
+          setVisibilitySyncPending(false);
           try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
           setLoading(false);
         }
@@ -379,6 +513,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: user.createdAt,
     });
   }, [uid, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // BIN-587: reparera en cascade som failade. Profilen kan säga 'private'
+  // medan items fortfarande bär effectiveVisibility:'public' — och läs-regeln
+  // litar på item-fältet utan att slå upp profilen, så läckan består tills
+  // någon stämplar om. Vi kör om stämplingen mot profilens NUVARANDE värde
+  // (steg 1 committar alltid först, så det är sanningen) en gång per app-load
+  // tills den lyckas och flaggan rensas.
+  const pendingVisibilityTarget = user?.defaultVisibility;
+  useEffect(() => {
+    if (!uid || !pendingVisibilityTarget || !visibilitySyncPending) return;
+    if (visibilityRetriedFor.current === uid) return;
+    // Ett explicit val är redan på väg ner. Det bär ett färskare värde än vårt
+    // och stämplar samma docs — låt det äga både skrivningen och flaggan.
+    // Kvoten lämnas orörd: ändras pending/target när det landar får effekten
+    // en ny chans att bedöma läget.
+    if (visibilityWritesInFlight.current > 0) return;
+    visibilityRetriedFor.current = uid;
+    const epoch = ++visibilityEpoch.current;
+    void runVisibilityCascade(uid, pendingVisibilityTarget, epoch)
+      .then(outcome => outcome === 'applied' ? markVisibilitySyncPending(uid, false) : undefined)
+      .catch(err => console.error('[visibilitySyncPending retry]', err));
+  }, [uid, pendingVisibilityTarget, visibilitySyncPending, markVisibilitySyncPending, runVisibilityCascade]);
 
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();
@@ -637,42 +793,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateDefaultVisibility = useCallback(async (visibility: ItemVisibility) => {
     if (!uid) return;
-    // Stega 1: uppdatera profil-fältet (+ legacy isPublic-mirror för bakåt-
-    // kompatibilitet i rules under migrationsperioden).
-    const isPublicMirror = visibility === 'public';
-    const { db, doc, setDoc, getDocs, collection, writeBatch, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', uid), {
-      defaultVisibility: visibility,
-      isPublic: isPublicMirror,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    setUser(prev => prev ? { ...prev, defaultVisibility: visibility, isPublic: isPublicMirror } : null);
-
-    // Stega 2: cascade till alla watchlist-items utan explicit per-item-
-    // override. Firestore-regler kan inte joina mot parent-user-doc per item,
-    // så vi denormaliserar 'effectiveVisibility' (+ legacy isPublic-mirror) på
-    // varje item-doc. Items som har egen 'visibility'-override lämnas orörda.
+    // Ta epok + in-flight SYNKRONT, före första await:en: ordningen ska följa
+    // användarens klick, inte vilken write som råkar landa först.
+    const epoch = ++visibilityEpoch.current;
+    visibilityWritesInFlight.current += 1;
     try {
-      const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
-      const updatable = snap.docs.filter(d => d.data().visibility == null);
-      const chunks: typeof updatable[] = [];
-      for (let i = 0; i < updatable.length; i += 450) {
-        chunks.push(updatable.slice(i, i + 450));
+      // Stega 1: uppdatera profil-fältet (+ legacy isPublic-mirror för bakåt-
+      // kompatibilitet i rules under migrationsperioden).
+      const isPublicMirror = visibility === 'public';
+      const { db, doc, setDoc, serverTimestamp } = await fsdb();
+      await setDoc(doc(db, 'users', uid), {
+        defaultVisibility: visibility,
+        isPublic: isPublicMirror,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      setUser(prev => prev ? { ...prev, defaultVisibility: visibility, isPublic: isPublicMirror } : null);
+
+      // Stega 2: cascade till alla watchlist-items utan explicit per-item-
+      // override. Firestore-regler kan inte joina mot parent-user-doc per item,
+      // så vi denormaliserar 'effectiveVisibility' (+ legacy isPublic-mirror) på
+      // varje item-doc. Items som har egen 'visibility'-override lämnas orörda.
+      try {
+        const outcome = await runVisibilityCascade(uid, visibility, epoch);
+        // Ersatt av ett nyare val: den körningen äger utfallet. Att rensa
+        // flaggan här hade sagt "synkat" om ETT ANNAT värde än det som gäller.
+        if (outcome === 'superseded') return;
+        // BIN-587: lyckad stämpling reparerar även ett tidigare misslyckat
+        // försök — rensa flaggan (no-op när den inte var satt).
+        await markVisibilitySyncPending(uid, false);
+      } catch (err) {
+        console.error('[defaultVisibility cascade]', err);
+        // BIN-587: profilen säger nu t.ex. 'privat' medan items fortfarande kan
+        // vara publikt läsbara — den farliga riktningen. Flagga det istället för
+        // att bara logga: Settings visar att ändringen inte är klar och nästa
+        // app-load kör om stämplingen. Försöks-kvoten för den här sessionen är
+        // förbrukad här, så omförsöket sker vid nästa load (inte i en tight loop).
+        visibilityRetriedFor.current = uid;
+        await markVisibilitySyncPending(uid, true);
       }
-      await Promise.all(chunks.map(chunk => {
-        const batch = writeBatch(db);
-        for (const d of chunk) {
-          batch.set(d.ref, {
-            effectiveVisibility: visibility,
-            isPublic: isPublicMirror,
-          }, { merge: true });
-        }
-        return batch.commit();
-      }));
-    } catch (err) {
-      console.error('[defaultVisibility cascade]', err);
+    } finally {
+      visibilityWritesInFlight.current -= 1;
     }
-  }, [uid]);
+  }, [uid, markVisibilitySyncPending, runVisibilityCascade]);
 
   // Deprecated forwarder — UI som inte migrerats till tre-state radio.
   const updateIsPublic = useCallback(async (isPublic: boolean) => {
@@ -755,7 +917,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -763,7 +925,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

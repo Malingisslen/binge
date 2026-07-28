@@ -7,6 +7,7 @@ import {
   type CandidateResult,
 } from './matching';
 import type {
+  MediaType,
   SessionCandidate,
   SessionParticipant,
   SessionSwipe,
@@ -14,9 +15,14 @@ import type {
   VoteKind,
 } from '@/types';
 
-function cand(tmdbId: number, genreIds: number[] = [], voteAverage = 7): SessionCandidate {
+function cand(
+  tmdbId: number,
+  genreIds: number[] = [],
+  voteAverage = 7,
+  mediaType: MediaType = 'movie',
+): SessionCandidate {
   return {
-    tmdbId, mediaType: 'movie', title: `T${tmdbId}`, posterPath: null, year: 2020,
+    tmdbId, mediaType, title: `T${tmdbId}`, posterPath: null, year: 2020,
     runtime: 100, genreIds, voteAverage, overview: '', providers: [],
   };
 }
@@ -26,8 +32,13 @@ function part(id: string): SessionParticipant {
     isHost: false, joinedAt: new Date(0), lastActiveAt: new Date(0),
   };
 }
-function swipe(tmdbId: number, votes: Record<string, VoteKind>): SessionSwipe {
-  return { tmdbId, votes, updatedAt: new Date(0) };
+// mediaType null = ett legacy-swipe-doc namngivet på bara tmdbId (pre-BIN-569).
+function swipe(
+  tmdbId: number,
+  votes: Record<string, VoteKind>,
+  mediaType: MediaType | null = 'movie',
+): SessionSwipe {
+  return { tmdbId, mediaType, votes, updatedAt: new Date(0) };
 }
 function taste(genres: Record<number, number>): TasteVector {
   return { genres, sampleSize: Object.keys(genres).length };
@@ -159,5 +170,61 @@ describe('nextCandidate + participantSwipeProgress', () => {
       'a',
     );
     expect(prog).toEqual({ done: 1, total: 3 });
+  });
+});
+
+// BIN-569 — TMDB:s film- och serie-id:n är skilda nummerrymder. En "Blandat"-
+// session kan dela ut både film 42 och serie 42; på bara numret slogs deras
+// röster ihop till ett gemensamt (fel) matchresultat.
+describe('media-type namespacing of swipes (BIN-569)', () => {
+  const movie42 = cand(42, [], 7, 'movie');
+  const tv42 = cand(42, [], 7, 'tv');
+
+  it('film 42 and serie 42 never share a vote tally', () => {
+    const [m, t] = scoreCandidates({
+      candidates: [movie42, tv42],
+      participants: [part('a'), part('b')],
+      swipes: [
+        swipe(42, { a: 'yes', b: 'yes' }, 'movie'),
+        swipe(42, { a: 'no', b: 'no' }, 'tv'),
+      ],
+    });
+    expect([m.yesCount, m.noCount]).toEqual([2, 0]);
+    expect([t.yesCount, t.noCount]).toEqual([0, 2]);
+  });
+
+  it('a veto on serie 42 does NOT sink film 42', () => {
+    const [m, t] = scoreCandidates({
+      candidates: [movie42, tv42],
+      participants: [part('a')],
+      swipes: [swipe(42, { a: 'veto' }, 'tv')],
+    });
+    expect(m.vetoed).toBe(false);
+    expect(t.vetoed).toBe(true);
+  });
+
+  it('voting on film 42 leaves serie 42 unswiped for next-candidate and progress', () => {
+    const swipes = [swipe(42, { a: 'yes' }, 'movie')];
+    const next = nextCandidate({ candidates: [movie42, tv42], swipes, participantId: 'a' });
+    expect(next?.mediaType).toBe('tv');
+    expect(participantSwipeProgress(swipes, [movie42, tv42], 'a')).toEqual({ done: 1, total: 2 });
+  });
+
+  it('a legacy bare-id swipe doc still counts, so an in-flight session keeps its votes', () => {
+    const [m] = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a')],
+      swipes: [swipe(42, { a: 'yes' }, null)],
+    });
+    expect(m.yesCount).toBe(1);
+  });
+
+  it('a namespaced swipe doc wins over a legacy one for the same number', () => {
+    const [m] = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a')],
+      swipes: [swipe(42, { a: 'no' }, null), swipe(42, { a: 'yes' }, 'movie')],
+    });
+    expect([m.yesCount, m.noCount]).toEqual([1, 0]);
   });
 });

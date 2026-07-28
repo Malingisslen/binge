@@ -9,7 +9,7 @@ import { joinSession, recordSwipe } from '@/lib/firebase/sessions';
 import { generateSecureToken } from '@/lib/firebase/utils';
 import { posterUrl } from '@/lib/tmdb/client';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
-import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress } from '@/lib/together/matching';
+import { scoreCandidates, pickMatches, nextCandidate, participantSwipeProgress, candidateKey } from '@/lib/together/matching';
 import { useSessionTasteVectors } from '@/hooks/useSessionTasteVectors';
 import { computeSessionProviders } from '@/lib/together/candidates';
 import { toneForId } from '@/lib/duotone';
@@ -304,7 +304,7 @@ function SessionMain({
     }
     setVetoConfirm(null);
     try {
-      await recordSwipe({ sessionId, tmdbId: cand.tmdbId, participantId: me.id, vote });
+      await recordSwipe({ sessionId, tmdbId: cand.tmdbId, mediaType: cand.mediaType, participantId: me.id, vote });
     } catch (e) {
       console.error(e);
     }
@@ -419,7 +419,7 @@ function SessionMain({
             me={me}
             onVote={onVote}
             progress={progress}
-            vetoConfirm={vetoConfirm?.tmdbId === next.tmdbId}
+            vetoConfirm={!!vetoConfirm && candidateKey(vetoConfirm) === candidateKey(next)}
             onCancelVeto={() => setVetoConfirm(null)}
           />
         ) : (
@@ -548,7 +548,7 @@ function CandidateTable({
             const myVote = r.votes[me.id];
             const summary = `${r.yesCount} ja · ${r.noCount} nej${r.vetoed ? ' · VETO' : ''}`;
             return (
-              <tr key={r.candidate.tmdbId} className={`border-b border-border-table last:border-b-0 ${r.vetoed ? 'opacity-40' : ''}`}>
+              <tr key={candidateKey(r.candidate)} className={`border-b border-border-table last:border-b-0 ${r.vetoed ? 'opacity-40' : ''}`}>
                 <td className="px-2 py-[4px] font-semibold truncate max-w-[260px]">{r.candidate.title}</td>
                 <td className="px-2 py-[4px] text-ink-3">{r.candidate.year ?? '—'}</td>
                 <td className="px-2 py-[4px] text-ink-3">{r.candidate.mediaType === 'movie' ? 'Film' : 'Serie'}</td>
@@ -598,14 +598,16 @@ function MatchList({
 }) {
   const { uid } = useAuth();
   const isGroupSession = !!session.groupId;
-  const [picking, setPicking] = useState<number | null>(null);
-  const [pickedTmdbId, setPickedTmdbId] = useState<number | null>(null);
+  // Nycklade på candidateKey, inte tmdbId: film 42 och serie 42 kan båda ligga
+  // i matchlistan och delade annars spinner/"Vald"-tillstånd. (BIN-569)
+  const [pickingKey, setPickingKey] = useState<string | null>(null);
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
 
   // Logga till gruppens sessionHistory så filmkvällen syns på grupp-sidan
   // som "Senaste filmkvällar". Bara meningsfullt för grupp-bundna sessioner.
   const recordPick = async (m: ReturnType<typeof pickMatches>[number]) => {
     if (!session.groupId || !uid) return;
-    setPicking(m.candidate.tmdbId);
+    setPickingKey(candidateKey(m.candidate));
     try {
       const { recordGroupSessionPick } = await import('@/lib/firebase/groups');
       await recordGroupSessionPick({
@@ -618,11 +620,11 @@ function MatchList({
         posterPath: m.candidate.posterPath,
         participantUids: participants.map(p => p.uid).filter((u): u is string => !!u),
       });
-      setPickedTmdbId(m.candidate.tmdbId);
+      setPickedKey(candidateKey(m.candidate));
     } catch (err) {
       console.warn('[group-session-pick]', err);
     } finally {
-      setPicking(null);
+      setPickingKey(null);
     }
   };
 
@@ -635,9 +637,10 @@ function MatchList({
         {matches.map(m => {
           const href = `/${m.candidate.mediaType === 'movie' ? 'movie' : 'tv'}/${m.candidate.tmdbId}/`;
           const poster = posterUrl(m.candidate.posterPath, 'w92');
-          const isPicked = pickedTmdbId === m.candidate.tmdbId;
+          const key = candidateKey(m.candidate);
+          const isPicked = pickedKey === key;
           return (
-            <div key={m.candidate.tmdbId} className="flex items-center gap-2 px-3 py-[5px] hover:bg-bg-2">
+            <div key={key} className="flex items-center gap-2 px-3 py-[5px] hover:bg-bg-2">
               <Link
                 href={href}
                 className="flex items-center gap-2 flex-1 min-w-0 no-underline text-ink"
@@ -667,11 +670,11 @@ function MatchList({
                 ) : (
                   <button
                     onClick={() => recordPick(m)}
-                    disabled={picking === m.candidate.tmdbId}
+                    disabled={pickingKey === key}
                     className="px-2 py-[2px] text-xxs border border-acc-deep bg-acc-deep text-white rounded-sm cursor-pointer font-[inherit] disabled:opacity-50"
                     title="Logga till gruppens filmkvällshistorik"
                   >
-                    {picking === m.candidate.tmdbId ? 'Sparar…' : 'Den här tar vi'}
+                    {pickingKey === key ? 'Sparar…' : 'Den här tar vi'}
                   </button>
                 )
               )}
