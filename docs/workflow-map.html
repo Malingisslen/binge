@@ -711,7 +711,7 @@
     {
       "id": "flow1",
       "label": "Sign in & hydrate",
-      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory.",
+      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory. The same context owns the visibility cascade: changing who may see your library writes the profile first and then re-stamps every non-overridden watchlist doc, with a pending-flag repair that re-runs on the next app load if that second half fails.",
       "steps": [
         {
           "from": "web-app",
@@ -746,6 +746,34 @@
           "to": "firestore",
           "payload": "onSnapshot users/{uid}/watchlist → WatchlistItem docs · plus TWO more owner-only listeners joined in memory: users/{uid}/watchlistTags (BIN-164) and users/{uid}/watchlistNotes (BIN-505 — notes were moved OFF the friends/public-readable watchlist doc, and the rules now reject a non-null inline `notes`)",
           "transport": "Firestore listeners",
+          "verified": true
+        },
+        {
+          "from": "web-app",
+          "to": "auth-context",
+          "payload": "updateDefaultVisibility('public' | 'friends' | 'private') from Settings — the one control that decides who may read this user's watchlist",
+          "transport": "React context",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "step 1 (always commits first, so the profile is the truth even if step 2 dies): setDoc users/{uid} {defaultVisibility, isPublic mirror}",
+          "transport": "Firestore write (merge)",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "step 2 cascadeVisibilityToItems: getDocs users/{uid}/watchlist, skip every title carrying its own per-item `visibility` override (BIN-595), re-stamp effectiveVisibility + the legacy isPublic mirror on the rest in ≤450-doc writeBatches. It THROWS on failure — it must never swallow, because a swallowed failure was exactly what left items readable under the old, more open setting",
+          "transport": "Firestore batch writes",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "firestore",
+          "payload": "BIN-587 repair leg — when step 2 throws: visibilitySyncPending:true on users/{uid} → Settings shows a warning + a manual 'try again', and the next app load re-runs the cascade ONCE against the profile's current value until it succeeds and the flag is cleared. Ordering is explicit: a synchronously bumped epoch ranks runs by when the user chose (not by which network call lands last), a promise queue serialises cascades over the same docs, and an in-flight guard keeps the automatic retry from racing a fresher explicit choice — a superseded run writes nothing and never falsely clears the flag. Residual: the flag write can itself die on the same network error that killed the cascade, leaving no flag, no warning and no retry — which is why the watchlist read rule cannot treat the item's own denormalised field as the last word",
+          "transport": "Firestore write + retry on app load",
           "verified": true
         }
       ],
@@ -892,7 +920,7 @@
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join",
+          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join. BIN-595: every mutator (addItem included) re-stamps those two DENORMALISED fields only when shouldStampVisibility() says the title carries NO per-item `visibility` override — re-marking a title you had made private no longer silently republishes it. The override field itself is written by updateVisibility alone.",
           "transport": "Firestore write (merge)",
           "verified": true
         },
@@ -1218,7 +1246,7 @@
         {
           "from": "feed-page",
           "to": "firestore",
-          "payload": "per followed uid (max 30): getDoc users/{uid} profile + query users/{uid}/watchlist where updatedAt>=14d limit 5 + query reviews where uid==followedUid limit 10",
+          "payload": "per followed uid (max 30): getPublicProfileCard(uid) → getDoc publicProfiles/{uid} for the display name (BIN-505 — users/{uid} is owner-locked, the feed never reads it) + query users/{uid}/watchlist where updatedAt>=14d orderBy updatedAt desc limit 5 + query reviews where uid==followedUid orderBy createdAt desc limit 10. BIN-600: the reviews orderBy is load-bearing, not cosmetic — reviews are addDoc'd with random ids, so without it Firestore ordered by __name__ and limit(10) took an ARBITRARY ten, which the 14-day client-side filter then mostly threw away; a freshly written review usually never reached the feed. Same query shape as useReviews.ts; the uid+createdAt composite index already exists.",
           "transport": "Firestore reads",
           "verified": true
         },
@@ -1441,7 +1469,7 @@
         {
           "from": "tillsammans-session-page",
           "to": "firestore",
-          "payload": "joinSession (set sessions/{id}/participants/{pid}) + recordSwipe (merge-set sessions/{id}/swipes/{tmdbId}.votes.{pid} = yes/no/veto)",
+          "payload": "joinSession (set sessions/{id}/participants/{pid}) + recordSwipe (merge-set sessions/{id}/swipes/{mediaType}_{tmdbId}.votes.{pid} = yes/no/veto). BIN-569: the swipe doc id is the composite mediaTypeDocId (movie_42 / tv_42) — on the bare number a 'Blandat' deck merged film 42's and series 42's votes into one wrong match. Docs written before that cutover still carry the bare id; the read side (swipeDocToObject → indexSwipes) matches them on number alone and merges the two docs' votes PER PARTICIPANT rather than picking one document (BIN-608 — a doc-level pick dropped everyone else's votes), until the session's 7-day TTL reaps them. BIN-618: only CANONICAL ids are read — the doc id is free-text to anyone holding the session link, and an alias like movie_042 or zmovie_42 resolved to the same candidate key as the genuine doc, so it could shadow or overwrite the real participants' votes. Anything a canonical writer could never emit now parses to NaN and matches no candidate.",
           "transport": "Firestore write",
           "verified": true
         },
