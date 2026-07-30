@@ -1,15 +1,6 @@
 import type { EpisodeProgress } from '@/types';
 
 /**
- * Räknar fram högsta sedda position (säsong/avsnitt) ur en episodeProgress-map,
- * med möjlighet att exkludera en (season, episode) som just markerats osedd,
- * eller en hel säsong (`excludeSeason`) som just "avmarkerats alla".
- * Returnerar null om inga avsnitt är sedda kvar. Specials (säsong 0) räknas med
- * men förlorar mot vilken säsong >= 1 som helst.
- *
- * Ren funktion (ingen Firebase-import) → enhetstestbar utan emulator.
- */
-/**
  * BIN-588: är HELA säsongen sedd? Räknar distinkta sedda avsnitt i säsongen ur
  * episodeProgress och jämför med säsongens avsnittsantal (TMDB). `alsoWatched`
  * lägger till avsnittet som just markerats — samma stale-state-skäl som
@@ -43,6 +34,15 @@ export function isSeasonFullyWatched(
   return watched.size >= episodeCount;
 }
 
+/**
+ * Räknar fram högsta sedda position (säsong/avsnitt) ur en episodeProgress-map,
+ * med möjlighet att exkludera en (season, episode) som just markerats osedd,
+ * eller en hel säsong (`excludeSeason`) som just "avmarkerats alla".
+ * Returnerar null om inga avsnitt är sedda kvar. Specials (säsong 0) räknas med
+ * men förlorar mot vilken säsong >= 1 som helst.
+ *
+ * Ren funktion (ingen Firebase-import) → enhetstestbar utan emulator.
+ */
 export function highestWatchedPosition(
   progress: EpisodeProgress | null,
   exclude?: { season: number; episode: number },

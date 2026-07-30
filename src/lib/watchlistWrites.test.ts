@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt,
-  shouldStampVisibility, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
+  shouldStampVisibility, planQuickRateWrite, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
 } from './watchlistWrites';
 
 // A stand-in for the serverTimestamp() sentinel — the helper just passes it
@@ -233,5 +233,41 @@ describe('normalizeTags', () => {
 
   it('returns [] for all-empty input', () => {
     expect(normalizeTags(['', '   ', '\t'])).toEqual([]);
+  });
+});
+
+// BIN-611 — the QuickRateModal decision BIN-599 fixed, now testable on its own.
+describe('planQuickRateWrite', () => {
+  it('adds an untracked title as seen', () => {
+    expect(planQuickRateWrite(null)).toBe('add-as-seen');
+    expect(planQuickRateWrite(undefined)).toBe('add-as-seen');
+  });
+
+  // The BIN-599 guard: an already-'sedd' film must NOT get a second status
+  // write, because updateStatus reads sedd → sedd as a rewatch and bumps
+  // rewatchCount permanently. Rating the same film twice in one pass must stay
+  // rating-only, or the count inflates once per pass.
+  it('never re-writes the status of a film already marked sedd', () => {
+    expect(planQuickRateWrite({ status: 'sedd' })).toBe('rating-only');
+  });
+
+  it('promotes a tracked-but-unseen film to sedd', () => {
+    for (const status of ['vill_se', 'mina', 'avbruten'] as const) {
+      expect(planQuickRateWrite({ status })).toBe('rating-and-status');
+    }
+  });
+
+  // The three outcomes are mutually exclusive and total — a fourth value, or two
+  // inputs collapsing onto one verdict, is what would let the modal's branch fall
+  // through to the wrong write. (The modal's own use of the verdict is asserted in
+  // QuickRateModal.test.tsx; this file cannot see it.)
+  it('maps the three input shapes onto three distinct verdicts', () => {
+    const verdicts = [
+      planQuickRateWrite(null),
+      planQuickRateWrite({ status: 'sedd' }),
+      planQuickRateWrite({ status: 'vill_se' }),
+    ];
+    expect(new Set(verdicts).size).toBe(3);
+    expect(verdicts.every(v => ['add-as-seen', 'rating-and-status', 'rating-only'].includes(v))).toBe(true);
   });
 });

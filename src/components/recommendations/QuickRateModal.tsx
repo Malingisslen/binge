@@ -10,6 +10,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
 import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { planQuickRateWrite } from '@/lib/watchlistWrites';
 
 const MIN_QUICK_RATES = 5;
 
@@ -36,9 +37,10 @@ function buildItemFromTmdb(
     status,
     // `?? undefined` is the actual defence: no rating in this modal means "leave it
     // alone", never "clear it", so an unsettled snapshot routing a tracked title
-    // through here can't null out its stored rating. `current` is null in this
-    // branch by construction (TS narrows it after the `if (existing)` above) — it is
-    // threaded through only so the signature stays honest if the branch ever changes.
+    // through here can't null out its stored rating. `current` is null at runtime in
+    // this branch by construction (it is the 'add-as-seen' plan, which is returned
+    // only for an absent item) — threaded through only so the signature stays honest
+    // if the branch ever changes.
     current,
     rating: rating ?? undefined,
     title: t.title ?? '',
@@ -72,20 +74,17 @@ export default function QuickRateModal({ open, onClose }: Props) {
   const markRated = async (t: TMDBSearchResult, rating: number | null) => {
     // Movie-only modal (discoverMovies + buildItemFromTmdb hardcodes 'movie').
     const existing = getItem('movie', t.id);
-    if (existing) {
-      if (rating !== null) await updateRating('movie', t.id, rating);
-      // BIN-599: only WRITE the status when it actually changes. updateStatus
-      // reads a 'sedd' → 'sedd' write as a rewatch and increments rewatchCount
-      // (see buildStatusUpdate's isRewatch), so re-marking a film that is
-      // already 'sedd' counted a viewing that never happened — once per pass
-      // through this modal, and permanently: rewatchCount is editable nowhere.
-      // This surface is a RATING pass ("Sett 4★"), not a viewing log, so the
-      // only thing an already-seen film needs from it is the rating above.
-      if (existing.status !== 'sedd') {
-        await updateStatus('movie', t.id, 'sedd');
-      }
+    // BIN-611: the "does this rating also move the status?" call lives in
+    // planQuickRateWrite, next to buildStatusUpdate and unit-tested there —
+    // BIN-599 fixed the rewatch-inflation here with no test to hold it down.
+    const plan = planQuickRateWrite(existing);
+    if (plan === 'add-as-seen') {
+      await addItem(buildItemFromTmdb(t, 'sedd', rating, existing));
     } else {
-      await addItem(buildItemFromTmdb(t, 'sedd', rating, existing ?? null));
+      if (rating !== null) await updateRating('movie', t.id, rating);
+      // 'rating-only' means the film is ALREADY 'sedd' — writing the status
+      // again would be counted as a rewatch that never happened.
+      if (plan === 'rating-and-status') await updateStatus('movie', t.id, 'sedd');
     }
     setRated(prev => new Set(prev).add(t.id));
   };

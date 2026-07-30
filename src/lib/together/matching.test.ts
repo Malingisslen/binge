@@ -6,6 +6,7 @@ import {
   participantSwipeProgress,
   type CandidateResult,
 } from './matching';
+import { parseTmdbIdFromDocId, parseMediaTypeFromDocId } from '@/lib/mediaTypeDocId';
 import type {
   MediaType,
   SessionCandidate,
@@ -39,6 +40,17 @@ function swipe(
   mediaType: MediaType | null = 'movie',
 ): SessionSwipe {
   return { tmdbId, mediaType, votes, updatedAt: new Date(0) };
+}
+// Ett swipe-doc så som det ser ut EFTER läsning: id:t tolkas med exakt samma
+// två funktioner som swipeDocToObject använder, så testerna nedan mäter den
+// riktiga läsvägen och inte en handrullad kopia av den.
+function swipeFromDocId(docId: string, votes: Record<string, VoteKind>): SessionSwipe {
+  return {
+    tmdbId: parseTmdbIdFromDocId(docId),
+    mediaType: parseMediaTypeFromDocId(docId),
+    votes,
+    updatedAt: new Date(0),
+  };
 }
 function taste(genres: Record<number, number>): TasteVector {
   return { genres, sampleSize: Object.keys(genres).length };
@@ -319,5 +331,73 @@ describe('legacy and namespaced swipe docs merge per participant (BIN-608)', () 
     expect(m.vetoed).toBe(true);
     expect(t.vetoed).toBe(true);
     expect(t.votes).toEqual({ b: 'veto', a: 'yes' });
+  });
+});
+
+// BIN-618 — swipe-doc:ens id är fritt skrivbart av den som har sessionslänken.
+// `movie_042` är ett ALIAS för samma tal som den äkta nyckeln `movie_42`: läste
+// vi det som 42 hamnade aliaset på den äkta kandidatnyckeln och kunde skugga
+// eller förfalska dess röster. Ett kanoniskt id har aldrig inledande nollor —
+// det som inte går att skriva kanoniskt läses inte alls.
+describe('aliased swipe doc ids cannot occupy the namespaced key (BIN-618)', () => {
+  const movie42 = cand(42, [], 7, 'movie');
+  const genuine = () => swipeFromDocId('movie_42', { a: 'yes', b: 'yes' });
+  const score = (swipes: SessionSwipe[]) => scoreCandidates({
+    candidates: [movie42],
+    participants: [part('a'), part('b')],
+    swipes,
+  })[0];
+
+  it('an alias id parses to NaN, so it can never name a candidate', () => {
+    expect(Number.isNaN(parseTmdbIdFromDocId('movie_042'))).toBe(true);
+    expect(Number.isNaN(parseTmdbIdFromDocId('042'))).toBe(true);
+    expect(Number.isNaN(parseTmdbIdFromDocId('tv_0000042'))).toBe(true);
+    // Okänt prefix är ett alias för det LEGACY-bara id:t på samma sätt.
+    expect(Number.isNaN(parseTmdbIdFromDocId('zmovie_42'))).toBe(true);
+    expect(Number.isNaN(parseTmdbIdFromDocId('season_42'))).toBe(true);
+    // Kanoniska id fortsätter läsas — regeln får inte svälja äkta dokument.
+    expect(parseTmdbIdFromDocId('movie_42')).toBe(42);
+    expect(parseTmdbIdFromDocId('tv_42')).toBe(42);
+    expect(parseTmdbIdFromDocId('42')).toBe(42);
+  });
+
+  it('an unknown-prefix alias cannot displace a genuine legacy bare-id doc', () => {
+    const r = score([
+      swipeFromDocId('42', { a: 'yes', b: 'yes' }),
+      swipeFromDocId('zmovie_42', { a: 'no', b: 'no' }),
+    ]);
+    expect([r.yesCount, r.noCount]).toEqual([2, 0]);
+  });
+
+  it('an aliased doc read after the genuine one does not overwrite its votes', () => {
+    const r = score([genuine(), swipeFromDocId('movie_042', { a: 'no', b: 'no' })]);
+    expect([r.yesCount, r.noCount]).toEqual([2, 0]);
+    expect(r.votes).toEqual({ a: 'yes', b: 'yes' });
+  });
+
+  it('an aliased doc alone forges nothing — no votes, no veto', () => {
+    const r = score([swipeFromDocId('movie_042', { a: 'yes', b: 'veto' })]);
+    expect([r.yesCount, r.noCount]).toEqual([0, 0]);
+    expect(r.vetoed).toBe(false);
+    expect(r.missing).toEqual(['a', 'b']);
+  });
+
+  // `c` röstar BARA i alias-doc:et — annars skulle den äkta rösten skriva över
+  // den i värde-mergen (BIN-608) och testet inte kunna se skillnad.
+  it('a bare legacy alias is not merged in as the legacy doc for 42 either', () => {
+    const r = scoreCandidates({
+      candidates: [movie42],
+      participants: [part('a'), part('b'), part('c')],
+      swipes: [swipeFromDocId('042', { c: 'veto' }), genuine()],
+    })[0];
+    expect(r.vetoed).toBe(false);
+    expect(r.yesCount).toBe(2);
+    expect(r.missing).toEqual(['c']);
+  });
+
+  it('an alias leaves the title unswiped rather than counting as progress', () => {
+    const swipes = [swipeFromDocId('movie_042', { a: 'yes' })];
+    expect(nextCandidate({ candidates: [movie42], swipes, participantId: 'a' })?.tmdbId).toBe(42);
+    expect(participantSwipeProgress(swipes, [movie42], 'a')).toEqual({ done: 0, total: 1 });
   });
 });

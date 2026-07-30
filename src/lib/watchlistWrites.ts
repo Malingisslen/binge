@@ -144,6 +144,35 @@ export function shouldStampVisibility(
   return current?.visibility == null;
 }
 
+export type QuickRateWrite = 'add-as-seen' | 'rating-and-status' | 'rating-only';
+
+/**
+ * BIN-611 — "should this quick rating ALSO write the title's status?"
+ *
+ * The decision BIN-599 fixed inside QuickRateModal, lifted out so it can be
+ * tested without React/Firebase (the fix shipped with no test at all — that gap
+ * IS this ticket). Three outcomes, and the middle one is the whole point:
+ *
+ *  - `add-as-seen`      — not in the library → add it, status 'sedd'.
+ *  - `rating-and-status`— tracked but NOT 'sedd' → rate it and promote it.
+ *  - `rating-only`      — tracked AND already 'sedd' → rate it, write NOTHING
+ *    else. `updateStatus` reads a 'sedd' → 'sedd' write as a rewatch and bumps
+ *    `rewatchCount` (see `buildStatusUpdate`'s `isRewatch`), so re-marking here
+ *    logged a viewing that never happened — once per pass through the modal,
+ *    and permanently, since `rewatchCount` is editable nowhere. This surface is
+ *    a RATING pass ("Sett 4★"), not a viewing log.
+ *
+ * `buildStatusUpdate` can't defend this itself: it only sees the stored status,
+ * so "did a viewing actually happen?" is the CALLER's question. This helper is
+ * that answer for the quick-rate caller.
+ */
+export function planQuickRateWrite(
+  current: { status: WatchStatus } | null | undefined,
+): QuickRateWrite {
+  if (!current) return 'add-as-seen';
+  return current.status === 'sedd' ? 'rating-only' : 'rating-and-status';
+}
+
 export function buildStatusUpdate(
   status: WatchStatus,
   ctx: StatusUpdateContext,

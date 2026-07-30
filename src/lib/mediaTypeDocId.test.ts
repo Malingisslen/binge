@@ -7,10 +7,17 @@ import {
   resolveTmdbId,
 } from './mediaTypeDocId';
 
-// Contract MUST match functions/src/shared/mediaTypeDocId.ts exactly — the two
-// copies exist so client and server key a title's doc identically. If you change
-// one, change the other (there is no shared import across the client/functions
-// boundary).
+// The WRITE contract MUST match functions/src/shared/mediaTypeDocId.ts exactly —
+// the two copies exist so client and server key a title's doc identically. If you
+// change one, change the other (there is no shared import across the
+// client/functions boundary).
+//
+// The READ side is the ONE deliberate exception: since BIN-618 the client's
+// `parseTmdbIdFromDocId` accepts only canonical ids while the server copy stays
+// permissive, so `resolveTmdbId(null, 'movie_042')` is NaN here and 42 there.
+// That divergence is intentional and documented at the function itself — do not
+// "resync" the pair to satisfy the rule above. (Pinning the server side's
+// behaviour is tracked in BIN-644.)
 describe('mediaTypeDocId (client mirror of the server helper)', () => {
   it('builds movie_/tv_ ids', () => {
     expect(mediaTypeDocId('movie', 42)).toBe('movie_42');

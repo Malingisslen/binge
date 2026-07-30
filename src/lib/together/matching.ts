@@ -43,6 +43,13 @@ export type SwipeLookup = (candidate: { tmdbId: number; mediaType: string | null
  * fort ett namngivet doc fanns, vilket "läkte" kollisionen genom att slänga
  * rösten. Vi väljer att behålla användarens röst framför att gissa bort den.
  * Kompromissen är fastnaglad i matching.test.ts (BIN-608).
+ *
+ * Nycklarna kommer från doc-id:n som vem som helst med sessionslänken kan hitta
+ * på. Ett alias som `movie_042` skulle betyda samma tal som den äkta nyckeln
+ * `movie_42` och kunna lägga sig ovanpå den här — därför läser
+ * parseTmdbIdFromDocId bara KANONISKA id och ger NaN för resten, som då aldrig
+ * matchar någon kandidat. Ingen extra vakt behövs här; regeln bor i parsern.
+ * (BIN-618)
  */
 export function indexSwipes(swipes: SessionSwipe[]): SwipeLookup {
   const byKey = new Map<string, SessionSwipe>();
