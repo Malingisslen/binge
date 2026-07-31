@@ -46,7 +46,7 @@ export default function StatusButton({
   const close = useCallback(() => setOpen(false), []);
   useClickOutside(ref, close);
 
-  async function handleSelect(status: WatchStatus) {
+  async function handleSelect(status: WatchStatus, countsAsViewing = false) {
     setOpen(false);
     // 'sedd' (film: terminal · TV: "alla avsnitt sedda" → 'mina') går via den
     // delade markSeen-vägen, som även nudgar ett betyg om titeln saknar ett.
@@ -54,7 +54,7 @@ export default function StatusButton({
       await markSeen({
         tmdbId, mediaType, title, posterPath, releaseYear,
         totalSeasons, providers, genreIds, tmdbStatus,
-      });
+      }, { countsAsViewing });
       return;
     }
     await addItem(buildWatchlistAddPayload({
@@ -115,6 +115,24 @@ export default function StatusButton({
               {statusMenuLabel(status, mediaType)}
             </button>
           ))}
+          {/* BIN-641 — the ONLY thing that counts a rewatch. Deliberately not the
+              'Sedd' option above: that renders highlighted when it is the current
+              status, so tapping it is as likely to mean "confirm/dismiss" as
+              "again" — and rewatchCount is editable nowhere. Film-only because
+              'sedd' is the terminal FILM status (watchStatus.ts).
+
+              QuickAddButton has the same menu and deliberately has NO such entry:
+              its plain 'Sedd' behaves identically there, and BIN-645 is mid-flight
+              in that file. Do not close the gap by copying this without saying so.
+              Malin, 2026-07-31. */}
+          {current?.status === 'sedd' && mediaType === 'movie' && (
+            <button
+              onClick={() => handleSelect('sedd', true)}
+              className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"
+            >
+              Sedd igen
+            </button>
+          )}
           {current && (
             <>
               <div className="border-t border-rule-2" />

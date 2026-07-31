@@ -9,8 +9,9 @@ import { getTVShow } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { trackEvent } from '@/lib/analytics';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { rewatchFields } from '@/lib/watchlistWrites';
 import { shouldPromptRating } from './useMarkSeen.helpers';
-import type { MediaType, TMDBTVShow } from '@/types';
+import type { MediaType, TMDBTVShow, WatchStatus } from '@/types';
 
 export interface MarkSeenInput {
   tmdbId: number;
@@ -33,22 +34,52 @@ export interface MarkSeenInput {
  *
  * Efter skrivet: om titeln saknar betyg, nudga ett betyg via stjärn-toasten;
  * annars vanlig bekräftelse-toast.
+ *
+ * BIN-641: `opts` forwards the caller's INTENT to addItem — it is not decided
+ * here, because this one hook serves two gestures that look identical at this
+ * level. "Sedd" (the status choice) must not count a rewatch; "Sedd igen" must.
+ * Passing nothing means no count, so a new call site is safe by omission. The
+ * full reasoning lives on `WatchlistState.addItem`.
  */
 export function useMarkSeen() {
   const { getItem, addItem, updateRating } = useWatchlist();
   const { show, showRating } = useToast();
   const queryClient = useQueryClient();
 
-  return useCallback(async (input: MarkSeenInput) => {
+  return useCallback(async (input: MarkSeenInput, opts?: { countsAsViewing?: boolean }) => {
     const { tmdbId, mediaType, title, posterPath, releaseYear } = input;
     const current = getItem(mediaType, tmdbId);
 
     const promptRating = () => {
+      // BIN-641: a counted rewatch says so. It is the app's only permanent,
+      // un-editable write, and it is made on a screen that does not show the
+      // count (Bibliotek renders "x2", the title page doesn't) — so without this
+      // the user gets the same confirmation as an ordinary re-mark and no way to
+      // tell the two apart. The rating nudge still wins when there is no rating:
+      // that one asks for something, this one only confirms.
+      //
+      // Asks the SAME helper the write asks, rather than re-deriving the rule —
+      // otherwise the toast and the counter drift and the message becomes a lie.
+      // `current != null` is null-safety, not a guarantee: it reads the render
+      // closure while the write reads the live ref, so a remote status change in
+      // between can still make this claim a rewatch the write did not count. The
+      // reverse (silent but counted) cannot happen — the entry only renders while
+      // render state says 'sedd'. Closing the gap properly is BIN-655.
+      //
+      // `writtenStatus` is the status the PAYLOAD carries, not a literal 'sedd':
+      // the TV branch writes 'mina', and passing 'sedd' here would let a TV call
+      // toast a rewatch over a write that counts nothing.
+      const writtenStatus: WatchStatus = mediaType === 'tv' ? 'mina' : 'sedd';
+      const counted = Boolean(opts?.countsAsViewing)
+        && current != null
+        && 'rewatchCount' in rewatchFields(writtenStatus, current.status, current.rewatchCount);
       if (shouldPromptRating('sedd', current?.rating ?? null)) {
         showRating(`Betygsätt ${title}?`, (rating) => {
           void updateRating(mediaType, tmdbId, rating);
           trackEvent('rate_on_sedd', { mediaType });
         });
+      } else if (counted) {
+        show(`${title} — omtitt räknad`);
       } else {
         show(`${title} — ${statusLabel('sedd', mediaType)}`);
       }
@@ -74,7 +105,7 @@ export function useMarkSeen() {
           providers: input.providers,
           genreIds: input.genreIds,
           tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
-        }));
+        }), opts);
       } catch {
         show('Kunde inte hämta serieinfo, försök igen');
         return;
@@ -90,7 +121,7 @@ export function useMarkSeen() {
       providers: input.providers,
       genreIds: input.genreIds,
       tmdbStatus: input.tmdbStatus ?? undefined,
-    }));
+    }), opts);
     promptRating();
   }, [getItem, addItem, updateRating, show, showRating, queryClient]);
 }

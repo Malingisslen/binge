@@ -133,7 +133,7 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // Testharness: exponerar mutatorerna så testet kan trigga dem. Refsen pekar
 // alltid på den SENASTE closuren (de återskapas när items-state ändras), så ett
 // anrop efter en seedad snapshot ser de seedade titlarna (BIN-332).
-let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>) => Promise<void>) | null = null;
+let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>, opts?: { countsAsViewing?: boolean }) => Promise<void>) | null = null;
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
 let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
@@ -546,6 +546,122 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     // BIN-593 joins the STRICT camp — a stomped watch date is unrecoverable, a
     // missing one is user-fixable via the date picker. Three-way divergence now.
     expect('watchedAt' in payload).toBe(false);
+  });
+
+  // ── BIN-641 — only a deliberate "Sedd igen" counts a rewatch ────────────────
+  // Malin, 2026-07-31: only a deliberate "Sedd igen" counts. Re-picking the
+  // status a title already has must not — that gesture is ambiguous, and
+  // rewatchCount is editable nowhere. addItem is also the BULK path, so the
+  // decision cannot live in the transition alone: the caller states intent.
+  describe('BIN-641: rewatch counting on the addItem path', () => {
+    const seenFilm = (rewatchCount = 0) =>
+      seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount });
+    const markSeen = () => ({ ...newTitle(42, 'movie'), status: 'sedd' as const });
+    // LAST write to that doc, not the first — the key-set test below writes twice.
+    const lastPayload = (path: string): Record<string, unknown> => {
+      const calls = setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path === path);
+      expect(calls.length).toBeGreaterThan(0);
+      return calls[calls.length - 1][1] as Record<string, unknown>;
+    };
+
+    it('counts a rewatch when the caller says a human logged a re-viewing', async () => {
+      await mountSeeded([seenFilm(2)]);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      expect(lastPayload('users/u1/watchlist/movie_42').rewatchCount).toBe(3);
+    });
+
+    it('counts NOTHING for the same write without that intent', async () => {
+      // This is the ordinary "Sedd" tap — re-picking the status a title already has,
+      // which Malin ruled must not count — AND every bulk caller. Counting on the
+      // transition alone would count both.
+      await mountSeeded([seenFilm(2)]);
+      await act(async () => { await addItemRef!(markSeen()); });
+      expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+    });
+
+    it('counts nothing on a FIRST viewing, however the caller asks', async () => {
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'vill_se' })]);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+    });
+
+    it('counts nothing for a series — only film has a terminal sedd', async () => {
+      await mountSeeded([seedDoc({ tmdbId: 7, status: 'mina' })]);
+      await act(async () => { await addItemRef!(newTitle(7), { countsAsViewing: true }); });
+      expect('rewatchCount' in lastPayload('users/u1/watchlist/tv_7')).toBe(false);
+    });
+
+    // The re-date gates on the COUNTED OUTCOME, not on the intent flag. Without
+    // that, intent on a tracked title that is NOT sedd would stomp the stored
+    // date while counting nothing — a write that re-dates without counting is
+    // incoherent, and watchedAt is user-authored.
+    it('neither counts nor re-dates a tracked film that is not sedd', async () => {
+      const STORED = new Date('2019-04-02T00:00:00Z');
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'vill_se', watchedAt: STORED })]);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+
+      const payload = lastPayload('users/u1/watchlist/movie_42');
+      expect('rewatchCount' in payload).toBe(false);
+      expect('watchedAt' in payload).toBe(false);
+    });
+
+    it('counts nothing during a cold load, when the library is not known yet', async () => {
+      // itemsRef is empty, so a re-mark is indistinguishable from a new add. The
+      // count is not user-fixable, so an unsettled snapshot guesses nothing.
+      render(<WatchlistProvider><Harness /></WatchlistProvider>);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+      // …and stamps no date either. Intent must not short-circuit the BIN-593
+      // tri-state: re-dating OVERWRITES user-authored data, so an unknown
+      // library state says nothing rather than guessing.
+      expect('watchedAt' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+    });
+
+    // BIN-641 + BIN-593 — the one case that OVERWRITES a stored date. Malin,
+    // 2026-07-31: "Sedd igen" is the user manually saying they watched it now,
+    // which is the carve-out BIN-593 leaves open. Without this the count says
+    // x2 while Dagbok and Statistik keep crediting the original viewing.
+    it('re-dates the film to now, replacing the stored date', async () => {
+      const STORED = new Date('2019-04-02T00:00:00Z');
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount: 1, watchedAt: STORED })]);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+
+      const payload = lastPayload('users/u1/watchlist/movie_42');
+      expect(payload.watchedAt).toBe('ts');
+      expect(payload.rewatchCount).toBe(2);
+    });
+
+    // …and the ordinary re-mark still must NOT (BIN-593 unchanged).
+    it('leaves the stored date alone without that intent', async () => {
+      const STORED = new Date('2019-04-02T00:00:00Z');
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
+      await act(async () => { await addItemRef!(markSeen()); });
+
+      expect('watchedAt' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+    });
+
+    // #14 Software Architect's binding acceptance criterion. `countsAsViewing`
+    // is a second PARAMETER, never a payload field, because WatchlistAddPayload
+    // is contractually the exact key set written to Firestore and
+    // isValidWatchlistItem uses a hasOnly allowlist — a stray key either lands
+    // as junk or fails the whole merge-write with permission-denied. That
+    // already happened once, with `notes`. So: prove the flag never reaches the
+    // document, by diffing the two key sets.
+    it('never writes the intent flag itself to Firestore', async () => {
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount: 2, watchedAt: new Date('2019-04-02T00:00:00Z') })]);
+      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      const withIntent = Object.keys(lastPayload('users/u1/watchlist/movie_42'));
+
+      setDoc.mockClear();
+      await act(async () => { await addItemRef!(markSeen()); });
+      const without = Object.keys(lastPayload('users/u1/watchlist/movie_42'));
+
+      expect(withIntent).not.toContain('countsAsViewing');
+      // The only differences the flag may make to the DOCUMENT are the counter
+      // and the re-date. Everything else must be the same key set — and the flag
+      // itself must never appear, which is the half that protects the hasOnly rule.
+      expect(withIntent.filter(k => k !== 'rewatchCount' && k !== 'watchedAt').sort()).toEqual(without.sort());
+    });
   });
 
   // ── BIN-593 — watchedAt is user-authored data ────────────────────────────────

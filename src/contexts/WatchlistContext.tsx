@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt, shouldStampVisibility } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt, shouldStampVisibility, rewatchFields } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -64,7 +64,44 @@ interface WatchlistState {
    * till titlar"-state mot en användare som faktiskt har 100 serier.
    */
   loading: boolean;
-  addItem: (item: WatchlistAddPayload) => Promise<void>;
+  /**
+   * BIN-641 — THE canonical explanation of `countsAsViewing`; everywhere else
+   * points here.
+   *
+   * It says a HUMAN deliberately logged a re-viewing, which is what turns a
+   * sedd → sedd write into a counted rewatch. Only the "Sedd igen" action passes
+   * it. Re-picking the status a title already has does NOT — that gesture is
+   * ambiguous (the current status renders highlighted in the menu, so tapping it
+   * is as likely to mean "confirm/dismiss" as "again"), and `rewatchCount` is
+   * editable nowhere, so a wrong count is permanent. Malin, 2026-07-31.
+   *
+   * Two reasons it is a SECOND PARAMETER and never a payload field:
+   *  - `WatchlistAddPayload` is contractually the exact key set written to
+   *    Firestore, and firestore.rules' isValidWatchlistItem uses a `hasOnly`
+   *    allowlist — a stray key either lands as junk or fails the whole
+   *    merge-write with permission-denied. That already bit us once, with
+   *    `notes`.
+   *  - It is intent, not data. Nothing about it belongs in the document.
+   *
+   * Defaults to FALSE by omission, because addItem is also the BULK path — the
+   * CSV importer, onboarding, and the "add all" collection surfaces — and a bulk
+   * replay must never count. Stated as a PROPERTY rather than an example on
+   * purpose: two earlier versions of this comment each named a specific caller as
+   * the reachable case, and both were wrong (the CSV importer filters titles
+   * already in the library; onboarding swaps its button for a "Tillagd" chip).
+   * The rule does not depend on any of them being reachable — a caller that does
+   * not state intent must not count, whether or not it can currently produce the
+   * transition.
+   *
+   * The transition IS reachable today, from re-picking the plain 'Sedd' entry in
+   * StatusButton's menu (and QuickAddButton's identical one) — which is exactly
+   * the gesture Malin ruled must not count, and which StatusButton.test pins.
+   *
+   * The real fix for this whole shape is BIN-655: addItem is two functions
+   * wearing one name, and "did a human do this" should be answered by which one
+   * you called.
+   */
+  addItem: (item: WatchlistAddPayload, opts?: { countsAsViewing?: boolean }) => Promise<void>;
   // BIN-560 Phase 4: every per-title mutator takes mediaType so it can (a) address
   // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
   // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
@@ -345,7 +382,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return { effectiveVisibility: eff, isPublic: eff === 'public' };
   }, [user?.defaultVisibility]);
 
-  const addItem = useCallback(async (item: WatchlistAddPayload) => {
+  const addItem = useCallback(async (item: WatchlistAddPayload, opts?: { countsAsViewing?: boolean }) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
@@ -358,6 +395,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // declaration. This runs after `await fsdb()`, so the closure value can be a
     // whole snapshot out of date while firstSnapshotSettledRef has already flipped.
     const currentForRating = itemsRef.current.find(i => i.tmdbId === item.tmdbId && i.mediaType === item.mediaType);
+    // BIN-641 — the rewatch count, computed ONCE so the re-date below can gate on
+    // the OUTCOME rather than re-deriving the conditions. The two must agree: a
+    // write that re-dates without counting (or the reverse) is incoherent, and
+    // the raw flag alone would permit it — intent on a tracked title that is NOT
+    // 'sedd' would stomp the stored date while counting nothing.
+    //
+    // Reads `currentForRating`, the LIVE ref the status guards below also use. A
+    // cold load leaves it undefined, so an unsettled snapshot counts nothing and
+    // (via the gate below) re-dates nothing either. Neither is user-fixable.
+    const rewatch = opts?.countsAsViewing
+      ? rewatchFields(item.status, currentForRating?.status, currentForRating?.rewatchCount)
+      : {};
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
     //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
     //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
@@ -419,6 +468,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // nowhere and never recovers, so during a cold load we must still stamp. Do
       // not "unify" these guards.
       ...(currentForRating ? {} : { addedAt: serverTimestamp() }),
+      // BIN-641 — the rewatch count. `opts.countsAsViewing` is the caller saying
+      // a human deliberately logged a re-viewing; `rewatchFields` owns the rest
+      // of the rule and is shared with buildStatusUpdate. See the option's doc on
+      // the addItem signature above for why intent cannot be inferred here.
+      //
+      // Cold-load behaviour: see the `const rewatch` note above.
+      ...rewatch,
       updatedAt: serverTimestamp(),
       // BIN-593: `watchedAt` is user-authored — Malin, 2026-07-25: "har man
       // manuellt justerat 'sett' ska det bara ändras om man själv manuellt ändrar
@@ -441,11 +497,31 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       //    is currently reachable only from updateStatus's optional 4th argument,
       //    which NO production caller passes — the real date picker goes through
       //    updateWatchedAt. It is the BIN-91 signature, kept, not the live path.)
-      //  - addItem has never written `rewatchCount` at all, so a re-mark here is
-      //    not counted as a rewatch the way updateStatus counts one.
-      // Both asymmetries are pre-existing and untouched by BIN-593 — see BIN-598.
+      // The rewatch asymmetry that used to be listed here is GONE, but not the way an
+      // earlier version of this comment claimed. addItem ALWAYS received sedd → sedd
+      // writes — re-picking the plain 'Sedd' entry in the status menu produces one —
+      // it simply never counted them. What was dead is the rule in buildStatusUpdate:
+      // no updateStatus caller can reach that transition at all. BIN-641 introduces
+      // the first surface that counts, and only on explicit intent.
+      // The watchedAtOverride asymmetry above is pre-existing and still stands.
+      //
+      // BIN-641 adds the ONE case that overwrites a stored date: a deliberate
+      // "Sedd igen". Malin, 2026-07-31 — that action is the user manually saying
+      // "I watched this, now", which is precisely the carve-out BIN-593 leaves
+      // open ("bara om man själv manuellt ändrar igen"). Without it the rewatch
+      // is invisible: the count says x2 while Dagbok, Statistik's monthly
+      // activity and Streamingrådgivarens films-this-month lens all keep
+      // crediting the ORIGINAL viewing, so a service she actually used tonight
+      // reads as unused. The cost is real and accepted — a title stores one
+      // date, so the earlier one is replaced.
+      // Gated on the COUNTED OUTCOME, not the raw flag: the re-date and the
+      // count must always agree, and this is the one branch that OVERWRITES
+      // user-authored data. A cold load counts nothing, so it re-dates nothing.
+      // Unreachable from the UI today (the "Sedd igen" entry needs a landed
+      // snapshot to render at all), which is exactly why it needs saying.
       ...(item.status === 'sedd'
-        && canAutoStampWatchedAt(resolveCurrentWatchedAt(currentForRating, firstSnapshotSettledRef.current))
+        && (('rewatchCount' in rewatch)
+          || canAutoStampWatchedAt(resolveCurrentWatchedAt(currentForRating, firstSnapshotSettledRef.current)))
         ? { watchedAt: serverTimestamp() }
         : {}),
       // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness on a genuine NEW
@@ -537,7 +613,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [uid, effectiveVisibilityNow]);
 
   // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
-  // — det tolkas som en omtitt (isRewatch = sedd→sedd) och räknar upp rewatchCount
+  // — det tolkas som en omtitt (rewatchFields = sedd→sedd) och räknar upp rewatchCount
   // varje gång man justerar datumet. Detta rör bara watchedAt + updatedAt.
   const updateWatchedAt = useCallback(async (mediaType: MediaType, tmdbId: number, watchedAt: Date) => {
     if (!uid) return;

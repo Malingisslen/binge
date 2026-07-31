@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt,
-  shouldStampVisibility, planQuickRateWrite, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
+  shouldStampVisibility, planQuickRateWrite, rewatchFields, MAX_TAGS_PER_ITEM, MAX_TAG_LENGTH,
 } from './watchlistWrites';
 
 // A stand-in for the serverTimestamp() sentinel — the helper just passes it
@@ -269,5 +269,46 @@ describe('planQuickRateWrite', () => {
     ];
     expect(new Set(verdicts).size).toBe(3);
     expect(verdicts.every(v => ['add-as-seen', 'rating-and-status', 'rating-only'].includes(v))).toBe(true);
+  });
+});
+
+// BIN-641 — the rewatch fields, shared by buildStatusUpdate and addItem so the
+// two write paths cannot drift on either the transition rule or the increment.
+describe('rewatchFields', () => {
+  it('counts one more on a sedd → sedd write', () => {
+    expect(rewatchFields('sedd', 'sedd', 2)).toEqual({ rewatchCount: 3 });
+  });
+
+  // The default is the risky half — an absent count must start at 1, not NaN.
+  it('starts at 1 when no count is stored', () => {
+    expect(rewatchFields('sedd', 'sedd', undefined)).toEqual({ rewatchCount: 1 });
+    expect(rewatchFields('sedd', 'sedd', null)).toEqual({ rewatchCount: 1 });
+  });
+
+  it('returns nothing for a FIRST viewing', () => {
+    for (const from of ['vill_se', 'mina', 'avbruten'] as const) {
+      expect(rewatchFields('sedd', from, 5)).toEqual({});
+    }
+  });
+
+  // Unknown library state (cold load) must not guess — the count is editable
+  // nowhere, so under-counting is the only safe direction.
+  it('returns nothing when the current status is unknown', () => {
+    expect(rewatchFields('sedd', undefined, 5)).toEqual({});
+    expect(rewatchFields('sedd', null, 5)).toEqual({});
+  });
+
+  // Film-only by construction: a TV write lands as 'mina', never 'sedd'.
+  // Guards the EQUALITY-form regression: `status === currentStatus` would pass
+  // every case above, because each holds one operand at 'sedd'.
+  it('is not merely status === currentStatus', () => {
+    expect(rewatchFields('mina', 'mina', 5)).toEqual({});
+    expect(rewatchFields('vill_se', 'vill_se', 5)).toEqual({});
+  });
+
+  it('returns nothing for any non-sedd write', () => {
+    for (const to of ['vill_se', 'mina', 'avbruten'] as const) {
+      expect(rewatchFields(to, 'sedd', 5)).toEqual({});
+    }
   });
 });

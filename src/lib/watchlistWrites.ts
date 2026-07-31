@@ -144,6 +144,41 @@ export function shouldStampVisibility(
   return current?.visibility == null;
 }
 
+/**
+ * BIN-641 — the rewatch-count FIELDS for a write, or nothing.
+ *
+ * Returns the fragment rather than a boolean so the two write paths cannot
+ * drift on the increment either — the `?? 0` default is the part that carries
+ * risk, not the comparison. Spread it; do not re-derive it.
+ *
+ * Film-only by construction: 'sedd' is the terminal FILM status, so a TV write
+ * (which lands as 'mina') can never be a rewatch — see watchStatus.ts.
+ *
+ * Knowing the transition is NOT sufficient on the addItem side. That path is
+ * also the BULK path (CSV import, onboarding, "add all" surfaces), where a
+ * sedd → sedd write is a restore rather than a viewing. The caller states
+ * intent; this only answers the half it can see. Do not re-justify that with a
+ * named caller — two attempts to do so cited callers that dedupe.
+ *
+ * NOTE for whoever adds the next caller: `planQuickRateWrite` also encodes
+ * 'sedd' + 'sedd' and must NOT be rewired onto this. Expressing the quick-rate
+ * rule via a helper named "rewatch" would imply that surface counts one, which
+ * is exactly the BIN-599 bug.
+ *
+ * AND: wherever this counts, the caller must ALSO re-date. addItem does
+ * (BIN-641); buildStatusUpdate does not, only because its branch is
+ * unreachable. Whoever makes it reachable adds the intent gate and the re-date
+ * together — a count without a fresh date is the half-feature Malin rejected.
+ */
+export function rewatchFields(
+  status: WatchStatus,
+  currentStatus: WatchStatus | null | undefined,
+  currentRewatchCount: number | null | undefined,
+): Record<string, number> {
+  const isRewatch = status === 'sedd' && currentStatus === 'sedd';
+  return isRewatch ? { rewatchCount: (currentRewatchCount ?? 0) + 1 } : {};
+}
+
 export type QuickRateWrite = 'add-as-seen' | 'rating-and-status' | 'rating-only';
 
 /**
@@ -157,7 +192,7 @@ export type QuickRateWrite = 'add-as-seen' | 'rating-and-status' | 'rating-only'
  *  - `rating-and-status`— tracked but NOT 'sedd' → rate it and promote it.
  *  - `rating-only`      — tracked AND already 'sedd' → rate it, write NOTHING
  *    else. `updateStatus` reads a 'sedd' → 'sedd' write as a rewatch and bumps
- *    `rewatchCount` (see `buildStatusUpdate`'s `isRewatch`), so re-marking here
+ *    `rewatchCount` (see `rewatchFields`), so re-marking here
  *    logged a viewing that never happened — once per pass through the modal,
  *    and permanently, since `rewatchCount` is editable nowhere. This surface is
  *    a RATING pass ("Sett 4★"), not a viewing log.
@@ -193,28 +228,30 @@ export function buildStatusUpdate(
   // and inflate the count that way; BIN-599 fixed it at that call site (it now
   // writes the status only when it changes), NOT here.
   //
-  // KNOWN COST — a real regression, escalated to Malin, not decided here. The
-  // code cannot tell a date SHE picked from one we auto-stamped (there is no
-  // watchedAtSource flag), so her "only a manual change may alter it" rule is
-  // implemented as "no automatic write may alter ANY stored date". Two paths pay:
+  // KNOWN COST, now PARTLY ANSWERED. The code cannot tell a date SHE picked from
+  // one we auto-stamped (there is no watchedAtSource flag), so her "only a manual
+  // change may alter it" rule is implemented as "no automatic write may alter ANY
+  // stored date". Two transitions paid; they no longer pay the same:
   //
-  //  - sedd -> sedd (the common one: re-mark an already-seen film). The rewatch
-  //    IS counted, but the date stays frozen at the first, possibly auto-stamped,
-  //    value. The row reads "x2 … Sedd: 2 apr 2019".
-  //  - vill_se/avbruten -> sedd (took it off the shelf to watch again). Recorded
-  //    NOWHERE: no rewatch (this rule) and no fresh date (stampWatchedAt below).
-  //    Before BIN-593 this transition wrote watchedAt: now.
-  //
-  // Either way Dagbok, Statistik's monthly activity and Streamingrådgivarens
-  // films-this-month lens all keep crediting the OLD month — so a service she
-  // actually used this month can read as unused. WatchedDateEditor is the way to
-  // re-date a re-viewing.
-  const isRewatch = status === 'sedd' && ctx.currentStatus === 'sedd';
+  //  - sedd -> sedd. No updateStatus caller can INTEND it — which is why the
+  //    branch stays (QuickRateModal is gated by planQuickRateWrite, VillSePicker
+  //    lists only vill_se films, WatchlistPage bulk writes vill_se/avbruten). All
+  //   four decide from RENDER state while ctx.currentStatus comes from the live
+  //   ref, so an await in between can still deliver it. The
+  //    live rewatch surface is addItem's "Sedd igen" (BIN-641), which counts AND
+  //    re-dates to now — Malin, 2026-07-31, the manual-act carve-out. So the frozen
+  //    date this used to describe is not what a user meets today.
+  //  - vill_se/avbruten -> sedd (took it off the shelf to watch again). STILL
+  //    ESCALATED and still unrecorded: no rewatch (this rule) and no fresh date
+  //    (stampWatchedAt below). Before BIN-593 this wrote watchedAt: now. Dagbok,
+  //    Statistik's monthly activity and Streamingrådgivarens films-this-month lens
+  //    all keep crediting the OLD month, so a service she actually used this month
+  //    can read as unused. WatchedDateEditor is the way to fix it by hand.
   // BIN-593: `watchedAt` belongs to the user. Two ways it may be written here:
   // an explicit override (the "markera sedd + välj datum" flow — a manual act),
   // or the very first automatic stamp on a title that provably has no date yet.
   // Anything else omits the key, so the merge-write preserves what's stored —
-  // including on a rewatch (see isRewatch above) and on any non-'sedd' status:
+  // including on a rewatch (see rewatchFields above) and on any non-'sedd' status:
   // leaving 'sedd' must not erase the history.
   //
   // CONSEQUENCE FOR EVERY READER: a stored date does NOT mean "currently seen".
@@ -232,7 +269,7 @@ export function buildStatusUpdate(
     ...ctx.visFields,
     updatedAt: ctx.now,
     ...(stampWatchedAt ? { watchedAt: ctx.watchedAtOverride ?? ctx.now } : {}),
-    ...(isRewatch ? { rewatchCount: (ctx.currentRewatchCount ?? 0) + 1 } : {}),
+    ...rewatchFields(status, ctx.currentStatus, ctx.currentRewatchCount),
     // BIN-35: clear the legacy v1/v2 `dropped` flag on any non-avbruten status.
     // migrateStatus lets `dropped:true` win unconditionally, so without this a
     // legacy doc would snap back to 'avbruten' on the next snapshot — making

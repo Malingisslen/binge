@@ -375,3 +375,144 @@ picked up as one planned job rather than four parallel ones.
 Assumption: the four shipping tickets are independent of the four parked ones.
 Verified by file ownership — the only overlap is the `watchlistWrites.ts` comment
 above. `QuickRateModal.tsx` imports `planQuickRateWrite`, which ships with it.
+
+---
+
+## PLAN — BIN-641 + BIN-645 (2026-07-30, after Malin's decisions)
+
+Router: `node docs/org/route.mjs` → tier **medium**, one owning role: **#14 Software
+Architect**. Blind critique run; its conditions are folded in below as binding.
+
+### PREMISE CORRECTION (found by the critique)
+
+I had recorded that StatusButton's signed-out tap already routes to `/login/`. It
+does NOT — that change was in the parked BIN-596 half and was reverted with it.
+`306859b` never touched StatusButton. At HEAD, StatusButton has no signed-out
+handling at all: a signed-out tap calls `addItem`, which returns on `!uid`, and the
+component then toasts success. That dead-click stays with parked BIN-596; it is NOT
+in scope here. StatusButton never calls `signIn()`, so it creates no accounts and
+has no consent problem — BIN-645 is genuinely QuickAddButton-only.
+
+### BIN-641 — the film page counts a rewatch
+
+Binding conditions from #14:
+
+1. **`countsAsViewing` must NOT go on `WatchlistAddPayload`.** That type is
+   contractually "the exact field set written to Firestore" — `addItem` spreads it
+   into `setDoc`, and `firestore.rules`' `isValidWatchlistItem` uses a `hasOnly`
+   allowlist. A stray field either lands as junk or makes the whole merge-write
+   `permission-denied`. This already bit once (`notes`). Use a SECOND PARAMETER:
+   `addItem(payload, opts?: { countsAsViewing?: boolean })`.
+2. **Default false by omission** is right, but pair it with a test that pins which
+   call sites pass `true`, so the next "I watched this" surface can't silently
+   forget — same shape as the BIN-611 regression test.
+3. **No rules / schema / index change.** `rewatchCount` is already in the
+   `hasOnly` allowlist (updateStatus writes it today). Confirmed by reading
+   `firestore.rules`. This stays true ONLY while condition 1 holds.
+
+Acceptance:
+- [ ] Marking an already-'sedd' film seen from the film page increments `rewatchCount`.
+- [ ] Re-importing a CSV export of an all-seen library increments nothing.
+- [ ] Snabb-betyg still increments nothing — BIN-611's test stays green, unedited.
+- [ ] A caller that says nothing about intent does NOT count a viewing.
+- [ ] **#14's criterion:** a test asserts the key set passed to `setDoc` for
+  `countsAsViewing: true` equals the `false` key set plus at most `rewatchCount` and `watchedAt` (the re-date, added by Malin 2026-07-31) —
+  i.e. the intent flag itself provably never reaches Firestore.
+
+### BIN-645 — the poster badge routes to /login
+
+Binding conditions from #14:
+
+4. **Open redirect is a real vector here.** `?next=` handed raw to `router.push`
+   lets `/login/?next=https://evil.example` land a user off-site immediately after a
+   genuine Google sign-in on binge.nu. Accept only a same-origin path: starts with a
+   single `/`, no scheme, no `//` prefix. Anything else falls back to today's
+   `/` / `/onboarding/`. Put it in ONE shared helper — `AuthGuard` will want the
+   same thing later.
+5. **`useSearchParams` under `output: 'export'` needs a `<Suspense>` boundary.**
+   `login/page.tsx` has none today; `app/tv/[id]/page.tsx` shows the pattern.
+
+Acceptance:
+- [ ] A signed-out tap on the poster badge reaches `/login/`; no `signIn()` from the grid.
+- [ ] After sign-in the visitor returns to where they came from.
+- [ ] A signed-IN user whose profile hasn't loaded is NOT treated as signed out
+  (key on `uid`, never `user` — AuthContext keeps uid when a profile read fails).
+- [ ] Auth still resolving → no navigation, no popup.
+- [ ] `next=https://evil.example`, `next=//evil.example` and `next=javascript:…`
+  all fall back to the default destination.
+
+### No architecture-changing unknowns
+
+Assumptions: two separate commits (watchlist rewatch counting; auth consent
+routing) since a revert of one must not drag the other. No Firestore rules,
+schema or index change in either — if that stops being true, stop and re-plan.
+
+---
+
+## BIN-641 REVISED — 2026-07-31, after review found the premise was false
+
+### What the review found, and I verified
+
+I told Malin the library list already counted rewatches and the film page did
+not — framing this as fixing an inconsistency. **That was wrong.** Nothing in
+production can write `'sedd'` over `'sedd'`:
+
+- `WatchlistPage`'s bulk actions write only `vill_se` / `avbruten`.
+- `VillSePickerPage`'s "Redan sett" is filtered to `status === 'vill_se'`.
+- `QuickRateModal` is gated to non-`sedd` by `planQuickRateWrite` (BIN-599).
+- Bibliotek's rows have no status menu at all.
+
+So `buildStatusUpdate`'s `isRewatch` branch is effectively dead today, and
+`rewatchCount` is 0 for every title in production. BIN-641 as first built would
+have made it incrementable for the FIRST time — not restored parity.
+
+Worse, it would have counted on a tap of the ALREADY-HIGHLIGHTED "Sedd" in the
+status menu: a confirm/dismiss gesture, permanent, no undo, no edit UI. That is
+the same write BIN-599 ruled must not count in QuickRateModal.
+
+### Malin's revised decision (2026-07-31)
+
+**Ship it, but only from a separate "Sedd igen" action.** Counting happens only
+when the user deliberately says they watched it again — never from re-picking
+the status they already have.
+
+### Shape
+
+- `useMarkSeen` takes `{ countsAsViewing?: boolean }`, default FALSE. The normal
+  mark-seen path stops passing it.
+- A new menu entry "Sedd igen" renders in StatusButton (the title page) ONLY
+  when the title is a film already at `'sedd'`. It is the only thing that passes
+  the flag.
+- DEVIATION from the first draft of this plan, decided while building: NOT in
+  QuickAddButton. That menu is a cramped quick-add affordance on poster grids
+  (min-w-110px), and adding it there would also have made the two commits
+  overlap on one file, breaking the revert granularity the plan asks for. Told
+  Malin; she can ask for it in the grid later.
+- "Sedd igen" ALSO re-dates the title to now (Malin, 2026-07-31). Without it the
+  count says x2 while Dagbok, Statistik and the advisor keep crediting the
+  original viewing. This is the BIN-593 carve-out — a manual act may set the
+  date — and the cost (one stored date, so the earlier one is replaced) is
+  accepted.
+- Film-only by construction: TV has no terminal `'sedd'` (watchStatus.ts).
+
+### Acceptance
+
+- [ ] Re-picking "Sedd" on an already-seen film counts NOTHING.
+- [ ] "Sedd igen" counts exactly one, and appears only for a film at `'sedd'`.
+- [ ] No "Sedd igen" for TV, for an unseen film, or for an untracked title.
+- [ ] CSV import and onboarding still count nothing (unchanged).
+- [ ] Snabb-betyg still counts nothing — BIN-599/611 tests stay green, unedited.
+- [x] The rationale comments name NO caller at all. Both attempts to name one
+      were false (the CSV importer filters duplicates; OnboardingFlow swaps in
+      a "Tillagd" chip), so the bulk-path caveat is stated as a PROPERTY —
+      a rule cannot be falsified by checking one file. Amended 2026-08-01.
+
+### Also from the reviews, being handled
+
+- `isRewatchWrite` dedupes the predicate but both paths still hand-write
+  `{ rewatchCount: (X ?? 0) + 1 }`. Return the FIELDS fragment instead.
+- Add the missing unit test for the helper in `watchlistWrites.test.ts`.
+- Cut the justification paragraph from seven restatements to one canonical
+  home + pointers; move the two comments that sit INSIDE the payload literal
+  in useMarkSeen (they document the parameter that follows it).
+- Filed BIN-655: `addItem` is two functions wearing one name.
