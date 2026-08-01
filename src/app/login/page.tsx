@@ -3,14 +3,15 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { trackEvent } from '@/lib/analytics';
 import { scorePassword } from '@/lib/passwordStrength';
 import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
 import { CURRENT_TERMS_VERSION, MIN_AGE } from '@/lib/legal';
+import { takeNextPath } from '@/lib/nextPath';
 
 export default function LoginPage() {
-  const { user, signIn, signInEmail, register, loading } = useAuth();
+  const { user, uid, profileLoading, signIn, signInEmail, register, loading } = useAuth();
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -21,15 +22,44 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // BIN-645: `takeNextPath()` CONSUMES the remembered path, so this effect is not
+  // idempotent — a second run reads null and would push '/' over the destination
+  // the first run already chose. React StrictMode double-invokes effects (Next 16
+  // has it on by default), and any later `user` identity change would do the same
+  // in production. A ref latches the one redirect; refs survive the StrictMode
+  // remount, which is the whole reason it isn't state.
+  const redirectedRef = useRef(false);
+
+  // Gated on `uid` — the AUTH verdict — not on `user`, the Firestore profile.
+  // AuthContext deliberately KEEPS uid and nulls the profile when a profile read
+  // fails, so gating on `user` left that population sitting on the login FORM
+  // while signed in, with their remembered path stranded in storage. This page
+  // is now the destination of a common tap (the poster badge), so that stopped
+  // being theoretical. Wait for `profileLoading` to settle either way first: a
+  // profile we could not load simply cannot claim the account needs onboarding.
   useEffect(() => {
-    if (!user) return;
+    if (!uid || profileLoading || redirectedRef.current) return;
+    redirectedRef.current = true;
     // Nya användare utan myProviders + utan onboardingCompletedAt ska igenom
     // onboarding-flödet. Existerande användare (före featuren landade) har
     // varken flagga men har providers — vi skickar bara in tomma profiler.
     const needsOnboarding =
-      !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
-    router.push(needsOnboarding ? '/onboarding/' : '/');
-  }, [user, router]);
+      user != null && !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
+    // Come back to where the visitor started. Today the ONLY surface that
+    // remembers a path is the poster badge (QuickAddButton) — the title page's
+    // own status button does not route here at all, and a signed-out pick there
+    // still no-ops behind a success toast (parked as BIN-596). So this reads a
+    // path that is usually a grid, not a title page.
+    //
+    // Onboarding still wins: a brand-new account has nothing to come back to
+    // yet, and skipping the flow would leave them without providers.
+    //
+    // The path comes from sessionStorage, never a query param — see nextPath.ts
+    // for why (a `?next=` would travel to Firebase's Google-hosted auth handler,
+    // and would be attacker-supplied). `takeNextPath` validates on read anyway.
+    const next = takeNextPath();
+    router.push(needsOnboarding ? '/onboarding/' : (next ?? '/'));
+  }, [uid, user, profileLoading, router]);
 
   async function handleGoogle() {
     setError('');

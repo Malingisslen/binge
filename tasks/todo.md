@@ -423,23 +423,37 @@ Acceptance:
 
 Binding conditions from #14:
 
-4. **Open redirect is a real vector here.** `?next=` handed raw to `router.push`
-   lets `/login/?next=https://evil.example` land a user off-site immediately after a
-   genuine Google sign-in on binge.nu. Accept only a same-origin path: starts with a
-   single `/`, no scheme, no `//` prefix. Anything else falls back to today's
-   `/` / `/onboarding/`. Put it in ONE shared helper — `AuthGuard` will want the
-   same thing later.
+4. **Open redirect is a real vector here.** A raw return path handed to
+   `router.push` lets an attacker-chosen value land a user off-site immediately
+   after a genuine Google sign-in on binge.nu. Accept only a same-origin path:
+   starts with a single `/`, no scheme, no `//` prefix. Anything else falls back to
+   today's `/` / `/onboarding/`. Put it in ONE shared helper — `AuthGuard` will want
+   the same thing later.
 5. **`useSearchParams` under `output: 'export'` needs a `<Suspense>` boundary.**
    `login/page.tsx` has none today; `app/tv/[id]/page.tsx` shows the pattern.
 
+**AMENDED 2026-08-01 — the carrier changed, so #5 fell away.** Condition 4 above
+was written for a `?next=` query param. Review of that version killed it: Firebase's
+popup sign-in copies the whole current URL into a `redirectUrl` param on
+`binge-nu.firebaseapp.com/__/auth/handler` — Google-hosted, not ours — so a
+`?next=/movie/603/` would disclose the title she was reading, cross-origin, at
+sign-in. The path now rides in `sessionStorage` (`src/lib/nextPath.ts`), which never
+travels and which no other origin can write. Condition 4's validation survives
+verbatim and is applied on read AS WELL as on write, plus a query-key allowlist,
+because the stored value still comes from the visitor's own address bar. Condition 5
+is moot — no `useSearchParams`, so no `<Suspense>`, and the exported HTML keeps its
+villkor + 13-års notice.
+
 Acceptance:
-- [ ] A signed-out tap on the poster badge reaches `/login/`; no `signIn()` from the grid.
-- [ ] After sign-in the visitor returns to where they came from.
-- [ ] A signed-IN user whose profile hasn't loaded is NOT treated as signed out
+- [x] A signed-out tap on the poster badge reaches `/login/`; no `signIn()` from the grid.
+- [x] After sign-in the visitor returns to where they came from.
+- [x] A signed-IN user whose profile hasn't loaded is NOT treated as signed out
   (key on `uid`, never `user` — AuthContext keeps uid when a profile read fails).
-- [ ] Auth still resolving → no navigation, no popup.
-- [ ] `next=https://evil.example`, `next=//evil.example` and `next=javascript:…`
-  all fall back to the default destination.
+  Both ends: the badge, and the login page's own redirect.
+- [x] Auth still resolving → no navigation, no popup.
+- [x] `https://evil.example`, `//evil.example` and `javascript:…` all fall back to
+  the default destination — and, since the carrier moved, a value planted directly
+  into storage is rejected on read too.
 
 ### No architecture-changing unknowns
 
@@ -516,3 +530,95 @@ the status they already have.
   home + pointers; move the two comments that sit INSIDE the payload literal
   in useMarkSeen (they document the parameter that follows it).
 - Filed BIN-655: `addItem` is two functions wearing one name.
+
+---
+
+## BIN-645 — review-round fixes, 2026-08-01
+
+All four gates ran in parallel on the staged bytes. Security PASS, code review PASS
+with three fixes owed, integration 0 blocking / 6 optional, test review
+APPROVED-WITH-FINDINGS. Applying the real ones:
+
+1. **The login page gated on `user` (the Firestore profile), not `uid` (the auth
+   verdict).** Found independently by security AND code review. AuthContext keeps
+   `uid` and nulls the profile when a profile read fails, so that population signed
+   in and then sat on the login FORM, remembered path stranded in storage. This page
+   is now the destination of a common tap, so it stopped being theoretical. Gate on
+   `uid`, wait for `profileLoading` to settle, and treat an unloadable profile as
+   "cannot claim to need onboarding".
+2. **`/sok` does not exist** — the route is `/search`. Four comments and three test
+   fixtures named a route the app has never had. Fifth false comment claim across
+   these two tickets; same lesson as BIN-641.
+3. **Two tests that could not fail.** `nextPath.test.ts`'s writer-side allowlist case
+   read back through `takeNextPath`, which strips a second time, so deleting the
+   writer's strip left it green — the exact trap the same file warns about 60 lines
+   earlier. And `login/page.test.tsx` seeded sessionStorage AFTER the render, so it
+   asserted the browser API to itself.
+
+### Second round, on the corrected bytes — all four gates re-run
+
+Security PASS / 0 findings, integration 0 blocking, code review PASS, test review
+APPROVED-WITH-FINDINGS. Two reviewers independently found the SAME hole, from
+different directions, in a test I had just written:
+
+4. **`waits while the profile is still loading` pinned only that the wait STARTS.**
+   A version that latched on the way in —
+   `if (!uid || latched) return; latched = true; if (profileLoading) return;` —
+   passed it while never redirecting once the flag cleared. The normal boot always
+   renders once with the flag true, so that mutant would have stranded EVERY
+   returning visitor on the login page. Test review reached the same gap by a second
+   route: nothing pinned `profileLoading` in the effect's dep array, and
+   `react-hooks/exhaustive-deps` is a warning here, so CI would not have caught its
+   removal either. One fix closes both — the case now drives wait → settle → land,
+   and the `useRouter` mock is hoisted stable so the dep array is not inert.
+   Mutation-verified: both mutants fail that case alone, 1 of 7.
+5. **The invented-route class recurred inside its own fix.** The new `row` fixture
+   said `/rekommendationer/?row=2`; the route is `/recommendations/` and `RecRow`
+   builds `?row=${rowKey}` — a colon-joined key, not an index. Two neighbours were
+   the same: `?next=/film/1399/` (title routes are `/movie/:id/`, and 1399 is a TV
+   show) and `/my/all?status=sedd` (`?status=` is only ever `behind`, only on
+   `/my/series`). Sixth, seventh and eighth false claims across these two tickets.
+   All three now name URLs the app actually builds.
+6. `QuickAddButton.test.tsx` was the only file under `src/` staged as CRLF, which is
+   why a five-line change rendered as a 258-line rewrite and hid the delta.
+   Normalized to LF.
+7. `?fromGroup=` is named in `nextPath.ts`'s header now. It was excluded by the
+   file's own rule (a Firestore read on mount) but the comment named `?invite=` as
+   *the* exclusion, so the next person to extend the allowlist would not know
+   `fromGroup` had been considered — and it is reachable, since `RecCard` puts the
+   badge on every title page.
+
+Also worth carrying forward: vitest's on-disk transform cache
+(`node_modules/.vite/vitest`) serves the PREVIOUS mutation's module after a file
+restore. Both the test and security reviewers produced one contaminated result each
+before spotting it. Clear that directory between mutation runs or the evidence lies.
+
+### Deliberately NOT done here (ticketed instead)
+
+- Carrying the return path THROUGH onboarding (integration #3). A brand-new account
+  — the exact population this consent fix is about — still lands on `/` after
+  onboarding. Real gap, but it means touching OnboardingFlow.finish(); own ticket.
+- `AuthGuard` still bounces to a bare `/login` without remembering the path
+  (integration #5). `nextPath.ts` now owns that concept and AuthGuard is the visible
+  half left behind.
+- `TopbarActions` and `HomePageClient` still call `signIn` inline via
+  `onClick={signIn}` — SAME consent gap this ticket exists to close, and one is the
+  landing page's primary CTA. Found by code review; the security pass's `grep
+  signIn()` missed that form. This one matters most of the three.
+- BIN-596's acceptance does not actually cover the signed-out dead click that two
+  comments now attribute to it (integration #2).
+- `login/page.tsx` is the only one of the three "is this visitor signed in" gates
+  that does not also read `loading`. Safe today purely because `uid` is null while
+  `loading` is true — an AuthContext invariant nothing states or enforces, and the
+  `wasLoggedIn` warm-up is already reaching toward optimistic session restore.
+  Filed on BIN-669 rather than widened into this commit.
+- The stale remembered path now sends an AuthGuard-bounced visitor to a page they
+  had already backed out of, where before this commit they landed on `/`. That
+  raises BIN-669 from "does not remember" to "remembers the wrong thing"; recorded
+  on the ticket.
+
+### No architecture-changing unknowns
+
+Assumption: gating the login redirect on `uid` cannot strand anyone — an unloadable
+profile yields `needsOnboarding: false`, which routes to the remembered path or `/`,
+both of which are better than the login form they are stuck on today.

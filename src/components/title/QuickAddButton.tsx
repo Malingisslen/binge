@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, Check } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
@@ -10,6 +11,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { rememberNextPath } from '@/lib/nextPath';
 import type { WatchStatus, MediaType } from '@/types';
 
 interface QuickAddButtonProps {
@@ -25,7 +27,13 @@ interface QuickAddButtonProps {
 export default function QuickAddButton({
   tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds,
 }: QuickAddButtonProps) {
-  const { user, uid, signIn } = useAuth();
+  const { uid, loading: authLoading } = useAuth();
+  const router = useRouter();
+  // BIN-645: keyed on `uid` (the auth verdict), never on the Firestore profile.
+  // AuthContext deliberately KEEPS uid when a profile read fails, so `!user`
+  // would read as "signed out" forever for that user — handing them a login
+  // round trip on every tap.
+  const signedOut = !authLoading && uid == null;
   const { getItem, addItem, removeItem } = useWatchlist();
   const markSeen = useMarkSeen();
   const { show: toast } = useToast();
@@ -83,18 +91,41 @@ export default function QuickAddButton({
     >
       <button
         onClick={async () => {
-          if (!user) {
-            try { await signIn(); } catch { toast('Inloggning misslyckades. Försök igen om en stund.'); }
+          // BIN-645: go to /login rather than calling signIn() here. A
+          // first-time Google sign-in CREATES the account, and account creation
+          // stamps termsAcceptedAt + ageConfirmedAt (13+). The villkor link and
+          // the 13-års-notisen live on the login page; a grid of posters shows
+          // neither, so signing in from here recorded a consent we never asked
+          // for. `next` carries them back to this page afterwards.
+          if (signedOut) {
+            // Remembered in sessionStorage, not a ?next= param — see nextPath.ts:
+            // the query would ride along to Firebase's Google-hosted auth handler.
+            //
+            // location, not usePathname(): this badge renders on /search, whose
+            // whole state is the ?q= query. usePathname() drops it, so a
+            // signed-out tap there would return the visitor to an empty search.
+            // Safe to read here — this runs in a click handler, never in render.
+            rememberNextPath(window.location.pathname + window.location.search);
+            router.push('/login/');
             return;
           }
+          // Belt-and-braces behind the disabled attribute below: we do not yet
+          // know whether this visitor is signed in, so there is no honest
+          // destination — neither the menu nor a trip to /login.
+          if (authLoading) return;
           setOpen(!open);
         }}
-        className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer ${
+        // Disabled while auth is unresolved rather than swallowing the tap: a
+        // click that does nothing at all reads as a broken button. This is the
+        // NARROW gate — only the auth verdict. Gating on the watchlist snapshot
+        // as well is BIN-596, deliberately not in this change.
+        disabled={authLoading}
+        className={`w-[28px] h-[28px] md:w-[22px] md:h-[22px] rounded-sm flex items-center justify-center border-none cursor-pointer disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-white'
             : 'bg-black/60 text-white hover:bg-acc-deep'
         }`}
-        title={current ? labelFor(current.status) : 'Lägg till'}
+        title={authLoading ? 'Laddar…' : current ? labelFor(current.status) : 'Lägg till'}
       >
         {current ? <Check size={13} /> : <Plus size={13} />}
       </button>
