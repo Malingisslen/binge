@@ -119,7 +119,8 @@
   </section>
 </div>
 
-<script id="data" type="application/json">{
+<script id="data" type="application/json">
+{
   "columns": [
     {
       "key": "ui",
@@ -711,8 +712,22 @@
     {
       "id": "flow1",
       "label": "Sign in & hydrate",
-      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory. The same context owns the visibility cascade: changing who may see your library writes the profile first and then re-stamps every non-overridden watchlist doc, with a pending-flag repair that re-runs on the next app load if that second half fails.",
+      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory. Signing in is reached two ways: the visitor opens /login themselves, or a signed-out tap on a write control routes them there so account creation always happens behind the villkor + 13-års notice. The same context owns the visibility cascade: changing who may see your library writes the profile first and then re-stamps every non-overridden watchlist doc, with a pending-flag repair that re-runs on the next app load if that second half fails.",
       "steps": [
+        {
+          "from": "web-app",
+          "to": "web-app",
+          "payload": "BIN-645 entry leg — a signed-out tap on a write control does NOT sign in inline. StatusButton (title pages, 306859b) and QuickAddButton (the + badge on every poster grid and rail, 71b404b) both route to /login/ instead, because a first-time Google sign-in CREATES the account and account creation stamps termsAcceptedAt + ageConfirmedAt — consent whose notice lives only on /login. Both key 'signed out' on `uid` (the auth verdict), never on `user` (the Firestore profile), since AuthContext deliberately keeps uid and nulls the profile when a profile read fails. STILL INLINE, same gap, tracked as BIN-668: TopbarActions and HomePageClient's landing CTA.",
+          "transport": "router.push('/login/')",
+          "verified": true
+        },
+        {
+          "from": "web-app",
+          "to": "web-app",
+          "payload": "BIN-645 return leg — rememberNextPath() stores where they were in sessionStorage under `binge:nextAfterLogin`, NOT a ?next= query param: Firebase's popup sign-in copies the whole current URL into a redirectUrl param on the Google-hosted binge-nu.firebaseapp.com/__/auth/handler, so a query would disclose the title cross-origin at sign-in. The value still comes from the visitor's own address bar, so it is same-origin-validated on read as well as write and carries a query allowlist (q/status/provider/row only) — ?invite= joins a group on mount with no confirmation and cannot be expressed here at all; ?fromGroup= is excluded by the same rule.",
+          "transport": "sessionStorage",
+          "verified": true
+        },
         {
           "from": "web-app",
           "to": "firebase-auth",
@@ -732,6 +747,13 @@
           "to": "firestore",
           "payload": "read users/{uid}",
           "transport": "Firestore read",
+          "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "web-app",
+          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first — and LoginPage is the app's ONLY router into it. The remembered path is then dropped by OnboardingFlow: open as BIN-669, together with AuthGuard's bounce, which sends people to /login without remembering anything.",
+          "transport": "router.push",
           "verified": true
         },
         {
@@ -780,7 +802,9 @@
       "area": "core",
       "covers": [
         "/login",
-        "/onboarding"
+        "/onboarding",
+        "QuickAddButton",
+        "StatusButton"
       ]
     },
     {
@@ -976,13 +1000,20 @@
     {
       "id": "flow5",
       "label": "Cross-device sync",
-      "description": "A watch-state write on one device propagates live to every signed-in tab and device — same onSnapshot listeners as sign-in hydration, no polling.",
+      "description": "A watch-state write on one device propagates live to every signed-in tab and device — same onSnapshot listeners as sign-in hydration, no polling. The write itself carries two pieces of human intent the snapshot cannot infer: whether this was a re-viewing, and when it happened.",
       "steps": [
         {
           "from": "web-app",
           "to": "firestore",
           "payload": "write users/{uid}/watchlist/{mediaType}_{tmdbId} (device A)",
           "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "web-app",
+          "to": "firestore",
+          "payload": "BIN-641 — a sedd→sedd write only counts as a rewatch when the CALLER says a human deliberately logged one (`addItem(payload, { countsAsViewing: true })`), which today is the film-page 'Sedd igen' action alone. Tapping the already-highlighted 'Sedd' in the status menu is as likely to mean confirm/dismiss as again, and rewatchCount has no undo or edit UI, so it must not count — the same rule BIN-599 set for quick-rate. A counted rewatch also re-stamps watchedAt to now: BIN-593 made that field user-authored, so it is NOT auto-stamped over a date the user set, EXCEPT on an explicit re-viewing, where the old date is the one thing that is certainly wrong. The intent flag itself never reaches Firestore — a key-set test pins that.",
+          "transport": "Firestore write (merge)",
           "verified": true
         },
         {
@@ -2522,7 +2553,8 @@
       "area": "ops & compliance"
     }
   ]
-}</script>
+}
+    </script>
 
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
