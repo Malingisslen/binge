@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Bell, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -10,6 +11,7 @@ import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
+import { rememberNextPath } from '@/lib/nextPath';
 import type { FriendRequest } from '@/lib/firebase/friends';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
@@ -18,7 +20,8 @@ import type { FriendRequest } from '@/lib/firebase/friends';
 // chrome around it changes — keeps Sentry-shaped logic untouched in Phase 1.
 
 export default function TopbarActions() {
-  const { user, uid, loading: authLoading, signIn, signOut, markNotificationsSeen } = useAuth();
+  const { user, uid, loading: authLoading, signOut, markNotificationsSeen } = useAuth();
+  const router = useRouter();
   const {
     notifications, friendRequests, recentPicks,
     unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
@@ -303,7 +306,28 @@ export default function TopbarActions() {
             // !uid-villkoret: profilen laddas parallellt efter auth-beskedet,
             // så user kan vara null en RTT trots inloggad — visa skelettet
             // (grenen ovanför) istället för en "Logga in"-flicker.
-            <button onClick={signIn} className="topbar-signin-btn">
+            <button
+              onClick={() => {
+                // BIN-668 (BIN-645's rule, second call site): never call signIn()
+                // from the chrome. A first-time Google sign-in CREATES the
+                // account, and account creation stamps termsAcceptedAt +
+                // ageConfirmedAt (13+) — but the villkor link and the 13-års-
+                // notisen live on /login. Signing in straight from the topbar
+                // recorded a consent the visitor was never shown.
+                //
+                // The return path rides in sessionStorage, not a ?next= param —
+                // see nextPath.ts: a query param would travel to Firebase's
+                // Google-hosted auth handler and disclose the page she was on.
+                //
+                // location, not usePathname(): the topbar renders on /search,
+                // whose entire state is the ?q= query, so dropping the search
+                // would return her to an empty page. Safe here — this is a click
+                // handler, never render.
+                rememberNextPath(window.location.pathname + window.location.search);
+                router.push('/login/');
+              }}
+              className="topbar-signin-btn"
+            >
               Logga in
             </button>
           )}

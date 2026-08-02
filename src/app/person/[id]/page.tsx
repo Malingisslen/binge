@@ -10,6 +10,8 @@ import { SEO_FALLBACK_PERSON_IDS } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
 import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
 import { prunePersonSeed } from '@/lib/tmdb/personSeed';
+import { buildPersonDescription } from '@/lib/seo/contentFloor';
+import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
 
 export const dynamic = 'force-static';
 export const dynamicParams = false;
@@ -55,8 +57,12 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   try {
     const person = await cachedGetPerson(personId);
-    const bio = person.biography?.slice(0, 180) ?? '';
-    const description = `${person.name}. ${bio || 'Skådespelare och filmskapare.'}`.trim();
+    // BIN-656/686: the same builder the client uses, through the same adapter, so
+    // the pre-rendered description and the one usePageMeta writes at hydration
+    // cannot disagree — movie and tv already share their builder across both
+    // halves this way. Replaces a hand-sliced 180-char bio that reproduced the
+    // near-duplicate description BIN-656 exists to kill.
+    const description = buildPersonDescription(personDescriptionInput(person));
     const url = `https://binge.nu/person/${personId}/`;
     const image = person.profile_path ? profileUrl(person.profile_path) ?? undefined : 'https://binge.nu/og-image.png';
 

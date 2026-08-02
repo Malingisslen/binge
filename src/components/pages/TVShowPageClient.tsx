@@ -67,7 +67,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // till "Serien hittades inte." nedan.
   const { data: show, isLoading } = useTVShow(Number.isFinite(showId) ? showId : null, initialData);
   const { offers } = useStreamingOffers(show?.id, 'tv');
-  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, items } = useWatchlist();
+  const { getItem, updateRating, updateNotes, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading } = useWatchlist();
   const { user } = useAuth();
   const ratings = useTitleRatings(show?.external_ids?.imdb_id);
   const { isWatched, markEpisodeWatched, markSeasonWatched, markSeasonUnwatched, getSeasonProgress } = useEpisodeProgressWithSync(showId);
@@ -90,19 +90,35 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
 
   // BIN-93: lazily backfill per-episode runtime onto the watchlist doc (free —
   // from the detail already fetched). No-ops unless in-library + runtime unknown.
+  //
+  // `watchlistLoading` is load-bearing in BOTH the guard and the deps. setRuntime
+  // looks the title up in the live snapshot and early-returns when it is not
+  // there — and on a hard page load the snapshot always lands AFTER `mounted`
+  // flips, so without this gate the backfill can run once against an empty
+  // library and never fire again. It also stops a previous account's stale items
+  // from deciding the write across a uid switch. Same pattern as
+  // CollectionSection/CompanionSection.
+  //
+  // NOTE (2026-08-02): BIN-598's WatchlistContext half is NOT landed — setRuntime
+  // still closes over `items`, so today it also gets a fresh identity per
+  // snapshot. That makes this gate belt-and-braces rather than the only thing
+  // holding the backfill up. When BIN-598 lands and the identity does become
+  // stable for the life of the uid, the gate becomes load-bearing on its own —
+  // do not remove it as redundant on the way past.
   const showRuntime = show?.episode_run_time?.[0] ?? null;
   useEffect(() => {
-    if (!mounted || !show || showRuntime == null) return;
+    if (!mounted || watchlistLoading || !show || showRuntime == null) return;
     void setRuntime('tv', show.id, showRuntime);
-  }, [mounted, show, showRuntime, setRuntime]);
+  }, [mounted, watchlistLoading, show, showRuntime, setRuntime]);
 
   // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
   // have (free). No-ops unless the title is in the library AND its freshness stamp
   // is absent (swept clean) or older than the refresh interval — repopulates a
   // swept doc and keeps a viewed title from reaching the sweep's clear threshold.
   // Never bumps updatedAt.
+  // Gated on `watchlistLoading` for the same reason as the runtime backfill above.
   useEffect(() => {
-    if (!mounted || !show) return;
+    if (!mounted || watchlistLoading || !show) return;
     const se = show['watch/providers']?.results?.SE;
     // Only send providers when the SE block is actually present — an absent block
     // must not clobber good denormalized ids with [].
@@ -122,7 +138,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
       tmdbStatus: show.status,
       runtime: showRuntime,
     });
-  }, [mounted, show, showRuntime, refreshTmdbFields]);
+  }, [mounted, watchlistLoading, show, showRuntime, refreshTmdbFields]);
 
   // T6: räknaren ("N förslag") och griden måste visa samma antal — skär till 5
   // (= similar-grid:s desktop-kolumner) redan här, istället för 8 i memo:t +
@@ -144,13 +160,20 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
 
   const displayTitle = show ? preferOriginalTitle(show.name, show.original_name) : '';
   const firstYear = show?.first_air_date ? show.first_air_date.slice(0, 4) : '';
+  // BIN-656: same content floor as the pre-rendered /tv/[id] metadata — the real
+  // overview when there is one, else an availability-led Swedish sentence. The
+  // old template appended `overview?.slice(…) ?? fallback`, and TMDB's sv-SE
+  // answer for an untranslated series is an EMPTY STRING, not null — so `??`
+  // never fired and ~72% of series pages shipped a bare "Titel (år)."
+  const metaDescription = useMemo(
+    () => (show ? buildContentFloor(tvContentFloorInput(show)).description : undefined),
+    [show],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
       : 'Serie',
-    description: show
-      ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''}. ${show.overview?.slice(0, 180) ?? 'Se var serien finns att streama i Sverige.'}`
-      : undefined,
+    description: metaDescription,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
     // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
     // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.

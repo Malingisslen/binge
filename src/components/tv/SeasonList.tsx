@@ -1,14 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ShieldAlert } from 'lucide-react';
+import { ChevronRight, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import type { TMDBSeason } from '@/types';
 import SeasonRow from './SeasonRow';
-import { titleHref } from '@/lib/tmdb/client';
+import { stillUrl, titleHref } from '@/lib/tmdb/client';
 import { useGroup } from '@/hooks/useGroups';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
+import { useTVSeason } from '@/hooks/useTMDB';
+import { LoadingView } from '@/components/ui/LoadingView';
 import { computeMaskBoundary, type MaskBoundary } from '@/lib/groupProgress';
+import { canonicalSpecialsFor, type CanonicalSpecials } from '@/lib/tv/canonicalSpecials';
 
 interface SeasonListProps {
   tmdbId: number;
@@ -38,66 +41,170 @@ export default function SeasonList({
     [displaySeasons]
   );
 
+  // BIN-580 — a couple of shows (Doctor Who 2005) keep canonical episodes in
+  // TMDB's season 0, which the filter above hides. Curated per show; null for
+  // everyone else, and skipped entirely if TMDB lists no season 0 for this show.
+  const specials = useMemo(() => {
+    const curated = canonicalSpecialsFor(tmdbId);
+    if (!curated) return null;
+    return seasons.some(s => s.season_number === 0) ? curated : null;
+  }, [tmdbId, seasons]);
+
   const toggle = (seasonNumber: number) => {
     setExpandedSeason(prev => prev === seasonNumber ? null : seasonNumber);
   };
+
+  // Season 0 is never a real row (displaySeasons filters it out), so it doubles
+  // as the expanded-key for the specials section — one section open at a time.
+  const SPECIALS_KEY = 0;
+
+  const rows = (boundary: MaskBoundary | null) => (
+    <div className="px-3 py-1">
+      {displaySeasons.map(season => {
+        const progress = getSeasonProgress(season.season_number, season.episode_count);
+        return (
+          <SeasonRow
+            key={season.id}
+            name={season.name}
+            episodeCount={season.episode_count}
+            watchedCount={progress.watched}
+            expanded={expandedSeason === season.season_number}
+            tmdbId={tmdbId}
+            seasonNumber={season.season_number}
+            previousSeasons={previousSeasonsMeta}
+            onToggle={() => toggle(season.season_number)}
+            isWatched={isWatched}
+            markEpisodeWatched={markEpisodeWatched}
+            markSeasonWatched={markSeasonWatched}
+            markSeasonUnwatched={markSeasonUnwatched}
+            maskBoundary={boundary}
+          />
+        );
+      })}
+      {/* Hidden while a group spoiler-mask is active: the specials carry titles and
+          synopses (regenerations, finales) that the masking exists to withhold, and
+          season 0 sits outside the mask's linear season/episode comparison. */}
+      {specials && !boundary && (
+        <CanonicalSpecialsSection
+          tmdbId={tmdbId}
+          specials={specials}
+          expanded={expandedSeason === SPECIALS_KEY}
+          onToggle={() => toggle(SPECIALS_KEY)}
+        />
+      )}
+    </div>
+  );
 
   return (
     <>
       {fromGroup && (
         <SpoilerProtectionBanner tmdbId={tmdbId} groupId={fromGroup}>
-          {boundary => (
-            <div className="px-3 py-1">
-              {displaySeasons.map(season => {
-                const progress = getSeasonProgress(season.season_number, season.episode_count);
-                return (
-                  <SeasonRow
-                    key={season.id}
-                    name={season.name}
-                    episodeCount={season.episode_count}
-                    watchedCount={progress.watched}
-                    expanded={expandedSeason === season.season_number}
-                    tmdbId={tmdbId}
-                    seasonNumber={season.season_number}
-                    previousSeasons={previousSeasonsMeta}
-                    onToggle={() => toggle(season.season_number)}
-                    isWatched={isWatched}
-                    markEpisodeWatched={markEpisodeWatched}
-                    markSeasonWatched={markSeasonWatched}
-                    markSeasonUnwatched={markSeasonUnwatched}
-                    maskBoundary={boundary}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {boundary => rows(boundary)}
         </SpoilerProtectionBanner>
       )}
-      {!fromGroup && (
-        <div className="px-3 py-1">
-          {displaySeasons.map(season => {
-            const progress = getSeasonProgress(season.season_number, season.episode_count);
+      {!fromGroup && rows(null)}
+    </>
+  );
+}
+
+// BIN-580 — the curated season-0 section. Read-only on purpose: ticking a
+// season-0 episode parks the watchlist progress marker on S0 (see the BIN-589
+// note in useSubscriptionAdvisor.helpers.ts), which would drag someone who is
+// caught up on 13 seasons back to "bakom". So this lists the episodes and
+// nothing else — no checkboxes, no "markera alla", no reactions.
+function CanonicalSpecialsSection({
+  tmdbId, specials, expanded, onToggle,
+}: {
+  tmdbId: number;
+  specials: CanonicalSpecials;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border-b border-rule-2 last:border-b-0">
+      <div className="flex items-center justify-between py-[5px] text-sm">
+        <div
+          className="flex items-center gap-1 cursor-pointer flex-1 min-w-0"
+          onClick={onToggle}
+        >
+          <ChevronRight
+            size={12}
+            className={`shrink-0 text-ink-3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+          />
+          <span className="font-semibold text-ink-2">
+            {specials.label}{' '}
+            <span className="font-normal text-ink-3 text-xs">({specials.episodeNumbers.length} avs)</span>
+          </span>
+        </div>
+        <span className="text-xxs text-ink-3 mx-4">Kan inte bockas av</span>
+      </div>
+      {expanded && <CanonicalSpecialsPanel tmdbId={tmdbId} episodeNumbers={specials.episodeNumbers} />}
+    </div>
+  );
+}
+
+// Fetches season 0 (only once the section is expanded — same lazy pattern as
+// SeasonEpisodePanel) and keeps just the curated episode numbers. Titles, stills
+// and synopses come from TMDB live; nothing about them is stored in the repo.
+function CanonicalSpecialsPanel({
+  tmdbId, episodeNumbers,
+}: {
+  tmdbId: number;
+  episodeNumbers: readonly number[];
+}) {
+  const { data: season, isLoading } = useTVSeason(tmdbId, 0);
+
+  const episodes = useMemo(() => {
+    const allowed = new Set(episodeNumbers);
+    return (season?.episodes ?? []).filter(ep => allowed.has(ep.episode_number));
+  }, [season, episodeNumbers]);
+
+  if (isLoading) {
+    return (
+      <div className="bg-bg-2 border-t border-rule-2 px-4">
+        <LoadingView label="Laddar avsnitt…" />
+      </div>
+    );
+  }
+
+  if (episodes.length === 0) {
+    return (
+      <div className="bg-bg-2 border-t border-rule-2 px-4 py-2 text-xs text-ink-3">
+        Inga avsnitt hittades.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-bg-2 border-t border-rule-2">
+      <div className="px-4 py-3">
+        <div className="eps">
+          {episodes.map(ep => {
+            const still = stillUrl(ep.still_path, 'w185');
+            const year = ep.air_date?.substring(0, 4) ?? '';
             return (
-              <SeasonRow
-                key={season.id}
-                name={season.name}
-                episodeCount={season.episode_count}
-                watchedCount={progress.watched}
-                expanded={expandedSeason === season.season_number}
-                tmdbId={tmdbId}
-                seasonNumber={season.season_number}
-                previousSeasons={previousSeasonsMeta}
-                onToggle={() => toggle(season.season_number)}
-                isWatched={isWatched}
-                markEpisodeWatched={markEpisodeWatched}
-                markSeasonWatched={markSeasonWatched}
-                markSeasonUnwatched={markSeasonUnwatched}
-              />
+              <div className="ep" key={ep.id}>
+                <div className="still">
+                  {still ? (
+                    <img src={still} alt="" loading="lazy" decoding="async" width={120} height={68} />
+                  ) : null}
+                </div>
+                <div className="code">S0E{ep.episode_number}</div>
+                <div>
+                  <div className="ttl">
+                    {ep.name}
+                    {year && <span className="font-normal text-ink-3 text-xs">{' '}{year}</span>}
+                  </div>
+                  {ep.overview && <div className="syn">{ep.overview}</div>}
+                </div>
+                <div className="runt">{ep.runtime ? `${ep.runtime} min` : ''}</div>
+                <div />
+              </div>
             );
           })}
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 

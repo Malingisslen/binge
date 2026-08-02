@@ -11,6 +11,8 @@ import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { translateDepartment } from '@/lib/tmdb/department';
 import { splitSelfCredits } from '@/lib/tmdb/personCredits';
 import { filmographyCompletion } from '@/lib/tmdb/filmographyCompletion';
+import { buildPersonDescription } from '@/lib/seo/contentFloor';
+import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import TitleGrid from '@/components/title/TitleGrid';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -100,11 +102,30 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     [roles, directedIdSet, getItem],
   );
 
+  // BIN-656: every person page used to ship the same sentence with only the name
+  // swapped in — a duplicate meta description across the whole long tail. Prefer
+  // a real Swedish bio; otherwise the facts we already have make the line unique.
+  // The English TMDB bio is deliberately excluded: the body labels it "Biografi
+  // på engelska", a search snippet can carry no such label.
+  // BIN-686: the Wikipedia bio is excluded too, but for a LICENCE reason rather than a
+  // labelling one — it is CC BY-SA and must carry its attribution wherever it travels.
+  // The body can and does render the "Biografi från <källa>" credit link below; a <meta>
+  // description, and the search snippet cut from it, cannot. So Wikipedia prose never
+  // reaches the snippet — those people get the fact-based fallback line instead, which
+  // is still unique per person.
+  // Both halves go through the SAME adapter — the static route's generateMetadata
+  // does too. Hand-rolling the mapping here is how the two drifted apart in the
+  // first place, and a field added to the adapter would silently never reach this
+  // side. (`contentFloorInput` pulls in @/lib/tmdb/providers, which this page's
+  // TitleGrid → TitleCard chain already loads, so it costs no extra bundle here.)
+  const metaDescription = useMemo(
+    () => (person ? buildPersonDescription(personDescriptionInput(person)) : undefined),
+    [person],
+  );
+
   usePageMeta({
     title: person ? person.name : 'Person',
-    description: person
-      ? `${person.name} — skådespelare och filmskapare. Se filmer och serier med ${person.name} och vad du kan streama i Sverige.`
-      : undefined,
+    description: metaDescription,
     ogImage: person?.profile_path ? profileUrl(person.profile_path, 'w500') ?? undefined : undefined,
     // Tar bort catch-all-shellets noindex när TMDB bekräftat att personen finns.
     // Pre-renderade /person/[id] (topp-N) påverkas inte — egen statisk HTML.

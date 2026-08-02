@@ -23,15 +23,21 @@ const RELEASE = process.env.NEXT_PUBLIC_GIT_SHA ?? 'dev';
 type SentryModule = typeof import('@sentry/react');
 
 let sentry: SentryModule | null = null;
-let initStarted = false;
+let initPromise: Promise<void> | null = null;
 
-export function initSentry(): void {
-  if (initStarted) return;
-  if (!DSN) return; // no-op i dev/CI om DSN saknas
-  if (typeof window === 'undefined') return;
-  initStarted = true;
+/**
+ * Startar (en gång) den lazy SDK-laddningen och returnerar ett löfte som
+ * resolvar när SDK:n är initierad — eller direkt när den är en no-op (inget
+ * DSN / server). Returvärdet finns för anropare som måste rapportera ETT fel
+ * omedelbart efter init (global-error.tsx): utan att invänta laddningen skulle
+ * captureError alltid falla igenom som no-op. Vanliga anropare ignorerar det.
+ */
+export function initSentry(): Promise<void> {
+  if (initPromise) return initPromise;
+  if (!DSN) return Promise.resolve(); // no-op i dev/CI om DSN saknas
+  if (typeof window === 'undefined') return Promise.resolve();
 
-  void import('@sentry/react')
+  const loading = import('@sentry/react')
     .then((S) => {
       S.init({
         dsn: DSN,
@@ -75,8 +81,11 @@ export function initSentry(): void {
       // Tillåt nytt försök om initSentry() anropas igen — i praktiken sker
       // det inte (Providers.tsx kör sin effect en gång per sidladdning), så
       // en adblocker-blockerad chunk ger INTE en retry-loop. Defensiv hygien.
-      initStarted = false;
+      initPromise = null;
     });
+
+  initPromise = loading;
+  return loading;
 }
 
 /**

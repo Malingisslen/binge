@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildContentFloor, type ContentFloorInput } from './contentFloor';
+import { buildContentFloor, buildPersonDescription, type ContentFloorInput } from './contentFloor';
 
 // genreIds: 878 Science Fiction, 28 Action, 18 Drama, 53 Thriller, 80 Kriminal
 const movieBase: ContentFloorInput = {
@@ -144,6 +144,97 @@ describe('buildContentFloor — meta description leads with the wedge', () => {
       'En skicklig tjuv som stjäl företagshemligheter via drömdelningsteknik får en sista chans till upprättelse.';
     const { description } = buildContentFloor({ ...movieBase, overview });
     expect(description.startsWith('En skicklig tjuv')).toBe(true);
+    expect(description.length).toBeLessThanOrEqual(170);
+  });
+});
+
+// BIN-656: the person-page equivalent. The defect was ONE sentence reused across
+// every /person page with only the name substituted, so these pin uniqueness.
+describe('buildPersonDescription — a real Swedish bio wins', () => {
+  const longBio =
+    'Alicia Vikander är en svensk skådespelare, född i Göteborg. Hon slog igenom i En kunglig affär och belönades med en Oscar för Den danska flickan.';
+
+  it('uses the Swedish biography when it is substantive', () => {
+    const description = buildPersonDescription({ name: 'Alicia Vikander', biography: longBio });
+    expect(description.startsWith('Alicia Vikander är en svensk skådespelare')).toBe(true);
+    expect(description.length).toBeLessThanOrEqual(170);
+  });
+
+  it('collapses the hard line breaks TMDB and Wikipedia bios carry', () => {
+    const description = buildPersonDescription({
+      name: 'Alicia Vikander',
+      biography: `Alicia Vikander är en svensk skådespelare, född i Göteborg.\n\nHon slog igenom i En kunglig affär.`,
+    });
+    expect(description).not.toMatch(/\n/);
+    expect(description).toContain('Göteborg. Hon slog igenom');
+  });
+
+  // Boundary: MIN_REAL_BIO is 60 and the comparison is `>=`. Every other fixture
+  // here sits far from the edge, so `>=` → `>` survives them all. This is the one
+  // that fails on that mutant.
+  it('treats a biography of exactly MIN_REAL_BIO characters as substantive', () => {
+    const bio = 'Alicia Vikander är en svensk skådespelare, född i Stockholm.';
+    // Pinned: if MIN_REAL_BIO ever moves, this fixture must move with it or the
+    // boundary stops being tested rather than silently starts testing the inside.
+    expect(bio.length).toBe(60);
+
+    const description = buildPersonDescription({
+      name: 'Alicia Vikander',
+      biography: bio,
+      role: 'Skådespelare',
+      birthYear: '1988',
+    });
+    expect(description).toBe(bio);
+    expect(description).not.toContain('Filmografi');
+  });
+
+  it('falls back when the biography is too thin to say anything', () => {
+    const description = buildPersonDescription({
+      name: 'Alicia Vikander',
+      biography: 'Svensk skådespelare.',
+      role: 'Skådespelare',
+      birthYear: '1988',
+    });
+    expect(description).toContain('Filmografi');
+    expect(description).toContain('född 1988');
+  });
+});
+
+describe('buildPersonDescription — the generated line is unique per person', () => {
+  it('carries role, birth year and birthplace when they are known', () => {
+    const description = buildPersonDescription({
+      name: 'Alicia Vikander',
+      biography: '',
+      role: 'Skådespelare',
+      birthYear: '1988',
+      birthPlace: 'Göteborg, Sverige',
+    });
+    expect(description).toBe(
+      'Alicia Vikander (Skådespelare), född 1988 i Göteborg, Sverige. Filmografi och var titlarna streamas i Sverige.',
+    );
+  });
+
+  it('separates two people who share a role and a birth year', () => {
+    const a = buildPersonDescription({ name: 'Alicia Vikander', role: 'Skådespelare', birthYear: '1988', birthPlace: 'Göteborg' });
+    const b = buildPersonDescription({ name: 'Bill Skarsgård', role: 'Skådespelare', birthYear: '1990', birthPlace: 'Vällingby' });
+    expect(a).not.toBe(b);
+  });
+
+  it('never invents a birth year or birthplace it was not given', () => {
+    const description = buildPersonDescription({ name: 'Okänd Person', role: 'Regi' });
+    expect(description).toBe('Okänd Person (Regi). Filmografi och var titlarna streamas i Sverige.');
+    expect(description).not.toContain('född');
+  });
+
+  it('says only where someone is from when the birth year is unknown', () => {
+    const description = buildPersonDescription({ name: 'Okänd Person', birthPlace: 'Malmö' });
+    expect(description).toContain('från Malmö');
+    expect(description).not.toContain('född');
+  });
+
+  it('still names the person when nothing but a name is known', () => {
+    const description = buildPersonDescription({ name: 'Okänd Person' });
+    expect(description.startsWith('Okänd Person.')).toBe(true);
     expect(description.length).toBeLessThanOrEqual(170);
   });
 });

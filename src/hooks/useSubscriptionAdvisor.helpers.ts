@@ -102,6 +102,28 @@ export function findTopPausable(
 // Threshold 3 = "påbörjat flera serier" — undviker att tjata om enstaka påbörjade titlar.
 export const CATCHUP_THRESHOLD = 3;
 
+// BIN-615 — har det numrerade spåret (säsong >= 1) börjat sända?
+//
+// Referenspunkten är sändningsdatumet för TMDB:s senast aireade avsnitt, INTE
+// dagens datum: `last_episode_to_air` har per definition redan sänts, så varje
+// säsong som startade samma dag eller tidigare har också sänts. Det håller
+// funktionen ren och tidsoberoende (inga `new Date()`-beroende testresultat) och
+// undviker att en ANNONSERAD men osänd säsong 1 skulle stämpla någon som bara
+// sett en försmaks-special som "bakom".
+//
+// Saknat datum på någon av sidorna → inget bevis → false (oförändrat beteende).
+// `seasons` kommer gratis med `/tv/{id}`-svaret (getTVShowLite) — ingen extra
+// TMDB-hämtning, ingen ny kostnad.
+function hasAiredNumberedSeason(show: TMDBTVShow, airedFrontierDate: string | null): boolean {
+  if (!airedFrontierDate) return false;
+  return (show.seasons ?? []).some(s =>
+    s.season_number >= 1 &&
+    s.episode_count > 0 &&
+    !!s.air_date &&
+    s.air_date <= airedFrontierDate,
+  );
+}
+
 // "Behind" = användaren har börjat titta MEN det finns aireade avsnitt
 // hen inte sett. Ej börjat → inte behind. Ikapp på allt aireat → inte behind
 // (även om showen är "Returning Series" och nya avsnitt är på väg).
@@ -124,6 +146,18 @@ export const CATCHUP_THRESHOLD = 3;
 // fallet och påstår "ikapp" för någon som bara sett Specials — det motsäger
 // highestWatchedPosition (som skriver markören och låter S0 förlora mot varje
 // säsong >= 1) och är exakt bortgömnings-felet kommentaren ovan varnar för.
+//
+// BIN-615 (Malins beslut 2026-07-29: smal fix i denna funktion, INGEN
+// tvåspårsmodell) — hålet BIN-589 lämnade kvar är det ENDA fallet där bägge
+// sidor ligger på specials: markör S0 + frontier S0. Där jämförde vi rakt av
+// specials mot specials och sa "ikapp" åt någon som bara sett julspecialarna
+// medan numrerade säsonger sänts (rådgivaren kunde då föreslå att säga upp en
+// tjänst man i själva verket ligger efter på). Samma "kräver POSITIVT bevis"-
+// regel gäller: har en numrerad säsong redan börjat sända kan en S0-markör inte
+// bevisa ikapp-läge → bakom. Övriga specials-fall ändras inte — markör S0 +
+// numrerad frontier gav redan "bakom" via olika-spår-regeln ovan, och det är
+// det pinnade testet på useSubscriptionAdvisor.test.ts:336 (S0E1-markör,
+// S1E1-frontier → bakom) som fortsatt gäller oförändrat.
 export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): boolean {
   // == null (inte falsy): säsong 0 (Specials) är giltig progress och får inte
   // kollapsas ihop med "ej börjat" (L3).
@@ -135,6 +169,9 @@ export function isUserBehindOnAired(item: WatchlistItem, show: TMDBTVShow): bool
   const userOnSpecials = userS === 0;
   const airedOnSpecials = last.season_number === 0;
   if (userOnSpecials !== airedOnSpecials) return true; // olika spår → ikapp obevisbart
+  // BIN-615: bägge på specials-spåret, men numrerade avsnitt har redan sänts →
+  // markören (som ligger på ett special) bevisar inget om det numrerade spåret.
+  if (userOnSpecials && hasAiredNumberedSeason(show, last.air_date)) return true;
   if (userS < last.season_number) return true;
   if (userS === last.season_number && userE < last.episode_number) return true;
   return false;

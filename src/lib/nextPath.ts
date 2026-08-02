@@ -49,6 +49,31 @@ const RETURN_QUERY_KEYS = ['q', 'status', 'provider', 'row'] as const;
 const KEY = 'binge:nextAfterLogin';
 
 /**
+ * Routes that ARE the sign-in journey, and can therefore never be a destination
+ * to come back to.
+ *
+ * BIN-668: the topbar's "Logga in" button renders on `/login` itself — AppShell
+ * only drops the chrome on `/`. Tapping it there stored `/login/` as the return
+ * path, which then (a) overwrote a path the poster badge had already stored,
+ * defeating the funnel from the 25k prerendered title pages, and (b) made
+ * LoginPage push ITSELF after sign-in with `redirectedRef` already latched — a
+ * signed-in visitor parked on the login form, with a Google button that looked
+ * dead. `/onboarding` is here for the same reason: LoginPage sends brand-new
+ * accounts there explicitly, so a stored `/onboarding/` can only fight it.
+ *
+ * Checked on read as well as on write, like `stripUnsafeQuery` — a value planted
+ * straight into storage never passed the writer.
+ */
+const SIGN_IN_ROUTES = ['/login', '/onboarding'];
+
+export function isSignInPath(pathWithQuery: string): boolean {
+  // Route only: drop the query/hash, then the trailing slash the app's exported
+  // URLs carry (`/login/`). An empty remainder is the home page, not a match.
+  const route = pathWithQuery.split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
+  return SIGN_IN_ROUTES.includes(route);
+}
+
+/**
  * Accept only a same-origin absolute path. Rejected on purpose —
  *   `https://evil.example`  scheme
  *   `//evil.example`        protocol-relative; the browser reads it as a HOST
@@ -94,6 +119,10 @@ export function stripUnsafeQuery(pathWithQuery: string): string {
 export function rememberNextPath(path: string | null | undefined): void {
   const safe = safeNextPath(path);
   if (!safe) return;
+  // A return path that IS the sign-in page is never a destination — see
+  // SIGN_IN_ROUTES. Guarding here rather than at each button covers all three
+  // call sites and any future one.
+  if (isSignInPath(safe)) return;
   // Private mode / disabled storage throws on write — losing the return path is
   // a worse landing, never a broken sign-in.
   try { window.sessionStorage.setItem(KEY, stripUnsafeQuery(safe)); } catch { /* no-op */ }
@@ -112,6 +141,7 @@ export function takeNextPath(): string | null {
     const raw = window.sessionStorage.getItem(KEY);
     window.sessionStorage.removeItem(KEY);
     const safe = safeNextPath(raw);
+    if (safe !== null && isSignInPath(safe)) return null;
     // Strip on the way OUT too, not just on the way in. A value planted straight
     // into storage by any script on our own origin never passed the writer, so
     // a write-side-only allowlist would let its `?invite=` through — the read is

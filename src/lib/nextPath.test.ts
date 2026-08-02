@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { safeNextPath, rememberNextPath, takeNextPath, stripUnsafeQuery } from './nextPath';
+import { safeNextPath, rememberNextPath, takeNextPath, stripUnsafeQuery, isSignInPath } from './nextPath';
 
 // BIN-645 — where to return to after sign-in. The path rides in sessionStorage
 // rather than a ?next= query param, because a query would travel to Firebase's
@@ -144,5 +144,54 @@ describe('stripUnsafeQuery — only pure VIEW state comes back with you', () => 
     // reading back would pass even with the writer's strip deleted. Same trap
     // this file warns about 60 lines up, and I walked into it anyway.
     expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/grupper/X');
+  });
+});
+
+// BIN-668 — the sign-in page is not a destination. The topbar's "Logga in"
+// button renders on /login itself (AppShell only drops the chrome on '/'), so
+// tapping it there stored '/login/' — overwriting a return path the poster badge
+// had already stored, and then making LoginPage router.push itself after
+// sign-in with redirectedRef already latched: a signed-in visitor stranded on
+// the login form.
+describe('isSignInPath — a return path that is the login page is no return path', () => {
+  beforeEach(() => window.sessionStorage.clear());
+
+  it.each([
+    ['the exported trailing-slash form', '/login/'],
+    ['the bare form', '/login'],
+    ['with a query the allowlist would otherwise keep', '/login/?q=blade'],
+    ['with a hash', '/login#top'],
+    ['onboarding, which LoginPage routes to explicitly', '/onboarding/'],
+  ])('recognises %s', (_label, input) => {
+    expect(isSignInPath(input)).toBe(true);
+  });
+
+  it.each([
+    ['the home page', '/'],
+    ['a title page', '/movie/603/'],
+    // Prefix-matching would swallow these; they are real destinations.
+    ['a page whose route merely starts with the word', '/loginhelp/'],
+    ['a nested page under a different route', '/guider/login/'],
+  ])('leaves %s alone', (_label, input) => {
+    expect(isSignInPath(input)).toBe(false);
+  });
+
+  // Assert the STORAGE, not the read — the reader guards a second time, so
+  // reading back would pass with the writer's guard deleted.
+  it('is applied by rememberNextPath, so the topbar on /login stores nothing', () => {
+    rememberNextPath('/login/');
+    expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBeNull();
+  });
+
+  // …and it must not clobber a path the poster badge already stored.
+  it('leaves an already-remembered destination intact', () => {
+    rememberNextPath('/movie/603/');
+    rememberNextPath('/login/');
+    expect(takeNextPath()).toBe('/movie/603/');
+  });
+
+  it('rejects a sign-in path planted directly in storage', () => {
+    window.sessionStorage.setItem('binge:nextAfterLogin', '/login/');
+    expect(takeNextPath()).toBeNull();
   });
 });

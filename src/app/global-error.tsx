@@ -1,6 +1,36 @@
 'use client';
 
-export default function GlobalError({ reset }: { error: Error; reset: () => void }) {
+import { useEffect } from 'react';
+import { captureError, initSentry } from '@/lib/sentry';
+import { trackEvent } from '@/lib/analytics';
+
+const SCOPE = 'app:global';
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // Lokal console.error — syns i DevTools + bugrapporter från användare.
+    console.error(`[${SCOPE}]`, error);
+
+    // global-error.tsx ERSÄTTER root-layouten, så Providers (som normalt kör
+    // initSentry) har aldrig monterats här. Vi måste därför initiera själva —
+    // och invänta den lazy SDK-laddningen, annars no-op:ar captureError alltid.
+    void initSentry().then(() => {
+      captureError(error, {
+        scope: SCOPE,
+        kind: 'error-boundary',
+        extra: { digest: error.digest },
+      });
+    });
+
+    trackEvent('error_boundary_triggered', { scope: SCOPE });
+  }, [error]);
+
   return (
     <html lang="sv">
       <body style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#eeece8' }}>

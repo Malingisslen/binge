@@ -79,19 +79,35 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // BIN-93: lazily backfill runtime onto the watchlist doc from the detail we
   // already fetched (free — no extra request). setRuntime no-ops unless the
   // title is in the library and runtime is still unknown.
+  //
+  // `watchlistLoading` is load-bearing in BOTH the guard and the deps. setRuntime
+  // looks the title up in the live snapshot and early-returns when it is not
+  // there — and on a hard page load the snapshot always lands AFTER `mounted`
+  // flips, so without this gate the backfill can run once against an empty
+  // library and never fire again. It also stops a previous account's stale items
+  // from deciding the write across a uid switch. Same pattern as
+  // CollectionSection/CompanionSection.
+  //
+  // NOTE (2026-08-02): BIN-598's WatchlistContext half is NOT landed — setRuntime
+  // still closes over `items`, so today it also gets a fresh identity per
+  // snapshot. That makes this gate belt-and-braces rather than the only thing
+  // holding the backfill up. When BIN-598 lands and the identity does become
+  // stable for the life of the uid, the gate becomes load-bearing on its own —
+  // do not remove it as redundant on the way past.
   const movieRuntime = movie?.runtime ?? null;
   useEffect(() => {
-    if (!mounted || !movie || movieRuntime == null) return;
+    if (!mounted || watchlistLoading || !movie || movieRuntime == null) return;
     void setRuntime('movie', movie.id, movieRuntime);
-  }, [mounted, movie, movieRuntime, setRuntime]);
+  }, [mounted, watchlistLoading, movie, movieRuntime, setRuntime]);
 
   // BIN-402: lazy-refresh the denormalized TMDB block from the detail we already
   // have (free — no extra request). No-ops unless the title is in the library AND
   // its freshness stamp is absent (swept clean / never stamped) or older than the
   // refresh interval — repopulates a swept doc and keeps a viewed title from ever
   // reaching the ToS sweep's 5-month clear threshold. Never bumps updatedAt.
+  // Gated on `watchlistLoading` for the same reason as the runtime backfill above.
   useEffect(() => {
-    if (!mounted || !movie) return;
+    if (!mounted || watchlistLoading || !movie) return;
     const se = movie['watch/providers']?.results?.SE;
     // Only send providers when the SE block is actually present — an absent block
     // must not clobber good denormalized ids with [] (a genuinely empty SE block
@@ -111,7 +127,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       genreIds: movie.genres?.map(g => g.id),
       runtime: movieRuntime,
     });
-  }, [mounted, movie, movieRuntime, refreshTmdbFields]);
+  }, [mounted, watchlistLoading, movie, movieRuntime, refreshTmdbFields]);
 
   // T6 (samma mönster som TVShowPageClient): räknaren och griden måste visa
   // samma antal — skär till 5 direkt så "N förslag" är ärligt.
@@ -122,13 +138,20 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
 
   const displayTitle = movie ? preferOriginalTitle(movie.title, movie.original_title) : '';
   const releaseYear = movie?.release_date ? movie.release_date.slice(0, 4) : '';
+  // BIN-656: same content floor as the pre-rendered /movie/[id] metadata — the
+  // real overview when there is one, else an availability-led Swedish sentence.
+  // The old template appended `overview?.slice(…) ?? fallback`, and TMDB's sv-SE
+  // answer for an untranslated film is an EMPTY STRING, not null — so `??` never
+  // fired and those pages shipped a bare "Titel (år)." description.
+  const metaDescription = useMemo(
+    () => (movie ? buildContentFloor(movieContentFloorInput(movie)).description : undefined),
+    [movie],
+  );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''} — var streamar jag?`
       : 'Film',
-    description: movie
-      ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''}. ${movie.overview?.slice(0, 180) ?? 'Se var filmen finns att streama i Sverige.'}`
-      : undefined,
+    description: metaDescription,
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
     // Tar bort catch-all-shellets noindex när TMDB bekräftat att filmen finns.
     // Pre-renderade /movie/[id] (topp-N) påverkas inte — de har egen statisk

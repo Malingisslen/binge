@@ -7,10 +7,11 @@
  * same way the rest of the app does (TV4 Play = 489 + alias 1944 → one entry).
  */
 
-import type { TMDBMovie, TMDBTVShow, TMDBProvider, TMDBProviderData } from '@/types/tmdb';
+import type { TMDBMovie, TMDBTVShow, TMDBPerson, TMDBProvider, TMDBProviderData } from '@/types/tmdb';
 import { canonicalProviderId, getProvider } from '@/lib/tmdb/providers';
+import { translateDepartment } from '@/lib/tmdb/department';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import type { ContentFloorInput } from './contentFloor';
+import type { ContentFloorInput, PersonDescriptionInput } from './contentFloor';
 
 const CAST_TAKE = 5;
 
@@ -70,5 +71,25 @@ export function tvContentFloorInput(s: TMDBTVShow): ContentFloorInput {
     cast: topCast(s.credits),
     providers: providerSplit(s['watch/providers']?.results?.SE),
     overview: s.overview ?? '',
+  };
+}
+
+/**
+ * Person → PersonDescriptionInput. The third adapter, and the one that stops
+ * /person's two halves from drifting: before BIN-686's review, generateMetadata
+ * hand-sliced the bio at 180 chars while the client called buildPersonDescription,
+ * so the pre-rendered description and the hydrated one disagreed on ~1000 pages.
+ *
+ * `biography` is TMDB's sv-SE bio verbatim — deliberately NOT the svenska-Wikipedia
+ * bio the client also renders. See PersonDescriptionInput.biography for why the
+ * licence forbids it here.
+ */
+export function personDescriptionInput(p: TMDBPerson): PersonDescriptionInput {
+  return {
+    name: p.name,
+    biography: p.biography ?? '',
+    role: p.known_for_department ? translateDepartment(p.known_for_department) : null,
+    birthYear: p.birthday ? p.birthday.slice(0, 4) : null,
+    birthPlace: p.place_of_birth,
   };
 }

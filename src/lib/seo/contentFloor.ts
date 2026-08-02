@@ -58,6 +58,7 @@ const META_MAX = 170;
 const PROVIDER_CAP = 3;
 const CAST_CAP = 2;
 const MIN_REAL_OVERVIEW = 60;
+const MIN_REAL_BIO = 60;
 
 /**
  * Natural Swedish noun phrase per TMDB genre id, for film and for serie.
@@ -204,4 +205,55 @@ export function buildContentFloor(input: ContentFloorInput): ContentFloor {
       : truncateForMeta(`${availabilityLead(input)} ${metaTail(input)}`);
 
   return { description, paragraph };
+}
+
+export interface PersonDescriptionInput {
+  name: string;
+  /**
+   * TMDB's sv-SE biography ONLY. Two sources the page body does show must never
+   * be passed here:
+   *   - the svenska-Wikipedia bio — it is CC BY-SA and must carry attribution
+   *     wherever it travels. The body renders a "Biografi från …"-credit link;
+   *     a <meta> description, and the search snippet cut from it, cannot (BIN-686).
+   *   - TMDB's English bio — the body labels it "Biografi på engelska", and a
+   *     SERP snippet carries no such label.
+   * Either one absent here just means the generated Swedish line is used instead,
+   * which is still unique per person.
+   */
+  biography?: string | null;
+  /** Already-translated Swedish department label ("Skådespelare"), or null. */
+  role?: string | null;
+  /** Four-digit birth year as string, or null when unknown. */
+  birthYear?: string | null;
+  birthPlace?: string | null;
+}
+
+/**
+ * Per-person meta description — the same content-floor idea as titles (BIN-656).
+ *
+ * Person pages used to ship one sentence with only the name swapped in, so every
+ * long-tail /person page was a near-duplicate meta description. A real Swedish
+ * bio is used when there is one; otherwise the facts we already have (role,
+ * birth year, birthplace) make the line unique per person.
+ *
+ * Unlike titles this does NOT lead with availability: a person has no Swedish
+ * streaming availability of their own, and the searched-for term is the name,
+ * so the name must survive the 170-char cut. Every asserted fact comes from the
+ * input — nothing is invented.
+ */
+export function buildPersonDescription(input: PersonDescriptionInput): string {
+  // TMDB/Wikipedia bios carry hard line breaks; a snippet is one line.
+  const bio = (input.biography ?? '').replace(/\s+/g, ' ').trim();
+  if (bio.length >= MIN_REAL_BIO) return truncateForMeta(bio);
+
+  const { name, role, birthYear, birthPlace } = input;
+  // Parenthesised label sidesteps Swedish noun agreement: "(Skådespelare)" and
+  // the department-shaped labels ("(Regi)", "(Manus)") both read correctly.
+  const roleParen = role ? ` (${role})` : '';
+  let born = '';
+  if (birthYear && birthPlace) born = `, född ${birthYear} i ${birthPlace}`;
+  else if (birthYear) born = `, född ${birthYear}`;
+  else if (birthPlace) born = `, från ${birthPlace}`;
+
+  return truncateForMeta(`${name}${roleParen}${born}. Filmografi och var titlarna streamas i Sverige.`);
 }

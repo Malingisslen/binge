@@ -359,6 +359,82 @@ describe('isUserBehindOnAired', () => {
     expect(isUserBehindOnAired(caughtUp, show)).toBe(false);
     expect(isUserBehindOnAired(behind, show)).toBe(true);
   });
+
+  // BIN-615 — hålet BIN-589 lämnade: bägge sidor på specials-spåret. Frontiern
+  // (makeEpisode) sände 2024-01-01, så en säsong med air_date <= det datumet har
+  // bevisligen sänts. Setet nedan driver HELA grenen: har numrerat sänt → bakom,
+  // har det inte sänt (eller saknar datum/avsnitt) → oförändrat ikapp.
+  function makeSeason(seasonNumber: number, airDate: string, episodeCount = 8) {
+    return {
+      id: 100 + seasonNumber,
+      season_number: seasonNumber,
+      name: `Säsong ${seasonNumber}`,
+      overview: '',
+      poster_path: null,
+      air_date: airDate,
+      episode_count: episodeCount,
+    };
+  }
+
+  it('returns true for a specials-only viewer once a numbered season has aired (BIN-615)', () => {
+    // Sett S0E4 (senaste julspecialen) — men säsong 1 och 2 har sänts och inte
+    // ett enda numrerat avsnitt är bockat. "Ikapp" här kan få rådgivaren att
+    // föreslå att säga upp tjänsten.
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const show = makeShow({
+      last_episode_to_air: makeEpisode(0, 4),
+      seasons: [makeSeason(0, '2020-12-24', 4), makeSeason(1, '2021-01-05'), makeSeason(2, '2022-01-05')],
+    });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+
+  // Boundary: hasAiredNumberedSeason compares `air_date <= airedFrontierDate`, and
+  // the frontier here is last_episode_to_air's own date (2024-01-01). The two
+  // fixtures either side of it both survive `<=` → `<`; this one does not. Same-day
+  // counts as aired, which is what the function's own comment promises.
+  it('counts a numbered season that aired ON the frontier date as aired (BIN-615)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const show = makeShow({
+      last_episode_to_air: makeEpisode(0, 4), // air_date 2024-01-01
+      seasons: [makeSeason(0, '2023-12-24', 4), makeSeason(1, '2024-01-01')],
+    });
+    expect(isUserBehindOnAired(item, show)).toBe(true);
+  });
+
+  it('keeps "caught up" for a specials viewer when the numbered season has not aired yet (BIN-615)', () => {
+    // Försmaks-special före premiären: säsong 1 är annonserad men sänder efter
+    // den senaste aireade episoden → inget numrerat att ligga efter på.
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const show = makeShow({
+      last_episode_to_air: makeEpisode(0, 4), // air_date 2024-01-01
+      seasons: [makeSeason(0, '2023-12-24', 4), makeSeason(1, '2024-06-01')],
+    });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
+  });
+
+  it('does not claim "behind" from a numbered season with no air date or no episodes (BIN-615)', () => {
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const noDate = makeShow({
+      last_episode_to_air: makeEpisode(0, 4),
+      seasons: [makeSeason(1, '', 8)],
+    });
+    const noEpisodes = makeShow({
+      last_episode_to_air: makeEpisode(0, 4),
+      seasons: [makeSeason(1, '2020-01-01', 0)],
+    });
+    expect(isUserBehindOnAired(item, noDate)).toBe(false);
+    expect(isUserBehindOnAired(item, noEpisodes)).toBe(false);
+  });
+
+  it('leaves the numbered track untouched — an aired season 1 does not flip a numbered marker (BIN-615)', () => {
+    // Regressionsvakt: BIN-615-grenen får bara gälla när markören ligger på S0.
+    const item = makeWatchlistItem({ lastWatchedSeason: 2, lastWatchedEpisode: 5 });
+    const show = makeShow({
+      last_episode_to_air: makeEpisode(2, 5),
+      seasons: [makeSeason(1, '2021-01-05'), makeSeason(2, '2022-01-05')],
+    });
+    expect(isUserBehindOnAired(item, show)).toBe(false);
+  });
 });
 
 // --- isCaughtUpOnEndedShow ---
@@ -423,6 +499,21 @@ describe('isCaughtUpOnEndedShow', () => {
   it('returns false for an unstarted show even if ended (belongs in Ej påbörjade)', () => {
     const item = makeWatchlistItem({ lastWatchedSeason: null });
     const show = makeShow({ status: 'Ended', last_episode_to_air: makeEpisode(5, 10) });
+    expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
+  });
+
+  it('returns false for a specials-only viewer of an ended show whose numbered seasons aired (BIN-615)', () => {
+    // Produkteffekten: utan BIN-615 göms en serie där bara julspecialarna är
+    // sedda under collapsed "Avslutade" — samma bortgömningsfel som BIN-589.
+    const item = makeWatchlistItem({ lastWatchedSeason: 0, lastWatchedEpisode: 4 });
+    const show = makeShow({
+      status: 'Ended',
+      last_episode_to_air: makeEpisode(0, 4), // air_date 2024-01-01
+      seasons: [
+        { id: 100, season_number: 0, name: 'Specials', overview: '', poster_path: null, air_date: '2020-12-24', episode_count: 4 },
+        { id: 101, season_number: 1, name: 'Säsong 1', overview: '', poster_path: null, air_date: '2021-01-05', episode_count: 8 },
+      ],
+    });
     expect(isCaughtUpOnEndedShow(item, show)).toBe(false);
   });
 });
