@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
+import { resolveAddedAt, addedAtIsRepairable } from '@/lib/watchlist/addedAt';
 import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, shouldStampProvidersAtAdd, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +17,13 @@ import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/ty
 // cap; NOTES_MIGRATE_CAP bounds the eager per-session migration write-burst.
 const NOTE_MAX_LEN = 5000;
 const NOTES_MIGRATE_CAP = 300;
+// BIN-640: same idea for the addedAt repair, with one honest difference from the
+// wording above — this PACES the burst, it does not bound the session. The repair
+// writes a concrete Date, so the echo drops those docs out of the filter, the
+// effect re-runs on the new items and takes the next 300. A 5000-doc account still
+// writes all 5000, in waves of 300. That is the intended behaviour; only docs
+// written during a dead listener need it, so it should be a handful in practice.
+const ADDED_AT_REPAIR_CAP = 300;
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
   const mediaType = data.mediaType as MediaType;
@@ -45,7 +53,11 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     nextAirProvider: (data.nextAirProvider as string | undefined) ?? null,
     nextAirUpdatedAt: data.nextAirUpdatedAt ? toDate(data.nextAirUpdatedAt) : null,
     digitalReleaseDate: (data.digitalReleaseDate as string | undefined) ?? null,
-    addedAt: toDate(data.addedAt),
+    // BIN-640: a doc added while the listener was dead has no addedAt. Resolve it
+    // to the doc's own updatedAt rather than letting toDate() report "now" on
+    // every load — see src/lib/watchlist/addedAt.ts.
+    addedAt: resolveAddedAt(data),
+    addedAtIsFallback: addedAtIsRepairable(data),
     updatedAt: toDate(data.updatedAt),
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
     // BIN-349: lazy — old docs have none; consumers fall back to updatedAt.
@@ -168,6 +180,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // can't false-share the "already migrated / handled" mark.
   const migratedNotesRef = useRef<Set<string>>(new Set());
   useEffect(() => { migratedNotesRef.current = new Set(); }, [uid]);
+  // BIN-640: docs this session has already attempted an addedAt repair for.
+  // Marked BEFORE the write, exactly like migratedNotesRef — a repair that FAILS
+  // must not be retried on every subsequent snapshot. Snapshot events fire on any
+  // change in the collection, so "the field exists now" is a post-write fact and
+  // would have been a retry storm, not a guard.
+  const repairedAddedAtRef = useRef<Set<string>>(new Set());
+  useEffect(() => { repairedAddedAtRef.current = new Set(); }, [uid]);
   // Which uid the current `items` were loaded for — set by the watchlist listener
   // when a snapshot lands. The migration gates on this so it never runs against a
   // previous account's `items` during a same-session switch (cross-account guard).
@@ -201,6 +220,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   //    för event-payloaden (en användare har bara EN första titel).
   const everNonEmptyRef = useRef(false);
   const firstSnapshotSettledRef = useRef(false);
+  // BIN-601: has the watchlist listener terminally errored? Set by onSnapshot's
+  // error callback, cleared by the next successful snapshot. Distinct from
+  // firstSnapshotSettledRef, which stays false in that state — "we never learned
+  // the contents" and "the listener is dead" call for different write decisions.
+  const listenerFailedRef = useRef(false);
   // BIN-593: the snapshot's items as a LIVE ref, written in the same onSnapshot
   // callback as firstSnapshotSettledRef below. The mutators await `fsdb()` (a dynamic import
   // that can take hundreds of ms on first use) before deciding what to write, so
@@ -262,6 +286,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // see "settled" paired with a pre-snapshot item list.
         itemsRef.current = next;
         setItems(next);
+        // A snapshot arrived, so the listener is alive again — clear the failed
+        // flag before anything can read it alongside these fresh items.
+        listenerFailedRef.current = false;
+        setLoading(false);
+      },
+      // BIN-601: a terminal listen error. Without this the app hangs in `loading`
+      // forever AND — the reason this ticket exists — `itemsRef` stays empty, so
+      // every later status change looks like a genuine new add and rewrites
+      // `addedAt`, silently re-dating a title that may be years old.
+      //
+      // `firstSnapshotSettledRef` deliberately stays FALSE: we still do not know
+      // the library's contents, and the other stamp guards must keep treating it
+      // as unknown rather than as empty.
+      () => {
+        listenerFailedRef.current = true;
         setLoading(false);
       }));
   }, [uid]);
@@ -371,6 +410,59 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [uid, items, notesByTmdbId]);
 
+  // BIN-640 — write a real addedAt for docs that were added while the listener
+  // was dead. Those docs have no stored addedAt (BIN-601 stops stamping in that
+  // state, so a re-mark cannot destroy a real date), and until this runs they are
+  // resolved to their own updatedAt at read time. This makes the date permanent,
+  // so it survives into Firestore, the GDPR export and every server-side reader.
+  //
+  // Structure mirrors the notes migration above and nextAirReadRepair, not the
+  // snapshot callback: its own effect keyed on `items`, its own in-progress ref
+  // marked before the write, chunked writeBatch. Costs no extra READS — the
+  // replacement date comes from the snapshot we already received, which is why
+  // this is preferred over BIN-640's original getDoc-per-add proposal (billed per
+  // add, against the 25 SEK/mån cap, and issued from a client whose reads are
+  // already failing).
+  useEffect(() => {
+    if (!uid) return;
+    // Same cross-account guard as the notes migration: on a same-session A→B
+    // switch `items` still holds A's rows until B's snapshot lands.
+    if (itemsUidRef.current !== uid) return;
+    const missing = items
+      .filter(i => i.addedAtIsFallback
+        && !repairedAddedAtRef.current.has(mediaTypeDocId(i.mediaType, i.tmdbId)))
+      .slice(0, ADDED_AT_REPAIR_CAP);
+    if (missing.length === 0) return;
+    missing.forEach(i => repairedAddedAtRef.current.add(mediaTypeDocId(i.mediaType, i.tmdbId)));
+    let cancelled = false;
+    void (async () => {
+      const { db, doc, writeBatch } = await fsdb();
+      for (let i = 0; i < missing.length && !cancelled; i += 200) {
+        const chunk = missing.slice(i, i + 200);
+        const batch = writeBatch(db);
+        for (const it of chunk) {
+          // addedAt ONLY. Never updatedAt — this is system repair, not user
+          // activity, and a serverTimestamp here would surface every repaired
+          // title as fake activity at the top of every follower's feed (feed
+          // queries order by updatedAt). Same invariant as the notes migration,
+          // nextAirReadRepair and refreshTmdbFields.
+          // `update`, deliberately NOT nextAirReadRepair's set+merge, which is the
+          // one place this diverges from the shape cited above. A merge-set would
+          // RESURRECT a title deleted between the snapshot and this commit as a
+          // ghost doc carrying only addedAt — which isValidWatchlistItem would
+          // happily accept. `update` fails on a missing doc instead. The cost:
+          // a batch is atomic, so one deleted title fails its whole 200-doc chunk
+          // and those docs wait for the next session. Idempotent, so that is fine.
+          batch.update(doc(db, 'users', uid, 'watchlist', mediaTypeDocId(it.mediaType, it.tmdbId)), {
+            addedAt: it.addedAt,
+          });
+        }
+        try { await batch.commit(); } catch { /* best-effort; retry next session */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uid, items]);
+
   // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
   // (effectiveVisibility + legacy isPublic-mirror) vid VARJE mutation. Gamla
   // docs som skrevs innan cascade-stämplingen får då fälten första gången
@@ -461,13 +553,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // sort, backlogResurface's oldest-first ranking, taste/stats' 30-day counter
       // and the GDPR export all read as the truth.
       //
-      // Deliberately gated on `currentForRating` ALONE — unlike
-      // shouldStampProvidersAtAdd below, which also requires the snapshot to have
-      // settled. The two conditions differ because the cost of guessing wrong is
-      // asymmetric per field: a genuinely new doc that lands WITHOUT addedAt sorts
-      // nowhere and never recovers, so during a cold load we must still stamp. Do
-      // not "unify" these guards.
-      ...(currentForRating ? {} : { addedAt: serverTimestamp() }),
+      // Deliberately NOT gated on firstSnapshotSettledRef — unlike
+      // shouldStampProvidersAtAdd below, which is. The two conditions differ
+      // because the cost of guessing wrong is asymmetric per field: during an
+      // ordinary cold load we must still stamp, or a genuinely new doc lands with
+      // no date at all. Do not "unify" these guards.
+      //
+      // BIN-601: but a DEAD listener is not a cold load. There, `currentForRating`
+      // is undefined for every title in the library, so stamping would rewrite the
+      // real add date of a title that may be years old — unrecoverable. So we say
+      // nothing, and BIN-640's two-part answer keeps that silence from costing
+      // anything: a doc with no stored addedAt reads as its own updatedAt rather
+      // than as "now" (src/lib/watchlist/addedAt.ts), and the repair effect below
+      // writes the date for real once the listener comes back.
+      ...(currentForRating || listenerFailedRef.current ? {} : { addedAt: serverTimestamp() }),
       // BIN-641 — the rewatch count. `opts.countsAsViewing` is the caller saying
       // a human deliberately logged a re-viewing; `rewatchFields` owns the rest
       // of the rule and is shared with buildStatusUpdate. See the option's doc on

@@ -88,6 +88,13 @@ export interface WatchlistItem {
   // clears the static group (TMDB ToS §1.C). Lazy: old items have none.
   tmdbFieldsRefreshedAt?: Date | null;
   addedAt: Date;
+  /**
+   * BIN-640: true when `addedAt` above is NOT stored on the doc and was resolved
+   * from `updatedAt` instead — which happens to a title added while the realtime
+   * listener was dead. The repair pass in WatchlistContext uses this to find the
+   * docs that need their date written for real; nothing else should branch on it.
+   */
+  addedAtIsFallback?: boolean;
   updatedAt: Date;
   watchedAt: Date | null;
 }

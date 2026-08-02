@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { fsdb } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
+import { resolveAddedAt } from '@/lib/watchlist/addedAt';
 import { getPublicProfileCard, type PublicProfileCard } from '@/lib/firebase/publicProfile';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import type { WatchlistItem, MediaType } from '@/types';
@@ -45,7 +46,10 @@ export function usePublicProfile(username: string) {
 // behöver användaren se mer får det bli via filterar/sök senare.
 const PUBLIC_WATCHLIST_LIMIT = 500;
 
-function mapWatchlistDoc(d: QueryDocumentSnapshot<DocumentData>): WatchlistItem {
+// Exported for test only: this is the PUBLIC read path, and BIN-640's whole point
+// is that a missing addedAt must not reach another person's screen as "added
+// today". That claim has to be provable on this mapper, not just the owner's.
+export function mapWatchlistDoc(d: QueryDocumentSnapshot<DocumentData>): WatchlistItem {
   const data = d.data();
   const mediaType = data.mediaType as MediaType;
   // Använd shared migration så publik profil ser samma statusar som
@@ -72,7 +76,10 @@ function mapWatchlistDoc(d: QueryDocumentSnapshot<DocumentData>): WatchlistItem 
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
     genreIds: (data.genreIds as number[]) ?? [],
-    addedAt: toDate(data.addedAt),
+    // BIN-640: same fallback as the owner's own mapper. This path feeds the
+    // PUBLIC profile's "Senaste 30 dagarna → Tillagda" counter, which is where a
+    // missing addedAt reading as "now" was visible to other people.
+    addedAt: resolveAddedAt(data),
     updatedAt: toDate(data.updatedAt),
     watchedAt: data.watchedAt ? toDate(data.watchedAt) : null,
   } as WatchlistItem;

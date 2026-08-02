@@ -1,5 +1,342 @@
 # tasks/todo.md — scratch
 
+## SPRINT 2026-08-01 — Selection (Phase 1)
+
+Linear MCP: connected. Scoped to project "Binge" inside shared team "Binge" for every
+read/write below. ~48 Backlog tickets reviewed (0 Todo, 0 In Progress carried over); 0
+reserved-label exclusions (no `onboarding-reserved`/`launch-gated` tickets present).
+
+**Note on scratchpad state:** `.claude/state/sprint-patches/pending-BIN-641-*` and
+`pending-BIN-645-*` files on disk are stale leftovers from the already-shipped BIN-641/645
+work (commits d5bb353/71b404b/dc71bdd/4e87cc0) — working tree is clean, nothing to recover.
+Safe to delete next time that directory is touched; not acted on here (out of scope).
+
+### Batch 1 — watchlist-auth-sweep (4 tickets, ONE coordinated diff — do not split)
+
+- [ ] **BIN-596** [Tier B, plan-gated] `build` — StatusButton/QuickAddButton aren't gated on
+  the watchlist snapshot; a cold-load "Sedd" lands without `watchedAt`.
+- [ ] **BIN-598** [Tier B, plan-gated] `build` — WatchlistContext: two lookup idioms after
+  BIN-593; "sedd-gated watchedAt" hand-copied at 7 sites.
+- [ ] **BIN-601** [Tier B, plan-gated] `build` — a permanently-failed watchlist listener lets
+  `addItem` overwrite the real `addedAt`/"Tillagd" date.
+- [ ] **BIN-617** [Tier B, plan-gated] `build` — `visibilitySyncPending` retry latch isn't
+  reset on sign-out.
+  - Files: `src/contexts/WatchlistContext.tsx`, `src/components/title/StatusButton.tsx`,
+    `src/components/title/QuickAddButton.tsx`, `src/contexts/AuthContext.tsx` (sign-out path
+    only), `src/lib/watchlistWrites.ts` (shared helper surface), plus each ticket's test file.
+  - **BINDING — Malin's decision 2026-07-30 (comment on BIN-596), this is the 4th attempt on
+    this exact surface after 3 review rounds found cascading regressions:**
+    1. ONE sweep, one context — fixes must NOT be chained across separate review rounds
+       where round N repairs round N−1's own damage.
+    2. The prior rounds' findings — BIN-630 (updateWatchedAt/updateTmdbStatus zero test
+       coverage), BIN-631 (flaky sign-out-latch regression test), BIN-640 (addedAt-absent
+       never self-heals — state the real cost: pins to top of Bibliotek sort, counts forever
+       in the 30-day counter, no repair), BIN-642 (dead listener → app-wide silent permanent
+       loading state) — are ACCEPTANCE CRITERIA for this batch, not separate tickets. Do not
+       re-file them.
+    3. Out of scope, must NOT be touched: `QuickRateModal.tsx`, `OnboardingFlow.tsx`, the CSV
+       importer (BIN-643), and the `addItem`/`updateStatus` rewatchCount asymmetry (decided
+       separately, BIN-629 — already resolved by BIN-641's shipped "Sedd igen" shape; don't
+       silently re-open it here).
+    4. **If review cascades again, STOP and hand back to Malin — do not run a 5th round.**
+       This is a hard stop condition, not a suggestion.
+  - Stakeholders: `AuthContext.tsx` + repeated-regression history trips the repo's highStakes
+    regex → requiresPlanMode **true** regardless of per-ticket priority. Route
+    `node docs/org/route.mjs --md src/contexts/WatchlistContext.tsx src/contexts/AuthContext.tsx`
+    before starting; fold any conditions in as further binding acceptance.
+  - Acceptance (BIN-596): both buttons gate their action on `useWatchlist()`'s `loading`,
+    matching CollectionSection/CompanionSection/MoviePageClient's existing pattern; a
+    cold-load "Sedd" tap can no longer land without `watchedAt`; the chosen disabled-state
+    visual is screenshotted and named in the close-out for Malin's sign-off (never auto-Done
+    — this whole batch parks In Review regardless of pass/fail per its Tier).
+  - Acceptance (BIN-598): all remaining mutators (`updateWatchedAt`, `updateRating`,
+    `updateNotes`, `updateProgress`, `updateTmdbStatus`, `setRuntime`, `refreshTmdbFields`,
+    `updateTags`, `removeItem`) read `itemsRef.current`; the "watchedAt counts only when
+    status is sedd" rule has exactly ONE shared implementation; no behavior change to a title
+    page's runtime/streaming-refresh reactivity when the library finishes loading (round-3's
+    regression); BIN-630's two zero-coverage mutators are now tested.
+  - Acceptance (BIN-601): a ref tracks a permanently-failed listener state, cleared on the
+    next successful snapshot; while set, `addedAt` is NOT stamped; the genuine-new-add path
+    (listener healthy) still stamps `addedAt` exactly as today; the in-code comment/warning
+    states the REAL cost (top-of-sort pin, permanent 30-day-counter inclusion, no self-heal —
+    not a softened version); BIN-642's composed dead-listener/loading-state failure is closed
+    or explicitly still open and said so in the close-out.
+  - Acceptance (BIN-617): sign-out resets `visibilityRetriedFor`; the regression test awaits
+    the actual retry-chain promise (not a mock-call race) and is run repeatedly to prove it
+    is not flaky (BIN-631's specific defect) before it's trusted.
+  - Suggested agent: direct (no repo implementation specialist beyond the review-gate agents).
+
+### Batch 2 — auth-consent (1 ticket)
+
+- [ ] **BIN-668** [Tier B, plan-gated] `build-review` — TopbarActions and HomePageClient
+  create an account via Google sign-in without showing the terms/13-years notice first —
+  same consent gap BIN-645 closed for the poster badge, missed because BIN-645's security
+  grep matched `signIn()` but not `onClick={signIn}`.
+  - Files: `src/components/layout/TopbarActions.tsx`, `src/components/pages/HomePageClient.tsx`,
+    reusing `src/lib/nextPath.ts` (read-only — the module BIN-645 already built).
+  - Stakeholders: `auth` label + High priority → requiresPlanMode **true** per formula
+    (single + priority ≤ 2). Same shared helper as BIN-645/669; no new sensitive surface.
+  - Signoff reason (ticket's own words): the homepage button is the primary CTA for signed-out
+    visitors — confirm with Malin how the extra hop (straight to `/login/` instead of an
+    immediate Google popup) affects conversion before it ships broadly. For the poster badge
+    she knowingly accepted that cost; the homepage is a heavier surface.
+  - Acceptance:
+    1. Both `onClick={signIn}` call sites are replaced with `rememberNextPath(...)` +
+       `router.push('/login/')`, identical to BIN-645's shape.
+    2. Keys on `uid` (the auth verdict), never `user` (the Firestore profile) — the exact bug
+       two reviewers caught independently in BIN-645.
+    3. A signed-in user completing Google sign-in from either surface still lands back where
+       they tapped from.
+    4. The homepage CTA's behavior change is called out explicitly for Malin's conversion
+       sign-off in the close-out — this ticket never auto-closes to Done.
+
+### Batch 3 — seo-metadata (1 ticket)
+
+- [ ] **BIN-656** [Tier A, plan-gated] `build` — long-tail film/TV/person pages ship a
+  generic meta description; `buildContentFloor`'s value is wired to the visible paragraph but
+  not to `usePageMeta`, and `??` lets an empty-string TMDB overview through untouched.
+  - Files: `src/components/pages/MoviePageClient.tsx`, `src/components/pages/TVShowPageClient.tsx`,
+    `src/components/pages/PersonPageClient.tsx`, `src/lib/seo/contentFloor.ts` (only if the
+    empty-string fix is centralized there instead of at each call site).
+  - Stakeholders: High priority, single tier per the ticket's own routing → requiresPlanMode
+    **true** per formula (single + priority ≤ 2), though the change itself is a narrow
+    correctness wire-up with no new logic.
+  - Acceptance:
+    1. `MoviePageClient` and `TVShowPageClient` pass `buildContentFloor(...).description` to
+       `usePageMeta` instead of the ad-hoc template string.
+    2. `PersonPageClient` builds its description from `person.biography` behind a length gate
+       (mirroring `MIN_REAL_OVERVIEW`), falling back to the generated form — never the
+       static template that ignores biography entirely.
+    3. An empty-string TMDB `overview`/`biography` is treated the same as missing (not just
+       `null`/`undefined`) at every one of the three call sites.
+    4. Pre-rendered top-N static pages (their own `generateMetadata`) are untouched — this
+       only changes the client-hydrated catch-all shell.
+
+### Batch 4 — infra-hygiene (2 tickets, disjoint files)
+
+- [ ] **BIN-657** [Tier A] `build` — `global-error.tsx` never logs the crash it catches; the
+  one error boundary above `Providers.tsx` (so `initSentry()` hasn't run) is the only one
+  with zero telemetry.
+  - Files: `src/app/global-error.tsx`, `src/lib/sentry.ts` (read to confirm `initSentry`'s
+    signature is safe to call a second time), `src/components/layout/SegmentError.tsx`
+    (reference only, not edited).
+  - Stakeholders: none beyond its own "medium/single" self-declared tier; Medium priority →
+    requiresPlanMode false per formula.
+  - Acceptance:
+    1. A `useEffect` calls `console.error('[app:global]', error)` at minimum.
+    2. `captureError`/Sentry reporting is reached by calling `initSentry()` first if it
+       hasn't run yet (idempotent — verify this against `sentry.ts`, don't assume) — no
+       silent no-op the way today's code has.
+    3. `trackEvent('error_boundary_triggered', { scope: 'global' })` fires, matching
+       `SegmentError`'s pattern.
+    4. No change to what the user sees (the "Något gick fel" markup + reload button).
+
+- [ ] **BIN-585** [Tier A] `build` — `shared-plugin.json`'s `roadmapDocs` points at two
+  deleted files; set to `[]`.
+  - Files: `.claude/shared-plugin.json`.
+  - Stakeholders: none (ticket self-declares "skip"). requiresPlanMode: false.
+  - Acceptance:
+    1. `roadmapDocs` is `[]`.
+    2. Spot-check the rest of the file for other dead paths per the ticket's own suggestion,
+       but don't scope-creep beyond documenting/flagging anything else found — fixing a
+       second unrelated stale path is a separate ticket, not silent scope growth here.
+    3. Commit message states the empty array is deliberate.
+
+### Batch 5 — streaming-progress (1 ticket, already decided)
+
+- [ ] **BIN-615** [Tier A] `build` — `isUserBehindOnAired` still reads "caught up" for a
+  viewer whose own progress marker is a season-0 special while numbered seasons have aired.
+  - Files: `src/hooks/useSubscriptionAdvisor.helpers.ts`, `src/hooks/useSubscriptionAdvisor.test.ts`.
+  - **Malin's decision, 2026-07-29 (comment on BIN-615): narrow fix, NOT a two-track progress
+    model.** Do not rebuild the progress model into two parallel tracks (specials vs numbered
+    seasons) — too large a change for a narrow case. A symmetric fix was already tried once
+    and reverted for breaking a deliberately pinned test
+    (`useSubscriptionAdvisor.test.ts:336`); read why that test is pinned before touching it,
+    and either respect it or justify a change to it in writing — never silently weaken it to
+    turn the suite green.
+  - Stakeholders: none new (already decided). requiresPlanMode: false.
+  - Acceptance:
+    1. A user whose highest-watched marker is a season-0 special, while numbered seasons have
+       since aired, is no longer reported "caught up".
+    2. `highestWatchedPosition` (the writer) and `isUserBehindOnAired` (the reader) still
+       agree on season-0 ranking after the fix — no reintroduced disagreement.
+    3. The pinned test at `useSubscriptionAdvisor.test.ts:336` is either untouched and still
+       green, or its change is justified in writing in the same diff.
+    4. No new `show.seasons`/two-track parameter threaded through the helper's signature.
+
+### Batch 6 — content-curation (1 ticket, already decided)
+
+- [ ] **BIN-580** [Tier A, UI/content] `build-review` — Doctor Who: surface the canonical
+  Season-0 specials TMDB otherwise hides everywhere on the show.
+  - Files: new curated list file (e.g. `src/lib/tv/canonicalSpecials.ts`, mirroring
+    `src/lib/tv/relatedSeries.ts`'s pattern), `src/components/tv/SeasonList.tsx`,
+    `src/lib/tmdb/seasonCompletion.ts` (only where it filters `season_number > 0`).
+  - **Malin's decision, 2026-07-29 (comment on BIN-580): yes, but ONLY for a curated list —
+    Doctor Who (57243) first entry.** Do NOT show Season 0 generally (TMDB's Season 0 is
+    junk for ~95% of shows — trailers, behind-the-scenes, mislabeled clips — which is why it
+    was hidden in the first place). Same hand-curated, display-only, zero-cost pattern as the
+    existing companion-titles/relatedSeries maps. Verify every curated TMDB episode id by
+    hand before it ships — the repo has been burned by unverified curated ids before. The
+    general hide-Season-0 default stays for everything outside the list.
+  - Signoff reason: which ~15 of Doctor Who's 199 Season-0 entries count as canonical is an
+    editorial call — build the section, let Malin confirm the picks before it's Done.
+  - Stakeholders: none beyond her own decision (already the mandate). requiresPlanMode: false.
+  - Acceptance:
+    1. A small, hand-curated allow-list of Season-0 episode ids exists for Doctor Who (57243)
+       only — no heuristic "is this canonical" detection.
+    2. Every curated id is verified against TMDB by hand (not just copied from the ticket's
+       count) — state this was done in the close-out.
+    3. A labelled "Specials" section renders on Doctor Who's title page showing only the
+       curated entries; every other show's Season-0 behavior is byte-identical to today.
+    4. The curated list + section rendering is called out for Malin's editorial sign-off —
+       never auto-Done.
+
+## Already decided by Malin — applied, not re-asked (Phase 1 step 4)
+
+- **BIN-596/598/601/617** — 2026-07-30: build as one coordinated sweep. See Batch 1.
+- **BIN-615** — 2026-07-29: build, narrow fix only. See Batch 5.
+- **BIN-580** — 2026-07-29: build, curated list only. See Batch 6.
+- **BIN-541** (MOTN/RapidAPI quota) — 2026-07-29: blocked. Waits on Malin reading the real
+  quota (daily vs monthly, and the number) off the Nokia API Hub/RapidAPI dashboard. Not
+  re-asked.
+- **BIN-565** (legacy bare-id offers fallback) — 2026-07-29: blocked. Waits on a re-run of
+  the #27 DBA mini-panel with the new counter-argument already written into the ticket,
+  before a fix shape is chosen.
+- **BIN-613** (First Load JS baseline) — 2026-07-29: yes, but as its own standalone job, not
+  inside an unattended sprint (it edits the live `deploy.yml` release gate). Routed
+  elsewhere, not re-asked; not built here.
+- **BIN-590** (password-strength client-only) — 2026-07-29: build a Firebase Auth blocking
+  function mirroring `src/lib/passwordStrength.ts`. Tier C (auth domain) — explicitly must
+  NOT be picked up by an unattended/automatic sprint; needs its own written plan + go-ahead
+  first. Not built here; not re-asked.
+- **BIN-558** (>100 groups truncated) — 2026-07-29: final "let it be — no action now." A real
+  but currently hypothetical ceiling; revisit only when a real account approaches it.
+- **BIN-559** (ensureUserProfile offline-safe) — 2026-07-24/29: leave as an accepted
+  trade-off unless Malin wants a dedicated redesign. Not re-asked.
+- **BIN-547** (logRecapMiss no ceiling) — repeated 2026-07-18 through 2026-07-29: leave
+  parked, pre-launch, zero real users, matches an already-accepted pattern elsewhere.
+- **BIN-555** (createGroup orphan reaper) — 2026-07-29: leave parked, low priority, bundle
+  with future orphan-reaper work if it ever gets attention.
+- **BIN-521** (Bundle-rådgivare nudge) — 2026-07-16 through 2026-07-29: routed to its own
+  `/stakeholder-review` (Monetization + Data/Integrations) before any code. Not re-litigated.
+- **BIN-189** (seasonal challenges) — 2026-07-13: form approved, full Tier-C plan written and
+  4-role panel already approve-with-conditions. **Build window is explicitly "a calm week in
+  Aug/Sept"** — i.e. now-ish, but the ticket's own sizing (new Firestore collection + rules +
+  GDPR wiring + a new route) and "calm week" framing argue against squeezing it into a mixed
+  multi-area sprint batch. Recommend Malin book it as its own dedicated 1–2 day session
+  rather than this run claiming it — the plan and panel sign-off are already banked, so
+  there's no re-litigation needed when she does.
+- **BIN-170** (Binge Wrapped) — 2026-07-13: booked for November, mockup approved, due
+  2026-10-15 (design-round start). Not due yet.
+- **BIN-419** (SEO re-measure) — 2026-07-13: scheduled, one-time cloud routine fires
+  2026-08-28. Not due yet.
+- **BIN-583** (Fas 2 companion recommendations row) — already SPLIT-AND-DEFER, dormant until
+  the curated list grows or usage is measured. Neither has happened.
+- **BIN-609** (fail-closed watchlist read rule) — 2026-07-30: **closed, not built.** BIN-587
+  Option 1 (pending flag + warning + manual/auto retry) is the mitigation in use instead. Not
+  in the open backlog; no action taken.
+
+Excluded silently (standing instructions, no new judgment needed): **BIN-454**/**BIN-402**
+(never flip `mutateEnabled` — ops-gated to ~Nov), **BIN-603** (wait for upstream CVE fix,
+re-check next dependency sweep).
+
+## Folded into Batch 1 as acceptance criteria, not built as separate tickets
+
+Per Malin's 2026-07-30 decision on BIN-596: **BIN-630, BIN-631, BIN-640, BIN-642** are this
+sweep's acceptance criteria, not independent work. Do not re-file or re-select them next
+sprint unless Batch 1 explicitly leaves one open.
+
+## Obsolete (premise gone — grepped against current `main`, not ticket prose)
+
+- **BIN-632** ("BIN-609's +1-read cost claim unverified, code-review at FAIL") — blocking
+  follow-up on BIN-609, which Malin closed 2026-07-30 without building. Nothing left to
+  verify a cost for. Resolving decision: BIN-609's closing comment, 2026-07-30.
+- **BIN-633** ("BIN-609's mandated stakeholder panel never ran") — same resolving decision;
+  BIN-609 isn't shipping, so the panel gate it names is moot.
+- **BIN-635** ("AuthContext comment now lies about the read rule, predates BIN-609") — the
+  premise was that BIN-609 shipped and changed the read rule out from under the comment. It
+  didn't ship. The comment is still accurate today.
+- **BIN-637** ("under BIN-609, a per-title public override can only narrow") — a deviation
+  note about BIN-609's specific design. BIN-609 isn't being built; the deviation it describes
+  doesn't exist on `main`.
+
+## Needs your call (not selected — genuinely her decision, not auto-built, first time flagged)
+
+- **BIN-624** (BIN-618 follow-up: swipe doc-id format guard in `firestore.rules` + re-sync
+  the functions-side `mediaTypeDocId` mirror) — a `firestore.rules` change is a sensitive
+  domain per the working agreement (written plan + go-ahead before code), and this is Low
+  priority. *Recommendation: bundle into a future rules-focused session rather than a
+  routine sprint; not urgent — the client-side fix (BIN-618) already closed the live risk.*
+- **BIN-655** (`addItem` is two functions wearing one name — split bulk path from human path)
+  — real, named tech debt ("cost twice, third time forces the split"), but it's a
+  cross-cutting refactor of the exact file Batch 1 is already touching this same sprint.
+  *Recommendation: worth doing, but only after Batch 1's sweep has landed and stabilized —
+  stacking two big WatchlistContext changes in one sprint is how the last three review
+  rounds happened.*
+- **BIN-664 / BIN-659 / BIN-669** (OnboardingFlow: mediaType-blind duplicate check; silently
+  swallowed write failures; the return path isn't carried through onboarding) — all three
+  land on `OnboardingFlow.tsx`, and BIN-669 in particular touches the same consent-routing
+  surface as this sprint's Batch 2. *Recommendation: real, worth building — but as their own
+  single-file batch next sprint, not stacked alongside this run's already-heaviest item
+  (Batch 1) and the homepage CTA change (Batch 2). Piling two "multiple tickets converge on
+  one file" risk clusters into one run is the pattern that produced the 2026-07-30 split.*
+- **BIN-660** (EventCard nests a real button inside its own Link on the calendar — invalid
+  a11y nesting on the week's primary action) — a real, scoped a11y bug with an obvious
+  correct fix, but not flagged before now; giving it one cycle before auto-building on my own
+  judgment. *Recommendation: build next sprint — no product decision here, just confirming I'm
+  not missing context on why the nesting exists.*
+- **BIN-646** (BIN-618 follow-up: three remaining asymmetries in `resolveTmdbId` — id `0`,
+  the field-branch, the unvalidated write side) — the ticket itself says none is a live
+  escalation (a writer who could exploit these could already write the canonical id
+  directly). *Recommendation: worth closing out for hygiene, but genuinely optional — low
+  urgency, fine to fold into whichever future sprint touches `mediaTypeDocId.ts` next.*
+- **BIN-636** (guard the deliberate client/server `mediaTypeDocId` split with a test while
+  BIN-624 stays open) — a test-only hardening ticket, High priority, but exists purely to
+  guard a gap that only matters if BIN-624 (above, needs-your-call) is delayed a long time.
+  *Recommendation: low cost to build any time; bundle with BIN-624 above rather than as a
+  standalone pick, so the guard and the fix it's guarding land in the same conversation.*
+- **BIN-634** (a stale `/simplify` marker sits next to the live gate markers, describing a
+  previous sprint's run) — trivial file cleanup, but touches `.claude/state/`, machine-read by
+  the commit gate; want a quick sanity check it's safe to delete before including it in an
+  unattended run. *Recommendation: safe, build next sprint — flagging once rather than
+  guessing at gate-file semantics under time pressure this run.*
+- **BIN-468** (seProviderIds dedup + refreshTmdbFields tests) — still deferred, same
+  reasoning as last sprint: touches `WatchlistContext.tsx`, which Batch 1 is rewriting this
+  run, and it has a documented stalling history. *Recommendation: pick up on its own once
+  Batch 1 has actually landed and stabilized — not just "this sprint attempted it" again.*
+
+## Obsolete-adjacent, not re-verified this run
+
+None beyond the BIN-609 cluster above — everything else in the fetched backlog either has a
+recorded decision, was selected, or is freshly flagged for the first time.
+
+## Post-sprint steps (Phase 3, mandatory)
+
+1. Full `npm run typecheck` + `npm run lint` before commit; fix anything fatal.
+2. File follow-up tickets for anything Batch 1 discovers beyond BIN-630/631/640/642 (already
+   folded in) — do not silently expand this sweep's scope; a genuinely new finding gets its
+   own ticket per the follow-up rule.
+3. Commit per the reviewGates table. Batch 1 in particular: read every reviewer's verdict
+   text, not just marker existence — this exact surface has produced forged/scope-limited
+   markers before (lessons digest).
+4. Push (triggers hosting deploy). No `firestore.rules`/functions changes in this sprint —
+   nothing needs a manual deploy step.
+5. Transition: Tier A `build` with all acceptance criteria passing → Done (BIN-585, BIN-657,
+   BIN-656, BIN-615). Any `build-review` ticket, or anything Tier B/C, or any failed/unclear
+   criterion → **In Review** + plain-language notify, never auto-Done — this covers all of
+   Batch 1 (BIN-596/598/601/617), BIN-668, and BIN-580 unconditionally, per their own
+   dispositions above.
+6. If Batch 1 review cascades into a second round finding NEW regressions (not just the
+   pre-folded BIN-630/631/640/642 criteria): STOP per Malin's binding condition #4. Do not
+   attempt a fifth round. Park with a clear account of what's clean vs entangled, same shape
+   as the 2026-07-30 split decision, and surface it to her directly.
+7. Fold the deviation log back per the skill (Linear ticket / lessons digest / archives as
+   appropriate).
+
+---
+
+# ARCHIVE
+
 ## SPRINT 2026-07-29 — Selection (Phase 1)
 
 Linear MCP: connected. Scoped to project "Binge" inside shared team "Binge" for every
@@ -622,3 +959,225 @@ before spotting it. Clear that directory between mutation runs or the evidence l
 Assumption: gating the login redirect on `uid` cannot strand anyone — an unloadable
 profile yields `needsOnboarding: false`, which routes to the remembered path or `/`,
 both of which are better than the login form they are stuck on today.
+
+---
+
+# SALVAGE PLAN 2026-08-02 — recover the 2026-08-01 sprint's verified work
+
+**Approved by Malin in-session ("kör"), after the written proposal she read in the
+2026-08-01 report.** The sprint ended `ship-incomplete`: batch 0 failed outcome
+verification and could not be reverse-applied, leaving a mixed tree that nothing could
+honestly commit. This plan removes ONLY batch 0 and ships the rest.
+
+## Premise, measured before acting
+
+`git apply --stat` on all six batch patches: batch 0's eight files are touched by NO
+other batch. Zero overlap → a clean seam exists, so no verified work has to be discarded
+to remove the failed work. The five files present in the tree but absent from every batch
+patch (`MoviePageClient.test.tsx`, `TVShowPageClient.test.tsx`, `sentry.test.ts`,
+`nextPath.ts`, `nextPath.test.ts`) are review-round fixes belonging to surviving batches —
+they stay.
+
+## Steps
+
+- [x] Snapshot index + worktree + all four markers to the session scratchpad
+      (`pre-salvage/`), so nothing in this operation is unrecoverable.
+- [x] Delete all four review markers. The run produced four self-certification security
+      warnings; the markers on disk carry PASS verdicts written by the same agents that
+      wrote the code, with fresh mtimes the commit gate would honour. Every gate is
+      re-earned from scratch by a real reviewer below.
+- [x] `git restore --source=HEAD --staged --worktree` the eight batch-0 files
+      (AuthContext{,.test}, WatchlistContext{,.test}, StatusButton{,.test},
+      QuickAddButton{,.test}). BIN-596/598/601/617 return to Todo; their code survives in
+      `.claude/state/sprint-patches/batch-0.patch` for a rebuild.
+- [ ] **BIN-686 (legal, blocks BIN-656)** — `PersonPageClient.tsx`: drop `wikiBio?.text`
+      from the meta-description source. The Wikipedia bio is CC BY-SA and must carry
+      attribution wherever it travels; the visible body renders a "Biografi från <källa>"
+      credit link, a `<meta>` description and the Google snippet cut from it cannot. Only
+      TMDB's own Swedish biography feeds the snippet; people without one fall back to the
+      fact-based line (role + birth year + birth place), which is still unique per person.
+      One file, one expression + its dep array, plus the WHY comment.
+- [ ] `npm run typecheck` and the full `npm test` suite green on the reduced tree.
+- [ ] All four reviewers run for real on the final staged diff — including the security
+      reviewer on BIN-668's consent-routing surface, which is BIN-685's blocking condition.
+- [ ] One commit, push, await deploy, purge Cloudflare.
+
+## Acceptance criteria
+
+- HEAD moves; `git status` clean afterwards apart from `tasks/`.
+- Five tickets live: BIN-615, BIN-656, BIN-657, BIN-668, BIN-580.
+- BIN-596/598/601/617/585 remain Todo, none silently dropped.
+- BIN-686 closed by the fix above; BIN-685 closed by a real security marker naming
+  `nextPath.ts` at its CURRENT blob, not the old one.
+- No marker written by an agent that authored the code it certifies.
+
+## Open questions
+
+No architecture-changing unknowns. Assumptions, stated explicitly:
+- Removing batch 0 cannot break a surviving batch, because no surviving batch imports a
+  symbol batch 0 added — verified by the zero-overlap measurement above and re-checked by
+  typecheck + the full test suite before commit.
+- The BIN-601/BIN-640 conflict the sprint surfaced is NOT resolved here. It belongs to the
+  batch-0 rebuild and is Malin's call; it is being discussed with her separately and is
+  deliberately not a blocker for shipping the five verified tickets.
+
+---
+
+# PLAN 2026-08-02 — BIN-601 rebuilt so it also closes BIN-640
+
+**Malin's call, in-session:** rebuild BIN-601 so it does not create BIN-640. Her earlier
+decisions had these in conflict — BIN-601 approved, BIN-640 excluded — while BIN-601's
+fix as written *causes* BIN-640. Option A of three offered; she picked it.
+
+Router: `node docs/org/route.mjs src/contexts/WatchlistContext.tsx src/lib/firebase/utils.ts`
+→ tier **medium**, panel [14 Software Architect]. One blind critique before implementation;
+its conditions become binding acceptance criteria below.
+
+## The two bugs, and why they are one bug
+
+At HEAD the watchlist `onSnapshot` has **no error callback**. If the listener dies:
+`loading` hangs true, `itemsRef` stays empty, so `currentForRating` is `undefined` for
+every title and every status change looks like a genuine new add — `addItem` rewrites
+`addedAt` with `serverTimestamp()`, silently re-dating a title that may be years old.
+That is BIN-601, and it is live today.
+
+BIN-601's prescribed fix — detect the failure, stop stamping — trades it for BIN-640:
+a genuinely new doc then lands with **no** `addedAt`, and `toDate()`
+(`src/lib/firebase/utils.ts:12`) ends in `return new Date()`, so a missing value reads as
+**added now, on every load, forever**. It tops Bibliotek's "Tillagd" sort and sits
+permanently inside `within30Days(item.addedAt)` — the counter on the user's PUBLIC
+profile (`stats.ts:61` → `ProfileStatsPanel`'s "Senaste 30 dagarna → Tillagda"). It never
+self-repairs: `addItem` is the only writer of `addedAt` and stamps only when the title is
+absent from `itemsRef`, so once the doc exists nothing fills the field in.
+
+Both branches are unrecoverable. The way out is not to pick one — it is to make the
+absent case harmless and self-healing.
+
+## Design
+
+**1. Detect the failure.** Give `onSnapshot` an error callback: set `listenerFailedRef`,
+settle `loading` (so the app is not stuck in a permanent loading state — that is BIN-642's
+symptom too). Clear the ref on the next successful snapshot. `firstSnapshotSettledRef`
+stays **false**: we still do not know the library's contents, and the other three stamps
+must keep treating it as unknown. This is the first half of BIN-596; BIN-596's
+button-gating half stays open and is NOT built here.
+
+**2. Stop destroying real dates (BIN-601).** Gate the `addedAt` stamp on
+`!currentForRating && !listenerFailedRef.current`. During a failed listener we never
+stamp, so a pre-existing doc keeps its real date.
+
+**3. Make the absent date harmless and self-healing (BIN-640) — with no billed read.**
+- **3a, read side.** A missing `addedAt` resolves to the doc's own `updatedAt` instead of
+  `new Date()`. Same lazy-field pattern `ratedAt` already uses two lines above it
+  ("old docs have none; consumers fall back to updatedAt"). This kills the symptom
+  everywhere at once: library sort, `backlogResurface`, taste/stats, and the public
+  profile counter. Three mappers read this field — `WatchlistContext.docToItem`,
+  `usePublicProfile`, `groups.ts:794` — so it goes in ONE pure helper they all call,
+  not three copies.
+- **3b, write side.** When a healthy snapshot lands, any doc missing `addedAt` gets one
+  merge-write setting `addedAt` to its own `updatedAt`. The data comes from the snapshot
+  we already received, so this costs **zero extra reads**; precedent is
+  `nextAirReadRepair`. Bounded: at most one write per affected doc, once ever, because
+  the field then exists. Writes `addedAt` ONLY — never `updatedAt`, which would re-date
+  the row.
+
+**Why not BIN-640's own prescription (a `getDoc` on the failure path).** Two reasons, and
+the second is decisive. It bills a read per add against the 25 SEK/mån cap. And it runs
+exactly where reads are already failing — the listener died because App Check, a token
+that cannot refresh, or a rules regression rejected this client, and a `getDoc` from that
+same client will usually fail too, forcing the same guess with an extra cost attached.
+The repair path gets the same information for free, from a snapshot we already receive.
+
+## Acceptance criteria
+
+- A dead listener + a status change on a title that already exists → `addedAt` unchanged
+  in the write payload. Test drives the error callback, not a mocked ref.
+- A dead listener + a status change on a genuinely new title → doc written without
+  `addedAt`; the item then reads as its `updatedAt`, NOT as now.
+- A healthy snapshot containing a doc with no `addedAt` → exactly one repair write, for
+  that doc, carrying `addedAt` only. A second snapshot writes nothing.
+- The repair never runs for a previous account's rows on a same-session uid switch
+  (guard on `itemsUidRef`, like the notes migration).
+- `within30Days` no longer counts an `addedAt`-less title as added today, proven against
+  the public-profile path, not only the owner's.
+- Every new guard is mutation-proven: each sub-condition has a test that fails alone when
+  that condition is inverted. Cache cleared before every run.
+- BIN-596 (button gating), BIN-598 (WatchlistContext leg) and BIN-617 stay open and
+  untouched; the commit says so.
+
+## Open questions
+
+No architecture-changing unknowns. Assumptions, stated:
+- `updatedAt` is the honest proxy for a missing `addedAt`: for a doc created during the
+  failed window it IS approximately the add time, and for a pre-existing doc `addedAt`
+  is never missing in the first place, so the proxy is only ever applied where it is right.
+- The residual is accepted and small: between a doc being written without `addedAt` and
+  the owner's next healthy snapshot, a viewer of their public profile sees that title in
+  the 30-day counter dated by `updatedAt` rather than a true add date. It self-heals; the
+  present behaviour does not.
+
+## Software Architect (#14) blind critique — folded in, 2026-08-02
+
+Verdict: diagnosis right, mechanism underspecified. 1 blocking, 3 conditions, 4 notes.
+No accepted-deviation covers this ground.
+
+**BLOCKING (plan changed).** Step 3b said "when a healthy snapshot lands", which reads as
+a write INSIDE the `onSnapshot` callback. Both repair precedents in this very file do the
+opposite, and for a reason the plan had no answer to: "the field then exists" is a
+POST-write fact, not a pre-write guard. A repair write that FAILS (permission-denied,
+offline) never makes the field exist — and snapshot events fire on any unrelated doc
+change in the collection, so every later event re-attempts it. That is a retry storm.
+
+Revised 3b, matching `nextAirReadRepair` (`useCalendar.ts:154-160`, own debounced effect,
+session Set marked BEFORE the write, chunked `writeBatch`) and the notes migration in this
+same file (`WatchlistContext.tsx:332-372`, separate effect keyed on `items`, in-progress
+ref marked before the async write, explicitly "echo-proof"):
+
+- The repair lives in its **own effect keyed on `items`**, never inside `onSnapshot`.
+- It carries its **own in-progress ref**, marked BEFORE the write, mirroring
+  `migratedNotesRef` — so a failed write cannot be retried on every subsequent snapshot.
+- It writes via a **chunked `writeBatch`**, not per-doc `setDoc`. A legacy account
+  recovering from an outage can have many affected docs; individual writes are the fan-out
+  `nextAirReadRepair`'s 450-chunking and `usePublicProfile`'s 500-cap exist to avoid.
+
+**CONDITIONS (now binding acceptance criteria).**
+- Two tabs on a stale snapshot both queue a write for the same doc. Same value, so
+  harmless, but "at most one write ever" was false as stated. The session ref bounds it
+  per tab; add an explicit two-tab test.
+- `updatedAt` as proxy is **exact** in the single-touch case — stronger than the plan's
+  "approximately" — but drifts with a SECOND touch during the same outage (add, then mark
+  seen: the repair stamps the last touch). Drift scales with outage length, not "small".
+  Add a multi-touch-during-outage test and say this plainly rather than under-claiming.
+- Batch the writes (as above).
+
+**NOTES accepted.**
+- `toDate()` stays untouched — ~20 callers all trust "field is always present", and
+  changing its default is the real landmine. Keeping the shared helper over three inline
+  ternaries, argued not asserted: three call sites is where a copied ternary starts
+  drifting, and a named helper is unit-testable once instead of three times.
+- GDPR export reads RAW Firestore fields (`userData.ts:50`), not `docToItem` — so it never
+  sees the read-side fallback. Before repair it honestly shows no `addedAt`; after repair
+  it shows a permanent timestamp indistinguishable from a genuine one, which the
+  multi-touch case can make provably wrong. Recorded in Open questions below.
+- BIN-596 half-build: no objection. `listenerFailedRef` is not orphaned — the `addedAt`
+  gate consumes it in this same change. Splitting failure-DETECTION from button-GATING is
+  a coherent boundary, and is not the four-ticket-batch failure mode of 2026-08-01.
+
+**Open question added by the critique:** the repair makes a possibly-wrong `addedAt`
+permanent and indistinguishable in the GDPR export. Accepted: the alternative is leaving
+the field absent forever, which is what makes the public 30-day counter wrong today. The
+proxy is exact in the common case and bounded by outage length in the rare one.
+
+### Correction made during implementation, 2026-08-02
+
+The plan said THREE mappers read `addedAt`. It is TWO. `groups.ts:794` maps the `addedAt`
+of a **group** watchlist doc (`groups/{id}/watchlist`, with `addedBy`/`memberRatings`),
+written by `groups.ts:510` and never touched by `addItem` — a different collection, not
+affected by this bug and deliberately left alone. The shared helper covers
+`WatchlistContext.docToItem` and `usePublicProfile.mapWatchlistDoc` only.
+
+Also added beyond the plan, because the repair must never invent data:
+`addedAtIsRepairable` requires an `updatedAt` to copy. A doc missing BOTH dates has no
+honest value available, so it is left alone rather than having `resolveAddedAt`'s "now"
+guess written back into Firestore as if it were fact — which the GDPR export could not
+then distinguish from a real add date.

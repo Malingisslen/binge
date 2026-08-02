@@ -1,10 +1,16 @@
 import type { MediaType, WatchStatus, WatchlistItem } from '@/types';
 
-/** Filled by the context, never by a caller. `notes` is here because `addItem`
- *  refuses to write it at all — notes live in the owner-only `watchlistNotes`
- *  subcollection (BIN-505), so accepting one would be a lie. */
+/** Not acceptable from a caller. Most are filled by the context; two are here
+ *  because `addItem` refuses to write them at all:
+ *   - `notes` — notes live in the owner-only `watchlistNotes` subcollection
+ *     (BIN-505), so accepting one would be a lie.
+ *   - `addedAtIsFallback` (BIN-640) — derived at READ time from whether the doc
+ *     had a stored `addedAt`; it is never persisted. Listing it here is what stops
+ *     `Carryable` from structurally admitting it onto `WatchlistAddPayload`, where
+ *     it would ride into the merge-write and fail the whole thing against
+ *     firestore.rules' `hasOnly` allowlist. That is the failure `notes` caused. */
 type ServerOwned =
-  | 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'
+  | 'addedAt' | 'addedAtIsFallback' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'
   | 'providersCheckedAt' | 'visibility' | 'notes';
 
 /** Identity + display fields. Every call knows these, so they are always written. */

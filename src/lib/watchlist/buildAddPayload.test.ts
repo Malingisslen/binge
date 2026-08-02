@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWatchlistAddPayload } from './buildAddPayload';
+import { buildWatchlistAddPayload, type WatchlistAddPayload } from './buildAddPayload';
 import type { WatchlistItem } from '@/types';
 
 const base = {
@@ -136,5 +136,33 @@ describe('buildWatchlistAddPayload', () => {
     });
     expect(withEmptyArrays.providers).toEqual([]);
     expect(withEmptyArrays.genreIds).toEqual([]);
+  });
+});
+
+// BIN-640 — a compile-time pin, not a runtime one.
+//
+// `addedAtIsFallback` is derived at READ time (did the doc have a stored
+// `addedAt`?) and is never persisted. It lives on `WatchlistItem`, and
+// `WatchlistAddPayload` is derived FROM `WatchlistItem`, so without an explicit
+// exclusion the payload type would structurally admit it — and a stray key in the
+// merge-write fails the WHOLE write against firestore.rules' `hasOnly` allowlist,
+// which is exactly what `notes` once did.
+//
+// A runtime test cannot catch this: nothing sets the field today. Only the type
+// can, so this asserts the type rejects it. If the `ts-expect-error` ever goes
+// unused, tsc fails — which is the alarm.
+describe('WatchlistAddPayload — never carries read-derived fields (BIN-640)', () => {
+  it('rejects addedAtIsFallback at the type level', () => {
+    const payload: WatchlistAddPayload = {
+      tmdbId: 1,
+      mediaType: 'movie',
+      status: 'sedd',
+      title: 'X',
+      posterPath: null,
+      releaseYear: null,
+      // @ts-expect-error addedAtIsFallback must not be assignable to the payload
+      addedAtIsFallback: true,
+    };
+    expect(payload.tmdbId).toBe(1);
   });
 });

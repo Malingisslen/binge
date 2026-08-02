@@ -57,8 +57,12 @@ let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () =
 // BIN-505: third subscription — per-title notes (watchlistNotes). Routed separately
 // so it doesn't clobber the watchlist items callback.
 let notesSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
+// BIN-601: the watchlist listener's terminal-error callback.
+let snapshotErrorCallback: (() => void) | null = null;
 
 const setDoc = vi.fn(async (..._args: unknown[]) => {});
+// BIN-640: the batch commit, as its own spy so a test can make it reject.
+const batchCommit = vi.fn(async () => {});
 const deleteDoc = vi.fn(async (..._args: unknown[]) => {});
 
 vi.mock('@/lib/firebase/db', () => ({
@@ -69,6 +73,11 @@ vi.mock('@/lib/firebase/db', () => ({
       onSnapshot: (
         ref: { _path?: string },
         cb: (snap: { size: number; docs: { data: () => Record<string, unknown> }[] }) => void,
+        // BIN-601: the watchlist listen now takes an ERROR callback too. Captured
+        // so tests can drive a terminal listen failure for real, instead of poking
+        // the ref the production code reads — a mocked ref would pass even if the
+        // callback were never wired up, which is the whole bug.
+        onError?: () => void,
       ) => {
         if ((ref?._path ?? '').endsWith('watchlistTags')) {
           tagsSnapshotCallback = cb as typeof tagsSnapshotCallback;
@@ -76,6 +85,7 @@ vi.mock('@/lib/firebase/db', () => ({
           notesSnapshotCallback = cb as typeof notesSnapshotCallback;
         } else {
           snapshotCallback = cb;
+          snapshotErrorCallback = onError ?? null;
         }
         return () => {};
       },
@@ -95,7 +105,12 @@ vi.mock('@/lib/firebase/db', () => ({
       set: (ref: unknown, data: unknown) => setDoc(ref, data),
       update: (ref: unknown, data: unknown) => setDoc(ref, data),
       delete: (ref: unknown) => deleteDoc(ref),
-      commit: async () => {},
+      // BIN-640: commit is its OWN spy so a test can make the batch FAIL. It used
+      // to be a bare `async () => {}`, which meant no test could tell "the dedup
+      // ref is marked before the write" from "marked after a successful commit" —
+      // and the second is the retry storm this design was blocked on. A rejection
+      // reaches production's `try { await batch.commit(); } catch {}`.
+      commit: () => batchCommit(),
     }),
     deleteField: () => 'DELETE_FIELD',
     serverTimestamp: () => 'ts',
@@ -191,6 +206,9 @@ beforeEach(() => {
   snapshotCallback = null;
   tagsSnapshotCallback = null;
   notesSnapshotCallback = null;
+  snapshotErrorCallback = null;
+  batchCommit.mockClear();
+  batchCommit.mockImplementation(async () => {});
   authState.uid = 'u1';
   authState.user = { defaultVisibility: 'private' };
 });
@@ -1285,5 +1303,213 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     expect(setDoc).toHaveBeenCalledTimes(2);
     const paths = setDoc.mock.calls.map(c => (c[0] as { _path: string })._path).sort();
     expect(paths).toEqual(['users/u1/watchlist/movie_100', 'users/u1/watchlist/tv_100']);
+  });
+});
+
+// BIN-601 + BIN-640 — a terminally failed watchlist listener.
+//
+// BIN-601: with the listener dead, `itemsRef` is empty, so every status change
+// looks like a genuine new add and rewrites `addedAt` — silently re-dating a
+// title that may be years old. Unrecoverable.
+//
+// BIN-640: simply not stamping trades that for a doc with NO addedAt, which
+// `toDate()` reported as "added now" on every load, forever — top of Bibliotek's
+// "Tillagd" sort and permanently inside the PUBLIC profile's 30-day counter. Also
+// unrecoverable, because addItem is the only writer of the field.
+//
+// These drive the real error callback the provider registers. Poking a ref would
+// pass even if the callback were never wired up, which is precisely the defect.
+describe('WatchlistContext — dead listener: addedAt is neither destroyed nor faked (BIN-601/640)', () => {
+  async function mount() {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+  }
+
+  it('registers an error callback on the watchlist listen at all', () => {
+    mount();
+    // The premise every other test in this block rests on. Without it the
+    // provider hangs in `loading` forever and never learns the listener died.
+    expect(snapshotErrorCallback).toBeTypeOf('function');
+  });
+
+  it('does NOT rewrite addedAt on a re-mark once the listener has failed', async () => {
+    mount();
+    await act(async () => { snapshotErrorCallback!(); });
+
+    // The user re-marks a title that has been in their library for years. The
+    // library is invisible to us, so this looks exactly like a new add.
+    await act(async () => { await addItemRef!(newTitle(42)); });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('addedAt');
+  });
+
+  it('still stamps addedAt during an ordinary cold load — a dead listener is not an empty library', async () => {
+    mount();
+    // No error, no snapshot yet: the genuine-new-add path must keep working, or
+    // every title added before the first snapshot lands with no date at all.
+    await act(async () => { await addItemRef!(newTitle(42)); });
+
+    const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.addedAt).toBe('ts');
+  });
+
+  it('resumes stamping once a snapshot proves the listener recovered', async () => {
+    mount();
+    await act(async () => { snapshotErrorCallback!(); });
+    await act(async () => { snapshotCallback!(snap([])); });
+    setDoc.mockClear();
+
+    await act(async () => { await addItemRef!(newTitle(42)); });
+
+    const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.addedAt).toBe('ts');
+  });
+
+  it('repairs a doc that has no stored addedAt, writing ONLY addedAt', async () => {
+    mount();
+    // A title added during an earlier outage: updatedAt present, addedAt absent.
+    const updated = new Date('2025-11-20T18:30:00Z');
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: updated })]));
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('users/u1/watchlist/tv_7');
+    // addedAt ONLY. An updatedAt here would surface a system repair as fake user
+    // activity at the top of every follower's feed (feed queries order by it).
+    expect(payload).toEqual({ addedAt: updated });
+  });
+
+  it('leaves a doc that already has addedAt completely alone', async () => {
+    mount();
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({
+        tmdbId: 7,
+        addedAt: new Date('2024-03-01T09:00:00Z'),
+        updatedAt: new Date('2025-11-20T18:30:00Z'),
+      })]));
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('never repairs twice, even when the write failed and the field is still missing', async () => {
+    // The guard has to be a session ref marked BEFORE the write, not "the field
+    // exists now" — a failed write never makes it exist, and snapshot events fire
+    // on ANY change in the collection, so the post-write reading is a retry storm.
+    //
+    // The failure is injected at COMMIT, which is the only place it is real: the
+    // batch's own commit is what production awaits and catches. Rejecting the
+    // per-doc spy instead would leave commit resolving, and the test would pass
+    // against a version that marked the ref only after a successful write.
+    batchCommit.mockRejectedValueOnce(new Error('permission-denied'));
+    mount();
+    const updated = new Date('2025-11-20T18:30:00Z');
+    const stillMissing = snap([seedDoc({ tmdbId: 7, updatedAt: updated })]);
+
+    await act(async () => { snapshotCallback!(stillMissing); });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // An unrelated title changes; the same addedAt-less doc is in the snapshot.
+    await act(async () => {
+      snapshotCallback!(snap([
+        seedDoc({ tmdbId: 7, updatedAt: updated }),
+        seedDoc({ tmdbId: 8, addedAt: updated, updatedAt: updated }),
+      ]));
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not repair a previous account\'s rows on a same-session uid switch', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    const updated = new Date('2025-11-20T18:30:00Z');
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: updated })]));
+    });
+    setDoc.mockClear();
+
+    // A→B switch: uid flips but B's snapshot has NOT landed, so `items` still
+    // holds A's rows — and the per-uid dedup set was just reset, making them
+    // eligible again. Without the guard the repair writes A's dates under
+    // users/u2, the same cross-account hazard the notes migration guards against.
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(setDoc).not.toHaveBeenCalled();
+
+    // Positive control: once B's OWN snapshot lands the repair runs for B. The
+    // guard defers; it never dead-locks the new account.
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 60, updatedAt: updated })]));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect((setDoc.mock.calls as [{ _path: string }][]).map(c => c[0]._path))
+      .toEqual(['users/u2/watchlist/tv_60']);
+  });
+
+  it('does NOT repair the local echo of an ordinary add — the hottest path in the app', async () => {
+    // Firestore's latency-compensated local snapshot reports a still-pending
+    // serverTimestamp() as null, so the echo of a genuine new add arrives as
+    // { addedAt: null, updatedAt: null } — the both-missing shape. If that looked
+    // repairable, EVERY add by EVERY user would fire an extra billed write
+    // carrying a client-clock "now", racing the server timestamp it overwrites.
+    // The `updatedAt != null` term in addedAtIsRepairable is what prevents it, and
+    // this is the test that stops someone deleting it as dead weight.
+    mount();
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, addedAt: null, updatedAt: null })]));
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('a second tab repairs independently — the bound is per session, not global', async () => {
+    // Honest statement of the invariant: the dedup ref is per provider instance,
+    // so two tabs holding the same stale snapshot each queue a write. Same value,
+    // so harmless — but "exactly one write ever" would be a false claim, and a
+    // future reader deserves the real one.
+    const updated = new Date('2025-11-20T18:30:00Z');
+    const tabA = render(<WatchlistProvider><Harness /></WatchlistProvider>);
+    await act(async () => { snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: updated })])); });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // A second tab mounts its own provider, with its own dedup set, and sees the
+    // same not-yet-repaired doc.
+    render(<WatchlistProvider><Harness /></WatchlistProvider>);
+    await act(async () => { snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: updated })])); });
+
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    expect(setDoc.mock.calls[1][1]).toEqual({ addedAt: updated });
+    tabA.unmount();
+  });
+
+  it('repairs a title touched TWICE during one outage to its LAST touch, not to now', async () => {
+    // The honest cost of the updatedAt proxy: added, then marked seen, both while
+    // the listener was down. The repair can only see the last write. Drift is
+    // bounded by how long the outage lasted — stated rather than hidden.
+    mount();
+    const secondTouch = new Date('2025-11-25T08:00:00Z');
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: secondTouch })]));
+    });
+
+    const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.addedAt).toEqual(secondTouch);
   });
 });
