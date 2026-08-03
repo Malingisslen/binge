@@ -49,63 +49,92 @@ export default function EventCard({ entry, isTonight = false }: Props) {
     ? `${entry.title} · digital release`
     : `${entry.title} · ${entry.episodeCode}`;
 
-  const handleToggle = async (e: React.MouseEvent) => {
+  const handleToggle = async () => {
     if (entry.kind !== 'episode') return;
-    e.preventDefault();
-    e.stopPropagation();
     await markEpisodeWatched(entry.season, entry.episode, !watched);
   };
 
+  // A11y/HTML validity: the "markera sedd"-toggle is a SIBLING of the Link, never
+  // nested inside it — interactive content inside an <a> is invalid and made the
+  // toggle need a preventDefault/stopPropagation workaround to stop the card from
+  // navigating. Outside the anchor, a click on the button simply isn't a click on
+  // the link, so no event surgery is needed.
+  //
+  // The Link keeps the card's whole clickable surface (still + text) and carries
+  // the flex-column layout `.ev` used to own; the footer row below re-creates the
+  // exact spacing the toggle had while it lived inside `.body` (8px above it,
+  // 12px under it), so nothing moves on screen.
+  //
+  // ONLY the toggle moves out. A movie card's "vill se" is a plain span with
+  // nothing focusable in it, so hoisting it too would cost ~27px of navigable
+  // card surface (and flip that strip's cursor from pointer to default) for no
+  // a11y gain — it stays inside the anchor, with the spacing it always had.
+  const footerStyle = { padding: '0 12px 12px', cursor: 'default' } as const;
+  const footerLabelStyle = { fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.04 } as const;
+
   return (
-    <Link
-      href={href}
-      className={`ev${isTonight ? ' is-tonight' : ''}${watched ? ' is-watched' : ''}`}
-      aria-label={ariaLabel}
-    >
-      <div className={`px duo-${tone}`}>
-        {still ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={still} alt="" loading="lazy" decoding="async" width={500} height={281} />
-        ) : null}
-        {badge && <span className="badge">{badge}</span>}
-      </div>
-      <div className="body">
-        <div className="ttl">{entry.title}</div>
-        <div className="meta">
-          {metaLine}
-          {entry.provider ? <> · <span className="ch">{entry.provider}</span></> : null}
+    <div className={`ev${isTonight ? ' is-tonight' : ''}${watched ? ' is-watched' : ''}`}>
+      {/* The negative focus-ring offset is load-bearing, not decoration: the card root clips
+          its children (`overflow: hidden`, which is what rounds the still's top corners),
+          and the global `:focus-visible` ring in globals.css is drawn 2px OUTSIDE the
+          border box. Now that the focusable element is this inner anchor rather than the
+          card root, an outward ring would be clipped away on three sides and survive as a
+          stray line over the footer. Drawing the same ring inward keeps it whole. */}
+      <Link
+        href={href}
+        className="flex flex-1 flex-col no-underline text-inherit focus-visible:[outline-offset:-2px]"
+        aria-label={ariaLabel}
+      >
+        <div className={`px duo-${tone}`}>
+          {still ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={still} alt="" loading="lazy" decoding="async" width={500} height={281} />
+          ) : null}
+          {badge && <span className="badge">{badge}</span>}
         </div>
-        {headline && (
-          <div className="syn">
-            <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>{headline}</strong>
-            {overview ? ` — ${overview}` : ''}
+        <div className="body" style={showToggle ? { paddingBottom: 8 } : undefined}>
+          <div className="ttl">{entry.title}</div>
+          <div className="meta">
+            {metaLine}
+            {entry.provider ? <> · <span className="ch">{entry.provider}</span></> : null}
           </div>
-        )}
-        {!headline && overview && (
-          <div className="syn">{overview}</div>
-        )}
-        {showToggle ? (
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center' }}>
-            <button
-              type="button"
-              onClick={handleToggle}
-              className={`ev-toggle${watched ? ' is-on' : ''}`}
-              aria-pressed={watched}
-              aria-label={watched ? 'Markera osedd' : 'Markera sedd'}
-              title={watched ? 'Markera osedd' : 'Markera sedd'}
-            />
-            <span style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
-              {watched ? 'sett' : 'markera sedd'}
-            </span>
-          </div>
-        ) : (
-          <div style={{ marginTop: 4 }}>
-            <span style={{ fontSize: 10.5, color: 'var(--ink-3)', letterSpacing: 0.04 }}>
-              vill se
-            </span>
-          </div>
-        )}
-      </div>
-    </Link>
+          {headline && (
+            <div className="syn">
+              <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>{headline}</strong>
+              {overview ? ` — ${overview}` : ''}
+            </div>
+          )}
+          {!headline && overview && (
+            <div className="syn">{overview}</div>
+          )}
+          {!showToggle && (
+            <div style={{ marginTop: 4 }}>
+              <span style={footerLabelStyle}>vill se</span>
+            </div>
+          )}
+        </div>
+      </Link>
+      {showToggle && (
+        <div style={{ ...footerStyle, display: 'flex', alignItems: 'center' }}>
+          {/* The text is INSIDE the button, not beside it. While the toggle lived in the
+              anchor its label was a navigation target; as a sibling span it would be a
+              dead zone next to a 14px hit area. As button content it labels the control
+              (so no aria-label — it would break "label in name" in the watched state) and
+              enlarges the tap target. The square is now a decorative span; `.ev-toggle`'s
+              own styles are unchanged, and `block` is belt-and-braces — a flex item is
+              blockified anyway, so it only matters if the button stops being flex. */}
+          <button
+            type="button"
+            onClick={handleToggle}
+            aria-pressed={watched}
+            className="flex items-center"
+            style={footerLabelStyle}
+          >
+            <span className={`ev-toggle block${watched ? ' is-on' : ''}`} aria-hidden="true" />
+            {watched ? 'sett' : 'markera sedd'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
