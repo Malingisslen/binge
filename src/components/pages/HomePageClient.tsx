@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import SearchDropdown from '@/components/search/SearchDropdown';
 import { useSearchBox } from '@/hooks/useSearchBox';
@@ -28,7 +27,7 @@ import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { pickFocalEntry, focalEntryKey } from '@/components/home/focalPick';
 import { seedCalendarEntries } from '@/lib/calendar/seedEntries';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import { rememberNextPath } from '@/lib/nextPath';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import type { TMDBSearchResult } from '@/types';
 
 // LandingPage tar trending-sektionen som ReactNode-prop istället för en
@@ -38,7 +37,7 @@ import type { TMDBSearchResult } from '@/types';
 // <LandingPageTrending> (live-fetch med seed-fallback). Två syskon-
 // komponenter, aldrig en villkorlig hook.
 function LandingPage({ trending }: { trending?: React.ReactNode }) {
-  const router = useRouter();
+  const goToLogin = useSignedOutRedirect();
   const { searchQuery, setSearchQuery, debouncedQuery, searchFocused, setSearchFocused, searchRef, clearSearch } = useSearchBox();
 
   return (
@@ -82,17 +81,15 @@ function LandingPage({ trending }: { trending?: React.ReactNode }) {
               // 13-års-notisen live on /login. This hero shows none of them, so
               // signing in from here recorded a consent nobody was asked for.
               //
-              // The return path rides in sessionStorage, not a ?next= param —
-              // see nextPath.ts (a query param travels to Firebase's
-              // Google-hosted auth handler).
+              // The return-path rules live in useSignedOutRedirect — this used
+              // to be a third inline copy of them.
               //
               // Unconditional: LandingPage also renders in the auth-LOADING
               // branch below (the pre-hydration pair), where we do not yet know
               // the verdict. /login is the honest destination either way — an
               // already-signed-in visitor who lands there is redirected straight
               // back out by LoginPage's own uid effect.
-              rememberNextPath(window.location.pathname + window.location.search);
-              router.push('/login/');
+              goToLogin();
             }}
             className="px-5 py-[7px] bg-acc-deep text-white border-none rounded-sm cursor-pointer font-[inherit] text-sm font-semibold mb-8"
           >

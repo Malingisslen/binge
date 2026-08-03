@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Bell, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -11,7 +10,7 @@ import { useMySessions } from '@/hooks/useMySessions';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useSenderProfile } from '@/hooks/useSenderProfile';
 import { getProvider } from '@/lib/tmdb/providers';
-import { rememberNextPath } from '@/lib/nextPath';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import type { FriendRequest } from '@/lib/firebase/friends';
 
 // Right-hand cluster of the new topbar: sessions popover, notifications bell
@@ -21,7 +20,7 @@ import type { FriendRequest } from '@/lib/firebase/friends';
 
 export default function TopbarActions() {
   const { user, uid, loading: authLoading, signOut, markNotificationsSeen } = useAuth();
-  const router = useRouter();
+  const goToLogin = useSignedOutRedirect();
   const {
     notifications, friendRequests, recentPicks,
     unreadCount, friendRequestsCount, providerUnreadCount, recentPicksCount,
@@ -315,16 +314,10 @@ export default function TopbarActions() {
                 // notisen live on /login. Signing in straight from the topbar
                 // recorded a consent the visitor was never shown.
                 //
-                // The return path rides in sessionStorage, not a ?next= param —
-                // see nextPath.ts: a query param would travel to Firebase's
-                // Google-hosted auth handler and disclose the page she was on.
-                //
-                // location, not usePathname(): the topbar renders on /search,
-                // whose entire state is the ?q= query, so dropping the search
-                // would return her to an empty page. Safe here — this is a click
-                // handler, never render.
-                rememberNextPath(window.location.pathname + window.location.search);
-                router.push('/login/');
+                // The return-path rules (sessionStorage never ?next=, location
+                // never usePathname, always through rememberNextPath) live in
+                // useSignedOutRedirect — this used to be a fourth inline copy.
+                goToLogin();
               }}
               className="topbar-signin-btn"
             >

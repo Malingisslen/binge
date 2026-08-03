@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { Plus, Check } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useMarkSeen } from '@/hooks/useMarkSeen';
@@ -11,7 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
-import { rememberNextPath } from '@/lib/nextPath';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import type { WatchStatus, MediaType } from '@/types';
 
@@ -29,7 +28,7 @@ export default function QuickAddButton({
   tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds,
 }: QuickAddButtonProps) {
   const { uid, loading: authLoading } = useAuth();
-  const router = useRouter();
+  const goToLogin = useSignedOutRedirect();
   // BIN-645: keyed on `uid` (the auth verdict), never on the Firestore profile.
   // AuthContext deliberately KEEPS uid when a profile read fails, so `!user`
   // would read as "signed out" forever for that user — handing them a login
@@ -112,24 +111,10 @@ export default function QuickAddButton({
     >
       <button
         onClick={async () => {
-          // BIN-645: go to /login rather than calling signIn() here. A
-          // first-time Google sign-in CREATES the account, and account creation
-          // stamps termsAcceptedAt + ageConfirmedAt (13+). The villkor link and
-          // the 13-års-notisen live on the login page; a grid of posters shows
-          // neither, so signing in from here recorded a consent we never asked
-          // for. `next` carries them back to this page afterwards.
-          if (signedOut) {
-            // Remembered in sessionStorage, not a ?next= param — see nextPath.ts:
-            // the query would ride along to Firebase's Google-hosted auth handler.
-            //
-            // location, not usePathname(): this badge renders on /search, whose
-            // whole state is the ?q= query. usePathname() drops it, so a
-            // signed-out tap there would return the visitor to an empty search.
-            // Safe to read here — this runs in a click handler, never in render.
-            rememberNextPath(window.location.pathname + window.location.search);
-            router.push('/login/');
-            return;
-          }
+          // BIN-645, now shared with StatusButton as BIN-714 — the whole rule
+          // and every reason behind it live in useSignedOutRedirect. Called
+          // FIRST, above the library gates: a signed-out visitor has no library.
+          if (signedOut) { goToLogin(); return; }
           // Belt-and-braces behind the disabled attribute below: we do not yet
           // know whether this visitor is signed in, so there is no honest
           // destination — neither the menu nor a trip to /login.

@@ -40,7 +40,17 @@ const auth = vi.hoisted(() => ({
 }));
 const markSeen = vi.hoisted(() => vi.fn());
 const toast = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => vi.fn());
 
+// The `push` SPY is hoisted and stable — that is the part BIN-645's lesson is
+// about; a fresh spy per call would make every assertion about it vacuous. (The
+// object around it is still new per call, so do not add an assertion here that
+// depends on the router's identity without fixing that first.)
+//
+// The real `useSignedOutRedirect` runs — only `next/navigation` is mocked.
+// Mocking the hook away would leave the sessionStorage half of BIN-714 (never a
+// ?next= param) untested here.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
 vi.mock('@/hooks/useMarkSeen', () => ({ useMarkSeen: () => markSeen }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
@@ -150,6 +160,8 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     auth.uid = 'u1';
     auth.user = { uid: 'u1' };
     auth.loading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, '', '/');
   });
 
   const trigger = () => screen.getByRole('button', { name: '+ Lägg till' });
@@ -225,21 +237,48 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     expect(toast).not.toHaveBeenCalled();
   });
 
-  it('a signed-out pick no longer no-ops behind a success toast', async () => {
-    // The state login/page.tsx parked as this ticket: `addItem` returns early
-    // without a uid, and the button confirmed the write anyway.
+  it('a signed-out tap goes to /login and remembers the way back (BIN-714)', async () => {
+    // Malin's call, 2026-08-03: the same thing the poster badge already did, so
+    // one action does not behave two ways in the same app. It replaces the old
+    // disabled-with-an-explanation state — which was itself a fix for something
+    // worse (the write returned early without a uid and the button toasted
+    // success anyway).
     auth.uid = null;
     auth.user = null;
     auth.loading = false;
+    window.history.replaceState({}, '', '/movie/603/?from=rek');
     render(film());
 
-    expect(trigger()).toBeDisabled();
-    expect(trigger()).toHaveAttribute('title', 'Logga in för att lägga till');
+    // Tappable: this tap has a real destination.
+    expect(trigger()).not.toBeDisabled();
 
     await act(async () => { fireEvent.click(trigger()); });
 
+    expect(push).toHaveBeenCalledWith('/login/');
+    // sessionStorage, NEVER a ?next= param — that would ride along to Firebase's
+    // Google-hosted auth handler. `?from=` is not on the return allowlist.
+    expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
+    // And still no write, no menu, no success toast.
     expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(markSeen).not.toHaveBeenCalled();
+    expect(screen.queryByText('Vill se')).not.toBeInTheDocument();
     expect(toast).not.toHaveBeenCalled();
+  });
+
+  it('the signed-out redirect wins over the library gate, which is false forever for them', async () => {
+    // Ordering is the whole risk: a signed-out visitor never gets a listener, so
+    // `libraryKnown` stays false for their entire session. Gating the redirect
+    // behind it is how the tap goes permanently dead.
+    auth.uid = null;
+    auth.user = null;
+    auth.loading = false;
+    watchlist.snapshotSettled = false;
+    watchlist.listenerFailed = false;
+    render(film());
+
+    await act(async () => { fireEvent.click(trigger()); });
+
+    expect(push).toHaveBeenCalledWith('/login/');
   });
 
   it('keys signed-in on `uid`, not on the loaded profile', async () => {

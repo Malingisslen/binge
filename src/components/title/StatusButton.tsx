@@ -11,6 +11,7 @@ import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatu
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -38,6 +39,7 @@ export default function StatusButton({
   const { uid, loading: authLoading } = useAuth();
   const { getItem, addItem, removeItem, listenerFailed, libraryKnown } = useWatchlist();
   const markSeen = useMarkSeen();
+  const goToLogin = useSignedOutRedirect();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -58,21 +60,26 @@ export default function StatusButton({
   // hold the button, but only one of them ends on its own.
   const authKnown = !authLoading;
   const signedIn = authKnown && uid != null;
+  // BIN-714 (Malin, 2026-08-03): a signed-out tap goes to /login and comes back,
+  // exactly as QuickAddButton's has since BIN-645 — one action, one behaviour.
+  // It is decided FIRST, above every library gate: they have no library and will
+  // not get one this session, so those gates are false forever for them.
+  const signedOut = authKnown && uid == null;
   // One expression, ordered from "we know least" to "we know most" — it decides
-  // BOTH whether the button writes and what its tooltip says, so the two can never
-  // disagree. Disabled with a reason rather than a tap that silently does nothing:
-  // the old behaviour wrote nothing at all for a signed-out visitor and toasted
-  // success anyway. Swedish, because these surface as the tooltip.
-  // `libraryKnown` comes from the context rather than being recomposed here from
-  // its primitives — every surface that re-derived the rule is a surface that
-  // could quietly get it wrong. `listenerFailed` is still read on its own so this
-  // button can tell "died" (answers on tap, below) from "not settled yet".
+  // BOTH whether the button writes and what its tooltip says, so the two can
+  // never disagree. `libraryKnown` comes from the context rather than being
+  // recomposed here from its primitives: every surface that re-derived the rule
+  // is a surface that could quietly get it wrong. `listenerFailed` is still read
+  // on its own so this button can tell "died" (answers on tap) from "not settled
+  // yet" (stays silent, it ends by itself).
   const holdReason = !authKnown ? 'Laddar…'
-    : !signedIn ? 'Logga in för att lägga till'
+    : signedOut ? null
     : listenerFailed ? LIBRARY_UNAVAILABLE
     : !libraryKnown ? 'Laddar…'
     : null;
-  const ready = holdReason == null;
+  // "May this button write?" — signed-out is deliberately NOT ready: their tap
+  // has a destination, not a write.
+  const ready = signedIn && holdReason == null;
   // BIN-596 — the one hold that never ends on its own, so it does not get the
   // disabled+tooltip treatment the transient ones get. See libraryHold.ts.
   const libraryDead = signedIn && listenerFailed;
@@ -138,16 +145,24 @@ export default function StatusButton({
     <div className="relative" ref={ref}>
       <button
         onClick={() => {
+          // BIN-714: first, and before every library gate — see the hook.
+          if (signedOut) { goToLogin(); return; }
           // A dead listener answers on tap instead of going inert — the tooltip
           // below is hover-only, and this hold has no end. See libraryHold.ts.
           if (libraryDead) { toast(LIBRARY_UNAVAILABLE); return; }
           if (ready) setOpen(!open);
         }}
         // Visibly disabled, not inert: a button that swallows the tap reads as
-        // broken. Same call as QuickAddButton's auth gate (BIN-645) — with the
-        // watchlist half added, which is this ticket.
-        disabled={!ready && !libraryDead}
-        title={holdReason ?? undefined}
+        // broken. Two states are deliberately NOT disabled — a signed-out
+        // visitor (their tap goes to /login) and a dead listener (their tap is
+        // the explanation). Both would otherwise be controls that do nothing.
+        disabled={!ready && !libraryDead && !signedOut}
+        // No tooltip once there is nothing left to explain — the button's own
+        // label already says what it does. For a signed-out visitor `holdReason`
+        // is null AND `current` is null (the context clears `items` on a null
+        // uid), so they get no tooltip either, which is right: theirs is a normal
+        // tappable button now.
+        title={holdReason ?? (current ? labelFor(current.status) : undefined)}
         className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-white border-acc-deep'
