@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { LIBRARY_UNAVAILABLE } from './libraryHold';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -34,13 +35,47 @@ export default function StatusButton({
   genreIds,
   tmdbStatus,
 }: StatusButtonProps) {
-  const { uid } = useAuth();
-  const { getItem, addItem, removeItem } = useWatchlist();
+  const { uid, loading: authLoading } = useAuth();
+  const { getItem, addItem, removeItem, listenerFailed, libraryKnown } = useWatchlist();
   const markSeen = useMarkSeen();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(mediaType, tmdbId);
+  // BIN-596 — hold every write until BOTH questions have real answers.
+  //
+  //  1. Auth, keyed on `uid` (the auth verdict), never on the Firestore profile:
+  //     AuthContext deliberately KEEPS uid when a profile read fails, so `!user`
+  //     would read as "signed out" forever for that visitor (BIN-645's bug).
+  //  2. The watchlist snapshot — `snapshotSettled`, not `loading`. `loading` goes
+  //     false in two very different states, and a dead listener is NOT an empty
+  //     library: writing then makes a re-mark look like a genuine new add, which
+  //     is how a "Sedd" tapped in the first second landed with no `watchedAt` at
+  //     all (absent from Dagbok, Statistik and Streamingrådgivaren, with nothing
+  //     to repair it later and no message telling the user).
+  //
+  // `listenerFailed` is held separately from `snapshotSettled` on purpose: both
+  // hold the button, but only one of them ends on its own.
+  const authKnown = !authLoading;
+  const signedIn = authKnown && uid != null;
+  // One expression, ordered from "we know least" to "we know most" — it decides
+  // BOTH whether the button writes and what its tooltip says, so the two can never
+  // disagree. Disabled with a reason rather than a tap that silently does nothing:
+  // the old behaviour wrote nothing at all for a signed-out visitor and toasted
+  // success anyway. Swedish, because these surface as the tooltip.
+  // `libraryKnown` comes from the context rather than being recomposed here from
+  // its primitives — every surface that re-derived the rule is a surface that
+  // could quietly get it wrong. `listenerFailed` is still read on its own so this
+  // button can tell "died" (answers on tap, below) from "not settled yet".
+  const holdReason = !authKnown ? 'Laddar…'
+    : !signedIn ? 'Logga in för att lägga till'
+    : listenerFailed ? LIBRARY_UNAVAILABLE
+    : !libraryKnown ? 'Laddar…'
+    : null;
+  const ready = holdReason == null;
+  // BIN-596 — the one hold that never ends on its own, so it does not get the
+  // disabled+tooltip treatment the transient ones get. See libraryHold.ts.
+  const libraryDead = signedIn && listenerFailed;
   const options = statusOptionsFor(mediaType);
   const labelFor = (s: WatchStatus) => statusLabel(s, mediaType);
   const close = useCallback(() => setOpen(false), []);
@@ -48,6 +83,12 @@ export default function StatusButton({
 
   async function handleSelect(status: WatchStatus, countsAsViewing = false) {
     setOpen(false);
+    // Belt-and-braces behind the disabled trigger below: the menu can only be
+    // opened when `ready`, but a menu left open across a listener failure must
+    // not write either. The toast lives BELOW this return on purpose — a gate
+    // that stops the write but still says "The Matrix — Sedd" is worse than no
+    // gate, because the user then has no reason to try again.
+    if (!ready) return;
     // 'sedd' (film: terminal · TV: "alla avsnitt sedda" → 'mina') går via den
     // delade markSeen-vägen, som även nudgar ett betyg om titeln saknar ett.
     if (status === 'sedd') {
@@ -69,6 +110,9 @@ export default function StatusButton({
 
   function handleRemove() {
     setOpen(false);
+    // Same gate, same reason as handleSelect: no write, and therefore no
+    // "borttagen" toast about a removal that did not happen.
+    if (!ready) return;
     // Serie med påbörjad historik: per-avsnitt-historiken sparas medvetet
     // (återtillägg återupptar där man var) — säg det och erbjud full
     // rensning. Se clearEpisodeProgress + docs/data-retention-policy.md.
@@ -93,8 +137,18 @@ export default function StatusButton({
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(!open)}
-        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold ${
+        onClick={() => {
+          // A dead listener answers on tap instead of going inert — the tooltip
+          // below is hover-only, and this hold has no end. See libraryHold.ts.
+          if (libraryDead) { toast(LIBRARY_UNAVAILABLE); return; }
+          if (ready) setOpen(!open);
+        }}
+        // Visibly disabled, not inert: a button that swallows the tap reads as
+        // broken. Same call as QuickAddButton's auth gate (BIN-645) — with the
+        // watchlist half added, which is this ticket.
+        disabled={!ready && !libraryDead}
+        title={holdReason ?? undefined}
+        className={`px-[10px] py-[3px] border rounded-sm text-xs font-[inherit] cursor-pointer font-semibold disabled:opacity-50 disabled:cursor-default ${
           current
             ? 'bg-acc-deep text-white border-acc-deep'
             : 'bg-acc-deep text-white border-acc-deep hover:bg-acc-deep/90'

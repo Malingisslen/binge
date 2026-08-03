@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import QuickAddButton from './QuickAddButton';
+import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import type { MediaType, WatchlistItem } from '@/types';
 
 // BIN-645: the plus badge on poster grids used to call signIn() inline. A
@@ -31,6 +32,15 @@ const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
   addItem: vi.fn(),
   removeItem: vi.fn(),
+  // BIN-596: the readiness pair. `loading` is deliberately NOT here — it cannot
+  // tell a landed snapshot from a dead listener, which is the whole point.
+  snapshotSettled: true,
+  listenerFailed: false,
+  // Derived exactly as the provider derives it, as a getter rather than a fixed
+  // value: a literal here would let a test set `listenerFailed` and still hand
+  // the component `libraryKnown: true`, which is a state production cannot
+  // produce — every gate assertion in this file would go vacuous.
+  get libraryKnown(): boolean { return this.snapshotSettled && !this.listenerFailed; },
 }));
 const markSeen = vi.hoisted(() => vi.fn());
 const toast = vi.hoisted(() => vi.fn());
@@ -70,6 +80,8 @@ describe('QuickAddButton — signed-out taps reach the consent notice (BIN-645)'
 
     auth.loading = false;
     watchlist.getItem.mockReturnValue(trackedSeries);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
   });
 
   it('sends a signed-out visitor to /login, carrying where they came from', async () => {
@@ -129,5 +141,100 @@ describe('QuickAddButton — signed-out taps reach the consent notice (BIN-645)'
 
     expect(watchlist.addItem).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-596 — the second half of the same gate: knowing WHO the visitor is is not
+// enough, we also have to know what is already in their library before writing.
+// `loading` from useWatchlist() cannot say: it goes false both when the first
+// snapshot lands and when the listener dies, and a dead listener is not an empty
+// library — treating it as one turns every re-mark into a genuine new add
+// (BIN-601/BIN-593). The badge sits on poster grids, where a tap comes within a
+// second of the page appearing, so this is the common path and not an edge case.
+describe('QuickAddButton — the write also waits for the watchlist snapshot (BIN-596)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+    watchlist.getItem.mockReturnValue(trackedSeries);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+  });
+
+  it('holds the menu while the first snapshot is still in flight', async () => {
+    watchlist.snapshotSettled = false;
+    render(button());
+
+    const trigger = screen.getByTitle('Laddar…');
+    expect(trigger).toBeDisabled();
+
+    await act(async () => { fireEvent.click(trigger); });
+
+    expect(screen.queryByText('Följ')).not.toBeInTheDocument();
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
+    expect(markSeen).not.toHaveBeenCalled();
+  });
+
+  it('reads a dead listener as FAILED, not as a loaded-and-empty library', async () => {
+    // Failure after a landed snapshot: `snapshotSettled` stays true, so a gate
+    // written as "settled?" alone would reopen exactly when the state it trusts
+    // is known to be stale.
+    watchlist.listenerFailed = true;
+    render(button());
+
+    const trigger = screen.getByTitle(LIBRARY_UNAVAILABLE);
+    // NOT disabled: this badge sits on a poster grid a phone scrolls, `title=`
+    // never renders on touch, and this hold has no end — so the disabled form
+    // is a control that is silently dead all session (libraryHold.ts).
+    expect(trigger).not.toBeDisabled();
+
+    await act(async () => { fireEvent.click(trigger); });
+
+    // Unchanged: no write, and the menu does not open (every option in it is
+    // gated, so opening it would only offer taps that do nothing).
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(markSeen).not.toHaveBeenCalled();
+    expect(screen.queryByText('Vill se')).not.toBeInTheDocument();
+    // Changed: it says why, through the one channel a touch device can show.
+    expect(toast).toHaveBeenCalledWith(LIBRARY_UNAVAILABLE);
+  });
+
+  it('a signed-out visitor is NOT held by the library gate — their tap has a destination', async () => {
+    // Production shape for a signed-out visitor: no listener runs, so
+    // `snapshotSettled` is false forever. Gating on it without excluding them
+    // would kill BIN-645's whole route to the consent notice.
+    auth.uid = null;
+    auth.user = null;
+    watchlist.snapshotSettled = false;
+    watchlist.getItem.mockReturnValue(null);
+    render(button());
+
+    const trigger = screen.getByTitle('Lägg till');
+    expect(trigger).toBeEnabled();
+
+    await act(async () => { fireEvent.click(trigger); });
+
+    expect(push).toHaveBeenCalledWith('/login/');
+  });
+
+  it('releases the menu once the snapshot lands — held, then flipped, then it writes', async () => {
+    // The transition, not just the held state: a mutant that latches on the way
+    // in passes a "renders disabled" assertion while stranding every user whose
+    // snapshot lands normally.
+    watchlist.snapshotSettled = false;
+    const view = render(button());
+    expect(screen.getByTitle('Laddar…')).toBeDisabled();
+
+    watchlist.snapshotSettled = true;
+    view.rerender(button());
+
+    await act(async () => { fireEvent.click(screen.getByTitle('Följer')); });
+    await act(async () => { fireEvent.click(screen.getByText('Följ')); });
+
+    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledTimes(1);
   });
 });

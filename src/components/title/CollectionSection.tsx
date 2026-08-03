@@ -38,8 +38,23 @@ export default function CollectionSection({
   currentMovieId: number;
 }) {
   const { data: collection } = useCollection(collectionId);
-  const { getItem, addItem, loading: watchlistLoading } = useWatchlist();
-  const { user } = useAuth();
+  const { getItem, addItem, libraryKnown } = useWatchlist();
+  const { user, uid, loading: authLoading } = useAuth();
+  // BIN-596 — two different questions, and conflating them cost the signed-out
+  // visitor a whole section.
+  //
+  //  · `libraryKnown` = "a library exists and I have read it". Required for every
+  //    WRITE affordance below.
+  //  · `libraryResolved` = "getItem's answers are TRUE". Also satisfied when
+  //    nobody is signed in: no listener ever subscribes, so `libraryKnown` is
+  //    false forever — but "not in your library" is then simply correct, because
+  //    there is no library. Read-only derivations use this one.
+  //
+  // Gating the read-only half on `libraryKnown` hid "Var streamar de osedda?"
+  // from every logged-out visitor on every collection page — an acquisition
+  // surface, and pure loss: that block writes nothing.
+  const signedOut = !authLoading && uid == null;
+  const libraryResolved = libraryKnown || signedOut;
   const [mounted, setMounted] = useState(false);
   const [adding, setAdding] = useState(false);
   const [showStreaming, setShowStreaming] = useState(false);
@@ -59,17 +74,23 @@ export default function CollectionSection({
     // every already-tracked film, so "osedda" would include films the user has
     // marked 'sedd' — and the bulk add hard-writes status: 'vill_se' over them,
     // up to ADD_UNSEEN_CAP at a time. Wait for the snapshot before judging.
-    if (!mounted || watchlistLoading) return new Set<number>();
+    //
+    // BIN-596: NOT `loading` — it goes false in both terminal states, so on a
+    // dead listener it said "loaded" while getItem answered null for every
+    // title, reopening the bulk write at the one moment it does most damage.
+    // `libraryResolved` rather than `libraryKnown` so a signed-out visitor still
+    // gets a truthful (empty) seen-set instead of a hidden section.
+    if (!mounted || !libraryResolved) return new Set<number>();
     const s = new Set<number>();
     for (const p of parts) {
       if (getItem('movie', p.id)?.status === 'sedd') s.add(p.id);
     }
     return s;
-  }, [mounted, watchlistLoading, parts, getItem]);
+  }, [mounted, libraryResolved, parts, getItem]);
 
   const unseen = useMemo(
-    () => (mounted && !watchlistLoading ? parts.filter(p => !seenIds.has(p.id)) : []),
-    [mounted, watchlistLoading, parts, seenIds],
+    () => (mounted && libraryResolved ? parts.filter(p => !seenIds.has(p.id)) : []),
+    [mounted, libraryResolved, parts, seenIds],
   );
   // Osedda som inte ens ligger i biblioteket — kandidater för "lägg till alla".
   // Gate på getItem (inte bara status): en film som redan ligger som vill_se/
@@ -102,7 +123,11 @@ export default function CollectionSection({
   const seenCount = seenIds.size;
 
   async function addAllUnseen() {
-    if (adding || unseenNotInLibrary.length === 0) return;
+    // Belt-and-braces behind the hidden trigger: `unseen` is already empty when
+    // the library is unknown, so the button cannot render — but this is the one
+    // write in the app that can demote 50 terminal 'sedd' films in a loop, and
+    // it should not depend on a derived list staying empty to be safe.
+    if (adding || !libraryKnown || unseenNotInLibrary.length === 0) return;
     setAdding(true);
     try {
       // BIN-159: bunden write-fan-out. Samlingar är normalt <30 filmer, men
@@ -135,14 +160,19 @@ export default function CollectionSection({
           {/* Gated on the snapshot too: pre-settle seenCount is 0 for everyone, so
               this would confidently tell a user who has seen the whole collection
               that they have seen none of it. */}
-          {mounted && !watchlistLoading && (
+          {mounted && libraryResolved && (
             <div className="sub">
               {seenCount} av {parts.length} sedda
               {unseen.length > 0 && ` · ${unseen.length} kvar`}
             </div>
           )}
         </div>
-        {mounted && unseenNotInLibrary.length > 0 && (
+        {/* The WRITE half — `libraryKnown`, not `libraryResolved`. A signed-out
+            visitor now reaches this with a full unseen list, and offering them a
+            bulk add that `addAllUnseen` refuses would be exactly the dead button
+            BIN-596 exists to remove. (Sending them to /login instead is the
+            BIN-714 question, and it is about the two per-title buttons.) */}
+        {mounted && libraryKnown && unseenNotInLibrary.length > 0 && (
           <button
             onClick={addAllUnseen}
             disabled={adding}

@@ -109,7 +109,7 @@ function ChipRow({ items, style }: { items: CompanionTitle[]; style?: CSSPropert
 function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const films = companions.filter((c) => c.mediaType === 'movie');
   const series = companions.filter((c) => c.mediaType === 'tv');
-  const { getItem, addItem, loading: watchlistLoading } = useWatchlist();
+  const { getItem, addItem, libraryKnown } = useWatchlist();
   const { user } = useAuth();
   const [showStreaming, setShowStreaming] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
@@ -146,12 +146,15 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const streamingLoading = liteQueries.some((q) => q.isLoading);
 
   async function addOne(film: CompanionTitle, movie: TMDBMovie) {
-    // watchlistLoading guard: before the snapshot lands getItem returns null for a
+    // Library-known guard: before the snapshot lands getItem returns null for a
     // film the user already tracks, so this would add it again — hard-writing
     // status 'vill_se' over a 'sedd' film, demoting a terminal status.
     // (BIN-593 stopped the write from ERASING watchedAt too; the status demotion
     // is reason enough on its own, so the guard stays.)
-    if (addingId != null || watchlistLoading || getItem('movie', film.id)) return;
+    //
+    // BIN-596: `libraryKnown`, not `loading` — `loading` goes false on a dead
+    // listener too, which is exactly when getItem lies about every title.
+    if (addingId != null || !libraryKnown || getItem('movie', film.id)) return;
     setAddingId(film.id);
     try {
       await addItem(buildWatchlistAddPayload({
@@ -221,9 +224,15 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
                 {movie && !inLibrary && (
                   <button
                     onClick={() => addOne(film, movie)}
-                    // Also disabled while the watchlist loads: addOne early-returns in
-                    // that window, so an enabled button would be a silent dead click.
-                    disabled={addingId != null || watchlistLoading}
+                    // Also disabled until the library is KNOWN: addOne early-returns
+                    // in that window, so an enabled button would be a silent dead
+                    // click. KNOWN CONSEQUENCE, accepted (BIN-731): a signed-out
+                    // visitor never gets a listener, so this stays disabled for them
+                    // permanently — with no tooltip saying why. Previously it was
+                    // enabled and did nothing at all, which is not better. Giving it
+                    // a real destination is BIN-731; BIN-714 covers only the two
+                    // per-title buttons.
+                    disabled={addingId != null || !libraryKnown}
                     className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                     style={{ marginTop: 6 }}
                   >

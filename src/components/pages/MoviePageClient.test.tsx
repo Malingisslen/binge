@@ -10,16 +10,20 @@ import { render } from '@testing-library/react';
 // snapshot ALWAYS lands after `mounted` flips, so the first run of these effects
 // necessarily sees an empty library.
 //
-// Today it re-fires anyway, by accident: `items` still sits in both callbacks'
-// dependency arrays, so every snapshot mints a new function identity and
-// re-triggers the effects here. BIN-598 removes `items` (the callbacks read the
-// live ref instead), which makes the identity stable for the life of the uid —
-// and would silently turn both backfills into no-ops on every cold load.
+// It re-fires because `items` sits in both callbacks' dependency arrays, so every
+// snapshot mints a new function identity and re-triggers the effects here.
 //
-// BIN-598's WatchlistContext half is NOT landed at this commit (it was the failed
-// batch 0 of the 2026-08-01 sprint and is back in Todo). So the mock below models
-// the world BIN-598 creates, deliberately ahead of it: it is STRICTER than the
-// current context, and it is what makes these assertions mean anything.
+// UPDATE (2026-08-04): BIN-598 has LANDED, and `setRuntime`/`refreshTmdbFields`
+// were deliberately left OUT of its itemsRef migration for exactly this reason —
+// their per-snapshot identity is load-bearing. The earlier version of this header
+// predicted the opposite ("BIN-598 removes `items`… which would silently turn
+// both backfills into no-ops"); that migration is now explicitly forbidden for
+// these two, see WatchlistContext.tsx's setRuntime comment and the identity test
+// in WatchlistContext.test.tsx.
+//
+// The mock below still models stable identity on purpose — but now as a
+// deliberately STRICTER world than production, so these assertions pin the
+// `loading` gate on its own merits instead of passing on identity churn.
 //
 // So this drives the WHOLE transition rather than one frame: render while the
 // watchlist is still loading, assert neither backfill fired, then flip `loading`
@@ -47,9 +51,10 @@ const watchlist = vi.hoisted(() => ({
 }));
 
 // The identity of both callbacks is deliberately STABLE across renders — stricter
-// than today's context, and the post-BIN-598 world this gate has to survive.
-// Handing back a fresh vi.fn() per call would re-create the pre-BIN-598 identity
-// churn and make every assertion below vacuous.
+// than production, where these two still churn per snapshot on purpose (see the
+// header above). Handing back a fresh vi.fn() per call would reproduce that churn
+// here and make every assertion below vacuous: the effects would re-fire on
+// identity alone, and the `loading` gate they exist to pin would go untested.
 watchlist.setRuntime = setRuntime;
 watchlist.refreshTmdbFields = refreshTmdbFields;
 

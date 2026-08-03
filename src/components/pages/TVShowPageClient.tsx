@@ -99,12 +99,13 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // from deciding the write across a uid switch. Same pattern as
   // CollectionSection/CompanionSection.
   //
-  // NOTE (2026-08-02): BIN-598's WatchlistContext half is NOT landed — setRuntime
-  // still closes over `items`, so today it also gets a fresh identity per
-  // snapshot. That makes this gate belt-and-braces rather than the only thing
-  // holding the backfill up. When BIN-598 lands and the identity does become
-  // stable for the life of the uid, the gate becomes load-bearing on its own —
-  // do not remove it as redundant on the way past.
+  // NOTE (2026-08-04): BIN-598 has now LANDED, and `setRuntime` was deliberately
+  // left OUT of its itemsRef migration — it still closes over `items` and still
+  // gets a fresh identity per snapshot, because that reactivity is what re-fires
+  // this backfill. So the previous note's "when BIN-598 lands the gate becomes
+  // load-bearing on its own" never arrives for this effect: it stays
+  // belt-and-braces. The operational advice is unchanged — do not remove it as
+  // redundant on the way past.
   const showRuntime = show?.episode_run_time?.[0] ?? null;
   useEffect(() => {
     if (!mounted || watchlistLoading || !show || showRuntime == null) return;

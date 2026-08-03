@@ -466,6 +466,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfileLoading(false);
           visibilitySyncPendingRef.current = false;
           setVisibilitySyncPending(false);
+          // BIN-617: the auto-repair is latched to one attempt per uid per app
+          // LOAD, and this branch is the only place a load can start over without
+          // a page reload. Signing out and back in as the same uid otherwise
+          // inherited the spent latch, so that session got no automatic retry —
+          // the pending flag stayed, the Settings warning stayed, and repairing
+          // it needed the manual "Försök igen nu" button. Nothing leaks either
+          // way (the flag is what holds the warning up), it just costs a free
+          // attempt. Reset here, with the rest of the per-user state.
+          visibilityRetriedFor.current = null;
           try { window.localStorage.removeItem('binge:wasLoggedIn'); } catch { /* private mode */ }
           setLoading(false);
         }

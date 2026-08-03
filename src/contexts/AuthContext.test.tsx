@@ -555,6 +555,141 @@ describe('AuthContext — failed visibility cascade no longer fails open (BIN-58
   });
 });
 
+// BIN-617: the auto-repair is latched to ONE attempt per uid per app load
+// (`visibilityRetriedFor`), and sign-out is the only way a load starts over
+// without a page reload. The latch survived it, so signing out and back in as the
+// same uid inherited a spent attempt: the pending flag stayed, the Settings
+// warning stayed, and only the manual "Försök igen nu" could clear it.
+//
+// BIN-631: the first attempt at this test raced a mock-call count against a
+// promise chain nobody awaited, and it was flaky. This one awaits the CHAIN — the
+// flag-write is the last link in it, so the test resolves when the retry has
+// genuinely finished. A regression cannot make it pass early; it makes it fail.
+describe('AuthContext — the visibility retry latch resets on sign-out (BIN-617)', () => {
+  // Awaits a REAL link of the retry chain, with a deadline that can only fire in
+  // the BROKEN world: on the fixed code the chain settles on microtasks, orders of
+  // magnitude below this. Without it a regression surfaces as vitest's generic 5 s
+  // timeout, which strands the following tests mid-`act` and reports failures in
+  // files this change never touched.
+  function withDeadline(p: Promise<void>, what: string, ms = 2000): Promise<void> {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      p.finally(() => clearTimeout(timer)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms);
+      }),
+    ]);
+  }
+
+  it('a same-session sign-out → sign-in as the same uid gets its own auto-retry', async () => {
+    // Both ends of the chain are AWAITED, never polled and never counted against a
+    // fixed number of flushes:
+    //   a failing retry ends in the effect's own console.error handler,
+    //   a succeeding one ends in markVisibilitySyncPending's profile write.
+    let retryFailed: (() => void) | null = null;
+    const firstFailed = new Promise<void>(res => { retryFailed = res; });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      if (String(args[0]).includes('visibilitySyncPending retry')) retryFailed?.();
+    });
+    let flagWritten: (() => void) | null = null;
+    const nextFlagWrite = () => new Promise<void>(res => { flagWritten = res; });
+    setDoc.mockImplementation(async (_ref: unknown, payload: unknown) => {
+      if ('visibilitySyncPending' in (payload as Record<string, unknown>)) flagWritten?.();
+    });
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+
+    // Session 1: the profile carries last session's pending flag, and this load's
+    // one retry FAILS — so the latch is spent and the flag stays set. (No flag
+    // WRITE here: the flag is already true on the profile, and BIN-587
+    // deliberately does not rewrite it.)
+    batchCommit.mockRejectedValue(new Error('unavailable'));
+    renderAuth();
+    await login({
+      username: 'malin',
+      defaultVisibility: 'private',
+      isPublic: false,
+      visibilitySyncPending: true,
+    });
+    await act(async () => { await withDeadline(firstFailed, "the first (failing) auto-retry"); });
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+    expect(ctx!.visibilitySyncPending).toBe(true);
+
+    // Sign out, then straight back in as the SAME uid — no page reload, so the
+    // latch is the only thing that could stop the second attempt.
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
+    expect(ctx!.visibilitySyncPending).toBe(false); // per-user state cleared
+
+    batchCommit.mockReset();
+    batchCommit.mockImplementation(async () => {}); // this time the cascade works
+    const secondCleared = nextFlagWrite();
+    await login({
+      username: 'malin',
+      defaultVisibility: 'private',
+      isPublic: false,
+      visibilitySyncPending: true,
+    });
+    await act(async () => { await withDeadline(secondCleared, "the post-sign-in auto-retry to clear the flag"); });
+
+    // A SECOND cascade actually ran (the latch let go)…
+    expect(getDocsMock).toHaveBeenCalledTimes(2);
+    expect(batchSets.at(-1)).toEqual({
+      ref: { _path: 'users/u1/watchlist/m1' },
+      data: { effectiveVisibility: 'private', isPublic: false },
+    });
+    // …and it repaired the account: the flag is deleted from the profile doc.
+    expect(ctx!.visibilitySyncPending).toBe(false);
+    const flagPayloads = userDocWrites()
+      .map(c => c[1] as Record<string, unknown>)
+      .filter(p => 'visibilitySyncPending' in p)
+      .map(p => p.visibilitySyncPending);
+    expect(flagPayloads).toEqual(['__delete__']);
+    errSpy.mockRestore();
+  });
+
+  it('WITHOUT a sign-out the latch still holds — one automatic attempt per load', async () => {
+    // The other half, and the reason the reset belongs in the signed-OUT branch
+    // specifically: BIN-587 spends the attempt deliberately so a cascade that
+    // keeps failing cannot loop against Firestore (billing reads) all session.
+    // Clearing the latch anywhere the profile is re-read would undo that.
+    let retryFailed: (() => void) | null = null;
+    const firstFailed = new Promise<void>(res => { retryFailed = res; });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      if (String(args[0]).includes('visibilitySyncPending retry')) retryFailed?.();
+    });
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1')] }));
+    batchCommit.mockRejectedValue(new Error('unavailable'));
+
+    renderAuth();
+    await login({
+      username: 'malin',
+      defaultVisibility: 'private',
+      isPublic: false,
+      visibilitySyncPending: true,
+    });
+    await act(async () => { await withDeadline(firstFailed, "the first (failing) auto-retry"); });
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+
+    // Still signed in; the profile is re-read and now reports a DIFFERENT target,
+    // which really does re-run the retry effect (its deps are the values, so a
+    // re-read alone would not). Only the latch stops a second cascade here.
+    profileDocData.current = {
+      username: 'malin',
+      defaultVisibility: 'public',
+      isPublic: true,
+      visibilitySyncPending: true,
+    };
+    await act(async () => { authCallback!(fakeUser); });
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(getDocsMock).toHaveBeenCalledTimes(1);
+    errSpy.mockRestore();
+  });
+});
+
 // BIN-536: updateProviders' array-contains group query had the same unbounded
 // shape BIN-510 flagged in groups.ts, and now shares groups.ts's real
 // MY_GROUPS_LIMIT constant (imported via the dynamic import) instead of a

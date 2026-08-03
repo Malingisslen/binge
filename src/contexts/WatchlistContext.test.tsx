@@ -157,10 +157,19 @@ let updateTagsRef: ((mediaType: MediaType, tmdbId: number, tags: string[]) => Pr
 let updateRatingRef: ((mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<void>) | null = null;
 let updateNotesRef: ((mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>) | null = null;
 let refreshTmdbFieldsRef: ((mediaType: MediaType, tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
+// BIN-598/BIN-630: the two mutators that had zero coverage.
+let updateWatchedAtRef: ((mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<void>) | null = null;
+let updateTmdbStatusRef: ((mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<void>) | null = null;
+// BIN-596: the readiness flags the add surfaces gate on, as the components see
+// them (a ref is invisible to a component).
+let readiness: { loading: boolean; snapshotSettled: boolean; listenerFailed: boolean; libraryKnown: boolean } | null = null;
 
 function Harness() {
   const wl = useWatchlist();
   useEffect(() => {
+    readiness = { loading: wl.loading, snapshotSettled: wl.snapshotSettled, listenerFailed: wl.listenerFailed, libraryKnown: wl.libraryKnown };
+    updateWatchedAtRef = wl.updateWatchedAt;
+    updateTmdbStatusRef = wl.updateTmdbStatus;
     addItemRef = wl.addItem;
     updateStatusRef = wl.updateStatus;
     updateProgressRef = wl.updateProgress;
@@ -207,6 +216,7 @@ beforeEach(() => {
   tagsSnapshotCallback = null;
   notesSnapshotCallback = null;
   snapshotErrorCallback = null;
+  readiness = null;
   batchCommit.mockClear();
   batchCommit.mockImplementation(async () => {});
   authState.uid = 'u1';
@@ -1511,5 +1521,416 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
 
     const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
     expect(payload.addedAt).toEqual(secondTouch);
+  });
+});
+
+// BIN-596 — what the ADD SURFACES have to gate on, and why `loading` cannot be it.
+//
+// `loading` flips to false in two states that call for opposite decisions: the
+// first snapshot landed (we know the library) and the listener died (we never
+// will, this session). StatusButton/QuickAddButton must hold their write in the
+// second, so the context exposes the two facts separately.
+describe('WatchlistContext — readiness the add surfaces gate on (BIN-596)', () => {
+  async function mount() {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {});
+  }
+
+  it('starts as "we know nothing yet"', async () => {
+    await mount();
+    expect(readiness).toEqual({ loading: true, snapshotSettled: false, listenerFailed: false, libraryKnown: false });
+  });
+
+  it('a landed snapshot settles it', async () => {
+    await mount();
+    await act(async () => { snapshotCallback!(snap([doc(1)])); });
+    expect(readiness).toEqual({ loading: false, snapshotSettled: true, listenerFailed: false, libraryKnown: true });
+  });
+
+  it('a dead listener stops loading WITHOUT ever claiming the library is known', async () => {
+    // The distinction the whole ticket rests on. `loading` alone is false in both
+    // this state and the one above — which is why gating on it would let a write
+    // through against a library we never read.
+    await mount();
+    await act(async () => { snapshotErrorCallback!(); });
+    expect(readiness).toEqual({ loading: false, snapshotSettled: false, listenerFailed: true, libraryKnown: false });
+  });
+
+  it('a recovering snapshot clears the failure and settles', async () => {
+    await mount();
+    await act(async () => { snapshotErrorCallback!(); });
+    await act(async () => { snapshotCallback!(snap([doc(1)])); });
+    expect(readiness).toEqual({ loading: false, snapshotSettled: true, listenerFailed: false, libraryKnown: true });
+  });
+
+  it('a failure AFTER a landed snapshot leaves settled true — and libraryKnown false', async () => {
+    // The fourth combination, and the only one that tells `&&` from `||`. It is
+    // also the state the whole ticket turns on: we still hold contents, so
+    // `snapshotSettled` cannot honestly go back to false — but they are stale,
+    // so nothing may write from them. Without this case a provider mutated to
+    // `snapshotSettled || !listenerFailed` passes the entire suite.
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotCallback!(snap([doc(1)])); });
+    expect(readiness?.libraryKnown).toBe(true);
+
+    await act(async () => { snapshotErrorCallback!(); });
+
+    expect(readiness).toEqual({
+      loading: false, snapshotSettled: true, listenerFailed: true, libraryKnown: false,
+    });
+  });
+
+  it('a uid switch goes back to unknown — the previous account\'s snapshot is not this one\'s', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotCallback!(snap([doc(1)])); });
+    expect(readiness?.snapshotSettled).toBe(true);
+
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+
+    // Not merely "loading again": a button gated on `loading` alone would be held
+    // here too, but so would one that had already concluded u1's library was u2's.
+    expect(readiness).toEqual({ loading: true, snapshotSettled: false, listenerFailed: false, libraryKnown: false });
+  });
+
+  it('a NEW listener does not inherit the previous uid\'s failure', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotErrorCallback!(); });
+    expect(readiness?.listenerFailed).toBe(true);
+
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+
+    expect(readiness?.listenerFailed).toBe(false);
+  });
+});
+
+// BIN-598/BIN-630 — updateWatchedAt and updateTmdbStatus had ZERO coverage while
+// they were migrated from the render-closure `items` to the live `itemsRef`. Both
+// write the denormalised visibility fields, so a stale read there is not cosmetic
+// staleness: it is BIN-595's leak (re-publishing a title the user hid), one
+// mutator over.
+describe('WatchlistContext — updateWatchedAt / updateTmdbStatus (BIN-598, coverage gap BIN-630)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotCallback!(snap(docs)); });
+  }
+
+  const writeTo = (path: string) =>
+    setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === path);
+
+  it('updateWatchedAt writes the caller\'s date and nothing that belongs to a status change (BIN-154)', async () => {
+    const chosen = new Date('2024-02-11T20:00:00Z');
+    await mountSeeded([seedDoc({ tmdbId: 70, mediaType: 'movie', status: 'sedd' })]);
+
+    await act(async () => { await updateWatchedAtRef!('movie', 70, chosen); });
+
+    const call = writeTo('users/u1/watchlist/movie_70');
+    expect(call).toBeDefined();
+    const payload = call![1] as Record<string, unknown>;
+    // The date the user picked, through Timestamp.fromDate (the harness returns
+    // the Date itself).
+    expect(payload.watchedAt).toEqual(chosen);
+    expect(payload.updatedAt).toBe('ts');
+    // BIN-154: editing the date must NOT be routed through updateStatus, which
+    // reads sedd → sedd as a rewatch and would count one on every date edit.
+    expect('status' in payload).toBe(false);
+    expect('rewatchCount' in payload).toBe(false);
+    // No per-item override on this title → the lazy visibility re-assert applies.
+    expect(payload.effectiveVisibility).toBe('private');
+    expect(payload.isPublic).toBe(false);
+    expect(call![2]).toEqual({ merge: true });
+  });
+
+  it('updateWatchedAt leaves a title the user HID alone (per-item override wins)', async () => {
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([seedDoc({
+      tmdbId: 71, mediaType: 'movie', status: 'sedd',
+      visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+    })]);
+
+    await act(async () => { await updateWatchedAtRef!('movie', 71, new Date('2024-02-11T20:00:00Z')); });
+
+    const payload = writeTo('users/u1/watchlist/movie_71')![1] as Record<string, unknown>;
+    // ABSENT, not 'private' — this is a merge, so omitting preserves the stored
+    // value. Writing the profile default here is what republished the title.
+    expect('effectiveVisibility' in payload).toBe(false);
+    expect('isPublic' in payload).toBe(false);
+    // …and the date itself still landed.
+    expect(payload.watchedAt).toEqual(new Date('2024-02-11T20:00:00Z'));
+  });
+
+  it('updateWatchedAt reads the LIVE snapshot, not the closure it was created in', async () => {
+    // The BIN-598 migration itself. The mutator awaits fsdb() — a dynamic import —
+    // before deciding what to write, so a render-closure `items` can be a whole
+    // snapshot stale by then. Capturing the callback while the library is empty
+    // and calling it after the override arrives reproduces exactly that pairing:
+    // reading the closure re-publishes the title.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+    const captured = updateWatchedAtRef!;
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({
+        tmdbId: 72, mediaType: 'movie', status: 'sedd',
+        visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+      })]));
+    });
+    // …and the identity survives that snapshot, which is the other half of the
+    // migration: `items` is out of the dep array, so a consumer's effect no longer
+    // re-fires once per snapshot.
+    expect(updateWatchedAtRef).toBe(captured);
+
+    await act(async () => { await captured('movie', 72, new Date('2024-02-11T20:00:00Z')); });
+
+    const payload = writeTo('users/u1/watchlist/movie_72')![1] as Record<string, unknown>;
+    expect('effectiveVisibility' in payload).toBe(false);
+    expect('isPublic' in payload).toBe(false);
+  });
+
+  it('findItem refuses to answer from another account\'s rows (itemsUidRef cross-account guard)', async () => {
+    // `itemsRef` is ONE shared mutable ref, so a mutator that started under A can
+    // reach `findItem` after a sign-out+sign-in has repopulated it with B's rows.
+    // The WRITE still lands under A (each mutator closes over its own uid) — the
+    // danger is the DECISION. Here: A's title carries a legacy inline note, and
+    // `updateNotes` reads `current?.notes` to decide whether to strip it. If
+    // findItem answered from B's copy (no note), the strip would be skipped and
+    // A's inline note — the BIN-505 third-party-PII leak — would survive.
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 88, mediaType: 'movie', notes: 'A:s privata anteckning' })]));
+    });
+    // Captured while A is signed in — this is the in-flight call.
+    const captured = updateNotesRef!;
+
+    // A→B, and B's OWN snapshot lands — so itemsRef now holds B's rows and
+    // itemsUidRef says 'u2'. B tracks the same film, with NO inline note and an
+    // explicit visibility override (so nothing else would force the item write).
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({
+        tmdbId: 88, mediaType: 'movie',
+        visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+      })]));
+    });
+    setDoc.mockClear();
+
+    // A's in-flight call finally runs. Read from B's row it would conclude
+    // "no inline note, visibility already stamped" and take BIN-522's no-op
+    // skip — leaving A's inline note in place, readable, for another session.
+    await act(async () => { await captured('movie', 88, 'ny text'); });
+
+    const itemWrite = setDoc.mock.calls.find(
+      c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_88',
+    );
+    expect(itemWrite).toBeDefined();
+    expect((itemWrite![1] as Record<string, unknown>).notes).toBe('DELETE_FIELD');
+    // And nothing was written under B.
+    expect(setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path.startsWith('users/u2/'))).toHaveLength(0);
+  });
+
+  it('updateRating reads the LIVE snapshot, not the closure it was created in', async () => {
+    // Same migration, same failure, and the one the sweep left unpinned: reverting
+    // `updateRating` alone to `items.find(...)` left the whole suite green, so
+    // nothing stopped it drifting back. The pairing that breaks it is the same as
+    // updateWatchedAt's — capture the callback while the library is empty, let a
+    // per-title `private` override land, then call the captured reference. A
+    // render-closure read sees the empty library, concludes "no override", and
+    // re-publishes a title the user had just hidden.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+    const captured = updateRatingRef!;
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({
+        tmdbId: 77, mediaType: 'movie', status: 'sedd',
+        visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+      })]));
+    });
+    // The other half of the migration: `items` is out of the dep array, so the
+    // identity survives the snapshot and a consumer's effect stops re-firing.
+    expect(updateRatingRef).toBe(captured);
+
+    await act(async () => { await captured('movie', 77, 4); });
+
+    const payload = writeTo('users/u1/watchlist/movie_77')![1] as Record<string, unknown>;
+    expect(payload.rating).toBe(4);
+    expect('effectiveVisibility' in payload).toBe(false);
+    expect('isPublic' in payload).toBe(false);
+  });
+
+  it('updateTmdbStatus writes the TMDB status + the visibility re-assert, and nothing else', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 73, mediaType: 'tv', status: 'mina' })]);
+
+    await act(async () => { await updateTmdbStatusRef!('tv', 73, 'Ended'); });
+
+    const call = writeTo('users/u1/watchlist/tv_73');
+    expect(call).toBeDefined();
+    expect(call![1]).toEqual({
+      tmdbStatus: 'Ended',
+      effectiveVisibility: 'private',
+      isPublic: false,
+      updatedAt: 'ts',
+    });
+    expect(call![2]).toEqual({ merge: true });
+  });
+
+  it('updateTmdbStatus can clear the field to null without touching a hidden title\'s visibility', async () => {
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([seedDoc({
+      tmdbId: 74, mediaType: 'tv', status: 'mina',
+      visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+    })]);
+
+    await act(async () => { await updateTmdbStatusRef!('tv', 74, null); });
+
+    expect(writeTo('users/u1/watchlist/tv_74')![1]).toEqual({ tmdbStatus: null, updatedAt: 'ts' });
+  });
+
+  it('updateTmdbStatus reads the LIVE snapshot too', async () => {
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+    const captured = updateTmdbStatusRef!;
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({
+        tmdbId: 75, mediaType: 'tv', status: 'mina',
+        visibility: 'private', effectiveVisibility: 'private', isPublic: false,
+      })]));
+    });
+    expect(updateTmdbStatusRef).toBe(captured);
+
+    await act(async () => { await captured('tv', 75, 'Ended'); });
+
+    expect(writeTo('users/u1/watchlist/tv_75')![1]).toEqual({ tmdbStatus: 'Ended', updatedAt: 'ts' });
+  });
+
+  it('neither writes anything when nobody is signed in', async () => {
+    authState.uid = null;
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      await updateWatchedAtRef!('movie', 76, new Date());
+      await updateTmdbStatusRef!('tv', 76, 'Ended');
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-598 acceptance #3 — the regression the 2026-07-29 attempt SHIPPED, and the
+// only reason `setRuntime` / `refreshTmdbFields` were left reading the render
+// closure while every other mutator moved to `findItem`.
+//
+// Those two are called fire-and-forget from MoviePageClient / TVShowPageClient,
+// out of an effect that depends on THE FUNCTION ITSELF. Their per-snapshot
+// identity is therefore not incidental — it is the reactivity: it is what re-runs
+// the page effect after a snapshot lands, so a title the visitor adds while
+// reading its page gets its runtime and its denormalised TMDB block backfilled on
+// that same visit instead of the next one. Make the identity stable (the obvious
+// "finish the migration" edit) and the backfill silently waits for a future
+// visit. Migrating them means changing those two page components in the SAME
+// diff; it is not a WatchlistContext-only edit.
+describe('WatchlistContext — title-page backfill reactivity is NOT migrated away (BIN-598 #3)', () => {
+  async function mountEmpty() {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotCallback!(snap([])); });
+  }
+
+  it('a new snapshot hands the title page a FRESH setRuntime/refreshTmdbFields — and leaves the migrated mutators alone', async () => {
+    await mountEmpty();
+    const runtimeBefore = setRuntimeRef!;
+    const refreshBefore = refreshTmdbFieldsRef!;
+    const watchedAtBefore = updateWatchedAtRef!;
+    const tmdbStatusBefore = updateTmdbStatusRef!;
+    const addItemBefore = addItemRef!;
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 80, runtime: null })]));
+    });
+
+    // The two deliberately-unmigrated ones: identity CHANGED, which is what makes
+    // the page effect re-fire. Migrating either onto `findItem` (stable `[]`-dep
+    // identity) kills this and re-ships the 2026-07-29 regression.
+    expect(setRuntimeRef).not.toBe(runtimeBefore);
+    expect(refreshTmdbFieldsRef).not.toBe(refreshBefore);
+    // …while the migrated mutators are stable across that very same snapshot —
+    // that is the BIN-598 win, and it must not have been bought by breaking the
+    // two assertions above.
+    expect(updateWatchedAtRef).toBe(watchedAtBefore);
+    expect(updateTmdbStatusRef).toBe(tmdbStatusBefore);
+    expect(addItemRef).toBe(addItemBefore);
+  });
+
+  it('backfills a title that only ENTERS the library while its page is open', async () => {
+    // The user-visible half of the same rule, end to end: the page calls
+    // setRuntime before the title is in the library (skip-guard, no write), the
+    // add lands in a later snapshot, and the fresh closure asserted above lets the
+    // re-fired effect finish the backfill on THIS visit rather than the next one.
+    await mountEmpty();
+
+    await act(async () => { await setRuntimeRef!('tv', 81, 95); });
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 81, runtime: null })]));
+    });
+    await act(async () => { await setRuntimeRef!('tv', 81, 95); });
+
+    const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_81');
+    expect(call).toBeDefined();
+    expect(call![1]).toEqual({ runtime: 95 }); // pure denormalisation — never updatedAt
   });
 });

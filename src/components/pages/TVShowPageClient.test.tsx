@@ -24,9 +24,12 @@ const watchlist = vi.hoisted(() => ({
   refreshTmdbFields: vi.fn(),
 }));
 
-// Stable identities across renders — the post-BIN-598 world, modelled ahead of it.
-// BIN-598's WatchlistContext half is not landed at this commit, so this mock is
-// deliberately stricter than the current context; see MoviePageClient.test.tsx.
+// Stable identities across renders — deliberately STRICTER than production, not a
+// preview of it. BIN-598 landed 2026-08-04 and left setRuntime/refreshTmdbFields
+// out of its itemsRef migration on purpose (their per-snapshot identity re-fires
+// these backfills), so production still churns here. Pinning stable identity is
+// what makes these assertions test the `loading` gate rather than the churn.
+// See MoviePageClient.test.tsx.
 watchlist.setRuntime = setRuntime;
 watchlist.refreshTmdbFields = refreshTmdbFields;
 

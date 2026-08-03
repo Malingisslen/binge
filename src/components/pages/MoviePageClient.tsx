@@ -64,7 +64,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
   const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
-  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading } = useWatchlist();
+  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading, libraryKnown } = useWatchlist();
   const { user } = useAuth();
   const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
@@ -88,12 +88,13 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // from deciding the write across a uid switch. Same pattern as
   // CollectionSection/CompanionSection.
   //
-  // NOTE (2026-08-02): BIN-598's WatchlistContext half is NOT landed — setRuntime
-  // still closes over `items`, so today it also gets a fresh identity per
-  // snapshot. That makes this gate belt-and-braces rather than the only thing
-  // holding the backfill up. When BIN-598 lands and the identity does become
-  // stable for the life of the uid, the gate becomes load-bearing on its own —
-  // do not remove it as redundant on the way past.
+  // NOTE (2026-08-04): BIN-598 has now LANDED, and `setRuntime` was deliberately
+  // left OUT of its itemsRef migration — it still closes over `items` and still
+  // gets a fresh identity per snapshot, because that reactivity is what re-fires
+  // this backfill. So the previous note's "when BIN-598 lands the gate becomes
+  // load-bearing on its own" never arrives for this effect: it stays
+  // belt-and-braces. The operational advice is unchanged — do not remove it as
+  // redundant on the way past.
   const movieRuntime = movie?.runtime ?? null;
   useEffect(() => {
     if (!mounted || watchlistLoading || !movie || movieRuntime == null) return;
@@ -221,9 +222,11 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       posterPath: movie.poster_path,
       releaseYear: parseInt(year, 10) || null,
       // Carries rating/progress forward if this somehow runs on a tracked title.
-      // NOT the cold-load defence — the CTA is gated on watchlistLoading for that,
-      // because `status` is written unconditionally and no payload shape can
-      // protect it. (BIN-593 made watchedAt safe on its own; status still isn't.)
+      // NOT the cold-load defence — the CTA is gated on `libraryKnown` for that
+      // (BIN-596; it was `watchlistLoading`, which also went false on a DEAD
+      // listener, i.e. exactly when `watchlistItem` is null for a tracked title).
+      // `status` is written unconditionally and no payload shape can protect it.
+      // (BIN-593 made watchedAt safe on its own; status still isn't.)
       current: watchlistItem,
       providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
       genreIds: movie.genres.map(g => g.id),
@@ -321,7 +324,23 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   the demotion alone still justifies the gate.) Hiding the CTA for
                   that moment is the only thing that makes the click safe; the
                   payload can't express "don't touch status". */}
-              {!watchlistLoading && (
+              {/* BIN-596: `libraryKnown`, not `!watchlistLoading`. The comment
+                  above always said "gated on the watchlist having SETTLED" —
+                  `loading` does not mean that, it also goes false when the
+                  listener dies, which is precisely when `watchlistItem` is null
+                  for a film the user has already marked 'sedd'.
+
+                  KNOWN CONSEQUENCE, accepted (BIN-731): a signed-out visitor has
+                  no listener, so `libraryKnown` is false for them forever and the
+                  whole "På bio nu · Hemma att hyra …" row is hidden — not just its
+                  CTA. Deliberate for now, because what they got before was WORSE:
+                  the CTA rendered, `addItem` refused the write for want of a uid,
+                  and the toast said "Bevakar släppet av X" anyway. A false
+                  confirmation beats no row only for whoever wrote the toast.
+                  Nothing is lost to crawlers — this sits inside ClientOnly.
+                  Unlike StatusButton/QuickAddButton this is NOT covered by
+                  BIN-714; giving them a real destination is BIN-731. */}
+              {libraryKnown && (
                 <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
               )}
             </ClientOnly>

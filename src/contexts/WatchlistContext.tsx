@@ -14,15 +14,26 @@ import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStamp
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
-// cap; NOTES_MIGRATE_CAP bounds the eager per-session migration write-burst.
+// cap.
+//
+// BIN-701 (traced 2026-08-02; two reviewers read the old wording opposite ways,
+// this is the verdict): NOTES_MIGRATE_CAP PACES the eager migration, it does NOT
+// bound the session. The effect takes `.slice(0, CAP)` of the titles still
+// carrying an inline note and marks only that slice in migratedNotesRef; the
+// batch then DELETES those inline notes, so the echo drops them out of the filter,
+// the effect re-runs on the new `items` and takes the next 300. An account with
+// 5000 inline notes migrates all 5000 in one session, in waves of 300 (each wave
+// chunked 200 per batch commit). What migratedNotesRef actually bounds is
+// RETRIES — a title whose migration write failed is not attempted again this
+// session. Worth knowing on a Blaze account with a 25 SEK/mån cap: the write
+// volume is "one write per un-migrated note", paid in waves, not capped at 300.
 const NOTE_MAX_LEN = 5000;
 const NOTES_MIGRATE_CAP = 300;
-// BIN-640: same idea for the addedAt repair, with one honest difference from the
-// wording above — this PACES the burst, it does not bound the session. The repair
-// writes a concrete Date, so the echo drops those docs out of the filter, the
-// effect re-runs on the new items and takes the next 300. A 5000-doc account still
-// writes all 5000, in waves of 300. That is the intended behaviour; only docs
-// written during a dead listener need it, so it should be a handful in practice.
+// BIN-640: the addedAt repair paces the same way, for the same reason — it writes
+// a concrete Date, so the echo drops those docs out of the filter and the next
+// wave takes the next 300. A 5000-doc account still writes all 5000. That is the
+// intended behaviour; only docs written during a dead listener need it, so it
+// should be a handful in practice.
 const ADDED_AT_REPAIR_CAP = 300;
 
 function docToItem(data: Record<string, unknown>): WatchlistItem {
@@ -76,6 +87,48 @@ interface WatchlistState {
    * till titlar"-state mot en användare som faktiskt har 100 serier.
    */
   loading: boolean;
+  /**
+   * BIN-596 — the two facts `loading` cannot express, for surfaces that WRITE.
+   *
+   * `loading` flips to false in BOTH terminal states: a landed snapshot AND a
+   * dead listener. A writer that reads the second as "loaded, library empty"
+   * treats every re-mark as a genuine new add — exactly the state BIN-601 stops
+   * `addItem` from stamping `addedAt` into, and the one that would let a
+   * cold-load "Sedd" land without a `watchedAt`. So the add surfaces
+   * (StatusButton / QuickAddButton) hold their action on these two instead:
+   *
+   *  - `snapshotSettled` — the first snapshot for the CURRENT uid has landed, so
+   *    `getItem` answers truthfully rather than "not in your library (yet)".
+   *  - `listenerFailed` — the listen terminally errored. Stays true until a
+   *    snapshot proves it recovered.
+   *
+   * `snapshotSettled` is false on a failure only when NO snapshot ever landed
+   * for this uid. A listener that dies AFTER one landed leaves it true next to
+   * `listenerFailed` — what we hold is simply known-stale. So "settled" alone
+   * never means "safe to write": test `listenerFailed` too, which is exactly
+   * what `libraryKnown` below does for you.
+   *
+   * Render-visible mirrors of `firstSnapshotSettledRef` / `listenerFailedRef`,
+   * which stay the MUTATORS' source of truth (a ref is still correct after an
+   * await; a render-closure boolean is not). Both are assigned in the same
+   * callbacks as their refs with no await in between — see itemsRef.
+   */
+  snapshotSettled: boolean;
+  listenerFailed: boolean;
+  /**
+   * BIN-596 — the ONE question every write surface actually has: may I trust
+   * what `getItem` just told me?
+   *
+   * Derived (`snapshotSettled && !listenerFailed`) and exposed rather than
+   * re-derived per component, because getting it wrong is silent and expensive.
+   * A surface that gates on `loading` instead reopens precisely when the
+   * listener has died — and `getItem` then answers "not in your library" for
+   * EVERY title. `CollectionSection`'s bulk "Lägg alla osedda i vill se" would
+   * hard-write `status: 'vill_se'` over up to 50 films the user had marked
+   * `'sedd'`; no payload shape can protect `status`, so this gate is the only
+   * defence (same argument as MoviePageClient's Bevaka CTA and CompanionSection).
+   */
+  libraryKnown: boolean;
   /**
    * BIN-641 — THE canonical explanation of `countsAsViewing`; everywhere else
    * points here.
@@ -138,6 +191,12 @@ interface WatchlistState {
 const WatchlistContext = createContext<WatchlistState>({
   items: [],
   loading: true,
+  // Default = "we know nothing yet", the same conservative reading the provider
+  // starts from: a consumer rendered outside the provider must not conclude that
+  // an empty library is a settled one.
+  snapshotSettled: false,
+  listenerFailed: false,
+  libraryKnown: false,
   addItem: async () => {},
   updateStatus: async () => {},
   updateWatchedAt: async () => {},
@@ -158,6 +217,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { uid, user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // BIN-596: render-visible mirrors of firstSnapshotSettledRef / listenerFailedRef
+  // (see the WatchlistState doc). Components cannot read a ref, and `loading`
+  // collapses "snapshot landed" and "listener died" into one false.
+  const [snapshotSettled, setSnapshotSettled] = useState(false);
+  const [listenerFailed, setListenerFailed] = useState(false);
   // BIN-402: `${uid}:${tmdbId}` keys of titles whose TMDB block we've lazy-refreshed
   // this session. Marked synchronously before the write so the pending-serverTimestamp
   // echo (which reads back null and would re-trip the staleness gate → write loop)
@@ -244,6 +308,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     everNonEmptyRef.current = false;
     firstSnapshotSettledRef.current = false;
+    // BIN-596: a NEW listener has not failed — the previous uid's outage says
+    // nothing about this one, and leaving it set would make the add surfaces read
+    // as "failed" for an account whose listener is fine. Reset with its mirror, in
+    // lockstep, so the ref the mutators read and the state the buttons read can
+    // never disagree. (Within one uid the flag still survives until a snapshot
+    // clears it — that is BIN-601's behaviour, unchanged.)
+    listenerFailedRef.current = false;
+    setSnapshotSettled(false);
+    setListenerFailed(false);
     itemsRef.current = [];
     pendingAddCountRef.current = 0;
     pendingFirstMediaTypeRef.current = null;
@@ -289,6 +362,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // A snapshot arrived, so the listener is alive again — clear the failed
         // flag before anything can read it alongside these fresh items.
         listenerFailedRef.current = false;
+        // BIN-596: the render-visible mirrors, set from the same callback as the
+        // refs above. React batches these, so the buttons flip from "held" to
+        // usable in one render, alongside the items they just gated on.
+        setSnapshotSettled(true);
+        setListenerFailed(false);
         setLoading(false);
       },
       // BIN-601: a terminal listen error. Without this the app hangs in `loading`
@@ -301,6 +379,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // as unknown rather than as empty.
       () => {
         listenerFailedRef.current = true;
+        // BIN-596: and say so to the UI. Note what this does NOT do: it never
+        // clears `snapshotSettled`. If a snapshot had already landed it stays
+        // TRUE alongside this flag — what we hold is known-stale, not unknown.
+        // That is why every write surface gates on `libraryKnown` (which folds in
+        // this flag) and never on `snapshotSettled` alone.
+        setListenerFailed(true);
         setLoading(false);
       }));
   }, [uid]);
@@ -469,6 +553,38 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // användaren rör titeln — ingen migrations-sweep behövs (matchar CLAUDE.md
   // lazy-migration-filosofin; orörda docs förlitar sig på läsar-fallbacken i
   // usePublicProfile). Anropas bara när item saknar per-item visibility-override.
+  // BIN-598: ONE lookup idiom for the mutators. Reads the LIVE ref, never the
+  // render-closure `items` — every mutator awaits `fsdb()` (a dynamic import that
+  // can take hundreds of ms on first use) before deciding what to write, so by
+  // then the closure can be a whole snapshot stale. itemsRef's declaration has the
+  // data loss that pairing caused (BIN-593). Stable identity (`[]` deps) so the
+  // mutators that use it no longer need `items` in their dep arrays: they are
+  // recreated per uid, not per snapshot.
+  //
+  // Two mutators deliberately still read `items` — see setRuntime /
+  // refreshTmdbFields below, where the per-snapshot identity is load-bearing.
+  // Cross-account guard, same shape (and same reason) as the notes-migration and
+  // addedAt-repair effects above: `itemsRef` is ONE shared mutable ref, so on a
+  // shared device a call that started under account A can reach this line after a
+  // sign-out+sign-in has already repopulated it with account B's rows. The write
+  // itself still lands under A (each mutator closes over its own `uid`) — but the
+  // DECISION would be made from B's data. Sharpest case: `updateNotes` reads
+  // `current?.notes` to decide whether to strip A's legacy inline note, and B's
+  // copy of the same title having no note would skip the strip — leaving in place
+  // exactly the third-party-PII leak BIN-505 exists to close.
+  //
+  // Answering `undefined` on mismatch is the safe direction: every caller treats
+  // "not found" as "no override / genuine new add", which re-asserts rather than
+  // skips. Identity is stable per uid (not per snapshot), so the mutators still
+  // keep `items` out of their dep arrays.
+  const findItem = useCallback(
+    (mediaType: MediaType, tmdbId: number) => {
+      if (itemsUidRef.current !== uid) return undefined;
+      return itemsRef.current.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
+    },
+    [uid],
+  );
+
   const effectiveVisibilityNow = useCallback((): { effectiveVisibility: ItemVisibility; isPublic: boolean } => {
     const eff = user?.defaultVisibility ?? 'private';
     return { effectiveVisibility: eff, isPublic: eff === 'public' };
@@ -486,7 +602,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // BIN-593: read the LIVE ref, not the render-closure `items` — see itemsRef's
     // declaration. This runs after `await fsdb()`, so the closure value can be a
     // whole snapshot out of date while firstSnapshotSettledRef has already flipped.
-    const currentForRating = itemsRef.current.find(i => i.tmdbId === item.tmdbId && i.mediaType === item.mediaType);
+    // BIN-598: through the shared `findItem`, so the file teaches one answer.
+    const currentForRating = findItem(item.mediaType, item.tmdbId);
     // BIN-641 — the rewatch count, computed ONCE so the re-date below can gate on
     // the OUTCOME rather than re-deriving the conditions. The two must agree: a
     // write that re-dates without counting (or the reverse) is incoherent, and
@@ -671,7 +788,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // BIN-595: depend on effectiveVisibilityNow (which is itself memoised on
     // user?.defaultVisibility), matching every sibling mutator, rather than
     // repeating its input here.
-  }, [uid, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
@@ -695,8 +812,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // BIN-593: live ref, not the render closure — same reason as addItem above.
-    const currentItem = itemsRef.current.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = currentItem?.visibility == null ? effectiveVisibilityNow() : {};
+    const currentItem = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(currentItem) ? effectiveVisibilityNow() : {};
     await setDoc(ref, buildStatusUpdate(status, {
       now: serverTimestamp(),
       visFields,
@@ -709,7 +826,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }), { merge: true });
     trackEvent('status_changed', { mediaType, status });
     // BIN-593: reads itemsRef, so `items` is no longer a dependency (see addItem).
-  }, [uid, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
   // — det tolkas som en omtitt (rewatchFields = sedd→sedd) och räknar upp rewatchCount
@@ -718,17 +835,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    // BIN-598: live ref via findItem (was `items.find`). The date itself is the
+    // caller's, so the freshness matters for ONE thing here — whether this title
+    // carries a per-title privacy override. Reading a stale closure could stamp
+    // the profile default over a title the user had just hidden (BIN-595's leak,
+    // one mutator over).
+    const current = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
     await setDoc(ref, { watchedAt: Timestamp.fromDate(watchedAt), ...visFields, updatedAt: serverTimestamp() }, { merge: true });
-  }, [uid, items, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateRating = useCallback(async (mediaType: MediaType, tmdbId: number, rating: number | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    const current = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
     // BIN-143: klampa till 0–5 (watchlist-betygsskalan är 0.5–5, ×2 vid visning;
     // defense-in-depth bakom firestore.rules-gränsen) så ett buggigt anrop aldrig
     // skickar ett värde reglerna nekar.
@@ -741,7 +863,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       ...visFields,
       updatedAt: serverTimestamp(),
     }, { merge: true });
-  }, [uid, items, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-505: write the note to the OWNER-ONLY watchlistNotes subcollection and
   // atomically strip any legacy inline `notes` off the public/friends-readable
@@ -759,8 +881,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const itemRef = doc(db, 'users', uid, 'watchlist', docId);
     const trimmed = notes?.trim();
     const clean = trimmed ? trimmed.slice(0, NOTE_MAX_LEN) : null;
-    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    // BIN-598: live ref via findItem. `current?.notes` decides whether the
+    // item-doc write happens at all (the BIN-522 no-op skip), so a stale closure
+    // could skip stripping an inline note that IS still there — a PII leak that
+    // waits for the next session.
+    const current = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
     const batch = writeBatch(db);
     if (clean) batch.set(noteRef, { note: clean, mediaType });
     else batch.delete(noteRef);
@@ -784,7 +910,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       migratedNotesRef.current.delete(docId);
       throw e;
     }
-  }, [uid, items, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateProgress = useCallback(async (mediaType: MediaType, tmdbId: number, season: number, episode: number) => {
     if (!uid) return;
@@ -794,8 +920,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // avskaffat och normaliseras vid läsning), och sub-state (ej_paborjad →
     // aktiv/ikapp) härleds — inget statusbyte behövs när första avsnittet
     // markeras. (Gamla auto-promote-flytten vill_se→mina togs bort 2026-06.)
-    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    // BIN-598: live ref via findItem — `current?.status` is forwarded to the
+    // group sync below, so a stale closure syncs a status the user has since
+    // changed.
+    const current = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
     await setDoc(ref, {
       lastWatchedSeason: season,
       lastWatchedEpisode: episode,
@@ -815,21 +944,34 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         status: current?.status ?? null,
       }),
     );
-  }, [uid, items, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateTmdbStatus = useCallback(async (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
-    const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
-    const visFields = current?.visibility == null ? effectiveVisibilityNow() : {};
+    // BIN-598: live ref via findItem — same privacy reason as updateWatchedAt.
+    const current = findItem(mediaType, tmdbId);
+    const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
     await setDoc(ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
-  }, [uid, items, effectiveVisibilityNow]);
+  }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-93: lazy runtime backfill from title-detail views. Writes only when the
   // title is already in the library and runtime is still unknown — and never
   // bumps updatedAt (it's a silent denormalisation, not a user edit, so it must
   // not reorder "senast ändrad").
+  //
+  // BIN-598: this one and refreshTmdbFields below deliberately KEEP the
+  // render-closure `items` (and `items` in their deps) while every other mutator
+  // moved to findItem. The per-snapshot identity is not incidental here, it is the
+  // reactivity: MoviePageClient/TVShowPageClient call these from an effect that
+  // depends on the function itself, so a title the visitor adds WHILE reading its
+  // page gets its runtime + TMDB block backfilled on the resulting snapshot. Make
+  // the identity stable and that backfill waits for the next visit — the round-3
+  // regression this sweep is explicitly told not to re-introduce. Migrating them
+  // means changing those two page effects in the same diff; it is not a
+  // WatchlistContext-only edit. Both read `current` only to SKIP a write, so a
+  // stale closure costs a no-op, never a wrong write.
   const setRuntime = useCallback(async (mediaType: MediaType, tmdbId: number, runtime: number | null) => {
     if (!uid || runtime == null) return;
     const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
@@ -940,9 +1082,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return itemsWithTags.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType) ?? null;
   }, [itemsWithTags]);
 
+  // Derived HERE, not per consumer — see the `libraryKnown` doc on WatchlistState
+  // for why re-deriving it at each write surface is how the gate goes missing.
+  const libraryKnown = snapshotSettled && !listenerFailed;
+
   const value = useMemo(() => ({
-    items: itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
-  }), [itemsWithTags, loading, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>
