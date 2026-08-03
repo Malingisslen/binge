@@ -72,9 +72,14 @@ describe('LoginPage — where you land after signing in (BIN-645)', () => {
     await act(async () => { render(<LoginPage />); });
 
     expect(push).toHaveBeenCalledWith('/onboarding/');
-    // …and the stored path is CONSUMED even though it was not used. Leaving it
-    // would hijack the next sign-in in this tab.
-    expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBeNull();
+    // …and the stored path SURVIVES (BIN-669). This assertion was the exact
+    // inverse until onboarding learned to hand the path back: consuming it here
+    // is what dropped every new account on the home page instead of the title
+    // they tapped. Onboarding is a detour, not a cancellation, so the value has
+    // to outlive this navigation — `OnboardingFlow.finish` is what consumes it,
+    // on completion AND on "Hoppa över". Nothing is hijacked in the meantime:
+    // `redirectedRef` latches this page to one push.
+    expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
   });
 
   // This is what `redirectedRef` in page.tsx exists for. `takeNextPath()`

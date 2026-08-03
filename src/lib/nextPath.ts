@@ -24,16 +24,29 @@
  * CAN choose that — by handing them a link to open before they tap. So the query
  * is not carried wholesale: only `RETURN_QUERY_KEYS` survive. The worst of the
  * excluded ones is `?invite=`, which joins a group on mount with no
- * confirmation; an allowlist means it cannot even be expressed here. Today that
- * page is also `AuthGuard`-wrapped so a signed-out visitor never sees the badge
- * on it — but that is a four-file coincidence, and a public route that later
- * grows a query-driven action would re-open it silently. The allowlist does not
- * depend on any of that.
+ * confirmation; an allowlist means it cannot even be expressed here.
+ *
+ * That used to come with a second, weaker reassurance — the group page is
+ * `AuthGuard`-wrapped, so a signed-out visitor never sees the badge on it.
+ * BIN-669 inverted exactly that: `AuthGuard` is now itself a writer, and an
+ * `AuthGuard`-wrapped page is precisely the case that gets remembered. The
+ * allowlist is what still holds (a bounce off `/grupper/?invite=abc` comes back
+ * as `/grupper/`), and it never depended on the wrapping. Product consequence
+ * worth knowing: a signed-out invitee returns to the group page with the token
+ * stripped, so the auto-join does not fire — they see the group, not a join.
  *
  * `?fromGroup=` is excluded by the same rule and is worth naming, because it is
  * NOT hypothetical: it drives group spoiler-masking, it costs a Firestore read
  * on mount, and the badge does render beside it (RecCard on a title page). The
  * cost of leaving it out is a title page that comes back unmasked — accepted.
+ *
+ * BIN-669 — the path has to survive ONBOARDING, not just sign-in. A brand-new
+ * account is routed to `/onboarding/` instead of its remembered path, so the
+ * value must still be in storage when the flow finishes; `LoginPage` therefore
+ * leaves it unconsumed on that branch and `OnboardingFlow` is the one that
+ * calls `takeNextPath`. That makes the key outlive a single navigation, which
+ * is why `clearNextPath` exists: a guard that bounces a visitor is stating
+ * "this page is the destination now", and must not inherit a stale one.
  *
  * `safeNextPath` validates on READ as well. sessionStorage is same-origin, but
  * any script on our own origin can write it, and a stored value outlives the tap
@@ -120,12 +133,23 @@ export function rememberNextPath(path: string | null | undefined): void {
   const safe = safeNextPath(path);
   if (!safe) return;
   // A return path that IS the sign-in page is never a destination — see
-  // SIGN_IN_ROUTES. Guarding here rather than at each button covers all three
-  // call sites and any future one.
+  // SIGN_IN_ROUTES. Guarding here rather than at each caller covers every one of
+  // them, including any added later. (No count: it kept going stale.)
   if (isSignInPath(safe)) return;
   // Private mode / disabled storage throws on write — losing the return path is
   // a worse landing, never a broken sign-in.
   try { window.sessionStorage.setItem(KEY, stripUnsafeQuery(safe)); } catch { /* no-op */ }
+}
+
+/**
+ * Forget any remembered path. For a caller that is about to REPLACE it: an
+ * earlier tap in the same tab must never outrank the page the visitor is being
+ * bounced off right now, and `rememberNextPath` silently no-ops on a path it
+ * refuses (a sign-in route, an unsafe value) — which would otherwise leave the
+ * stale one in place and land them somewhere they never asked for.
+ */
+export function clearNextPath(): void {
+  try { window.sessionStorage.removeItem(KEY); } catch { /* no-op */ }
 }
 
 /**

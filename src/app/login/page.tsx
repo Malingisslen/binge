@@ -51,13 +51,16 @@ export default function LoginPage() {
     // still no-ops behind a success toast (parked as BIN-596). So this reads a
     // path that is usually a grid, not a title page.
     //
-    // Onboarding still wins: a brand-new account has nothing to come back to
-    // yet, and skipping the flow would leave them without providers.
+    // Onboarding still wins as the immediate destination — a brand-new account
+    // would otherwise land without providers. But it is a DETOUR, not a
+    // cancellation (BIN-669): the path is deliberately left UNCONSUMED on that
+    // branch so `OnboardingFlow` can take it when the flow finishes. Consuming
+    // it here is what used to drop it, since `takeNextPath` removes on read.
     //
     // The path comes from sessionStorage, never a query param — see nextPath.ts
     // for why (a `?next=` would travel to Firebase's Google-hosted auth handler,
     // and would be attacker-supplied). `takeNextPath` validates on read anyway.
-    const next = takeNextPath();
+    const next = needsOnboarding ? null : takeNextPath();
     router.push(needsOnboarding ? '/onboarding/' : (next ?? '/'));
   }, [uid, user, profileLoading, router]);
 

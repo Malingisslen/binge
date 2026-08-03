@@ -25,6 +25,7 @@ import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
+import { clearNextPath } from '@/lib/nextPath';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -47,6 +48,27 @@ interface AuthState {
   register: (email: string, password: string, name: string, termsVersion: string) => Promise<void>;
   resendEmailVerification: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * BIN-669 — is the visitor LEAVING, or were they turned away?
+   *
+   * Both look identical to a route guard: `uid` goes null on a page that
+   * requires one. But `signOut()` does not navigate, so the guard fires while
+   * the departing user's own page is still mounted — and a guard that remembers
+   * where it bounced someone would then store THAT page as the return path.
+   * On a shared device the next person to sign in inherits it, and since
+   * BIN-669 lets a remembered path survive onboarding, a brand-new account gets
+   * routed into the previous user's private URL. Firestore denies the contents,
+   * so nothing leaks — they just learn the address and land on an error.
+   *
+   * Deliberately a PREDICATE, not a single-use consumer. A consume-on-read
+   * would be read inside the guard's effect, and React re-runs effects (Strict
+   * Mode mounts twice) — the second run would find the intent already spent and
+   * remember the page after all, which is the bug, not the fix. `signOut` owns
+   * the whole window: it raises the flag, and lowers it only after clearing the
+   * stored path a second time, so a bounce that slipped through cannot survive
+   * either.
+   */
+  isSigningOut: () => boolean;
   updateProviders: (providers: number[]) => Promise<void>;
   updateDefaultView: (view: 'table' | 'grid' | 'cards') => Promise<void>;
   updateProviderCosts: (costs: Record<number, number>) => Promise<void>;
@@ -96,6 +118,9 @@ const AuthContext = createContext<AuthState>({
   register: async () => {},
   resendEmailVerification: async () => {},
   signOut: async () => {},
+  // Default "no, they were turned away" — the conservative reading: a guard
+  // outside the provider must remember where it bounced someone.
+  isSigningOut: () => false,
   updateProviders: async () => {},
   updateDefaultView: async () => {},
   updateProviderCosts: async () => {},
@@ -607,18 +632,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendEmailVerification(auth.currentUser);
   }, []);
 
+  // BIN-669 — a ref, not state: it is raised and read inside the same commit
+  // (signOut → uid null → the guard's effect), which a state update could not
+  // deliver in time.
+  const signingOutRef = useRef(false);
+  const isSigningOut = useCallback(() => signingOutRef.current, []);
+
   const signOut = useCallback(async () => {
-    await firebaseSignOut(auth);
-    // Clear React Query cache so the next user (on shared device) or a
-    // re-signed-in user starts with empty server-state instead of the
-    // previous user's cached watchlist / reviews / notifications.
-    queryClient.clear();
-    // GDPR-hygien på delad enhet: Firestores IndexedDB-cache
-    // (persistentLocalCache) överlever annars signOut, så nästa användare
-    // skulle kort kunna se föregående användares watchlist från disk.
-    // Fel sväljs i helpern — en misslyckad rensning blockerar aldrig
-    // utloggningen.
-    await clearFirestorePersistence();
+    // BIN-669: raised BEFORE the sign-out, not after. `firebaseSignOut` flips
+    // `uid` to null on the still-mounted page, so a route guard's effect runs
+    // between this line and the next await — setting the flag afterwards would
+    // always be too late. See `isSigningOut`'s doc for what it prevents.
+    signingOutRef.current = true;
+    // Belt: a path an earlier tap stored is not this handover's business either.
+    clearNextPath();
+    try {
+      await firebaseSignOut(auth);
+      // Clear React Query cache so the next user (on shared device) or a
+      // re-signed-in user starts with empty server-state instead of the
+      // previous user's cached watchlist / reviews / notifications.
+      queryClient.clear();
+      // GDPR-hygien på delad enhet: Firestores IndexedDB-cache
+      // (persistentLocalCache) överlever annars signOut, så nästa användare
+      // skulle kort kunna se föregående användares watchlist från disk.
+      // Fel sväljs i helpern — en misslyckad rensning blockerar aldrig
+      // utloggningen.
+      await clearFirestorePersistence();
+    } finally {
+      // Braces, and the reason the flag can be a plain predicate: even if a
+      // guard somewhere DID write a path while `uid` was flipping, it does not
+      // outlive the sign-out. Lowered last, so the window the flag covers is
+      // exactly the window a bounce can happen in.
+      clearNextPath();
+      signingOutRef.current = false;
+    }
   }, [queryClient]);
 
   const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
@@ -923,7 +970,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user, uid, loading, profileLoading, emailVerified,
-      signIn, signInEmail, register, resendEmailVerification, signOut,
+      signIn, signInEmail, register, resendEmailVerification, signOut, isSigningOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
@@ -931,7 +978,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       user, uid, loading, profileLoading, emailVerified,
-      signIn, signInEmail, register, resendEmailVerification, signOut,
+      signIn, signInEmail, register, resendEmailVerification, signOut, isSigningOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
       updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,

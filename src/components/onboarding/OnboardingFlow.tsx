@@ -13,6 +13,7 @@ import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { takeNextPath } from '@/lib/nextPath';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 /**
@@ -33,19 +34,59 @@ import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 const DEFAULT_PROVIDERS = [8, 119, 337, 384, 76, 520]; // Netflix, Prime, Disney+, HBO Max, Viaplay, SVT Play
 
+/**
+ * BIN-659: one SHAPE for every failed write in the flow — the situation is
+ * always the same (the write did not land, the same button is the retry), but
+ * the wording is not: each caller names what it could not save, because "Kunde
+ * inte spara" alone leaves the visitor guessing which of the step's actions
+ * failed. An earlier draft exported a shared default string; nothing ever
+ * rendered it, so it was a constant claiming to be the single source of a
+ * wording the flow deliberately varies.
+ *
+ * `border-danger/30` (not `border-rule`) to match the other danger banners —
+ * GroupPageClient uses exactly this; the design system's danger token, not a raw
+ * red.
+ */
+function SaveError({ message }: { message: string }) {
+  return (
+    <p
+      role="alert"
+      className="text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm px-3 py-2 mb-3"
+    >
+      {message}
+    </p>
+  );
+}
+
 export function OnboardingFlow() {
   const router = useRouter();
   const { uid, user } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   if (!uid || !user) return null;
+
+  /**
+   * BIN-659: every step change goes through here, so the completion error can
+   * never outlive the step it was raised on. `saveFailed` belongs to `finish`,
+   * and "Hoppa över" reaches `finish` from EVERY step — so a failed skip on
+   * step 1 would otherwise leave "Kunde inte spara att du är klar" sitting under
+   * the card while the visitor works through steps 2-4 for unrelated reasons.
+   * The per-step errors need no such reset: those components unmount on a step
+   * change and lose their local state for free.
+   */
+  const goToStep = (next: 1 | 2 | 3 | 4) => {
+    setSaveFailed(false);
+    setStep(next);
+  };
 
   // Markerar onboarding som klar och navigerar. `destination` låter
   // Kalibrera-CTA:n slutföra onboardingen INNAN den routar till /kalibrera/
   // — annars lämnade primärknappen flödet med onboardingCompletedAt osatt.
-  const finish = async (destination = '/') => {
+  const finish = async (destination?: string) => {
     setSaving(true);
+    setSaveFailed(false);
     try {
       const { db, doc, setDoc, serverTimestamp } = await fsdb();
       await setDoc(
@@ -54,7 +95,21 @@ export function OnboardingFlow() {
         { merge: true },
       );
       trackEvent('onboarding_completed', { step_reached: step });
-      router.push(destination);
+      // BIN-669: sign-in remembered where they were (the poster badge on a
+      // prerendered title page is the funnel), then routed them here instead.
+      // Onboarding is the last leg of that trip, so it is what hands them back.
+      // Consumed unconditionally — even when the Kalibrera CTA names its own
+      // destination — because a value left in storage would aim the NEXT
+      // sign-in in this tab at a page that is by then long stale.
+      const remembered = takeNextPath();
+      router.push(destination ?? remembered ?? '/');
+    } catch (err) {
+      // BIN-659: this rejected unhandled before, so a failed write left the
+      // visitor on the last step with a dead-looking button and no idea the
+      // account was still flagged as un-onboarded. Navigation stays blocked on
+      // purpose — advancing past a write that did not land is the actual bug.
+      console.error('Onboarding finish failed:', err);
+      setSaveFailed(true);
     } finally {
       setSaving(false);
     }
@@ -69,11 +124,18 @@ export function OnboardingFlow() {
     <div className="max-w-[640px] mx-auto py-8 px-4">
       <StepIndicator current={step} total={4} />
       <div className="mt-6 bg-surface border border-rule rounded-sm p-6">
-        {step === 1 && <StepWelcome onNext={() => setStep(2)} />}
-        {step === 2 && <StepProviders onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-        {step === 3 && <StepFirstTitle onBack={() => setStep(2)} onNext={() => setStep(4)} />}
-        {step === 4 && <StepDone onBack={() => setStep(3)} onFinish={finish} saving={saving} />}
+        {step === 1 && <StepWelcome onNext={() => goToStep(2)} />}
+        {step === 2 && <StepProviders onBack={() => goToStep(1)} onNext={() => goToStep(3)} />}
+        {step === 3 && <StepFirstTitle onBack={() => goToStep(2)} onNext={() => goToStep(4)} />}
+        {step === 4 && <StepDone onBack={() => goToStep(3)} onFinish={finish} saving={saving} />}
       </div>
+      {/* Below the card: `finish` is reachable from both the card's buttons and
+          "Hoppa över", so its error belongs to neither one alone. */}
+      {saveFailed && (
+        <div className="mt-4">
+          <SaveError message="Kunde inte spara att du är klar. Kontrollera anslutningen och försök igen." />
+        </div>
+      )}
       <div className="mt-4 text-center">
         <button
           onClick={skip}
@@ -148,6 +210,7 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
       : DEFAULT_PROVIDERS,
   );
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const toggle = (id: number) =>
     setSelected(s => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
@@ -156,9 +219,16 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
 
   const save = async () => {
     setSaving(true);
+    setSaveFailed(false);
     try {
       await updateProviders(selected);
       onNext();
+    } catch (err) {
+      // BIN-659: a rejected write used to leave "Nästa" looking simply dead —
+      // the step never advanced and nothing said why. The selection is still in
+      // state, so the same button is the retry.
+      console.error('Onboarding provider save failed:', err);
+      setSaveFailed(true);
     } finally {
       setSaving(false);
     }
@@ -197,6 +267,9 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
           );
         })}
       </div>
+      {saveFailed && (
+        <SaveError message="Kunde inte spara dina tjänster. Kontrollera anslutningen och försök igen." />
+      )}
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
@@ -222,7 +295,17 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 250);
   const { data: searchData, isLoading } = useSearch(debouncedQuery);
+  // Deliberately NOT gated on `libraryKnown` the way every other add surface is
+  // (BIN-596). This step runs once, on an account created seconds ago, so the
+  // "library you already have" this ticket protects does not exist yet — the
+  // gate would only ever hold the very first add of a brand-new user behind a
+  // snapshot they have no reason to wait for. The residual it leaves is narrow
+  // and tracked in BIN-729: on a DEAD listener a title marked "Sedd" here lands
+  // without `watchedAt` (addItem's own guards suppress it), and that half does
+  // not self-heal. Do not "fix" this by adding the gate without reading that
+  // ticket — it also lists the other ungated writers, and they want one answer.
   const { items, addItem } = useWatchlist();
+  const [addFailed, setAddFailed] = useState(false);
 
   const canContinue = items.length > 0;
 
@@ -236,20 +319,29 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
     const status: WatchStatus = result.media_type === 'tv'
       ? 'mina'
       : (intent === 'plan' ? 'vill_se' : 'sedd');
-    await addItem(buildWatchlistAddPayload({
-      tmdbId: result.id,
-      mediaType: result.media_type,
-      status,
-      title,
-      posterPath: result.poster_path,
-      releaseYear: getReleaseYear(result),
-      genreIds: result.genre_ids ?? [],
-      // Genuine new add with no `current` and no provider data on this surface.
-      // Explicit [] (not omitted) so the created doc satisfies WatchlistItem's
-      // non-optional array contract; taste/backfill owns filling it in later, and
-      // shouldStampProvidersAtAdd deliberately does not stamp on an empty list.
-      providers: [],
-    }));
+    setAddFailed(false);
+    try {
+      await addItem(buildWatchlistAddPayload({
+        tmdbId: result.id,
+        mediaType: result.media_type,
+        status,
+        title,
+        posterPath: result.poster_path,
+        releaseYear: getReleaseYear(result),
+        genreIds: result.genre_ids ?? [],
+        // Genuine new add with no `current` and no provider data on this surface.
+        // Explicit [] (not omitted) so the created doc satisfies WatchlistItem's
+        // non-optional array contract; taste/backfill owns filling it in later, and
+        // shouldStampProvidersAtAdd deliberately does not stamp on an empty list.
+        providers: [],
+      }));
+    } catch (err) {
+      // BIN-659: the add rejected unhandled, so the row simply never turned into
+      // "Tillagd" — indistinguishable from a missed tap, and "Nästa" stayed
+      // disabled with nothing explaining it. The row's button is the retry.
+      console.error('Onboarding first-title add failed:', err);
+      setAddFailed(true);
+    }
   };
 
   return (
@@ -283,7 +375,16 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
             .filter(isAddableMediaType)
             .slice(0, 6)
             .map(r => {
-              const alreadyAdded = items.some(i => i.tmdbId === r.id);
+              // BIN-664: tmdbId alone is not an identity. TMDB numbers movies
+              // and series in SEPARATE sequences, so id 1399 is both Game of
+              // Thrones and an unrelated film — matching on the number alone
+              // showed the second one as "Tillagd" with no way to add it, and
+              // (with one title added) let the visitor leave step 3 believing
+              // they had tracked something they had not. The watchlist doc id is
+              // mediaType-namespaced for the same reason (BIN-560).
+              const alreadyAdded = items.some(
+                i => i.tmdbId === r.id && i.mediaType === r.media_type,
+              );
               const poster = posterUrl(r.poster_path, 'w92');
               return (
                 <li
@@ -342,6 +443,10 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
               );
             })}
         </ul>
+      )}
+
+      {addFailed && (
+        <SaveError message="Kunde inte lägga till titeln. Kontrollera anslutningen och försök igen." />
       )}
 
       {items.length > 0 && (

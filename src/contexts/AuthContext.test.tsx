@@ -28,6 +28,11 @@ let authCallback: ((u: FakeUser | null) => void) | null = null;
 const createUserWithEmailAndPassword = vi.fn(async () => ({ user: fakeUser }));
 const sendEmailVerification = vi.fn(async () => {});
 const updateProfileMock = vi.fn(async () => {});
+// BIN-669: controllable, so a test can hold the sign-out mid-flight (to observe
+// the window `isSigningOut` covers) and make it REJECT (to prove the flag is
+// lowered anyway). An inline `vi.fn(async () => {})` in the factory below could
+// do neither, which is why the try/finally shipped untested the first time.
+const signOutMock = vi.fn(async () => {});
 
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, cb: (u: FakeUser | null) => void) => {
@@ -42,7 +47,7 @@ vi.mock('firebase/auth', () => ({
     (sendEmailVerification as (...a: unknown[]) => Promise<void>)(...args),
   updateProfile: (...args: unknown[]) =>
     (updateProfileMock as (...a: unknown[]) => Promise<void>)(...args),
-  signOut: vi.fn(async () => {}),
+  signOut: (...args: unknown[]) => (signOutMock as (...a: unknown[]) => Promise<void>)(...args),
   deleteUser: vi.fn(async () => {}),
   GoogleAuthProvider: class {},
 }));
@@ -705,5 +710,63 @@ describe('AuthContext — updateProviders group query bound (BIN-536)', () => {
 
     expect(limitCalls).toContain(100);
     expect(getDocsMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AuthContext — the sign-out window is exactly the sign-out (BIN-669)', () => {
+  // `isSigningOut()` is what stops AuthGuard storing the DEPARTING user's private
+  // page as the next account's return path on a shared device. It is only a safe
+  // predicate (rather than a consume-once read) because `signOut` owns the whole
+  // window and always closes it — which is the part that shipped untested: moving
+  // the reset out of the `finally` left every other test in the repo green, while
+  // one failed sign-out would silently disable the protection for the rest of the
+  // tab's life.
+  const NEXT_KEY = 'binge:nextAfterLogin';
+
+  it('raises the flag for the duration of the sign-out and lowers it after', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+    expect(ctx!.isSigningOut()).toBe(false);
+
+    // Hold firebaseSignOut mid-flight — this is the window AuthGuard's effect
+    // runs in, with the departing user's page still mounted.
+    let release: (() => void) | null = null;
+    signOutMock.mockImplementationOnce(
+      () => new Promise<void>(res => { release = () => res(); }),
+    );
+
+    let done: Promise<void>;
+    await act(async () => { done = ctx!.signOut(); });
+    expect(ctx!.isSigningOut()).toBe(true);
+
+    await act(async () => { release!(); await done; });
+    expect(ctx!.isSigningOut()).toBe(false);
+  });
+
+  it('lowers the flag even when the sign-out THROWS', async () => {
+    // The regression the finally exists for. A network error here used to be
+    // survivable; with a stranded flag it silently turns off remembered-path
+    // capture for every genuine bounce afterwards in that tab.
+    renderAuth();
+    await login({ username: 'malin' });
+    signOutMock.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.signOut()).rejects.toThrow('network');
+    });
+
+    expect(ctx!.isSigningOut()).toBe(false);
+  });
+
+  it('drops a remembered path on the way out, so it cannot outlive the account', async () => {
+    // Belt to AuthGuard's braces: not writing a new path is not enough if an
+    // earlier tap in the same tab already stored one.
+    window.sessionStorage.setItem(NEXT_KEY, '/grupper/g-hemlig-123/');
+    renderAuth();
+    await login({ username: 'malin' });
+
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(window.sessionStorage.getItem(NEXT_KEY)).toBeNull();
   });
 });
