@@ -1,7 +1,12 @@
 {
   "hosting": {
     "public": "out",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/__next._full.txt"
+    ],
     "redirects": [
       { "source": "/my/following", "destination": "/my/series/", "type": 301 },
       { "source": "/my/following/", "destination": "/my/series/", "type": 301 },

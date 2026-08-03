@@ -160,6 +160,65 @@ jobs:
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
           TMDB_BUILD_REFRESH_BUDGET: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1000000' || '' }}
 
+      # Guard the `**/__next._full.txt` entry in firebase.json's hosting.ignore.
+      #
+      # Next 16's static export writes a `__next._full.txt` into every page
+      # directory that is a BYTE-IDENTICAL twin of the sibling `index.txt`
+      # (~22 900 files, ~1.5 GB per deploy). Nothing ever requests it — the
+      # client router builds its RSC URL as `pathname += "index.txt"`, and
+      # `_full` appears nowhere in the bundle, the HTML, the `__next._tree.txt`
+      # payloads, the sitemap or the service worker. So we stop uploading it.
+      #
+      # That premise is a Next.js INTERNAL, and this repo takes Next minors via
+      # the weekly dependabot `react-next` group. Two failure modes, two
+      # responses — deliberately split:
+      #
+      #   * The files are GONE (Next renamed or dropped them). The ignore glob
+      #     is now a no-op: we quietly stop saving, the site is fine. ADVISORY —
+      #     ::warning:: and continue, same reasoning as the audit step above
+      #     (BIN-344): this is the only prod path and a cost regression must not
+      #     freeze an urgent hotfix.
+      #   * The files EXIST but are no longer identical twins of index.txt. Now
+      #     the glob may be dropping real content, and Firebase Hosting caches
+      #     .txt for a day (see the headers block in firebase.json), so a bad
+      #     deploy costs a rebuild plus a Cloudflare purge. BLOCKING.
+      #
+      # Guarding the invariant rather than the filename is the point: a name
+      # check cannot catch "Next kept the name and changed the meaning".
+      - name: Verify the ignored RSC twin is still a duplicate
+        run: |
+          set -euo pipefail
+          FULL=$(find out -type f -name '__next._full.txt' | wc -l)
+          INDEX=$(find out -type f -name 'index.txt' | wc -l)
+          echo "__next._full.txt: $FULL   index.txt: $INDEX"
+
+          if [ "$FULL" -eq 0 ]; then
+            echo "::warning::No __next._full.txt in the build — the hosting.ignore entry is a no-op and the ~1.5 GB/deploy saving is gone. Next.js probably renamed the static-export segment artifacts. Re-check which files are unreferenced and update firebase.json + .claude/rules/deployment.md."
+            exit 0
+          fi
+
+          if [ "$FULL" -ne "$INDEX" ]; then
+            echo "::error::__next._full.txt ($FULL) and index.txt ($INDEX) no longer pair up 1:1 — the ignore glob may be dropping content that has no twin. Refusing to deploy."
+            exit 1
+          fi
+
+          # Byte-identity on a sample. Full comparison would be 22 900 cmp calls.
+          # 50 of ~22 900 only catches a SYSTEMIC change — which is the only
+          # realistic one, since a Next upgrade changes every page the same way.
+          # It would miss a single anomalous file; that is accepted.
+          BAD=0
+          for f in $(find out -type f -name '__next._full.txt' | shuf -n 50); do
+            if ! cmp -s "$f" "$(dirname "$f")/index.txt"; then
+              echo "::error::$f differs from its sibling index.txt"
+              BAD=$((BAD + 1))
+            fi
+          done
+          if [ "$BAD" -ne 0 ]; then
+            echo "::error::$BAD of 50 sampled __next._full.txt files are NOT duplicates of index.txt. The premise behind the hosting.ignore entry no longer holds. Refusing to deploy."
+            exit 1
+          fi
+          echo "50/50 sampled files are byte-identical twins — safe to ignore on upload."
+
       # Deploy hosting via a direct, pinned firebase-tools call instead of the
       # floating FirebaseExtended/action-hosting-deploy@v0. This is a faithful
       # inline replacement of what that action did (write the service-account

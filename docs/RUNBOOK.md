@@ -317,6 +317,49 @@ Glöm inte cache-purge efter rollback (§8).
 
 ---
 
+## 10b. Hosting-lagring: tva kopplade kostnadskontroller
+
+Firebase Hosting debiterar **lagring**, inte bara trafik. I juli 2026 lag binge
+pa **307 GB lagrat** mot 1,7 GB nedladdat - enbart kvarliggande deployer. Tva
+kontroller haller nere det. **Bada maste finnas kvar**, och den forsta syns inte
+i repot alls, vilket ar precis sa 307 GB kommer tillbaka.
+
+**1. Antal sparade releaser = 3** - satt 2026-08-02, en **konto-installning, inte
+kod**: Firebase console -> `binge-nu` -> Hosting -> Manage site -> *Release
+storage settings* -> "Number of previous releases to keep". Rutan var **tom** =
+spara varje version for alltid, och varje deploy ar ~10 GB. Tre releaser racker
+for rollback i ett solo-flode som pushar direkt till main. **Andrar du den,
+uppdatera den har raden** - det finns ingen annan plats dar vardet ar skrivet.
+
+**2. `**/__next._full.txt` ignoreras vid uppladdning** (`firebase.json` ->
+`hosting.ignore`, 2026-08-03). Next 16:s statiska export skriver en
+`__next._full.txt` i varje sid-katalog som ar byte-identisk med grannen
+`index.txt` - ~22 900 filer, ~1,5 GB per deploy. Ingen hamtar den: klient-routern
+bygger sin RSC-URL som `pathname += "index.txt"`, och `_full` finns varken i
+bundlen, HTML:en, `__next._tree.txt`-payloaderna, sitemap:en eller service
+workern.
+
+Den ignoreras i stallet for att raderas efter bygget, sa att **en** rad tacker
+`deploy.yml`, `preview.yml` och lokala `firebase deploy` - ett raderingssteg i
+deploy-flodet hade fatt previewen att servera en annan filuppsattning an prod.
+
+Premissen ar ett Next.js-internt beteende och repot tar Next-minors via den
+veckovisa dependabot-gruppen `react-next`. Steget *"Verify the ignored RSC twin
+is still a duplicate"* i `deploy.yml` kollar darfor **invarianten** pa varje
+farskt bygge:
+
+- filerna **borta** -> `::warning::`, deployen fortsatter (glob:en ar en no-op,
+  sajten oskadd, vi slutar bara spara - advisory av samma skal som audit-steget,
+  BIN-344: enda prod-vagen far inte frysas av en kostnadsregression);
+- filerna **finns men skiljer sig fran `index.txt`** -> **blockerar**, for da kan
+  glob:en kasta bort riktigt innehall och `.txt` cachas ett dygn (se cache-purge
+  ovan).
+
+Ser du deployen blockera pa det steget: kolla forst om en Next-uppgradering just
+landat, och avgor om filen fortfarande ar oanvand innan du ror glob:en.
+
+---
+
 ## 11. Kontakter + resurser
 
 - Firebase Support: https://firebase.google.com/support (Spark = community-
