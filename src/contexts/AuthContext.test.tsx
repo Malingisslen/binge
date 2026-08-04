@@ -28,10 +28,10 @@ let authCallback: ((u: FakeUser | null) => void) | null = null;
 const createUserWithEmailAndPassword = vi.fn(async () => ({ user: fakeUser }));
 const sendEmailVerification = vi.fn(async () => {});
 const updateProfileMock = vi.fn(async () => {});
-// BIN-669: controllable, so a test can hold the sign-out mid-flight (to observe
-// the window `isSigningOut` covers) and make it REJECT (to prove the flag is
-// lowered anyway). An inline `vi.fn(async () => {})` in the factory below could
-// do neither, which is why the try/finally shipped untested the first time.
+// BIN-669/732: controllable, so a test can make the sign-out REJECT and still
+// assert the remembered path is gone. An inline `vi.fn(async () => {})` in the
+// factory below could not, which is why the failure path shipped untested the
+// first time.
 const signOutMock = vi.fn(async () => {});
 
 vi.mock('firebase/auth', () => ({
@@ -219,6 +219,9 @@ beforeEach(() => {
   profileDocData.current = null;
   ctx = null;
   try { window.localStorage.clear(); } catch { /* private mode */ }
+  // BIN-732: the remembered return path lives here, and a leftover from a
+  // neighbouring test would make "the path survived" pass for the wrong reason.
+  try { window.sessionStorage.clear(); } catch { /* private mode */ }
 });
 
 // BIN-517: register()-writen racear onAuthStateChanged → ensureUserProfile →
@@ -713,40 +716,89 @@ describe('AuthContext — updateProviders group query bound (BIN-536)', () => {
   });
 });
 
-describe('AuthContext — the sign-out window is exactly the sign-out (BIN-669)', () => {
-  // `isSigningOut()` is what stops AuthGuard storing the DEPARTING user's private
-  // page as the next account's return path on a shared device. It is only a safe
-  // predicate (rather than a consume-once read) because `signOut` owns the whole
-  // window and always closes it — which is the part that shipped untested: moving
-  // the reset out of the `finally` left every other test in the repo green, while
-  // one failed sign-out would silently disable the protection for the rest of the
-  // tab's life.
+// BIN-669 stopped AuthGuard storing the DEPARTING user's private page as the
+// next account's return path — but through a flag raised by `signOut()`, which
+// is one tab's memory. Firebase broadcasts a sign-out to every tab on the
+// origin, so a second tab parked on a guarded page had a `false` flag and stored
+// the page anyway; on a shared device the next account inherits it, and a
+// remembered path outlives onboarding. BIN-732 moves the decision onto the
+// TRANSITION — uid going set→null, whatever caused it and in whichever tab —
+// which is the only signal that actually crosses tabs.
+describe('AuthContext — a session ending forgets the return path (BIN-732)', () => {
   const NEXT_KEY = 'binge:nextAfterLogin';
+  const stored = () => window.sessionStorage.getItem(NEXT_KEY);
 
-  it('raises the flag for the duration of the sign-out and lowers it after', async () => {
+  it('clears a remembered path when uid goes set→null, with no signOut() call in this tab', async () => {
+    // THE regression. This provider never runs `signOut` — it only receives the
+    // sign-out another tab performed, exactly as the second tab does in life.
     renderAuth();
     await login({ username: 'malin' });
-    expect(ctx!.isSigningOut()).toBe(false);
+    window.sessionStorage.setItem(NEXT_KEY, '/grupper/g-hemlig-123/');
 
-    // Hold firebaseSignOut mid-flight — this is the window AuthGuard's effect
-    // runs in, with the departing user's page still mounted.
-    let release: (() => void) | null = null;
-    signOutMock.mockImplementationOnce(
-      () => new Promise<void>(res => { release = () => res(); }),
-    );
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
 
-    let done: Promise<void>;
-    await act(async () => { done = ctx!.signOut(); });
-    expect(ctx!.isSigningOut()).toBe(true);
-
-    await act(async () => { release!(); await done; });
-    expect(ctx!.isSigningOut()).toBe(false);
+    expect(stored()).toBeNull();
+    expect(ctx!.uid).toBeNull();
   });
 
-  it('lowers the flag even when the sign-out THROWS', async () => {
-    // The regression the finally exists for. A network error here used to be
-    // survivable; with a stranded flag it silently turns off remembered-path
-    // capture for every genuine bounce afterwards in that tab.
+  it('leaves a path alone on a signed-out BOOT, where uid was never set', async () => {
+    // The negative that makes the transition the right signal rather than "uid
+    // is null". A signed-out visitor taps the poster badge, the path is stored,
+    // /login loads — and Firebase then reports "no session" for the first time.
+    // Clearing on that verdict would break the funnel from the 25k prerendered
+    // title pages (BIN-645) for every visitor, every time.
+    renderAuth();
+    await act(async () => {}); // flusha initAppCheck().then(subscribe)
+    window.sessionStorage.setItem(NEXT_KEY, '/movie/603/');
+
+    await act(async () => { authCallback!(null); });
+
+    expect(stored()).toBe('/movie/603/');
+  });
+
+  it('re-arms: a SECOND session ending clears again', async () => {
+    // The transition is per session, not once per tab. Sign out, sign back in,
+    // sign out again — the third step has to forget too, or the protection
+    // quietly expires after the first handover of the tab's life.
+    renderAuth();
+    await login({ username: 'malin' });
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
+
+    await login({ username: 'malin' });
+    window.sessionStorage.setItem(NEXT_KEY, '/installningar/');
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
+
+    expect(stored()).toBeNull();
+  });
+
+  it('signOut() drops the path itself, without waiting for the listener', async () => {
+    // Belt to the listener's braces, and not redundant: the clear here is
+    // synchronous with the visitor's click, while the listener's is a network
+    // round-trip away — and never arrives at all if the sign-out fails.
+    window.sessionStorage.setItem(NEXT_KEY, '/grupper/g-hemlig-123/');
+    renderAuth();
+    await login({ username: 'malin' });
+    // The auth listener deliberately does NOT fire here, so only signOut's own
+    // clear can satisfy this.
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(stored()).toBeNull();
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a sign-out that FAILS still leaves nothing remembered', async () => {
+    // A network error leaves them signed in, so the lost path costs nothing —
+    // but a half-finished handover must never be the case that keeps it.
+    window.sessionStorage.setItem(NEXT_KEY, '/grupper/g-hemlig-123/');
     renderAuth();
     await login({ username: 'malin' });
     signOutMock.mockRejectedValueOnce(new Error('network'));
@@ -755,18 +807,6 @@ describe('AuthContext — the sign-out window is exactly the sign-out (BIN-669)'
       await expect(ctx!.signOut()).rejects.toThrow('network');
     });
 
-    expect(ctx!.isSigningOut()).toBe(false);
-  });
-
-  it('drops a remembered path on the way out, so it cannot outlive the account', async () => {
-    // Belt to AuthGuard's braces: not writing a new path is not enough if an
-    // earlier tap in the same tab already stored one.
-    window.sessionStorage.setItem(NEXT_KEY, '/grupper/g-hemlig-123/');
-    renderAuth();
-    await login({ username: 'malin' });
-
-    await act(async () => { await ctx!.signOut(); });
-
-    expect(window.sessionStorage.getItem(NEXT_KEY)).toBeNull();
+    expect(stored()).toBeNull();
   });
 });

@@ -142,11 +142,18 @@ export function rememberNextPath(path: string | null | undefined): void {
 }
 
 /**
- * Forget any remembered path. For a caller that is about to REPLACE it: an
- * earlier tap in the same tab must never outrank the page the visitor is being
- * bounced off right now, and `rememberNextPath` silently no-ops on a path it
- * refuses (a sign-in route, an unsafe value) — which would otherwise leave the
- * stale one in place and land them somewhere they never asked for.
+ * Forget any remembered path. Two kinds of caller, and both matter:
+ *
+ *  · About to REPLACE it (`AuthGuard`'s bounce) — an earlier tap in the same tab
+ *    must never outrank the page the visitor is being bounced off right now, and
+ *    `rememberNextPath` silently no-ops on a path it refuses (a sign-in route, an
+ *    unsafe value), which would otherwise leave the stale one standing and land
+ *    them somewhere they never asked for.
+ *  · The session ENDED (`AuthContext`: `signOut`, and the uid set→null branch of
+ *    the auth listener) — a path stored while someone was signed in must not
+ *    survive them, or the next account on a shared device inherits it. BIN-732:
+ *    the listener is what makes that true in EVERY tab, since Firebase
+ *    broadcasts a sign-out but per-tab flags do not travel.
  */
 export function clearNextPath(): void {
   try { window.sessionStorage.removeItem(KEY); } catch { /* no-op */ }
