@@ -44,7 +44,7 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import { useEpisodeProgressWithSync } from '@/hooks/useEpisodeProgressWithSync';
 import { tvShowStatusLabel } from '@/lib/watchStatus';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
@@ -166,15 +166,17 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // old template appended `overview?.slice(…) ?? fallback`, and TMDB's sv-SE
   // answer for an untranslated series is an EMPTY STRING, not null — so `??`
   // never fired and ~72% of series pages shipped a bare "Titel (år)."
-  const metaDescription = useMemo(
-    () => (show ? buildContentFloor(tvContentFloorInput(show)).description : undefined),
+  // BIN-688: ONE floor per render, shared by the meta description and the visible
+  // fallback paragraph below (the movie sibling does the same).
+  const contentFloor = useMemo(
+    () => (show ? buildContentFloor(tvContentFloorInput(show)) : undefined),
     [show],
   );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${firstYear ? ` (${firstYear})` : ''} — var streamar jag?`
       : 'Serie',
-    description: metaDescription,
+    description: contentFloor?.description,
     ogImage: show?.poster_path ? posterUrl(show.poster_path, 'w500') ?? undefined : undefined,
     // Tar bort catch-all-shellets noindex när TMDB bekräftat att serien finns.
     // Pre-renderade /tv/[id] (topp-N) påverkas inte — egen statisk HTML.
@@ -301,9 +303,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               ))}
             </div>
           )}
-          {show.overview
+          {/* BIN-688: same substance test as the meta description — see the movie sibling. */}
+          {hasSubstantialText(show.overview)
             ? <p className="syn">{show.overview}</p>
-            : <p className="syn">{buildContentFloor(tvContentFloorInput(show)).paragraph}</p>}
+            : <p className="syn">{contentFloor?.paragraph}</p>}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (

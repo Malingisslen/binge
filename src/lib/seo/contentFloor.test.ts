@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildContentFloor, buildPersonDescription, type ContentFloorInput } from './contentFloor';
+import {
+  buildContentFloor,
+  buildPersonDescription,
+  hasSubstantialText,
+  MIN_SUBSTANTIAL_TEXT,
+  type ContentFloorInput,
+} from './contentFloor';
 
 // genreIds: 878 Science Fiction, 28 Action, 18 Drama, 53 Thriller, 80 Kriminal
 const movieBase: ContentFloorInput = {
@@ -169,14 +175,14 @@ describe('buildPersonDescription — a real Swedish bio wins', () => {
     expect(description).toContain('Göteborg. Hon slog igenom');
   });
 
-  // Boundary: MIN_REAL_BIO is 60 and the comparison is `>=`. Every other fixture
-  // here sits far from the edge, so `>=` → `>` survives them all. This is the one
-  // that fails on that mutant.
-  it('treats a biography of exactly MIN_REAL_BIO characters as substantive', () => {
+  // Boundary: MIN_SUBSTANTIAL_TEXT is 60 and the comparison is `>=`. Every other
+  // fixture here sits far from the edge, so `>=` → `>` survives them all. This is
+  // the one that fails on that mutant.
+  it('treats a biography of exactly MIN_SUBSTANTIAL_TEXT characters as substantive', () => {
     const bio = 'Alicia Vikander är en svensk skådespelare, född i Stockholm.';
-    // Pinned: if MIN_REAL_BIO ever moves, this fixture must move with it or the
+    // Pinned: if the threshold ever moves, this fixture must move with it or the
     // boundary stops being tested rather than silently starts testing the inside.
-    expect(bio.length).toBe(60);
+    expect(bio.length).toBe(MIN_SUBSTANTIAL_TEXT);
 
     const description = buildPersonDescription({
       name: 'Alicia Vikander',
@@ -236,5 +242,54 @@ describe('buildPersonDescription — the generated line is unique per person', (
     const description = buildPersonDescription({ name: 'Okänd Person' });
     expect(description.startsWith('Okänd Person.')).toBe(true);
     expect(description.length).toBeLessThanOrEqual(170);
+  });
+});
+
+// BIN-688: the substance test is now ONE exported predicate, because the page
+// clients ask the same question about the visible paragraph that this module asks
+// about the meta description. Before, the clients used bare truthiness — so a
+// two-word overview stood as body text while the description used the floor.
+describe('hasSubstantialText — the single threshold both surfaces read', () => {
+  it('accepts text of exactly the threshold and rejects one character less', () => {
+    const exact = 'a'.repeat(MIN_SUBSTANTIAL_TEXT);
+    expect(hasSubstantialText(exact)).toBe(true);
+    expect(hasSubstantialText(exact.slice(0, -1))).toBe(false);
+  });
+
+  it('rejects the empty, whitespace-only and missing cases TMDB actually returns', () => {
+    // TMDB's sv-SE answer for an untranslated title is '' — not null, not absent.
+    expect(hasSubstantialText('')).toBe(false);
+    expect(hasSubstantialText('   \n  ')).toBe(false);
+    expect(hasSubstantialText(null)).toBe(false);
+    expect(hasSubstantialText(undefined)).toBe(false);
+  });
+
+  it('counts words, not padding — collapsed whitespace decides', () => {
+    // Padding in the MIDDLE, on purpose. Trailing padding would be removed by
+    // `.trim()` alone, so a fixture built that way passes with the collapse
+    // deleted — the test would carry a name it does not earn. TMDB prose is
+    // full of internal double spaces and hard line breaks, which is the case
+    // this is actually about.
+    const padded = `${'a'.repeat(30)}${' '.repeat(20)}\n\n${'a'.repeat(25)}`;
+    expect(padded.length).toBeGreaterThan(MIN_SUBSTANTIAL_TEXT);
+    expect(padded.replace(/\s+/g, ' ').length).toBeLessThan(MIN_SUBSTANTIAL_TEXT);
+    expect(hasSubstantialText(padded)).toBe(false);
+  });
+
+  it('governs the meta description too, so the two halves cannot disagree', () => {
+    const thin = 'En kort text.';
+    expect(hasSubstantialText(thin)).toBe(false);
+    // Same input, same verdict: the generated availability line, not the overview.
+    const { description } = buildContentFloor({ ...movieBase, overview: thin });
+    expect(description).not.toContain(thin);
+    expect(description.startsWith('Inception streamas just nu på Netflix i Sverige.')).toBe(true);
+  });
+
+  it('keeps a real overview on one line for the snippet', () => {
+    const overview =
+      'En skicklig tjuv stjäl företagshemligheter via drömdelningsteknik.\n\nHan får en sista chans.';
+    const { description } = buildContentFloor({ ...movieBase, overview });
+    expect(description).not.toMatch(/\n/);
+    expect(description).toContain('drömdelningsteknik. Han får');
   });
 });

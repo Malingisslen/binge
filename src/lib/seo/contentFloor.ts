@@ -57,8 +57,29 @@ export interface ContentFloor {
 const META_MAX = 170;
 const PROVIDER_CAP = 3;
 const CAST_CAP = 2;
-const MIN_REAL_OVERVIEW = 60;
-const MIN_REAL_BIO = 60;
+
+/**
+ * One threshold for "does this text say enough to stand as the page's own
+ * prose?" (BIN-688). It used to exist three times — a MIN_REAL_OVERVIEW here, an
+ * identical MIN_REAL_BIO here, and a bare truthiness check in the page clients —
+ * so a 30-character overview was shown as body text while the meta description
+ * silently swapped in the generated floor for the SAME title. Both halves read
+ * this one predicate now.
+ */
+export const MIN_SUBSTANTIAL_TEXT = 60;
+
+/** Collapse the hard line breaks TMDB/Wikipedia prose carries; a snippet is one line. */
+function oneLine(text: string | null | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * True when `text` is long enough to carry a page on its own. Whitespace is
+ * collapsed first, so 60 characters means 60 characters of actual words.
+ */
+export function hasSubstantialText(text: string | null | undefined): boolean {
+  return oneLine(text).length >= MIN_SUBSTANTIAL_TEXT;
+}
 
 /**
  * Natural Swedish noun phrase per TMDB genre id, for film and for serie.
@@ -198,11 +219,10 @@ function truncateForMeta(s: string): string {
 export function buildContentFloor(input: ContentFloorInput): ContentFloor {
   const paragraph = `${descriptiveSentence(input)} ${availabilityLead(input)}`;
 
-  const overview = input.overview?.trim() ?? '';
-  const description =
-    overview.length >= MIN_REAL_OVERVIEW
-      ? truncateForMeta(overview)
-      : truncateForMeta(`${availabilityLead(input)} ${metaTail(input)}`);
+  const overview = oneLine(input.overview);
+  const description = hasSubstantialText(overview)
+    ? truncateForMeta(overview)
+    : truncateForMeta(`${availabilityLead(input)} ${metaTail(input)}`);
 
   return { description, paragraph };
 }
@@ -242,9 +262,8 @@ export interface PersonDescriptionInput {
  * input — nothing is invented.
  */
 export function buildPersonDescription(input: PersonDescriptionInput): string {
-  // TMDB/Wikipedia bios carry hard line breaks; a snippet is one line.
-  const bio = (input.biography ?? '').replace(/\s+/g, ' ').trim();
-  if (bio.length >= MIN_REAL_BIO) return truncateForMeta(bio);
+  const bio = oneLine(input.biography);
+  if (hasSubstantialText(bio)) return truncateForMeta(bio);
 
   const { name, role, birthYear, birthPlace } = input;
   // Parenthesised label sidesteps Swedish noun agreement: "(Skådespelare)" and

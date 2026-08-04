@@ -35,7 +35,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { buildContentFloor } from '@/lib/seo/contentFloor';
+import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
@@ -144,15 +144,18 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // The old template appended `overview?.slice(…) ?? fallback`, and TMDB's sv-SE
   // answer for an untranslated film is an EMPTY STRING, not null — so `??` never
   // fired and those pages shipped a bare "Titel (år)." description.
-  const metaDescription = useMemo(
-    () => (movie ? buildContentFloor(movieContentFloorInput(movie)).description : undefined),
+  // BIN-688: ONE floor per render, shared by the meta description and the visible
+  // fallback paragraph below. They used to be two independent calls, so a future
+  // input that varied between them could have described the same film two ways.
+  const contentFloor = useMemo(
+    () => (movie ? buildContentFloor(movieContentFloorInput(movie)) : undefined),
     [movie],
   );
   usePageMeta({
     title: displayTitle
       ? `${displayTitle}${releaseYear ? ` (${releaseYear})` : ''} — var streamar jag?`
       : 'Film',
-    description: metaDescription,
+    description: contentFloor?.description,
     ogImage: movie?.poster_path ? posterUrl(movie.poster_path, 'w500') ?? undefined : undefined,
     // Tar bort catch-all-shellets noindex när TMDB bekräftat att filmen finns.
     // Pre-renderade /movie/[id] (topp-N) påverkas inte — de har egen statisk
@@ -308,9 +311,12 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
             </div>
           )}
-          {movie.overview
+          {/* BIN-688: the SAME "does this text carry the page?" test the meta
+              description uses. A bare truthiness check let a one-line overview
+              stand as body text while the description quietly used the floor. */}
+          {hasSubstantialText(movie.overview)
             ? <p className="syn">{movie.overview}</p>
-            : <p className="syn">{buildContentFloor(movieContentFloorInput(movie)).paragraph}</p>}
+            : <p className="syn">{contentFloor?.paragraph}</p>}
 
           {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
               library state (inLibrary) and isn't core SEO content. */}

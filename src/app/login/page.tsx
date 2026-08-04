@@ -45,11 +45,11 @@ export default function LoginPage() {
     // varken flagga men har providers — vi skickar bara in tomma profiler.
     const needsOnboarding =
       user != null && !user.onboardingCompletedAt && (user.myProviders?.length ?? 0) === 0;
-    // Come back to where the visitor started. Today the ONLY surface that
-    // remembers a path is the poster badge (QuickAddButton) — the title page's
-    // own status button does not route here at all, and a signed-out pick there
-    // still no-ops behind a success toast (parked as BIN-596). So this reads a
-    // path that is usually a grid, not a title page.
+    // Come back to where the visitor started. Four surfaces remember a path, and
+    // they all go through `useSignedOutRedirect` — read its caller list rather
+    // than trusting a copy of it here; an earlier version of this comment named
+    // one surface and went stale the same week (BIN-714 landed the title page's
+    // status button, which it claimed "does not route here at all").
     //
     // Onboarding still wins as the immediate destination — a brand-new account
     // would otherwise land without providers. But it is a DETOUR, not a
