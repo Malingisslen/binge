@@ -160,7 +160,26 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
           )}
         </div>
         <div className="flex-1">
-          {biography && (
+          {/* BIN-734 asked for `hasSubstantialText(biography)` here, to match what
+              BIN-688 did on the film and series pages. Deliberately NOT done, and
+              this comment is the reason so the next pass does not re-apply it:
+              BIN-735 (filed hours later, on the same threshold) established that
+              the 60-character line is a SNIPPET-quality measure and must never
+              decide whether real text appears on the page. On film and series
+              pages a thin overview is now shown AND followed by the generated
+              floor sentence, so nothing is lost. A person page has no visible
+              generated paragraph to add — adding one is new UI, not a bug fix —
+              so the same rule here means simply: keep the biography.
+
+              What the shared predicate DOES still decide for a person is the
+              <meta description> (buildPersonDescription), and it should: a
+              two-word bio makes a poor search snippet while remaining perfectly
+              good on the page. The body is a superset of the snippet either way,
+              which is the property BIN-688 was protecting.
+
+              The check is on the collapsed string so a whitespace-only TMDB bio
+              cannot render an empty paragraph plus an orphan source credit. */}
+          {biography.trim() && (
             <>
               <p className="text-base text-ink-2 leading-relaxed mb-3 line-clamp-6">{biography}</p>
               {bioSource === 'wiki-sv' && wikiBio && (

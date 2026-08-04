@@ -176,6 +176,40 @@ describe('PersonPageClient — which biography reaches the meta description (BIN
     expect(personEnQuery.enabled).toBe(true);
   });
 
+  // BIN-734/735 — pinning a DECISION, not just behaviour. BIN-734 asked for the
+  // 60-character `hasSubstantialText` gate to be put on the visible biography,
+  // to match what BIN-688 did on the film and series pages. It was deliberately
+  // not done: BIN-735 established hours later that the threshold is a
+  // snippet-quality measure and must never decide whether real text appears on
+  // the page at all. Film and series pages now render a thin overview AND the
+  // generated sentence; a person page has no generated paragraph to add, so the
+  // same rule here simply means "keep the biography". Without this test the next
+  // pass reads the ticket, applies the one-liner, and silently deletes short
+  // biographies from every person page.
+  it('keeps a thin but genuine Swedish biography on the page, even though the snippet falls back', () => {
+    const THIN_BIO = 'Svensk skådespelare.';
+    state.person = { ...person, biography: THIN_BIO };
+    render(<PersonPageClient id="543530" />);
+
+    // On the page: the person's own words, short as they are.
+    expect(screen.getByText(THIN_BIO)).toBeTruthy();
+    // In the snippet: the generated line, because twenty characters make a poor
+    // search result. The body is a superset of the snippet, which is the
+    // property BIN-688 was protecting.
+    expect(lastDescription()).toBe(GENERATED);
+  });
+
+  it('renders nothing at all for a biography that is only whitespace', () => {
+    // TMDB does return blank-but-truthy bios. A bare truthiness check rendered
+    // an empty paragraph — and, for the Wikipedia source, an orphan credit line
+    // under it.
+    state.person = { ...person, biography: '   \n  ' };
+    const { container } = render(<PersonPageClient id="543530" />);
+
+    // The biography paragraph is the only clamped one on the page.
+    expect(container.querySelector('p.line-clamp-6')).toBeNull();
+  });
+
   it('replaces the shell description once the person arrives, not just on the first frame', () => {
     // Cold load: TMDB has not answered yet.
     state.person = undefined;

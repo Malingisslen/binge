@@ -7,6 +7,7 @@ import { Plus } from 'lucide-react';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { getMovieLite, titleHref } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
@@ -110,7 +111,13 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const films = companions.filter((c) => c.mediaType === 'movie');
   const series = companions.filter((c) => c.mediaType === 'tv');
   const { getItem, addItem, libraryKnown } = useWatchlist();
-  const { user } = useAuth();
+  const { user, uid, loading: authLoading } = useAuth();
+  // BIN-731: "Lägg i vill se" answers a signed-out tap the way every other add
+  // affordance does — /login, then back to this page (BIN-714/645). Keyed on
+  // `uid`, never on `user`: the profile stays null for a signed-in visitor whose
+  // profile read failed, and reading that as "signed out" was BIN-645's bug.
+  const goToLogin = useSignedOutRedirect();
+  const signedOut = !authLoading && uid == null;
   const [showStreaming, setShowStreaming] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
 
@@ -223,16 +230,15 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
                 />
                 {movie && !inLibrary && (
                   <button
-                    onClick={() => addOne(film, movie)}
-                    // Also disabled until the library is KNOWN: addOne early-returns
-                    // in that window, so an enabled button would be a silent dead
-                    // click. KNOWN CONSEQUENCE, accepted (BIN-731): a signed-out
-                    // visitor never gets a listener, so this stays disabled for them
-                    // permanently — with no tooltip saying why. Previously it was
-                    // enabled and did nothing at all, which is not better. Giving it
-                    // a real destination is BIN-731; BIN-714 covers only the two
-                    // per-title buttons.
-                    disabled={addingId != null || !libraryKnown}
+                    onClick={() => (signedOut ? goToLogin() : void addOne(film, movie))}
+                    // Signed-out is decided FIRST, above the library gate: they
+                    // never get a listener, so `libraryKnown` is false for them
+                    // forever and this button used to sit permanently disabled with
+                    // nothing saying why (BIN-731). Their tap is a destination, not
+                    // a write. A signed-IN visitor still waits for the library to
+                    // be KNOWN — addOne early-returns in that window, so an enabled
+                    // button would be a silent dead click.
+                    disabled={!signedOut && (addingId != null || !libraryKnown)}
                     className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                     style={{ marginTop: 6 }}
                   >

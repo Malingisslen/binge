@@ -218,6 +218,9 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   const hasRentBuy = rent.length > 0 || buy.length > 0;
   const yearStart = show.first_air_date?.substring(0, 4) ?? '—';
   const yearEnd = show.status === 'Ended' ? show.last_air_date?.substring(0, 4) : '';
+  // BIN-735 — see the paragraph render below (the movie sibling is identical).
+  const overviewText = show.overview?.trim() ? show.overview : null;
+  const needsContentFloorParagraph = !hasSubstantialText(show.overview);
   const genres = show.genres.map(g => g.name).join(', ');
   const cast = show.credits?.cast?.slice(0, 10) ?? [];
   // BIN-187 — "Samla klart" (seasons leg): how many of this show's seasons the
@@ -303,10 +306,12 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
               ))}
             </div>
           )}
-          {/* BIN-688: same substance test as the meta description — see the movie sibling. */}
-          {hasSubstantialText(show.overview)
-            ? <p className="syn">{show.overview}</p>
-            : <p className="syn">{contentFloor?.paragraph}</p>}
+          {/* BIN-688 + BIN-735: the show's own words are always shown when it has
+              any, and the generated sentence is ADDED (not substituted) when they
+              are too thin to carry the page — see the movie sibling for the full
+              reasoning. The meta description keeps the 60-char rule unchanged. */}
+          {overviewText && <p className="syn">{overviewText}</p>}
+          {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
           <div className="stats">
             <span><span className="k">säsonger</span><strong>{show.number_of_seasons}</strong></span>
             {show.number_of_episodes && (

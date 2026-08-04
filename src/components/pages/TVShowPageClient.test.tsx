@@ -1,12 +1,18 @@
 // src/components/pages/TVShowPageClient.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
-// BIN-598 — the TV sibling of MoviePageClient.test.tsx. Same defect, same fix,
-// and it needs its own test: the two files' effects are copies, not a shared
-// helper, so a revert of one leaves the other's test green. See the long note in
-// MoviePageClient.test.tsx for why the whole loading→settled transition has to be
-// driven rather than just the settled frame.
+// The TV sibling of MoviePageClient.test.tsx, and it needs to exist separately:
+// the two pages' effects and paragraph renders are copies, not a shared helper,
+// so a revert of one leaves the other's test green.
+//
+//  - BIN-598 — the lazy backfills must survive a LATE watchlist snapshot. Driven
+//    with `isLoading: true` so every hook runs and the render short-circuits at
+//    LoadingView. See MoviePageClient.test.tsx for why the whole loading→settled
+//    transition has to be driven rather than just the settled frame.
+//  - BIN-715/735 — the content floor ADDS text to a thin page, it never replaces
+//    the show's own words. That needs the real body (`isLoading: false`), which
+//    is exactly what this file could not do before BIN-715.
 
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
@@ -14,6 +20,11 @@ const setRuntime = vi.hoisted(() => vi.fn());
 const refreshTmdbFields = vi.hoisted(() => vi.fn());
 const watchlist = vi.hoisted(() => ({
   loading: true,
+  snapshotSettled: false,
+  listenerFailed: false,
+  get libraryKnown(): boolean {
+    return this.snapshotSettled && !this.listenerFailed;
+  },
   items: [] as unknown[],
   getItem: () => undefined,
   updateRating: vi.fn(),
@@ -29,29 +40,38 @@ const watchlist = vi.hoisted(() => ({
 // out of its itemsRef migration on purpose (their per-snapshot identity re-fires
 // these backfills), so production still churns here. Pinning stable identity is
 // what makes these assertions test the `loading` gate rather than the churn.
-// See MoviePageClient.test.tsx.
 watchlist.setRuntime = setRuntime;
 watchlist.refreshTmdbFields = refreshTmdbFields;
+
+const tmdb = vi.hoisted(() => ({ show: null as unknown, isLoading: true }));
+
+const SHORT_OVERVIEW = 'En serie om ätten Stark.';
+const LONG_OVERVIEW =
+  'Sju ätter slåss om järntronen medan en äldre fiende vaknar bortom muren i norr.';
+
+// The generated content-floor sentence for this fixture ends with its
+// availability lead; that clause is unique to the floor, so its presence or
+// absence answers "was the floor rendered?" (contentFloor.test.ts owns wording).
+const FLOOR_TAIL = /Game of Thrones streamas just nu på Netflix i Sverige\./;
 
 const show = {
   id: 1399,
   name: 'Game of Thrones',
   original_name: 'Game of Thrones',
-  overview: 'Sju ätter slåss om järntronen.',
+  overview: LONG_OVERVIEW,
   first_air_date: '2011-04-17',
   episode_run_time: [57],
   poster_path: '/poster.jpg',
   status: 'Ended',
+  number_of_seasons: 8,
   genres: [{ id: 18, name: 'Drama' }],
   seasons: [],
   'watch/providers': { results: { SE: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } },
 };
 
-// `isLoading: true` WITH data: every hook and effect runs, the render
-// short-circuits at the LoadingView branch below them.
-vi.mock('@/hooks/useTMDB', () => ({ useTVShow: () => ({ data: show, isLoading: true }) }));
+vi.mock('@/hooks/useTMDB', () => ({ useTVShow: () => ({ data: tmdb.show, isLoading: tmdb.isLoading }) }));
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, uid: null }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, uid: null, loading: false }) }));
 vi.mock('@/hooks/usePageMeta', () => ({ usePageMeta: () => {} }));
 vi.mock('@/hooks/useTitleRatings', () => ({ useTitleRatings: () => ({}) }));
 vi.mock('@/hooks/useStreamingOffers', () => ({ useStreamingOffers: () => ({ offers: [] }) }));
@@ -64,22 +84,58 @@ vi.mock('@/hooks/useEpisodeProgressWithSync', () => ({
     getSeasonProgress: () => ({ watched: 0, total: 0 }),
   }),
 }));
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+}));
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useQueryClient: () => ({ prefetchQuery: vi.fn() }),
 }));
 
+// Children of the real body. Each owns its own Firestore listener, react-query
+// call or provider context and has its own tests; stubbing them keeps this file
+// about TVShowPageClient's own decisions.
+vi.mock('@/components/title/JsonLd', () => ({
+  JsonLd: () => null, tvSchema: () => ({}), breadcrumbSchema: () => ({}),
+}));
+vi.mock('@/components/title/StatusButton', () => ({ default: () => null }));
+vi.mock('@/components/title/RatingStars', () => ({ default: () => null }));
+vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
+vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
+vi.mock('@/components/title/FreeWatchBadge', () => ({ default: () => null }));
+vi.mock('@/components/title/AddToListButton', () => ({ default: () => null }));
+vi.mock('@/components/title/AddToGroupButton', () => ({ default: () => null }));
+vi.mock('@/components/title/NotInterestedButton', () => ({ default: () => null }));
+vi.mock('@/components/title/NotesBlock', () => ({ default: () => null }));
+vi.mock('@/components/title/TagEditor', () => ({ default: () => null }));
+vi.mock('@/components/title/FriendsWhoSaw', () => ({ default: () => null }));
+vi.mock('@/components/title/ReviewList', () => ({ default: () => null }));
+vi.mock('@/components/title/PriceHistoryChart', () => ({ default: () => null }));
+vi.mock('@/components/title/RecapPanel', () => ({ default: () => null }));
+vi.mock('@/components/title/CheapestPathVerdict', () => ({ CheapestPathVerdict: () => null }));
+vi.mock('@/components/title/RatingsRow', () => ({ RatingsRow: () => null }));
+vi.mock('@/components/tv/SeasonList', () => ({ default: () => null }));
+vi.mock('@/components/tv/RelatedSeriesStrip', () => ({ default: () => null }));
+vi.mock('@/components/franchise/CompanionSection', () => ({ default: () => null }));
+vi.mock('@/components/recommendations/RecCard', () => ({ default: () => null }));
+vi.mock('@/components/ui/TrailerSection', () => ({ default: () => null }));
+vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
+
 import TVShowPageClient from './TVShowPageClient';
 
-describe('TVShowPageClient — the lazy backfills wait for the watchlist (BIN-598)', () => {
-  beforeEach(() => {
-    setRuntime.mockReset();
-    refreshTmdbFields.mockReset();
-    watchlist.loading = true;
-    watchlist.items = [];
-  });
+beforeEach(() => {
+  setRuntime.mockReset();
+  refreshTmdbFields.mockReset();
+  watchlist.loading = true;
+  watchlist.snapshotSettled = false;
+  watchlist.listenerFailed = false;
+  watchlist.items = [];
+  tmdb.show = show;
+  tmdb.isLoading = true;
+});
 
+describe('TVShowPageClient — the lazy backfills wait for the watchlist (BIN-598)', () => {
   it('holds both backfills while the snapshot is still in flight, then fires them once it lands', () => {
     const { rerender } = render(<TVShowPageClient id="1399" />);
 
@@ -96,5 +152,44 @@ describe('TVShowPageClient — the lazy backfills wait for the watchlist (BIN-59
       tmdbStatus: 'Ended',
       runtime: 57,
     }));
+  });
+});
+
+describe('TVShowPageClient — the content floor adds text, it never replaces it (BIN-715/735)', () => {
+  beforeEach(() => {
+    watchlist.loading = false;
+    watchlist.snapshotSettled = true;
+    tmdb.isLoading = false;
+  });
+
+  it('keeps a short but genuine overview AND adds the generated sentence', () => {
+    tmdb.show = { ...show, overview: SHORT_OVERVIEW };
+    render(<TVShowPageClient id="1399" />);
+
+    // The show's own words survive — the whole of BIN-735. A revert to the
+    // either/or render drops this line.
+    expect(screen.getByText(SHORT_OVERVIEW)).toBeTruthy();
+    // …and the thin page still gains the extra prose it was written for.
+    expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
+  });
+
+  it('does not add the generated sentence when the overview already carries the page', () => {
+    render(<TVShowPageClient id="1399" />);
+
+    expect(screen.getByText(LONG_OVERVIEW)).toBeTruthy();
+    // BIN-715: the shared 60-character threshold is what decides this. Swap
+    // hasSubstantialText for a bare truthiness check and the floor stops
+    // appearing for the short overview above; drop the check entirely and it
+    // appears here, duplicating a synopsis that needed no help.
+    expect(screen.queryByText(FLOOR_TAIL)).toBeNull();
+  });
+
+  it('falls back to the generated sentence alone when TMDB has no Swedish overview', () => {
+    // TMDB's sv-SE answer for an untranslated series is an empty string, not
+    // null — which is why ~72% of series pages once shipped "Titel (år).".
+    tmdb.show = { ...show, overview: '' };
+    render(<TVShowPageClient id="1399" />);
+
+    expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
   });
 });

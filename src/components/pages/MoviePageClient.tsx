@@ -32,6 +32,7 @@ import FriendsWhoSaw from '@/components/title/FriendsWhoSaw';
 import ReviewList from '@/components/title/ReviewList';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
+import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { useTitleRatings } from '@/hooks/useTitleRatings';
 import { RatingsRow } from '@/components/title/RatingsRow';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
@@ -65,7 +66,14 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
   const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading, libraryKnown } = useWatchlist();
-  const { user } = useAuth();
+  const { user, uid, loading: authLoading } = useAuth();
+  // BIN-731: a signed-out tap on the countdown strip's "Bevaka släpp" goes to
+  // /login and comes back — the same answer StatusButton/QuickAddButton give
+  // (BIN-714/645). Keyed on `uid` (the auth verdict), never on `user` (the
+  // Firestore profile), which stays null for a signed-in visitor whose profile
+  // read failed — BIN-645's bug.
+  const goToLogin = useSignedOutRedirect();
+  const signedOut = !authLoading && uid == null;
   const { show: toast } = useToast();
   const ratings = useTitleRatings(movie?.imdb_id);
   const [showRentBuy, setShowRentBuy] = useState(false);
@@ -201,6 +209,12 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const myProviderIds = mounted ? (user?.myProviders ?? []) : [];
   const subsYouOwn = onSubscription.filter(p => myProviderIds.includes(canonicalProviderId(p.provider_id)));
   const year = movie.release_date?.substring(0, 4) ?? '—';
+  // BIN-735 — see the paragraph render below. Any non-blank overview is the
+  // film's own words and is always shown; the generated floor sentence is added
+  // whenever those words are too thin to carry the page by themselves (which is
+  // exactly when the meta description falls back to the floor as well).
+  const overviewText = movie.overview?.trim() ? movie.overview : null;
+  const needsContentFloorParagraph = !hasSubstantialText(movie.overview);
   const genres = movie.genres.map(g => g.name).join(', ');
   const cast = movie.credits?.cast?.slice(0, 10) ?? [];
   const directors = movie.credits?.crew?.filter(c => c.job === 'Director') ?? [];
@@ -311,12 +325,18 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
               )}
             </div>
           )}
-          {/* BIN-688: the SAME "does this text carry the page?" test the meta
-              description uses. A bare truthiness check let a one-line overview
-              stand as body text while the description quietly used the floor. */}
-          {hasSubstantialText(movie.overview)
-            ? <p className="syn">{movie.overview}</p>
-            : <p className="syn">{contentFloor?.paragraph}</p>}
+          {/* BIN-688 asked the SAME "does this text carry the page?" question the
+              meta description asks, so the two halves cannot describe one film two
+              ways. BIN-735 fixed what that cost: the 60-char line is a SNIPPET-
+              quality measure, and using it to decide whether the film's own words
+              appear AT ALL threw away genuine short synopses ("En dokumentär om
+              Greta Thunberg.") in a module whose entire job is ADDING text to thin
+              pages. So a real-but-thin overview is now shown AND followed by the
+              generated sentence — the page loses nothing and still gains the extra
+              prose. The meta description keeps the 60-char rule untouched, and the
+              body still contains every word the snippet uses. */}
+          {overviewText && <p className="syn">{overviewText}</p>}
+          {needsContentFloorParagraph && <p className="syn">{contentFloor?.paragraph}</p>}
 
           {/* BIN-193: cinema→streaming countdown. ClientOnly — depends on
               library state (inLibrary) and isn't core SEO content. */}
@@ -336,18 +356,25 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                   listener dies, which is precisely when `watchlistItem` is null
                   for a film the user has already marked 'sedd'.
 
-                  KNOWN CONSEQUENCE, accepted (BIN-731): a signed-out visitor has
-                  no listener, so `libraryKnown` is false for them forever and the
-                  whole "På bio nu · Hemma att hyra …" row is hidden — not just its
-                  CTA. Deliberate for now, because what they got before was WORSE:
-                  the CTA rendered, `addItem` refused the write for want of a uid,
-                  and the toast said "Bevakar släppet av X" anyway. A false
-                  confirmation beats no row only for whoever wrote the toast.
-                  Nothing is lost to crawlers — this sits inside ClientOnly.
-                  Unlike StatusButton/QuickAddButton this is NOT covered by
-                  BIN-714; giving them a real destination is BIN-731. */}
-              {libraryKnown && (
-                <CinemaCountdownStrip info={cinemaInfo} inLibrary={!!watchlistItem} onBevaka={handleBevaka} />
+                  BIN-731 closed the hole that gate left: a signed-out visitor has
+                  no listener, so `libraryKnown` is false for them FOREVER — the
+                  whole "På bio nu · Hemma att hyra …" row used to disappear, not
+                  just its CTA. `signedOut` is decided FIRST and separately, above
+                  the library gate, for the reason useSignedOutRedirect spells out:
+                  they will never have a library this session, so a library gate is
+                  false forever for them and ordering it first is how the tap goes
+                  dead. Their "Bevaka släpp" is a destination (/login, and back
+                  here), never a write — which is what StatusButton and
+                  QuickAddButton already do (BIN-714/645), so the same button no
+                  longer behaves two ways in the same app. A signed-IN visitor
+                  whose listener died still gets no row: theirs is a broken
+                  library, and /login is not the answer to it. */}
+              {(signedOut || libraryKnown) && (
+                <CinemaCountdownStrip
+                  info={cinemaInfo}
+                  inLibrary={!!watchlistItem}
+                  onBevaka={signedOut ? goToLogin : handleBevaka}
+                />
               )}
             </ClientOnly>
           )}

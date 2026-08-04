@@ -12,11 +12,18 @@ import { rememberNextPath } from '@/lib/nextPath';
  *
  * Callers — keep this list current, it is the only thing that makes the drift
  * visible:
- *   · `QuickAddButton`  — the badge on poster grids, where the rule was born
- *                         (BIN-645)
- *   · `StatusButton`    — the title page (BIN-714, Malin's decision)
- *   · `TopbarActions`   — the topbar "Logga in" (BIN-668)
- *   · `HomePageClient`  — the landing CTA
+ *   · `QuickAddButton`   — the badge on poster grids, where the rule was born
+ *                          (BIN-645)
+ *   · `StatusButton`     — the title page (BIN-714, Malin's decision)
+ *   · `TopbarActions`    — the topbar "Logga in" (BIN-668)
+ *   · `HomePageClient`   — the landing CTA
+ *   · `MoviePageClient`  — the cinema-countdown strip's "Bevaka släpp" (BIN-731)
+ *   · `CompanionSection` — the companion strip's "Lägg i vill se" (BIN-731)
+ *
+ * The last two are the reason this list is worth keeping: both were shipped
+ * hidden or permanently disabled for signed-out visitors, because their
+ * library-readiness gate was written before this rule existed and nothing made
+ * the divergence visible.
  *
  * NOT a caller, and should not become one: `AuthGuard`. A bounce is not a tap —
  * it must CLEAR first and must not remember at all during a deliberate sign-out

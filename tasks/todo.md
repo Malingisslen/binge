@@ -1,163 +1,248 @@
-# Recovery session 2026-08-03c — land what three sprints built and never shipped
+# Sprint 2026-08-04b — land the previous sprint's stranded work, then close its own gaps
+
+Base: `8855ed7` (docs/lessons) on `4397db5` (fix(seo): BIN-687/688). Working tree clean.
+
+**Why "b":** the 2026-08-04 sprint (`sprint-parallel`) built four batches, reviewed and
+tested them, then crashed at close-out without committing anything (BIN-743/744 explain
+why). Nothing reached `main`. The work is real and green — this sprint's job is mostly
+**recovery**, not re-implementation. Do not rewrite from scratch; apply the named
+stash/patch, re-verify, then continue past it where a decision was left open.
+
+## Land in this order (dependency chain, not batch-number order)
+
+1. **Agent C (streaming)** — standalone, zero conflicts, lands first.
+2. **Agent A (seo-titlepage-recovery)** — touches `useSignedOutRedirect`'s caller list;
+   Agent B's patch was rebased to apply cleanly *after* this lands.
+3. **Agent B (auth)** — full stakeholder panel MUST run before this is graded done (BIN-744:
+   last time it wasn't, and nobody caught it until after the fact).
+4. **Agent D (infra-docs)** — re-traces the workflow-map flows that A/B/C just touched, so it
+   must run last, in its own commit, never bundled with feature code.
+5. **Agent E (social-data)** — independent, any time.
+
+## Agent A — seo-titlepage-recovery [Tier B]
+
+Recover from `git stash apply` on
+`sprint-parallel-cleanup-unaccounted-batch-0-2026-08-04-BIN-731-730-734-715-735-titlepage-signedout-contentfloor`
+(patch twin, if the stash is gone: `.claude/state/sprint-patches/batch-0-20260804-212000.patch`,
+verified applies clean against `main`). 27 tests were green, 3 reviewers (code/test/integration)
+read exactly these files. Re-run the suite after applying — don't trust a green claim from
+a prior run.
+
+- [ ] **BIN-731** — Signed-out visitors lose the cinema-countdown strip and the Companion
+  "lägg till" button entirely (`libraryKnown` is permanently false with no listener running).
+  Fix reuses BIN-714's shared `useSignedOutRedirect()` helper — same decision, new call
+  sites. Files: `src/components/pages/MoviePageClient.tsx`, `src/components/franchise/CompanionSection.tsx`.
+  Disposition: build.
+  Acceptance:
+  - [ ] Signed-out + logged-out states render the strip/button (not hidden), tap routes to `/login` via `sessionStorage`, never `?next=`.
+  - [ ] `useSignedOutRedirect`'s own logic is unchanged — only its caller list grows (confirmed as the right call in the recovery comment).
+- [ ] **BIN-730** — `CompanionSection` (`addOne`/disabled) and `MoviePageClient`'s Bevaka CTA
+  got BIN-596's `libraryKnown` gate with no dedicated test; the gate can regress silently.
+  Files: `src/components/pages/MoviePageClient.test.tsx`, new `src/components/franchise/CompanionSection.test.tsx`.
+  Disposition: build.
+  Acceptance:
+  - [ ] `libraryKnown` in both test mocks is a GETTER derived from `snapshotSettled`/`listenerFailed` (same pattern as `CollectionSection.test.tsx`), not a hardcoded value production can't reach.
+  - [ ] Mutation-verified: removing the gate fails exactly these new tests.
+- [ ] **BIN-734** — Person-page biography was gated on a bare truthy check while
+  film/series pages use `hasSubstantialText`; applying that same function here would
+  delete every short-but-real biography on the site (mutation-tested — it turns the new
+  BIN-687 test red). Correct fix (already reasoned through, reused as-is): gate on
+  `biography.trim()` only (kills whitespace-only stubs), add the code comment explaining
+  why `hasSubstantialText` is deliberately NOT used here, keep the pinning test.
+  Files: `src/components/pages/PersonPageClient.tsx`, `src/components/pages/PersonPageClient.test.tsx`.
+  Disposition: build.
+  Acceptance:
+  - [ ] A thin-but-real Swedish biography (e.g. "Svensk skådespelare, född 1974.") still renders on the page.
+  - [ ] `<meta description>` still uses the generated line via `buildPersonDescription`'s 60-char rule — page body and meta stay allowed to differ (that's the decision, not a bug).
+  - [ ] **Do NOT** apply `hasSubstantialText` to the visible biography — that is the literal one-liner this ticket exists to reject.
+  - Note (out of batch — gitignored, cannot be done by a batch, see Housekeeping): the decision still needs a manual entry in `.claude/rules/accepted-deviations.md` on Malin's machine so a future scan doesn't re-flag it.
+- [ ] **BIN-715** — No test pins that the film/series pages actually call the shared
+  `hasSubstantialText` threshold for the visible body paragraph — today only the helper
+  itself is tested. Files: `MoviePageClient.test.tsx`, `TVShowPageClient.test.tsx`.
+  Disposition: build.
+  Acceptance:
+  - [ ] Each test renders the real page body (not `isLoading: true`) with a thin (<60 char) description and asserts the paragraph does NOT render.
+  - [ ] Must land together with BIN-735 (same files) — resolve both in the same commit.
+- [ ] **BIN-735** — **Needs Malin's A/B call, built as A.** BIN-688 reused the 60-char
+  `MIN_SUBSTANTIAL_TEXT` snippet-quality threshold to gate whether the film/series body
+  paragraph renders at all — a real, short, true description now vanishes and is replaced
+  by the generated sentence. Built (Alternative **A**, per the recovery comment's own
+  recommendation): render the real short description **and** the generated sentence
+  together on thin pages — two paragraphs, page loses nothing. Alternative B (real text
+  only, one paragraph, meta-only threshold) was NOT built.
+  Files: `MoviePageClient.tsx:317`, `TVShowPageClient.tsx:307` + tests.
+  Disposition: build-review.
+  Signoff: **Malin picks A (as built) or B before this lands** — it changes the visible
+  layout on every thin long-tail film/series page. Recommendation is A (per the prior
+  comment): the generated sentence carries real utility (where to stream) and dropping it
+  would weaken exactly the pages that need the most search help.
+  Acceptance:
+  - [ ] Whichever alternative ships, pin the user-visible outcome in a test (not just the helper).
+  - [ ] Land in the same commit as BIN-715 (shared files, sequential dependency).
+
+## Agent B — auth [Tier top, requiresPlanMode]
+
+Recover from `.claude/state/sprint-patches/batch-1-20260804-211200.patch` (6 files, 12 new
+tests, verified applies clean against `main` **after** Agent A lands — it conflicted with
+Agent A's `useSignedOutRedirect.ts` changes before that).
+
+- [ ] **BIN-732** — BIN-669's fix (landed 4397db5-lineage, `isSigningOut()` flag) only
+  covers the tab that actually called `signOut()`. Firebase Auth broadcasts the logout to
+  every same-origin tab via a storage event; a second tab on a guarded page also sees
+  `uid → null`, but its own `isSigningOut()` is `false`, so it remembers ITS OWN page as
+  the return path. Narrow blast radius (shared device, multiple tabs, next person picks up
+  the leftover tab) but real: a leaked `/grupper/<id>/` URL exposes the group's name +
+  member uids (`firestore.rules:973-974`, `allow read: if isSignedIn()` — accepted
+  "unlisted link" model, same family as ADR 0015 — not a new hole, just a new way in).
+  Fix direction (from the recovery comment, already built): listen to the
+  `onAuthStateChanged` transition itself rather than trusting the local flag — clear
+  `binge:nextAfterLogin` whenever uid goes from set to null for ANY reason, and only
+  remember a return path when uid was ALREADY null when the guard mounted (a genuine
+  bounce must still be remembered).
+  Files: `src/contexts/AuthContext.tsx`, `src/components/auth/AuthGuard.tsx` (deviation:
+  half the fix could only live here, not in the file the original plan named — reasonable,
+  keep it), + 4 more per the patch.
+  Disposition: build-review.
+  **requiresPlanMode: true.** Router: `node docs/org/route.mjs --md src/contexts/AuthContext.tsx`
+  → tier **top**, full panel (#5 Legal/GDPR, #27 DBA). **This is the exact failure BIN-744
+  documents — last time this ticket's panel never ran and nobody caught it before commit.**
+  The panel MUST convene on this specific diff (not batch-0's green status — no reviewer
+  touched this code yet) before it counts as done. If the executing agent cannot dispatch
+  the panel itself, STOP and hand this ticket back rather than build-and-hope.
+  Acceptance:
+  - [ ] Full panel (#5 Legal/GDPR, #27 DBA) runs against THIS diff specifically; its binding conditions are folded in before commit.
+  - [ ] A second-tab test: tab B (never called `signOut`) does not remember its page as a return path when tab A signs out.
+  - [ ] `isSigningOut()`'s doc comment is updated — it currently claims coverage it doesn't have (the exact gap this ticket closes).
+  - [ ] A genuine bounce (signed-out visitor opens a deep link) still remembers the page — the fix must not regress that.
+
+## Agent C — streaming [Tier A]
+
+Recover from `.claude/state/sprint-patches/batch-2-20260804-205700.patch` (3 files,
++72/−9, includes a new test, verified applies clean against `main`, no conflicts with
+anything else this sprint).
+
+- [ ] **BIN-733** — The streaming-offers box waits ~22s before giving up, not the 10s its
+  own per-attempt budget implies: `useStreamingOffers`' 10s `Promise.race` timeout doesn't
+  match any of React Query's no-retry predicates (`permission-denied` /
+  `unauthenticated` / `not-found`), so the shared client retries once after a ~2s backoff.
+  Fix (built): add `streamingOffers timeout` to the no-retry predicate in
+  `src/lib/queryClient.ts` — a timeout after an already-generous 10s budget isn't worth a
+  retry. Two clean extractions along the way: the retry predicate became a named function
+  (was anonymous, untestable without a full client), and the duplicated error string became
+  a shared constant.
+  Files: `src/lib/queryClient.ts`, `src/hooks/useStreamingOffers.ts` (or wherever the error
+  string lived), + the new test.
+  Disposition: build.
+  Acceptance:
+  - [ ] A hanging connection now gives up in ~10s, not ~22s — pinned in a test against the REAL client config (`useStreamingOffers.test.ts` runs with `retry: false` by design and cannot catch this on its own).
+  - [ ] No other query type's retry behavior changes.
+  - [ ] Mutation-verified (remove the predicate entry, confirm the new test goes red).
+
+## Agent D — infra-docs (workflow-map re-trace) [Tier A, own commit]
+
+- [ ] **BIN-706** — `.claude/state/workflow-map-stale.json` has been live since
+  2026-08-01, re-stamped as recently as 2026-08-04T05:24, and has now survived three
+  sprints untouched (`docs/workflow-map.html` last updated `dc71bdd`, before any of
+  today's or the last two days' changes). **Run this LAST**, after Agents A/B/C land, so
+  it documents what's actually on `main` — not what a flag guessed hours ago.
+  Disposition: build.
+  Acceptance:
+  - [ ] Re-trace ONLY the flows whose nodes match the CURRENT flag's `triggers` at the time this runs (read the file fresh — don't copy the list from this ticket, it will be stale by the time Agent D starts).
+  - [ ] Update only `docs/workflow-map.html`'s `<script id="data">` JSON — nothing else in the file.
+  - [ ] `node scripts/check-workflow-map.mjs` passes; `.claude/state/workflow-map-stale.json` is deleted.
+  - [ ] Committed ALONE — never bundled with feature code (2026-07-10 lesson: a feature revert would silently drop the flow docs too).
+
+## Agent E — social-data (mediaTypeDocId parity test) [Tier A]
+
+- [ ] **BIN-636** — The client (`src/lib/mediaTypeDocId.ts`) now rejects aliased swipe doc
+  ids (`movie_042`, `zmovie_42`); the server copy (`functions/src/shared/mediaTypeDocId.ts`)
+  still accepts them — a deliberate, documented divergence (BIN-618/624). Nothing enforces
+  that the two stay apart on purpose rather than by accident; a future "resync these files"
+  cleanup would silently reopen the client-side hole with every test still green.
+  Files: new parity test (e.g. `src/lib/mediaTypeDocId.parity.test.ts`), read-only against
+  both `src/lib/mediaTypeDocId.ts` and `functions/src/shared/mediaTypeDocId.ts`.
+  Disposition: build.
+  Acceptance:
+  - [ ] A test asserts the client rejects at least one id shape (`movie_042`) the server still accepts — it must FAIL loudly the day the two files are made to match again.
+  - [ ] BIN-624's Linear description gets the residual-risk note this ticket asks for (which server paths still parse an aliased id) — a comment is enough, doesn't need code.
+  - [ ] No production code changes — this ticket is test/doc only, per its own scope.
+
+## Needs you (Tier D / needs-approval — not built this sprint)
+
+- **BIN-700 / BIN-643 / BIN-729 — one UX decision, three sites.** When the watchlist
+  listener is unreachable (dead permanently, or just not loaded yet), should the app show
+  an honest "couldn't load your library, try again" state, or retry silently in the
+  background? Automation has declined to build any of the three twice now (2026-08-02 and
+  2026-08-04) specifically because the naive version — just blocking until the list is
+  in — was tried once already and reverted: it produced a library that *looked* confidently
+  empty (with delete buttons next to nothing), which is worse than a spinner. All three
+  tickets are the same question from different angles (CSV import, quick-rate modal /
+  onboarding, and the read-side empty state) and should get one answer, not three. My read:
+  option (a), an honest error state with retry, is safer than a silent background retry a
+  user can't see progress on — but the visual form is yours to set.
+- **BIN-732's panel is the gating risk for this whole sprint, not a footnote.** Restated
+  here because BIN-744 exists precisely because this got missed last time: if whoever
+  executes Agent B cannot itself convene a full stakeholder panel, that ticket must NOT be
+  graded done on green tests alone.
+- **BIN-624** — rules change (`firestore.rules` swipe doc-id format guard) is explicitly
+  out of autonomous-batch scope per its own body (sensitive domain, needs a manual
+  `firebase deploy --only firestore:rules`) and needs a decision on whether the server
+  (`functions/src/shared/mediaTypeDocId.ts`) should adopt the client's stricter parsing.
+- **BIN-707** — sprint-patches directory hygiene. Same mechanical trap as BIN-585 below:
+  `.claude/` is gitignored, so a sprint batch can't write there and no diff-based gate can
+  see it done. Now worse than when filed: today's run added a fresh set of undated
+  `batch-0/1/2/3.patch` sitting next to their already-dated twins
+  (`batch-0-20260804-212000.patch` etc). Needs a direct pass in a normal session: verify
+  each undated file is byte-identical to its dated twin (md5), then delete the duplicate —
+  never rename blind.
+- **BIN-585** — one-line fix, `.claude/shared-plugin.json` → `roadmapDocs: []` (both listed
+  files are confirmed deleted). Failed via the sprint mechanism three times running for the
+  same structural reason (`.claude/` is gitignored — no batch can write it, no gate can see
+  it). **This session tried the direct edit too and was blocked by the permission
+  classifier** — so even a same-session direct edit isn't the fix; it needs Malin's own
+  hands on the file, or an explicitly-granted permission first.
+- **BIN-743 / BIN-744** — both are about the sprint-engine's own close-out and risk-gate
+  behavior. The fix lives in `C:/claude-plugins` (the shared `delivery`/`workflow-guards`
+  plugins), not in this repo — building it from inside a binge sprint is the exact
+  poisoned-session pattern the 2026-08-03 lesson warns about. Route to a dedicated
+  `C:/claude-plugins` session.
+- **BIN-189 (seasonal challenges)** — already fully planned and panel-approved
+  (2026-07-13, `~/.claude/plans/binge-bin189-seasonal-challenges.md`, full panel
+  approve-with-conditions), build window "a calm week in Aug/Sept," launch Nov 1. Not
+  scheduled into this sprint — it's a multi-week feature (new Firestore collection +
+  rules + GDPR export update) that also needs you to author the first challenge's content
+  before it can ship. Worth booking its own week rather than splitting across ticket batches.
+- **BIN-521 (bundle-rådgivare)** — still routed to its own `/stakeholder-review`
+  (Monetization + Data/Integrations) per your 2026-07-18 call, reaffirmed 2026-07-29. Not
+  reopened here.
+
+## Deviation log
+
+*(append as Agents A–E run: `- [deviation|discovery|needs-human] <id>: <plan said> → <found> → <conservative choice>`)*
+
+## Gates
+
+Each agent: `npm run typecheck` on changed files → targeted tests → full `npx vitest run`
+before the sprint's last commit. Reviewers per `.claude/shared-plugin.json` `reviewGates`
+(ledger mode). Agent B's security marker must show it read `AuthContext.tsx`/`AuthGuard.tsx`
+from THIS diff — a marker naming only Agent A's files does not cover it (2026-08-04 lesson).
+Push once, at the end — `deploy.yml` is hosting-only, no rules/functions in scope this
+sprint. Cloudflare purge after the deploy goes green.
+
+---
+
+# Recovery session 2026-08-03c — land what three sprints built and never shipped (ARCHIVED — fully shipped)
+
+All five steps landed: BIN-596/598/617/701 (`3a0632e`), BIN-664/659/669 (`17d799b`),
+BIN-714 (`6a5d641`), BIN-638 (`e78b878`), BIN-687/688 (`4397db5`). Housekeeping items
+BIN-707/706 were NOT fully done by that session — see BIN-707/BIN-706 above, carried
+forward into this sprint.
 
 Base: `ea5e6b5` (local, unpushed docs commit) on top of `b557be6`. Working tree clean.
 All material verified present: `stash@{2}` (batch 0), `stash@{1}` (batch 1), `stash@{0}`
 (BIN-638 tests), `.claude/state/sprint-patches/2026-08-03-0026-batch-4.patch` (SEO,
 `git apply --check` clean).
 
-**Not in this session:** the shared sprint-engine tickets (BIN-683/684/713/639/628). They
-live in `C:/claude-plugins`, and per the 2026-08-03 lesson a refused edit to shared infra
-contaminates every subagent launched afterwards in the same session. Separate session.
-
-## Stakeholder routing (done before this plan — `node docs/org/route.mjs`)
-
-`tier: top` — high-stakes path `src/contexts/AuthContext.tsx`. Full panel run blind,
-sonnet/low: #5 Legal/GDPR, #14 Software Architect, #19 Customer Support, #27 DBA.
-
-Binding conditions folded in below:
-
-- **#19 Support (BLOCKING):** BIN-596's dead-listener hold renders as `disabled` +
-  `title=` tooltip. A native `title` never appears on touch, and a `disabled` button fires
-  no tap event — so on mobile the visitor gets a grey control that does nothing, with no
-  message, for an unbounded time (a failed listener has no auto-recovery). → **Item 1b.**
-- **#14 Architect (BLOCKING ×3):** (a) batch 0 makes `StatusButton` *disable* a signed-out
-  visitor while `QuickAddButton` already *redirects* — landing batch 0 alone ships two
-  add-affordances on one page that disagree; BIN-714 must be written against the LANDED
-  file, not speculatively. (b) BIN-714 must be ONE shared helper, not a third inline copy
-  of the remember-and-redirect rule (the BIN-645/668/669 drift lineage). (c) The BIN-669
-  "split" is not a file exclusion — it interleaves with BIN-659 inside `finish()` and spans
-  four files; a half-applied result compiles clean and is behaviorally wrong. → **Items 2, 3.**
-- **#5 Legal:** no blocking conditions. Confirms the `findItem`/`itemsRef` migration in
-  batch 0 closes a real BIN-595-class privacy-timing gap (a stale closure could re-stamp a
-  profile default over a just-privatized title, or skip stripping a legacy inline note).
-- **#27 DBA:** no blocking conditions. Ruled on the BIN-701 dispute — see below.
-
-## Adjudicated: the BIN-701 verdict that withdrew batch 0 was WRONG
-
-The sprint held all of BIN-596/598/617/701 because BIN-701 graded `correctness=fail`
-`data-safety=fail`. BIN-701 is a **comment-only** change; no executing code.
-
-Traced independently (me) and confirmed independently (#27 DBA), against
-`WatchlistContext.tsx:371-411`: the effect's deps are `[uid, items, notesByTmdbId]`;
-`legacy` takes `.slice(0, NOTES_MIGRATE_CAP)` of items still carrying an inline `notes`;
-the batch DELETES that inline field; the listener echo drops those docs out of the filter
-and re-fires the effect on the new `items`, which takes the next 300. `migratedNotesRef`
-guards RETRIES, not the session. So `NOTES_MIGRATE_CAP` **paces**, it does not bound —
-exactly what the new comment says. A 5000-note account migrates all 5000 in one session.
-
-Cost: ~10 000 writes for such an account, under the 20 000/day free tier; pre-existing
-BIN-505 behavior, unchanged by a comment. Not a new cost.
-
-Two of three verifiers were wrong. Recorded on BIN-712.
-
-## Found during analysis: BIN-669 has a REAL defect — fix it, don't park it
-
-The sprint's `data-safety=fail` on BIN-669 is correct, and I verified the mechanism myself:
-`AuthContext.signOut` (`AuthContext.tsx:601-613`) does **not** navigate. So signing out on a
-guarded page flips `uid → null` on the still-mounted page, `AuthGuard`'s effect fires, and
-BIN-669's new `rememberNextPath(location.pathname + location.search)` stores the *departing*
-user's private path (e.g. `/grupper/<id>/`). Nothing clears it. BIN-669 then makes that value
-survive a *different* account's onboarding (`login/page.tsx` leaves it unconsumed,
-`OnboardingFlow.finish()` navigates to it). On a shared device, user B registering in the
-same tab is auto-routed into user A's group URL. `firestore.rules` denies the content, so
-there is no data leak — but B learns A's group id and lands on a permission error.
-
-Parking BIN-669 is the wrong call for two reasons: the architect's condition (c) says the
-split is the risky operation, and BIN-714 (Malin's decision today) rides on exactly this
-return-path machinery — without BIN-669, a brand-new account that taps "sedd" loses its
-return path at onboarding. **Fix BIN-669 and land all three together.**
-
-## Order is binding (architect's mitigation). One commit per step.
-
-### 1. Batch 0 — watchlist + auth write-path (BIN-596/598/617/701)
-`git stash apply "stash@{2}"` — 9 files. Adds render-visible `snapshotSettled` /
-`listenerFailed`, the `itemsRef`/`findItem` live-ref migration, `shouldStampVisibility`,
-and the corrected BIN-701 comment (already inside the stash — verified; no separate edit).
-
-**1b (Support's blocking condition).** The dead-listener hold must be perceivable without
-hover.
-
-**LANDED DESIGN — supersedes this item's first draft.** The draft said "a visible inline
-notice … No toast". What shipped is the opposite: the failed state stays TAPPABLE and
-answers on tap via the existing toast. Reason, decided while building it: `QuickAddButton`
-is a 28px badge on a poster grid, and a permanent inline red line under every poster wrecks
-the grid it sits in — while a toast is one mechanism that works identically in both
-components, on touch and on desktop, and reuses machinery the app already has. The
-transient holds (`Laddar…`) keep the disabled+tooltip form, because they end on their own.
-The rule and the Swedish copy live in `src/components/title/libraryHold.ts` so the two
-buttons cannot word it differently.
-
-**1c (integration review, blocking — found after 1b).** `loading` was still the gate on
-three sibling WRITE surfaces, which is the same defect one level out: `CollectionSection`'s
-bulk "Lägg alla osedda i vill se" (hard-writes `status: 'vill_se'` over up to 50 films —
-`status` is the field no payload shape can protect), `MoviePageClient`'s Bevaka CTA, and
-`CompanionSection`'s add. All three now consume a single derived `libraryKnown` exposed by
-`WatchlistContext`, rather than each re-deriving it. This was BIN-596's acceptance criterion
-#2, which the first draft of this plan dropped.
-
-**1d (security review, blocking).** `findItem` read one shared mutable `itemsRef` with no
-account check, unlike the two sibling effects on the same ref. On a shared device an
-in-flight call from account A could make its DECISION from account B's rows — sharpest in
-`updateNotes`, where B's note-less copy would skip stripping A's legacy inline note (the
-BIN-505 PII leak). Now guarded on `itemsUidRef`, answering `undefined` on mismatch.
-
-**1e (test review, blocking).** `updateRating`'s migration to the live ref had no test —
-reverting it left the suite green. Pinned now.
-
-Acceptance: `npm run typecheck` clean; full `npx vitest run` green; every new guard
-mutation-verified (mutant killed, then restored from a scratchpad snapshot and re-run).
-
-### 2. Batch 1 — onboarding (BIN-664, BIN-659, BIN-669 fixed)
-`git stash apply "stash@{1}"` — 7 files. Then fix BIN-669's defect:
-
-`AuthGuard` must not remember the path on a **deliberate sign-out**. Implement as an
-explicit signal from `AuthContext` (a `signingOut` flag set before `firebaseSignOut` and
-cleared after the guard has run), NOT by ordering `clearNextPath()` inside `signOut` —
-`signOut` is async and the guard's effect fires between its awaits, so a trailing clear is
-a race, not a fix.
-
-Acceptance: a test drives sign-out from a guarded page and asserts nothing is remembered;
-a second test drives A-signs-out → B-registers → B finishes onboarding and asserts B lands
-on `/`, never on A's path. `nextPath.ts` is a pure lib with no Firebase import, so this
-stays testable without the emulator.
-
-### 3. BIN-714 — signed-out tap routes to `/login` (Malin's decision, 2026-08-03)
-Written against the file batch 0 landed, never speculatively. One shared helper
-(`useSignedOutRedirect()`), called by BOTH `StatusButton` and `QuickAddButton`; the helper
-documents its call sites the way `nextPath.ts` does. Replaces batch 0's
-`holdReason = 'Logga in för att lägga till'` disabled branch with the redirect, ordered
-BEFORE the library-known gate — matching QuickAddButton's existing BIN-645 order.
-
-Return path via `sessionStorage` (`rememberNextPath`), NEVER `?next=`. Gate on `uid` before
-any Firestore call (#27 DBA) so no write is fired that only fails at the rules layer.
-
-Acceptance: both buttons behave identically for a signed-out visitor; a test pins the
-order (redirect wins over the library gate); no `?next=` anywhere.
-
-### 4. BIN-638 — streaming-offer tests
-`git stash apply "stash@{0}"` — 1 test file, 9/9 green when the sprint ran it. Re-run.
-
-### 5. BIN-687/688 — SEO content floor
-`git apply .claude/state/sprint-patches/2026-08-03-0026-batch-4.patch` — 5 files,
-`--check` already clean. Last, lowest coupling.
-
-### 6. Housekeeping
-- BIN-707: date-namespace this run's `batch-0/2/3.patch` before the next sprint reuses the
-  slots. Gitignored — no diff, so record the disposition in the ticket, not in a commit.
-- BIN-706: `.claude/state/workflow-map-stale.json` must be re-derived from the ACTUAL
-  committed tree after steps 1-5, not from its current trigger list (which names files that
-  were withdrawn). Own commit — never bundled with feature code.
-
-## Gates
-
-Each step: `npm run typecheck` → targeted tests → full `npx vitest run` before the last
-commit. Reviewers per `.claude/shared-plugin.json` `reviewGates` (ledger mode — the agents
-record their own verdicts; nothing is hand-written). Push once, at the end; that triggers
-`deploy.yml` (hosting only). No rules/functions deploy is needed — no `firestore.rules`,
-no `functions/**` in scope. Cloudflare purge after the deploy goes green.
-
-## Still Malin's, not mine
-- BIN-596 acceptance #3: she signs off a screenshot of the resting/disabled state. Item 1b
-  changes what that screenshot shows, so it is taken AFTER 1b.
-- Follow-up worth filing (Support, non-blocking): a return-toast after the login round-trip
-  — a visitor who tapped "sedd" comes back to an unmarked title and may believe it was saved.
+(full original plan text omitted from the archive — see git history of this file if the
+detail is needed again; the acceptance conditions that mattered are captured in the
+lessons digest and in the commits themselves.)
