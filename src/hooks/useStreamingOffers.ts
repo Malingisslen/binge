@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fsdb } from '@/lib/firebase/db';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { STREAMING_OFFERS_TIMEOUT_MESSAGE } from '@/lib/queryClient';
 import type { Offer, StreamingOffersDoc } from '@/lib/streaming/offers';
 
 /**
@@ -30,9 +31,15 @@ export function useStreamingOffers(
       // tidsgräns, så ett hängande nät kunde låta offers-queryn aldrig settla
       // (titelsidan renderar ändå — offers är komplement — men queryn fastnade).
       // Timeouten spänner över BÅDA läsningarna, inte 10s per läsning.
+      // BIN-733: felnamnet är delat med queryClients retry-predikat, som inte
+      // gör om en query som redan slagit i sin egen tidsgräns — annars blir
+      // väntan 10s + 1s backoff + 10s innan rutan ger upp.
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('streamingOffers timeout')), 10_000);
+        timer = setTimeout(
+          () => reject(new Error(STREAMING_OFFERS_TIMEOUT_MESSAGE)),
+          10_000,
+        );
       });
       const read = async (): Promise<StreamingOffersDoc | null> => {
         const snap = await getDoc(doc(db, 'streamingOffers', mediaTypeDocId(mediaType, tmdbId)));

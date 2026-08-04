@@ -40,6 +40,30 @@ export function shouldPersistQuery(query: {
   return typeof head === 'string' && PERSISTED_QUERY_PREFIXES.has(head);
 }
 
+/** Felmeddelandet useStreamingOffers kastar när dess egen 10s-budget löper ut.
+ *  Delas med retry-predikatet nedan så att de två inte kan glida isär — hooken
+ *  äger tidsgränsen, klienten äger beslutet att inte försöka igen. */
+export const STREAMING_OFFERS_TIMEOUT_MESSAGE = 'streamingOffers timeout';
+
+/**
+ * Ska en fallerad query göras om?
+ *
+ * Extraherad som ren funktion (test-extraction-mönstret) så retry-policyn kan
+ * pinnas utan att starta en QueryClient.
+ *
+ * BIN-733: ett fel som REDAN är en tidsgräns blir inte bättre av ett nytt
+ * försök — det bara fördubblar väntan. Streamingrutan väntade 10s, backade av
+ * 1s och väntade 10s till (~22s) innan den gav upp; nu ger den upp vid ~10s.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 2) return false;
+  const msg = error instanceof Error ? error.message : '';
+  // Firestore permission-fel blir inte bättre av att försökas igen.
+  if (/permission-denied|unauthenticated|not-found/i.test(msg)) return false;
+  if (msg === STREAMING_OFFERS_TIMEOUT_MESSAGE) return false;
+  return true;
+}
+
 /**
  * Central React Query-klient med global felhantering.
  *
@@ -103,14 +127,9 @@ export function createQueryClient(): QueryClient {
         // Matchar PERSIST_MAX_AGE — se kommentaren vid konstanten.
         gcTime: PERSIST_MAX_AGE,
         refetchOnWindowFocus: false,
-        // Retry-kedja: 1 försök till med kort backoff. Firestore permission-fel
-        // retryas inte eftersom de inte blir bättre av att försökas igen.
-        retry: (failureCount, error) => {
-          if (failureCount >= 2) return false;
-          const msg = error instanceof Error ? error.message : '';
-          if (/permission-denied|unauthenticated|not-found/i.test(msg)) return false;
-          return true;
-        },
+        // Retry-kedja: 1 försök till med kort backoff — se shouldRetryQuery för
+        // vilka fel som inte retryas alls.
+        retry: shouldRetryQuery,
         retryDelay: attempt => Math.min(1000 * 2 ** attempt, 10_000),
       },
       mutations: {
