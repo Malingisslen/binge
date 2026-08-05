@@ -23,10 +23,12 @@ BIN-521, BIN-189.
 
 ## Needs Malin
 
-- **BIN-700 — In Review.** The library error state and its "Försök igen" button are LIVE on
-  main. This ticket (with BIN-643/729) was explicitly parked on her A/B choice and was built
-  anyway; option (a) was self-approved by the sprint. She confirms the copy and the shape, or
-  it is a revert/rework. See the lesson "Not built this sprint is a binding parking brake".
+- **BIN-700 — RESOLVED 2026-08-05: Malin picked A** ("behåll a"), after the shipped copy and
+  the whole-page shape were put in front of her. The library error state and its "Försök igen"
+  button stay as built; option (b), the silent background retry, is not to be re-proposed.
+  The gate breach stands as a process lesson even though the outcome was ratified: the ticket
+  was parked on her choice and the sprint self-approved (a) before asking. See the lesson
+  "Not built this sprint is a binding parking brake".
 - **`.claude/state/workflow-map-stale.json` is still present** and now names three files
   batch-1 actually changed — the workflow map describes onboarding/import/watchlist flows
   that no longer behave as documented, and the linter cannot see it. BIN-706 must run from
