@@ -85,8 +85,11 @@ export function parseTmdbIdFromDocId(docId: string): number {
  * legacy `123` (or anything else) returns `null` — it is genuinely
  * unattributable, and callers must decide whether to skip or default. This is
  * intentionally NOT `normalizeMediaType` (which defaults unknown → 'tv'): a doc
- * id either carries a recognised prefix or it doesn't. Mirror of the paired
- * mediaTypeDocId module — keep the two in sync.
+ * id either carries a recognised prefix or it doesn't. THIS FUNCTION is a true
+ * mirror of its twin in `functions/src/shared/mediaTypeDocId.ts` — keep those
+ * two in sync. The claim stops at this function: the two MODULES are no longer
+ * mirrors (`parseTmdbIdFromDocId` above is strict here and permissive there
+ * since BIN-618), so this line is never a licence to resync the pair.
  */
 export function parseMediaTypeFromDocId(docId: string): MediaType | null {
   if (docId.startsWith('movie_')) return 'movie';
