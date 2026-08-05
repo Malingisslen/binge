@@ -807,6 +807,32 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(k)).data.uid == null;
       }
       function validVote(v) { return v == 'yes' || v == 'no' || v == 'veto'; }
+      // BIN-624: doc-id formkontroll på röstdokument. Exakt den form
+      // mediaTypeDocId() skriver — `movie_`/`tv_` + KANONISKA siffror (ingen
+      // inledande nolla). Utan den kunde vem som helst med sessionslänken skapa
+      // sessions/{id}/swipes/<vad som helst>: skräpdokument och kostnad, inte
+      // röstintegritet (BIN-636:s granskning visade att inget förfalskat doc-id
+      // kan dölja eller förfalska en röst på någondera sidan längre).
+      //
+      // Den här regeln binder FORMEN, inte ANTALET: en länkinnehavare kan
+      // fortfarande skapa movie_1 … movie_999999, var och en med en giltig egen
+      // eller anon-röst. Läs alltså inte det här som att skräpdoc-kostnaden är
+      // löst — en volymgräns vore en egen biljett.
+      //
+      // Gäller BARA create. Två skäl, båda avsiktliga:
+      //  1. create/update avgörs av om dokumentet FINNS, inte av anroparen — en
+      //     angripare kan alltså inte nå update-grenen på en väg utan dokument.
+      //     Undantaget öppnar ingenting; det stänger bara alla NYA icke-kanoniska id:n.
+      //  2. Legacy bara-numeriska röstdokument (skrivna före namngivningen) slås
+      //     fortfarande ihop per deltagare (BIN-608) tills sessionens 7-dagars-TTL
+      //     städar bort dem. En guard på update skulle frysa dem mitt i en session.
+      //
+      // recordSwipe (src/lib/firebase/sessions.ts) är enda skribenten och går
+      // alltid via mediaTypeDocId() med tmdbId typad `number` — kanonisk per
+      // konstruktion, så ingen legitim skrivning kan nekas av den här regeln.
+      function canonicalSwipeDocId(id) {
+        return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
+      }
       function swipeShapeOk() {
         return request.resource.data.keys().hasOnly(['votes', 'updatedAt'])
           && request.resource.data.votes is map
@@ -920,7 +946,8 @@ service cloud.firestore {
         // får aldrig röra resource.data (diff() på create kastar och skulle
         // neka alla legitima förstaröster; alla .diff()-användningar i filen
         // är update-only av samma skäl).
-        allow create: if swipeShapeOk()
+        allow create: if canonicalSwipeDocId(tmdbId)
+          && swipeShapeOk()
           && request.resource.data.votes.size() == 1
           && validVote(request.resource.data.votes[request.resource.data.votes.keys()[0]])
           && (

@@ -28,7 +28,15 @@ import * as server from '../../functions/src/shared/mediaTypeDocId';
  * as a plain agreement block. Never relax the client to make it pass.
  */
 
-/** The alias shapes BIN-618 closed on the client. Server still resolves all of these to 42. */
+/**
+ * The alias shapes BIN-618 closed on the client. Server still resolves all of these to 42.
+ *
+ * BIN-624 half 1 made this list load-bearing in a SECOND file: the swipe doc-id guard's
+ * denial cases in `src/test/rules/firestore-rules.test.ts` are asserted to be a superset of
+ * this array, so that a doc id the client refuses to READ can also never be WRITTEN. Nothing
+ * mechanically links the two — if you add a shape here, add it there too, or the rules test
+ * quietly stops being the superset its own comment claims.
+ */
 const ALIASES_OF_42 = ['movie_042', '042', 'tv_0000042', 'zmovie_42', 'season_42'] as const;
 
 /** Doc ids both copies must still agree on — the non-diverged part of the read contract. */

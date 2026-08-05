@@ -1097,8 +1097,18 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
     await setDoc(doc(anonDb(), 'sessions', 's1', 'participants', ANON1), validParticipant(null));
     await setDoc(doc(anonDb(), 'sessions', 's1', 'participants', ANON2), validParticipant(null));
   }
+  // BIN-624: create on sessions/{id}/swipes/{tmdbId} now requires the canonical
+  // `movie_N`/`tv_N` doc id. These fixtures were written against BARE numeric
+  // ids, which the guard denies — so the namespacing happens HERE, once, and
+  // every vote-binding case below keeps testing exactly what it was written to
+  // test. Do NOT "fix" a red case by loosening the rule to admit bare ids: that
+  // re-opens the junk-doc hole the guard exists to close. The doc-id guard has
+  // its own cases in the sibling describe block.
+  /** Takes the doc id verbatim — for the doc-id guard's own cases. */
+  const rawSwipeRef = (db: ReturnType<typeof ownerDb>, docId: string) =>
+    doc(db, 'sessions', 's1', 'swipes', docId);
   const swipeRef = (db: ReturnType<typeof ownerDb>, tmdbId = '603') =>
-    doc(db, 'sessions', 's1', 'swipes', tmdbId);
+    rawSwipeRef(db, `movie_${tmdbId}`);
 
   it('signed-in first vote on a title succeeds (CREATE branch — the diff()-on-create trap)', async () => {
     await seedParticipants();
@@ -1208,6 +1218,70 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
     await assertFails(setDoc(swipeRef(ownerDb(), '609'), {
       votes: { [OWNER]: 'yes' }, evil: true, updatedAt: serverTimestamp(),
     }, { merge: true }));
+  });
+
+  // BIN-624: the doc-id format guard itself. Everything above proves WHO may
+  // write a vote; this block proves WHERE a vote document may be created.
+  describe('doc-id format guard (BIN-624)', () => {
+    const firstVote = { votes: { [OWNER]: 'yes' }, updatedAt: serverTimestamp() };
+
+    it('accepts the two shapes mediaTypeDocId() actually writes', async () => {
+      await seedParticipants();
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_42'), firstVote, { merge: true }));
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'tv_42'), firstVote, { merge: true }));
+      // tmdbId 0 is canonical output for the number 0 — the regex must not
+      // reject it as a "leading zero", or a legitimate id would be unwritable.
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_0'), firstVote, { merge: true }));
+    });
+
+    // The alias set from BIN-618/636 — this list must stay a SUPERSET of
+    // `ALIASES_OF_42` in src/lib/mediaTypeDocId.parity.test.ts, or the two
+    // files end up with two different spellings of "the alias set". Each of
+    // these used to be creatable, and none is a shape a canonical writer can
+    // produce.
+    it.each([
+      ['movie_042', 'leading zero — the alias that re-keys onto the genuine movie_42'],
+      ['042', 'bare padded alias — the legacy-shaped member of the same set'],
+      ['tv_0000042', 'padded alias'],
+      ['zmovie_42', 'unknown prefix'],
+      ['season_42', 'wrong namespace entirely'],
+      ['movie_', 'empty suffix — must not resolve as Number("") === 0'],
+      ['movie_1_2', 'junk suffix'],
+      ['movie_xyz', 'non-numeric suffix'],
+      ['603', 'bare legacy id — creatable before this guard, not any more'],
+      ['MOVIE_42', 'prefix case must match — the regex is lowercase-anchored'],
+      // Not asserted: a path-traversal id like `../evil`. The Firestore SDK
+      // rejects it as a malformed reference before any rule is consulted, so
+      // the case would pass without the guard and prove nothing.
+    ])('denies CREATE at %s (%s)', async (docId) => {
+      await seedParticipants();
+      await assertFails(setDoc(rawSwipeRef(ownerDb(), docId), firstVote, { merge: true }));
+    });
+
+    // The reason `update` is deliberately left unguarded: sessions that were
+    // live before this rule shipped still hold bare-numeric vote documents, and
+    // BIN-608 merges them per participant until the 7-day TTL reaps them.
+    // Guarding update would freeze those sessions mid-vote.
+    it('a grandfathered bare-numeric doc can still receive a NEW vote key', async () => {
+      await seedParticipants();
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'sessions', 's1', 'swipes', '603'), {
+          votes: { other_uid: 'yes' }, updatedAt: serverTimestamp(),
+        });
+      });
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), '603'), {
+        votes: { [OWNER]: 'no' }, updatedAt: serverTimestamp(),
+      }, { merge: true }));
+    });
+
+    // The guard is additive, not a replacement: an id-shaped path must not buy
+    // its way past the vote-binding rules the block above pins.
+    it('a canonical doc id does NOT excuse forging another participant\'s vote', async () => {
+      await seedParticipants();
+      await assertFails(setDoc(rawSwipeRef(anonDb(), 'movie_99'), {
+        votes: { other_uid: 'veto' }, updatedAt: serverTimestamp(),
+      }, { merge: true }));
+    });
   });
 });
 
