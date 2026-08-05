@@ -6,6 +6,7 @@ import { recapDocId, seasonRecapDocId, type EpisodeRef } from '@/lib/recaps/boun
 import { recapIndexDocId, parseRecapIndex, parseSeasonOnlySeasons, nearestCoveredBoundary } from '@/lib/recaps/coverage';
 import { RECAPS_ENABLED } from '@/lib/recaps/config';
 import { logRecapMiss } from '@/lib/recaps/coverageGap';
+import { RECAP_TIMEOUT_MESSAGE } from '@/lib/queryClient';
 import { isSeasonRecapLoading } from './useRecap.helpers';
 import type { RecapDoc, RecapSource, SeasonRecapDoc } from '@/lib/recaps/types';
 
@@ -61,12 +62,17 @@ function docToSeasonRecap(data: Record<string, unknown>): SeasonRecapDoc {
   };
 }
 
-/** Direct doc get with the streamingOffers 10s-timeout precedent (getDoc has no own limit). */
+/** Direct doc get with the streamingOffers 10s-timeout precedent (getDoc has no own limit).
+ *
+ * BIN-746: the rejection message comes from the SHARED `readTimeoutMessage` marker, so
+ * `shouldRetryQuery` recognises it as "this read already spent its own budget" and does not
+ * retry it. Before that, only the streaming-offers string was recognised and a timed-out
+ * recap read waited 10s + 1s backoff + 10s ≈ 21s before giving up. */
 async function getDocWithTimeout(docId: string): Promise<Record<string, unknown> | null> {
   const { db, doc, getDoc } = await fsdb();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('recap timeout')), 10_000);
+    timer = setTimeout(() => reject(new Error(RECAP_TIMEOUT_MESSAGE)), 10_000);
   });
   try {
     const snap = await Promise.race([getDoc(doc(db, 'recaps', docId)), timeout]);

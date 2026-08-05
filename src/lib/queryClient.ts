@@ -40,10 +40,33 @@ export function shouldPersistQuery(query: {
   return typeof head === 'string' && PERSISTED_QUERY_PREFIXES.has(head);
 }
 
-/** Felmeddelandet useStreamingOffers kastar när dess egen 10s-budget löper ut.
- *  Delas med retry-predikatet nedan så att de två inte kan glida isär — hooken
- *  äger tidsgränsen, klienten äger beslutet att inte försöka igen. */
-export const STREAMING_OFFERS_TIMEOUT_MESSAGE = 'streamingOffers timeout';
+/** Suffixet varje klient-satt läsbudget märker sitt timeout-fel med.
+ *
+ *  BIN-746: BIN-733 delade bara EN sträng ('streamingOffers timeout') mellan
+ *  hooken och retry-predikatet, så nästa läsning med egen tidsgräns (useRecap)
+ *  föll utanför i tysthet och väntade fortfarande 10s + 1s backoff + 10s ≈ 21s.
+ *  Markören är därför gemensam: bygg meddelandet med `readTimeoutMessage()` och
+ *  en ny tidsatt läsning täcks av no-retry-regeln samma dag den shippas.
+ *  Hooken äger tidsgränsen, klienten äger beslutet att inte försöka igen. */
+const READ_TIMEOUT_SUFFIX = ' timeout';
+
+/** Bygg felmeddelandet för en läsning som slagit i sin egen tidsgräns. */
+export function readTimeoutMessage(source: string): string {
+  return `${source}${READ_TIMEOUT_SUFFIX}`;
+}
+
+/** Är detta ett fel från en läsnings EGEN tidsbudget (och därmed inte värt ett
+ *  nytt försök)? Kräver något före suffixet så en bar 'timeout' från ett
+ *  främmande lager inte råkar matcha. */
+export function isReadTimeoutMessage(message: string): boolean {
+  return message.length > READ_TIMEOUT_SUFFIX.length && message.endsWith(READ_TIMEOUT_SUFFIX);
+}
+
+/** Felmeddelandet useStreamingOffers kastar när dess egen 10s-budget löper ut. */
+export const STREAMING_OFFERS_TIMEOUT_MESSAGE = readTimeoutMessage('streamingOffers');
+
+/** Felmeddelandet useRecaps doc-läsningar kastar när deras 10s-budget löper ut. */
+export const RECAP_TIMEOUT_MESSAGE = readTimeoutMessage('recap');
 
 /**
  * Ska en fallerad query göras om?
@@ -54,13 +77,17 @@ export const STREAMING_OFFERS_TIMEOUT_MESSAGE = 'streamingOffers timeout';
  * BIN-733: ett fel som REDAN är en tidsgräns blir inte bättre av ett nytt
  * försök — det bara fördubblar väntan. Streamingrutan väntade 10s, backade av
  * 1s och väntade 10s till (~22s) innan den gav upp; nu ger den upp vid ~10s.
+ *
+ * BIN-746: regeln gäller ALLA läsningar med egen tidsbudget, inte bara
+ * streamingrutan — recap-läsningarna matchade inte den ursprungliga strängen
+ * och väntade fortfarande ~21s.
  */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   if (failureCount >= 2) return false;
   const msg = error instanceof Error ? error.message : '';
   // Firestore permission-fel blir inte bättre av att försökas igen.
   if (/permission-denied|unauthenticated|not-found/i.test(msg)) return false;
-  if (msg === STREAMING_OFFERS_TIMEOUT_MESSAGE) return false;
+  if (isReadTimeoutMessage(msg)) return false;
   return true;
 }
 
