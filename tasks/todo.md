@@ -1,7 +1,8 @@
 # BIN-624 — swipe doc-id guard in firestore.rules (+ the server-strictness question)
 
-Plan written 2026-08-05, approved the same day. **Half 1 is BUILT and in this commit;
-half 2 waits on the instrumented count and is not written yet.** Tier `top` per
+Plan written 2026-08-05, approved the same day. **Half 1 is SHIPPED (`6373f6a`) and the
+rules are deployed to prod; half 2 waits on the instrumented count and is not written
+yet.** Tier `top` per
 `node docs/org/route.mjs firestore.rules …`; panel #4 Security Architect, #6 Data
 Protection Officer, #27 DBA ran BLIND and concurrently before this plan was written.
 Their conditions are folded in below as binding acceptance criteria.
@@ -82,11 +83,11 @@ with `tmdbId` statically typed `number` — canonical by construction.
       **DONE:** also catches the regression where someone extends the guard to `update`.
 - [x] `npm run test:rules` green against the emulator BEFORE deploy (#4). Java on PATH.
       **DONE: 244/244.**
-- [ ] **OPEN — Malin's step.** Deploy by hand: `firebase deploy --only firestore:rules`.
+- [x] Deployed by hand: `firebase deploy --only firestore:rules` — **LIVE in prod 2026-08-05**
+      ("released rules firestore.rules to cloud.firestore").
       `deploy.yml` ships hosting only and will never do this. Rollback is pure removal of an
       added constraint — no data migration, no lockstep client deploy, since production
-      clients already write canonical ids only (#4). **Until this runs, the guard is in the
-      repo but not in production.**
+      clients already write canonical ids only (#4).
 
 ---
 
