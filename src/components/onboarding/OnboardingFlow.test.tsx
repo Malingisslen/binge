@@ -23,6 +23,12 @@ const auth = vi.hoisted(() => ({
 const watchlist = vi.hoisted(() => ({
   items: [] as WatchlistItem[],
   addItem: vi.fn<(payload: { tmdbId: number; mediaType: string }) => Promise<void>>(async () => {}),
+  // A GETTER, mirroring the provider's own derivation — a hardcoded
+  // `libraryKnown` would let these tests assert a state production can't reach.
+  snapshotSettled: true,
+  listenerFailed: false,
+  get libraryKnown(): boolean { return this.snapshotSettled && !this.listenerFailed; },
+  retryListener: vi.fn(),
 }));
 const search = vi.hoisted(() => ({
   data: null as { results: TMDBSearchResult[] } | null,
@@ -75,6 +81,8 @@ beforeEach(() => {
   auth.updateProviders.mockResolvedValue(undefined);
   watchlist.items = [];
   watchlist.addItem.mockResolvedValue(undefined);
+  watchlist.snapshotSettled = true;
+  watchlist.listenerFailed = false;
   search.data = null;
   search.isLoading = false;
   setDoc.mockResolvedValue(undefined);
@@ -187,6 +195,74 @@ describe('BIN-659 — a failed write is visible and retry-able', () => {
     // Moving on is unrelated to the skip that failed.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
 
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+// BIN-643. This step used to be deliberately ungated, on the argument that a
+// brand-new account has no library to overwrite. The overwrite is not the only
+// loss: on a dead listener a title marked "Sedd" here lands with NO watchedAt
+// (addItem suppresses the stamp when it cannot tell a new add from a re-mark),
+// and that half never self-heals. The flow is also reachable for any account
+// whose onboardingCompletedAt is unset, library and all.
+describe('BIN-643 — the first add waits for the library, and never traps anyone', () => {
+  // A tracked title unrelated to the search result, so step 3's own "Hoppa över"
+  // stays out of the way (canContinue is true) and the row still offers "Följ".
+  const other = () => [item(603, 'movie')];
+
+  async function goToStepThree() {
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+    expect(screen.getByRole('heading', { name: 'Lägg till din första titel' })).toBeInTheDocument();
+  }
+
+  beforeEach(() => {
+    search.data = { results: [gotSeries] };
+    watchlist.items = other();
+  });
+
+  it('holds the add while the first snapshot is in flight', async () => {
+    watchlist.snapshotSettled = false;
+    await goToStepThree();
+
+    const follow = screen.getByRole('button', { name: 'Följ' });
+    expect(follow).toBeDisabled();
+    await act(async () => { fireEvent.click(follow); });
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(screen.getByText(/Läser in ditt bibliotek/)).toBeInTheDocument();
+  });
+
+  it('explains a dead listener and offers a retry', async () => {
+    watchlist.listenerFailed = true;
+    await goToStepThree();
+
+    expect(screen.getByRole('button', { name: 'Följ' })).toBeDisabled();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Följ' })); });
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Försök igen' })); });
+    expect(watchlist.retryListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets someone leave onboarding even when the listener never recovers', async () => {
+    // The reason the gate is safe to add here at all: a hold that never ends
+    // must not be a locked door. "Hoppa över" completes the account and routes.
+    watchlist.listenerFailed = true;
+    await goToStepThree();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Hoppa över' })); });
+    expect(push).toHaveBeenCalledWith('/');
+  });
+
+  it('adds normally once the library is known — the control', async () => {
+    await goToStepThree();
+
+    const follow = screen.getByRole('button', { name: 'Följ' });
+    expect(follow).not.toBeDisabled();
+    await act(async () => { fireEvent.click(follow); });
+    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

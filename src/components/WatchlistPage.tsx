@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   Search, Film, Tv, X, Check, SlidersHorizontal, ChevronDown, Library,
-  Rows3, LayoutGrid, Grid3x3,
+  Rows3, LayoutGrid, Grid3x3, CloudOff,
 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
 import ProviderDot from '@/components/ui/ProviderDot';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { useAuth } from '@/hooks/useAuth';
@@ -43,6 +44,11 @@ import { toneForId } from '@/lib/duotone';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { useIncrementalList } from '@/hooks/useIncrementalList';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import {
+  LIBRARY_UNREACHABLE_TITLE,
+  LIBRARY_UNREACHABLE_BODY,
+  LIBRARY_RETRY_LABEL,
+} from '@/lib/watchlist/libraryHoldCopy';
 import type { WatchStatus, WatchlistItem } from '@/types';
 
 // BIN-560 Phase 4: selection/next-air state is keyed by the composite doc id
@@ -85,7 +91,10 @@ export default function WatchlistPage(props: WatchlistPageProps) {
 }
 
 function WatchlistPageInner({ status, title }: WatchlistPageProps) {
-  const { items, loading: watchlistLoading, removeItem, updateStatus, updateRating } = useWatchlist();
+  const {
+    items, loading: watchlistLoading, listenerFailed, retryListener,
+    removeItem, updateStatus, updateRating,
+  } = useWatchlist();
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -348,6 +357,41 @@ function WatchlistPageInner({ status, title }: WatchlistPageProps) {
         </header>
         <LibrarySubnav status={status} />
         <LoadingView variant="grid" label="Laddar biblioteket…" />
+      </>
+    );
+  }
+
+  // BIN-700: a terminally dead listener. `loading` is false here and `items` is
+  // empty — which, without this branch, renders as a confident "Inget i
+  // biblioteket än" to someone who has 300 titles. That is the single worst
+  // thing this view can say: it reads as "your data is gone".
+  //
+  // Deliberately a WHOLE-PAGE state, not a banner above the (empty) list: every
+  // control below it — the bulk select-all, "Ta bort", the status filters —
+  // operates on a list we know to be wrong, and a delete button next to nothing
+  // is the confidently-empty library that got the first attempt at this reverted.
+  // Ordered AFTER the loading branch so a retry in flight shows the spinner, not
+  // the error it is busy trying to clear.
+  if (listenerFailed) {
+    return (
+      <>
+        <header>
+          <div className="crumb">Bibliotek · {labelForStatus(status)}</div>
+          <h1 className="page-h1">{title}</h1>
+        </header>
+        <LibrarySubnav status={status} />
+        <div className="mt-4">
+          <EmptyState
+            icon={<CloudOff size={22} />}
+            title={LIBRARY_UNREACHABLE_TITLE}
+            body={LIBRARY_UNREACHABLE_BODY}
+            action={
+              <button type="button" onClick={retryListener} className="btn btn-acc">
+                {LIBRARY_RETRY_LABEL}
+              </button>
+            }
+          />
+        </div>
       </>
     );
   }

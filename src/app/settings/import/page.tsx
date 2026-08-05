@@ -11,6 +11,13 @@ import { searchMulti, findByImdbId, posterUrl } from '@/lib/tmdb/client';
 import { parseWatchlistCsv, type ImportRow, type ImportFormat } from '@/lib/import/parseWatchlistCsv';
 import { pickBestMatch, titleOf, importStatus } from '@/lib/import/matchTitle';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import {
+  LIBRARY_UNREACHABLE_TITLE,
+  LIBRARY_UNREACHABLE_BODY,
+  LIBRARY_RETRY_LABEL,
+  LIBRARY_LOADING,
+  LIBRARY_WRITE_HELD,
+} from '@/lib/watchlist/libraryHoldCopy';
 import type { MediaType, WatchStatus } from '@/types';
 
 /**
@@ -37,7 +44,19 @@ export default function ImportPage() {
 
 function ImportContent() {
   usePageMeta({ title: 'Importera' });
-  const { getItem, addItem } = useWatchlist();
+  // BIN-729: `libraryKnown` (snapshotSettled && !listenerFailed), never
+  // `loading` — which goes false in BOTH terminal states. On a dead listener
+  // `getItem` answers null for EVERY title, so every row below reads as a
+  // non-duplicate and `addItem` hard-writes `status` over titles the user
+  // already has, row after row. `status` is the one field no payload shape can
+  // protect (see MoviePageClient's handleBevaka comment), so this gate is the
+  // only defence — the same argument, and the same one-line fix, as
+  // CollectionSection's bulk "Lägg alla osedda i vill se" (BIN-596).
+  //
+  // `listenerFailed` is read on its own too, because the two halves of "not
+  // known" call for different UI: the first snapshot lands on its own in under a
+  // second, while a failed listener never does and needs a way out.
+  const { getItem, addItem, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const { show: toast } = useToast();
 
   const [stage, setStage] = useState<Stage>('idle');
@@ -64,6 +83,11 @@ function ImportContent() {
   }, []);
 
   const analyze = useCallback(async () => {
+    // Gated as well as the import itself: the dry-run's `duplicate` verdict IS
+    // the dedup, and one computed against an unread library marks every row as
+    // new. The user then confirms a list that is wrong, and the confirmation is
+    // what the whole page treats as consent to write.
+    if (!libraryKnown) return;
     setStage('analyzing');
     const results = await Promise.all(rows.map(async (row): Promise<Analyzed> => {
       try {
@@ -100,11 +124,16 @@ function ImportContent() {
     }));
     setAnalyzed(results);
     setStage('analyzed');
-  }, [rows, getItem]);
+  }, [rows, getItem, libraryKnown]);
 
   const importable = analyzed.filter(a => a.match && !a.duplicate && a.status);
 
   const runImport = useCallback(async () => {
+    // Belt-and-braces behind the disabled button: the analysis this loop writes
+    // from could have been produced before the listener died, and this is a
+    // bulk hard-write of `status` — the most destructive path in the app after
+    // CollectionSection's bulk add.
+    if (!libraryKnown) return;
     setStage('importing');
     let n = 0;
     let failed = 0;
@@ -135,7 +164,7 @@ function ImportContent() {
     }
     setStage('done');
     toast(failed > 0 ? `Importerade ${n} titlar · ${failed} misslyckades` : `Importerade ${n} titlar`);
-  }, [importable, addItem, toast]);
+  }, [importable, addItem, toast, libraryKnown]);
 
   const matchedCount = analyzed.filter(a => a.match).length;
   const dupeCount = analyzed.filter(a => a.match && a.duplicate).length;
@@ -158,6 +187,8 @@ function ImportContent() {
           <input
             type="file"
             accept=".csv,text/csv"
+            // Picking a file writes nothing, so it stays usable while the
+            // library loads — the hold belongs on the two actions that write.
             disabled={stage === 'analyzing' || stage === 'importing'}
             onChange={e => { const f = e.target.files?.[0]; if (f) void onFile(f); }}
             className="text-sm disabled:opacity-50"
@@ -174,8 +205,32 @@ function ImportContent() {
           )}
         </div>
 
+        {/* BIN-729 — the honest hold. Rendered above the actions so a disabled
+            "Analysera"/"Importera" is never an unexplained dead button, and split
+            in two because the failed half never resolves on its own: it gets a
+            retry, the transient half gets a sentence. */}
+        {!libraryKnown && (
+          listenerFailed ? (
+            <div
+              role="alert"
+              className="mt-4 bg-danger-soft border border-danger/30 rounded-md px-4 py-3"
+            >
+              <p className="text-sm font-semibold text-danger-ink">{LIBRARY_UNREACHABLE_TITLE}</p>
+              <p className="text-sm text-ink-2 mt-1">{LIBRARY_UNREACHABLE_BODY}</p>
+              <p className="text-xs text-ink-3 mt-1">{LIBRARY_WRITE_HELD}</p>
+              <button type="button" onClick={retryListener} className="btn btn-acc mt-3">
+                {LIBRARY_RETRY_LABEL}
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-3 mt-4">{LIBRARY_LOADING}</p>
+          )
+        )}
+
         {stage === 'parsed' && (
-          <button onClick={analyze} className="btn btn-acc mt-4">Analysera mot TMDB</button>
+          <button onClick={analyze} disabled={!libraryKnown} className="btn btn-acc mt-4 disabled:opacity-50">
+            Analysera mot TMDB
+          </button>
         )}
         {stage === 'analyzing' && (
           <p className="text-sm text-ink-3 mt-4">Matchar {rows.length} titlar mot TMDB…</p>
@@ -190,7 +245,7 @@ function ImportContent() {
             </div>
 
             {stage === 'analyzed' && importable.length > 0 && (
-              <button onClick={runImport} className="btn btn-acc mb-4">
+              <button onClick={runImport} disabled={!libraryKnown} className="btn btn-acc mb-4 disabled:opacity-50">
                 Importera {importable.length} titlar
               </button>
             )}

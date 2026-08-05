@@ -14,6 +14,12 @@ import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { takeNextPath } from '@/lib/nextPath';
+import {
+  LIBRARY_UNREACHABLE_TITLE,
+  LIBRARY_UNREACHABLE_BODY,
+  LIBRARY_RETRY_LABEL,
+  LIBRARY_LOADING,
+} from '@/lib/watchlist/libraryHoldCopy';
 import type { TMDBSearchResult, WatchStatus } from '@/types';
 
 /**
@@ -295,16 +301,23 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 250);
   const { data: searchData, isLoading } = useSearch(debouncedQuery);
-  // Deliberately NOT gated on `libraryKnown` the way every other add surface is
-  // (BIN-596). This step runs once, on an account created seconds ago, so the
-  // "library you already have" this ticket protects does not exist yet — the
-  // gate would only ever hold the very first add of a brand-new user behind a
-  // snapshot they have no reason to wait for. The residual it leaves is narrow
-  // and tracked in BIN-729: on a DEAD listener a title marked "Sedd" here lands
-  // without `watchedAt` (addItem's own guards suppress it), and that half does
-  // not self-heal. Do not "fix" this by adding the gate without reading that
-  // ticket — it also lists the other ungated writers, and they want one answer.
-  const { items, addItem } = useWatchlist();
+  // BIN-643: gated on `libraryKnown` like every other add surface (BIN-596).
+  //
+  // This deliberately REVERSES the earlier note here, which argued the step is
+  // safe ungated because a brand-new account has no library to protect. That was
+  // true of the overwrite risk and wrong about the rest: on a DEAD listener a
+  // title marked "Sedd" here lands with no `watchedAt` (addItem's own guards
+  // suppress the stamp when it cannot tell a new add from a re-mark), and unlike
+  // a missing `addedAt` that half never self-heals. It also is not always a new
+  // account — this flow is reachable for anyone whose `onboardingCompletedAt` is
+  // unset, including an existing library.
+  //
+  // The cost is one snapshot's wait on the very first add, which lands in well
+  // under a second; the failed case says so and offers a retry, and "Hoppa över"
+  // stays live throughout so a dead listener can never trap someone inside
+  // onboarding. BIN-700/643/729 are one answer at three sites — see
+  // `src/lib/watchlist/libraryHoldCopy.ts`.
+  const { items, addItem, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const [addFailed, setAddFailed] = useState(false);
 
   const canContinue = items.length > 0;
@@ -315,6 +328,8 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
     result: TMDBSearchResult & { media_type: 'movie' | 'tv' },
     intent: 'plan' | 'engage',
   ) => {
+    // Belt-and-braces behind the disabled buttons (BIN-643).
+    if (!libraryKnown) return;
     const title = getDisplayTitle(result);
     const status: WatchStatus = result.media_type === 'tv'
       ? 'mina'
@@ -419,7 +434,8 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                   ) : r.media_type === 'tv' ? (
                     <button
                       onClick={() => handleAdd(r, 'engage')}
-                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer"
+                      disabled={!libraryKnown}
+                      className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
                     >
                       Följ
                     </button>
@@ -427,13 +443,15 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
                     <div className="flex gap-1">
                       <button
                         onClick={() => handleAdd(r, 'plan')}
-                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer"
+                        disabled={!libraryKnown}
+                        className="text-xxs px-2 py-[3px] border border-rule rounded-sm bg-white cursor-pointer disabled:opacity-50"
                       >
                         Vill se
                       </button>
                       <button
                         onClick={() => handleAdd(r, 'engage')}
-                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer"
+                        disabled={!libraryKnown}
+                        className="text-xxs px-2 py-[3px] bg-acc-deep text-white rounded-sm cursor-pointer disabled:opacity-50"
                       >
                         Sedd
                       </button>
@@ -447,6 +465,23 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
 
       {addFailed && (
         <SaveError message="Kunde inte lägga till titeln. Kontrollera anslutningen och försök igen." />
+      )}
+
+      {/* BIN-643 — why the add buttons are held. The failed half never resolves
+          on its own, so it carries the retry; the transient half is one snapshot
+          away and just says so. "Hoppa över" below stays live in both. */}
+      {!libraryKnown && (
+        listenerFailed ? (
+          <div role="alert" className="text-xs text-danger-ink bg-danger-soft border border-danger/30 rounded-sm px-3 py-2 mb-3">
+            <p className="font-semibold">{LIBRARY_UNREACHABLE_TITLE}</p>
+            <p className="mt-1 text-ink-2">{LIBRARY_UNREACHABLE_BODY}</p>
+            <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+              {LIBRARY_RETRY_LABEL}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-ink-3 mb-3">{LIBRARY_LOADING}</p>
+        )
       )}
 
       {items.length > 0 && (

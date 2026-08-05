@@ -26,6 +26,13 @@ const watchlist = vi.hoisted(() => ({
   addItem: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
   updateRating: vi.fn<(mediaType: string, tmdbId: number, rating: number | null) => Promise<void>>(async () => {}),
   updateStatus: vi.fn<(mediaType: string, tmdbId: number, status: string) => Promise<void>>(async () => {}),
+  // Mirrors the provider's own derivation rather than hardcoding libraryKnown —
+  // a literal would let these tests claim a state production cannot reach, and
+  // make every gate assertion below vacuous (CollectionSection.test's pattern).
+  snapshotSettled: true,
+  listenerFailed: false,
+  get libraryKnown(): boolean { return this.snapshotSettled && !this.listenerFailed; },
+  retryListener: vi.fn(),
 }));
 
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
@@ -59,6 +66,8 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
   beforeEach(() => {
     vi.clearAllMocks();
     watchlist.getItem.mockReturnValue(null);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
   });
 
   it('rates an already-seen film WITHOUT touching its status', async () => {
@@ -103,5 +112,64 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     expect(watchlist.updateRating).not.toHaveBeenCalled();
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
     expect(watchlist.addItem).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-643. Every verdict this modal reaches comes from `getItem`, and an unread
+// library answers null for ALL of it — so `planQuickRateWrite` returns
+// 'add-as-seen' for a film the user has tracked for years, and that add carries
+// `current: null`: providers: [] over stored provider data, no rating carried
+// forward. The gate is the only thing standing between those two facts, and it
+// is invisible when it regresses — which is exactly how CollectionSection kept
+// its wrong `loading` gate through a review.
+describe('BIN-643 — no write while the library is unknown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // The film IS tracked, and seen. Ungated, the pre-snapshot miss turns this
+    // into an add-as-new — the loss this ticket exists to stop.
+    watchlist.getItem.mockReturnValue(seen());
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+  });
+
+  it('holds the rating buttons while the first snapshot is in flight', async () => {
+    watchlist.snapshotSettled = false;
+    await openModal();
+
+    expect(screen.getByText('Sett 5★')).toBeDisabled();
+    await rate('Sett 5★');
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.updateRating).not.toHaveBeenCalled();
+    expect(watchlist.updateStatus).not.toHaveBeenCalled();
+    // Said out loud, so the disabled buttons are not just dead controls.
+    expect(screen.getByText(/Läser in ditt bibliotek/)).toBeInTheDocument();
+  });
+
+  it('holds them on a dead listener too, and offers a way out', async () => {
+    // `loading` is false in this state and `snapshotSettled` can be true — the
+    // exact pair that reads as "loaded, library empty" to anything gating on
+    // either one alone.
+    watchlist.listenerFailed = true;
+    await openModal();
+
+    expect(screen.getByText('Sett 4★')).toBeDisabled();
+    await rate('Sett 4★');
+    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.updateRating).not.toHaveBeenCalled();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Försök igen' })); });
+    expect(watchlist.retryListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('rates normally once the library is known — the control', async () => {
+    // Without this, a modal that rendered nothing at all would satisfy both
+    // tests above.
+    await openModal();
+
+    expect(screen.getByText('Sett 4★')).not.toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await rate('Sett 4★');
+    expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
   });
 });

@@ -11,6 +11,12 @@ import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
 import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { planQuickRateWrite } from '@/lib/watchlistWrites';
+import {
+  LIBRARY_UNREACHABLE_TITLE,
+  LIBRARY_UNREACHABLE_BODY,
+  LIBRARY_RETRY_LABEL,
+  LIBRARY_LOADING,
+} from '@/lib/watchlist/libraryHoldCopy';
 
 const MIN_QUICK_RATES = 5;
 
@@ -53,7 +59,14 @@ function buildItemFromTmdb(
 }
 
 export default function QuickRateModal({ open, onClose }: Props) {
-  const { addItem, getItem, updateRating, updateStatus } = useWatchlist();
+  // BIN-643: every verdict this modal reaches is `getItem`'s, and `getItem`
+  // answers null for the whole library while the snapshot is unread — so
+  // `planQuickRateWrite` returns 'add-as-seen' for a film the user has tracked
+  // for years. That add carries `current: null`, which means `providers: []` over
+  // stored provider data and no carry-forward of the rating. `libraryKnown`
+  // (from the context, never re-derived here) is the gate; `listenerFailed` is
+  // read separately because only that half needs a way out.
+  const { addItem, getItem, updateRating, updateStatus, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const [rated, setRated] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery({
@@ -72,6 +85,9 @@ export default function QuickRateModal({ open, onClose }: Props) {
   const titles = (data?.results ?? []).slice(0, 50);
 
   const markRated = async (t: TMDBSearchResult, rating: number | null) => {
+    // Belt-and-braces behind the disabled buttons: a modal opened before the
+    // listener died must not write either.
+    if (!libraryKnown) return;
     // Movie-only modal (discoverMovies + buildItemFromTmdb hardcodes 'movie').
     const existing = getItem('movie', t.id);
     // BIN-611: the "does this rating also move the status?" call lives in
@@ -100,6 +116,22 @@ export default function QuickRateModal({ open, onClose }: Props) {
           <h2 className="text-sm font-bold">Snabb-betyg ({rated.size} markerade)</h2>
           <button onClick={onClose} className="text-ink-3" aria-label="Stäng"><X size={16} /></button>
         </header>
+        {/* BIN-643 — the honest hold, above the cards so the disabled rating
+            buttons below are never unexplained. Failed gets a retry (it never
+            ends on its own); the first-snapshot wait gets a sentence. */}
+        {!libraryKnown && (
+          listenerFailed ? (
+            <div role="alert" className="m-3 bg-danger-soft border border-danger/30 rounded-sm px-3 py-2">
+              <p className="text-xs font-semibold text-danger-ink">{LIBRARY_UNREACHABLE_TITLE}</p>
+              <p className="text-xs text-ink-2 mt-1">{LIBRARY_UNREACHABLE_BODY}</p>
+              <button type="button" onClick={retryListener} className="btn btn-acc btn-sm mt-2">
+                {LIBRARY_RETRY_LABEL}
+              </button>
+            </div>
+          ) : (
+            <p className="px-3 pt-3 text-xs text-ink-3">{LIBRARY_LOADING}</p>
+          )
+        )}
         {isLoading ? (
           <div className="p-8">
             <LoadingView label="Laddar titlar…" />
@@ -118,10 +150,14 @@ export default function QuickRateModal({ open, onClose }: Props) {
                     </div>
                   )}
                   <div className="font-semibold mb-1 line-clamp-2">{t.title}</div>
+                  {/* The three rating buttons WRITE, so they hold on
+                      `libraryKnown`. "Hoppa över" only advances local state —
+                      disabling it would strand the visitor in a modal whose only
+                      exit is the footer. */}
                   <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => markRated(t, 5)} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm">Sett 5★</button>
-                    <button onClick={() => markRated(t, 4)} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm">Sett 4★</button>
-                    <button onClick={() => markRated(t, 3)} className="bg-surface border border-rule text-[10px] py-1 rounded-sm">Sett 3★</button>
+                    <button onClick={() => markRated(t, 5)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 5★</button>
+                    <button onClick={() => markRated(t, 4)} disabled={!libraryKnown} className="bg-acc-deep/10 text-acc-deep text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 4★</button>
+                    <button onClick={() => markRated(t, 3)} disabled={!libraryKnown} className="bg-surface border border-rule text-[10px] py-1 rounded-sm disabled:opacity-50">Sett 3★</button>
                     <button onClick={() => skip(t.id)} className="bg-surface border border-rule text-[10px] py-1 rounded-sm">Hoppa över</button>
                   </div>
                 </div>

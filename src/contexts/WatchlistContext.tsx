@@ -130,6 +130,22 @@ interface WatchlistState {
    */
   libraryKnown: boolean;
   /**
+   * BIN-700 — re-subscribe after a terminal listen error, so `listenerFailed` is
+   * a state the user can act on rather than one they have to reload out of.
+   *
+   * The failed state never ends on its own (that is the whole problem — see
+   * `components/title/libraryHold.ts`), so every surface that RENDERS the
+   * failure offers this as its "Försök igen". It tears the subscription down and
+   * starts a fresh one for the same uid: `loading` goes true again, and the next
+   * outcome is either a landed snapshot or the same failure, honestly reported.
+   *
+   * Safe to call at any time — a retry while the listener is healthy is just a
+   * re-subscribe. It deliberately does NOT reset the first_title_added
+   * bookkeeping: that is keyed on the uid actually changing, because a session
+   * that already added titles has not stopped having done so.
+   */
+  retryListener: () => void;
+  /**
    * BIN-641 — THE canonical explanation of `countsAsViewing`; everywhere else
    * points here.
    *
@@ -197,6 +213,7 @@ const WatchlistContext = createContext<WatchlistState>({
   snapshotSettled: false,
   listenerFailed: false,
   libraryKnown: false,
+  retryListener: () => {},
   addItem: async () => {},
   updateStatus: async () => {},
   updateWatchedAt: async () => {},
@@ -222,6 +239,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // collapses "snapshot landed" and "listener died" into one false.
   const [snapshotSettled, setSnapshotSettled] = useState(false);
   const [listenerFailed, setListenerFailed] = useState(false);
+  // BIN-700: bumped by retryListener to force the watchlist effect to tear down
+  // and re-subscribe for the SAME uid. A counter rather than a boolean so a
+  // second "Försök igen" after a second failure still re-runs the effect.
+  const [retryNonce, setRetryNonce] = useState(0);
+  const retryListener = useCallback(() => setRetryNonce(n => n + 1), []);
   // BIN-402: `${uid}:${tmdbId}` keys of titles whose TMDB block we've lazy-refreshed
   // this session. Marked synchronously before the write so the pending-serverTimestamp
   // echo (which reads back null and would re-trip the staleness gate → write loop)
@@ -304,9 +326,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const itemsRef = useRef<WatchlistItem[]>([]);
   const pendingAddCountRef = useRef(0);
   const pendingFirstMediaTypeRef = useRef<MediaType | null>(null);
+  // BIN-700: which uid the CURRENT subscription was opened for. The effect below
+  // now re-runs for two different reasons (a uid change and a user-triggered
+  // retry), and they must not reset the same state — see inside.
+  const subscribedUidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    everNonEmptyRef.current = false;
+    // BIN-700: account-scoped state. A retry re-subscribes for the SAME uid, and
+    // resetting these there would re-arm the first_title_added decision for a
+    // session that has already added titles (the event would fire a second time
+    // for the same user) and would drop `itemsRef` on the floor while every
+    // mutator still reads it. Both belong to the account, not to the listener.
+    if (subscribedUidRef.current !== uid) {
+      subscribedUidRef.current = uid;
+      everNonEmptyRef.current = false;
+      itemsRef.current = [];
+      pendingAddCountRef.current = 0;
+      pendingFirstMediaTypeRef.current = null;
+    }
+    // Listener-scoped state below: a fresh subscription genuinely has not read
+    // the library yet, whatever the reason it was opened.
     firstSnapshotSettledRef.current = false;
     // BIN-596: a NEW listener has not failed — the previous uid's outage says
     // nothing about this one, and leaving it set would make the add surfaces read
@@ -317,9 +356,6 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     listenerFailedRef.current = false;
     setSnapshotSettled(false);
     setListenerFailed(false);
-    itemsRef.current = [];
-    pendingAddCountRef.current = 0;
-    pendingFirstMediaTypeRef.current = null;
     if (!uid) { setItems([]); setLoading(false); return; }
     // uid bytte (sign-in eller account-switch) → tillbaka till loading
     // tills första snapshoten kommer.
@@ -387,7 +423,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         setListenerFailed(true);
         setLoading(false);
       }));
-  }, [uid]);
+    // BIN-700: `retryNonce` is what makes "Försök igen" mean anything — bumping
+    // it tears this subscription down and opens a new one for the same uid.
+  }, [uid, retryNonce]);
 
   // BIN-164: parallel owner-only subscription for per-title tags. Kept separate
   // from the watchlist listener (own collection, own rules) — doc id = tmdbId,
@@ -1087,8 +1125,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const libraryKnown = snapshotSettled && !listenerFailed;
 
   const value = useMemo(() => ({
-    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
-  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>
