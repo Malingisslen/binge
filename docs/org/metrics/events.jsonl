@@ -49,3 +49,7 @@
 {"ts":"2026-07-23T09:15:47.211Z","type":"trigger","fired":true,"signals":"auth,gdpr","ran":null}
 {"ts":"2026-07-23T09:19:26.122Z","type":"trigger","fired":true,"signals":"auth,cloud function,delete,firestore.rules","ran":null}
 {"ts":"2026-07-23T09:23:49.774Z","type":"trigger","fired":true,"signals":"auth,cloud function,delete,firestore.rules","ran":null}
+{"ts":"2026-08-05T19:34:13.006Z","type":"trigger","fired":true,"signals":"gdpr,llm","ran":null}
+{"ts":"2026-08-05T19:41:41.205Z","type":"trigger","fired":true,"signals":"cloud function,gdpr,llm,login,payment,security rule","ran":null}
+{"ts":"2026-08-05T19:48:09.715Z","type":"trigger","fired":true,"signals":"cloud function,delete,gdpr,llm,login,payment,security rule","ran":null}
+{"ts":"2026-08-05T19:53:30.667Z","type":"trigger","fired":true,"signals":"cloud function,delete,gdpr,llm,login,payment,security rule","ran":null}
