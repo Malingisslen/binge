@@ -72,10 +72,11 @@ a prior run.
   only, one paragraph, meta-only threshold) was NOT built.
   Files: `MoviePageClient.tsx:317`, `TVShowPageClient.tsx:307` + tests.
   Disposition: build-review.
-  Signoff: **Malin picks A (as built) or B before this lands** — it changes the visible
-  layout on every thin long-tail film/series page. Recommendation is A (per the prior
-  comment): the generated sentence carries real utility (where to stream) and dropping it
-  would weaken exactly the pages that need the most search help.
+  Signoff: **RESOLVED 2026-08-05 — Malin picked A**, live in this session, shown both
+  layouts side by side before choosing. A ships as built; B is not to be re-proposed.
+  (The ask was: it changes the visible layout on every thin long-tail film/series page.
+  Recommendation was A — the generated sentence carries real utility (where to stream)
+  and dropping it would weaken exactly the pages that need the most search help.)
   Acceptance:
   - [ ] Whichever alternative ships, pin the user-visible outcome in a test (not just the helper).
   - [ ] Land in the same commit as BIN-715 (shared files, sequential dependency).
