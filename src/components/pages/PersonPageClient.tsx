@@ -37,7 +37,12 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
   const credits = seededCredits ?? fetchedCredits;
   const { getItem, loading: watchlistLoading } = useWatchlist();
 
-  const svBio = person?.biography || '';
+  // BIN-747: trimmed at the SOURCE, not just where it renders. TMDB returns
+  // blank-but-truthy biographies ('   ', '\n'), and an untrimmed value is truthy
+  // enough to switch BOTH fallbacks off (`enabled: !!person && !svBio`) while
+  // still being suppressed by the render guard below — so the person ended up
+  // with no biography at all, and no request had even been spent looking for one.
+  const svBio = (person?.biography ?? '').trim();
 
   // Only fetch Wikipedia fallback when TMDB has no Swedish bio.
   const wikiBio = useSwedishWikiBio(person?.id, !!person && !svBio);

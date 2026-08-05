@@ -210,6 +210,51 @@ describe('PersonPageClient — which biography reaches the meta description (BIN
     expect(container.querySelector('p.line-clamp-6')).toBeNull();
   });
 
+  // BIN-747 — the whitespace bio used to be suppressed TWICE over: truthy enough
+  // to switch both fallback sources off, blank enough for the render guard to
+  // hide. The person got no biography at all, and no request was ever spent
+  // looking for one. Trimming at the source is what makes these two tests
+  // different from each other: the one above still renders nothing (there is
+  // genuinely nothing to show), this one recovers the Wikipedia text.
+  it('falls back to Wikipedia when the TMDB biography is only whitespace', () => {
+    state.person = { ...person, biography: '   \n  ' };
+    state.wikiBio = { text: WIKI_BIO, pageUrl: 'https://sv.wikipedia.org/wiki/Alicia_Vikander' };
+    render(<PersonPageClient id="543530" />);
+
+    // The requests are actually made — a blank-but-truthy bio must not read as
+    // "TMDB already answered in Swedish".
+    expect(useSwedishWikiBio).toHaveBeenLastCalledWith(person.id, true);
+    expect(personEnQuery.enabled).toBe(true);
+
+    // …and the recovered text reaches the page, credit and all.
+    expect(screen.getByText(WIKI_BIO)).toBeTruthy();
+    expect(screen.getByText(/svenska Wikipedia/)).toBeTruthy();
+  });
+
+  it('falls back to the English biography when the TMDB Swedish one is only whitespace', () => {
+    state.person = { ...person, biography: ' \t ' };
+    state.enBio = EN_BIO;
+    render(<PersonPageClient id="543530" />);
+
+    expect(screen.getByText(EN_BIO)).toBeTruthy();
+    expect(screen.getByText(/Biografi på engelska/)).toBeTruthy();
+  });
+
+  it('does not leak the blank source into the biography it renders', () => {
+    // A trimmed-empty Swedish bio must not win precedence over a real fallback,
+    // and must not survive into the visible paragraph as padding either.
+    state.person = { ...person, biography: '\n\n' };
+    state.wikiBio = { text: WIKI_BIO, pageUrl: 'https://sv.wikipedia.org/wiki/Alicia_Vikander' };
+    state.enBio = EN_BIO;
+    const { container } = render(<PersonPageClient id="543530" />);
+
+    const bio = container.querySelector('p.line-clamp-6');
+    expect(bio?.textContent).toBe(WIKI_BIO);
+    // Wikipedia beats English, exactly as it does for a bio that is absent
+    // outright — whitespace changes nothing about the order.
+    expect(screen.queryByText(/Biografi på engelska/)).toBeNull();
+  });
+
   it('replaces the shell description once the person arrives, not just on the first frame', () => {
     // Cold load: TMDB has not answered yet.
     state.person = undefined;
