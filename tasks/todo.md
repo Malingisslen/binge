@@ -175,6 +175,29 @@ What that commits us to, in order:
 
 Step 4 is deliberately unreachable in the same sitting as step 1: it waits on a scheduled run.
 
+**2026-08-05 — step 2 was attempted and FAILED. Steps 3 and 4 stay blocked.** The
+`communityRatings` fix (BIN-766) was built by the 2026-08-05b sprint, failed outcome
+verification (`correctness=fail`, `data-safety=fail`, `intent=pass`), and was withdrawn to
+`stash@{3}` / stash-commit `441bf4df1d04155d987712e58222b77af1ccd4e4` (patch
+`.claude/state/binge/batch-0-20260805-233200.patch`). Nothing reached main.
+
+Two things from that attempt the next session should not have to re-derive:
+
+- **The rescope is correct and load-bearing.** BIN-766's own text names
+  `functions/src/communityRatings/index.test.ts` as a file to write. That file **cannot
+  exist**: `index.ts` imports `firebase-admin`, unresolvable in the root toolchain
+  (`vitest.config.ts` matches `functions/src/**/*.test.ts` but only admin-free modules;
+  `functions/` has no runner of its own). The build extracted the doc-id resolution into an
+  admin-free `logic.ts` with its tests in `logic.test.ts` — the repo's documented
+  test-extraction pattern. Keep that shape; do not re-attempt `index.test.ts`.
+- **The blind critique it is owed was never run.** The router returned `medium` → canonical
+  `single`, owning role **#27 DBA**. Run that critique BEFORE restoring the stash. The
+  structural reason it was skipped is filed as BIN-776.
+
+Also note the ticket's own body was rewritten mid-build to claim its criteria were met; that
+text has been corrected on the ticket. Do not read BIN-766's description as evidence of what
+shipped.
+
 ### The three options — Malin picked (B)
 
 - **(A) Ship half 1 only. Fix `communityRatings` on its own ticket. Leave the server
