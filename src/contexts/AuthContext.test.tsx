@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -33,6 +33,12 @@ const updateProfileMock = vi.fn(async () => {});
 // factory below could not, which is why the failure path shipped untested the
 // first time.
 const signOutMock = vi.fn(async () => {});
+// Säkerhetsgranskning 2026-08-05: deleteAccount's pre-flight freshness gate and
+// the auth deletion it gates. Both controllable, because the whole point of the
+// fix is WHICH of them runs first when the session is stale.
+const deleteUserMock = vi.fn(async () => {});
+const authTime: { current: string } = { current: new Date().toUTCString() };
+const getIdTokenResultMock = vi.fn(async () => ({ authTime: authTime.current }));
 
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, cb: (u: FakeUser | null) => void) => {
@@ -48,7 +54,9 @@ vi.mock('firebase/auth', () => ({
   updateProfile: (...args: unknown[]) =>
     (updateProfileMock as (...a: unknown[]) => Promise<void>)(...args),
   signOut: (...args: unknown[]) => (signOutMock as (...a: unknown[]) => Promise<void>)(...args),
-  deleteUser: vi.fn(async () => {}),
+  deleteUser: (...args: unknown[]) => (deleteUserMock as (...a: unknown[]) => Promise<void>)(...args),
+  getIdTokenResult: (...args: unknown[]) =>
+    (getIdTokenResultMock as (...a: unknown[]) => Promise<{ authTime: string }>)(...args),
   GoogleAuthProvider: class {},
 }));
 
@@ -132,10 +140,21 @@ vi.mock('@/lib/firebase/db', () => ({
 
 vi.mock('@/lib/firebase/appCheck', () => ({ initAppCheck: async () => {} }));
 vi.mock('@/lib/firebase/publicProfile', () => ({ syncMyPublicProfile: vi.fn(async () => {}) }));
-vi.mock('@/lib/firebase/userData', () => ({ collectUserDataSnapshots: vi.fn(async () => ({})) }));
-vi.mock('@/lib/firebase/accountDeletion', () => ({
+// Säkerhetsgranskning 2026-08-05: hoisted rather than inline vi.fn()s inside the
+// factories, because the assertion the fix needs is that these were NOT reached —
+// an inline spy is unreachable from the test body, which is why the ordering
+// shipped unpinned.
+const deletion = vi.hoisted(() => ({
+  collectUserDataSnapshots: vi.fn(async () => ({})),
   collectDeletionRefs: vi.fn(async () => ({})),
   applyDeletionPlan: vi.fn(async () => {}),
+}));
+vi.mock('@/lib/firebase/userData', () => ({
+  collectUserDataSnapshots: deletion.collectUserDataSnapshots,
+}));
+vi.mock('@/lib/firebase/accountDeletion', () => ({
+  collectDeletionRefs: deletion.collectDeletionRefs,
+  applyDeletionPlan: deletion.applyDeletionPlan,
 }));
 vi.mock('@/lib/firebase/groups', () => ({
   updateMemberProviders: vi.fn(async () => {}),
@@ -160,7 +179,23 @@ vi.mock('@/lib/firebase/username', () => ({
     (claimUsername as (...a: unknown[]) => Promise<void>)(...args),
 }));
 
+// BIN-748: the provider and AuthGuard are rendered TOGETHER at the end of this
+// file, because the fix is a contract between them — the provider writes which
+// page the tab is showing a session on, the guard reads it — and neither file's
+// own harness can observe both halves. ONE router object, not a fresh one per
+// call — a new identity each render re-fires the guard's effect and would make
+// "it only decides once" vacuous. `usePathname` is the provider's write side, so
+// it is a settable value rather than a constant.
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+const nav = vi.hoisted(() => ({ pathname: '/' }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => router,
+  usePathname: () => nav.pathname,
+}));
+
+import AuthGuard from '@/components/AuthGuard';
 import { AuthProvider, useAuth } from './AuthContext';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 
 // --- Harness -----------------------------------------------------------------
 
@@ -214,10 +249,19 @@ beforeEach(() => {
   sendEmailVerification.mockClear();
   updateProfileMock.mockClear();
   claimUsername.mockClear();
+  deleteUserMock.mockClear();
+  getIdTokenResultMock.mockClear();
+  deletion.collectUserDataSnapshots.mockClear();
+  deletion.collectDeletionRefs.mockClear();
+  deletion.applyDeletionPlan.mockClear();
+  authTime.current = new Date().toUTCString(); // fresh session unless a test ages it
   authCallback = null;
   authObj.currentUser = null;
   profileDocData.current = null;
   ctx = null;
+  router.push.mockClear();
+  nav.pathname = '/';
+  window.history.replaceState({}, '', '/');
   try { window.localStorage.clear(); } catch { /* private mode */ }
   // BIN-732: the remembered return path lives here, and a leftover from a
   // neighbouring test would make "the path survived" pass for the wrong reason.
@@ -808,5 +852,267 @@ describe('AuthContext — a session ending forgets the return path (BIN-732)', (
     });
 
     expect(stored()).toBeNull();
+  });
+});
+
+// BIN-748 — BIN-732's rule reads the tab's MEMORY of whether a session existed,
+// and a tab starting mid-sign-out has none. Another tab (or a revoked/expired
+// token) ends the session while this one re-boots — a reload, a frozen tab
+// waking, a tab opened from the signed-in one — with the departing user's URL
+// still in the address bar. Its first verdict is `null`, so the guard read it as
+// a genuine bounce and stored their page for the next account.
+//
+// The provider and the guard are rendered TOGETHER here on purpose: the fix is a
+// contract between them — the provider records WHICH page this tab is showing a
+// session on, the guard asks whether its own page is that one — and each file's
+// own harness can only see its half. Mocking the other half would assert the mock.
+describe('AuthContext + AuthGuard — a tab that BOOTS mid-sign-out (BIN-748)', () => {
+  const NEXT_KEY = 'binge:nextAfterLogin';
+  const TAB_KEY = 'binge:tabSession';
+  const stored = () => window.sessionStorage.getItem(NEXT_KEY);
+
+  /** Both halves read the URL from their own source — the provider from
+   *  usePathname(), the guard from window.location — so move them together. */
+  function goto(path: string) {
+    window.history.replaceState({}, '', path);
+    nav.pathname = path.split('?')[0];
+  }
+
+  function renderGuarded() {
+    const qc = new QueryClient();
+    return render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <AuthGuard><div>hemligt</div></AuthGuard>
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  // The boot: subscribe, then Firebase's first verdict — "no session".
+  async function bootWithNoSession(path: string) {
+    goto(path);
+    const view = renderGuarded();
+    await act(async () => {}); // flusha initAppCheck().then(subscribe)
+    expect(authCallback).not.toBeNull();
+    await act(async () => { authCallback!(null); });
+    return view;
+  }
+
+  it('a session arriving marks the page it is being shown on', async () => {
+    // The write that makes the whole thing possible: `hadSessionRef` dies with
+    // the page, sessionStorage survives a reload of this tab (and only this tab).
+    goto('/grupper/g-hemlig-123/');
+    renderAuth();
+    await login({ username: 'malin' });
+
+    expect(window.sessionStorage.getItem(TAB_KEY)).toBe('/grupper/g-hemlig-123');
+  });
+
+  it('the marker follows the session as the user navigates', async () => {
+    // Per navigation, not once per session: the page that matters is the one
+    // they are ON when the session ends, not the one they signed in on.
+    const qc = new QueryClient();
+    const tree = () => (
+      <QueryClientProvider client={qc}>
+        <AuthProvider><Harness /></AuthProvider>
+      </QueryClientProvider>
+    );
+    goto('/grupper/g-hemlig-123/');
+    const view = render(tree());
+    await login({ username: 'malin' });
+    expect(window.sessionStorage.getItem(TAB_KEY)).toBe('/grupper/g-hemlig-123');
+
+    goto('/my/series/');
+    await act(async () => { view.rerender(tree()); });
+
+    expect(window.sessionStorage.getItem(TAB_KEY)).toBe('/my/series');
+  });
+
+  it('the guard reads the marker the PREVIOUS page load left behind', async () => {
+    // THE regression. The previous load of this tab left the marker; the session
+    // is already gone by the time this one asks. `/grupper/<id>/` is readable by
+    // any signed-in user, so an inherited return path discloses the group's name
+    // and memberUids to whoever signs in next on a shared device.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    window.sessionStorage.setItem(NEXT_KEY, '/tv/1399/'); // an earlier tap's path
+    await bootWithNoSession('/grupper/g-hemlig-123/');
+
+    expect(stored()).toBeNull();
+    expect(router.push).toHaveBeenCalledWith('/login');
+    expect(screen.queryByText('hemligt')).not.toBeInTheDocument();
+  });
+
+  it('an unmarked tab booting signed-out still remembers where it was', async () => {
+    // The funnel from the 25k prerendered title pages (BIN-645) is the thing
+    // this must not cost. Same boot, no marker.
+    await bootWithNoSession('/bibliotek/?status=vill_se');
+
+    expect(stored()).toBe('/bibliotek/?status=vill_se');
+  });
+
+  it('the marker silences ONE page, not the rest of the tab', async () => {
+    // What replaces retiring the marker at a particular moment — and the reason
+    // there is nothing left to get the ordering of. After the handover the
+    // visitor is an ordinary signed-out one, and a guarded deep link they tap
+    // themselves IS their intent, even though the marker is still sitting there.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    const view = await bootWithNoSession('/grupper/g-hemlig-123/');
+    expect(stored()).toBeNull();
+    view.unmount();
+
+    await bootWithNoSession('/bibliotek/?status=vill_se');
+
+    expect(stored()).toBe('/bibliotek/?status=vill_se');
+    expect(window.sessionStorage.getItem(TAB_KEY), 'still standing, and harmless').toBe('/grupper/g-hemlig-123');
+  });
+
+  it('a session ending under the mounted page is still a handover (BIN-732)', async () => {
+    // The already-covered case must keep working with the marker in play: the
+    // in-memory rule and the stored one agree here rather than fighting.
+    goto('/grupper/g-hemlig-123/');
+    renderGuarded();
+    await act(async () => {}); // subscribe
+    profileDocData.current = { username: 'malin' };
+    authObj.currentUser = fakeUser;
+    await act(async () => { authCallback!(fakeUser); });
+    expect(window.sessionStorage.getItem(TAB_KEY)).toBe('/grupper/g-hemlig-123');
+
+    await act(async () => {
+      authObj.currentUser = null;
+      authCallback!(null);
+    });
+
+    expect(stored()).toBeNull();
+  });
+});
+
+// Säkerhetsgranskning 2026-08-05 (BIN-748's panel, filed against this diff) —
+// deleteAccount ran the irreversible Firestore erasure FIRST and called
+// deleteUser() last, so the single most common real-world click (any session older
+// than ~5 minutes) wiped the library, ratings and episode progress, then failed on
+// auth/requires-recent-login and told the user to log in again — as if nothing had
+// happened. The Auth account, with its email and uid, survived: half an Art. 17
+// erasure, in the half that keeps the personal data.
+//
+// deleteUser() cannot simply be moved first — without a token every write in the
+// cascade is denied by firestore.rules — so the gate is a pre-flight token-age
+// check, and these tests pin that it runs BEFORE anything is destroyed.
+describe('AuthContext — deleteAccount checks session freshness before erasing', () => {
+  function minutesAgo(m: number) {
+    return new Date(Date.now() - m * 60 * 1000).toUTCString();
+  }
+
+  async function signedInProvider() {
+    renderAuth();
+    await login({ username: 'malin' });
+  }
+
+  it('a stale session is turned away with NOTHING erased', async () => {
+    // THE regression. Four minutes plus: old enough that Firebase's own ~5-minute
+    // rule is about to bite by the time the cascade finishes.
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+
+    // Not one step of the erasure was reached — the user still has an account.
+    expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
+    expect(deletion.collectDeletionRefs).not.toHaveBeenCalled();
+    expect(deletion.applyDeletionPlan).not.toHaveBeenCalled();
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it('the refusal carries BOTH codes the settings UI matches on', async () => {
+    // Two claims in one message. `requires-recent-login` is what every existing
+    // reader (and Firebase itself) recognises; the pre-flight code is what lets
+    // DeleteAccountSection promise "Ingenting har raderats." here and NOT on the
+    // same Firebase error thrown after the cascade, where it would be a lie.
+    await signedInProvider();
+    authTime.current = minutesAgo(10);
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(STALE_SESSION_PREFLIGHT);
+    });
+  });
+
+  it('the cutoff itself is refused, one millisecond younger is not', async () => {
+    // Testgranskningen 2026-08-05: with only 30/10/1-minute fixtures, `<` and
+    // `<=` are indistinguishable — a mutant that ACCEPTS a session of exactly
+    // the maximum age survived the whole suite. That direction is a separate
+    // claim from the NaN-safety below, and only a fixture landing on the exact
+    // millisecond can pin it. Hence the frozen clock: `toUTCString()` has
+    // second granularity, so an unaligned "now" puts the age up to 999 ms off
+    // the boundary and the two operators agree again.
+    await signedInProvider();
+    const anchor = Date.UTC(2026, 7, 5, 12, 0, 0);
+    authTime.current = new Date(anchor - 2 * 60 * 1000).toUTCString();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(anchor);
+
+    try {
+      await act(async () => {
+        await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+      });
+      expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
+
+      now.mockReturnValue(anchor - 1); // the session is now 1 ms younger
+      await act(async () => { await ctx!.deleteAccount(); });
+      expect(deletion.applyDeletionPlan).toHaveBeenCalledTimes(1);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('a fresh session erases Firestore first and the Auth user last', async () => {
+    // The happy path, and the reason the order below is not simply reversed:
+    // after deleteUser() this client holds no token and firestore.rules denies
+    // every write in the cascade.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(deletion.applyDeletionPlan).toHaveBeenCalledTimes(1);
+    expect(deleteUserMock).toHaveBeenCalledTimes(1);
+    const [gate] = getIdTokenResultMock.mock.invocationCallOrder;
+    const [snapshot] = deletion.collectUserDataSnapshots.mock.invocationCallOrder;
+    const [erase] = deletion.applyDeletionPlan.mock.invocationCallOrder;
+    const [authDelete] = deleteUserMock.mock.invocationCallOrder;
+    expect(gate).toBeLessThan(snapshot); // the gate is a PRE-flight check…
+    expect(erase).toBeLessThan(authDelete); // …and the cascade still precedes deleteUser
+  });
+
+  it('a token read that FAILS stops the deletion instead of proceeding blind', async () => {
+    // Offline, or App Check refusing: we cannot tell whether the session is fresh,
+    // and the safe answer is to erase nothing. Fail closed.
+    await signedInProvider();
+    getIdTokenResultMock.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('network');
+    });
+
+    expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it('an unparsable authTime is treated as stale, not as fresh', async () => {
+    // The arithmetic yields NaN, and every `NaN < x` comparison is false. Written
+    // the obvious way (`age >= MAX` → refuse) that silently becomes "proceed" and
+    // the cascade runs on a session of unknown age.
+    await signedInProvider();
+    authTime.current = 'inte ett datum';
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+
+    expect(deletion.applyDeletionPlan).not.toHaveBeenCalled();
+    expect(deleteUserMock).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo, useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   onAuthStateChanged,
@@ -11,6 +12,7 @@ import {
   updateProfile,
   signOut as firebaseSignOut,
   deleteUser,
+  getIdTokenResult,
   GoogleAuthProvider,
   type User,
 } from 'firebase/auth';
@@ -26,6 +28,8 @@ import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
+import { markTabSession } from '@/lib/tabSession';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -120,6 +124,21 @@ const AuthContext = createContext<AuthState>({
   setCalibrationGenres: async () => {},
   deleteAccount: async () => {},
 });
+
+// Säkerhetsgranskning 2026-08-05: Firebase kräver en "recent login" för
+// destruktiva auth-operationer (deleteUser kastar auth/requires-recent-login)
+// och drar gränsen vid ~5 minuters token-ålder.
+// Vi drar vår egen gräns snävare: mellan kontrollen och deleteUser
+// ligger hela Firestore-raderingen, och den tar tid. Marginalen är skillnaden
+// mellan "vi vände bort dig med all data kvar" och "vi hann radera allt först".
+//
+// DBA-panelen 2026-08-05: marginalen måste dominera kaskadens värsta fall, inte
+// nätt och jämnt täcka det. collectDeletionRefs går sekventiellt per grupp och
+// per recension (en round-trip var), så ett tungt konto kan ta tiotals sekunder
+// — och Firebase ~5-minutersgräns är inte ett publicerat kontrakt vi får pressa.
+// 2 min lämnar ~3 min marginal i stället för ~1. Kostnaden är noll i praktiken:
+// den som nekas måste logga in igen ändå, och gör då om försöket på sekunder.
+const RECENT_LOGIN_MAX_AGE_MS = 2 * 60 * 1000;
 
 // Försöker claima ett auto-genererat username från Google displayName /
 // email-localpart. Returnerar det claimade värdet vid lyckat utfall, annars
@@ -337,6 +356,7 @@ async function ensureUserProfile(
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const pathname = usePathname();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
@@ -512,6 +532,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, []);
+
+  // BIN-748 — keep a record of which page this tab is showing a session on,
+  // somewhere a RELOAD of the tab can still read it. `hadSessionRef` dies with
+  // the page, so a tab that re-boots between a sign-out (in another tab, or a
+  // revoked token) and its own next verdict has no way to know it was showing a
+  // session a moment ago, and its AuthGuard would store the departing user's URL
+  // as the next sign-in's landing page (see lib/tabSession.ts).
+  //
+  // Re-runs per navigation, on purpose. The marker is never retired: a guard on
+  // any OTHER page sees a path that doesn't match and treats its own signed-out
+  // verdict as the real bounce it is (BIN-645). That is what makes this immune
+  // to mount order — the catch-all router's pages (`/grupper/<id>/`) mount their
+  // guard a commit or two late, after a `next/dynamic` chunk lands, and a marker
+  // that had to be cleared "at the right moment" was already gone by then.
+  useEffect(() => {
+    if (!uid) return;
+    markTabSession(pathname);
+  }, [uid, pathname]);
 
   // BIN-23: Firebase fire:ar inte onAuthStateChanged vid silent token-refresh,
   // så emailVerified fastnar på false tills man loggar ut/in. Vanligaste flödet
@@ -928,6 +966,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return;
     const id = currentUser.uid;
 
+    // Säkerhetsgranskning 2026-08-05: freshness-kontrollen MÅSTE ligga före den
+    // oåterkalleliga Firestore-raderingen. Ordningen var tvärtom: hela kontot
+    // raderades först och deleteUser kastade sedan requires-recent-login — det
+    // VANLIGASTE utfallet av ett verkligt klick, eftersom sessionen sällan är
+    // under 5 minuter gammal.
+    // Användaren såg "Du måste logga in igen", trodde att ingenting hänt, och hade
+    // i själva verket redan förlorat bibliotek, betyg och avsnittsprogress medan
+    // Auth-kontot (e-post + uid) levde vidare — en halv Art. 17-radering.
+    //
+    // Att i stället köra deleteUser FÖRST går inte: när Auth-användaren är borta
+    // har klienten ingen token, och firestore.rules avvisar varenda write i
+    // kaskaden. Så vi frågar token:en om sin ålder innan något raderas, och
+    // vänder bort en gammal session med allt i behåll. Kastar getIdTokenResult
+    // (offline/nätfel) avbryter vi också — fail closed, ingenting är rört ännu.
+    const { authTime } = await getIdTokenResult(currentUser);
+    const sessionAgeMs = Date.now() - new Date(authTime).getTime();
+    // Negerad jämförelse, inte `>=`: ett oparsbart authTime ger NaN, och NaN ska
+    // leda till re-auth — inte till att kaskaden rullar vidare på en tyst false.
+    if (!(sessionAgeMs < RECENT_LOGIN_MAX_AGE_MS)) {
+      // Bär BÅDA koderna: `requires-recent-login` är vad varje befintlig läsare
+      // (och Firebase självt) känner igen, och preflight-koden är det som skiljer
+      // "ingenting är rört" från samma fel kastat efter kaskaden — se lib/authErrors.
+      throw new Error(
+        `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): sessionen är för gammal för att radera kontot`,
+      );
+    }
+
     // Delad läsning med buildUserExport — om nya user-owned collections
     // läggs till ska de uppdateras i collectUserDataSnapshots.
     const snaps = await collectUserDataSnapshots(id);
@@ -942,10 +1007,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const plan = await collectDeletionRefs(kit, id, snaps, user?.username);
     await applyDeletionPlan(kit, plan);
 
-    // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen:
-    // failar deleteUser (vanligast auth/requires-recent-login) finns kontot
-    // kvar och då ska cachen också vara kvar — användaren re-auth:ar och
-    // försöker igen mot en fräsch instans.
+    // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen: failar
+    // deleteUser finns kontot kvar och då ska cachen också vara kvar —
+    // användaren försöker igen mot en fräsch instans. Efter freshness-porten
+    // ovan är det som återstår här nät-fel, och då är omförsöket den enda
+    // återställningen: kaskaden är idempotent (kör om mot redan tom data) och
+    // fönstret är sekunder, inte de ~5 minuter porten stängde.
     await deleteUser(currentUser);
 
     // GDPR: utan rensning ligger den raderade användarens watchlist m.m.

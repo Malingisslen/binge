@@ -28,6 +28,12 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 
 const NEXT_KEY = 'binge:nextAfterLogin';
 const stored = () => window.sessionStorage.getItem(NEXT_KEY);
+// BIN-748: the page this tab last showed a session on — the one thing about a
+// session that survives a RELOAD of the tab. Written by AuthProvider, never by
+// the guard, so it is set directly here (the two-halves-together test lives in
+// AuthContext.test.tsx, where the provider writes it for real). Stored without
+// a trailing slash, which is how tabSession.ts normalizes both sides.
+const TAB_KEY = 'binge:tabSession';
 
 const guard = () => <AuthGuard><div>hemligt</div></AuthGuard>;
 
@@ -184,5 +190,120 @@ describe('AuthGuard — a session ending is a handover, not a bounce (BIN-669/73
     await act(async () => { render(guard()); });
 
     expect(stored()).toBe('/bibliotek/?status=vill_se');
+  });
+});
+
+describe('AuthGuard — a tab that BOOTS into a just-ended session (BIN-748)', () => {
+  // The corner BIN-732 left open. Its rule reads the tab's MEMORY of whether a
+  // session existed, and a tab re-booting mid-sign-out has none: another tab (or
+  // a revoked token) ended the session, and this one reloaded — or was opened
+  // from the signed-in tab — with the departing user's URL still in the address
+  // bar. Its very first verdict is `null` with nothing in memory to contradict
+  // it, so it stored their page. Every case below is that boot: `loading` true,
+  // then false with no uid, and NEVER a uid in between.
+  async function bootSignedOut(path: string) {
+    auth.loading = true;
+    auth.uid = null;
+    window.history.replaceState({}, '', path);
+    const { rerender } = render(guard());
+
+    auth.loading = false;
+    await act(async () => { rerender(guard()); });
+    return rerender;
+  }
+
+  it('remembers NOTHING when this tab had already shown a session on this page', async () => {
+    // `/grupper/<id>/` is the sharp case: the group doc allows any signed-in
+    // read, so an inherited return path tells the next account the group's name
+    // and memberUids — and a remembered path outlives onboarding, so even a
+    // brand-new account gets routed straight into it.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    await bootSignedOut('/grupper/g-hemlig-123/');
+
+    expect(stored()).toBeNull();
+    // Still turned away, and still told where to go — the fix changes what is
+    // remembered, never whether the guard guards.
+    expect(push).toHaveBeenCalledWith('/login');
+    expect(screen.queryByText('hemligt')).not.toBeInTheDocument();
+  });
+
+  it('also drops a path an earlier tap left in this tab', async () => {
+    // Not writing is half the job: the tab is carrying a path from before the
+    // session ended, and that one belongs to the departing user too.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    window.sessionStorage.setItem(NEXT_KEY, '/tv/1399/');
+    await bootSignedOut('/grupper/g-hemlig-123/');
+
+    expect(stored()).toBeNull();
+  });
+
+  it('holds even when the guard mounts LONG after the verdict landed', async () => {
+    // The defect the integration review caught (2026-08-05), and the reason the
+    // marker is a path rather than a flag the provider retires. Guarded pages
+    // under the catch-all router — `/grupper/<id>/` above all — are not in the
+    // commit where `loading` flips: DynamicRouter gates dispatch on `mounted`
+    // and then loads the page client through next/dynamic, so their AuthGuard
+    // first renders commits later, after a chunk fetch. Mounting straight into
+    // `loading: false` is that tab: nothing about the earlier verdict is left to
+    // read except the marker itself.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    window.history.replaceState({}, '', '/grupper/g-hemlig-123/');
+    auth.loading = false;
+    auth.uid = null;
+
+    await act(async () => { render(guard()); });
+
+    expect(stored(), 'a late-mounting guard must not hand over the departing URL').toBeNull();
+    expect(push).toHaveBeenCalledWith('/login');
+  });
+
+  it('an UNMARKED tab booting signed-out is still a real bounce', async () => {
+    // The negative that keeps the fix honest: a visitor who was never signed in
+    // here is the BIN-645 funnel from the 25k prerendered title pages, and it
+    // has to survive. This is the same boot sequence, minus the marker.
+    await bootSignedOut('/bibliotek/?status=vill_se');
+
+    expect(stored()).toBe('/bibliotek/?status=vill_se');
+  });
+
+  it('the very next guarded page is a bounce again, with the marker untouched', async () => {
+    // What replaces "retire the marker at the right moment": the marker names
+    // ONE page, so every other guarded page is an ordinary signed-out visit and
+    // keeps its return path (BIN-645) — the funnel from the 25k prerendered
+    // title pages survives the handover instead of going quiet for the rest of
+    // the tab's life. Note the marker is deliberately still set here.
+    window.sessionStorage.setItem(TAB_KEY, '/grupper/g-hemlig-123');
+    await bootSignedOut('/grupper/g-hemlig-123/');
+    expect(stored()).toBeNull();
+
+    window.history.replaceState({}, '', '/bibliotek/?status=vill_se');
+    await act(async () => { render(guard()); });
+
+    expect(stored()).toBe('/bibliotek/?status=vill_se');
+    expect(window.sessionStorage.getItem(TAB_KEY), 'the guard never writes the marker').toBe('/grupper/g-hemlig-123');
+  });
+
+  it('the marker never turns a signed-in visitor away or gets read twice', async () => {
+    // A marked tab whose session is LIVE renders the page as before, and when
+    // that session then ends the handover rule still holds — the two mechanisms
+    // compose instead of one overriding the other.
+    window.sessionStorage.setItem(TAB_KEY, '/installningar');
+    auth.loading = true;
+    auth.uid = null;
+    window.history.replaceState({}, '', '/installningar/');
+    const { rerender } = render(guard());
+
+    auth.loading = false;
+    auth.uid = 'u1';
+    await act(async () => { rerender(guard()); });
+    expect(screen.getByText('hemligt')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+
+    auth.uid = null;
+    await act(async () => { rerender(guard()); });
+    await act(async () => { rerender(guard()); });
+
+    expect(stored()).toBeNull();
+    expect(push).toHaveBeenCalledWith('/login');
   });
 });

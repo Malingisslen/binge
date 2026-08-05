@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 
@@ -16,12 +17,16 @@ export function DeleteAccountSection() {
     try {
       await deleteAccount();
     } catch (err: unknown) {
-      // `requires-recent-login` kastas av Firebase när sessionen är äldre
-      // än ~5 min — GDPR tycker det är OK att kräva re-auth för destructive
-      // actions.
-      const msg = err instanceof Error && err.message.includes('requires-recent-login')
-        ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
-        : 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
+      // Två fall som ser likadana ut och betyder motsatta saker — se lib/authErrors.
+      // Vår egen förkontroll (BIN-748) kastar INNAN något raderats, så där är
+      // löftet sant. Firebases eget requires-recent-login kan bara nå hit EFTER
+      // kaskaden, och då vore samma mening en lögn.
+      const message = err instanceof Error ? err.message : '';
+      const msg = message.includes(STALE_SESSION_PREFLIGHT)
+        ? 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.'
+        : message.includes(REQUIRES_RECENT_LOGIN)
+          ? 'Du måste logga in igen innan du kan ta bort ditt konto.'
+          : 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
       toast(msg);
       setDeleting(false);
       setConfirming(false);

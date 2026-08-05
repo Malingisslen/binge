@@ -58,10 +58,10 @@ function meKit() {
 }
 
 /** Run the real extracted deletion cascade as the authenticated owner. */
-async function runDeletion() {
+async function runDeletion(fallbackUsername?: string | null) {
   const kit = meKit();
   const snaps = await collectUserDataSnapshots(ME, kit);
-  const plan = await collectDeletionRefs(kit, ME, snaps);
+  const plan = await collectDeletionRefs(kit, ME, snaps, fallbackUsername);
   await applyDeletionPlan(kit, plan);
 }
 
@@ -301,5 +301,75 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
 
     expect(await count(['users', ME, 'watchlist']), 'all 460 flushed across chunks').toBe(0);
     expect(await exists(['users', ME]), 'profile doc erased in same run').toBe(false);
+  });
+
+  // DBA-panelen 2026-08-05 (BIN-748). `deleteAccount` säger numera i klartext att
+  // ett omförsök är ofarligt, och den nya freshness-porten före raderingen gör
+  // omförsöket till DEN normala vägen. Men kaskaden är inte idempotent för att
+  // den återupptar en sparad plan — den är det för att varje försök frågar
+  // Firestore på nytt (array-contains + färska subcollection-läsningar), så det
+  // som redan är borta faller ur nästa plan av sig självt. Skriver någon om
+  // collectDeletionRefs till en lagrad id-lista faller den egenskapen tyst; det
+  // här testet är det som gör att den faller HÄR i stället för i produktion.
+  it('a retry after an INTERRUPTED plan converges to the same end state', async () => {
+    await seedFullAccount();
+
+    // Ett avbrutet första försök: bygg den riktiga planen och commit:a allt utom
+    // sista raderingen, plus INGA array-uppdateringar. Det är vad ett nätfel mitt
+    // i applyDeletionPlan lämnar efter sig — raderingarna commit:as före
+    // memberLeave/editorLeave, så de senare är alltid de som blir kvar.
+    //
+    // Avbrottspunkten är vald med flit och inte "på mitten": profil-doc:et ligger
+    // NÄST sist i refs och username-reservationen sist, så det här är det enda
+    // avbrott där omförsöket inte längre kan läsa sitt eget username. Ett snitt
+    // mitt i listan lämnar profilen kvar och gör fallback-argumentet nedan
+    // verkningslöst (integrationsgranskningen 2026-08-05).
+    const kit = meKit();
+    const snaps = await collectUserDataSnapshots(ME, kit);
+    const plan = await collectDeletionRefs(kit, ME, snaps, MY_NAME);
+    await applyDeletionPlan(kit, {
+      refs: plan.refs.slice(0, plan.refs.length - 1),
+      memberLeaveUpdates: [],
+      editorLeaveUpdates: [],
+    });
+    expect(await count(['users', ME, 'watchlist']), 'the erasure did run').toBe(0);
+    expect(await exists(['users', ME]), 'and got as far as the profile doc').toBe(false);
+    expect(await exists(['usernames', MY_NAME]), 'but not the reservation after it').toBe(true);
+
+    // Utan fallback är reservationen strandsatt: planen hämtar username ur
+    // profil-doc:et, och det finns inte längre. Det är inte en hypotetisk gren —
+    // det är det enda som gör fjärde argumentet till collectDeletionRefs
+    // nödvändigt, och utan det här steget skulle testet passera med argumentet
+    // helt bortplockat.
+    await runDeletion();
+    expect(await exists(['usernames', MY_NAME]), 'orphaned without the fallback').toBe(true);
+
+    // Omförsöket som produktionen gör: `MY_NAME` är samma fallback som
+    // deleteAccount skickar från React-state (`user?.username`), vilket överlever
+    // ett kastat anrop.
+    await runDeletion(MY_NAME);
+
+    for (const sub of KNOWN_USER_SUBCOLLECTIONS) {
+      const remaining = await count(['users', ME, sub]);
+      expect(remaining, `users/${ME}/${sub} after retry`).toBe(sub === 'followers' ? 1 : 0);
+    }
+    expect(await exists(['users', ME]), 'profile doc erased').toBe(false);
+    expect(await exists(['usernames', MY_NAME]), 'username reservation released').toBe(false);
+    expect(await exists(['publicProfiles', ME]), 'public projection erased').toBe(false);
+    expect(await exists(['groups', 'mygroup']), 'owned group erased').toBe(false);
+    expect(await exists(['sessions', 'mysession']), 'hosted session erased').toBe(false);
+    expect(await exists(['reports', 'rep1']), 'moderation report still retained').toBe(true);
+
+    // Array-uppdateringarna hoppades över i första försöket, så om omförsöket
+    // inte hittade dem igen ligger mitt uid kvar i gruppen och listan för alltid.
+    let otherListEditors: unknown[] = ['unset'];
+    let memberUids: unknown[] = ['unset'];
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore() as unknown as fsMod.Firestore;
+      otherListEditors = (await fsMod.getDoc(fsMod.doc(db, 'lists', 'otherlist'))).data()?.editors ?? [];
+      memberUids = (await fsMod.getDoc(fsMod.doc(db, 'groups', 'othergroup'))).data()?.memberUids ?? [];
+    });
+    expect(otherListEditors, 'uid stripped from co-edited list on the retry').toEqual([OTHER]);
+    expect(memberUids, 'uid removed from member-group memberUids on the retry').toEqual([OTHER]);
   });
 });
