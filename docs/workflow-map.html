@@ -712,7 +712,7 @@
     {
       "id": "flow1",
       "label": "Sign in & hydrate",
-      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory. Signing in is reached two ways: the visitor opens /login themselves, or a signed-out tap on a write control routes them there so account creation always happens behind the villkor + 13-års notice. The same context owns the visibility cascade: changing who may see your library writes the profile first and then re-stamps every non-overridden watchlist doc, with a pending-flag repair that re-runs on the next app load if that second half fails.",
+      "description": "Firebase Auth sign-in, then the app hydrates the profile and subscribes live to the watchlist — plus a separate owner-only tags collection joined in memory. Signing in is reached two ways: the visitor opens /login themselves, or a signed-out tap on a write control routes them there so account creation always happens behind the villkor + 13-års notice. The subscription is not assumed to succeed: a terminal listen error is a first-class state the UI can show and the user can retry, and every write surface waits for the library to be genuinely known before it writes. Signing OUT is the same story in reverse — the remembered return path is dropped on the auth transition itself, so a second tab cannot hand the departing user’s page to the next account. The same context owns the visibility cascade: changing who may see your library writes the profile first and then re-stamps every non-overridden watchlist doc, with a pending-flag repair that re-runs on the next app load if that second half fails.",
       "steps": [
         {
           "from": "web-app",
@@ -771,6 +771,16 @@
           "verified": true
         },
         {
+          "from": "watchlist-context",
+          "to": "web-app",
+          "payload": "BIN-700/601/640 failure leg — the listen can die terminally. The context exposes THREE flags rather than one: `snapshotSettled` (a first snapshot for the CURRENT uid landed), `listenerFailed` (the listen errored, stays true until a retry), and the derived `libraryKnown = snapshotSettled && !listenerFailed`. \"Settled\" alone never means safe — a failure AFTER a good snapshot leaves `items` populated but known-stale, so every caller tests `libraryKnown`. On failure the library view renders a whole-page \"Vi når inte ditt bibliotek just nu\" state with a \"Försök igen\" button (shared copy in src/lib/watchlist/libraryHoldCopy.ts) instead of the empty-library copy — whole-page because the bulk-select and delete controls would otherwise act on a list known to be wrong. Before this, `loading` went false with `items` empty and someone with 300 titles was shown \"inget här än\"."
+        },
+        {
+          "from": "web-app",
+          "to": "watchlist-context",
+          "payload": "BIN-700 retry leg — `retryListener()` tears the subscription down and opens a new one for the SAME uid, so the failed state is one the user can act on rather than reload out of. Account-scoped bookkeeping (itemsRef, the first_title_added pending counters, everNonEmptyRef) is reset only on a real uid change, never on a retry — a retry must not re-fire the first-title analytics event, and a genuine account switch must still clear the previous account’s items."
+        },
+        {
           "from": "web-app",
           "to": "auth-context",
           "payload": "updateDefaultVisibility('public' | 'friends' | 'private') from Settings — the one control that decides who may read this user's watchlist",
@@ -797,6 +807,11 @@
           "payload": "BIN-587 repair leg — when step 2 throws: visibilitySyncPending:true on users/{uid} → Settings shows a warning + a manual 'try again', and the next app load re-runs the cascade ONCE against the profile's current value until it succeeds and the flag is cleared. Ordering is explicit: a synchronously bumped epoch ranks runs by when the user chose (not by which network call lands last), a promise queue serialises cascades over the same docs, and an in-flight guard keeps the automatic retry from racing a fresher explicit choice — a superseded run writes nothing and never falsely clears the flag. Residual: the flag write can itself die on the same network error that killed the cascade, leaving no flag, no warning and no retry — which is why the watchlist read rule cannot treat the item's own denormalised field as the last word",
           "transport": "Firestore write + retry on app load",
           "verified": true
+        },
+        {
+          "from": "auth-context",
+          "to": "web-app",
+          "payload": "BIN-732 sign-out handover — the remembered return path is cleared on the auth TRANSITION (uid set→null), not by the tab that clicked \"Logga ut\". Firebase broadcasts a sign-out to every tab on the origin, but BIN-669’s guard was a flag in ONE tab’s memory: a second tab parked on a guarded page also went uid→null, its own provider had never called signOut, and it stored the departing user’s page as the NEXT account’s return path. A remembered path outlives onboarding, so on a shared device a brand-new account could land on /grupper/<id>/ — which discloses the group name and memberUids, since firestore.rules allows any signed-in read of the group doc. `hadSessionRef` distinguishes a handover (set→null) from a signed-out visitor merely booting (null on arrival, whose path a poster-badge tap may legitimately have just stored). Accepted cost: a revoked or expired session also forgets where the visitor was — the guard re-remembers as soon as they hit a guarded page. The click path ALSO clears synchronously before firebaseSignOut, because the listener’s clear lands a round trip later and not at all if the sign-out throws."
         }
       ],
       "area": "core",
@@ -937,7 +952,7 @@
         {
           "from": "web-app",
           "to": "watchlist-context",
-          "payload": "addItem(title, status:'vill_se')",
+          "payload": "BIN-596/643 readiness gate → addItem(title, status:'vill_se'). Every add control (StatusButton, QuickAddButton, QuickRateModal, onboarding’s first title) waits for `libraryKnown` before it writes. Ungated, `getItem` answers \"not tracked\" for the whole library while the snapshot is still in flight or has failed, and the write then hard-overwrites `status` on a title the user had already seen — a silent demotion of real data. Non-writing controls stay live so a dead listener never traps anyone inside a flow.",
           "transport": "React context",
           "verified": true
         },
@@ -1030,7 +1045,7 @@
     {
       "id": "flow-import",
       "label": "Import & seed a library",
-      "description": "Three entry points feed the same watchlist write path. CSV import (Letterboxd/IMDb) is dry-run-safe: nothing is written until the user confirms the TMDB-matched preview. Onboarding's first-title step and /kalibrera's genre calibration write immediately (small, low-risk actions), but all three converge on WatchlistContext.addItem / users/{uid} writes.",
+      "description": "Three entry points feed the same watchlist write path. CSV import (Letterboxd/IMDb) is dry-run-safe: nothing is written until the user confirms the TMDB-matched preview. BIN-729: the dry run is gated too, not just the write — an analysis run against an unread library marks every row as NEW, and the user’s confirmation of that list is what the page treats as consent, so an ungated preview launders a bad diff into an approved one. Onboarding's first-title step and /kalibrera's genre calibration write immediately (small, low-risk actions), but all three converge on WatchlistContext.addItem / users/{uid} writes.",
       "covers": [
         "/settings/import",
         "/onboarding",
@@ -1048,7 +1063,7 @@
         {
           "from": "import-page",
           "to": "tmdb-api",
-          "payload": "analyze(): per row, findByImdbId(imdbId) if present, else searchMulti(title) — dry-run match against TMDB, nothing persisted yet",
+          "payload": "analyze() — held until `libraryKnown` (BIN-729): per row, findByImdbId(imdbId) if present, else searchMulti(title) — dry-run match against TMDB, nothing persisted yet",
           "transport": "fetch (TMDB)",
           "verified": true
         },
@@ -1062,14 +1077,14 @@
         {
           "from": "import-page",
           "to": "watchlist-context",
-          "payload": "user confirms preview → runImport() loops importable rows → addItem({tmdbId, mediaType, status, title, rating, ...}) per-title try/catch",
+          "payload": "user confirms preview → runImport(), also held until `libraryKnown` → loops importable rows → addItem({tmdbId, mediaType, status, title, rating, ...}) per-title try/catch",
           "transport": "React context",
           "verified": true
         },
         {
           "from": "onboarding-flow",
           "to": "watchlist-context",
-          "payload": "Step 3 \"Lägg till din första titel\" → search result picked → addItem({tmdbId, mediaType, status: 'mina'|'vill_se'|'sedd', ...})",
+          "payload": "Step 3 \"Lägg till din första titel\", gated on `libraryKnown` like every other add surface (BIN-643 — the earlier comment arguing this step was safe ungated is reversed in place: a \"Sedd\" landing without `watchedAt` never self-heals, and the flow is reachable for accounts that already have a library). → search result picked → addItem({tmdbId, mediaType, status: 'mina'|'vill_se'|'sedd', ...})",
           "transport": "React context",
           "verified": true
         },
@@ -1500,7 +1515,7 @@
         {
           "from": "tillsammans-session-page",
           "to": "firestore",
-          "payload": "joinSession (set sessions/{id}/participants/{pid}) + recordSwipe (merge-set sessions/{id}/swipes/{mediaType}_{tmdbId}.votes.{pid} = yes/no/veto). BIN-569: the swipe doc id is the composite mediaTypeDocId (movie_42 / tv_42) — on the bare number a 'Blandat' deck merged film 42's and series 42's votes into one wrong match. Docs written before that cutover still carry the bare id; the read side (swipeDocToObject → indexSwipes) matches them on number alone and merges the two docs' votes PER PARTICIPANT rather than picking one document (BIN-608 — a doc-level pick dropped everyone else's votes), until the session's 7-day TTL reaps them. BIN-618: only CANONICAL ids are read — the doc id is free-text to anyone holding the session link, and an alias like movie_042 or zmovie_42 resolved to the same candidate key as the genuine doc, so it could shadow or overwrite the real participants' votes. Anything a canonical writer could never emit now parses to NaN and matches no candidate.",
+          "payload": "joinSession (set sessions/{id}/participants/{pid}) + recordSwipe (merge-set sessions/{id}/swipes/{mediaType}_{tmdbId}.votes.{pid} = yes/no/veto). BIN-569: the swipe doc id is the composite mediaTypeDocId (movie_42 / tv_42) — on the bare number a 'Blandat' deck merged film 42's and series 42's votes into one wrong match. Docs written before that cutover still carry the bare id; the read side (swipeDocToObject → indexSwipes) matches them on number alone and merges the two docs' votes PER PARTICIPANT rather than picking one document (BIN-608 — a doc-level pick dropped everyone else's votes), until the session's 7-day TTL reaps them. BIN-618: only CANONICAL ids are read — the doc id is free-text to anyone holding the session link, and an alias like movie_042 or zmovie_42 resolved to the same candidate key as the genuine doc, so it could shadow or overwrite the real participants' votes. Anything a canonical writer could never emit now parses to NaN and matches no candidate. BIN-624: firestore.rules now constrains the swipe doc id itself — `create` requires ^(movie|tv)_(0|[1-9][0-9]*)$, exactly what mediaTypeDocId() emits, so a link-holder can no longer create sessions/{id}/swipes/<anything> (junk docs and cost; not vote integrity, which BIN-636 established is intact on both sides). The guard is on CREATE only: Firestore decides create-vs-update by whether the document exists, so no caller can reach the update branch on an empty path, and grandfathered bare-numeric swipe docs keep merging per participant (BIN-608) until the session’s 7-day TTL reaps them. It binds the FORM, not the VOLUME — movie_1 … movie_999999 remain creatable.",
           "transport": "Firestore write",
           "verified": true
         },
@@ -2554,7 +2569,7 @@
     }
   ]
 }
-    </script>
+</script>
 
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
