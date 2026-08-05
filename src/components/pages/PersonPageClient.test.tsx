@@ -240,6 +240,47 @@ describe('PersonPageClient — which biography reaches the meta description (BIN
     expect(screen.getByText(/Biografi på engelska/)).toBeTruthy();
   });
 
+  // BIN-756 — BIN-747 trimmed the FIRST source only, so the identical
+  // blank-but-truthy trap survived at step two and step three of the chain. These
+  // three drive the chain one link further down than the BIN-747 tests above.
+  it('falls back to the English biography when the Wikipedia extract is only whitespace', () => {
+    // A blank Wikipedia extract used to win precedence over a perfectly good
+    // English bio — and then be hidden by the render guard, so the page showed no
+    // biography at all while one was sitting in the next source.
+    state.wikiBio = { text: '  \n ', pageUrl: 'https://sv.wikipedia.org/wiki/Alicia_Vikander' };
+    state.enBio = EN_BIO;
+    render(<PersonPageClient id="543530" />);
+
+    expect(screen.getByText(EN_BIO)).toBeTruthy();
+    expect(screen.getByText(/Biografi på engelska/)).toBeTruthy();
+    // …and no credit for the source that had nothing to say.
+    expect(screen.queryByText(/svenska Wikipedia/)).toBeNull();
+  });
+
+  it('renders no biography, and no source credit, when every source is blank', () => {
+    // The failure mode this shape produces is not a missing paragraph but an
+    // ORPHAN credit line: a blank source that still wins `bioSource` labels an
+    // empty body "Biografi från svenska Wikipedia".
+    state.person = { ...person, biography: '   ' };
+    state.wikiBio = { text: '\n\n', pageUrl: 'https://sv.wikipedia.org/wiki/Alicia_Vikander' };
+    state.enBio = ' \t ';
+    const { container } = render(<PersonPageClient id="543530" />);
+
+    expect(container.querySelector('p.line-clamp-6')).toBeNull();
+    expect(screen.queryByText(/svenska Wikipedia/)).toBeNull();
+    expect(screen.queryByText(/Biografi på engelska/)).toBeNull();
+  });
+
+  it('renders a padded fallback biography collapsed, not with its padding intact', () => {
+    // Trimming at the SOURCE is what this pins: a guard that only trimmed at the
+    // render site would still hand the raw string to the paragraph.
+    state.wikiBio = { text: `\n  ${WIKI_BIO}\n `, pageUrl: 'https://sv.wikipedia.org/wiki/Alicia_Vikander' };
+    const { container } = render(<PersonPageClient id="543530" />);
+
+    expect(container.querySelector('p.line-clamp-6')?.textContent).toBe(WIKI_BIO);
+    expect(screen.getByText(/svenska Wikipedia/)).toBeTruthy();
+  });
+
   it('does not leak the blank source into the biography it renders', () => {
     // A trimmed-empty Swedish bio must not win precedence over a real fallback,
     // and must not survive into the visible paragraph as padding either.

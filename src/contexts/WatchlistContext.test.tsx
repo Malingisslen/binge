@@ -59,6 +59,14 @@ let tagsSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () =
 let notesSnapshotCallback: ((snap: { size: number; docs: { id: string; data: () => Record<string, unknown> }[] }) => void) | null = null;
 // BIN-601: the watchlist listener's terminal-error callback.
 let snapshotErrorCallback: (() => void) | null = null;
+// BIN-755: how many watchlist listens have been opened, and how many torn down.
+// "Försök igen" (retryListener) claims to open a FRESH subscription for the same
+// uid; re-assigning `snapshotCallback` proves nothing on its own, because the
+// mock would hand back the same live callback whether the effect re-ran or not.
+// Counting the onSnapshot calls — and the unsubscribes React runs before them —
+// is the only externally visible evidence that the old listener actually died.
+let watchlistListenCount = 0;
+let watchlistUnsubscribeCount = 0;
 
 const setDoc = vi.fn(async (..._args: unknown[]) => {});
 // BIN-640: the batch commit, as its own spy so a test can make it reject.
@@ -86,6 +94,10 @@ vi.mock('@/lib/firebase/db', () => ({
         } else {
           snapshotCallback = cb;
           snapshotErrorCallback = onError ?? null;
+          // BIN-755: only the watchlist listen is counted — the tags/notes
+          // subscriptions are keyed on uid alone and must NOT re-run on a retry.
+          watchlistListenCount += 1;
+          return () => { watchlistUnsubscribeCount += 1; };
         }
         return () => {};
       },
@@ -163,11 +175,14 @@ let updateTmdbStatusRef: ((mediaType: MediaType, tmdbId: number, tmdbStatus: str
 // BIN-596: the readiness flags the add surfaces gate on, as the components see
 // them (a ref is invisible to a component).
 let readiness: { loading: boolean; snapshotSettled: boolean; listenerFailed: boolean; libraryKnown: boolean } | null = null;
+// BIN-755: the "Försök igen" the failure surfaces render (components/title/libraryHold.ts).
+let retryListenerRef: (() => void) | null = null;
 
 function Harness() {
   const wl = useWatchlist();
   useEffect(() => {
     readiness = { loading: wl.loading, snapshotSettled: wl.snapshotSettled, listenerFailed: wl.listenerFailed, libraryKnown: wl.libraryKnown };
+    retryListenerRef = wl.retryListener;
     updateWatchedAtRef = wl.updateWatchedAt;
     updateTmdbStatusRef = wl.updateTmdbStatus;
     addItemRef = wl.addItem;
@@ -217,6 +232,9 @@ beforeEach(() => {
   notesSnapshotCallback = null;
   snapshotErrorCallback = null;
   readiness = null;
+  retryListenerRef = null;
+  watchlistListenCount = 0;
+  watchlistUnsubscribeCount = 0;
   batchCommit.mockClear();
   batchCommit.mockImplementation(async () => {});
   authState.uid = 'u1';
@@ -1630,6 +1648,189 @@ describe('WatchlistContext — readiness the add surfaces gate on (BIN-596)', ()
     });
 
     expect(readiness?.listenerFailed).toBe(false);
+  });
+});
+
+// BIN-700/BIN-755 — "Försök igen", the only way out of a dead listener.
+//
+// The failed state never ends on its own, so every surface that renders the
+// failure (components/title/libraryHold.ts) offers `retryListener` as its retry.
+// It had NO provider-level coverage at all: a mutant that made it inert — drop
+// the nonce from the effect's dependency array, or make the callback a no-op —
+// passed the entire suite, and the button would spin the user back to the same
+// dead state forever with no way to reach their library short of a page reload.
+//
+// The three things it must get right, and the three ways it can silently fail:
+//  1. it really does tear down and re-open the listen (not just re-render);
+//  2. it must NOT reset the account-scoped first_title_added bookkeeping — a
+//     session that already added titles has not stopped having done so, and the
+//     deferred decision from a cold load must survive the outage that hit it;
+//  3. a REAL uid change must still reset all of that, or a new account inherits
+//     the previous one's history.
+describe('WatchlistContext — retryListener re-subscribes the dead listener (BIN-700/755)', () => {
+  async function mount() {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {});
+  }
+
+  it('opens a FRESH listen for the same uid, and reports the new listener honestly', async () => {
+    await mount();
+    expect(watchlistListenCount).toBe(1);
+
+    await act(async () => { snapshotErrorCallback!(); });
+    expect(readiness?.listenerFailed).toBe(true);
+
+    await act(async () => { retryListenerRef!(); });
+
+    // Torn down AND re-opened. Either half alone is a bug: no teardown leaks a
+    // listener (and its reads) per press; no re-open is the inert mutant.
+    expect(watchlistUnsubscribeCount).toBe(1);
+    expect(watchlistListenCount).toBe(2);
+    // Back to "we know nothing yet" — the retry is a new question, not an answer.
+    // A retry that left `listenerFailed` true would keep every write surface held
+    // even after the library came back.
+    expect(readiness).toEqual({ loading: true, snapshotSettled: false, listenerFailed: false, libraryKnown: false });
+
+    // …and the fresh listener's own outcome is what settles it.
+    await act(async () => { snapshotCallback!(snap([doc(1)])); });
+    expect(readiness).toEqual({ loading: false, snapshotSettled: true, listenerFailed: false, libraryKnown: true });
+  });
+
+  it('re-subscribes AGAIN after a second failure — the nonce is a counter, not a flag', async () => {
+    await mount();
+    await act(async () => { snapshotErrorCallback!(); });
+    await act(async () => { retryListenerRef!(); });
+    // The retried listener dies too (a genuinely offline device).
+    await act(async () => { snapshotErrorCallback!(); });
+    expect(readiness?.listenerFailed).toBe(true);
+
+    await act(async () => { retryListenerRef!(); });
+
+    // A boolean "retried" flag would stop here: the effect's deps would no longer
+    // change, so the second press would do nothing and the user would be stuck.
+    expect(watchlistListenCount).toBe(3);
+    expect(readiness?.listenerFailed).toBe(false);
+  });
+
+  it('re-subscribes ONLY the watchlist listener, not the tags and notes ones', async () => {
+    await mount();
+    const tagsCb = tagsSnapshotCallback;
+    const notesCb = notesSnapshotCallback;
+
+    await act(async () => { snapshotErrorCallback!(); });
+    await act(async () => { retryListenerRef!(); });
+
+    // Those two are keyed on uid alone and did not fail; re-running them would
+    // bill a fresh full read of both collections on every press of a button the
+    // user is likely to press repeatedly (Blaze, 25 SEK/mån cap). Identity, not a
+    // count: their onSnapshot callback is created inside the effect, so an equal
+    // reference is proof the effect did not re-run.
+    expect(tagsSnapshotCallback).toBe(tagsCb);
+    expect(notesSnapshotCallback).toBe(notesCb);
+  });
+
+  it('does not re-fire first_title_added for a session that already fired it', async () => {
+    await mount();
+    // Brand-new user: an empty library settles, then they add their first title.
+    await act(async () => { snapshotCallback!(snap([])); });
+    await act(async () => { await addItemRef!(newTitle(101)); });
+    expect(firstTitleAddedCount()).toBe(1);
+
+    await act(async () => { retryListenerRef!(); });
+    // The fresh listener lands EMPTY — the optimistic write has not round-tripped
+    // yet, which is exactly the frame that makes this mutant reachable.
+    await act(async () => { snapshotCallback!(snap([])); });
+    await act(async () => { await addItemRef!(newTitle(102)); });
+
+    // A retry that reset `everNonEmptyRef` (account-scoped state, not the
+    // listener's) would read this session as a brand-new user all over again and
+    // bill a duplicate first_title_added — a metric no later analysis can undo.
+    expect(firstTitleAddedCount()).toBe(1);
+  });
+
+  it('does not LOSE a first_title_added that the outage interrupted', async () => {
+    await mount();
+    // The other direction of the same rule. The user's very first add happens
+    // during a cold load, so the decision is deferred (BIN-56/110) — and then the
+    // listener dies before any snapshot lands.
+    await act(async () => { await addItemRef!(newTitle(201, 'movie')); });
+    await act(async () => { snapshotErrorCallback!(); });
+    expect(firstTitleAddedCount()).toBe(0);
+
+    await act(async () => { retryListenerRef!(); });
+    await act(async () => { snapshotCallback!(snap([doc(201, 'movie')])); });
+
+    // The pending count and its mediaType had to survive the retry: clearing them
+    // there drops the event permanently, because a later snapshot always contains
+    // the title and `items.length === 0` never becomes true again.
+    expect(firstTitleAddedCount()).toBe(1);
+    expect(trackEvent).toHaveBeenCalledWith('first_title_added', { mediaType: 'movie' });
+  });
+
+  // The other half of the guard: both branches of `subscribedUidRef.current !== uid`
+  // need a test of their own, or "never reset" and "always reset" each pass half
+  // the suite. Split in two because the two consequences are independent — one is
+  // about whose rows a write is decided from, the other about whose history the
+  // analytics event belongs to.
+  async function switchToU2(view: ReturnType<typeof render>) {
+    await act(async () => {
+      authState.uid = 'u2';
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+  }
+
+  it('a uid change does not let the previous account\'s rows decide the new one\'s write', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => { snapshotCallback!(snap([doc(1), doc(2)])); });
+
+    await switchToU2(view);
+
+    // u2's snapshot has not landed yet — the window where a leftover `itemsRef`
+    // would still be answering with u1's titles. A title u1 owned must read as a
+    // genuine new add for u2 (addedAt stamped), never as a re-mark of u1's row
+    // (addedAt withheld, so u2's title would sort nowhere and never recover).
+    // `itemsRef` is cleared here AND `findItem` refuses to answer until
+    // `itemsUidRef` matches — belt and braces, so this asserts the outcome both
+    // mechanisms exist for rather than reaching into either one.
+    setDoc.mockClear();
+    await act(async () => { await addItemRef!(newTitle(1)); });
+    const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('users/u2/watchlist/tv_1');
+    expect(payload.addedAt).toBe('ts');
+  });
+
+  it('a uid change re-arms first_title_added for the new account', async () => {
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    // u1 is a returning user with a library, so their session can never fire the
+    // first-title event.
+    await act(async () => { snapshotCallback!(snap([doc(1), doc(2)])); });
+    await act(async () => { await addItemRef!(newTitle(3)); });
+    expect(firstTitleAddedCount()).toBe(0);
+
+    await switchToU2(view);
+    // u2's own (empty) library settles first, so nothing here goes through the
+    // deferred cold-load path — the event can only fire from `everNonEmptyRef`
+    // having been reset for the new account.
+    await act(async () => { snapshotCallback!(snap([])); });
+    await act(async () => { await addItemRef!(newTitle(301)); });
+
+    expect(firstTitleAddedCount()).toBe(1);
   });
 });
 

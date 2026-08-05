@@ -55,12 +55,24 @@ export default function PersonPageClient({ id, initialData }: { id: string; init
     staleTime: TMDB_STALE.PERSON,
   });
 
-  const enBio = personEn?.biography || '';
+  // BIN-756: BIN-747 trimmed only the FIRST of the three sources, so the same
+  // blank-but-truthy bug survived one step down the chain. A Wikipedia extract or
+  // an English TMDB biography that is whitespace-only won precedence over the
+  // source below it, set `bioSource` to itself, and was then suppressed by the
+  // render guard — leaving the person with no biography even though a real one
+  // was sitting in the next source. Every source is now collapsed where it
+  // enters, so precedence and rendering can no longer disagree about what
+  // "has a biography" means.
+  const wikiText = (wikiBio?.text ?? '').trim();
+  const enBio = (personEn?.biography ?? '').trim();
 
   // Precedence: sv TMDB → sv Wikipedia → en TMDB
-  const biography = svBio || wikiBio?.text || enBio || '';
+  const biography = svBio || wikiText || enBio || '';
+  // Reads the same trimmed strings as `biography` above — so bioSource cannot
+  // name a source whose text renders empty, which is what put an orphan "Biografi
+  // från svenska Wikipedia" credit (or the English label) under nothing at all.
   const bioSource: 'tmdb-sv' | 'wiki-sv' | 'tmdb-en' | null =
-    svBio ? 'tmdb-sv' : wikiBio?.text ? 'wiki-sv' : enBio ? 'tmdb-en' : null;
+    svBio ? 'tmdb-sv' : wikiText ? 'wiki-sv' : enBio ? 'tmdb-en' : null;
 
   // PE3: separera Self-gästframträdanden (talkshows, galor) från riktiga
   // roller så filmografin inte dränks i dem.

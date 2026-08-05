@@ -98,11 +98,18 @@ describe('EventCard — toggle is outside the link (BIN-660)', () => {
   // The layout the anchor took over from `.ev` in this very diff. jsdom cannot
   // compute it, so the class string is the only thing that can pin it — without
   // `flex-1` the anchor stops filling the card and the footer floats up.
+  //
+  // BIN-709: the bare `flex` is a THIRD independent term and was unasserted —
+  // `toContain('flex-1')` is satisfied by a className that lost it. It is what
+  // makes the anchor a flex CONTAINER, and `.ev .body { flex: 1 }` in globals.css
+  // is inert without it: the body stops stretching, so a short card's text no
+  // longer fills the tile and the week board's rows lose their even bottoms.
+  // Matched as class TOKENS (toHaveClass), not substrings, or `flex-1` would
+  // stand in for `flex` again.
   it('gives the link the column layout the card root used to own', () => {
     render(<EventCard entry={episode} />);
 
-    expect(cardLink().className).toContain('flex-1');
-    expect(cardLink().className).toContain('flex-col');
+    expect(cardLink()).toHaveClass('flex', 'flex-1', 'flex-col');
   });
 
   // Acceptance #3 — "no visual change" — rests entirely on this arithmetic:
@@ -114,6 +121,39 @@ describe('EventCard — toggle is outside the link (BIN-660)', () => {
 
     expect(container.querySelector('.body')).toHaveStyle({ paddingBottom: '8px' });
     expect(toggle().parentElement).toHaveStyle({ padding: '0 12px 12px' });
+  });
+
+  // BIN-709 — WHERE the footer sits, which the spacing test above cannot see:
+  // its padding is identical whether it is rendered before the link or after it.
+  // Two things ride on "after": the card root is a flex COLUMN, so a footer
+  // emitted first would paint the toggle row above the still image; and DOM order
+  // is tab order, so it would also put the toggle before the card's own link for
+  // a keyboard user — re-breaking, in reading order, the sequence BIN-660 moved
+  // the button out of the anchor to protect.
+  it('renders the toggle footer after the link, as the card root\'s last child', () => {
+    const { container } = render(<EventCard entry={episode} />);
+    const root = container.firstElementChild!;
+
+    // Exactly two children: nothing else may slip between the link and the
+    // footer and re-open the gap the spacing arithmetic depends on.
+    expect(root.children).toHaveLength(2);
+    expect(root.children[0]).toBe(cardLink());
+    expect(root.lastElementChild).toBe(toggle().parentElement);
+  });
+
+  // BIN-709 — the flex layout INSIDE the footer row, the last unasserted piece
+  // of "no visual change". Both halves are load-bearing and fail independently:
+  //  - the footer's own `display: flex` + centring is what keeps the 14px square
+  //    on the text's baseline instead of at the top of the row;
+  //  - the button's `flex items-center` is what keeps the square BESIDE its
+  //    label. The square carries Tailwind's `block` (see the component), so a
+  //    button that stops being a flex container stacks the square above the
+  //    text and the footer row doubles in height.
+  it('lays the footer and its button out as centred flex rows', () => {
+    render(<EventCard entry={episode} />);
+
+    expect(toggle().parentElement).toHaveStyle({ display: 'flex', alignItems: 'center' });
+    expect(toggle()).toHaveClass('flex', 'items-center');
   });
 
   // The movie card keeps `.body`'s own 12px bottom padding — the override above
