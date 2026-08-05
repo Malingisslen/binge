@@ -7,10 +7,16 @@ import {
   resolveTmdbId,
 } from './mediaTypeDocId';
 
-// Keep in lockstep with src/lib/mediaTypeDocId.test.ts (the client mirror). The
-// two source helpers are byte-identical copies with no shared import, so this
-// test pair is the ONLY drift net — it must exercise the same contract on both
-// sides (null/blank/case + string passthrough), or a one-sided edit slips past.
+// Mostly in lockstep with src/lib/mediaTypeDocId.test.ts — but NOT on the read
+// side. The two helpers stopped being byte-identical at BIN-618: this server copy
+// still resolves aliased doc ids (`movie_042`) that the client now rejects,
+// because the server read sites were never audited for shapes only a function
+// writes (BIN-624, still open).
+//
+// So do not "resync" the pair on the strength of anything in this file. The
+// divergence is pinned by src/lib/mediaTypeDocId.parity.test.ts, which imports
+// BOTH copies and fails on either half of that edit — that test, not this pair,
+// is the drift net now (BIN-636).
 describe('mediaTypeDocId', () => {
   it('builds movie_/tv_ ids', () => {
     expect(mediaTypeDocId('movie', 42)).toBe('movie_42');

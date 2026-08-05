@@ -16,8 +16,9 @@ import {
 // `parseTmdbIdFromDocId` accepts only canonical ids while the server copy stays
 // permissive, so `resolveTmdbId(null, 'movie_042')` is NaN here and 42 there.
 // That divergence is intentional and documented at the function itself — do not
-// "resync" the pair to satisfy the rule above. (Pinning the server side's
-// behaviour is tracked in BIN-644.)
+// "resync" the pair to satisfy the rule above. It is no longer only documented:
+// mediaTypeDocId.parity.test.ts imports both copies and fails if either side is
+// edited toward the other (BIN-636, which is what BIN-644 asked for).
 describe('mediaTypeDocId (client mirror of the server helper)', () => {
   it('builds movie_/tv_ ids', () => {
     expect(mediaTypeDocId('movie', 42)).toBe('movie_42');

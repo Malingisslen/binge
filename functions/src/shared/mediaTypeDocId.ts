@@ -11,6 +11,13 @@
  * LEGACY bare-`${tmdbId}` documents written before namespacing. That answer
  * differs per collection (read-with-fallback, orphan, or skip) and belongs at
  * the call site, next to the data — restating it here just drifts.
+ *
+ * `parseTmdbIdFromDocId` below is deliberately MORE PERMISSIVE than the client
+ * copy in `src/lib/mediaTypeDocId.ts`: it still resolves aliased ids the client
+ * rejects since BIN-618, because these server read sites were never audited for
+ * shapes only a function writes (BIN-624). Both halves are pinned by
+ * `src/lib/mediaTypeDocId.parity.test.ts` — tightening this file without going
+ * through that test is the resync BIN-636 exists to catch.
  */
 
 export type MediaType = 'movie' | 'tv';
@@ -76,7 +83,11 @@ export function parseMediaTypeFromDocId(docId: string): MediaType | null {
  * Number.isFinite). The field branch is guarded the SAME way parseTmdbIdFromDocId
  * guards its own — `Number('')`/`Number(null)` are 0, so an empty/absent/junk
  * field must fall through to the doc id, never slip past a finite check as a
- * phantom id-0. Mirror of the paired mediaTypeDocId module — keep the two in sync.
+ * phantom id-0. The FIELD branch is a true mirror of the client copy — keep those
+ * two in sync. The DOC-ID branch is not: it delegates to `parseTmdbIdFromDocId`
+ * above, which stays permissive here and is strict on the client, so
+ * `resolveTmdbId(null, 'movie_042')` is 42 here and NaN there. That split is
+ * deliberate (BIN-618) and pinned by src/lib/mediaTypeDocId.parity.test.ts.
  */
 export function resolveTmdbId(field: number | string | null | undefined, docId: string): number {
   const fromField = Number(field);

@@ -14,7 +14,9 @@ import type { MediaType } from '@/types/domain';
  * The READ side is NOT identical any more: `parseTmdbIdFromDocId` below accepts
  * only canonical ids, while the server copy stays permissive (BIN-618 — see that
  * function's own note for why the divergence is deliberate and which direction is
- * safe). Do not "resync" the pair on the strength of this header.
+ * safe). Do not "resync" the pair on the strength of this header —
+ * `mediaTypeDocId.parity.test.ts` imports BOTH copies and fails on either half of
+ * that edit (BIN-636).
  *
  * Legacy bare-`${tmdbId}` docs written before this migration are NOT addressed
  * here — each call site decides its own read-with-fallback policy next to the data.
