@@ -1,5 +1,5 @@
 {
-  "comment": "Coverage universe for docs/workflow-map.html — mechanically enumerated 2026-07-02. scripts/check-workflow-map.mjs asserts every entry below is claimed by at least one flow's covers[]. Regenerate: functions = exports in functions/src/index.ts; routes = page.tsx dirs under src/app.",
+  "comment": "Coverage universe for docs/workflow-map.html — mechanically enumerated 2026-07-02. scripts/check-workflow-map.mjs asserts every entry below is claimed by at least one flow's covers[]. Regenerate: functions = exports in functions/src/index.ts; routes = page.tsx dirs under src/app. boundaries = HAND-CURATED, not enumerable: client files that transmit data off-device while belonging to no route and no function — an app-router crash boundary renders instead of the route tree, so the routes rule structurally misses it. Add one whenever a new such file starts sending events.",
   "functions": [
     "onFriendRequestCreate",
     "onSessionPickCreate",
@@ -64,5 +64,9 @@
     "/stats",
     "/integritet",
     "/[...path]"
+  ],
+  "boundaries": [
+    "src/app/global-error.tsx",
+    "src/components/layout/SegmentError.tsx"
   ]
 }

@@ -706,6 +706,36 @@
       "label": "Plausible Analytics",
       "context": "external-api",
       "path": "functions/src/insights/api.ts"
+    },
+    {
+      "id": "global-error-boundary",
+      "label": "Global crash boundary",
+      "context": "web-app",
+      "path": "src/app/global-error.tsx"
+    },
+    {
+      "id": "segment-error-boundary",
+      "label": "Segment error boundary",
+      "context": "web-app",
+      "path": "src/components/layout/SegmentError.tsx"
+    },
+    {
+      "id": "sentry-lib",
+      "label": "Sentry client (lazy)",
+      "context": "client-state",
+      "path": "src/lib/sentry.ts"
+    },
+    {
+      "id": "analytics-lib",
+      "label": "trackEvent (Plausible wrapper)",
+      "context": "client-state",
+      "path": "src/lib/analytics.ts"
+    },
+    {
+      "id": "sentry-ingest",
+      "label": "Sentry (ingest)",
+      "context": "external-api",
+      "path": "src/lib/sentry.ts"
     }
   ],
   "actions": [
@@ -2562,6 +2592,75 @@
           "to": "hub-seed-lib",
           "payload": "SEO WP1 (build-time only, static export): '/', '/films', '/series' server components build-fetch one TMDB list page (getTrending('all','week') for '/'; getPopularMovies(1)/getPopularTV(1) for '/films'/'/series') and run seedHubItems() — drops person results + non-Latin-title items (stricter than the SEO pre-render filter, so a seed can never link a de-indexed title), caps ~10-20 — to seed the client grid's initial state as a prop; exported static HTML now carries crawlable <a href=\"/movie|tv/{id}/\"> links, hydration-safe (client filters are no-ops on the seed)",
           "transport": "build-time fetch (TMDB) + method call",
+          "verified": true
+        }
+      ],
+      "area": "ops & compliance"
+    },
+    {
+      "id": "flow-crash-telemetry",
+      "label": "App crash → error telemetry",
+      "description": "global-error.tsx is the app's last boundary: it fires only when the root layout itself throws, and Next.js then replaces the WHOLE document with it — so Providers, React context and the normal initSentry() call have never mounted. That is why this one file initialises Sentry itself and AWAITS the lazy import('@sentry/react') before reporting; without the await captureError() would silently no-op and the worst class of crash would leave no trace at all (BIN-657). Two things leave the device here. (1) A Sentry event: captureException tagged scope='app:global' + kind='error-boundary' with extra.digest (Next.js' error digest), scrubbed in beforeSend — user.email/username/ip_address deleted and the query string blanked out of request.url — at 100% error sampling and 0% traces/replays. An empty NEXT_PUBLIC_SENTRY_DSN (dev, CI, local) or an ad-blocked SDK chunk drops the event by design. (2) One Plausible event, 'error_boundary_triggered', carrying nothing but props {scope:'app:global'} — cookie-free and IP-anonymised, which is why it needs no consent gate. Everything the user sees stays on the device: a console.error plus a bare inline-styled <html> document with a 'Ladda om'-button wired to Next.js' reset(). Segment crashes never reach this node — src/app/error.tsx and its nine per-segment siblings (feed, films, grupper, movie/[id], my, search, series, tv/[id], [...path]) all render the shared SegmentError component, which fires the SAME two signals under its own scope string ('app:root', 'app:feed', 'app:movie', …) while the root layout, Providers and the topbar stay alive around one blanked-out panel. SegmentError deliberately does NOT call initSentry(): Providers already started the lazy SDK load on page mount, so its captureError() reports when the chunk has landed and silently no-ops when the crash beat it there — an accepted gap, not a bug, because the alternative is paying the 26 KB SDK on every first load. Its trackEvent('error_boundary_triggered', {scope}) carries no such dependency, which makes the Plausible scope breakdown the only reliable answer to 'which part of the app is crashing'.",
+      "covers": [
+        "global-error.tsx",
+        "src/components/layout/SegmentError.tsx",
+        "error_boundary_triggered"
+      ],
+      "steps": [
+        {
+          "from": "web-app",
+          "to": "global-error-boundary",
+          "payload": "the root layout (or a Provider) threw during render — Next.js tears down the tree and renders global-error.tsx as the entire document, handing it {error, error.digest, reset}",
+          "transport": "React error boundary",
+          "verified": true
+        },
+        {
+          "from": "global-error-boundary",
+          "to": "sentry-lib",
+          "payload": "useEffect → await initSentry(): lazy import('@sentry/react') + init({dsn: NEXT_PUBLIC_SENTRY_DSN, environment, release: NEXT_PUBLIC_GIT_SHA ?? 'dev'}). Needed HERE because Providers (the usual caller) never mounted; resolves instantly as a no-op when the DSN is empty",
+          "transport": "lazy dynamic import",
+          "verified": true
+        },
+        {
+          "from": "sentry-lib",
+          "to": "sentry-ingest",
+          "payload": "captureException(error, {tags: {scope: 'app:global', kind: 'error-boundary'}, extra: {digest}}) — beforeSend first deletes user.email/username/ip_address and strips the query string from request.url; ignoreErrors drops ResizeObserver/abort/network noise",
+          "transport": "https (Sentry SDK)",
+          "verified": true
+        },
+        {
+          "from": "global-error-boundary",
+          "to": "analytics-lib",
+          "payload": "trackEvent('error_boundary_triggered', {scope: 'app:global'}) — fired unconditionally, independent of the Sentry init promise, so a blocked Sentry chunk still leaves a crash count",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "analytics-lib",
+          "to": "external-plausible",
+          "payload": "window.plausible('error_boundary_triggered', {props: {scope}}) — no PII beyond the fixed scope string, no URL, no error text; silent no-op when the Plausible script is absent or ad-blocked",
+          "transport": "https (Plausible script)",
+          "verified": true
+        },
+        {
+          "from": "web-app",
+          "to": "segment-error-boundary",
+          "payload": "contrast path — a single route segment threw during render (a /my Firestore read, a title page, the feed). Next.js swaps ONLY that segment for its nearest error.tsx, and all ten of them render the shared SegmentError with a fixed scope prop; the root layout, Providers and the topbar survive, so the user keeps the app around one blanked-out panel with a 'Försök igen' button wired to reset() and the error digest printed as a support ref",
+          "transport": "React error boundary (per segment)",
+          "verified": true
+        },
+        {
+          "from": "segment-error-boundary",
+          "to": "sentry-lib",
+          "payload": "useEffect → captureError(error, {scope, kind: 'error-boundary', extra: {digest}}) — the same call shape as the global boundary, but with NO initSentry() and no await: Providers started the lazy SDK load on page mount, so this reports if the @sentry/react chunk has landed and silently no-ops if the crash beat it there. From here the event rides the identical beforeSend scrubbing and https ingest step above",
+          "transport": "function call",
+          "verified": true
+        },
+        {
+          "from": "segment-error-boundary",
+          "to": "analytics-lib",
+          "payload": "trackEvent('error_boundary_triggered', {scope}) with the segment's own scope — 'app:root', 'app:feed', 'app:films', 'app:grupper', 'app:movie', 'app:my', 'app:search', 'app:series', 'app:tv', 'app:dynamic' — the one signal here that does not depend on the Sentry chunk having loaded, which is why the Plausible scope breakdown, not Sentry, is what tells us WHICH part of the app is crashing",
+          "transport": "function call",
           "verified": true
         }
       ],
