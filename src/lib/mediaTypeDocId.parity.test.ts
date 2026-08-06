@@ -113,12 +113,36 @@ describe('the BIN-618 client/server split is DELIBERATE — a resync must fail h
     }
   });
 
-  it('the divergence covers the doc-id branch ONLY — a stored "042" field still resolves on both (BIN-646)', () => {
-    // Documented gap, not an oversight: Number('042') is 42, so a doc that ALSO
-    // carries the aliased id as its tmdbId field resolves identically on both
-    // sides. Tightening that branch is BIN-646; this pins today's behaviour so
-    // BIN-646 has to come here and say so.
-    expect(client.resolveTmdbId('042', 'movie_042')).toBe(42);
+  // BIN-646 came here and said so. The field branch used to be the way an
+  // aliased doc could still resolve on the client: `Number('042')` is 42, so
+  // `movie_042` was NaN without the field and 42 with it — readable or not for a
+  // reason unrelated to which title it names. The client now holds a STRING
+  // field to the same canonical shape as the doc id; the server still resolves
+  // both, which is the BIN-618 split, unchanged.
+  it('a stored "042" field no longer rescues an aliased doc on the client (BIN-646)', () => {
+    expect(client.resolveTmdbId('042', 'movie_042')).toBe(NaN);
     expect(server.resolveTmdbId('042', 'movie_042')).toBe(42);
+  });
+
+  it('a NUMERIC field is untouched by that tightening — it cannot be spelled with a leading zero', () => {
+    expect(client.resolveTmdbId(42, 'movie_042')).toBe(42);
+    expect(server.resolveTmdbId(42, 'movie_042')).toBe(42);
+  });
+
+  // BIN-646, second half: id 0. TMDB numbers titles from 1, but Number.isFinite(0)
+  // is true, so `movie_0` used to walk past every downstream guard as a real
+  // title — the phantom-id-0 hole the empty suffix was already closed for. The
+  // field branch has always required > 0; now the doc-id branch agrees.
+  it.each(['0', 'movie_0', 'tv_0'])('client rejects the phantom id-0 doc %s', (docId) => {
+    expect(client.parseTmdbIdFromDocId(docId)).toBe(NaN);
+    expect(client.resolveTmdbId(null, docId)).toBe(NaN);
+    // Both directions, per this file's own contract: tightening the SERVER copy
+    // must fail here too, not just relaxing the client one.
+    expect(server.parseTmdbIdFromDocId(docId)).toBe(0);
+  });
+
+  it('a zero FIELD was never accepted either — the two branches now agree on 0', () => {
+    expect(client.resolveTmdbId(0, 'movie_0')).toBe(NaN);
+    expect(client.resolveTmdbId('0', 'movie_0')).toBe(NaN);
   });
 });

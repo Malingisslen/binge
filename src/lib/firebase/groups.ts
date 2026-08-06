@@ -96,7 +96,7 @@ export async function createGroup(params: {
   const inviteToken = generateSecureToken();
   const inviteTokenHash = await sha256Hex(inviteToken);
 
-  const { db, addDoc, collection, doc, setDoc, serverTimestamp } = await fsdb();
+  const { db, addDoc, collection, doc, setDoc, deleteDoc, serverTimestamp } = await fsdb();
   const groupRef = await addDoc(collection(db, 'groups'), {
     name: params.name,
     ownerUid: params.ownerUid,
@@ -108,16 +108,36 @@ export async function createGroup(params: {
     updatedAt: serverTimestamp(),
   });
 
-  await setDoc(doc(db, 'groups', groupRef.id, 'members', params.ownerUid), {
-    uid: params.ownerUid,
-    displayName: params.ownerDisplayName,
-    username: params.ownerUsername,
-    photoURL: params.ownerPhotoURL,
-    providers: params.ownerProviders,
-    role: 'owner',
-    notifications: true,
-    joinedAt: serverTimestamp(),
-  });
+  // BIN-555: samma spöke-medlems-form som join/accept, men spegelvänd. Här
+  // finns ingen ANNAN medlem att bevara — grupp-doc:et skrevs just, med
+  // memberUids: [owner] — så kompensationen är att radera hela grupp-doc:et,
+  // inte arrayRemove:a ägaren ur det. En arrayRemove hade lämnat kvar exakt
+  // det ägarlösa doc:et den här biljetten finns för att bli av med, och
+  // dessutom gjort det osynligt för ägarens egen "mina grupper"-query
+  // (array-contains på memberUids) — alltså omöjligt att ens hitta igen.
+  //
+  // deleteDoc, inte deleteGroup(): gruppen kan omöjligt ha hunnit få
+  // subkollektioner, och deleteGroup:s städning kostar läsningar i onödan.
+  try {
+    await setDoc(doc(db, 'groups', groupRef.id, 'members', params.ownerUid), {
+      uid: params.ownerUid,
+      displayName: params.ownerDisplayName,
+      username: params.ownerUsername,
+      photoURL: params.ownerPhotoURL,
+      providers: params.ownerProviders,
+      role: 'owner',
+      notifications: true,
+      joinedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('owner member doc write failed after group create — rolling back the group doc', err);
+    await deleteDoc(doc(db, 'groups', groupRef.id)).catch(rollbackErr => {
+      console.error('rollback of the group doc ALSO failed — an ownerless group remains, needs manual Firestore fix', rollbackErr);
+    });
+    // Kastas vidare: anroparen får INTE ett groupId + token för en grupp som
+    // inte längre finns. Ett omförsök är säkert — inget spår är kvar.
+    throw err;
+  }
 
   invalidateMyGroupsCache(params.ownerUid);
 

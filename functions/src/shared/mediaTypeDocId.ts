@@ -86,11 +86,15 @@ export function parseMediaTypeFromDocId(docId: string): MediaType | null {
  * Number.isFinite). The field branch is guarded the SAME way parseTmdbIdFromDocId
  * guards its own — `Number('')`/`Number(null)` are 0, so an empty/absent/junk
  * field must fall through to the doc id, never slip past a finite check as a
- * phantom id-0. The FIELD branch is a true mirror of the client copy — keep those
- * two in sync. The DOC-ID branch is not: it delegates to `parseTmdbIdFromDocId`
- * above, which stays permissive here and is strict on the client, so
- * `resolveTmdbId(null, 'movie_042')` is 42 here and NaN there. That split is
- * deliberate (BIN-618) and pinned by src/lib/mediaTypeDocId.parity.test.ts.
+ * phantom id-0. NEITHER branch mirrors the client copy any more. The DOC-ID
+ * branch diverged first (BIN-618): it delegates to `parseTmdbIdFromDocId` above,
+ * which stays permissive here and is strict on the client, so
+ * `resolveTmdbId(null, 'movie_042')` is 42 here and NaN there. The FIELD branch
+ * diverged next (BIN-646): the client now holds a STRING field to the same
+ * canonical shape as a doc id, so `resolveTmdbId('042', 'movie_042')` is 42 here
+ * and NaN there too, and the client also rejects id `0` outright. Both splits are
+ * deliberate and pinned by src/lib/mediaTypeDocId.parity.test.ts — do not "resync"
+ * either branch on the strength of this comment.
  */
 export function resolveTmdbId(field: number | string | null | undefined, docId: string): number {
   const fromField = Number(field);

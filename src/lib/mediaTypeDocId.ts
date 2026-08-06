@@ -46,8 +46,16 @@ export function mediaTypeDocId(mediaType: string | null | undefined, tmdbId: num
  * same 42 the genuine key means, so a hand-written `movie_042` doc would be
  * re-keyed onto the real `movie_42` slot and could mask its contents. Anything a
  * canonical writer could never produce is treated as unparseable instead. (BIN-618)
+ *
+ * `0` is not in the set either (BIN-646). TMDB ids start at 1, so no genuine
+ * title is ever 0 — but `Number.isFinite(0)` is true, so a `movie_0` doc used to
+ * pass every downstream guard as if it named a real title. That is the same
+ * phantom-id-0 hole the empty suffix (`movie_`) was already closed for; the two
+ * differ only in whether the zero is written out. Rejecting it here also makes
+ * this branch agree with `resolveTmdbId`'s field branch, which has always
+ * required `> 0`.
  */
-const CANONICAL_TMDB_ID = /^(?:0|[1-9][0-9]*)$/;
+const CANONICAL_TMDB_ID = /^[1-9][0-9]*$/;
 
 /**
  * Recover the numeric tmdbId from a per-title doc id, accepting BOTH the legacy
@@ -105,17 +113,29 @@ export function parseMediaTypeFromDocId(docId: string): MediaType | null {
  * Number.isFinite). The field branch rejects the same EMPTY/junk cases the doc-id
  * branch does — `Number('')`/`Number(null)` are 0, so an empty/absent/junk field
  * must fall through to the doc id, never slip past a finite check as a phantom
- * id-0 — but it is NOT canonical-strict the way BIN-618 made the doc-id branch:
- * `Number('042')` is 42, so a doc keyed `movie_042` that ALSO stores
- * `tmdbId: '042'` still resolves to 42, while the same doc without the field is
- * NaN. Tightening the field branch is tracked in BIN-646; do not read the two
- * branches as equivalent in the meantime. Paired with the server module — but NOT identical any more: the
- * doc-id branch delegates to `parseTmdbIdFromDocId` above, which since BIN-618
- * accepts only canonical ids on the client. So this function diverges too, for
- * field-less legacy docs: `resolveTmdbId(null, 'movie_042')` is NaN here and 42
- * on the server. Deliberate — see that function's note before "resyncing".
+ * id-0.
+ *
+ * BIN-646 closed the last asymmetry between the two branches: a STRING field is
+ * now held to the same canonical shape as the doc id, so `tmdbId: '042'` no
+ * longer resolves to 42 on a doc the doc-id branch already refuses. Before this,
+ * whether an aliased doc resolved depended on whether it happened to carry the
+ * field — the same document could be readable or unreadable for a reason that
+ * had nothing to do with which title it names. A numeric field is left alone:
+ * `42` cannot carry a leading zero, so there is nothing to canonicalize.
+ *
+ * Paired with the server module — but NOT identical any more: the doc-id branch
+ * delegates to `parseTmdbIdFromDocId` above, which since BIN-618 accepts only
+ * canonical ids on the client. So this function diverges too, for field-less
+ * legacy docs: `resolveTmdbId(null, 'movie_042')` is NaN here and 42 on the
+ * server, and since BIN-646 the same is true WITH the field. Deliberate — see
+ * that function's note before "resyncing".
  */
 export function resolveTmdbId(field: number | string | null | undefined, docId: string): number {
+  // A string field goes through the same canonical gate as a doc id; a number
+  // only has to be a positive integer (it cannot be spelled `042`).
+  if (typeof field === 'string') {
+    return CANONICAL_TMDB_ID.test(field) ? Number(field) : parseTmdbIdFromDocId(docId);
+  }
   const fromField = Number(field);
   return Number.isInteger(fromField) && fromField > 0 ? fromField : parseTmdbIdFromDocId(docId);
 }

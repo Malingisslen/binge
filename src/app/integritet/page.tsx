@@ -10,7 +10,7 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-07-05"
+      lastUpdated="2026-08-06"
       version="1.2"
     >
       <section>
@@ -151,6 +151,34 @@ export default function IntegritetPage() {
           <li><strong>IndexedDB</strong> — Firebase lagrar din inloggningssession här.</li>
           <li><strong>Funktionella cookies från Cloudflare</strong> (<code>__cf_bm</code>, <code>__cflb</code>) — används för botskydd och lastbalansering och är nödvändiga för att tjänsten ska fungera.</li>
           <li><strong>Google reCAPTCHA</strong> (<code>_GRECAPTCHA</code>) — sätts av Googles reCAPTCHA/App Check för bot- och missbruksskydd. Räknas som nödvändig för tjänstens säkerhet.</li>
+          <li>
+            <strong>Tre värden i webbläsarens <code>sessionStorage</code></strong> — till
+            skillnad från cookies och IndexedDB ovan är de bundna till den enskilda fliken
+            och försvinner när du stänger fliken eller webbläsaren. Ingen tredje part har
+            åtkomst till dem, och de lämnar aldrig din enhet.
+            <ul>
+              <li>
+                <code>binge:nextAfterLogin</code> — kommer ihåg vilken sida du var på när du
+                klickade på logga in eller skapa konto — eller som skickade dig till
+                inloggningen för att sidan kräver att du är inloggad — så att du kommer
+                tillbaka dit efteråt. Läses och raderas när inloggningen är klar.
+                Innehåller bara en sökväg på binge.nu — ibland med sökord eller filter från
+                sidan du var på — aldrig en adress till någon annan sajt.
+              </li>
+              <li>
+                <code>binge:tabSession</code> — sökvägen till den sida fliken senast visade
+                medan du var inloggad. Utan den kan en delad dator visa din inloggade sida
+                för nästa person som öppnar fliken.
+                Innehåller, precis som ovan, bara en sökväg på binge.nu, och försvinner när
+                fliken stängs.
+              </li>
+              <li>
+                <code>binge:lastReportAt</code> — en tidsstämpel som bromsar hur ofta samma
+                flik kan skicka in anmälningar av olämpligt innehåll. Innehåller bara
+                klockslaget för din senaste anmälan, ingenting om vad du anmälde.
+              </li>
+            </ul>
+          </li>
         </ul>
         <p>
           Om vi i framtiden lägger till statistik- eller marknadsförings-

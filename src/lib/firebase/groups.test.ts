@@ -155,6 +155,67 @@ describe('createGroup (BIN-532 REVERTED: sequential writes, not an atomic batch)
 
     expect(result.groupId).toBeTruthy();
     expect(result.inviteToken).toHaveLength(32); // 16 bytes hex
+
+    // BIN-556's counterpart guard, for BIN-555's rollback: a compensating delete
+    // that also fired on the happy path would erase every group as it was
+    // created. The rollback is asserted to run in the failure tests below; this
+    // asserts it does NOT run here.
+    expect(deleteDocMock).not.toHaveBeenCalled();
+  });
+
+  // BIN-555 (stakeholder panel 2026-08-06: Security Architect + DBA + Codebase
+  // Archaeologist, all three independently). If the owner's member doc fails to
+  // write, the group doc created a line earlier is left ownerless forever —
+  // memberUids already grants the owner full access, so it shows up in their
+  // "my groups" list while its member list renders empty, and no sweep exists
+  // to reap it. The compensating action here is DELETING the group doc, not
+  // arrayRemove-ing the owner out of memberUids (the sibling flows' pattern):
+  // an arrayRemove would leave the very orphan this ticket exists to remove,
+  // and strip it out of the owner's own array-contains query at the same time,
+  // making it unfindable.
+  describe('BIN-555: ägarlöst grupp-doc rullas tillbaka om member-writen failar', () => {
+    it('raderar grupp-doc:et, kastar felet vidare, och rör inte memberUids', async () => {
+      const boom = new Error('network lost');
+      setDocMock.mockRejectedValueOnce(boom);
+
+      await expect(createGroup({
+        ownerUid: 'owner-1',
+        ownerDisplayName: 'Malin',
+        ownerUsername: 'malin',
+        ownerPhotoURL: null,
+        ownerProviders: [8],
+        name: 'Filmkvällarna',
+        defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+      })).rejects.toThrow('network lost');
+
+      // Grupp-doc:et som just skapades är borta igen.
+      expect(deleteDocMock).toHaveBeenCalledTimes(1);
+      const groupId = (await addDocMock.mock.results[0].value as { id: string }).id;
+      expect((deleteDocMock.mock.calls[0][0] as { _path: string })._path).toBe(`groups/${groupId}`);
+
+      // INTE sibling-flödenas arrayRemove — det hade lämnat kvar doc:et.
+      expect(updateDocMock).not.toHaveBeenCalled();
+      // Och fortfarande ingen batch: kompensationen får inte smyga in atomicitet.
+      expect(writeBatchMock).not.toHaveBeenCalled();
+    });
+
+    it('kastar ORIGINALFELET även när rollback-raderingen själv failar, så anroparen aldrig får ett id till en grupp som inte finns', async () => {
+      const boom = new Error('network lost');
+      setDocMock.mockRejectedValueOnce(boom);
+      deleteDocMock.mockRejectedValueOnce(new Error('rollback failed too'));
+
+      await expect(createGroup({
+        ownerUid: 'owner-1',
+        ownerDisplayName: 'Malin',
+        ownerUsername: 'malin',
+        ownerPhotoURL: null,
+        ownerProviders: [8],
+        name: 'Filmkvällarna',
+        defaults: { providerMode: 'intersect', aggregation: 'least_misery', mediaType: 'both' },
+      })).rejects.toThrow('network lost');
+
+      expect(deleteDocMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

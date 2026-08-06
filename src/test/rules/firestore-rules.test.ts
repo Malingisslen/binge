@@ -1229,8 +1229,15 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
       await seedParticipants();
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_42'), firstVote, { merge: true }));
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'tv_42'), firstVote, { merge: true }));
-      // tmdbId 0 is canonical output for the number 0 — the regex must not
-      // reject it as a "leading zero", or a legitimate id would be unwritable.
+      // `movie_0` is still WRITABLE here, and since BIN-646 the client refuses to
+      // READ it: TMDB numbers titles from 1, so no genuine title is 0, and
+      // `Number.isFinite(0)` was letting a `movie_0` doc past every downstream
+      // guard as if it named one. So this line no longer says "a legitimate id
+      // must stay writable" — it records a KNOWN residual: the rules regex is
+      // deliberately wider than the client's reader until the guard is narrowed,
+      // which is a firestore.rules change with its own plan and deploy (BIN-797).
+      // The effect meanwhile is a doc nobody can create by accident and nobody
+      // reads — not a vote that silently counts.
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_0'), firstVote, { merge: true }));
     });
 
