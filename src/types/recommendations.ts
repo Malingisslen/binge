@@ -2,6 +2,7 @@
 import { assertNever } from '@/lib/assertNever';
 import type { MediaType } from './domain';
 import type { TMDBSearchResult } from './tmdb';
+import type { CompanionTitle } from '@/lib/franchise/companions';
 
 export type RowId =
   | { kind: 'similar'; mediaType: MediaType; tmdbId: number }
@@ -11,11 +12,14 @@ export type RowId =
   | { kind: 'trending' }
   | { kind: 'latest-fav' }
   | { kind: 'upcoming' }
-  | { kind: 'free-public' };
+  | { kind: 'free-public' }
+  // BIN-583 — "Fortsätter som film". One aggregate row (not one per show): the
+  // curated set is small, so per-anchor rows would be a cascade of one-item rows.
+  | { kind: 'companion' };
 
 /** Stable string-key for React + URL query-param.
  *   similar:movie:603, person:140607, genre:18, keyword:9663,
- *   trending, latest-fav, upcoming
+ *   trending, latest-fav, upcoming, free-public, companion
  */
 export function rowKey(id: RowId): string {
   switch (id.kind) {
@@ -27,6 +31,7 @@ export function rowKey(id: RowId): string {
     case 'latest-fav':  return 'latest-fav';
     case 'upcoming':    return 'upcoming';
     case 'free-public': return 'free-public';
+    case 'companion':   return 'companion';
     default:            return assertNever(id);
   }
 }
@@ -42,6 +47,7 @@ export function parseRowKey(key: string): RowId | null {
   if (key === 'latest-fav') return { kind: 'latest-fav' };
   if (key === 'upcoming') return { kind: 'upcoming' };
   if (key === 'free-public') return { kind: 'free-public' };
+  if (key === 'companion') return { kind: 'companion' };
   if (key.startsWith('similar:')) {
     const parts = key.split(':');
     if (parts.length !== 3) return null;
@@ -94,6 +100,17 @@ export interface DominantGenre {
   count: number;
 }
 
+/**
+ * BIN-583 — a followed show plus the curated follow-up film(s) the user does not
+ * have in their library. Built by `selectCompanionAnchors`; `films` is never
+ * empty, so the presence of an anchor is exactly "this row has something to show".
+ */
+export interface CompanionAnchor {
+  showTmdbId: number;
+  showTitle: string;
+  films: CompanionTitle[];
+}
+
 /** What the cascade prioritizer takes as input. Pure data — no fetch fns. */
 export interface CascadeInput {
   /** Most recent 5★ rating within 30 days, or null. */
@@ -105,6 +122,9 @@ export interface CascadeInput {
   dominantGenres: DominantGenre[];
   hasMyProviders: boolean;
   upcomingCount: number; // for row 10 score
+  /** BIN-583 — followed shows with an unwatched curated companion film. Empty =
+   *  the "Fortsätter som film" row is not emitted at all. */
+  companionAnchors: CompanionAnchor[];
 }
 
 /** What cascadePrioritizer returns: ordered list of rows with metadata. */
@@ -121,6 +141,8 @@ export interface RowSpec {
     person?: RecurringPerson;
     genre?: { id: number };
     keyword?: RecurringKeyword;
+    /** When kind=companion: the anchors whose films the row offers. */
+    companions?: CompanionAnchor[];
   };
 }
 

@@ -11,6 +11,7 @@ const VALID_IDS: RowId[] = [
   { kind: 'latest-fav' },
   { kind: 'upcoming' },
   { kind: 'free-public' },
+  { kind: 'companion' },
 ];
 
 describe('rowKey + parseRowKey', () => {

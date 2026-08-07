@@ -10,6 +10,7 @@ describe('rowKey exhaustiveness', () => {
     expect(rowKey({ kind: 'latest-fav' })).toBe('latest-fav');
     expect(rowKey({ kind: 'upcoming' })).toBe('upcoming');
     expect(rowKey({ kind: 'free-public' })).toBe('free-public');
+    expect(rowKey({ kind: 'companion' })).toBe('companion');
   });
   it('throws via assertNever for an unknown kind', () => {
     const bogus = { kind: 'does-not-exist' } as unknown as RowId;

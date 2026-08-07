@@ -13,6 +13,7 @@ import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
+import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import RecRow from './RecRow';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -21,6 +22,8 @@ import EmptyState from './EmptyState';
 import QuickRateModal from './QuickRateModal';
 import { RowExhaustionContext, type ReportExhaustion } from './rowExhaustionContext';
 import { demoteExhaustedRows } from '@/lib/recommendations/rowComposition';
+import { rowMatchesMediaFilter } from '@/lib/recommendations/rowMediaFilter';
+import { companionFilmKeys } from '@/lib/recommendations/companionSeeds';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
@@ -32,23 +35,6 @@ const MEDIA_TABS: ReadonlyArray<{ value: MediaTypeFilter; label: string }> = [
   { value: 'movie', label: 'Filmer' },
   { value: 'tv', label: 'Serier' },
 ];
-
-/**
- * Filtrera bort medie-låsta rader (similar, latest-fav) vars seed-medietyp
- * inte matchar aktivt mediatyp-filter. Andra rad-typer hanterar sin egen
- * mediatyp inifrån (genre-canon/thematic/upcoming gör parallel-fetch;
- * trending/person filtrerar per titel klient-sidigt).
- */
-function rowMatchesMediaFilter(
-  spec: RowSpec,
-  mediaType: MediaTypeFilter,
-  latestFiveStar: { mediaType: 'movie' | 'tv' } | null,
-): boolean {
-  if (mediaType === 'all') return true;
-  if (spec.id.kind === 'similar') return spec.id.mediaType === mediaType;
-  if (spec.id.kind === 'latest-fav') return latestFiveStar?.mediaType === mediaType;
-  return true;
-}
 
 export default function RecommendationsHub() {
   const cascade = useRecommendationsCascade();
@@ -77,6 +63,21 @@ export default function RecommendationsHub() {
     for (const n of ni) s.add(mediaTypeDocId(n.mediaType, n.tmdbId));
     return s;
   }, [items, ni]);
+
+  // BIN-583 cross-row dedup (binding condition of the #28 panel critique): a
+  // curated companion film is reachable from the same `mina`-TV seed pool as
+  // similar/latest-fav/upcoming, and dedupeAndExclude only dedupes WITHIN a row.
+  // So the companion row keeps the film — it's the row that explains why it's
+  // there — and every OTHER row treats it as excluded for this pass.
+  const excludedIdsOtherRows = useMemo(() => {
+    const companionKeys = companionFilmKeys(
+      cascade.rows.flatMap(r => (r.id.kind === 'companion' ? r.meta?.companions ?? [] : [])),
+    );
+    if (companionKeys.size === 0) return excludedIds;
+    const s = new Set(excludedIds);
+    for (const k of companionKeys) s.add(k);
+    return s;
+  }, [cascade.rows, excludedIds]);
 
   // Rows report "tapped out" (pool fully rotated, or emptied by exclusions);
   // we sink those down the cascade so a fresher row rises into view.
@@ -169,6 +170,7 @@ export default function RecommendationsHub() {
                 spec={spec}
                 index={idx}
                 excludedIds={excludedIds}
+                excludedIdsOtherRows={excludedIdsOtherRows}
                 filters={filters}
                 myProviders={myProviders}
                 topGenreIds={cascade.topGenreIds}
@@ -208,6 +210,8 @@ interface DispatchProps {
   spec: RowSpec;
   index: number;
   excludedIds: ReadonlySet<string>;
+  /** excludedIds ∪ the companion row's films — see the cross-row dedup note above. */
+  excludedIdsOtherRows: ReadonlySet<string>;
   filters: FilterState;
   myProviders: number[];
   topGenreIds: number[];
@@ -217,15 +221,21 @@ interface DispatchProps {
 
 function RowDispatch(props: DispatchProps) {
   const { spec } = props;
+  // The companion row owns its films this pass; every other row gets them as an
+  // exclusion so a title can't appear twice on the page (BIN-583).
+  const p: DispatchProps = spec.id.kind === 'companion'
+    ? props
+    : { ...props, excludedIds: props.excludedIdsOtherRows };
   switch (spec.id.kind) {
-    case 'trending':    return <TrendingRow {...props} />;
-    case 'latest-fav':  return <LatestFavRow {...props} />;
-    case 'similar':     return <SimilarRow {...props} />;
-    case 'person':      return <PersonRow {...props} />;
-    case 'genre-canon': return <GenreCanonRow {...props} />;
-    case 'thematic':    return <ThematicRow {...props} />;
-    case 'upcoming':    return <UpcomingRow {...props} />;
-    case 'free-public': return <FreePublicRow {...props} />;
+    case 'trending':    return <TrendingRow {...p} />;
+    case 'latest-fav':  return <LatestFavRow {...p} />;
+    case 'similar':     return <SimilarRow {...p} />;
+    case 'person':      return <PersonRow {...p} />;
+    case 'genre-canon': return <GenreCanonRow {...p} />;
+    case 'thematic':    return <ThematicRow {...p} />;
+    case 'upcoming':    return <UpcomingRow {...p} />;
+    case 'free-public': return <FreePublicRow {...p} />;
+    case 'companion':   return <CompanionRow {...p} />;
   }
 }
 
@@ -267,5 +277,10 @@ function UpcomingRow({ spec, index, excludedIds, filters, myProviders, topGenreI
 
 function FreePublicRow({ spec, index, excludedIds, filters }: DispatchProps) {
   const r = useRowFreePublic(spec, excludedIds, filters);
+  return <RecRow result={r} index={index} />;
+}
+
+function CompanionRow({ spec, index, excludedIds, filters }: DispatchProps) {
+  const r = useRowCompanion(spec, excludedIds, filters);
   return <RecRow result={r} index={index} />;
 }

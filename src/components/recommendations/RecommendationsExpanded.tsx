@@ -27,6 +27,7 @@ import { useRowGenreCanon } from '@/hooks/rows/useRowGenreCanon';
 import { useRowThematic } from '@/hooks/rows/useRowThematic';
 import { useRowUpcoming } from '@/hooks/rows/useRowUpcoming';
 import { useRowFreePublic } from '@/hooks/rows/useRowFreePublic';
+import { useRowCompanion } from '@/hooks/rows/useRowCompanion';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 
 interface Props {
@@ -174,6 +175,7 @@ function ExpandedDispatch(props: DispatchProps) {
     case 'thematic':    return <ThematicExpanded {...props} />;
     case 'upcoming':    return <UpcomingExpanded {...props} />;
     case 'free-public': return <FreePublicExpanded {...props} />;
+    case 'companion':   return <CompanionExpanded {...props} />;
   }
 }
 
@@ -215,5 +217,12 @@ function UpcomingExpanded({ spec, excludedIds, filters, sort, myProviders, topGe
 
 function FreePublicExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
   const r = useRowFreePublic(spec, excludedIds, filters);
+  return gridFromResult(r, sort);
+}
+
+// BIN-583. No cross-row dedup here: the expanded view renders exactly one row,
+// so there is no sibling row for a companion film to collide with.
+function CompanionExpanded({ spec, excludedIds, filters, sort }: DispatchProps) {
+  const r = useRowCompanion(spec, excludedIds, filters);
   return gridFromResult(r, sort);
 }

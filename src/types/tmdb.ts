@@ -31,6 +31,12 @@ export interface TMDBMovie {
   vote_average: number;
   vote_count: number;
   genres: { id: number; name: string }[];
+  // Landsfälten som listsvaren bär på `origin_country`. Detaljsvaret levererar
+  // `production_countries` alltid och `origin_country` på nyare TMDB-svar — båda
+  // är valfria här så en detaljhämtad film kan mappas till en RowTitle utan att
+  // tappa landsfiltret (BIN-583).
+  origin_country?: string[];
+  production_countries?: { iso_3166_1: string; name: string }[];
   credits?: {
     cast: TMDBCastMember[];
     crew: TMDBCrewMember[];

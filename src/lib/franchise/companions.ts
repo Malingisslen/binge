@@ -90,3 +90,16 @@ export function companionsFor(mediaType: 'movie' | 'tv', tmdbId: number): Compan
   if (!group) return [];
   return group.filter((e) => !(e.mediaType === mediaType && e.id === tmdbId));
 }
+
+/**
+ * Just the companion FILMS of a title, in curated (chronological) order.
+ *
+ * BIN-583: the "Fortsätter som film" recommendations row recommends films and
+ * nothing else — its anchor is a followed show, but its payload is always a
+ * movie. Keeping that invariant in ONE place is what lets the row's media-filter
+ * branch (`rowMatchesMediaFilter`) safely key on the payload type instead of the
+ * anchor's, so a film can never surface under the "Serier" tab.
+ */
+export function companionFilmsFor(mediaType: 'movie' | 'tv', tmdbId: number): CompanionTitle[] {
+  return companionsFor(mediaType, tmdbId).filter((e) => e.mediaType === 'movie');
+}

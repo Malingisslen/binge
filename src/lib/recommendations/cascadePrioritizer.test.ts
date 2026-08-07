@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { prioritizeRows } from './cascadePrioritizer';
-import type { CascadeInput } from '@/types';
+import type { CascadeInput, CompanionAnchor } from '@/types';
 
 function emptyInput(): CascadeInput {
   return {
@@ -12,6 +12,15 @@ function emptyInput(): CascadeInput {
     dominantGenres: [],
     hasMyProviders: false,
     upcomingCount: 0,
+    companionAnchors: [],
+  };
+}
+
+function anchor(showTitle: string, filmId: number): CompanionAnchor {
+  return {
+    showTmdbId: filmId + 1,
+    showTitle,
+    films: [{ mediaType: 'movie', id: filmId, label: `${showTitle}: filmen` }],
   };
 }
 
@@ -153,6 +162,67 @@ describe('prioritizeRows', () => {
     expect(labels).toContain('Liknar Off Campus');
     expect(labels).toContain('Liknar Silo');
     expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('BIN-583: no companion row when the curated map has nothing to offer', () => {
+    const rows = prioritizeRows(emptyInput());
+    expect(rows.find(r => r.id.kind === 'companion')).toBeUndefined();
+  });
+
+  it('BIN-583: emits the companion row only when an anchor exists, carrying its films', () => {
+    const a = anchor('Breaking Bad', 559969);
+    const rows = prioritizeRows({ ...emptyInput(), companionAnchors: [a] });
+    const row = rows.find(r => r.id.kind === 'companion');
+    expect(row).toBeDefined();
+    expect(row?.rowKey).toBe('companion');
+    expect(row?.label).toBe('Fortsätter som film');
+    expect(row?.description).toBe('Eftersom du följer Breaking Bad.');
+    expect(row?.meta?.companions?.[0].films.map(f => f.id)).toEqual([559969]);
+  });
+
+  it('BIN-583: the standfirst lists every anchor in Swedish', () => {
+    const rows = prioritizeRows({
+      ...emptyInput(),
+      companionAnchors: [anchor('Breaking Bad', 1), anchor('Firefly', 2), anchor('Deadwood', 3)],
+    });
+    const row = rows.find(r => r.id.kind === 'companion');
+    expect(row?.description).toBe('Eftersom du följer Breaking Bad, Firefly och Deadwood.');
+  });
+
+  it('BIN-583: companion is a flat C-job score, between trending and genre-canon', () => {
+    const rows = prioritizeRows({
+      ...emptyInput(),
+      dominantGenres: [{ id: 18, count: 5 }],
+      companionAnchors: [anchor('Breaking Bad', 1)],
+    });
+    const row = rows.find(r => r.id.kind === 'companion');
+    // Curated-set membership is binary, so the score carries no strength signal.
+    expect(row?.jtbd).toBe('C');
+    expect(row?.score).toBe(35);
+    const idx = (k: string) => rows.findIndex(r => r.id.kind === k);
+    expect(idx('genre-canon')).toBeLessThan(idx('companion'));
+    expect(idx('companion')).toBeLessThan(idx('trending'));
+  });
+
+  it('BIN-583: the score does not grow with the number of anchors', () => {
+    const one = prioritizeRows({ ...emptyInput(), companionAnchors: [anchor('A', 1)] });
+    const many = prioritizeRows({
+      ...emptyInput(),
+      companionAnchors: [anchor('A', 1), anchor('B', 2), anchor('C', 3)],
+    });
+    const scoreOf = (rows: ReturnType<typeof prioritizeRows>) =>
+      rows.find(r => r.id.kind === 'companion')?.score;
+    expect(scoreOf(many)).toBe(scoreOf(one));
+  });
+
+  it('BIN-583: a personalised B-job row still outranks the companion row', () => {
+    const rows = prioritizeRows({
+      ...emptyInput(),
+      latestFiveStar: { tmdbId: 603, mediaType: 'movie', title: 'The Matrix', daysSince: 1 },
+      companionAnchors: [anchor('Breaking Bad', 1)],
+    });
+    const idx = (k: string) => rows.findIndex(r => r.id.kind === k);
+    expect(idx('latest-fav')).toBeLessThan(idx('companion'));
   });
 
   it('R4: latest-fav heading names the title instead of a cryptic day count', () => {

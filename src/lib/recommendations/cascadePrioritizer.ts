@@ -4,6 +4,32 @@ import { rowKey } from '@/types';
 const B_KINDS = new Set<RowId['kind']>(['similar', 'person', 'latest-fav', 'upcoming']);
 const JTBD_SORT_PRIORITY: Record<RowSpec['jtbd'], number> = { B: 0, C: 1 };
 
+/**
+ * BIN-583 — flat, constant score for the companion row, deliberately in the C
+ * band between trending (30) and genre-canon (40).
+ *
+ * Binding condition from the #28 (Recommendations / Scoring-Integrity) critique:
+ * membership in a hand-curated set is BINARY, not a strength signal, so there is
+ * nothing to scale a score by. A hand-picked "high because it feels personal"
+ * number would be an unvalidatable claim — the cascade has no per-row engagement
+ * telemetry to check it against. Constant, mid-C, and easy to move later.
+ *
+ * ACCEPTED COST of that placement (second #28 condition, 2026-08-06): the hub
+ * excludes every companion film from every OTHER row, so a film that would also
+ * have qualified organically — the person row scores up to 90, free-public 55,
+ * upcoming 50 — is pulled out of that higher row and shown here at 35 instead.
+ * The title is never lost, only re-labelled and positioned lower, and it lands in
+ * the row that explains WHY it is being offered, which is the point of the
+ * feature. Revisit if per-row engagement telemetry ever exists to price it.
+ */
+const COMPANION_SCORE = 35;
+
+/** "A", "A och B", "A, B och C" — Swedish list join for the row's standfirst. */
+function joinSv(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} och ${names[names.length - 1]}`;
+}
+
 function jtbdOf(kind: RowId['kind']): RowSpec['jtbd'] {
   return B_KINDS.has(kind) ? 'B' : 'C';
 }
@@ -119,6 +145,22 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
     score: 55,
     jtbd: jtbdOf('free-public'),
   });
+
+  // BIN-583 — "Fortsätter som film". Emitted ONLY when the curated map actually
+  // has an unwatched follow-up film for a show the user follows. Malin's call
+  // 2026-08-06: a row that shows up seldom and is right beats one that always
+  // shows up and guesses — so there is no always-on lane here, unlike free-public.
+  if (input.companionAnchors.length > 0) {
+    out.push({
+      id: { kind: 'companion' },
+      rowKey: rowKey({ kind: 'companion' }),
+      label: 'Fortsätter som film',
+      description: `Eftersom du följer ${joinSv(input.companionAnchors.map(a => a.showTitle))}.`,
+      score: COMPANION_SCORE,
+      jtbd: jtbdOf('companion'),
+      meta: { companions: [...input.companionAnchors] },
+    });
+  }
 
   // Row 6 — trending (always)
   out.push({

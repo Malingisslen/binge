@@ -16,6 +16,7 @@ import {
   type SeedCredits,
 } from '@/lib/recommendations/seedAnalysis';
 import { prioritizeRows } from '@/lib/recommendations/cascadePrioritizer';
+import { selectCompanionAnchors } from '@/lib/recommendations/companionSeeds';
 import { localIsoDate } from '@/lib/utils';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import type { RowSpec } from '@/types';
@@ -127,6 +128,9 @@ export function useRecommendationsCascade(): CascadeOutput {
     const recurringKeywords = detectRecurringKeywords(seedsForFetch, keywordsByTmdb, 3);
     const dominantGenres = detectDominantGenres(items, 5);
     const latestFiveStar = detectLatestFiveStar(items, new Date(), FIVE_STAR_WINDOW_DAYS);
+    // BIN-583 — derived from the curated map + the library alone. No TMDB call
+    // here: the row only fetches film details once it is known to have content.
+    const companionAnchors = selectCompanionAnchors(items);
 
     const rows = prioritizeRows({
       latestFiveStar,
@@ -137,6 +141,7 @@ export function useRecommendationsCascade(): CascadeOutput {
       dominantGenres,
       hasMyProviders: myProviders.length > 0,
       upcomingCount: upcomingDataLength,
+      companionAnchors,
     });
 
     return {

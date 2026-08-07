@@ -53,6 +53,8 @@ function whyForRow(spec: RowSpec): string {
       return 'kommande på dina tjänster';
     case 'free-public':
       return 'gratis via public service · 0 kr';
+    case 'companion':
+      return 'kurerad koppling · serien fortsätter som film';
   }
 }
 
