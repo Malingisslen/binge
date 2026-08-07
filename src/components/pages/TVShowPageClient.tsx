@@ -48,6 +48,7 @@ import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
+import { seProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
@@ -120,15 +121,10 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
   // Gated on `watchlistLoading` for the same reason as the runtime backfill above.
   useEffect(() => {
     if (!mounted || watchlistLoading || !show) return;
-    const se = show['watch/providers']?.results?.SE;
-    // Only send providers when the SE block is actually present — an absent block
-    // must not clobber good denormalized ids with [].
-    const providerIds = se
-      ? Array.from(new Set(
-          [...(se.flatrate ?? []), ...(se.free ?? []), ...(se.ads ?? []), ...(se.rent ?? []), ...(se.buy ?? [])]
-            .map(p => canonicalProviderId(p.provider_id)),
-        ))
-      : undefined;
+    // BIN-468: shared with MoviePageClient. Returns undefined for an ABSENT SE
+    // block (so it can never clobber good denormalized ids) and [] for a present
+    // but empty one — see seProviderIds.ts for why that distinction is load-bearing.
+    const providerIds = seProviderIdsForRefresh(show);
     void refreshTmdbFields('tv', show.id, {
       // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.

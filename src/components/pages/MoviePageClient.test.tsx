@@ -146,6 +146,7 @@ vi.mock('@/components/ui/TrailerSection', () => ({ default: () => null }));
 vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
 
 import MoviePageClient from './MoviePageClient';
+import type { TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 
 /** Reset to a signed-in visitor whose library has settled, showing the body. */
 function signedInWithSettledLibrary() {
@@ -193,6 +194,81 @@ describe('MoviePageClient — the lazy backfills wait for the watchlist (BIN-598
       providers: [8],
       runtime: 136,
     }));
+  });
+});
+
+describe('MoviePageClient — what the lazy refresh actually sends (BIN-468)', () => {
+  // These drive the effect only, so they render on the loading branch (every hook
+  // still runs). `watchlist.loading = false` is the snapshot landing; without it the
+  // effect is held and every assertion below would be vacuously true.
+  function lastRefreshPayload(overrides?: Record<string, unknown>): TmdbDenormFields {
+    if (overrides) tmdb.movie = { ...movie, ...overrides };
+    watchlist.loading = false;
+    render(<MoviePageClient id="603" />);
+    const calls = refreshTmdbFields.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return calls[calls.length - 1][2] as TmdbDenormFields;
+  }
+
+  it('sends undefined providers when TMDB returned no SE block, so a good list is never blanked', () => {
+    // The dangerous case. `undefined` makes planTmdbFieldsRefresh skip the
+    // providers group entirely; `[]` would be written and would wipe the
+    // denormalized ids the advisor and the ToS sweep both read.
+    const payload = lastRefreshPayload({ 'watch/providers': { results: {} } });
+
+    expect(payload.providers).toBeUndefined();
+    // The static group still refreshes — an absent SE block says nothing about it.
+    expect(payload.title).toBe('The Matrix');
+  });
+
+  it('sends undefined providers when the detail carries no watch/providers key at all', () => {
+    const payload = lastRefreshPayload({ 'watch/providers': undefined });
+
+    expect(payload.providers).toBeUndefined();
+  });
+
+  it('sends [] for a present-but-empty SE block — "nowhere in Sweden" is a real answer', () => {
+    const payload = lastRefreshPayload({ 'watch/providers': { results: { SE: {} } } });
+
+    expect(payload.providers).toEqual([]);
+  });
+
+  it('includes rent and buy, canonicalised and de-duplicated', () => {
+    const payload = lastRefreshPayload({
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
+            // 1944 is TMDB's current id for TV4 Play; 489 is ours. Both appear, one
+            // must survive — otherwise the doc claims two subscriptions for one.
+            rent: [{ provider_id: 1944, provider_name: 'TV4 Play' }, { provider_id: 2, provider_name: 'Apple TV' }],
+            buy: [{ provider_id: 489, provider_name: 'TV4 Play' }],
+          },
+        },
+      },
+    });
+
+    // 1944 and 489 collapse to the canonical 489, which keeps its first position.
+    expect(payload.providers).toEqual([8, 489, 2]);
+  });
+
+  it('denormalizes the ORIGINAL title, matching what addItem/StatusButton write', () => {
+    // Otherwise a title-page view rewrites a correctly-stored English title with
+    // TMDB's Swedish one on every visit, and the library flips between the two.
+    const payload = lastRefreshPayload({ title: 'Matrix', original_title: 'The Matrix' });
+
+    expect(payload.title).toBe('The Matrix');
+  });
+
+  it('never sends updatedAt-adjacent fields it has no business writing', () => {
+    const payload = lastRefreshPayload();
+
+    // The title page owns the static group + providers. nextAir*/digitalReleaseDate
+    // belong to the calendar's repair path — the 2026-07-11 attempt that wrote them
+    // from here was reverted for clobbering fresher values (see BIN-468's body).
+    expect(Object.keys(payload).sort()).toEqual(
+      ['genreIds', 'posterPath', 'providers', 'runtime', 'title'],
+    );
   });
 });
 

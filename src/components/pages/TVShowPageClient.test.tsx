@@ -2,9 +2,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-// The TV sibling of MoviePageClient.test.tsx, and it needs to exist separately:
-// the two pages' effects and paragraph renders are copies, not a shared helper,
-// so a revert of one leaves the other's test green.
+// The TV sibling of MoviePageClient.test.tsx, and it needs to exist separately.
+// The provider derivation the two effects used to duplicate is now one shared
+// helper (BIN-468, `src/lib/tmdb/seProviderIds.ts`), but everything AROUND it —
+// each page's effect wiring, its payload key set, its paragraph renders — is
+// still per-page, so a revert of one leaves the other's test green.
 //
 //  - BIN-598 — the lazy backfills must survive a LATE watchlist snapshot. Driven
 //    with `isLoading: true` so every hook runs and the render short-circuits at
@@ -123,6 +125,7 @@ vi.mock('@/components/ui/TrailerSection', () => ({ default: () => null }));
 vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
 
 import TVShowPageClient from './TVShowPageClient';
+import type { TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 
 beforeEach(() => {
   setRuntime.mockReset();
@@ -152,6 +155,75 @@ describe('TVShowPageClient — the lazy backfills wait for the watchlist (BIN-59
       tmdbStatus: 'Ended',
       runtime: 57,
     }));
+  });
+});
+
+describe('TVShowPageClient — what the lazy refresh actually sends (BIN-468)', () => {
+  // The TV twin of MoviePageClient's BIN-468 block, and it has to be its own copy:
+  // the two pages call the same helper but assemble different payloads (tmdbStatus,
+  // episode_run_time), so one page's green test says nothing about the other's.
+  function lastRefreshPayload(overrides?: Record<string, unknown>): TmdbDenormFields {
+    if (overrides) tmdb.show = { ...show, ...overrides };
+    watchlist.loading = false;
+    render(<TVShowPageClient id="1399" />);
+    const calls = refreshTmdbFields.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return calls[calls.length - 1][2] as TmdbDenormFields;
+  }
+
+  it('sends undefined providers when TMDB returned no SE block, so a good list is never blanked', () => {
+    const payload = lastRefreshPayload({ 'watch/providers': { results: {} } });
+
+    expect(payload.providers).toBeUndefined();
+    // The static group still refreshes — an absent SE block says nothing about it.
+    expect(payload.title).toBe('Game of Thrones');
+    expect(payload.tmdbStatus).toBe('Ended');
+  });
+
+  it('sends undefined providers when the detail carries no watch/providers key at all', () => {
+    const payload = lastRefreshPayload({ 'watch/providers': undefined });
+
+    expect(payload.providers).toBeUndefined();
+  });
+
+  it('sends [] for a present-but-empty SE block — "nowhere in Sweden" is a real answer', () => {
+    const payload = lastRefreshPayload({ 'watch/providers': { results: { SE: {} } } });
+
+    expect(payload.providers).toEqual([]);
+  });
+
+  it('includes rent and buy, canonicalised and de-duplicated', () => {
+    const payload = lastRefreshPayload({
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
+            rent: [{ provider_id: 1944, provider_name: 'TV4 Play' }, { provider_id: 2, provider_name: 'Apple TV' }],
+            buy: [{ provider_id: 489, provider_name: 'TV4 Play' }],
+          },
+        },
+      },
+    });
+
+    // 1944 and 489 collapse to the canonical 489, which keeps its first position.
+    expect(payload.providers).toEqual([8, 489, 2]);
+  });
+
+  it('denormalizes the ORIGINAL name, matching what addItem/StatusButton write', () => {
+    const payload = lastRefreshPayload({ name: 'Maktkamp i Westeros', original_name: 'Game of Thrones' });
+
+    expect(payload.title).toBe('Game of Thrones');
+  });
+
+  it('sends the series status but nothing the calendar owns', () => {
+    const payload = lastRefreshPayload();
+
+    // tmdbStatus is the one extra field the TV page denormalizes. nextAir*/
+    // digitalReleaseDate stay with the calendar's repair path — writing them from
+    // here is the 2026-07-11 attempt that was reverted for clobbering fresher data.
+    expect(Object.keys(payload).sort()).toEqual(
+      ['genreIds', 'posterPath', 'providers', 'runtime', 'title', 'tmdbStatus'],
+    );
   });
 });
 
