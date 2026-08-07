@@ -5,21 +5,22 @@ import { DeleteAccountSection } from './DeleteAccountSection';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 
 // BIN-777, and the Customer Support critique that gated it (2026-08-06).
+// Wording of the recent-login branch revised by BIN-796 (Malin's call, 2026-08-07).
 //
-// Deleting an account has three failure messages, and two of them open with the
-// SAME sentence: "Du måste logga in igen innan du kan ta bort ditt konto." The
-// only thing separating them is the clause "Ingenting har raderats." — which is
-// a promise about the person's data, not a nicety. Our own preflight throws
-// before the cascade, so there the promise is true; Firebase's own
-// requires-recent-login can only surface AFTER it, where the same sentence
-// would be a lie.
+// Deleting an account has three failure messages. Two of them are about the same
+// Firebase error code and mean opposite things: our own preflight throws BEFORE
+// the cascade, so there "Ingenting har raderats." is true; Firebase's own
+// requires-recent-login can only surface AFTER it, where that promise would be a
+// lie about someone's data.
 //
-// That shared prefix is exactly why a substring assertion is forbidden here: a
-// mutant that swaps the two branches keeps the prefix intact, so `toContain`
-// on it passes while the app tells someone nothing was deleted when their
-// library is already gone. Every assertion below therefore pins the FULL
-// string, and the two branches are additionally pinned by the presence and the
-// absence of the promise clause.
+// Until BIN-796 the second branch handled that by saying nothing at all about
+// what had happened. It shared its whole opening sentence with the first, so a
+// mutant swapping the two branches kept the prefix and survived any substring
+// assertion. The branches now say visibly different things — the second one
+// states that deletion HAS started — but the full-string assertions below stay,
+// because the risk they guard is unchanged: the failure mode is a message that
+// makes a claim about the person's data that the code cannot back up. Presence
+// and absence of the promise clause are pinned separately for the same reason.
 
 const auth = vi.hoisted(() => ({
   deleteAccount: vi.fn<() => Promise<void>>(async () => {}),
@@ -41,7 +42,8 @@ const PREFLIGHT_ERROR = `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): 
 
 const PROMISE_CLAUSE = 'Ingenting har raderats.';
 const PREFLIGHT_MSG = 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.';
-const RECENT_LOGIN_MSG = 'Du måste logga in igen innan du kan ta bort ditt konto.';
+const RECENT_LOGIN_MSG =
+  'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Ta bort mitt konto en gång till för att slutföra den.';
 const GENERIC_MSG = 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
 
 async function attemptDelete() {
@@ -65,6 +67,8 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     await attemptDelete();
 
     expect(toast.show).toHaveBeenCalledWith(PREFLIGHT_MSG);
+    // No action here — this branch's promise is true and needs no retry affordance.
+    expect(toast.show.mock.calls[0][1]).toBeUndefined();
     // Löftesklausulen är hela skillnaden mot grannmeddelandet — pinna den
     // separat, så att en mutant som byter plats på grenarna inte kan överleva
     // på den gemensamma inledningen.
@@ -76,8 +80,26 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
 
     await attemptDelete();
 
-    expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG);
+    // The action argument is not decoration: a toast without one self-dismisses
+    // after 2500ms, with one after 6000ms (ToastContext). This message is more
+    // than twice as long as the branch that ships no action, and it is the app's
+    // only notice that the library is already gone while the account remains —
+    // dropping the action makes it unreadable, not just less convenient.
+    expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG, {
+      label: 'Försök igen',
+      onClick: expect.any(Function),
+    });
     expect(toast.show.mock.calls[0][0]).not.toContain(PROMISE_CLAUSE);
+    // BIN-796: silence read as "nothing happened". The message must say deletion
+    // started, and must not claim it finished either — both halves, or the honest
+    // middle ground collapses back to one of the two lies.
+    expect(toast.show.mock.calls[0][0]).toContain('påbörjats');
+    expect(toast.show.mock.calls[0][0]).not.toContain('raderat');
+    // There is no auto-resume — logging in only refreshes the token the preflight
+    // reads. A message that stops at "logga in igen" strands the user on an empty
+    // but still-existing account, so the retry action is part of the promise and
+    // is pinned here (#19 Customer Support critique, 2026-08-07).
+    expect(toast.show.mock.calls[0][0]).toContain('Ta bort mitt konto');
   });
 
   it('okänt fel: den generiska texten, och den låtsas aldrig vara ett inloggningsfel', async () => {
