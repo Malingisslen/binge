@@ -1,5 +1,5 @@
-// BIN-815 — the build hung 4 of 6 runs on 2026-08-07, always to the job
-// timeout, always with `Collecting page data using 3 workers ...` as the last
+// BIN-815 — the build hung 4 of 6 runs on 2026-08-07, always to the build
+// step timeout, always with `Collecting page data using 3 workers ...` as the last
 // line. That phase is `generateStaticParams`, and three routes make network
 // calls in it: movie/[id] and tv/[id] (1000 TMDB list fetches each) and
 // person/[id] (~2100 via collectPersonIds). The other five are static lists.
@@ -120,6 +120,19 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     void route.run().catch(() => {});
     await vi.advanceTimersByTimeAsync(60_000);
     expect(lines.some((l) => l.includes(route.second as string))).toBe(true);
+  });
+
+  // The person route wraps ~2100 calls in ONE label, which has no 20s ceiling of
+  // its own — a healthy run legitimately takes ~40s. Without its aggregate flag
+  // every green build would print STUCK every tick until the line meant nothing.
+  // This pins the flag at the CALL SITE; the helper's branch is pinned separately
+  // in buildFetch.test.ts.
+  it.runIf(route.second === null)('en frisk aggregat-körning rapporteras inte som STUCK', async () => {
+    for (const m of route.mocks) m.mockImplementation(() => new Promise(() => {}));
+    void route.run().catch(() => {});
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(lines.some((l) => l.startsWith('[build-fetch] pid='))).toBe(true);
+    expect(lines.some((l) => l.includes('STUCK'))).toBe(false);
   });
 
   it.runIf(route.second !== null)('rapporterar de äldsta och räknar resten — inte 1000 rader per puls', async () => {

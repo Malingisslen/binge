@@ -91,7 +91,7 @@ ticket's.
 - [x] A heartbeat every 30 s during `Collecting page data`, including when zero fetches are
       in flight and on a fully warm cache. [tests in buildFetch.test.ts + titleParams.watchdog.test.ts]
 - [x] The heartbeat **repeats** — a one-tick-then-die watchdog is indistinguishable from
-      today's silence. [mutant kills 5 tests]
+      today's silence. [mutant kills 6 tests]
 - [x] `movie/[id]`, `tv/[id]` and `person/[id]` register their fetches; unwrapping one
       route's `trackBuildCall` fails exactly that route's tests and leaves the siblings
       green. [mutation-verified]. `startBuildWatchdog()` in those routes is belt-and-braces
