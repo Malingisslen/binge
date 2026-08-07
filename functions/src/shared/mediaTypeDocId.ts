@@ -70,7 +70,9 @@ export function parseTmdbIdFromDocId(docId: string): number {
  * mirror of its twin in `src/lib/mediaTypeDocId.ts` — keep those two in sync.
  * The claim stops at this function: the two MODULES are no longer mirrors
  * (`parseTmdbIdFromDocId` above stays permissive here and is strict there since
- * BIN-618), so this line is never a licence to resync the pair.
+ * BIN-618), so this line is not a licence to resync the pair — not without
+ * BIN-624's decision, which is what audits the server read sites and says
+ * whether the split closes.
  */
 export function parseMediaTypeFromDocId(docId: string): MediaType | null {
   if (docId.startsWith('movie_')) return 'movie';
