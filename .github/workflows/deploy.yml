@@ -118,17 +118,38 @@ jobs:
             next-cache-${{ hashFiles('package-lock.json') }}-
             next-cache-
 
+      # Restore och save är MEDVETET delade (BIN-815). Med den sammanslagna
+      # `actions/cache@v4` körs sparandet som ett post-steg som hoppas över när
+      # bygget fälls — `Post Restore TMDB build cache = skipped` syns på varje
+      # hängd körning 2026-08-07. Följden är att ett omförsök startar från exakt
+      # samma cachetillstånd som just misslyckades: ett nytt tärningskast, inte
+      # ett varmare bygge.
+      #
+      # `timeout-minutes` nedan sitter på BYGGSTEGET, inte på jobbet, och det
+      # finns inget jobbnivå-tak. Ett steg som slår i taket fäller steget och
+      # jobbet fortsätter till `always()`-stegen som vanligt — det är alltså inte
+      # fallet "jobbet avbryts och hinner inte spara". Bevis i samma riktning:
+      # raden `Post Restore TMDB build cache = skipped` visar att köraren
+      # fortsatte bearbeta steg. Sparandet bör alltså fyra även på en hängning.
+      # Bekräfta ändå på nästa riktiga hängning innan någon förlitar sig på det.
       - name: Restore TMDB build cache
-        uses: actions/cache@v4
+        id: tmdb-cache
+        uses: actions/cache/restore@v4
         with:
           path: .tmdb-cache
           # Rullande nyckel: varje körning sparar en ny cache, restore-keys
           # plockar senaste. Ger "varm cache från förra deployen".
-          key: tmdb-cache-${{ github.run_id }}
+          # run_attempt ingår (BIN-815): `github.run_id` är OFÖRÄNDRAT när en
+          # körning görs om via "Re-run jobs", så utan det kolliderar försök 2:s
+          # sparande med försök 1:s nyckel och kastas tyst — alltså precis på
+          # omförsöks-vägen det här steget finns för. Prefixet `tmdb-cache-`
+          # plockar ändå senaste posten.
+          key: tmdb-cache-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             tmdb-cache-
 
       - name: Build
+        id: build
         # Två regimer delar bygget:
         #  - Kod-deploy (push/dispatch): återanvänder .tmdb-cache och re-hämtar
         #    bara en BUDGETERAD, rullande andel stale titlar (default 1500/worker,
@@ -159,6 +180,22 @@ jobs:
           # Schedule: hög budget → full refresh av allt som är stale (cachen
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
           TMDB_BUILD_REFRESH_BUDGET: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1000000' || '' }}
+
+      # Spara TMDB-cachen ÄVEN när bygget fällde (BIN-815) — se kommentaren vid
+      # restore-steget för vad detta bevisligen täcker och vad som är obekräftat.
+      # `continue-on-error` för att ett misslyckat cache-sparande aldrig får bli
+      # anledningen att en grön deploy inte når binge.nu.
+      - name: Save TMDB build cache
+        # Villkoret är "restore-steget hann köra", vilket är den verkliga
+        # förutsättningen: utan det finns ingen nyckel att spara under. Ett steg
+        # som aldrig nåddes har TOM conclusion, inte 'skipped', så en kontroll mot
+        # 'skipped' hade varit en tom bock som aldrig fyrar.
+        if: always() && steps.tmdb-cache.outputs.cache-primary-key != ''
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .tmdb-cache
+          key: ${{ steps.tmdb-cache.outputs.cache-primary-key }}
 
       # Guard the `**/__next._full.txt` entry in firebase.json's hosting.ignore.
       #

@@ -8,7 +8,7 @@ import {
 } from '@/lib/tmdb/client';
 import { SEO_FALLBACK_PERSON_IDS } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
-import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
+import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { prunePersonSeed } from '@/lib/tmdb/personSeed';
 import { buildPersonDescription } from '@/lib/seo/contentFloor';
 import { personDescriptionInput } from '@/lib/seo/contentFloorInput';
@@ -32,10 +32,23 @@ export const dynamicParams = false;
 const cachedGetPerson = cache((id: number) => fetchForBuild('person', getPerson, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
+  // BIN-815: den här rutten är den STÖRSTA anroparen i `Collecting page data`
+  // — 100 list-sidor plus upp till 2000 detaljhämtningar inne i
+  // collectPersonIds. Utan registrering rapporterar vakthunden `inflight=0`
+  // genom fasens längsta nätverksarbete, vilket är precis den slutsats
+  // ("felet ligger inte i TMDB-lagret") som då blir falsk.
+  startBuildWatchdog();
   try {
     // Delad pipeline med src/app/sitemap.ts (collectPersonIds) — buildSignal
     // injiceras per fetch så ingen byggtids-hämtning når Next 60s-taket.
-    const ids = await collectPersonIds({ signal: buildSignal });
+    // aggregate: etiketten täcker ~2100 anrop i två sekventiella faser, så den
+    // har inget eget 20 s-tak. Utan flaggan hade ett FRISKT bygge skrivit STUCK
+    // varje puls, och en rad som alltid syns slutar betyda något.
+    const ids = await trackBuildCall(
+      'params:person-ids',
+      () => collectPersonIds({ signal: buildSignal }),
+      { aggregate: true },
+    );
     // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
     // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
     const safe = ids.length > 0 ? ids : SEO_FALLBACK_PERSON_IDS;

@@ -1,3 +1,129 @@
+# BIN-815 — make the hanging build say what it is stuck on (2026-08-07b)
+
+Tier `medium`, panel `[3 Financial Controller]`, router re-run at HEAD on the actual
+files. **The critique ran today and is on the ticket**; its conditions are this plan's
+acceptance criteria, not a separate step.
+
+## Scope — deliberately points 1 and 4 only
+
+The critique's binding condition 1 is explicit: *ship the observability alone first, land
+it, and use the next real hang to identify what is actually stuck before building retry or
+concurrency changes on speculation.* So:
+
+- **Point 1 (observability)** — built here.
+- **Point 4 (cache survives a failed build)** — built here. Cheap and strictly better than
+  today regardless of what the hang turns out to be.
+- **Point 2 (per-fetch timeout + retry)** — NOT built. The critique found the ticket's
+  premise factually false at HEAD: `buildFetch.ts` already applies a 20 s
+  `AbortSignal.timeout` to every build-time fetch, through an abort-aware semaphore. A
+  45–175 minute hang is happening *despite* a 20-second per-call ceiling, so the stuck
+  thing is not an unbounded TMDB fetch. Adding a retry here would spend Actions minutes on
+  the wrong layer.
+- **Point 3 (lower concurrency)** — NOT built. Same reason: speculation until point 1
+  reports.
+
+## What changes
+
+### A. `src/lib/tmdb/buildFetch.ts` — a watchdog heartbeat
+
+A module-level in-flight map plus one `setInterval` per worker process printing, every
+30 s:
+
+```
+[build-fetch] pid=1234 inflight=2 fetched=418/1500 oldest=41s
+[build-fetch]   STUCK 41s  params:popular-movies/p3
+```
+
+The diagnostic value is in the line it prints when **nothing** is in flight — but that
+inference is only sound if every build-time call is registered. The timer is `.unref()`ed.
+
+### B. Register the calls that actually run in the phase that hangs
+
+All three `generateStaticParams` that make network calls in `Collecting page data` —
+`movie/[id]` (1000 list fetches), `tv/[id]` (1000) and `person/[id]` (~2100 via
+`collectPersonIds`) — call `startBuildWatchdog()` and wrap their fetches in
+`trackBuildCall`. The other four (`provider`, `genre`, `billigaste`, `forsvinner`) are
+static lists with no network.
+
+`sitemap.ts`'s copy is deliberately NOT instrumented: it runs in a later phase. The
+watchdog outlives that boundary, so a hang there still prints `inflight=0` — recorded in
+`buildFetch.ts` so nobody reads that line as proof.
+
+### C. `.github/workflows/deploy.yml` — save the TMDB cache when the build fails
+
+`actions/cache/restore` + `actions/cache/save` with
+`if: always() && steps.tmdb-cache.outputs.cache-primary-key != ''`, keyed on
+`run_id`-`run_attempt`. The guard states the real precondition — the restore step ran, so a
+key exists. A step that was never *reached* has an EMPTY conclusion, not `'skipped'`, so the
+obvious-looking `conclusion != 'skipped'` check would have been a tick that never fires.
+
+**Honest limit, recorded in the workflow comment:** `timeout-minutes` sits on the Build
+*step*, not the job, and there is no job-level cap — so `always()` steps do run and the save
+almost certainly fires on the 2026-08-07 event. Still to be confirmed on the next real hang
+rather than assumed.
+
+## It took three review rounds to instrument the right file
+
+Worth recording, because two of the three wrong answers looked obviously right.
+
+- **Round 1** registered only `fetchForBuild`, and started the watchdog only on a cache
+  *miss*. On a warm cache — the regime a code deploy runs in — no timer existed at all.
+- **Round 2** registered the sitemap and gave its ~4000 previously-unbounded calls a
+  `buildSignal()`. Both wrong. `sitemap.xml` has no dynamic segment, so it runs in
+  *Generating static pages*, not the phase that hangs. Worse, `AbortSignal.timeout` starts
+  counting at **creation**: creating 2000 signals in one synchronous burst behind an 8-slot
+  semaphore aborts most of them while still queued. A reviewer measured it against the real
+  semaphore — 64 dispatched, 146 aborted of 210 — which would have shipped a sitemap with
+  **zero** `/person/` URLs. That change is fully reverted.
+- **Round 3** instrumented `movie/[id]` and `tv/[id]` `generateStaticParams`. **Round 4**
+  added `person/[id]`, which the integration reviewer caught as the biggest caller in that
+  phase (~2100 calls) — and gave aggregate labels their own stuck threshold, because two
+  reviewers independently noticed that a healthy build would otherwise print STUCK every
+  tick and train the reader to ignore the line.
+
+The stakeholder critique's premise — "a 20 s timeout already applies to every build-time
+fetch" — is still not quite true (the sitemap's list calls have none), but round 2 proved
+that adding one naively is worse than leaving it. That is now its own question, not this
+ticket's.
+
+## Acceptance criteria
+
+- [x] A heartbeat every 30 s during `Collecting page data`, including when zero fetches are
+      in flight and on a fully warm cache. [tests in buildFetch.test.ts + titleParams.watchdog.test.ts]
+- [x] The heartbeat **repeats** — a one-tick-then-die watchdog is indistinguishable from
+      today's silence. [mutant kills 5 tests]
+- [x] `movie/[id]`, `tv/[id]` and `person/[id]` register their fetches; unwrapping one
+      route's `trackBuildCall` fails exactly that route's tests and leaves the siblings
+      green. [mutation-verified]. `startBuildWatchdog()` in those routes is belt-and-braces
+      and deliberately NOT separately pinned — the first `trackBuildCall` starts the same
+      singleton interval, so the call is inert by construction.
+- [x] A stuck call is named with its label and its age, and the age grows across ticks.
+- [x] The STUCK list is capped at 5 **oldest** plus a count. Reversing the sort fails a
+      test, and so does sorting by label instead of by age — the fixture's names run
+      backwards against their ages on purpose. [mutation-verified]
+- [x] An aggregate label (`params:person-ids`, ~2100 calls, no 20 s ceiling of its own) has
+      its own generous threshold, so a healthy build never prints STUCK for it — while a
+      real hang still does. [mutation-verified]
+- [x] The watchdog timer is unref'd. [mutant kills 1 test]
+- [x] `trackBuildCall` registers, names and de-registers on both success and throw, and
+      costs no refresh budget. [4 tests]
+- [x] Retries are NOT added; `networkFetches`, `refreshBudget()` and the 1500 default are
+      untouched. [critique conditions 2, 3, 5]
+- [x] `TMDB_BUILD_REFRESH_BUDGET` and the 175-minute timeout are untouched.
+      [critique condition 6]
+- [x] `sitemap.ts` and `seoPersonIds.ts` are back at HEAD — round 2's change to them was a
+      regression, not an improvement.
+- [x] The cache is saved on a failed build step, keyed per attempt, and the workflow states
+      that survival of a hard timeout kill is unverified. [critique condition 4]
+
+## Still owed after this ships
+
+The critique's condition 1 stands: **use the next real hang to identify the culprit before
+building retries or a concurrency change.** This batch buys the evidence; it does not claim
+to fix the hang.
+
+---
+
 # Sprint 2026-08-07 — selection
 
 Fourth pass in three days on a backlog that's mostly self-referential process debt

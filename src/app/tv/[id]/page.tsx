@@ -17,7 +17,7 @@ import {
   latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
-import { fetchForBuild, buildSignal } from '@/lib/tmdb/buildFetch';
+import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 
@@ -40,13 +40,21 @@ export const dynamicParams = false;
 const cachedGetTVShow = cache((id: number) => fetchForBuild('tv', getTVShow, id));
 
 export async function generateStaticParams(): Promise<{ id: string }[]> {
+  // BIN-815: den här fasen (`Collecting page data`) är den som hängde 4 av 6
+  // körningar 2026-08-07. Pulsen startas innan första anropet och varje
+  // list-hämtning registreras — utan det rapporterar vakthunden `inflight=0`
+  // rakt igenom en hängning och pekar utredningen åt fel håll.
+  startBuildWatchdog();
   const collectIds = async (
     fetcher: (page: number) => Promise<{ results: { id: number }[] }>,
     pageCount: number,
+    kind: string,
   ): Promise<Set<number>> => {
     const ids = new Set<number>();
     const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
-    const results = await Promise.allSettled(pages.map(p => fetcher(p)));
+    const results = await Promise.allSettled(
+      pages.map(p => trackBuildCall(`params:${kind}/p${p}`, () => fetcher(p))),
+    );
     for (const r of results) {
       if (r.status === 'fulfilled') {
         // Curation: skip non-Latin-titled series — same rule as browsing
@@ -59,8 +67,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
 
   try {
     const [popular, topRated] = await Promise.all([
-      collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES),
-      collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES),
+      collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-tv'),
+      collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-tv'),
     ]);
     const ids = cappedTitleIds([...popular], [...topRated]);
     // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
