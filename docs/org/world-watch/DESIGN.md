@@ -117,7 +117,21 @@ high-stakes list + tier rules below are the spec; `route.mjs` is their executabl
   `functions/src/submitReport/`, `src/contexts/AuthContext.tsx` (security rules, GDPR
   data, moderation, auth).
 - **One stakeholder** — a single medium-impact feature area (one owning role).
-- **Skip** — trivial / doc-only (no owning role, or only Technical Writer).
+- **Skip** — trivial / doc-only: only Technical Writer owns it, or the set holds no code
+  at all (docs, plans, repo tooling under `scripts/`).
+
+**Unmapped ≠ trivial (BIN-788, 2026-08-06).** The ownership map enumerates files, so a
+new file next to ten owned siblings used to match nothing and route `skip` — an unknown
+blast radius reported as a cleared one. Two rules close that:
+- ownership resolves **by directory** for code paths: owning a file in a directory owns
+  that directory's other code files (the router reports these under `inherited`);
+- a code path (`src/`, `functions/`, `extension/`, `shared/`, or a root config file) that
+  *still* has no owner routes **one stakeholder**, seating **#14 Software Architect**, and
+  names the path so the map gets fixed. Only non-code paths route `skip`.
+
+Consumers that must tell the two apart read the router's `reasonCode`
+(`high-stakes` / `owned` / `unmapped-code` / `doc-only` / `no-code-paths`), never the
+prose in `reason`. The tier vocabulary is unchanged (`top` / `medium` / `skip`).
 
 The role→path mapping (seeded from the reviewer routing, now generalized to all 28
 roles via the ownership map):

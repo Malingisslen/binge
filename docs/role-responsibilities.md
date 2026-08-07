@@ -433,6 +433,11 @@ findings here too.
 - **Account-deletion cascade** — the 450-op chunked `writeBatch` over 25
   collections; inbound followers are deliberately left for the weekly orphan sweep.
   → `src/contexts/AuthContext.tsx`, `src/lib/firebase/userData.ts`
+- **Doc-id contract & watchlist write payloads** — the `movie:123` / `tv:123` document
+  id every watchlist, swipe and community-rating write is keyed on, and the helpers
+  that build/repair those payloads. A silent change here collides or shadows real user
+  data (BIN-569, BIN-608, BIN-624, BIN-766).
+  → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlist/**`
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).
 
 **Watch-items (diagnostic):**

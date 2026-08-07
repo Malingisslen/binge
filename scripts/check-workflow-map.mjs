@@ -9,8 +9,11 @@
 //      must match >=1 entry) — catches renames/deletions;
 //   2. every flow step's from/to must reference an existing node id;
 //   3. COVERAGE: every entry in docs/workflow-map-universe.json (functions/
-//      routes/endpoints/extension) must be claimed by at least one flow's
-//      covers[] — a new function or route without a mapped flow fails CI.
+//      routes/boundaries/…) must be claimed by at least one flow's covers[] —
+//      a new function, route or off-device-transmitting boundary without a
+//      mapped flow fails CI. Key-agnostic (every array-valued key but
+//      "comment" counts) and segment-boundary matched, both pinned by
+//      scripts/check-workflow-map.test.mjs (BIN-789).
 //   4. CONTENT FLOOR: every flow must carry substantive prose — a label, a
 //      real description, at least one step, and a non-empty payload on every
 //      step. This is the anti-silent-loss guard (BIN-459): coverage (check 3)
@@ -161,6 +164,67 @@ export function checkContentRatchet(actions, baseline, problems) {
   }
 }
 
+// ── Check 3 — coverage cross-check against the enumerated universe ───────────────────
+// docs/workflow-map-universe.json is a plain object of KEY -> string[]. EVERY array-valued
+// key is enforced (only "comment" is exempt), so adding or renaming a key — `functions`,
+// `routes`, the hand-curated `boundaries` (BIN-760/780) — keeps its entries required
+// rather than silently dropping the rule. BIN-789: none of this was tested, and the whole
+// `boundaries` guard worked by accident.
+const UNIVERSE_COMMENT_KEY = 'comment';
+
+export function universeEntries(universe) {
+  return new Set(
+    Object.entries(universe || {})
+      .filter(([k]) => k !== UNIVERSE_COMMENT_KEY)
+      .flatMap(([, v]) => (Array.isArray(v) ? v : []))
+      .filter((e) => typeof e === 'string' && e.trim().length > 0),
+  );
+}
+
+// A covers[] token may name a universe entry exactly, or name a SEGMENT of it — flows say
+// `global-error.tsx` where the universe says `src/app/global-error.tsx`, and dynamic-route
+// variants extend an entry. Containment must therefore land on '/' boundaries: plain
+// substring matching let `/feed` count as covered because some flow claimed `/feedback`,
+// i.e. a real hole reading as green (BIN-789). Tokens shorter than MIN_FUZZY_LEN (notably
+// the root route '/') only ever match exactly.
+const MIN_FUZZY_LEN = 4;
+
+// TAIL only, on a '/' boundary. Matching the needle anywhere inside the haystack would let
+// a flow claiming 'src/app' cover every universe entry beneath it — one flow silently
+// documenting a whole directory is the same green-on-a-hole failure BIN-789 fixed for
+// '/feed' vs '/feedback', just one level up.
+function segmentTail(haystack, needle) {
+  if (!haystack.endsWith(needle)) return false;
+  const before = haystack.length - needle.length;
+  return before === 0 || haystack[before - 1] === '/';
+}
+
+export function coversEntry(claim, entry) {
+  if (typeof claim !== 'string' || typeof entry !== 'string') return false;
+  if (claim === entry) return true;
+  if (claim.length < MIN_FUZZY_LEN || entry.length < MIN_FUZZY_LEN) return false;
+  // ONE direction only: the claim may be a shorter, whole-segment tail of the entry
+  // ('global-error.tsx' → 'src/app/global-error.tsx'). The reverse — a deeper path
+  // claiming a broader entry — is NOT coverage: a flow that touches one file under
+  // 'src/app' has not documented 'src/app'.
+  return segmentTail(entry, claim);
+}
+
+export function checkCoverage(universe, actions, problems) {
+  const entries = universeEntries(universe);
+  const claimed = new Set();
+  for (const action of actions || []) {
+    for (const c of action?.covers || []) claimed.add(c);
+  }
+  const claimedList = [...claimed];
+  let covered = 0;
+  for (const entry of [...entries].sort()) {
+    if (claimedList.some((c) => coversEntry(c, entry))) covered += 1;
+    else problems.push(`universe entry '${entry}' is not covered by any flow (add it to a flow's covers[])`);
+  }
+  return { covered, universeSize: entries.size };
+}
+
 // Build the content-baseline object from the current flows. Deterministic
 // (flows keyed by id, no timestamp) so the committed file only churns when the
 // prose actually changes.
@@ -230,30 +294,12 @@ export function main() {
     if (baseline) checkContentRatchet(data.actions || [], baseline, problems);
   }
 
-  // Coverage cross-check against the enumerated universe.
+  // Check 3 — coverage cross-check against the enumerated universe (see checkCoverage).
   let covered = 0, universeSize = 0;
   const universePath = join(ROOT, 'docs/workflow-map-universe.json');
   if (existsSync(universePath)) {
     const universe = JSON.parse(readFileSync(universePath, 'utf8'));
-    const universeEntries = new Set(
-      Object.entries(universe)
-        .filter(([k]) => k !== 'comment')
-        .flatMap(([, v]) => (Array.isArray(v) ? v : []))
-    );
-    universeSize = universeEntries.size;
-    const claimed = new Set();
-    for (const action of data.actions || []) {
-      for (const c of action.covers || []) claimed.add(c);
-    }
-    for (const entry of [...universeEntries].sort()) {
-      // covers[] may name a universe entry directly, or a dynamic-route variant.
-      // Fuzzy containment only for entries long enough not to over-match ('/'!).
-      const hit =
-        claimed.has(entry) ||
-        (entry.length > 3 && [...claimed].some((c) => c.length > 3 && (c.includes(entry) || entry.includes(c))));
-      if (hit) covered += 1;
-      else problems.push(`universe entry '${entry}' is not covered by any flow (add it to a flow's covers[])`);
-    }
+    ({ covered, universeSize } = checkCoverage(universe, data.actions || [], problems));
   }
 
   if (problems.length) {
