@@ -1,0 +1,328 @@
+{
+  "//": "Per-repo config for the shared malin-plugins hooks (C:/claude-plugins). Gate-class hooks FAIL CLOSED if this file is missing/malformed â€” see C:/claude-plugins/README.md.",
+  "productionGlobs": {
+    "include": [
+      "^src/.*\\.(ts|tsx)$",
+      "^functions/src/.*\\.ts$"
+    ],
+    "exclude": [
+      "\\.test\\.(ts|tsx)$",
+      "/__tests__/"
+    ]
+  },
+  "planTodoPath": "tasks/todo.md",
+  "planReviewChecklistPath": ".claude/plan-review-checklist.md",
+  "acceptedDeviationsPath": ".claude/rules/accepted-deviations.md",
+  "highStakes": {
+    "securityRegex": "(firestore\\.rules|src/lib/firebase/|AuthContext|passwordStrength|\\bauth\\b|GDPR|\\bpii\\b)",
+    "lineThreshold": 100
+  },
+  "_reviewProof": "2026-08-01: proof of review moved from hand-written marker files to the RECORDED ledger. A marker is a separate act of writing performed by the party being audited â€” twelve such writes were flagged as forged in Butlery on 2026-08-01, and every stricter spelling of the assertion (name the file, pin the sha, list what you read) was still an assertion. In ledger mode a PostToolUse hook records which reviewer read which bytes and a SubagentStop hook records the verdict it ended on; nothing is hand-writable, and a later fix silently un-proves the file it touched. This repo's four agents already pinned shas honestly, so this is a hardening rather than a repair. All four carry the two rules it depends on: open files with Read, and end on REVIEW-VERDICT: pass|fail (N blocking).",
+  "reviewProof": "ledger",
+  "pushGate": {
+    "agent": "binge-integration-reviewer"
+  },
+  "reviewGates": [
+    {
+      "agent": "binge-code-reviewer",
+      "marker": "code-review-done.marker",
+      "patterns": [
+        "^src/.*\\.(ts|tsx)$"
+      ],
+      "exclude": [
+        "\\.test\\.(ts|tsx)$",
+        "/__tests__/"
+      ]
+    },
+    {
+      "_note": "BIN-757, 2026-08-06 (Malin's call in the backlog review): the last three patterns were added because the gate's shape was 'where does sensitive code LIVE', and the bulk-write paths live in components. A one-word comment change under functions/ earned a security review while the CSV import â€” which writes hundreds of watchlist docs per run, on the client, under the user's own credentials â€” earned none. Widening only; nothing was removed.",
+      "agent": "binge-security-reviewer",
+      "marker": "security-done.marker",
+      "patterns": [
+        "^firestore\\.rules$",
+        "^firestore\\.indexes\\.json$",
+        "^functions/",
+        "^src/lib/firebase/",
+        "^src/contexts/AuthContext\\.tsx$",
+        "^src/lib/passwordStrength\\.ts$",
+        "^src/app/settings/import/",
+        "^src/contexts/WatchlistContext\\.tsx$",
+        "^src/components/.*[Bb]ulk"
+      ]
+    },
+    {
+      "agent": "binge-test-reviewer",
+      "marker": "test-done.marker",
+      "patterns": [
+        "\\.test\\.(ts|tsx)$",
+        "^src/.*/__tests__/",
+        "vitest.*\\.config\\.ts$"
+      ]
+    },
+    {
+      "_note": "The whole-diff, cross-file pass. Was `codeReviewGate` until 2026-07-31, i.e. gated on the /code-review BUILTIN â€” a command only a human can start, so every unattended run (sprint-parallel, /commit, any resume) dead-ended asking Malin to type it. Same filePattern and same marker as before; the only change is that a spawnable agent now owns it. /code-review stays available and is still the deeper pass â€” it is simply no longer the ONLY way to earn this marker.",
+      "agent": "binge-integration-reviewer",
+      "marker": "simplify-done.marker",
+      "patterns": [
+        "\\.(ts|tsx)$"
+      ]
+    }
+  ],
+  "stopCheck": {
+    "command": "npm run typecheck",
+    "filePattern": "\\.(ts|tsx)$",
+    "errorPathRegex": "^(\\S+\\.tsx?)[\\(:]"
+  },
+  "knowledge": {
+    "agentsDir": ".claude/agents",
+    "sizeLimit": 800,
+    "windowDays": 30,
+    "lessonsFile": "tasks/lessons.md",
+    "digestFile": ".claude/rules/lessons-digest.md"
+  },
+  "docsSweep": {
+    "exemptGlobs": [
+      "docs/org/**",
+      "tasks/lessons.md",
+      "tasks/todo.md",
+      ".claude/**"
+    ],
+    "navigationDocs": [
+      "docs/workflow-map.html"
+    ],
+    "forMalinDocs": [],
+    "docLinters": [
+      "node scripts/check-workflow-map.mjs"
+    ]
+  },
+  "roleOrg": {
+    "janitorDueEnabled": true,
+    "worldWatchStatePath": "docs/org/world-watch/state.json",
+    "retroSchedulePath": "docs/org/metrics/retro-schedule.json",
+    "metricsEventsPath": "docs/org/metrics/events.jsonl",
+    "rolePathsFile": "docs/org/ownership-map.json",
+    "stalenessDir": ".claude/state/dossier-stale",
+    "dossierStampEnabled": false,
+    "memoryCuration": {
+      "memoryDir": "C:/Users/malla/.claude/projects/C--binge/memory",
+      "projectDir": "C:/Users/malla/.claude/projects/C--binge",
+      "excludeFiles": [],
+      "corpusCapMB": 4
+    }
+  },
+  "delivery": {
+    "repoName": "binge",
+    "linear": {
+      "team": "Binge",
+      "project": "Binge",
+      "isolationScope": "project",
+      "ticketPrefix": "BIN",
+      "intakeState": "Backlog",
+      "states": [
+        "Backlog",
+        "Todo",
+        "In Progress"
+      ],
+      "reservedLabels": [
+        "onboarding-reserved",
+        "launch-gated"
+      ],
+      "typeLabels": [
+        "Bug",
+        "security",
+        "tech-debt",
+        "performance",
+        "test-gap",
+        "dependency",
+        "idea"
+      ],
+      "areaLabels": [
+        {
+          "name": "frontend",
+          "covers": "src/components/**, src/app/**, globals.css, tailwind config, design system, a11y"
+        },
+        {
+          "name": "watchlist",
+          "covers": "src/lib/watchStatus*, libraryView, WatchlistContext, episodeProgress, src/components/watchlist/**"
+        },
+        {
+          "name": "streaming",
+          "covers": "src/lib/tmdb/providers*, useSubscriptionAdvisor*, useCalendar, src/lib/calendar/**, advisor"
+        },
+        {
+          "name": "social",
+          "covers": "src/components/groups/**, group/Tillsammans/user pages, reviews, firebase/groups+sessions, follow, notifications/FCM"
+        },
+        {
+          "name": "auth",
+          "covers": "AuthContext, passwordStrength, GDPR dataExport/userData, account/profile, App Check"
+        },
+        {
+          "name": "data",
+          "covers": "src/lib/firebase/** collectors, src/lib/tmdb client/cacheTiers/buildFetch/buildCache, migrations"
+        },
+        {
+          "name": "seo",
+          "covers": "generateStaticParams, sitemap, usePageMeta, Schema.org, seoCoverage"
+        },
+        {
+          "name": "infra",
+          "covers": "firebase.json, firestore.rules, .github/workflows/**, next.config, Cloudflare, deploy"
+        }
+      ],
+      "trackerPath": ".claude/linear-tracker.json"
+    },
+    "router": {
+      "command": "node docs/org/route.mjs --md",
+      "tierMap": {
+        "top": "full-panel",
+        "medium": "single",
+        "skip": "skip"
+      },
+      "dossierPath": "docs/role-responsibilities.md"
+    },
+    "metrics": {
+      "logReviewCommand": "node docs/org/metrics/log_event.mjs review"
+    },
+    "verify": {
+      "formatCommand": "npx eslint --fix",
+      "formatAllCommand": "npm run lint",
+      "testPathTemplate": "src/**/*.test.ts"
+    },
+    "hygiene": {
+      "fileSizeLines": 400,
+      "checks": [
+        {
+          "check": "lint",
+          "command": "npm run lint",
+          "flagWhen": "any error"
+        },
+        {
+          "check": "types",
+          "command": "npm run typecheck",
+          "flagWhen": "any error"
+        },
+        {
+          "check": "unit tests",
+          "command": "npm test",
+          "flagWhen": "any failure; non-trivial module with 0 coverage"
+        },
+        {
+          "check": "rules tests",
+          "command": "npm run test:rules",
+          "flagWhen": "any failure (needs Java on PATH â€” JBR)"
+        },
+        {
+          "check": "dep audit",
+          "command": "npm audit",
+          "flagWhen": "High/Critical CVE; prod dep >=1 major behind"
+        },
+        {
+          "check": "bundle",
+          "command": "npm run analyze",
+          "flagWhen": "First Load JS regression vs tracked baseline"
+        }
+      ]
+    },
+    "tierCTriggers": [
+      "firestore.rules",
+      "functions/**",
+      "watch-status model (src/lib/watchStatus*)",
+      "Firestore migrations"
+    ],
+    "tierDExamples": [
+      "rules/functions deploy (deploy.yml does NOT do these)",
+      "Firebase Console step",
+      "Cloudflare action",
+      "TMDB key",
+      "secrets/billing",
+      "app-store submission"
+    ],
+    "decisionQueue": {
+      "source": "run-only"
+    },
+    "cleanTreeIgnore": [
+      "docs/org/metrics/events\\.jsonl$",
+      "docs/org/world-watch/state\\.json$",
+      "docs/org/janitor/last-run\\.json$",
+      "tasks/todo\\.md$",
+      "^.{0,3}\\.claude/state/"
+    ],
+    "ship": {
+      "pushTriggersDeploy": true,
+      "deployAfterCommit": [
+        {
+          "name": "await-deploy",
+          "run": "poll `gh run list --workflow=deploy.yml --branch=main` for the run matching HEAD until completed (~30s apart, build takes 3-5 min)",
+          "guard": "conclusion must be success â€” on failure show `gh run view <id> --log-failed`, STOP, and do NOT purge (visitors would get the old build unshielded)"
+        },
+        {
+          "name": "purge-cloudflare",
+          "run": "source .env.local && curl -s -X POST \"https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache\" -H \"Authorization: Bearer $CF_API_TOKEN\" -H \"Content-Type: application/json\" --data '{\"purge_everything\":true}' â€” verify \"success\": true",
+          "guard": "CF_ZONE_ID + CF_API_TOKEN present in .env.local, else tell the founder which are missing"
+        }
+      ]
+    },
+    "competitors": [
+      "JustWatch",
+      "Letterboxd",
+      "Serializd",
+      "Trakt",
+      "TV Time",
+      "Reelgood"
+    ],
+    "_roadmapDocs": "BIN-585, 2026-08-05: emptied, not repointed. Both entries named files that no longer exist â€” docs/analysis/FUTURE_ROADMAP.md was deliberately deleted in 7e40f14 once mined into Linear, and project_roadmap.md is a Claude MEMORY file, never a repo path. A scan-night roadmap-anchor gate reading two dead paths silently passes every time, which reads as 'checked' rather than 'never ran'. Empty is the honest state: this repo's roadmap lives in Linear. Repoint only at a committed doc that actually exists.",
+    "roadmapDocs": [],
+    "scanNight": {
+      "dir": ".claude/scan-night"
+    }
+  },
+  "contextDiet": {
+    "alwaysOn": [
+      "CLAUDE.md",
+      ".claude/rules/code-style.md",
+      ".claude/rules/lessons-digest.md"
+    ],
+    "memoryIndex": "C:/Users/malla/.claude/projects/C--binge/memory/MEMORY.md",
+    "budgetChars": 13000,
+    "neverMove": [
+      "GDPR",
+      "consent",
+      "auth",
+      "PII",
+      "credential",
+      "no-verify",
+      "amend",
+      "destructive",
+      "firestore.rules"
+    ],
+    "gateProbes": [
+      {
+        "name": "commit gate is live (--amend is always refused, fires on a clean tree)",
+        "command": "printf '{\"tool_input\":{\"command\":\"git commit --amend -m x\"},\"cwd\":\"C:/binge\"}' | node C:/claude-plugins/plugins/workflow-guards/scripts/require-review-before-commit.mjs",
+        "expectStderr": "not allowed"
+      },
+      {
+        "name": "review markers demanded by name (needs staged files; silent on a clean tree)",
+        "command": "printf '{\"tool_input\":{\"command\":\"git commit -m x\"},\"cwd\":\"C:/binge\"}' | node C:/claude-plugins/plugins/workflow-guards/scripts/require-review-before-commit.mjs",
+        "expectStderr": "MISSING:"
+      },
+      {
+        "name": "lone sensitive-domain edit demands a plan (silent if tasks/todo.md was touched in the last 6h â€” that IS plan evidence)",
+        "command": "printf '{\"session_id\":\"probe\",\"tool_input\":{\"file_path\":\"C:/binge/src/lib/firebase/config.ts\"},\"cwd\":\"C:/binge\"}' | node C:/claude-plugins/plugins/workflow-guards/scripts/plan-threshold-guard.mjs",
+        "expectStderr": "sensitive domain"
+      },
+      {
+        "name": "lessons/digest drift tripwire balances",
+        "command": "printf '{\"cwd\":\"C:/binge\"}' | node C:/claude-plugins/plugins/workflow-guards/scripts/knowledge-freshness.mjs 2>&1 | grep -E \"lessons-digest drift\" || echo DRIFT-CLEAN",
+        "expectStderr": "DRIFT-CLEAN"
+      }
+    ]
+  },
+  "preview": {
+    "templatePath": "docs/design/previews/_binge-template.html",
+    "tokensDoc": ".claude/rules/design-system.md",
+    "outputDir": "tasks/previews",
+    "frame": "desktop 1320 + phone 390x844"
+  }
+}

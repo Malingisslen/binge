@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*serviceAccount*.json)",
+      "Read(**/*service-account*.json)",
+      "Read(**/*-adminsdk-*.json)",
+      "Read(**/*firebase-adminsdk*.json)",
+      "Read(**/*.pem)",
+      "Read(**/*.p12)",
+      "Read(**/id_rsa)",
+      "Read(**/id_ed25519)",
+      "Read(**/secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(//c/Users/malla/.ssh/**)"
+    ],
+    "ask": [
+      "mcp__plugin_firebase_firebase__firestore_delete_document",
+      "mcp__plugin_firebase_firebase__firestore_delete_database",
+      "mcp__plugin_firebase_firebase__firestore_delete_index",
+      "mcp__plugin_firebase_firebase__messaging_send_message"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || echo .)\"; exec node .claude/hooks/preview-gate.mjs'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || echo .)\"; exec node .claude/hooks/dossier-freshness.mjs'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || echo .)\"; exec node .claude/hooks/map-freshness.mjs'"
+          }
+        ]
+      }
+    ]
+  }
+}

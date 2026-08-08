@@ -43,8 +43,18 @@ emulator-data/
 *.tsbuildinfo
 next-env.d.ts
 
-# claude code agent-lokal state
-.claude/
+# Claude Code. The CONFIG is versioned — rules, agents, hooks, gate settings and
+# shared-plugin.json are what make the gates exist, and an unversioned gate is one
+# machine loss away from being gone. Only genuinely per-run state stays out.
+# (Butlery and webbkollen have always tracked theirs; this repo was the outlier.)
+.claude/state/
+.claude/worktrees/
+.claude/cache/
+.claude/hooks/sessions/
+.claude/hooks/__pycache__/
+.claude/linear-tracker.json
+.claude/scheduled_tasks.lock
+.claude/*.doctor-backup
 .superpowers/
 .worktrees/
 

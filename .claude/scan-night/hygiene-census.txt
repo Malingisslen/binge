@@ -1,0 +1,35 @@
+  6:3  warning  'TV_STATUS_OPTIONS' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 35 problems (0 errors, 35 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
+---TYPECHECK---
+
+> binge-app@0.1.0 typecheck
+> tsc --noEmit
+
+---TEST---
+ RUN  v4.1.5 C:/binge
+
+
+ Test Files  93 passed (93)
+      Tests  905 passed (905)
+   Start at  23:40:54
+   Duration  34.72s (transform 7.19s, setup 98.29s, import 19.31s, tests 5.40s, environment 329.95s)
+
+---AUDIT---
+
+postcss  <8.5.10
+Severity: moderate
+PostCSS has XSS via Unescaped </style> in its CSS Stringify Output - https://github.com/advisories/GHSA-qx2v-qp2m-jg93
+fix available via `npm audit fix --force`
+Will install next@9.3.3, which is a breaking change
+node_modules/next/node_modules/postcss
+  next  9.3.4-canary.0 - 16.3.0-canary.5
+  Depends on vulnerable versions of postcss
+  node_modules/next
+
+2 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
