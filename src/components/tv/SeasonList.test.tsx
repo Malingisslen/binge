@@ -35,7 +35,14 @@ vi.mock('@/hooks/useGroupMemberProgress', () => ({ useGroupMemberProgress: () =>
 // The season rows pull in EpisodeReactions → useEpisodeReactions → the Firebase
 // config module, which initialises the Auth SDK at import time. Stub the leaf so
 // the real SeasonRow/EpisodeRow tree still renders.
-vi.mock('@/components/tv/EpisodeReactions', () => ({ default: () => null }));
+// BIN-679: a SPY, not a bare stub. EpisodeReactions' (tmdbId, season, episode) triple
+// IS the Firestore document key — `${tmdbId}_${season}_${episode}` — so the season
+// this row hands it decides which thread the specials post into. Stub it to null and
+// nothing notices a special writing into a numbered episode's reaction thread.
+const episodeReactions = vi.hoisted(() => vi.fn());
+vi.mock('@/components/tv/EpisodeReactions', () => ({
+  default: (props: { tmdbId: number; season: number; episode: number }) => { episodeReactions(props); return null; },
+}));
 
 function seasons(withSeason0: boolean): TMDBSeason[] {
   const numbered = [
@@ -46,13 +53,24 @@ function seasons(withSeason0: boolean): TMDBSeason[] {
   return withSeason0 ? [specials, ...numbered] : numbered;
 }
 
-function renderList(tmdbId: number, withSeason0 = true, fromGroup?: string) {
+// BIN-679: a spy, not a no-op. The season number a special's checkbox forwards is
+// hardcoded at the call site, and the guard that protects the progress marker keys
+// on exactly that number — so a call site passing 1 instead of 0 would defeat the
+// whole ticket while every hook- and helper-level test stayed green.
+const markEpisodeWatched = vi.fn(async () => {});
+
+function renderList(
+  tmdbId: number,
+  withSeason0 = true,
+  fromGroup?: string,
+  isWatched: (season: number, episode: number) => boolean = () => false,
+) {
   return render(
     <SeasonList
       tmdbId={tmdbId}
       seasons={seasons(withSeason0)}
-      isWatched={() => false}
-      markEpisodeWatched={async () => {}}
+      isWatched={isWatched}
+      markEpisodeWatched={markEpisodeWatched}
       markSeasonWatched={async () => {}}
       markSeasonUnwatched={async () => {}}
       getSeasonProgress={() => ({ watched: 0, total: 13 })}
@@ -65,6 +83,8 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
   beforeEach(() => {
     useTVSeason.mockReset();
     useTVSeason.mockReturnValue({ data: season0, isLoading: false });
+    markEpisodeWatched.mockClear();
+    episodeReactions.mockClear();
     groupState.group = null;
     groupState.members = [];
     groupState.progress = new Map();
@@ -74,15 +94,17 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     renderList(DW_REVIVAL);
     // Collapsed first: the section header is there, the episodes are not.
     expect(screen.getByText('Specialavsnitt')).toBeTruthy();
-    expect(screen.queryByText('The Day of the Doctor')).toBeNull();
+    expect(screen.queryByText(/The Day of the Doctor/)).toBeNull();
 
     fireEvent.click(screen.getByText('Specialavsnitt'));
 
-    expect(screen.getByText('The Day of the Doctor')).toBeTruthy();
-    expect(screen.getByText('The Waters of Mars')).toBeTruthy();
+    // Titles carry their air year since BIN-679 — pinned exactly in its own test
+    // below; matched loosely here so this case stays about the ALLOW-LIST.
+    expect(screen.getByText(/The Day of the Doctor/)).toBeTruthy();
+    expect(screen.getByText(/The Waters of Mars/)).toBeTruthy();
     // The uncurated clutter it sits between stays hidden — that is the whole point
     // of the allow-list (season 0 has 199 entries for this show).
-    expect(screen.queryByText('Doctor Who at the Proms')).toBeNull();
+    expect(screen.queryByText(/Doctor Who at the Proms/)).toBeNull();
   });
 
   it('does not fetch season 0 until the section is expanded', () => {
@@ -94,15 +116,119 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     expect(useTVSeason.mock.calls.some(([id, season]) => id === DW_REVIVAL && season === 0)).toBe(true);
   });
 
-  it('renders the specials read-only — no checkboxes and no bulk progress actions', () => {
+  // BIN-679 reversed this deliberately. It used to assert ZERO checkboxes, because
+  // ticking a special parked the watchlist marker on S0 (BIN-589). The guard now
+  // lives in useEpisodeProgressWithSync — season 0 writes episodeProgress and never
+  // touches the marker — so the affordance is safe and the ban is lifted.
+  it('renders a checkbox per special, but still no bulk progress actions', () => {
     renderList(DW_REVIVAL);
     fireEvent.click(screen.getByText('Specialavsnitt'));
 
-    // Ticking a season-0 episode would park the watchlist progress marker on S0
-    // (BIN-589), so the section deliberately carries no progress affordances.
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    // Exactly the two curated episodes the TMDB fixture returned — not three (the
+    // uncurated Proms entry) and not zero. `toBeGreaterThan(0)` would go vacuous the
+    // moment a neighbouring numbered row rendered its own checkbox.
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(2);
+
+    // Still absent, and NOT for the old reason: TMDB's season-0 numbering is sparse
+    // (the curated list is a handful of numbers scattered through ~199 entries), so
+    // "everything up to N" and a season episode-count are both meaningless here.
     expect(screen.queryByText('Markera alla sedda')).toBeNull();
     expect(screen.queryByText('Markera hit')).toBeNull();
+  });
+
+  // Criterion 1 is phrased about the USER ACTION, so the composition is what needs
+  // proof: the hook guard and the helper exclusion are each pinned elsewhere, but
+  // both key on the season number this call site hardcodes. Passing 1 here would
+  // route a special down the numbered path and park the marker on it — with every
+  // other test in the batch still green.
+  it('forwards season 0 — and no episodeCount — when a special is ticked', () => {
+    renderList(DW_REVIVAL);
+    fireEvent.click(screen.getByText('Specialavsnitt'));
+
+    const boxes = screen.getAllByRole('checkbox');
+    fireEvent.click(boxes[boxes.length - 1]);
+
+    // Exact args: 83 is "The Day of the Doctor", the last curated special in the
+    // fixture. A 4th argument would be episodeCount, which drives the auto-advance
+    // to the next season — meaningless for a sparse season 0.
+    expect(markEpisodeWatched).toHaveBeenCalledTimes(1);
+    expect(markEpisodeWatched).toHaveBeenCalledWith(0, 83, true);
+  });
+
+  // The OTHER thing the row's season number decides. `EpisodeReactions` turns
+  // (tmdbId, season, episode) into the Firestore doc id `${tmdbId}_${season}_${ep}`,
+  // so a row handing it season 1 would post curated special #2's reactions into
+  // 57243_1_2 — the same thread as S1E02 "The End of the World", whose reactions are
+  // spoiler-gated on having watched THAT episode. The section comment stakes #18
+  // Community Manager's sign-off on this exact literal, so it gets pinned, not hoped.
+  it('hands season 0 to the reactions thread, and labels the row S0', () => {
+    renderList(DW_REVIVAL);
+    fireEvent.click(screen.getByText('Specialavsnitt'));
+
+    expect(screen.getByText('S0E83')).toBeTruthy();
+    for (const call of episodeReactions.mock.calls) {
+      expect(call[0].season).toBe(0);
+      expect(call[0].tmdbId).toBe(DW_REVIVAL);
+    }
+    expect(episodeReactions.mock.calls.map(c => c[0].episode).sort((a, b) => a - b)).toEqual([14, 83]);
+  });
+
+  // The air year is the disambiguator on a 2005-2022 list with four Christmas
+  // specials, and the shared EpisodeRow only shows a date for UNAIRED episodes.
+  it('keeps the air year visible on each special', () => {
+    renderList(DW_REVIVAL);
+    fireEvent.click(screen.getByText('Specialavsnitt'));
+
+    expect(screen.getByText('The Day of the Doctor (2013)')).toBeTruthy();
+    expect(screen.getByText('The Waters of Mars (2009)')).toBeTruthy();
+  });
+
+  // The `watched` prop is the other half of the wiring: read it off the wrong season
+  // and every special renders permanently unticked while the writes land correctly.
+  it('reads the checked state from season 0, not from a numbered season', () => {
+    renderList(DW_REVIVAL, true, undefined, (season, episode) => season === 0 && episode === 83);
+    fireEvent.click(screen.getByText('Specialavsnitt'));
+
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    expect(boxes.map(b => b.checked)).toEqual([false, true]);
+
+    // And the UN-tick direction. Every other click in this file lands on an unchecked
+    // box, so hardcoding `true` at the call site would leave a special permanently
+    // stuck ticked with nothing red.
+    fireEvent.click(boxes[1]);
+    expect(markEpisodeWatched).toHaveBeenCalledWith(0, 83, false);
+  });
+
+  // The year guard's false branch. All three fixture episodes carry an air_date, so
+  // dropping the guard entirely goes unnoticed — while live TMDB season-0 entries
+  // routinely lack one, and the curated list is meant to grow. Without the guard the
+  // title renders as "... (undefined)".
+  it('leaves the title alone when a special has no air date', () => {
+    useTVSeason.mockReturnValue({
+      data: { episodes: [{ id: 904, episode_number: 14, name: 'Eve of the Daleks', overview: '', still_path: null, air_date: null, runtime: 60 }] },
+      isLoading: false,
+    });
+    renderList(DW_REVIVAL);
+    fireEvent.click(screen.getByText('Specialavsnitt'));
+
+    expect(screen.getByText('Eve of the Daleks')).toBeTruthy();
+  });
+
+  // The counter is the one thing Malin parked the ticket to look at, so it gets an
+  // assertion rather than a hope. The denominator is the CURATED list (22 entries for
+  // Doctor Who), NOT the three-episode TMDB fixture and NOT TMDB's ~199 season-0
+  // entries — counting either of those is the mistake this pins. The literal 22 is a
+  // deliberate tripwire: deriving it from canonicalSpecialsFor() would compute the
+  // expected value with the code under test, and adding a curated episode SHOULD force
+  // a look at a user-visible counter.
+  it('counts watched specials against the curated list, not the TMDB season', () => {
+    renderList(DW_REVIVAL, true, undefined, (season, episode) => season === 0 && episode === 14);
+    expect(screen.getByText('1/22')).toBeTruthy();
+  });
+
+  it('counts zero when nothing is ticked, and ignores watched NUMBERED episodes', () => {
+    renderList(DW_REVIVAL, true, undefined, (season) => season === 1);
+    expect(screen.getByText('0/22')).toBeTruthy();
   });
 
   it('leaves the global hide-season-0 rule alone for uncurated shows', () => {

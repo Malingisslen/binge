@@ -15,13 +15,22 @@
 // synopses still come from the live TMDB season fetch, nothing is stored here but
 // numbers. The global hide-season-0 rule is untouched for every other show.
 //
-// DISPLAY ONLY — deliberately not tickable. markEpisodeWatched writes the exact
-// position you tick, so a season-0 tick parks the watchlist marker on S0 (see the
-// BIN-589 note in useSubscriptionAdvisor.helpers.ts). Someone caught up on 13
-// seasons who ticked "The Power of the Doctor" would have their progress marker
-// pulled back to season 0 and the show would read as "bakom". Making specials
-// trackable needs a progress marker that can hold a specials position alongside a
-// numbered one — a watch-status-model change, not this section.
+// TICKABLE since BIN-679. It was display-only before that, because
+// markEpisodeWatched wrote the exact position you ticked: a season-0 tick parked
+// the watchlist marker on S0 and someone caught up on 13 seasons who ticked "The
+// Power of the Doctor" read as "bakom" across the library.
+//
+// That was fixed with a guard, not a new marker model. `useEpisodeProgressWithSync`
+// routes season 0 straight to episodeProgress and never calls updateProgress, and
+// `highestWatchedPosition` skips season 0 when recomputing the marker backwards —
+// both halves are needed, since without the second an un-tick of the last numbered
+// episode would fall back onto a watched special. Specials are their own track:
+// they live in `episodeProgress.seasons["0"]` and never enter the marker from here.
+//
+// Still true, and NOT for the old reason: no bulk actions on this section. TMDB's
+// season-0 numbering is sparse — this curated list is a handful of numbers scattered
+// through ~199 entries — so an episode count and "everything up to N" are both
+// meaningless. Per-episode ticks only.
 
 export interface CanonicalSpecials {
   /** Section heading (Swedish UI). */

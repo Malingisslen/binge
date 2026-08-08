@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ChevronRight, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
-import type { TMDBSeason } from '@/types';
+import type { TMDBEpisode, TMDBSeason } from '@/types';
 import SeasonRow from './SeasonRow';
-import { stillUrl, titleHref } from '@/lib/tmdb/client';
+import EpisodeRow from './EpisodeRow';
+import { titleHref } from '@/lib/tmdb/client';
 import { useGroup } from '@/hooks/useGroups';
 import { useGroupMemberProgress } from '@/hooks/useGroupMemberProgress';
 import { useTVSeason } from '@/hooks/useTMDB';
@@ -90,6 +91,9 @@ export default function SeasonList({
           specials={specials}
           expanded={expandedSeason === SPECIALS_KEY}
           onToggle={() => toggle(SPECIALS_KEY)}
+          isWatched={isWatched}
+          markEpisodeWatched={markEpisodeWatched}
+          watchedCount={specials.episodeNumbers.filter(n => isWatched(SPECIALS_KEY, n)).length}
         />
       )}
     </div>
@@ -107,18 +111,32 @@ export default function SeasonList({
   );
 }
 
-// BIN-580 — the curated season-0 section. Read-only on purpose: ticking a
-// season-0 episode parks the watchlist progress marker on S0 (see the BIN-589
-// note in useSubscriptionAdvisor.helpers.ts), which would drag someone who is
-// caught up on 13 seasons back to "bakom". So this lists the episodes and
-// nothing else — no checkboxes, no "markera alla", no reactions.
+// BIN-580 — the curated season-0 section. BIN-679 made it tickable: the reason it
+// was read-only was that markEpisodeWatched wrote the exact position you ticked, so
+// a season-0 tick parked the watchlist marker on S0 and dragged someone caught up
+// on 13 seasons back to "bakom". useEpisodeProgressWithSync now routes season 0
+// past the marker entirely (and highestWatchedPosition skips it on the way back),
+// so a tick lands in episodeProgress and nowhere else.
+//
+// Still no "markera alla": TMDB's season-0 numbering is SPARSE — the curated list
+// is a handful of episode numbers scattered through ~199 entries — so `episodeCount`
+// has no meaning here and neither does "everything up to N". Per-episode only.
+//
+// Reusing the shared EpisodeRow brings EpisodeReactions to specials for the first
+// time — deliberate, and reviewed by #18 Community Manager (2026-08-08, godkänd):
+// the thread key is `${tmdbId}_0_${ep}`, a fresh slot in the same namespace with no
+// collision, and the reactions list only opens once YOU have marked the episode
+// watched, so the specials' heavier spoilers get the same gate as any other episode.
 function CanonicalSpecialsSection({
-  tmdbId, specials, expanded, onToggle,
+  tmdbId, specials, expanded, onToggle, isWatched, markEpisodeWatched, watchedCount,
 }: {
   tmdbId: number;
   specials: CanonicalSpecials;
   expanded: boolean;
   onToggle: () => void;
+  isWatched: (season: number, episode: number) => boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
+  watchedCount: number;
 }) {
   return (
     <div className="border-b border-rule-2 last:border-b-0">
@@ -136,21 +154,69 @@ function CanonicalSpecialsSection({
             <span className="font-normal text-ink-3 text-xs">({specials.episodeNumbers.length} avs)</span>
           </span>
         </div>
-        <span className="text-xxs text-ink-3 mx-4">Kan inte bockas av</span>
+        <span className="text-xxs text-ink-3 mx-4">
+          {watchedCount}/{specials.episodeNumbers.length}
+        </span>
       </div>
-      {expanded && <CanonicalSpecialsPanel tmdbId={tmdbId} episodeNumbers={specials.episodeNumbers} />}
+      {expanded && (
+        <CanonicalSpecialsPanel
+          tmdbId={tmdbId}
+          episodeNumbers={specials.episodeNumbers}
+          isWatched={isWatched}
+          markEpisodeWatched={markEpisodeWatched}
+        />
+      )}
     </div>
   );
 }
+
+// Same memo + stable-callback shape as PanelEpisodeRow in SeasonEpisodePanel:
+// without it every episodeProgress onSnapshot re-renders every special.
+// `episodeCount` is deliberately NOT passed — it drives the auto-advance to the
+// next season, which has no meaning for a sparse season 0 (and the season-0 guard
+// in useEpisodeProgressWithSync returns before it anyway).
+const SpecialEpisodeRow = memo(function SpecialEpisodeRow({
+  episode, tmdbId, watched, markEpisodeWatched,
+}: {
+  episode: TMDBEpisode;
+  tmdbId: number;
+  watched: boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
+}) {
+  const handleToggle = useCallback(
+    (w: boolean) => { void markEpisodeWatched(0, episode.episode_number, w); },
+    [markEpisodeWatched, episode.episode_number]
+  );
+  // The air year rides in the title. The shared row shows a year for nothing but
+  // UNAIRED episodes, which is right for a numbered season you read top to bottom —
+  // and wrong here: this list spans 2005-2022 in air order, and four of the entries
+  // are Christmas specials. The year IS the disambiguator. Kept in this component
+  // rather than added to EpisodeRow so numbered seasons are untouched.
+  const withYear = useMemo(() => {
+    const year = episode.air_date?.substring(0, 4);
+    return year ? { ...episode, name: `${episode.name} (${year})` } : episode;
+  }, [episode]);
+  return (
+    <EpisodeRow
+      episode={withYear}
+      seasonNumber={0}
+      tmdbId={tmdbId}
+      watched={watched}
+      onToggle={handleToggle}
+    />
+  );
+});
 
 // Fetches season 0 (only once the section is expanded — same lazy pattern as
 // SeasonEpisodePanel) and keeps just the curated episode numbers. Titles, stills
 // and synopses come from TMDB live; nothing about them is stored in the repo.
 function CanonicalSpecialsPanel({
-  tmdbId, episodeNumbers,
+  tmdbId, episodeNumbers, isWatched, markEpisodeWatched,
 }: {
   tmdbId: number;
   episodeNumbers: readonly number[];
+  isWatched: (season: number, episode: number) => boolean;
+  markEpisodeWatched: (season: number, episode: number, watched: boolean, episodeCount?: number) => Promise<void>;
 }) {
   const { data: season, isLoading } = useTVSeason(tmdbId, 0);
 
@@ -179,29 +245,15 @@ function CanonicalSpecialsPanel({
     <div className="bg-bg-2 border-t border-rule-2">
       <div className="px-4 py-3">
         <div className="eps">
-          {episodes.map(ep => {
-            const still = stillUrl(ep.still_path, 'w185');
-            const year = ep.air_date?.substring(0, 4) ?? '';
-            return (
-              <div className="ep" key={ep.id}>
-                <div className="still">
-                  {still ? (
-                    <img src={still} alt="" loading="lazy" decoding="async" width={120} height={68} />
-                  ) : null}
-                </div>
-                <div className="code">S0E{ep.episode_number}</div>
-                <div>
-                  <div className="ttl">
-                    {ep.name}
-                    {year && <span className="font-normal text-ink-3 text-xs">{' '}{year}</span>}
-                  </div>
-                  {ep.overview && <div className="syn">{ep.overview}</div>}
-                </div>
-                <div className="runt">{ep.runtime ? `${ep.runtime} min` : ''}</div>
-                <div />
-              </div>
-            );
-          })}
+          {episodes.map(ep => (
+            <SpecialEpisodeRow
+              key={ep.id}
+              episode={ep}
+              tmdbId={tmdbId}
+              watched={isWatched(0, ep.episode_number)}
+              markEpisodeWatched={markEpisodeWatched}
+            />
+          ))}
         </div>
       </div>
     </div>

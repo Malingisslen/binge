@@ -25,7 +25,25 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   const progressRef = useRef(progress);
   useEffect(() => { progressRef.current = progress; }, [progress]);
 
+  // BIN-679: säsong 0 är specials, och watchlist-markören
+  // (lastWatchedSeason/Episode) har ingen position som betyder "sett ett
+  // specialavsnitt" — den räknar numrerade säsonger. Så en special-bockning
+  // skriver ENBART episodeProgress och rör aldrig markören.
+  //
+  // Det stänger också gruppsynken vid källan: syncProgressToGroups anropas inuti
+  // WatchlistContext.updateProgress och ingen annanstans, så ett special kan inte
+  // nå någon annan medlems spoilergräns. Det värsta felläget här var aldrig en
+  // felaktig räknare — det var computeMaskBoundary som matar spoilerskyddet i
+  // Tillsammans för ANDRA (#27:s kritik 2026-08-07).
+  //
+  // Motparten till den här vakten sitter i highestWatchedPosition, som hoppar över
+  // säsong 0 när markören räknas om bakåt. Utan båda läcker specials in i markören
+  // via avmarkeringsvägen i stället för bockningsvägen.
   const markEpisodeWatched = useCallback(async (season: number, episode: number, watched: boolean, episodeCount?: number) => {
+    if (season === 0) {
+      await markEpisode(season, episode, watched);
+      return;
+    }
     if (watched) {
       await Promise.all([
         markEpisode(season, episode, watched),
@@ -71,6 +89,11 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   }, [markEpisode, updateProgress, tmdbId]);
 
   const markSeasonWatched = useCallback(async (season: number, episodeCount: number) => {
+    // BIN-679, samma vakt: se markEpisodeWatched ovan.
+    if (season === 0) {
+      await markSeason(season, episodeCount);
+      return;
+    }
     await Promise.all([
       markSeason(season, episodeCount),
       updateProgress('tv', tmdbId, season, episodeCount),
@@ -85,6 +108,11 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
   // BIN-495: hela säsongen skrivs i EN Firestore-write (markSeasonUnwatchedBase)
   // istället för N parallella per-avsnitt-writes.
   const markSeasonUnwatched = useCallback(async (season: number, episodeNumbers: number[]) => {
+    // BIN-679, samma vakt: se markEpisodeWatched ovan.
+    if (season === 0) {
+      await markSeasonUnwatchedBase(season, episodeNumbers);
+      return;
+    }
     await markSeasonUnwatchedBase(season, episodeNumbers);
     const highest = highestWatchedPosition(progressRef.current, undefined, season);
     await updateProgress('tv', tmdbId, highest?.season ?? 0, highest?.episode ?? 0);

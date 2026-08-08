@@ -28,14 +28,29 @@ describe('highestWatchedPosition', () => {
     expect(highestWatchedPosition(p)).toEqual({ season: 2, episode: 2 });
   });
 
-  it('treats specials (season 0) as losing to any season >= 1', () => {
+  // BIN-679 changed these two deliberately. They used to pin "specials lose to any
+  // numbered season, but win when nothing numbered is watched" — true and harmless
+  // while season 0 was untickable, and a live corruption path the moment the curated
+  // specials got checkboxes. The marker these positions are written to
+  // (lastWatchedSeason/Episode) has no way to say "watched a special", so a season-0
+  // position in it reads as "barely started" to every library surface.
+  it('never counts specials (season 0), even when they are the highest key present', () => {
     const p = progress({ 0: { 1: true, 2: true }, 1: { 1: true } });
     expect(highestWatchedPosition(p)).toEqual({ season: 1, episode: 1 });
   });
 
-  it('returns a special only when no numbered season has a watched episode', () => {
+  // THE regression this ticket exists for, and the one a tick-path-only guard misses:
+  // watched specials + the only watched numbered episode being unmarked. Before
+  // BIN-679 this returned { season: 0, episode: 2 } and parked the marker on a
+  // special — someone caught up on 13 seasons would read as "bakom" everywhere.
+  it('returns null rather than a special when no numbered season has a watched episode', () => {
     const p = progress({ 0: { 1: true, 2: true }, 1: { 1: false } });
-    expect(highestWatchedPosition(p)).toEqual({ season: 0, episode: 2 });
+    expect(highestWatchedPosition(p)).toBeNull();
+  });
+
+  it('ignores specials when the just-unmarked episode was the last numbered one', () => {
+    const p = progress({ 0: { 5: true }, 1: { 1: true } });
+    expect(highestWatchedPosition(p, { season: 1, episode: 1 })).toBeNull();
   });
 
   it('excludes a single just-unmarked episode', () => {

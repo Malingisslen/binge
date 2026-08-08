@@ -132,9 +132,12 @@ function hasAiredNumberedSeason(show: TMDBTVShow, airedFrontierDate: string | nu
 //
 // BIN-589 — säsong 0 (Specials) är ett EGET spår, inte "före säsong 1". Både
 // markören och TMDB:s last_episode_to_air kan peka på ett special: TMDB lägger
-// alla specials i säsong 0 oavsett sändningsdatum, och markEpisodeWatched
-// skriver exakt det avsnitt du bockade (en special-bock parkerar markören på
-// S0). En skalär markör kan därför ALDRIG bevisa att både en special-position
+// alla specials i säsong 0 oavsett sändningsdatum, och markören kan stå på S0
+// dels från äldre data, dels för att useMarkSeen ("jag har sett hela serien")
+// skriver last_episode_to_air rakt in — och för t.ex. Doctor Who 2005 ÄR det
+// avsnittet ett special. (Att bocka ett special i specialsektionen skriver
+// däremot inte längre markören alls — BIN-679 — men det smalnar av vägarna in,
+// det stänger dem inte.) En skalär markör kan därför ALDRIG bevisa att både en special-position
 // och en numrerad position är sedda. En jämförelse där bara ena sidan är
 // säsong 0 är alltså inget positivt bevis på ikapp-läge — och samma "kräver
 // POSITIVT bevis"-regel som isCaughtUpOnEndedShow lever på ger då "bakom":
@@ -144,8 +147,9 @@ function hasAiredNumberedSeason(show: TMDBTVShow, airedFrontierDate: string | nu
 // Samma spår (båda S0, eller båda numrerade) jämförs numeriskt precis som förr.
 // Att i stället låta säsong 0 sortera EFTER numrerade säsonger vänder det andra
 // fallet och påstår "ikapp" för någon som bara sett Specials — det motsäger
-// highestWatchedPosition (som skriver markören och låter S0 förlora mot varje
-// säsong >= 1) och är exakt bortgömnings-felet kommentaren ovan varnar för.
+// highestWatchedPosition (som skriver markören och sedan BIN-679 utesluter S0
+// helt: specials kan aldrig vara den högsta sedda positionen) och är exakt
+// bortgömnings-felet kommentaren ovan varnar för.
 //
 // BIN-615 (Malins beslut 2026-07-29: smal fix i denna funktion, INGEN
 // tvåspårsmodell) — hålet BIN-589 lämnade kvar är det ENDA fallet där bägge
