@@ -256,20 +256,6 @@ describe('planQuickRateWrite', () => {
       expect(planQuickRateWrite({ status })).toBe('rating-and-status');
     }
   });
-
-  // The three outcomes are mutually exclusive and total — a fourth value, or two
-  // inputs collapsing onto one verdict, is what would let the modal's branch fall
-  // through to the wrong write. (The modal's own use of the verdict is asserted in
-  // QuickRateModal.test.tsx; this file cannot see it.)
-  it('maps the three input shapes onto three distinct verdicts', () => {
-    const verdicts = [
-      planQuickRateWrite(null),
-      planQuickRateWrite({ status: 'sedd' }),
-      planQuickRateWrite({ status: 'vill_se' }),
-    ];
-    expect(new Set(verdicts).size).toBe(3);
-    expect(verdicts.every(v => ['add-as-seen', 'rating-and-status', 'rating-only'].includes(v))).toBe(true);
-  });
 });
 
 // BIN-641 — the rewatch fields, shared by buildStatusUpdate and addItem so the

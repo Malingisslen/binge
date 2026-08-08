@@ -10,7 +10,7 @@ export default function IntegritetPage() {
   return (
     <LegalPageShell
       title="Integritetspolicy"
-      lastUpdated="2026-08-06"
+      lastUpdated="2026-08-08"
       version="1.2"
     >
       <section>
@@ -176,6 +176,20 @@ export default function IntegritetPage() {
                 <code>binge:lastReportAt</code> — en tidsstämpel som bromsar hur ofta samma
                 flik kan skicka in anmälningar av olämpligt innehåll. Innehåller bara
                 klockslaget för din senaste anmälan, ingenting om vad du anmälde.
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>Webbläsarens <code>localStorage</code></strong> — till skillnad
+            från sessionStorage-värdena ovan finns dessa kvar även efter att du
+            stängt fliken eller webbläsaren, tills du ändrar dem eller rensar
+            webbläsarens data. Värdet nedan är det vi hittills redovisat i detalj;
+            listan är inte fullständig, och vi utökar den efter hand.
+            <ul>
+              <li>
+                <code>binge:theme</code> — om du valt ljust läge, mörkt läge eller
+                att följa enhetens egen inställning. Innehåller bara det valet. Ingen
+                tredje part har åtkomst till det, och det lämnar aldrig din enhet.
               </li>
             </ul>
           </li>

@@ -35,6 +35,26 @@ export function normalizeMediaType(raw: string | null | undefined): MediaType {
  * The canonical per-title doc id: `movie_${tmdbId}` / `tv_${tmdbId}`.
  * `tmdbId` accepts a string so Firestore path params (which arrive as strings)
  * pass straight through without a lossy Number() round-trip.
+ *
+ * The string variant is UNVALIDATED, and deliberately so — adding a throw here
+ * would change the failure mode of ~90 call sites that no reviewer has read
+ * (decision recorded at a4a1470). The contract is therefore the caller's to keep,
+ * and this is what breaks when it doesn't: since BIN-618 the CLIENT doc-id branch
+ * accepts only canonical ids, so a non-canonical string writes a doc this half's
+ * doc-id branch can no longer address. `''` and `'-5'` produce a doc
+ * `parseTmdbIdFromDocId` rejects outright. A LEADING ZERO is worse, and not
+ * because the doc goes inert: `'042'` writes `movie_042`, which no client read
+ * path resolves — the doc-id branch rejects the alias, and the field branch
+ * rejects it too, because every writer feeds the id and the stored `tmdbId` from
+ * the SAME value, so an aliased doc carries the string `'042'` (parity test:
+ * "a stored 042 field no longer rescues an aliased doc"). The permissive server
+ * copy still re-keys it onto 42, though, while the id it was meant to name lives
+ * at `movie_42` — so the row is invisible to the app and shadows the genuine one
+ * to every Cloud Function that reads it. That is the alias-collision class of
+ * BIN-618/624: BIN-618 closed it on the client read path only, so the write side
+ * is where it is introduced and the server read sites are where it still lands,
+ * which is BIN-624's remaining scope. Pass a number unless a Firestore path param
+ * forces otherwise.
  */
 export function mediaTypeDocId(mediaType: string | null | undefined, tmdbId: number | string): string {
   return `${normalizeMediaType(mediaType)}_${tmdbId}`;
