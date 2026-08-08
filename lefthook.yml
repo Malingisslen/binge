@@ -1,0 +1,40 @@
+# Local commit gates. CI (ci.yml) stays the backstop — these exist so a type
+# error or lint problem costs seconds at commit time instead of a push, a CI
+# round-trip and a red main.
+#
+# Ported from Butlery's lefthook.yml (2026-08-08). Butlery learned the hard way
+# that an ungated whole-project check runs on commits that contain no code at
+# all: its analyze step cost 255s on a commit of one JSON and two markdown
+# files. Every command here is glob-gated from the start.
+#
+# Manual run: npx lefthook run pre-commit
+# Skip one hung step: LEFTHOOK_EXCLUDE=typecheck (never LEFTHOOK=0).
+
+pre-commit:
+  commands:
+    # `tsc` must read the whole project — handing it file arguments makes it
+    # ignore tsconfig.json, so this one cannot be scoped to staged files the way
+    # lint is. The glob covers the inputs that can turn clean code red: the
+    # sources, the compiler config, and the dependency set types resolve against.
+    # Measured 22s warm / 48s cold on this repo (2026-08-08) — the slowest step
+    # here by far, which is exactly why it must never run on a docs-only commit.
+    typecheck:
+      glob:
+        - "*.ts"
+        - "*.tsx"
+        - "tsconfig.json"
+        - "package.json"
+        - "package-lock.json"
+      run: npm run typecheck
+      fail_text: "tsc found type errors. Fix them before committing (npm run typecheck)."
+      priority: 1
+
+    # eslint takes file arguments and still honours eslint.config.mjs, so unlike
+    # typecheck this reads only what is staged.
+    lint:
+      glob:
+        - "*.ts"
+        - "*.tsx"
+      run: npx eslint {staged_files}
+      fail_text: "eslint found problems in the staged files. Fix them, or justify with a scoped inline disable."
+      priority: 2
