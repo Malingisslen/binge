@@ -57,6 +57,13 @@ export default function SeasonList({
 
   // Season 0 is never a real row (displaySeasons filters it out), so it doubles
   // as the expanded-key for the specials section — one section open at a time.
+  //
+  // It is read as BOTH things: the accordion key, and the literal season number in
+  // the watched-count below. Don't "disambiguate" the accordion by giving this a
+  // non-season value like -1 — the count would drop to zero while the checkboxes
+  // underneath kept working, because those pass season 0 directly. That trap has a
+  // live tripwire (the `1/22` case in SeasonList.test.tsx reddens on exactly that
+  // mutation), so this is a pointer, not a warning about something unguarded.
   const SPECIALS_KEY = 0;
 
   const rows = (boundary: MaskBoundary | null) => (

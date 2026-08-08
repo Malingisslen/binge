@@ -10,10 +10,13 @@
 // ONLY there, so the page silently skips them.
 //
 // This map is the narrow exception: a hand-picked list of season-0 episode NUMBERS
-// per show, rendered as one extra labelled section. Same curated, display-only,
-// zero-runtime-cost pattern as relatedSeries.ts — the episode titles, stills and
-// synopses still come from the live TMDB season fetch, nothing is stored here but
-// numbers. The global hide-season-0 rule is untouched for every other show.
+// per show, rendered as one extra labelled section. It shares relatedSeries.ts's
+// SHAPE — hand-curated, no TMDB metadata checked in, only episode numbers and our
+// own section label — but not its affordance: relatedSeries is display-only and this
+// section is tickable (see below). Nor its cost: relatedSeries fetches nothing, while
+// expanding this section fires one lazy season-0 request, and the episode titles,
+// stills and synopses all come from it live. The global hide-season-0 rule is
+// untouched for every other show.
 //
 // TICKABLE since BIN-679. It was display-only before that, because
 // markEpisodeWatched wrote the exact position you ticked: a season-0 tick parked

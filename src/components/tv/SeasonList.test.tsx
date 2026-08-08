@@ -41,7 +41,7 @@ vi.mock('@/hooks/useGroupMemberProgress', () => ({ useGroupMemberProgress: () =>
 // nothing notices a special writing into a numbered episode's reaction thread.
 const episodeReactions = vi.hoisted(() => vi.fn());
 vi.mock('@/components/tv/EpisodeReactions', () => ({
-  default: (props: { tmdbId: number; season: number; episode: number }) => { episodeReactions(props); return null; },
+  default: (props: { tmdbId: number; season: number; episode: number; watched: boolean }) => { episodeReactions(props); return null; },
 }));
 
 function seasons(withSeason0: boolean): TMDBSeason[] {
@@ -105,6 +105,11 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     // The uncurated clutter it sits between stays hidden — that is the whole point
     // of the allow-list (season 0 has 199 entries for this show).
     expect(screen.queryByText(/Doctor Who at the Proms/)).toBeNull();
+
+    // The header renders the curated length a SECOND time, next to the label. One
+    // probe per rendering, not per number: without this the header and the `x/22`
+    // counter below it could disagree on screen with nothing red.
+    expect(screen.getByText('(22 avs)')).toBeTruthy();
   });
 
   it('does not fetch season 0 until the section is expanded', () => {
@@ -169,6 +174,16 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
     for (const call of episodeReactions.mock.calls) {
       expect(call[0].season).toBe(0);
       expect(call[0].tmdbId).toBe(DW_REVIVAL);
+      // The spoiler gate's WIRING — not the gate itself. EpisodeReactions opens its
+      // list only once you have marked the episode watched (`if (!watched) return`),
+      // and the section comment stakes #18 Community Manager's sign-off on that. This
+      // file mocks EpisodeReactions away, so it can only pin what the row FORWARDS;
+      // the branch that implements the gate is still untested (BIN-821). Pinning the
+      // hand-off is still worth it: EpisodeRow is the only place in the tree that
+      // renders EpisodeReactions, and this is the only test file that reaches
+      // EpisodeRow — so nothing else can catch a hardcoded prop here, and EpisodeRow
+      // serves the numbered seasons too.
+      expect(call[0].watched).toBe(false);
     }
     expect(episodeReactions.mock.calls.map(c => c[0].episode).sort((a, b) => a - b)).toEqual([14, 83]);
   });
@@ -191,6 +206,16 @@ describe('SeasonList — curated season-0 specials (BIN-580)', () => {
 
     const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
     expect(boxes.map(b => b.checked)).toEqual([false, true]);
+
+    // The other half of the spoiler-gate hand-off. Asserting only `false` above
+    // pins one value, and a forwarded boolean pinned at one value is a half pin —
+    // the same-value hardcode is always the survivor. `watched={false}` in
+    // EpisodeRow would strand the reactions list permanently shut for EVERY episode
+    // in the app, and passes the other test untouched. Map, not `.every`, so a
+    // missing episode reads as undefined instead of vacuously true.
+    const gate = new Map(episodeReactions.mock.calls.map(c => [c[0].episode, c[0].watched]));
+    expect(gate.get(83)).toBe(true);
+    expect(gate.get(14)).toBe(false);
 
     // And the UN-tick direction. Every other click in this file lands on an unchecked
     // box, so hardcoding `true` at the call site would leave a special permanently
