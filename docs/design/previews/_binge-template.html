@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>binge preview — TEMPLATE</title>
+
+<!--
+  Skeleton for a binge screen preview. Copy it, fill in the frames, open it in
+  Malin's browser. Never edit this file to build one screen — copy first.
+
+  Reached from .claude/shared-plugin.json → preview.templatePath (the /preview
+  skill) and named by .claude/hooks/preview-gate.mjs when it blocks.
+
+  Everything here mirrors .claude/rules/design-system.md and src/app/globals.css.
+  When a token changes there, this file is WRONG until someone updates it — it is
+  a stand-in for the real app, so a preview that invents a colour teaches Malin to
+  expect something the app will not deliver.
+
+  Two modes:
+    directions  — 3-4 deliberately INCOMPATIBLE takes on the same screen, each
+                  with steal/skip chips. Use this for a NEW screen: recognising a
+                  preference is far easier than specifying one.
+    single      — one screen, phone + desktop, for a change to a screen that exists.
+-->
+
+<style>
+/* ── tokens: verbatim from src/app/globals.css :root ───────────────────────── */
+:root {
+  --bg:        oklch(0.985 0.003 90);
+  --bg-2:      oklch(0.968 0.004 90);
+  --surface:   oklch(1 0 0);
+
+  --ink:       oklch(0.18 0.006 80);
+  --ink-2:     oklch(0.42 0.008 80);
+  --ink-3:     oklch(0.60 0.010 80);
+
+  --rule:      oklch(0.88 0.006 80);
+  --rule-2:    oklch(0.94 0.005 80);
+  --placeholder-fill: oklch(0.85 0.02 80);
+
+  /* saffran — nu / live / avgörande. CTA, live, veto, brand. */
+  --acc:       oklch(0.72 0.14 75);
+  --acc-deep:  oklch(0.55 0.13 70);
+  --acc-soft:  oklch(0.955 0.04 75);
+
+  /* plum — idag / tidpositionering. WeekStrip today, kalenderns today-kolumn. */
+  --cal-deep:  oklch(0.48 0.11 300);
+  --cal-soft:  oklch(0.945 0.045 300);
+
+  --warn-soft: oklch(0.965 0.06 95);
+  --warn-deep: oklch(0.72 0.13 80);
+  --warn-ink:  oklch(0.42 0.10 80);
+
+  --danger:      oklch(0.55 0.17 25);
+  --danger-soft: oklch(0.955 0.04 25);
+  --danger-ink:  oklch(0.48 0.16 25);
+
+  --success:     oklch(0.62 0.16 165);
+  --season-done: oklch(0.55 0.13 145);
+
+  --sans: 'Albert Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* exactly two shadows exist — tailwind.config.ts */
+  --shadow-lift: 0 4px 14px oklch(0 0 0 / 0.06);
+  --shadow-pop:  0 2px 8px oklch(0 0 0 / 0.04);
+}
+
+/* ── page chrome for the preview itself (not part of the app) ──────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; font-size: 15px; font-family: var(--sans); background: var(--bg-2); color: var(--ink); }
+.sheet { max-width: 1500px; margin: 0 auto; padding: 32px 24px 64px; }
+.sheet > h1 { font-size: 22px; margin: 0 0 4px; }
+.sheet > p.lede { margin: 0 0 28px; color: var(--ink-2); max-width: 70ch; }
+.note { background: var(--warn-soft); color: var(--warn-ink); border: 1px solid var(--warn-deep);
+        border-radius: 6px; padding: 10px 14px; margin: 0 0 28px; font-size: 14px; }
+
+/* ── frames ────────────────────────────────────────────────────────────────── */
+.frames { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.frame { background: var(--bg); border: 1px solid var(--rule); border-radius: 8px;
+         overflow: hidden; box-shadow: var(--shadow-lift); }
+.frame > figcaption { font-size: 12px; color: var(--ink-3); padding: 6px 10px;
+         background: var(--bg-2); border-bottom: 1px solid var(--rule-2); }
+.frame.desktop { width: 1320px; max-width: 100%; }
+.frame.phone   { width: 390px; }
+.frame .viewport { height: 800px; overflow: auto; }
+.frame.phone .viewport { height: 844px; }
+
+/* ── app chrome: sticky topbar + subnav + canvas (design-system.md · Layout) ── */
+.topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px;
+          height: 56px; padding: 0 40px; background: var(--surface);
+          border-bottom: 1px solid var(--rule); }
+.brand { font-weight: 700; letter-spacing: -0.01em; color: var(--acc-deep); }
+.weekstrip { display: flex; gap: 4px; }
+.weekstrip span { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center;
+                  font-size: 12px; color: var(--ink-2); background: var(--bg-2); }
+.weekstrip span.today { background: var(--cal-soft); color: var(--cal-deep); font-weight: 600; }
+.search { flex: 1; height: 32px; border-radius: 6px; border: 1px solid var(--rule);
+          background: var(--bg); padding: 0 10px; display: flex; align-items: center;
+          color: var(--ink-3); font-size: 13px; }
+.avatar { width: 30px; height: 30px; border-radius: 999px; background: var(--placeholder-fill); }
+
+.subnav { display: flex; gap: 18px; padding: 0 40px; height: 40px; align-items: center;
+          background: var(--surface); border-bottom: 1px solid var(--rule); font-size: 14px; }
+.subnav a { color: var(--ink-2); text-decoration: none; }
+.subnav a[aria-current] { color: var(--ink); font-weight: 600;
+          box-shadow: inset 0 -2px 0 var(--acc); }
+
+.canvas { max-width: 1320px; margin: 0 auto; padding: 32px 40px 48px; }
+.frame.phone .topbar, .frame.phone .canvas { padding-left: 16px; padding-right: 16px; }
+.frame.phone .subnav { display: none; }
+.tabbar { position: sticky; bottom: 0; display: none; height: 56px; background: var(--surface);
+          border-top: 1px solid var(--rule); }
+.frame.phone .tabbar { display: flex; }
+.tabbar div { flex: 1; display: grid; place-items: center; font-size: 11px; color: var(--ink-3); }
+.tabbar div[aria-current] { color: var(--acc-deep); }
+
+/* ── primitives — radii 3/6/8 only, two shadows only, two accents only ─────── */
+h2.screen { font-size: 19px; margin: 0 0 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.btn { height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent;
+       background: var(--acc); color: oklch(0.18 0.006 80); font: inherit; font-weight: 600;
+       font-size: 14px; cursor: pointer; }
+.btn.secondary { background: var(--surface); border-color: var(--rule); color: var(--ink); font-weight: 500; }
+.btn.danger { background: var(--danger); color: var(--surface); }
+.chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px;
+        background: var(--bg-2); border: 1px solid var(--rule-2); font-size: 12px; color: var(--ink-2); }
+.chip.live { background: var(--acc-soft); border-color: var(--acc); color: var(--acc-deep); font-weight: 600; }
+.chip.today { background: var(--cal-soft); border-color: var(--cal-deep); color: var(--cal-deep); font-weight: 600; }
+.chip.done { background: oklch(0.955 0.04 145); border-color: var(--season-done); color: var(--season-done); }
+.poster { width: 92px; aspect-ratio: 2/3; border-radius: 3px; background: var(--placeholder-fill); }
+table.rows { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.rows th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 8px 10px;
+        background: var(--bg-2); border-bottom: 1px solid var(--rule); }
+table.rows td { padding: 8px 10px; border-bottom: 1px solid var(--rule-2); }
+table.rows tr:nth-child(even) td { background: var(--bg-2); }
+
+/* ── directions mode: steal / skip chips ──────────────────────────────────────
+   One <section class="direction"> per take. Malin marks each element she wants
+   kept; the winning screen is assembled from her picks, not from one variant. */
+.direction { margin: 0 0 40px; }
+.direction > header { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; }
+.direction > header h3 { font-size: 17px; margin: 0; }
+.direction > header .tag { font-size: 12px; color: var(--ink-3); }
+.direction > p.claim { margin: 0 0 14px; color: var(--ink-2); max-width: 75ch; }
+.picks { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+.picks label { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+        border-radius: 6px; border: 1px solid var(--rule); background: var(--surface);
+        font-size: 13px; cursor: pointer; }
+.picks input { accent-color: var(--acc-deep); }
+</style>
+</head>
+
+<body>
+<div class="sheet">
+
+  <h1>SKÄRMENS NAMN — riktningar</h1>
+  <p class="lede">En rad om vad skärmen ska göra för användaren. Inga tekniska ord.</p>
+
+  <div class="note">
+    TEMPLATE — byt ut allt inuti <code>&lt;section class="direction"&gt;</code>. Behåll tokens och
+    chrome orörda: de är kopior av <code>globals.css</code> och ska inte hittas på här.
+  </div>
+
+  <!-- ══ EN RIKTNING ══════════════════════════════════════════════════════════ -->
+  <section class="direction">
+    <header>
+      <h3>A · Namnet på greppet</h3>
+      <span class="tag">vad den offrar för att vinna något annat</span>
+    </header>
+    <p class="claim">
+      En mening om vad den här varianten tror är viktigast, och vad den medvetet gör sämre.
+      Riktningarna ska vara OFÖRENLIGA — annars finns inget att välja mellan.
+    </p>
+
+    <div class="frames">
+      <figure class="frame desktop">
+        <figcaption>desktop · 1320</figcaption>
+        <div class="viewport">
+          <div class="topbar">
+            <span class="brand">binge</span>
+            <span class="weekstrip"><span>må</span><span class="today">ti</span><span>on</span><span>to</span><span>fr</span></span>
+            <span class="search">Sök serier, filmer, personer…</span>
+            <span class="avatar"></span>
+          </div>
+          <nav class="subnav">
+            <a href="#" aria-current="page">Hem</a><a href="#">Bibliotek</a><a href="#">Kalender</a>
+            <a href="#">Rekommendationer</a><a href="#">Streamingrådgivaren</a><a href="#">Vänner</a><a href="#">Grupper</a>
+          </nav>
+          <main class="canvas">
+            <h2 class="screen">Skärmens rubrik</h2>
+            <div class="row">
+              <div class="card" style="flex:1 1 420px">
+                <div class="row" style="align-items:center">
+                  <div class="poster"></div>
+                  <div>
+                    <div style="font-weight:600">Titel</div>
+                    <div style="color:var(--ink-2);font-size:13px">Undertext · 2026 · 3 säsonger</div>
+                    <div class="picks" style="margin-top:8px">
+                      <span class="chip live">Live nu</span>
+                      <span class="chip today">Idag</span>
+                      <span class="chip done">Sett</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="card" style="flex:0 1 300px">
+                <div style="font-weight:600;margin-bottom:10px">Panel</div>
+                <table class="rows">
+                  <tr><th>Rad</th><th>Värde</th></tr>
+                  <tr><td>Något</td><td>42</td></tr>
+                  <tr><td>Annat</td><td>7</td></tr>
+                </table>
+                <div class="row" style="margin-top:14px">
+                  <button class="btn">Avgörande knapp</button>
+                  <button class="btn secondary">Sekundär</button>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </figure>
+
+      <figure class="frame phone">
+        <figcaption>mobil · 390×844</figcaption>
+        <div class="viewport">
+          <div class="topbar"><span class="brand">binge</span><span class="search">Sök…</span><span class="avatar"></span></div>
+          <main class="canvas">
+            <h2 class="screen">Skärmens rubrik</h2>
+            <div class="card">
+              <div class="row" style="align-items:center">
+                <div class="poster" style="width:64px"></div>
+                <div><div style="font-weight:600">Titel</div>
+                     <div style="color:var(--ink-2);font-size:13px">Undertext</div></div>
+              </div>
+              <div class="row" style="margin-top:14px"><button class="btn">Avgörande knapp</button></div>
+            </div>
+          </main>
+          <nav class="tabbar">
+            <div aria-current="page">Hem</div><div>Bibliotek</div><div>Kalender</div><div>Vänner</div><div>Mer</div>
+          </nav>
+        </div>
+      </figure>
+    </div>
+
+    <div class="picks">
+      <label><input type="checkbox"> behåll: layouten</label>
+      <label><input type="checkbox"> behåll: panelen till höger</label>
+      <label><input type="checkbox"> behåll: knappordningen</label>
+      <label><input type="checkbox"> hoppa över: allt i A</label>
+    </div>
+  </section>
+
+  <!-- Kopiera sektionen ovan till B, C (och D) med OFÖRENLIGA grepp. -->
+
+</div>
+</body>
+</html>
