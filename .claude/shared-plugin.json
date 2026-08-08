@@ -63,8 +63,10 @@
       "_note": "The whole-diff, cross-file pass. Was `codeReviewGate` until 2026-07-31, i.e. gated on the /code-review BUILTIN â€” a command only a human can start, so every unattended run (sprint-parallel, /commit, any resume) dead-ended asking Malin to type it. Same filePattern and same marker as before; the only change is that a spawnable agent now owns it. /code-review stays available and is still the deeper pass â€” it is simply no longer the ONLY way to earn this marker.",
       "agent": "binge-integration-reviewer",
       "marker": "simplify-done.marker",
+      "_note2": "2026-08-08: added `^\\.github/(workflows|actions)/`. Before this, NO gate in this repo covered the release path at all — a change to `deploy.yml` (which builds and deploys production), `preview.yml`, `ci.yml` or `secret-scan.yml` reached zero reviewers. Meanwhile `.claude/rules/deployment.md` already lists `.github/workflows/**` in its auto-load `paths:`, so the repo's own prose treated it as load-bearing while the automated half — the one that actually runs — did not. Two sources, opposite answers, and the automated one wins by default. Found by sweeping all three repos on 2026-08-08 after the same gap was fixed in Synat (BIN-820), where the identical widening (BIN-667) had already been made and this repo never got it. These are REGEXES, not globs: a literal `.github/workflows/**` throws `Nothing to repeat` at `new RegExp()`. `actions` is in the alternation even though this repo has no `.github/actions/` yet — Synat learned that gating only `workflows/` exempts logic the moment anything is extracted into a composite action (BIN-666/667), and the cheap time to cover it is before that move, not after.",
       "patterns": [
-        "\\.(ts|tsx)$"
+        "\\.(ts|tsx)$",
+        "^\\.github/(workflows|actions)/"
       ]
     }
   ],

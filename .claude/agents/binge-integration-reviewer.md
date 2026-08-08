@@ -1,6 +1,6 @@
 ---
 name: binge-integration-reviewer
-description: Reviews the staged Binge diff AS A WHOLE for cross-file breakage — contract drift between changed callers and callees, one concept handled two different ways across files, and duplication introduced across the batch — then writes its completion marker. Run before committing any .ts/.tsx change.
+description: Reviews the staged Binge diff AS A WHOLE for cross-file breakage — contract drift between changed callers and callees, one concept handled two different ways across files, and duplication introduced across the batch — then writes its completion marker. Run before committing any .ts/.tsx change, and any change under .github/workflows/ or .github/actions/.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -38,6 +38,16 @@ files**, not the quality of any single file:
    rule against its actual values. "Is the logic sound" is not the question; "would it have fired"
    is. This class is what per-file review structurally cannot catch — a rule can be flawless and
    still be keyed to the wrong clock.
+7. **The release path** (`.github/workflows/`, `.github/actions/`) — gated here since 2026-08-08.
+   Before that no gate in this repo covered it at all, so `deploy.yml` (which builds and deploys
+   production), `preview.yml`, `ci.yml` and `secret-scan.yml` could each change with zero review.
+   This is the only code whose failure mode is SILENCE: a workflow reading `secrets.X` for a value
+   stored as a repo *variable* resolves to empty string and fails nothing, and a scheduled alarm
+   keyed to the wrong clock goes quietest exactly when the system is busiest. Both cost Synat real
+   incidents. Treat a YAML change like a code change — check the twin call sites, check what
+   consumes the run's conclusion, and replay any guard against the dates of the incident it exists
+   for. Note the counts you can measure and paginate them: a `--limit 100` listing of run history
+   is a capped page, not a total.
 
 Explicitly NOT your job: per-file correctness, style, naming, test quality. Those gates exist.
 Report only what you are genuinely confident about — no nitpick spam.
