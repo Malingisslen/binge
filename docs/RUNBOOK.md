@@ -226,11 +226,61 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
    en budgeterad andel stale titlar (`TMDB_BUILD_REFRESH_BUDGET`, default
    1500/worker) → tidsbunden, 45-min-tak. Den **veckovisa `schedule`-refreshen**
    kör med stor budget → full metadata-refresh (~1.5-2 h) och har därför ett eget
-   **150-min-tak**. (Tidigare delade båda 30 min → schedule-körningen timeout:ade
-   ALLTID; det var själva buggen.) Om en schedule-körning ändå röd-timeout:ar:
-   verifiera att `timeout-minutes`-uttrycket i deploy.yml gav den 150, inte 30.
+   **175-min-tak** (texten sa länge 150; `deploy.yml`s ternär ger 175). (Tidigare
+   delade båda 30 min → schedule-körningen timeout:ade ALLTID; det var själva
+   buggen.) Om en schedule-körning ändå röd-timeout:ar: verifiera att
+   `timeout-minutes`-uttrycket i deploy.yml gav den 175, inte 45.
 4. Höj inte sidantalet (`SEO_*` i `seoCoverage.ts`); sänk aldrig
    `BUILD_FETCH_TIMEOUT_MS` under ~10s (frisk fetch måste hinna klart).
+5. **RÖTT bygge med `[selection]` i loggen (BIN-823).** Nytt felläge sedan
+   urvals-spärrhaken. Betyder "urvalet blev för tunt", inte "koden är trasig":
+   pre-rendren fick färre id:n än täckningsgolvet tillåter och bygget fälls hellre
+   än att ersätta ~31 000 sidor med ~150. Felmeddelandet namnger utvägen.
+   - **Vanligaste orsaken:** `.tmdb-cache` evakuerad ur actions/cache ⇒ urvalet
+     måste härledas om från kallt, under 15-minuters räddningstaket. För `movie`
+     och `tv` krävs att TMDB dessutom stryper; **för `person` är det aritmetik,
+     inte otur** — mätt härledningstid 2 672 s mot ett tak på 900 s, så en kall
+     personhärledning slår ALLTID i taket, lämnar manifestet oskrivet och fäller
+     200-id-golvet. Gäller vid varje kall start, inte bara första deployen: även
+     en `MANIFEST_VERSION`-bump eller ett korrupt manifest landar här.
+     Åtgärd: `gh workflow run deploy.yml -f full_refresh=true` — det ger
+     150-minuters härledningstak och 175-minuters steg-tak.
+   - **Hinner den inte klart heller: kör den igen.** Ett lyckat delresultat
+     sparas — `writeSelectionManifest` skriver till `.tmdb-cache/`, och
+     deploy.yml:s "Save TMDB build cache" körs `if: always()`, så manifesten
+     bör överleva även en steg-timeout. (Den överlevnaden är resonerad, inte
+     observerad — deploy.yml hedgar den själv; bekräfta på nästa riktiga
+     hängning innan du förlitar dig på den.)
+     **Men vänta dig inte att härledningen hoppas över:** `full_refresh` sätter
+     `TMDB_SELECTION_REFRESH`, och det tvingar omhärledning av ALLA tre typerna
+     oavsett hur färska manifesten är. Det som sparas gör två OLIKA saker:
+     manifesten för de typer som HANN klart låter deras täckningsgolv passera
+     nästa gång, och detaljcachen (`.tmdb-cache/movie-*.json`, skriven av
+     `fetchForBuild`) gör personens rollist-fas snabbare. Den typ som slog i
+     taket har inget manifest alls — `writeSelectionManifest` nås bara när
+     härledningen lyckades — så den måste hinna klart för att bygget ska bli
+     grönt. Vill du hoppa över härledningen helt: kör en **vanlig** deploy utan
+     `full_refresh` — den läser manifesten och gör noll listanrop.
+   - **Första deployen efter BIN-823 KAN gå röd, och i så fall är det väntat.**
+     Själva push:en till main triggar push-vägen automatiskt — inget
+     `TMDB_SELECTION_REFRESH`, 45-minuters steg-tak, 15-minuters räddningstak —
+     och den måste härleda alla tre urvalen innan någon hinner dispatcha.
+     Om den går röd eller inte hänger på `.tmdb-cache`: restoras den varmt
+     (`restore-keys: tmdb-cache-`) serveras personens rollistor från disk och
+     härledningen krymper till ~100 listsidor, och bygget kan mycket väl bli
+     grönt. Citera INTE 2 672-sekundersmätningen här — den gjordes när
+     `collectPersonIds` gick förbi diskcachen, vilket är precis vad den här
+     committen ändrade. Den siffran gäller fortfarande vid evakuerad cache och i
+     preview (som saknar cache-steg helt). Blir den röd: behandla det som väntat,
+     inte som en regression — gamla sajten ligger kvar, och åtgärden är att
+     direkt köra `gh workflow run deploy.yml -f full_refresh=true`.
+     Samma push är också första riktiga provet på att fasordningen
+     (`Collecting page data` klar före `Generating static pages`) håller —
+     CI och preview sätter båda `SELECTION_ALLOW_THIN` och kan inte falsifiera den.
+   - Gamla sajten ligger kvar under tiden; ett rött bygge deployar ingenting.
+   - Sätt ALDRIG `SELECTION_ALLOW_THIN` i `deploy.yml` för att komma förbi. Den
+     stänger av både golvet och sitemapens kast och hör bara hemma i `ci.yml`
+     och `preview.yml`.
 
 ---
 

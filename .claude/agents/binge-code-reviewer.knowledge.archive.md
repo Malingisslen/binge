@@ -6592,3 +6592,791 @@ special airing today would be un-tickable — inherited from the shared row, unr
 
 Isolated-worktree results: 224 files / 2683 passed / 4 skipped, `tsc --noEmit` exit 0, `eslint`
 exit 0 on all 7 non-new source files. Verdict: pass, 0 blocking.
+
+### 2026-08-08 — BIN-679 follow-up (r4): a mock-prop assertion pins the wiring, not the guard
+
+Staged set: `src/lib/tv/canonicalSpecials.ts` (9a42757), `src/components/tv/SeasonList.tsx`
+(65fbfbd), `src/components/tv/SeasonList.test.tsx` (84a5726). 17 added lines, two comment
+rewrites + one assertion. Reviewed on an isolated worktree of the index (tree 345daf9,
+snap commit 328b620), fresh `cacheDir` outside `node_modules`.
+
+**The finding.** The new line is `expect(call[0].watched).toBe(false)` inside
+`hands season 0 to the reactions thread`, closing the review round's "the spoiler gate is
+unpinned repo-wide" note. Mutations run in the isolated worktree:
+
+| mutant | result |
+|---|---|
+| `EpisodeRow.tsx:109` `watched={watched}` → `watched={true}` | 1 of 14 red — exactly the named test. Assertion is load-bearing. |
+| same line → `watched={false}` | **FULL SUITE GREEN** (2683 passed / 4 skipped). |
+| `EpisodeReactions.tsx:17` `if (!watched) {` → `if (false && !watched) {` | **FULL SUITE GREEN** (2683 passed / 4 skipped). |
+| `SeasonList.tsx:66` `SPECIALS_KEY = 0` → `-1` | 1 of 14 red — only `counts watched specials against the curated list`. |
+
+So the assertion closes the LEAK direction of one link (EpisodeRow forwards its `watched`
+prop) and nothing else. The gate itself — `if (!watched) return <gate/>` in
+`EpisodeReactions.tsx` — is structurally unreachable from `SeasonList.test.tsx`, which
+mocks `EpisodeReactions` to a spy precisely so the Firebase-importing hook never loads.
+`EpisodeReactions` is imported by `EpisodeRow.tsx` alone, and `SeasonList.test.tsx` is the
+only test file in the tree that renders it, so #18 Community Manager's sign-off ("reactions
+only open once YOU have marked the episode watched") remains unpinned at its implementation.
+An `EpisodeReactions.test.tsx` can cover the `!watched` branch with no Firestore at all —
+`useEpisodeReactions` is called only inside `ReactionsThread`, below the gate.
+
+**Answer to "is this the right home?"** Yes for what it pins (only place that renders the
+tree; the claim it defends is written in `SeasonList.tsx`'s section comment), no for what
+the ticket believed it pinned. Recorded as advisory, not blocking: the diff strictly adds
+detection power.
+
+**Comment rewrites.** `canonicalSpecials.ts:13` display-only → data-only: accurate, and no
+third reading inside the file (the only surviving "display-only" is the explicitly retired
+one at :21). But the sentence still points at `relatedSeries.ts` as "the same pattern", and
+that file's own header says "It is DISPLAY ONLY — it does not merge the shows, and touches
+no watchlist / progress / status data" — the retired sense, now false for canonicalSpecials.
+The ambiguity moved one hop out rather than being removed; suggested naming the shared
+property (hand-curated, zero runtime TMDB cost, nothing stored but ids) instead of the term.
+Second half of the new parenthetical documents the comment's own edit history rather than
+the code — code-style debt, suggested trim.
+
+`SeasonList.tsx:61-65` (SPECIALS_KEY doubles as accordion key and literal season number):
+verified accurate by the `-1` mutant — the counter goes 1/22 → 0/22 while the checkboxes,
+the reactions thread and the expansion all keep working, because those pass a literal `0`
+(`CanonicalSpecialsPanel` `isWatched(0, …)`, `SpecialEpisodeRow` `markEpisodeWatched(0, …)`,
+`EpisodeRow seasonNumber={0}`). "Silently" is true of runtime behaviour; the counter test at
+`SeasonList.test.tsx:230` does catch it, which the comment could name.
+
+**Also noted (out of the staged set):** `tasks/todo.md:9` — unstaged, being replaced by the
+BIN-679 plan — still reads "`CanonicalSpecialsSection` … är medvetet display-only" in the
+present tense; per code-style the plan is disposable and BIN-679 shipped in 95a09d6.
+The mock's declared prop type (`{ tmdbId; season; episode }`) omits `watched`, which the new
+assertion reads through an `any` mock.calls entry; it fails loudly rather than silently, but
+adding `watched: boolean` keeps the spy self-documenting.
+
+Rig hygiene: junction dropped before `worktree remove`; `remove --force` hit Permission
+denied, cleared with `rm -rf` + `git worktree prune` from the repo root, `node_modules/.bin/
+vitest` verified present afterwards. Index blobs re-verified unchanged at close.
+Verdict: pass, 0 blocking.
+
+### 2026-08-08 — BIN-679 r6 (final): a SIBLING agent's cleanup wiped the shared `node_modules` through my rig's junction
+
+Reviewing the staged BIN-679 follow-up (3 files, comment/test-only: `SeasonList.test.tsx`
+`ef3268fd`, `SeasonList.tsx` `a118fff4`, `canonicalSpecials.ts` `163a42ad`). Built the
+standard rig at 16:46 — `git write-tree` → `commit-tree` → `worktree add --detach` +
+`mklink /J node_modules C:\binge\node_modules` — ran the target suite green (14/14) on the
+staged bytes, then went to typecheck. Two minutes later the worktree was EMPTY except
+`tsconfig.tsbuildinfo`, it was gone from `git worktree list`, and
+`ls C:/binge/node_modules` returned **0 entries**: the entire shared install was destroyed
+mid-review. I had removed nothing.
+
+Cause: the per-session scratchpad (`…/8aade003-…/scratchpad/`) is shared by every agent in
+the session. A sibling reviewer (its own `wt-r5-164756` appeared at 16:47, plus `vcache-r5`,
+`remedy-r5.mjs`) cleaned up stale worktrees there, and the removal walked into MY junction
+and deleted the real `C:\binge\node_modules` behind it. The 2026-08-01 lesson ("drop the
+junction FIRST, then `worktree remove --force`") only protects against your OWN removal —
+it cannot protect a junction a concurrent agent removes for you. Blast radius is the whole
+repo: `npm test`, `npm run typecheck`, `npm run lint` and every commit gate were dead.
+
+Repair: `npm --prefix /c/binge ci --prefer-offline --no-audit --no-fund` → "added 722
+packages in 47s", `node_modules/.bin/vitest` back. Then rebuilt the rig WITHOUT a junction —
+`npm --prefix <worktree> ci --prefer-offline` (53 s) gives the scratch tree a private
+`node_modules`, which also isolates the vitest transform cache for free (default `cacheDir`
+is `node_modules/.vite`, so the round-N−1-mutant class disappears). Note `--cache.dir` is
+not a valid vitest 4 flag (CAC throws). Removing the rig afterwards failed with `Filename
+too long`; `rm -rf` + `git worktree prune` from the repo root cleared it and
+`C:/binge/node_modules` survived at 448 entries.
+
+Findings on the diff itself (all four of r5's taken advisories verified by mutation in the
+private rig; control 14/14 green, hashes == index before and after each run):
+- `EpisodeRow.tsx` `watched={watched}` → `watched={false}` at the sole `EpisodeReactions`
+  call: **1 of 14 fails**, and it is exactly `reads the checked state from season 0` — the
+  new `Map`-based assertion. The gate-stuck-shut direction that survived r4 is now dead.
+- Same site → `watched={true}`: 2 of 14 fail (`hands season 0 to the reactions thread` +
+  the same Map test). Both directions of the forwarded boolean are pinned.
+- `const SPECIALS_KEY = 0` → `-1`: **1 of 14 fails**, exactly the `1/22` case, so
+  `SeasonList.tsx`'s new "live tripwire" comment is true as written.
+- The Map assertion is free of the vacuity traps: an absent episode yields `undefined`,
+  which fails `toBe(true)` and `toBe(false)` alike (unlike `.every` over an empty array or
+  a `find` that returns undefined). `mock.calls` is cleared in `beforeEach`, and the Map is
+  built before the un-tick click, so no later call can overwrite a key.
+- Comment claims verified statically: `EpisodeRow.tsx` is the ONLY importer/renderer of
+  `EpisodeReactions` in the tree; `SeasonEpisodePanel` uses `EpisodeRow` for numbered
+  seasons; no test renders `EpisodeReactions` unmocked (`TVShowPageClient.test.tsx` mocks
+  `SeasonList` wholesale), so "the branch that implements the gate is still untested" holds.
+- Advisory (comment-only, non-blocking): `canonicalSpecials.ts:13-15`'s rewritten header
+  claims canonicalSpecials shares relatedSeries.ts's "zero runtime TMDB cost, nothing stored
+  but ids". Both halves are slightly off. `RelatedSeriesStrip` renders curated labels and
+  fetches NOTHING, so relatedSeries really is zero-fetch; the specials section fires an
+  extra `useTVSeason(tmdbId, 0)` on every expand — the next sentence ("titles, stills and
+  synopses still come from the live TMDB season fetch") half-corrects it but also
+  contradicts it. And BOTH files store hand-written labels (`label: 'Specialavsnitt'`,
+  `label: 'Klassiska serien · 1963–1989'`), plus TMDB episode titles in canonicalSpecials'
+  inline comments — relatedSeries.ts's own header makes those labels the point ("labels are
+  never fetched"). The property that is true of both: no TMDB metadata is checked in, only
+  ids/numbers plus our own Swedish copy. Also `(own ticket)` in the test comment would be
+  greppable as `(BIN-821)`. Per the BIN-641 four-round precedent I did NOT make this
+  blocking — it is one sentence's precision on a comment, and re-rounding it costs more
+  than it buys.
+- Agreed with the parent on `tasks/todo.md:9`: the "medvetet display-only" line sits under
+  the heading "## Vad som är trasigt idag" in an unstaged, disposable plan — past-state
+  context, not a live claim. Withdrawing my earlier "also found".
+
+Typecheck (`npm run typecheck`) and `npx eslint` on the three files: clean, run in the
+private rig on the staged bytes. Verdict: pass, 0 blocking.
+
+### 2026-08-08 — BIN-679 r6 (closing): a "same pattern as <module>" cross-reference converges only when split into shared vs NOT-shared
+
+Staged: `src/lib/tv/canonicalSpecials.ts` (header only), `src/components/tv/SeasonList.tsx`
+(comment only), `src/components/tv/SeasonList.test.tsx` (two assertions + a mock prop type).
+Index == worktree on all three (`git rev-parse :<path>` == `git hash-object <path>`:
+57e8874 / a118fff / b6ca804). Verdict: pass, 0 blocking, 1 advisory.
+
+Sixth round on ONE comment. Rounds 1-5 each found a different clause that was true of
+`relatedSeries.ts` but false of `canonicalSpecials.ts` ("zero runtime TMDB cost" was r5's).
+The rewrite that finally holds does NOT swap in a better analogy — it NAMES which properties
+are shared and which are explicitly not:
+  - shares the SHAPE: hand-curated, no TMDB metadata checked in, only episode numbers + our
+    own section label;
+  - NOT the affordance: relatedSeries is display-only, this section is tickable;
+  - NOT the cost: relatedSeries fetches nothing, this fires one lazy season-0 request.
+Every clause priced by READING the named module, not by trusting its own header:
+`RelatedSeriesStrip.tsx` renders `<Link>`s off curated labels with no hook and no fetch
+(`TVShowPageClient.tsx:455` passes `relatedSeriesFor(show.id)` straight in), so "fetches
+nothing" is TRUE; `CanonicalSpecialsPanel` calls `useTVSeason(tmdbId, 0)` only when expanded
+and `EpisodeRow` renders `still_path` (`<img>`), `name` and `overview` from it, so "titles,
+stills and synopses all come from it live" is TRUE.
+
+The ONE residual, carried forward as advisory, not blocking: "no TMDB metadata checked in"
+is a claim about the DATA that the same file contradicts 40 lines down — `CANONICAL_SPECIALS`
+carries 22 inline TMDB episode titles and years ("// The Christmas Invasion (2005)") as
+re-verification aids. `relatedSeries.ts` has the same shape in miniature (one comment naming
+"The Power of the Doctor"), so the property IS shared in spirit; only the scoping word is
+missing. Fix if it is ever touched again: "the DATA holds only numbers and our own label —
+the titles beside them are re-verification comments, never rendered." Explicitly NOT filed
+as blocking: per the BIN-641 four-round precedent, a seventh round on one sentence costs
+more than the precision buys, and a rewrite is itself the highest-risk edit in this diff.
+
+Mutation-verified in a private rig (index tree → `git write-tree`/`commit-tree`/
+`worktree add --detach`, own `npm ci`, 722 packages, 33 s — NO junction; the shared
+`node_modules` was destroyed twice today by sibling teardowns walking through one). Clean
+control 14/14. Each mutant applied via a script that exits non-zero on no-match, asserted
+present BEFORE and AFTER the run in one command, restored by `git checkout --` and verified
+by hash:
+  - `SPECIALS_KEY = 0` → `-1`: 1 failed / 13 passed, the failure being exactly the `1/22`
+    case named in the new `SeasonList.tsx` comment. The comment's tripwire claim is true,
+    and the accordion still works under the mutant (checkboxes pass season 0 directly),
+    which is the trap it warns about.
+  - header `({specials.episodeNumbers.length} avs)` → `({0} avs)`: 1 failed / 13 passed —
+    the new `expect(screen.getByText('(22 avs)'))` kills it ALONE. This is the second
+    rendering of the curated length; before this round it was unpinned (the `x/22` counter
+    pins the other site).
+  - `EpisodeRow.tsx:109` `watched={watched}` → `watched={false}`: 1 failed (the new
+    `gate.get(83) === true` Map assertion). → `watched={true}`: 2 failed. Both directions of
+    the forwarded prop are now dead; last round only the `false` direction was pinned and the
+    `watched={false}` mutant (reactions stranded shut for EVERY episode in the app) survived
+    2683/2683.
+
+Comment claims re-verified statically after the r5 fix: `EpisodeRow.tsx` is still the only
+renderer of `EpisodeReactions`; `SeasonList.test.tsx` is still the only test file reaching
+`EpisodeRow` (no `SeasonEpisodePanel`/`SeasonPageClient` test exists, `TVShowPageClient.test.tsx`
+mocks `SeasonList` wholesale); `EpisodeReactions.tsx:17` really is `if (!watched) return
+<gate>`, so "the branch that implements the gate is still untested (BIN-821)" holds and the
+ticket id is now greppable. The mock's prop type gained `watched: boolean`, restoring parity
+with the real component's signature (the "a mock with FEWER parameters deletes the behaviour
+under test" trap, closed here).
+
+Main-tree suite 14/14, `npm run typecheck` clean, `npx eslint` on the three files clean,
+rig removed with `git worktree remove --force`, `node_modules/.bin/vitest` present after.
+
+### 2026-08-08 — BIN-823: a persisted build artifact silently un-runs an existing guard test
+
+Staged diff persisted the SEO pre-render selection to `.tmdb-cache/selection-{movie,tv,person}.json`
+and made `generateStaticParams` read it instead of deriving (`resolveSelection` in
+`src/lib/tmdb/selectionManifest.ts`). `readSelectionManifest` resolves its path from
+`process.env.TMDB_CACHE_DIR || join(process.cwd(), '.tmdb-cache')`.
+
+`src/app/titleParams.watchdog.test.ts` (NOT in the staged set — BIN-815's regression guard, the one
+three reviewers built after the watchdog was twice wired to the wrong build phase) imports the three
+routes' real `generateStaticParams` and asserts the heartbeat/STUCK lines their list fetches produce.
+It sets no `TMDB_CACHE_DIR`. Measured this review:
+
+  npx vitest run src/app/titleParams.watchdog.test.ts            → 10 failed / 1 passed
+  TMDB_CACHE_DIR=<empty tmp> npx vitest run <same file>          → 11 passed / 4 skipped
+
+Cause: the local verification builds had written real manifests (movie 7583 ids, tv 6987, person
+1000, derivedAt 2026-08-08T20:07Z), so `resolveSelection` short-circuited, `derive` never ran, no
+`trackBuildCall` fired, and every watchdog assertion had nothing to observe. CI stays green only by
+accident of step order — `deploy.yml` runs `Test` (line 85) before `Restore TMDB build cache`
+(line 135), and `ci.yml` never restores at all. The briefed "Full suite: 2743 passed" was true when
+run and false by the time the manifests existed.
+
+Generalisation: any new cwd-relative persisted artifact can change which branch an EXISTING test
+exercises, with no diff on that test file to alert a reviewer. Two moves: grep the suite for callers
+of the reading code that don't override the dir env, and re-run the suite with the artifact present.
+The diff's own new tests all isolate correctly (`selectionResolve.test.ts`,
+`selectionManifest.io.test.ts`, `sitemap.test.ts` each `mkdtempSync` + set `TMDB_CACHE_DIR`), and
+`seoPersonIds.test.ts`'s header even names the hazard ("stops the suite from reading or writing the
+repo's REAL .tmdb-cache") — the author saw it for the file they touched and not for the one they
+didn't.
+
+Same review, other findings worth the audit trail:
+- The three routes' `catch` only re-throws on `err.message.startsWith('[selection]')`, so a derive
+  that REJECTS (not returns []) falls to `SEO_FALLBACK_*` = 10 ids, green build, deploy — the exact
+  "fallback must never reach a deploy" the ADR's Fork C exists to close. Reachable via
+  `latinDisplayIds(r.value.results)` on a malformed 200 body. Fix belongs inside `resolveSelection`
+  (treat a throw like the timeout), not in three duplicated string-prefix sniffs.
+- `mergeManifest(null, type, [], now)` skips the `freshIds.length === 0` guard (it requires
+  `previous !== null`) and PERSISTS an empty/thin manifest with a fresh `derivedAt`; every later code
+  deploy then reads it as fresh, never re-derives, and dies on the floor for up to 30 days.
+- `SELECTION_CEILING.person` (1 000) is below the person derivation (`SEO_PERSON_TARGET_IDS` 3 000,
+  really ~10k unique), so the ratchet is a no-op for person — the ADR's "3–5k slack per typ" holds
+  for titles only.
+- Reversed-decision prose not retired: `sitemap.ts`'s header still promised the old "falls back to
+  static routes instead of breaking the build" beside the new code that deliberately throws; plus
+  four stale "sitemap shares this pipeline" cross-references.
+
+### 2026-08-08 — BIN-823 r3 (closing): the prose-fix round's own blind spot, and two questions answered
+
+**Blocking finding (1).** `src/lib/tmdb/buildFetch.ts:74-81`. Round 2 took the B3
+"reversed-decision prose" finding and rewrote five named sites (`sitemap.ts` header,
+`seoPersonIds.ts` module contract, `seoCoverage.ts` ×3, `person/[id]`, `selectionManifest.ts`).
+It missed `buildFetch.ts` — a file the same diff MODIFIES — whose BIN-815 watchdog rationale
+still reads: "INTE instrumenterad: allt som hämtar i den SENARE fasen `Generating static pages`
+— sitemap.ts:s egen kopia av `collectIds` (störst) …" and "`collectIds` finns i tre nästan
+identiska kopior". This very diff deleted sitemap.ts's `collectIds` and every TMDB import from
+it (verified in `git diff --cached -- src/app/sitemap.ts`): sitemap.ts now performs zero network
+I/O, and two copies of `collectIds` remain (movie, tv). The harm is not pedantic — that comment
+block took three review rounds to get right precisely so the next hang investigation is aimed
+correctly, and it now names a pure file-reader as the phase's biggest un-instrumented fetcher.
+Same stale count in `selectionManifest.ts:328` ("tre nästan identiska kopior").
+LESSON: after a prose-reversal fix lands, re-grep the DELETED SYMBOL (`git grep collectIds`),
+not the fixer's inventory of sites. Folded into the comment-vs-code principle.
+
+**Non-blocking (3).**
+- `selectionManifest.ts:136-156`: the B2 fix inserted `SelectionFloorError` + its own JSDoc
+  BETWEEN `assertCoverageFloor`'s JSDoc and the function. The "Kastar om det upplösta urvalet
+  krympt under golvet" block now documents nothing and the function is bare. Known class
+  (BIN-616, BIN-641 ×3) — new instance, caused by a review-round fix.
+- `selectionResolve.test.ts`: 7 real `::warning::` lines on a green run → GitHub annotations on
+  every `npm test` in ci.yml. `selectionParams.test.ts:98-100` spies stderr for exactly this and
+  documents why. New principle bullet added under Testing mechanics.
+- `SelectionFloorError` sets no `name`, so build logs print `Error: [selection] …`. Cosmetic.
+
+**Q1 — can the new `tooThin` branch loop or wedge a different failure? No.**
+`mergeManifest` is monotonic below the ceiling, so `previousCount` never decreases build-over-
+build; a thin manifest either grows past the floor (green, self-healed) or stays thin (red, with
+`workflow_dispatch full_refresh=true` printed in the error). No oscillation is constructible.
+`writeSelectionManifest` runs BEFORE the floor throws, so a red build persists its partial
+derivation and the next build accumulates onto it — deliberate, and `actions/cache/save` with
+`if: always()` (path `.tmdb-cache`, whole dir, so `selection-*.json` rides along) is what makes it
+work. `floorFor(type, 0)` is the correct threshold and provably cannot disagree with the floor's
+own `floorFor(type, previousCount)`: `tooThin` requires `previousCount < ABSOLUTE_FLOOR`, and then
+`ceil(0.8·previousCount) < previousCount < ABSOLUTE_FLOOR`, so `max(...)` is `ABSOLUTE_FLOOR` on
+both sides. Under `SELECTION_ALLOW_THIN` the floor is 0 so `tooThin` is dead — correct for CI.
+Cost to know: while thin, EVERY code deploy pays a rescue derivation (≤15 min/type) and the
+person derivation can eat the whole 1500-fetch worker budget — the accepted N5 coupling, now
+reachable on ordinary code deploys, bounded and covered by the ADR's own "Rättelse om
+budgetkonkurrens" (green build, thinner pages, self-heals next build).
+
+**Q2 — does `SelectionFloorError` survive `generateStaticParams`? Yes.**
+`tsconfig.json` target is ES2017, so `class X extends Error {}` stays a native class and
+`instanceof` is not broken by ES5 down-levelling. The `instanceof` test runs INSIDE the route
+module, same process and same module instance that threw, so the static-worker boundary never has
+to preserve class identity — Next only serialises message/stack afterwards for display, and it
+does not swallow generateStaticParams errors (they propagate out of `buildAppStaticPaths` and
+fail `next build` non-zero). `selectionParams.test.ts:115-120` pins the rethrow per route
+(`rejects.toThrow(SelectionFloorError)`) — the link that was deletable with the whole suite green
+before. Residual worth knowing, not a defect: the floor is only consulted via `resolveSelection`;
+`sitemap.ts`'s own throw covers "manifest missing", never "manifest thin".
+
+**Eviction tie-break (N2) verified by hand, not just by its test:** week1 = merge(null, 3000 ids,
+ceiling 1000) evicts the 2000 highest indices → survivors 1..1000; week2 bumps all 1000 incumbents
+to the same `now`, appends 2000 newcomers at higher indices, evicts them → 1000/1000 survive. And
+starvation is NOT introduced: incumbents the derivation stops listing keep an older `lastDerived`
+and are evicted ahead of newcomers, so churn continues at the margin.
+
+Verification: 7 selection test files, 95 passed / 4 skipped, run against the staged bytes;
+`git diff` empty for every reviewed path (only unstaged `docs/org/metrics/events.jsonl` differs).
+
+### 2026-08-09 — BIN-823 r4: a past-tense "copy count" inverted the ADR the same commit was amending; a stale plan file rode the feature commit
+
+Round 4 of the SEO selection ratchet (`git diff --cached`, 31 files, tree clean, every reviewed
+blob re-hashed pre/post and matching `git rev-parse :<path>`).
+
+**All four round-3 items verified fixed.** `buildFetch.ts:76-83` now says the sitemap "gör noll
+nätanrop, så den kan inte längre vara en hängning" and counts `collectIds` as two copies (movie,
+tv) — `git grep collectIds` confirms exactly two. `SelectionFloorError` carries
+`override name = 'SelectionFloorError'` and its JSDoc/`assertCoverageFloor`'s are un-swapped.
+`selectionResolve.test.ts` installs ONE `process.stderr.write` spy in the top-level `beforeEach`;
+`npx vitest run selectionResolve.test.ts selectionParams.test.ts 2>&1 | grep -c '::warning::'`
+returns 0, so the seven fake GitHub Actions annotations per green run are gone.
+
+**BLOCKING — `src/app/sitemap.ts:71`.** "Tidigare härledde den här filen om hela urvalet på egen
+hand — en tredje och fjärde kopia av `collectIds` respektive `collectPersonIds`". `git show
+HEAD:src/app/sitemap.ts` shows it had its own `collectIds` (a genuine third copy) but IMPORTED the
+shared `collectPersonIds` from `@/lib/tmdb/seoPersonIds` — one function, two callers, which is
+exactly ADR 0005's decision. And ADR 0005 is amended two files away IN THIS COMMIT to say the
+decision "(EN delad pipeline, inte två kopior) står kvar och är skärpt". So the comment asserts the
+duplication that the ADR it cites exists to have prevented. New principle: a PAST-TENSE claim about
+how many COPIES a helper had is a claim about a decision record — a round that DELETES a call site
+routinely miscounts a shared helper's second CALLER as a second COPY. Check each named symbol
+separately against `git show HEAD:<file>` and against any ADR the same diff touches.
+
+**NON-BLOCKING 1 — `tasks/todo.md`.** The staged file is BIN-679's plan ("Parkerad för hennes
+granskning", shipped 95a09d6); HEAD's is BIN-815's. Neither is BIN-823, which has no plan file in
+`tasks/` at all. `code-style.md` says an implemented plan is DELETED, not swapped, and bundling it
+into a feature commit means a BIN-823 revert restores BIN-815's plan. Same class as the
+workflow-map lesson (unrelated doc riding feature code).
+
+**NON-BLOCKING 2 — 800/1000 challenged and upheld.** Hand-replayed: derive 800, ceiling 1000 ⇒
+week 2 merges 800 previous + ~30 new = 830 < 1000, no eviction, the dropped id survives. Ceiling ==
+derivation (1000) and 3× derivation (3000) both evict it — matching the three-row behaviour test at
+`selectionManifest.test.ts:282`. No bad interaction with `SELECTION_ABSOLUTE_FLOOR.person = 200`:
+steady-state `previousCount` ≈ 1000+seeds so `floorFor` ≈ 826 via the 80 % term, comfortably under
+the resolved count, and `tooThin` compares against `floorFor(type, 0)` = 200. Real one-time cost the
+ADR does not name: the first build yields 800 + 32 seeds = 832 person pages where production had
+~1000, regrowing toward the ceiling over ~4-5 weekly refreshes. The 32 GSC-indexed person seeds are
+union-at-read and cannot be evicted, so nothing Google actually holds is at risk.
+
+**NON-BLOCKING 3 — `preview.yml`.** Real TMDB key, no `SELECTION_ALLOW_THIN`, and — unlike
+`deploy.yml` — NO `.tmdb-cache` restore and no step timeout. So every dependabot PR preview
+cold-derives all three types under `RESCUE_DERIVE_TIMEOUT_MS` (15 min) and now goes RED on the
+coverage floor where it previously just produced a smaller preview. Deliberate per
+`selectionManifest.ts:99-101`, but the cold-cache half is stated nowhere.
+
+Gates run against the staged bytes: `npm run typecheck` clean; `npx eslint` clean on all 18 changed
+source/test files; 10 selection-related suites 141 passed / 4 skipped. Local `.tmdb-cache` carries
+`selection-{movie,tv,person}.json` from a verification build (7583 / 6987 / 1000 ids) — the person
+file predates the 800 change; gitignored, no repo impact, and `titleParams.watchdog.test.ts` now
+overrides `TMDB_CACHE_DIR` so the artifact can no longer blind it.
+
+Also noted: `.claude/**` is TRACKED since b20bf69, so `.claude/rules/accepted-deviations.md`'s own
+"`.claude/` is gitignored, so there is no git history to fall back on" line is now false, and the
+BIN-585/684 "a gitignored target evaporates from every diff-based gate" lesson no longer holds for
+this repo. Out of scope for this diff; worth correcting when that file is next touched.
+
+### 2026-08-09 — BIN-823 r5: an env flag's scope moved; the fix round patched the code sites and left the ADR + the rules file asserting the opposite
+
+Round 5 of BIN-823. Round 4's blocking finding (`sitemap.ts` calling the shared `collectPersonIds`
+"en fjärde kopia") was correctly fixed, and four items changed. Item 3 of the brief: `preview.yml`
+gained `SELECTION_ALLOW_THIN: '1'`, and "`allowThinSelection`'s JSDoc and `ci.yml`'s comment were
+corrected to match — the old prose claimed preview.yml never sets it."
+
+Both of those WERE corrected (`selectionManifest.ts:99-105` now explains the preview reason;
+`ci.yml:88-92` now says "preview.yml sätter den också, men av ett annat skäl"). But
+`grep -rn SELECTION_ALLOW_THIN` returns four prose sites, not two:
+
+- `docs/org/adr/0018-seo-selection-ratchet.md:98-101` (staged NEW in this same commit) —
+  "`SELECTION_ALLOW_THIN=1` stänger av golvet och sätts **BARA i `ci.yml`** … och
+  `deploy.yml`/`preview.yml` **kan aldrig råka få den**." The second clause is not merely stale,
+  it is the exact negation of what the same commit does, inside Fork C — the decision record for
+  the coverage floor itself.
+- `.claude/rules/deployment.md:37-38` (staged M) — "`SELECTION_ALLOW_THIN=1` stänger av golvet och
+  sätts bara i `ci.yml` (dummynyckel)." This file is trigger-loaded on `.github/workflows/**`, i.e.
+  it is precisely what the next agent editing a workflow reads before deciding where the flag may
+  live.
+
+Same class as the BIN-823 r2 finding (a fix round enumerates the sites IT found) and the BIN-679
+three-modules case, with one new coordinate: when what moved is an ENV VAR's SCOPE rather than a
+symbol, the replication sites include the ADR and the `.claude/rules/*.md` operating instruction,
+and one grep of the variable name finds all of them at once. Filed BLOCKING for parity with r4,
+which blocked on a strictly smaller version of the same error.
+
+**Non-blocking, but the more interesting finding — the flag doesn't cover the case its own comment
+names.** `preview.yml`'s new comment justifies the flag with "en strypt personhärledning skulle då
+fälla bygget på täckningsgolvet". Trace it to the end:
+
+- Derive RESOLVES thin/empty (throttled key, `Promise.allSettled` swallows the failures) →
+  `derived.ok === true` → `mergeManifest(null, type, [], now)` writes a valid EMPTY manifest →
+  floor is 0 under the flag → `sitemap.ts` finds a readable file → preview is green. Covered.
+- Derive TIMES OUT or THROWS with `previous === null` (cold preview cache, `RESCUE_DERIVE_TIMEOUT_MS`
+  = 15 min against the ~44 min the person pipeline took on 2026-08-08) → `if (derived.ok)` gates
+  BOTH the merge and the write, so no manifest is ever written → the floor is off, so
+  `generateStaticParams` happily returns just the seeds and the build continues → `sitemap.ts`'s
+  `selectionOrThrow` throws `urvalsmanifestet för movie saknas` and the preview goes red anyway.
+
+Production is unaffected (the floor fires first there, which is the intended loud failure), so this
+is preview-only ergonomics. Remedy is one of: persist the merged manifest even on give-up when
+`previous === null`, or let `sitemap.ts` tolerate a missing manifest under `allowThinSelection()`.
+
+**Also non-blocking: the timeout warning is pinned only NEGATIVELY.** The round's real defect — the
+throw branch's `::warning::` and the shared `else` branch's "härledningen nådde sitt tak (N ms)"
+both firing on a throw — is fixed by moving the timeout warning inside the `try` behind
+`if (!derived.ok)` and deleting the `else`. Control flow verified equivalent: timeout warns exactly
+once, `derived.ok` narrows (own `npx tsc --noEmit` run: clean), and nothing that previously wrote a
+manifest now skips it. But `grep "nådde sitt tak"` finds the string in exactly one test, as
+`expect(written).not.toContain('nådde sitt tak')` in the THROW test (`selectionResolve.test.ts:284`).
+No test asserts a timeout DOES warn, so deleting the whole timeout-warning block leaves the suite
+green — and the rescue-timeout test at :163 already drives that exact path and asserts only the
+returned ids. One-line gap in the twin of the line the round moved.
+
+Verification: worktree == index for all 30 staged files (only `tasks/todo.md` dirty, unstaged, as
+briefed — BIN-679's spent plan correctly kept out of the commit). `npx tsc --noEmit` clean.
+Selection suites re-run on these bytes: 8 files, 106 passed / 4 skipped, no `::warning::`
+annotations leaking (both new test files install a single `process.stderr.write` spy in
+`beforeEach`). `node scripts/check-workflow-map.mjs` OK — 95 nodes, 63/63 coverage; no
+`.claude/state/workflow-map-stale.json`. ADR 0005 correctly amended to "delvis ersatt av ADR 0018"
+rather than rewritten. `tasks/lessons.md` + `lessons-digest.md` sync contract met (1 lesson, 1
+one-liner; inserted second-to-last rather than appended — cosmetic, the freshness hook counts).
+
+### 2026-08-09 — BIN-823 r6 (confirmation): a NEW ADR contradicting code added in the same commit
+
+Round 5 blocked on `SELECTION_ALLOW_THIN` prose: `preview.yml` had started setting the flag while
+ADR 0018 Fork C and `.claude/rules/deployment.md` still said it is set "BARA i `ci.yml`" and that
+`deploy.yml`/`preview.yml` "kan aldrig råka få den". r6 confirms both are fixed and consistent, and
+that `grep SELECTION_ALLOW_THIN` now returns four agreeing sites (JSDoc, `ci.yml`, ADR 0018:98,
+`deployment.md:37`) plus the new `sitemap.ts:86`.
+
+**But the var-grep was the fixer's enumerator, and it is the wrong one.** r5's non-blocking 1
+(the flag exempted only the coverage floor, so a preview whose person derive times out writes no
+manifest and `sitemap.ts` fails the build anyway) became production code this round:
+`selectionOrThrow` now returns `[...seedIds]` under `allowThinSelection()`. Mutation-verified here —
+replacing the branch with a comment kills exactly 1 test alone (`sitemap.test.ts`'s new
+"faller tillbaka på frö-id:n" case, which also asserts `movie/1` is ABSENT so it cannot be satisfied
+by a leftover manifest), and both existing throw cases pin the inverse. Guard placement is right:
+under the flag with a missing manifest the route returns `resolvedIds(null, seeds)` = seeds and the
+sitemap returns the same seeds, so parity is exact; in CI the derive returns `[]`, `mergeManifest`
+writes an EMPTY manifest, and both sides read seeds — the throw path is never even reached there.
+`deploy.yml` sets the flag nowhere (grep) and has no `workflow_dispatch` input for it, so it cannot
+reach production; the preview channel's sitemap lists binge.nu URLs that are a strict subset of real
+ones, so returning seeds rather than `[]` costs nothing.
+
+The defect: ADR 0018 — **added by this same commit** — still states the absolute the same commit's
+code broke. Fork E: "Sitemapen **kastar** om ett manifest saknas i stället för att falla tillbaka",
+with a paragraph arguing that any fallback is an actively false claim to Google. Fork C:98 says the
+flag "stänger av golvet" while `deployment.md` (correctly) says "både golvet och sitemapens kast".
+Fork E contains no occurrence of `SELECTION_ALLOW_THIN`, so the grep that closed r5's finding
+structurally cannot find it. Two more absolutes in `sitemap.ts` itself survive above the exemption
+they contradict: the file header (43-46, "Den KASTAR om manifestet saknas i stället för att falla
+tillbaka") and the default export's block (195-200, "Låt det kasta").
+
+Filed BLOCKING, same class and same file as r5 — this is a decision record and a future reader who
+trusts it deletes the branch as a bug, turning every dependabot preview red again. Remedy is two
+sentences in the ADR plus an "utom under SELECTION_ALLOW_THIN" clause in the two `sitemap.ts` sites.
+
+NON-BLOCKING: `selectionManifest.ts:434-437`'s comment says the `fallbackIds` return is reached by
+"ett bygge helt utan giltig TMDB-nyckel (CI)" — with non-empty seed lists (74/10/32) `ids.length`
+is never 0 for any real caller, so CI pre-renders the SEEDS, not `SEO_FALLBACK_*`; only the tests
+(`seedIds: []`) reach it. Keep the branch (Next 16 throws on empty params), fix the regime claim.
+Also: `docs/org/metrics/events.jsonl` gains 9 sprint-engine rows but no row for BIN-823's own #3
+critique that ADR 0018's header says ran.
+
+Verification on these bytes: index == worktree for all 24 reviewed paths; 8 selection suites
+107 passed / 4 skipped; mutant asserted present before AND after its run, restored by hash.
+`.claude/agents/binge-test-reviewer.knowledge*.md` are staged `MM` — the sibling's newest lesson
+(93 archive lines) is NOT in the index and will not ride this commit.
+
+### 2026-08-09 — A correction that re-anchors a measured number must retire the formulas built on the old anchor (BIN-823 r7)
+
+Round 6 blocked BIN-823 on a false premise inside a founder-approved decision: ADR 0018 Fork B
+claimed the ratchet was "precis vad urvalet effektivt rymmer idag. Noll kostnadsrörelse", when
+the realized sitemap was ~20 800 URLs and the ratchet makes the 31 000 ceiling reachable for the
+first time, monotonically. Round 7 shipped the correction: a table (~20 800 → ~31 000 URLs,
+~22 900 → ~33 100 page dirs, ~10 → ~14,5 GB/deploy, ~30 → ~43 GB stored, ~8,3 → ~12 SEK/mån),
+phased over 2–3 months, plus an explicit "this is MORE than the +2,9 SEK #3 Financial Controller
+rejected as needing its own costed ticket".
+
+The table's own arithmetic checks out against the repo's measured numbers — `selectionManifest.ts`
+lines 73–74 ("sitemapen hade 20 763 URL:er") and `.claude/rules/deployment.md` ("~22 900 filer,
+~1,5 GB per deploy" + "varje deploy är ~10 GB"). 33 100/22 900 × 10 = 14,45; ×3 = 43,4 GB;
+×$0,026 = $1,13; at the ADR's own implied 10,64 SEK/USD = ~12,0 SEK. (The stated delta "+~3,8"
+is 3,7 from its own table — rounding, not an error. The linear scaling also ignores fixed deploy
+overhead, i.e. it errs conservative/high, which is the safe direction for a cost claim.)
+
+What the correction did NOT do is re-derive what it just invalidated. Its whole content is
+"~10 GB/deploy describes today's ~22 900-page build, NOT the 31 000-page ceiling" — and two
+paragraphs below, unchanged, stand:
+
+- `docs/org/adr/0018:96` — "Vid 41 500 sidor blir det ~40 GB ≈ 11,2 SEK/mån (+2,9)". Computed as
+  41 500/31 000 × 10 GB, i.e. on the retired anchor. Re-anchored it is ~19 GB/deploy → ~57 GB →
+  ~15,8 SEK, i.e. +7,5 over today. The comparison the correction makes ("+3,8 is MORE than the
+  +2,9 that was rejected") therefore compares a re-anchored number against an un-re-anchored one.
+  The conclusion survives — it is even stronger — but the two numbers are not commensurable.
+- `docs/org/adr/0018:102` — the reusable formula, explicitly written "så den inte behöver härledas
+  om": `nytt_tak / gammalt_tak × 10 GB × 3 releaser × $0,026/GB/mån`. Mixes a REALIZED base (10 GB
+  at 20 800 URLs) with a NOMINAL divisor (31 000), so it understates any future raise by ~45 %.
+- `src/lib/tmdb/selectionManifest.ts:21` — "takets storlek (Hosting-lagring, ~10 GB/deploy × 3
+  sparade releaser mot 25 SEK/mån-taket)" presents 10 GB as the price of the CEILING.
+- `src/lib/tmdb/selectionManifest.ts:60-61` — the same formula, duplicated as the change-guard
+  comment above `SELECTION_CEILING`, i.e. the exact place a future raise will read it.
+
+`git grep "10 GB"` finds all four in one command, plus the two `deployment.md`/`RUNBOOK.md`
+sites where "varje deploy är ~10 GB" is a MEASUREMENT of today and stays correct. The
+"~31 000 sidor" figure repeated in six other comments (the fallback-disaster comparison) is
+forward-looking and fine — the ratchet trends the site there; only the money math needed the
+re-anchoring.
+
+Filed blocking. Same family as r5 (the `SELECTION_ALLOW_THIN` var-grep) and r6 (Fork E's
+behaviour-word contradiction), one level up: there the diff reversed a DECISION and left its
+prose; here the diff corrected a NUMBER and left the arithmetic derived from it. Generalized
+principle: a correction is a reversal, and the likeliest un-retired site is the paragraph
+directly below the correction itself.
+
+Also filed non-blocking this round:
+- `docs/org/adr/0018:87-88` — "Malin godkände Fork B på formuleringen 'noll kostnadsrörelse' och
+  **fick** den korrigerade siffran i skepp-noteringen." Past tense, written before the ship note
+  exists. Same class as the 2026-08-05 "acceptance criteria met" lesson, in an ADR rather than a
+  Linear ticket: if the note is never written, the decision record permanently claims she was told.
+- `docs/org/metrics/events.jsonl` last line — the BIN-823 `review` row is hand-shaped and drifts
+  from the schema its own README pins ("Both MUST use the canonical field names ... do not
+  improvise"): `verdict` instead of `outcome`/`recommendation`, `note` instead of `plan`,
+  `panel:["3"]` as a string, and no `ran`/`conflicts`/`escalations`/`rubber_stamp`/`via`. Scoring
+  impact is nil (must_haves 5 + a non-empty `adrs` derive non-rubber-stamp under the documented
+  legacy tolerance), but the README names this exact drift as what broke the shakedown data.
+- `.claude/agents/binge-code-reviewer.knowledge.md` is 54 kB against its own stated 30 k budget.
+  Not this diff's doing; it needs a compaction pass, not another addition.
+
+Verified on these bytes: `git status --porcelain` clean apart from the staged set + unstaged
+`tasks/todo.md`; index == worktree for all 32 staged paths, re-pinned after reading. Ran the
+eight BIN-823 suites — 108 passed / 4 skipped (the `it.runIf` pairs), no `::warning::` annotation
+leaked to the real stderr. Confirmed fixed from my earlier rounds: `titleParams.watchdog.test.ts`
+now takes its own `TMDB_CACHE_DIR` (the cwd-artifact trap that turned it 11 green → 10 red),
+`sitemap.ts:43-46` + `:195-200` both qualify the throw with the `SELECTION_ALLOW_THIN` exception,
+Fork C says the flag switches off TWO protections, Fork E carries the exemption paragraph, and
+`selectionResolve.test.ts` now READS `deploy.yml` to prove the flag is absent there (with a
+`TMDB_SELECTION_REFRESH` presence check so it cannot pass on an unread file) — the property four
+prose sites asserted and nothing checked.
+
+### 2026-08-09 — BIN-823 r8 (closing): a correction that replaces a sentence's TAIL leaves its HEAD dangling
+Round 7's blocking finding (Fork B's ~10 GB anchor re-anchored to the realized ~22 900 page
+dirs while the arithmetic below it stayed on the retired 31 000-page anchor) is fixed at every
+site I named, and I re-derived all of it from the staged blobs rather than from the briefing:
+
+- ADR 0018 Fork B now states the anchor is MEASURED at today's ~22 900 dirs, gives the per-page
+  formula `sidkataloger / 22 900 × 10 GB × 3 releaser × $0,026/GB/mån`, and carries a three-row
+  table. Checked every cell against the anchor and against each other: 33 100/22 900 × 10 = 14,45
+  ≈ 14,5 GB → 43 GB stored → 11,96 ≈ 12 SEK; 43 600 → 19,04 ≈ 19 GB → 57 GB → 15,74 ≈ 15,8 SEK.
+  The implied USD→SEK rate (~10,6) is the same in all three rows, and page-dirs minus sitemap-URLs
+  is a CONSTANT +2 100 across today / ceiling / draft — so the table is internally consistent, not
+  three independently guessed numbers. Deltas: 12−8,3 = **+3,7**, 15,8−8,3 = **+7,5**,
+  15,8−12 = **+3,8**, and the ADR now names which baseline each belongs to instead of mixing a
+  corrected figure with an uncorrected one. My r7 "3,7 not 3,8" nit is taken.
+- `selectionManifest.ts:19-28` (module header) and `:65-68` (the change-guard directly above
+  `SELECTION_CEILING`) both mirror the per-page formula plus a "scaling ceiling-against-ceiling
+  understates by ~45 %" warning. The 45 % is the current-ceiling case read as "the truth is 45 %
+  higher than the naive figure" (14,5 vs 10); read as a share of the truth it is ~31 %, and for
+  the draft raise it is ~42 % / ~30 %. Directionally right, percent-base loose — NOT filed,
+  because the same comment hands the reader the formula and both computed answers, so nobody has
+  to lean on the ratio.
+- `seoCoverage.ts:28` now says the scheduled build's step cap is 175 min and that 150 min is the
+  NAME of `REFRESH_DERIVE_TIMEOUT_MS`, a different thing. Verified against `deploy.yml:164`'s
+  ternary (175 : 45) and against `buildFetch.ts:231-234` (rescue 15 min, refresh 150 min).
+  ADR 0018's "kort (15 min) … långt (150 min)" is therefore CORRECT as written — it is about the
+  aggregate derive cap, not the step cap. RUNBOOK §6 item 5 states both caps and gets both right.
+- `.tmdb-cache` bullet: 1,9 GB at ~20 800 ids → ~2,8 GB at 31 000, ~3,8 GB at 41 500 ✓, ~19 % of
+  the 10 GB repo limit ✓.
+
+ONE non-blocking finding, and it is the r7 class running forward one splice: the same edit that
+inserted the `.tmdb-cache` correction overwrote the TAIL of the sentence it replaced and left the
+HEAD standing — `docs/org/adr/0018-seo-selection-ratchet.md:240` reads "… ~19 %, god marginal.
+**En takhöjning till** / Samma ankarfel som i Fork B gällde här: …". No wrong number is conveyed
+(the retired ~2,5 GB figure is explicitly retired two lines down), so it is editorial debris, not
+arithmetic — but it sits in the exact bullet a future ceiling-raise ticket reads. Fix: delete the
+three dangling words. Lesson folded in place: after correcting a number, re-read the SENTENCE the
+correction was spliced into, not just every formula built on the number.
+
+Also verified this round and clean: `events.jsonl`'s BIN-823 row against `docs/org/metrics/README.md`'s
+canonical `review` schema — `panel` is an array of role NUMBERS (`[3]`) exactly as documented (the
+neighbouring rows' role-name strings are the legacy shape), `must_haves` is the integer 5 matching
+Fork B's "fem villkor", `rubber_stamp:false` is consistent with 5 conditions + `adrs:["0018"]`,
+`ticket` and `outcome` are documented optionals; all 84 lines re-parse as JSON. The row omits the
+undocumented `ran` field its neighbours carry — not a schema violation. The ADR's past-tense
+approval claim is now sourced ("Hon fick den korrigerade siffran innan commit, 2026-08-09, och
+svarade 'helt ok kostnad'"), which is what my r6 non-blocking item asked for.
+
+Suite re-run from the index-clean worktree (only `tasks/todo.md` differs from the index):
+9 selection-related files, 138 passed / 4 skipped (the two `it.runIf` arms), no `::warning::`
+annotation leaked to the real stderr — the `selectionResolve.test.ts` / `selectionParams.test.ts`
+stderr spies hold. Verdict: pass, 0 blocking.
+
+### 2026-08-09 — a "soft retreat" timeout that cannot retreat inside its enclosing step cap (BIN-823 r9)
+
+Ledger round 9 on the BIN-823 staged diff. Briefed delta: three comment/doc-only changes, no
+behaviour. Corroborated by mtime ordering rather than pinned shas (markers are gone and the
+ledger is unreadable through a tool by design): `buildFetch.ts` and `docs/RUNBOOK.md` at
+01:33, `docs/org/adr/0018` at 01:28, while `selectionManifest.ts`/`seoCoverage.ts` (01:13),
+`selectionResolve.test.ts` (00:57) and `sitemap.ts` (00:51) are the previous round's bytes.
+`git status --porcelain` shows only `tasks/todo.md` unstaged.
+
+**The disclosure is accurate; I verified each clause.** `src/lib/tmdb/buildFetch.ts:232-242`
+now says the refresh pair does NOT work as a guard. Checked against:
+- `deploy.yml:164` — `${{ (schedule || (workflow_dispatch && inputs.full_refresh)) && 175 || 45 }}`.
+  So 175 on the refresh path, 45 on the push path. The pairing (15/45, 150/175) is as stated.
+- `seoCoverage.ts:27-29` — "En KALL full-hämtning tar ≈ 1.5-2 h", and that time is spent in
+  `fetchForBuild` from `generateMetadata`/page bodies, i.e. in "Generating static pages",
+  AFTER the derive in "Collecting page data". So attributing 90–120 min to the render is fair,
+  not an overstatement, and 150 + 90 > 175 holds.
+- `resolveSelection` (`selectionManifest.ts:394-436`): on timeout it warns, keeps `previous`,
+  and `assertCoverageFloor` passes because `previousCount` is unchanged — so the retreat is
+  real code, it just has no wall-clock room on the refresh branch.
+
+**But an accurate disclosure is not the fix, and I said so as a non-blocking recommendation.**
+The lower value strictly dominates. At 150: a pathological weekly derive burns 150 min, the
+step is killed at 175, the run is red, nothing deploys AND no new titles enter the ratchet. At
+~45: the same run warns at 45, keeps the previous manifest, renders inside the remaining
+130 min, and ships the code deploy on the old selection; the ratchet loses nothing because
+next Monday retries. The risk of aborting a healthy derive is nil — the same file's
+`AGGREGATE_STUCK_AFTER_MS` comment prices a healthy `collectPersonIds` at ~40 s (the 2 672 s
+figure everything cites is the pathological case), so 45 min is ~65× headroom and 150 min is
+~225×. General rule folded into the deploy.yml-semantics bullet: an inner timeout only
+retreats if `timeout + remaining work < enclosing step cap`, so check BOTH branches of a
+two-value pair against `timeout-minutes`, and derive "healthy duration" from a sibling
+constant's own rationale before accepting a large one.
+
+**Two doc propagation items, both non-blocking, both the same class as my r2/r5/r6 findings
+(a round that takes a prose finding enumerates only the files IT found):**
+1. `docs/RUNBOOK.md:239-249` — item 5's remedy is `gh workflow run deploy.yml -f
+   full_refresh=true`, and on the very first fully-cold run that dispatch can itself go red by
+   exactly the asymmetry just disclosed (cold derive + full metadata refresh > 175 min). The
+   missing half is that the run is still useful: a SUCCESSFUL derive writes
+   `.tmdb-cache/selection-*.json` (`writeSelectionManifest` → `buildCacheDir()` →
+   `.tmdb-cache`, `buildCache.ts:40-42`), and deploy.yml's "Save TMDB build cache"
+   (lines 202-212) runs `if: always() && steps.tmdb-cache.outputs.cache-primary-key != ''`,
+   so the manifest survives a step timeout and a second dispatch is cheap. One line: "hinner
+   den inte klart — kör den igen, urvalet är sparat." This matters because item 5 was rewritten
+   THIS round precisely because its predecessor was not followable.
+2. `docs/org/adr/0018:230` — "Alternatives considered" still presents `withAggregateTimeout`
+   ("kort (15 min) på räddningsvägen, långt (150 min) i veckobygget") as the BIN-815 fix with
+   no hint of the asymmetry. The ADR is where a future reader checks whether the weekly build
+   is protected; the code comment is not reachable from there.
+
+**Verified and clean:** the r8 editorial finding is closed — `grep -rn "takhöjning"` returns
+only `docs/org/adr/0018:134` (a complete sentence: "…så en takhöjning är ett permanent
+åtagande…") and an unrelated `selectionSeed.ts:17`; the dangling "En takhöjning till" fragment
+is gone. Every surviving `+2,9`/`11,2` in the ADR is an explicit retraction, not a live claim.
+RUNBOOK's 150→175 correction matches `deploy.yml:164`. The new phase-ordering sentence is
+TRUE: `ci.yml:93` and `preview.yml:55` both set `SELECTION_ALLOW_THIN: '1'`, and under it
+`selectionOrThrow` (`sitemap.ts:101-110`) returns seeds instead of throwing, so a sitemap that
+ran BEFORE the params phase would be masked in both — neither can falsify the ordering. (CI's
+dummy key writes no manifest at all; preview has a real key but no cache restore, so a movie/tv
+manifest may exist and a person one usually won't — masked either way.)
+
+`npx tsc --noEmit` exit 0. Re-ran the 9 selection suites WITH the local
+`.tmdb-cache/selection-{movie,tv,person}.json` present (the artifact class that silently
+broke `titleParams.watchdog.test.ts` in r1): 138 passed / 4 skipped, no `::warning::` leaked
+to the real stderr. Verdict: pass, 0 blocking.
+
+### 2026-08-09 — BIN-823 r10: the remedy's second half was checked against the artifact, not against the flag its own command sets
+
+Round 10 was briefed as "your three findings addressed, nothing else changed". Verified by
+reading every staged file (32 paths) rather than by trusting the delta; `git diff` (worktree
+vs index) empty for all reviewed files, `git status` clean except `tasks/todo.md` (unstaged,
+still BIN-679's shipped plan while HEAD/index carry BIN-815's — a `git add -A` before commit
+would sweep the shipped plan back in) and `.claude/agents/binge-test-reviewer.knowledge.md`
+(`MM`, a sibling reviewer editing its own knowledge mid-review).
+
+**Finding 1 (mine, r9) — correctly refused.** I asked for `REFRESH_DERIVE_TIMEOUT_MS` 150 →
+45 min. The author did the arithmetic instead and did NOT lower it: the cap must fit in
+`175 − render`, render measured 90–120 min ⇒ window 55–85 min; but the only COLD derive
+measurement is 2 672 s = 44,5 min for `person` alone, so 45 would kill the exact run the cap
+exists to rescue by 30 seconds. My "~40 s for a healthy derive" came from the file's own
+`AGGREGATE_STUCK_AFTER_MS` comment, which describes the WARM case — I priced a cold path with
+a warm number. Ten minutes of margin between two n=1 measurements is not something to pick
+blind; parked on BIN-826 with the full arithmetic recorded in `buildFetch.ts:243-251` and in
+ADR 0018's alternatives section. Lesson folded: "document + decide with data on a ticket" is a
+legitimate answer to a constants finding when both ends of the window are single measurements.
+
+**Finding 3 (mine, r9) — taken.** ADR 0018's alternatives now states that only the rescue path
+(15 inside 45) is protected, that 150 inside 175 is not, and gives the 55–85 window, the 44,5
+floor and BIN-826.
+
+**Finding 2 (mine, r9) — taken, and the fix shipped a NEW false claim.** RUNBOOK §6d item 5
+now reads: "Hinner den inte klart heller: kör den igen. Ett lyckat delresultat sparas —
+`writeSelectionManifest` skriver till `.tmdb-cache/`, och deploy.yml:s 'Save TMDB build cache'
+körs `if: always()`, så manifesten överlever även en steg-timeout. Andra dispatchen börjar
+alltså varmare, och **de typer som redan blev klara härleds inte om**." The bolded tail is
+false for the command the bullet directly above it tells you to run:
+
+- `deploy.yml:196` sets `TMDB_SELECTION_REFRESH: '1'` on `schedule` OR
+  `workflow_dispatch && inputs.full_refresh`.
+- `selectionManifest.ts:389-390`: `const refresh = isSelectionRefresh();
+  const mustDerive = refresh || previous === null || stale || tooThin;`
+
+So a second `gh workflow run deploy.yml -f full_refresh=true` re-derives all three types
+regardless of how fresh the manifests are. The derive is TMDB list calls, which `buildCache`
+never caches, so "warmer" does not shorten it either. What the surviving manifests actually
+buy is (a) the coverage floor passes even if the derive times out again (`resolveSelection`
+keeps `previous`), and (b) a warm DETAIL cache for the render. Skipping derivation entirely
+needs the flagless path — a plain push/dispatch with fresh manifests does zero list calls,
+which is the whole point of BIN-823.
+
+Filed as 1 blocking finding, one line to fix. This is the fifth time in this ticket that the
+round which took a prose finding authored a new wrong claim while correcting the old one (r2
+left `buildFetch.ts` naming the now-fetch-free `sitemap.ts`; r5 fixed four
+`SELECTION_ALLOW_THIN` sites and left ADR Fork E contradicted; r7 re-anchored 10 GB and left
+the formula; r8 left a dangling sentence; r10 this). The generalizable check that would have
+caught it in one step: a remedy is a COMMAND, so trace the command's env/regime flags into the
+code they gate — do not verify only the artifact the remedy talks about.
+
+Everything else re-verified clean this round: seed counts (74/10/32 = 116, pinned by
+`selectionSeed.test.ts`), the top-level `process.stderr.write` spy now in
+`selectionResolve.test.ts`'s `beforeEach` (r9 finding, closed — no `::warning::` reaches the
+real stderr), `deploy.yml` still contains no `SELECTION_ALLOW_THIN` (pinned by a test that
+reads the file), `ci.yml`/`preview.yml` both set it with their own stated reason, ADR 0005
+retired in place rather than duplicated, and the `mergeManifest` tiebreak + the three-row
+`derive vs ceiling` behaviour test unchanged.
+
+### 2026-08-09 — BIN-823 r11: my own finding text became the repo's wrong claim, and a measurement outlived the code path that produced it
+
+Final ledger round on the BIN-823 staged set (32 files). Three fixes were taken from r10's
+findings; two of them are clean, the third inherited a defect from the way I WROTE the r10
+finding.
+
+**1. RUNBOOK item 5's re-dispatch bullet — the flag claim is now correct.** Verified against
+`selectionManifest.ts:389-390` (`const refresh = isSelectionRefresh(); const mustDerive =
+refresh || previous === null || stale || tooThin;`) and `buildFetch.ts:225-227`
+(`TMDB_SELECTION_REFRESH === '1'`), with `deploy.yml:196` setting it on
+`schedule || (workflow_dispatch && inputs.full_refresh)`. So "full_refresh … tvingar
+omhärledning av ALLA tre typerna oavsett hur färska manifesten är" is true, and the escape
+hatch it names (a plain deploy → `mustDerive` false → zero list calls) is true.
+
+**2. But the sentence that replaced it mis-attributes half its own content.**
+`docs/RUNBOOK.md:256-258`: "Det sparade manifestet gör i stället två saker — täckningsgolvet
+passerar även om härledningen slår i taket igen, och personens rollist-fas läser från den
+varma detaljcachen i stället för nätet."
+ - Half one is true: derive times out → `derived.ok` false → `manifest = previous` →
+   `resolvedIds(previous, seeds)` = `previousCount` → `assertCoverageFloor` passes whenever
+   the previous count cleared the absolute floor.
+ - Half two is NOT a property of the manifest. The cast phase's warmth comes from
+   `seoPersonIds.ts:64-66` routing ~2 000 `getMovie` calls through `fetchForBuild`, which
+   reads `.tmdb-cache/movie-{id}.json` (`buildCache.ts`) — a different artifact that merely
+   rides the same `actions/cache` key. The manifest has zero influence on it.
+ - Provenance matters: that exact pairing is MY r10 wording ("The saved manifest buys a
+   passing coverage FLOOR and a warm detail cache"). The fixer transcribed it. A finding is
+   not a note to the author, it is draft prose for the repo — write it as text I would pass.
+   Knowledge principle updated in place (Static export bullet, r10 clause).
+
+**3. `buildFetch.ts:262-272` — the abandoned-pipeline claim is now defensible.** "Varje
+enskild förfrågan i den dör fortfarande på sin egen abort" holds on both phases (list phase
+gets `signal: buildSignal` from `person/[id]/page.tsx:59`, cast phase gets its own
+`buildSignal()` inside `fetchForBuild`), and "kan fortsätta dra semaforplatser och
+refresh-budget" is now TRUE where the old "kan inte leva vidare obegränsat" was not: the
+cast phase increments `networkFetches` (the refresh budget) and queues behind client.ts's
+8-slot semaphore. Cross-reference verified: ADR 0018 really does carry a section
+"Rättelse om budgetkonkurrens" (line 292) saying exactly that.
+
+**4. The rescue-cap test now pins a margin, not an inequality.**
+`selectionResolve.test.ts:226-237`: `expect(45*60_000 - RESCUE_DERIVE_TIMEOUT_MS)
+.toBeGreaterThanOrEqual(RENDER_BUDGET_MS)` with `RENDER_BUDGET_MS = 25 min` and the comment
+marking the 25 as an ASSUMPTION about warm-cache render time. Mutants: 44 min → −(−…) fails;
+21 min → fails. The old bare `< 45 min` let 44 min survive 50/50.
+`sitemap.test.ts:41-46` moved the `SELECTION_ALLOW_THIN` delete into `beforeEach` with a
+corrected rationale (the exposure is a leak from another file in the same worker, which an
+`afterEach` cannot prevent; this file's own setter at line 146 sits AFTER both throw-tests
+in file order and could never have hit them).
+
+**5. New, non-blocking: a measurement quoted across the change that removed its cause.**
+`docs/RUNBOOK.md:261-267` predicts the first post-BIN-823 push "förväntas gå RÖD, och det går
+inte att undvika", justified by "Mätt persontid 2 672 s mot 900 s tak". That 2 672 s was
+measured on 2026-08-08 while `collectPersonIds` called RAW `getMovie` and bypassed the disk
+cache entirely — the very thing this commit changed (`seoPersonIds.ts:60-63` says so). The
+push path restores `.tmdb-cache` through `restore-keys: tmdb-cache-` (deploy.yml:148), and
+`fetchForBuild` serves any entry younger than `REFRESH_AFTER_MS` (6 d) with no network, so a
+warm restore leaves the derive at ~100 list pages ≈ single-digit minutes and the build can
+simply go green. The figure still holds for the regimes the other three sites use it in
+(evacuated cache, preview with no restore at all — preview.yml has no cache step). Left
+non-blocking: the prediction is hedged and its remedy is correct either way.
+
+Everything else in the set re-verified as unchanged from the rounds that cleared it:
+`git status` clean except the stated `tasks/todo.md`, index == worktree hash for every source
+file read, and the eight BIN-823 test files green in one run (108 passed / 4 skipped — the
+4 are `it.runIf` branches in `titleParams.watchdog.test.ts`). Noted for the committer: the
+TEST reviewer's two knowledge files were `MM` (staged copy older than the worktree) while I
+worked — a sibling agent writing mid-review, same class as the concurrent-edit principle.

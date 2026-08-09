@@ -1,35 +1,55 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-// Mock the TMDB client so the build-time fetches return small deterministic
-// fixtures — both sitemap.ts (titles) and collectPersonIds (persons) read this.
-vi.mock('@/lib/tmdb/client', () => ({
-  getPopularMovies: vi.fn(),
-  getTopRatedMovies: vi.fn(),
-  getPopularTV: vi.fn(),
-  getTopRatedTV: vi.fn(),
-  getMovie: vi.fn(),
-}));
-
-import {
-  getPopularMovies,
-  getTopRatedMovies,
-  getPopularTV,
-  getTopRatedTV,
-  getMovie,
-} from '@/lib/tmdb/client';
 import sitemap from './sitemap';
 import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
+import {
+  MANIFEST_VERSION,
+  type SelectionManifest,
+  type SelectionType,
+  writeSelectionManifest,
+} from '@/lib/tmdb/selectionManifest';
+import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 
-const list = (ids: number[]) => ({ results: ids.map(id => ({ id })) } as never);
+// BIN-823: sitemapen gör inga TMDB-anrop längre — den LÄSER urvalsmanifesten
+// som pre-rendren skrev i en tidigare byggfas. Därför mockas inte klienten här;
+// testet skriver riktiga manifest till en temporär cache-katalog i stället.
+// Paritet mellan sitemap och pre-render är nu strukturell (en artefakt, två
+// läsare) snarare än ett löfte om att två kodvägar beter sig lika.
+
+let dir: string;
+
+function writeManifest(type: SelectionType, ids: number[]): void {
+  const manifest: SelectionManifest = {
+    version: MANIFEST_VERSION,
+    type,
+    derivedAt: 1_000_000,
+    ids: ids.map(id => ({ id, lastDerived: 1_000_000 })),
+  };
+  writeSelectionManifest(manifest);
+}
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(getPopularMovies).mockResolvedValue(list([1]));
-  vi.mocked(getTopRatedMovies).mockResolvedValue(list([2]));
-  vi.mocked(getPopularTV).mockResolvedValue(list([3]));
-  vi.mocked(getTopRatedTV).mockResolvedValue(list([4]));
-  vi.mocked(getMovie).mockResolvedValue({ credits: { cast: [{ id: 100 }] } } as never);
+  dir = mkdtempSync(join(tmpdir(), 'sitemap-selection-test-'));
+  process.env.TMDB_CACHE_DIR = dir;
+  writeManifest('movie', [1, 2]);
+  writeManifest('tv', [3, 4]);
+  writeManifest('person', [100]);
+  // I BÅDA krokarna, med flit. Den verkliga risken är inte att den här filens
+  // egna kast-tester no-oppar varandra — de ligger före settern i filordning och
+  // kan inte det — utan att en ANNAN fil i samma worker lämnat flaggan satt.
+  // Det kan bara en beforeEach stoppa. (Testgranskningen 2026-08-08: enbart
+  // afterEach gick att radera med 74/74 grönt.)
+  delete process.env.SELECTION_ALLOW_THIN;
+});
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+  delete process.env.TMDB_CACHE_DIR;
+  delete process.env.SELECTION_ALLOW_THIN;
 });
 
 const EXPECTED_STATIC = [
@@ -44,8 +64,8 @@ const EXPECTED_STATIC = [
 ];
 
 describe('sitemap — BIN-337 URL shape + family coverage', () => {
-  it('every entry is an absolute binge.nu URL ending in a trailing slash', async () => {
-    const entries = await sitemap();
+  it('every entry is an absolute binge.nu URL ending in a trailing slash', () => {
+    const entries = sitemap();
     expect(entries.length).toBeGreaterThan(0);
     for (const e of entries) {
       expect(e.url.startsWith('https://binge.nu/'), `bad origin: ${e.url}`).toBe(true);
@@ -53,8 +73,8 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     }
   });
 
-  it('includes a representative URL from every parity-critical family', async () => {
-    const urls = new Set((await sitemap()).map(e => e.url));
+  it('includes a representative URL from every parity-critical family', () => {
+    const urls = new Set(sitemap().map(e => e.url));
     expect(urls.has('https://binge.nu/movie/1/')).toBe(true);
     expect(urls.has('https://binge.nu/tv/3/')).toBe(true);
     expect(urls.has('https://binge.nu/person/100/')).toBe(true);
@@ -65,8 +85,8 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     expect(urls.has(`https://binge.nu/genre/${SEO_GENRE_SLUGS[0]}/`)).toBe(true);
   });
 
-  it('genre family is EXACTLY the curated slug set — none dropped, none extra (BIN-461)', async () => {
-    const genreUrls = (await sitemap()).map(e => e.url).filter(u => u.includes('/genre/'));
+  it('genre family is EXACTLY the curated slug set — none dropped, none extra (BIN-461)', () => {
+    const genreUrls = sitemap().map(e => e.url).filter(u => u.includes('/genre/'));
     // Two-sided, like the static-route guard: a sitemap /genre/ URL outside
     // generateStaticParams' set would build to nothing (dynamicParams=false)
     // and serve the noindex catch-all shell — a sitemap-committed soft-404.
@@ -75,8 +95,8 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     );
   });
 
-  it('lists exactly the 8 public static routes — no auth-walled/noindex pages leak in', async () => {
-    const all = (await sitemap()).map(e => e.url);
+  it('lists exactly the 8 public static routes — no auth-walled/noindex pages leak in', () => {
+    const all = sitemap().map(e => e.url);
     const urls = new Set(all);
     for (const u of EXPECTED_STATIC) expect(urls.has(u), `missing static: ${u}`).toBe(true);
     // Two-sided: the static (non-dynamic) route set must be EXACTLY these 8, so a
@@ -91,20 +111,69 @@ describe('sitemap — BIN-337 URL shape + family coverage', () => {
     }
   });
 
-  it('emits no duplicate URLs (crawl-budget hygiene)', async () => {
-    const all = (await sitemap()).map(e => e.url);
+  it('emits no duplicate URLs (crawl-budget hygiene)', () => {
+    const all = sitemap().map(e => e.url);
     expect(new Set(all).size).toBe(all.length);
   });
+});
 
-  it('falls back to non-title entries if the TMDB title fetch fails (build stays green)', async () => {
-    vi.mocked(getPopularMovies).mockRejectedValue(new Error('TMDB down'));
-    vi.mocked(getTopRatedMovies).mockRejectedValue(new Error('TMDB down'));
-    vi.mocked(getPopularTV).mockRejectedValue(new Error('TMDB down'));
-    vi.mocked(getTopRatedTV).mockRejectedValue(new Error('TMDB down'));
-    const entries = await sitemap();
-    // Static + provider + franchise + forsvinner families still present.
-    expect(entries.length).toBeGreaterThan(0);
-    expect(entries.every(e => e.url.startsWith('https://binge.nu/') && e.url.endsWith('/'))).toBe(true);
-    expect(entries.some(e => e.url.includes('/provider/'))).toBe(true);
+describe('sitemap — urvalsmanifestet (BIN-823)', () => {
+  // MEDVETEN OMVÄNDNING. Den här testfilen pinnade tidigare motsatsen: "faller
+  // tillbaka på icke-titel-poster om TMDB-hämtningen failar (bygget förblir
+  // grönt)". Det var rätt när sitemapen SJÄLV hämtade från TMDB — en nätverkshick
+  // skulle inte fälla ett bygge. Nu läser den en lokal fil som pre-rendren
+  // precis skrivit; saknas den har urvalet aldrig producerats, och en sitemap
+  // med bara de statiska familjerna vore ett aktivt felaktigt påstående till
+  // Google om att sajten har ~60 sidor.
+  it('kastar hellre än att publicera en sitemap utan titlar när manifestet saknas', () => {
+    rmSync(join(dir, 'selection-movie.json'));
+
+    expect(() => sitemap()).toThrow(/urvalsmanifestet för movie saknas/);
+  });
+
+  it('kastar även när bara person-manifestet saknas', () => {
+    rmSync(join(dir, 'selection-person.json'));
+
+    expect(() => sitemap()).toThrow(/urvalsmanifestet för person saknas/);
+  });
+
+  // Undantaget för preview/CI. Utan det är preview-lättnaden bara halv: en
+  // strypt personhärledning som slår i räddningstaket skriver aldrig något
+  // manifest, så previewen hade gått röd HÄR i stället för på golvet, trots
+  // SELECTION_ALLOW_THIN. Integrationsgranskningen 2026-08-08 spårade den
+  // grenen till den mätta persontiden 2 672 s mot ett tak på 900 s.
+  it('faller tillbaka på frö-id:n i stället för att kasta när tunt urval är tillåtet', () => {
+    process.env.SELECTION_ALLOW_THIN = '1';
+    rmSync(join(dir, 'selection-person.json'));
+    rmSync(join(dir, 'selection-movie.json'));
+
+    const urls = new Set(sitemap().map(e => e.url));
+
+    expect(urls.has(`https://binge.nu/person/${SEED_PERSON_IDS[0]}/`)).toBe(true);
+    expect(urls.has(`https://binge.nu/movie/${SEED_MOVIE_IDS[0]}/`)).toBe(true);
+    // Manifestet finns kvar för tv — den typen ska inte tappa sina id:n.
+    expect(urls.has('https://binge.nu/tv/3/')).toBe(true);
+    // …men de raderade manifestens egna id:n är borta, alltså är det verkligen
+    // frö-fallbacken som svarar och inte en läsning av en kvarglömd fil.
+    expect(urls.has('https://binge.nu/movie/1/')).toBe(false);
+  });
+
+  // Frö-id:na unioneras in vid läsning i BÅDE sitemap och pre-render, så de kan
+  // inte hamna i den ena men inte den andra.
+  it('tar med frö-id:n som inte finns i manifestet', () => {
+    const urls = new Set(sitemap().map(e => e.url));
+
+    expect(urls.has(`https://binge.nu/movie/${SEED_MOVIE_IDS[0]}/`)).toBe(true);
+    expect(urls.has(`https://binge.nu/tv/${SEED_TV_IDS[0]}/`)).toBe(true);
+    expect(urls.has(`https://binge.nu/person/${SEED_PERSON_IDS[0]}/`)).toBe(true);
+  });
+
+  it('adresserar exakt manifestets id-mängd ∪ fröna, inget mer', () => {
+    const movieUrls = sitemap()
+      .map(e => e.url)
+      .filter(u => u.startsWith('https://binge.nu/movie/'));
+    const expected = new Set([1, 2, ...SEED_MOVIE_IDS].map(id => `https://binge.nu/movie/${id}/`));
+
+    expect(new Set(movieUrls)).toEqual(expected);
   });
 });

@@ -157,3 +157,23 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
 - **Trigger:** The 2026-08-06 sprint held BIN-759 and BIN-468 out at the commit gate with the reason "panel/critique owed and never run" — finished, green, reviewed work stashed back out. But `node docs/org/route.mjs`, run at HEAD against each batch's actual file set, returns `{tier:"skip", reason:"no owning role (trivial / unmapped)", panel:[], roles:[]}` for BOTH. No critique was owed. The hold text came verbatim from the 2026-08-05 run's plan, where it had been true; nobody re-ran the router on 08-06. BIN-759 was a founder-ordered comment-only edit (18 lines, zero executing lines). BIN-468 has now stalled three consecutive runs for three different reasons and has never put a line on main. BIN-468's own batch agent *did* re-run the router, got `skip`, recorded the discrepancy in its deviation log — and the hold still happened, because a deviation log is not a gate input. Compounding it: `docs/org/ownership-map.json` enumerates 149 EXACT file paths, no globs, so a brand-new file in an owned directory (`src/lib/tmdb/seProviderIds.ts`, ten owned siblings) routes `skip`, and `src/lib/mediaTypeDocId.ts` — the doc-id contract behind BIN-569/608/624/766 — appears zero times. "No owner mapped" and "deliberately trivial" return the same string.
 - **Rule:** The router is the single risk signal, and its answer is only valid for the fileset and the day it was run on. Re-run `docs/org/route.mjs` on the batch's ACTUAL files at selection, every run; never inherit a tier from a prior plan, a ticket comment, or a previous run's withdrawal note. If a hold is going to override the router, print the router's raw output next to the hold reason so the contradiction is visible at the moment it is made — an override that cites only prose is indistinguishable from a stale copy-paste. And when reading a `skip`: check the paths are actually IN the ownership map before trusting it, because an unmapped path is a silent false-negative on the very mechanism the plan-before-large-changes rule depends on.
 - **Example:** BAD — carry "critique owed, cannot convene" forward from yesterday's plan, withdraw two green batches, report them as blocked on a reviewer. GOOD — run the router at selection, get `skip` for both, ship them; or if holding anyway, write "router says skip, holding because X" so X can be challenged.
+
+## [Design] A ratchet needs headroom, and deepening the input is not headroom (2026-08-08)
+
+- **Trigger:** Any "keep what we had, union with what's fresh, cap the total" design —
+  selection manifests, LRU-with-grace, retention buffers.
+- **Rule:** The ratchet only retains anything when **ceiling > input size**. If the fresh
+  derivation alone fills the ceiling, the union always overflows and eviction removes
+  exactly the entries missing from this round's input — the result is byte-identical to
+  the fresh input and the whole mechanism is a no-op. The fix is to *shrink the input*
+  below the ceiling (or raise the ceiling, which costs money); **enlarging the input does
+  NOT help** — an entry that left the input is evicted regardless of how deep the list it
+  left was. That wrong intuition was acted on twice in BIN-823: once by the author
+  (`SEO_PERSON_TARGET_IDS` 1000 → 3000) and once by the closing integration reviewer,
+  who proposed the same 3000 with an aggregate-retention simulation as evidence.
+- **Example:** BAD — measure "how many of week 1's ids survive to week 12"; a deeper
+  input is a more *stable* input, so retention rises and the no-op hides. GOOD — assert
+  the single decisive case: force one id out of the input, then check whether it is still
+  in the manifest. It isn't, at any input depth ≥ ceiling. Shipped: derive 800, ceiling
+  1000, so the ~200 most-recently-dropped keep their pages. Pinned as a three-row
+  behaviour test, not a comparison of two constants.

@@ -31,12 +31,18 @@ export interface CacheEntry<T> {
 
 // TMDB_CACHE_DIR override:as i tester; default .tmdb-cache/ i repo-roten
 // (gitignored, persistas via actions/cache).
-function cacheDir(): string {
+//
+// Exporterad för att selectionManifest.ts lägger sina filer i SAMMA katalog och
+// därmed rider på samma actions/cache-livscykel. Två kopior av sökvägslogiken
+// hade kunnat glida isär och tyst lämna manifesten utanför cachen — vilket ser
+// ut som "manifestet saknas varje bygge", alltså precis den härledning per
+// deploy som BIN-823 finns för att ta bort.
+export function buildCacheDir(): string {
   return process.env.TMDB_CACHE_DIR || join(process.cwd(), '.tmdb-cache');
 }
 
 function cachePath(kind: string, id: number): string {
-  return join(cacheDir(), `${kind}-${id}.json`);
+  return join(buildCacheDir(), `${kind}-${id}.json`);
 }
 
 /**
@@ -61,7 +67,7 @@ export function readBuildCacheEntry<T>(
 
 export function writeBuildCache<T>(kind: string, id: number, data: T, now: number = Date.now()): void {
   try {
-    mkdirSync(cacheDir(), { recursive: true });
+    mkdirSync(buildCacheDir(), { recursive: true });
     const entry: CacheEntry<T> = { fetchedAt: now, data };
     // Atomisk skrivning (temp + rename) så parallella Next-workers aldrig
     // läser en halvskriven fil.

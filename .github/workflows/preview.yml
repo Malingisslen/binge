@@ -46,6 +46,13 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
+          # Previewen har varken `.tmdb-cache`-restore eller step-timeout, till
+          # skillnad från deploy.yml. Den måste alltså härleda urvalet från kall
+          # cache varje gång, under 15-minuters räddningstaket, och en strypt
+          # personhärledning skulle då fälla bygget på täckningsgolvet (BIN-823).
+          # En preview är ingen produktionsdeploy — den får ha ett tunt urval.
+          # Golvet ska bara skydda det som faktiskt ersätter binge.nu.
+          SELECTION_ALLOW_THIN: '1'
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}

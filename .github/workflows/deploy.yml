@@ -180,6 +180,20 @@ jobs:
           # Schedule: hög budget → full refresh av allt som är stale (cachen
           # repopuleras helt). Ersätter den gamla TMDB_CACHE_BUST-wipen.
           TMDB_BUILD_REFRESH_BUDGET: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1000000' || '' }}
+          # BIN-823: styr URVALET av id:n, inte hur många detaljsvar som får
+          # re-hämtas. Samma villkor som budgeten ovan bara för att båda hör till
+          # veckobygget — de är olika saker och har därför egna flaggor.
+          #
+          # Tom (kod-deploy) → routerna läser urvalet ur .tmdb-cache/selection-*.json
+          # och gör NOLL listanrop. '1' (schedule/full_refresh) → urvalet härleds
+          # om ur TMDB:s topplistor och UNIONERAS med det befintliga; en titel som
+          # roterat ur topplistan behålls tills taket tvingar fram evakuering.
+          #
+          # Före detta härleddes urvalet vid varje deploy, och eftersom TMDB:s
+          # ranking roterar veckovis roterade urvalet med den: titlar ramlade ur,
+          # föll till catch-all-routens noindex och avindexerades av Google
+          # (264 → 117 indexerade sidor på fem veckor).
+          TMDB_SELECTION_REFRESH: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_refresh)) && '1' || '' }}
 
       # Spara TMDB-cachen ÄVEN när bygget fällde (BIN-815) — se kommentaren vid
       # restore-steget för vad detta bevisligen täcker och vad som är obekräftat.

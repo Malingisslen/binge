@@ -81,6 +81,18 @@ jobs:
         env:
           # Dummy values so the build doesn't crash on missing env vars.
           # The CI build is a smoke test — not deployed.
+          #
+          # BIN-823: med en dummynyckel failar varje TMDB-hämtning, så urvalet
+          # blir bara frö-id:n (~116 sidor). INTE fallback-id:n — fröna unioneras
+          # in vid läsning och är aldrig tomma, så SEO_FALLBACK_* är onåbart här.
+          # Täckningsgolvet fäller ett sådant bygge med flit (en riktig deploy får
+          # aldrig ersätta ~31 000 sidor med ~116), så den här körningen måste
+          # säga att den vet om det. deploy.yml
+          # är den enda vägen till produktion och sätter flaggan ALDRIG.
+          # preview.yml sätter den också, men av ett annat skäl — se kommentaren
+          # där; dess nyckel är dessutom tom på dependabot-PR:er, som läser ur
+          # Dependabots egna secret-lager.
+          SELECTION_ALLOW_THIN: '1'
           NEXT_PUBLIC_TMDB_API_KEY: ci-dummy
           NEXT_PUBLIC_FIREBASE_API_KEY: ci-dummy
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-dummy.firebaseapp.com

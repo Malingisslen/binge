@@ -16,6 +16,8 @@ import {
   cappedTitleIds,
   latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
+import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
+import { SEED_TV_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
@@ -34,7 +36,8 @@ export const dynamicParams = false;
  * Suspense-wrap krävs eftersom TVShowPageClient använder useSearchParams
  * (för `?fromGroup=`-parametern). Utan boundary failar Next-builden.
  *
- * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
+ * Pariteten mot src/app/sitemap.ts går sedan BIN-823 via urvalsmanifestet den
+ * här härledningen skriver — inte via delade konstanter.
  */
 
 const cachedGetTVShow = cache((id: number) => fetchForBuild('tv', getTVShow, id));
@@ -58,7 +61,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     for (const r of results) {
       if (r.status === 'fulfilled') {
         // Curation: skip non-Latin-titled series — same rule as browsing
-        // (titleFilter.ts); identical filter in sitemap.ts keeps parity.
+        // (titleFilter.ts). Sitemap parity is inherited through the manifest
+        // this derivation writes, so the filter only has to be right here.
         for (const id of latinDisplayIds(r.value.results)) ids.add(id);
       }
     }
@@ -66,16 +70,25 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
   };
 
   try {
-    const [popular, topRated] = await Promise.all([
-      collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-tv'),
-      collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-tv'),
-    ]);
-    const ids = cappedTitleIds([...popular], [...topRated]);
-    // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
-    // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
-    const safe = ids.length > 0 ? ids : SEO_FALLBACK_TV_IDS;
-    return safe.map(id => ({ id: String(id) }));
+    // BIN-823 — se movie/[id]/page.tsx för hela resonemanget. Kort: urvalet
+    // persisteras mellan byggen, så `derive` (1 000 listanrop) körs bara i
+    // veckobygget eller om manifestet saknas/är för gammalt.
+    const ids = await resolveSelection({
+      type: 'tv',
+      seedIds: SEED_TV_IDS,
+      fallbackIds: SEO_FALLBACK_TV_IDS,
+      derive: async () => {
+        const [popular, topRated] = await Promise.all([
+          collectIds(p => getPopularTV(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-tv'),
+          collectIds(p => getTopRatedTV(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-tv'),
+        ]);
+        return cappedTitleIds([...popular], [...topRated]);
+      },
+    });
+    return ids.map(id => ({ id: String(id) }));
   } catch (err) {
+    // Täckningsgolvet ska fälla bygget, inte tystas av fallbacken.
+    if (err instanceof SelectionFloorError) throw err;
     console.warn('[tv/[id]] generateStaticParams TMDB-fetch failed:', err);
     return SEO_FALLBACK_TV_IDS.map(id => ({ id: String(id) }));
   }

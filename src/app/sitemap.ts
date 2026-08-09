@@ -1,18 +1,7 @@
 import type { MetadataRoute } from 'next';
-import {
-  getPopularMovies,
-  getPopularTV,
-  getTopRatedMovies,
-  getTopRatedTV,
-} from '@/lib/tmdb/client';
-import {
-  SEO_TITLE_PAGES,
-  SEO_TOP_RATED_PAGES,
-  SEO_PROVIDER_IDS,
-  cappedTitleIds,
-  latinDisplayIds,
-} from '@/lib/tmdb/seoCoverage';
-import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
+import { SEO_PROVIDER_IDS } from '@/lib/tmdb/seoCoverage';
+import { readSelectionManifest, resolvedIds, allowThinSelection } from '@/lib/tmdb/selectionManifest';
+import { SEED_MOVIE_IDS, SEED_TV_IDS, SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 import { FRANCHISES } from '@/lib/seo/franchises';
 import { SEO_GENRE_SLUGS } from '@/lib/seo/genreHubs';
 
@@ -42,15 +31,21 @@ export const dynamic = 'force-static';
  * **Sitemap MÅSTE adressera samma URL-mängd som pre-rendren** i
  * src/app/movie/[id]/page.tsx, src/app/tv/[id]/page.tsx och
  * src/app/person/[id]/page.tsx. Diskrepans → "Genomsökt – inte indexerad"
- * i GSC. Därför importerar vi samma konstanter från @/lib/tmdb/seoCoverage.
+ * i GSC. Sedan BIN-823 garanteras det STRUKTURELLT: både sitemapen och de tre
+ * routerna läser samma urvalsmanifest i .tmdb-cache/. Tidigare importerade de
+ * bara samma konstanter och körde samma härledning två gånger — paritet som
+ * vilade på att två kodvägar råkade ge samma svar.
  *
  * Privata routes (/my, /settings, /stats, /grupper, /feed, /login,
  * /kalibrera) exkluderas eftersom de kräver auth. De har även
  * robots: index: false via sina layout.tsx-filer + Disallow i robots.txt.
  *
- * Körs bara vid build — TMDB-calls här räknas mot byggtid inte runtime.
- * Om TMDB-calls failar (nätverk/rate-limit) faller sitemap tillbaka till
- * bara statiska routes istället för att bryta hela build:en.
+ * Körs bara vid build. **Inga TMDB-anrop härifrån längre** — filen läser en
+ * lokal artefakt som pre-rendren skrev i en tidigare byggfas. Den KASTAR om
+ * manifestet saknas i stället för att falla tillbaka — utom under
+ * `SELECTION_ALLOW_THIN` (CI/preview), där den returnerar frö-id:na. Se
+ * selectionOrThrow nedan för varför en halv sitemap är värre än inget bygge,
+ * och varför undantaget ändå är rätt.
  */
 
 const SITE_URL = 'https://binge.nu';
@@ -70,43 +65,55 @@ function staticEntries(): MetadataRoute.Sitemap {
   ];
 }
 
-type Fetcher = (page: number) => Promise<{ results: { id: number }[] }>;
-
-async function collectIds(fetcher: Fetcher, pageCount: number): Promise<Set<number>> {
-  const ids = new Set<number>();
-  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
-  // 8-concurrent semaphoren i client.ts skyddar mot 429 även om vi fire:ar
-  // alla pages samtidigt.
-  const results = await Promise.allSettled(pages.map(p => fetcher(p)));
-  for (const r of results) {
-    if (r.status === 'fulfilled') {
-      // Curation: skip non-Latin-titled entries — MUST match the identical
-      // filter in {movie,tv}/[id]/page.tsx so sitemap == pre-render URL set.
-      for (const id of latinDisplayIds(r.value.results)) ids.add(id);
-    }
+/**
+ * Titel- och person-URL:er läses ur SAMMA urvalsmanifest som pre-rendren
+ * skrev (BIN-823).
+ *
+ * Tidigare härledde den här filen om hela urvalet på egen hand — en tredje kopia
+ * av `collectIds`, plus en andra anropare av den DELADE `collectPersonIds`
+ * (ADR 0005: en pipeline, aldrig två kopior — det beslutet står kvar). ~4 100
+ * extra TMDB-anrop per bygge. Paritetsinvarianten vilade då på att två oberoende
+ * kodvägar råkade ge samma svar; nu är den strukturell: en artefakt, två läsare.
+ *
+ * Manifesten skrivs i fasen `Collecting page data` (alla `generateStaticParams`)
+ * som är helt avslutad innan `Generating static pages` börjar — där den här
+ * filen körs. Läsordningen är alltså garanterad av Next, inte av tur.
+ *
+ * KASTAR om ett manifest saknas. En sitemap som tyst faller tillbaka på bara
+ * frö-id:n hade publicerat ~116 URL:er som den kanoniska listan över sajten och
+ * bett Google glömma resten — värre än ingen sitemap alls. Routernas
+ * täckningsgolv fäller normalt bygget långt innan vi når hit; det här är
+ * bältet till det hängslet.
+ *
+ * …UTOM under `SELECTION_ALLOW_THIN`, samma undantag som golvet. Utan det vore
+ * preview-lättnaden bara halv: en strypt personhärledning som slår i
+ * räddningstaket skriver ALDRIG något manifest (`resolveSelection` behåller
+ * bara det befintliga, och på en kall preview finns inget), så previewen hade
+ * gått röd här i stället för på golvet — den mätta persontiden är 2 672 s mot
+ * ett tak på 900 s, alltså den förväntade grenen och inte ett hörnfall.
+ * Undantaget är säkert av samma skäl som golvets: `deploy.yml` sätter aldrig
+ * flaggan, och en preview-kanals sitemap är aldrig binge.nu:s.
+ */
+function selectionOrThrow(
+  type: 'movie' | 'tv' | 'person',
+  seedIds: readonly number[],
+): number[] {
+  const manifest = readSelectionManifest(type);
+  if (manifest === null) {
+    if (allowThinSelection()) return [...seedIds];
+    throw new Error(
+      `[sitemap] urvalsmanifestet för ${type} saknas — pre-rendren har inte skrivit det ` +
+        `detta bygge. Publicerar hellre ingen sitemap än en som listar en bråkdel av sajten (BIN-823).`,
+    );
   }
-  return ids;
+  return resolvedIds(manifest, seedIds);
 }
 
-async function titleEntries(): Promise<MetadataRoute.Sitemap> {
+function titleEntries(): MetadataRoute.Sitemap {
   const lastModified = new Date();
   const entries: MetadataRoute.Sitemap = [];
 
-  const [popularMovies, topMovies, popularTV, topTV] = await Promise.all([
-    collectIds(getPopularMovies, SEO_TITLE_PAGES),
-    collectIds(getTopRatedMovies, SEO_TOP_RATED_PAGES),
-    collectIds(getPopularTV, SEO_TITLE_PAGES),
-    collectIds(getTopRatedTV, SEO_TOP_RATED_PAGES),
-  ]);
-
-  // Cap + dedup via cappedTitleIds — EXAKT samma id-mängd som pre-rendren i
-  // movie/[id]/page.tsx + tv/[id]/page.tsx. En enda källa för merge-ordning,
-  // dedup och cap; utan delad helper kan sitemap adressera fler URLs än som
-  // pre-renderas → "Genomsökt – inte indexerad" i GSC.
-  const movieIds = cappedTitleIds([...popularMovies], [...topMovies]);
-  const tvIds = cappedTitleIds([...popularTV], [...topTV]);
-
-  for (const id of movieIds) {
+  for (const id of selectionOrThrow('movie', SEED_MOVIE_IDS)) {
     entries.push({
       url: `${SITE_URL}/movie/${id}/`,
       lastModified,
@@ -114,7 +121,7 @@ async function titleEntries(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     });
   }
-  for (const id of tvIds) {
+  for (const id of selectionOrThrow('tv', SEED_TV_IDS)) {
     entries.push({
       url: `${SITE_URL}/tv/${id}/`,
       lastModified,
@@ -126,17 +133,9 @@ async function titleEntries(): Promise<MetadataRoute.Sitemap> {
   return entries;
 }
 
-/**
- * Person-URLs — delar EXAKT samma pipeline som src/app/person/[id]/page.tsx
- * via collectPersonIds (@/lib/tmdb/seoPersonIds), så sitemap och pre-render
- * adresserar samma person-URL-mängd. Sitemap:en hoppar över buildSignal +
- * ≥1-fallbacken (en tom person-lista är ok i en sitemap; fallbacken behövs
- * bara för Next static-export-kravet i generateStaticParams).
- */
-async function personEntries(): Promise<MetadataRoute.Sitemap> {
+function personEntries(): MetadataRoute.Sitemap {
   const lastModified = new Date();
-  const ids = await collectPersonIds();
-  return ids.map(id => ({
+  return selectionOrThrow('person', SEED_PERSON_IDS).map(id => ({
     url: `${SITE_URL}/person/${id}/`,
     lastModified,
     changeFrequency: 'monthly' as const,
@@ -194,19 +193,22 @@ function genreEntries(): MetadataRoute.Sitemap {
   }));
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const statics = staticEntries();
-  // Titles + persons kan failla oberoende av varandra (separata try-catch)
-  // så att en TMDB-hick på person-credits inte tar ner hela title-sitemapen.
-  const [titles, persons] = await Promise.all([
-    titleEntries().catch(err => {
-      console.warn('[sitemap] title-fetch misslyckades:', err);
-      return [] as MetadataRoute.Sitemap;
-    }),
-    personEntries().catch(err => {
-      console.warn('[sitemap] person-fetch misslyckades:', err);
-      return [] as MetadataRoute.Sitemap;
-    }),
-  ]);
-  return [...statics, ...providerEntries(), ...franchiseEntries(), ...forsvinnerEntries(), ...genreEntries(), ...titles, ...persons];
+export default function sitemap(): MetadataRoute.Sitemap {
+  // Inga try/catch längre, med flit. Tidigare gjorde den här funktionen
+  // TMDB-anrop, och då var det rätt att låta en nätverkshick ge en mindre
+  // sitemap i stället för ett fällt bygge. Nu läser den en lokal fil som
+  // pre-rendren precis skrivit: saknas den har något gått grundligt fel, och en
+  // halv sitemap vore ett aktivt felaktigt påstående till Google om vilka sidor
+  // sajten har. Låt det kasta — på den enda väg som når binge.nu. Under
+  // `SELECTION_ALLOW_THIN` (bara CI och preview) faller selectionOrThrow
+  // tillbaka på fröna i stället; de byggena publicerar ingenting till Google.
+  return [
+    ...staticEntries(),
+    ...providerEntries(),
+    ...franchiseEntries(),
+    ...forsvinnerEntries(),
+    ...genreEntries(),
+    ...titleEntries(),
+    ...personEntries(),
+  ];
 }

@@ -1,4 +1,5 @@
 import { getPopularMovies, getMovie } from '@/lib/tmdb/client';
+import { fetchForBuild } from '@/lib/tmdb/buildFetch';
 import {
   SEO_PERSON_SOURCE_MOVIE_PAGES,
   SEO_PERSON_CAST_PER_MOVIE,
@@ -9,10 +10,12 @@ import {
 /**
  * Shared person-ID collection pipeline (BIN-337).
  *
- * Both src/app/sitemap.ts and src/app/person/[id]/page.tsx (generateStaticParams)
- * need the SAME set of person IDs, or the sitemap lists person URLs that aren't
- * pre-rendered → "Crawled – not indexed" soft-404s. Previously each re-implemented
- * the pipeline; this is the single source of truth.
+ * Sedan BIN-823 finns EN anropare: `derive` i src/app/person/[id]/page.tsx.
+ * Sitemapen härleder inte längre — den läser urvalsmanifestet som den
+ * härledningen skrev, så pariteten är strukturell i stället för att bero på att
+ * två kopior av den här pipelinen beter sig lika. (Ursprungligen, ADR 0005:
+ * båda hade egna kopior, och driften mellan dem gav "Genomsökt – inte
+ * indexerad" i GSC. Delvis ersatt av ADR 0018 Fork E.)
  *
  * Lives here (not in the pure seoCoverage.ts) on purpose: this is a fetcher, so it
  * imports the TMDB client. seoCoverage.ts stays pure (constants + cappedTitleIds)
@@ -22,13 +25,22 @@ import {
  * ORDER IS LOAD-BEARING (same contract as cappedTitleIds): popular-page order →
  * Set-insertion order of movie ids → per-movie top-`SEO_PERSON_CAST_PER_MOVIE`
  * cast → Set-insertion order of person ids → slice to `SEO_PERSON_TARGET_IDS`.
- * Which IDs survive the cap depends entirely on this order, so both callers MUST
- * go through this one function — don't reorder (e.g. collect in completion order).
+ * Which IDs survive the cap depends entirely on this order. Since BIN-823 there
+ * is only ONE caller (the person route's derivation; the sitemap reads the
+ * manifest instead), so the order is no longer a cross-file contract — but it
+ * still decides who gets a page, so don't collect in completion order.
  *
  * `signal` is a per-fetch factory so the build-time caller can inject a fresh
- * AbortSignal.timeout per request (buildSignal); the sitemap caller omits it.
- * Failed fetches are skipped (allSettled) — an empty result is valid for the
- * sitemap; the page caller layers its own ≥1 fallback on top.
+ * AbortSignal.timeout per request (buildSignal). It applies to the popular-list
+ * phase only — the cast-detail phase goes through `fetchForBuild`, which
+ * supplies its own `buildSignal()` per call (BIN-823).
+ *
+ * Failed fetches are skipped (allSettled), so a throttled run silently returns
+ * FEWER ids rather than failing — measured 2026-08-08: 4 375 movie ids locally
+ * against production's ~9 850. An empty result is no longer harmless: it flows
+ * into `mergeManifest` (which then keeps the previous selection untouched) and
+ * then into the coverage floor, which fails the build if nothing else rescues
+ * it. That is deliberate — see selectionManifest.ts.
  */
 export async function collectPersonIds(
   opts?: { signal?: () => AbortSignal | undefined },
@@ -45,8 +57,12 @@ export async function collectPersonIds(
     }
   }
 
+  // BIN-823: via fetchForBuild, inte rå getMovie. De här ~2 000 filmerna är
+  // exakt samma dokument som titelsidorna redan cachar i .tmdb-cache — att gå
+  // förbi cachen hämtade om dem varje bygge helt i onödan. Nu delar
+  // personhärledningen den varma cachen med resten av bygget.
   const movieDetails = await Promise.allSettled(
-    Array.from(movieIds).map(id => getMovie(id, fetchOpts())),
+    Array.from(movieIds).map(id => fetchForBuild('movie', getMovie, id)),
   );
   const peopleIds = new Set<number>();
   for (const r of movieDetails) {

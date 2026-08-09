@@ -10,6 +10,9 @@
 // fetches, the heartbeat reports `inflight=0` straight through a hang and the
 // next investigation is pointed the wrong way.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const getPopularMovies = vi.fn();
 const getTopRatedMovies = vi.fn();
@@ -75,8 +78,21 @@ const ROUTES = [
 
 describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)', (route) => {
   let lines: string[];
+  let cacheDir: string;
 
   beforeEach(() => {
+    // BIN-823: `generateStaticParams` gör inte längre några list-anrop om det
+    // finns ett färskt urvalsmanifest — det är hela poängen med den ändringen.
+    // Utan en egen cache-katalog läser den här filen repots RIKTIGA
+    // .tmdb-cache, hoppar över härledningen, och varje puls-assertion nedan
+    // får ingenting att observera (10 av 11 föll så här lokalt). Egen tom
+    // katalog + refresh-regimen tvingar fram den härledning testet bevakar.
+    cacheDir = mkdtempSync(join(tmpdir(), 'watchdog-params-test-'));
+    process.env.TMDB_CACHE_DIR = cacheDir;
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    // Härledningen ger inget här (mockarna hänger/failar med flit), och
+    // täckningsgolvet ska inte vara det som fäller ett vakthundstest.
+    process.env.SELECTION_ALLOW_THIN = '1';
     vi.useFakeTimers();
     __resetBuildFetchState();
     lines = [];
@@ -87,6 +103,10 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
   afterEach(() => {
     __resetBuildFetchState();
     vi.useRealTimers();
+    rmSync(cacheDir, { recursive: true, force: true });
+    delete process.env.TMDB_CACHE_DIR;
+    delete process.env.TMDB_SELECTION_REFRESH;
+    delete process.env.SELECTION_ALLOW_THIN;
   });
 
   it('startar pulsen i den fas som hänger, innan något anrop hunnit svara', async () => {

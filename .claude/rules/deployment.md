@@ -20,11 +20,28 @@ TMDB-anrop vid byggtid. Två skydd (se `src/lib/tmdb/buildFetch.ts` +
 - **AbortSignal.timeout (20s)** på alla byggtids-anrop → ingen sida når Next
   60s-tak; exporten kan aldrig avbrytas av en strypt fetch (otursdrabbade
   sidor får tunn metadata, bygget förblir grönt).
-- **Fil-cache `.tmdb-cache/`** (TTL 7 dagar) persistas mellan CI-körningar via
+- **Fil-cache `.tmdb-cache/`** (mjuk refresh efter 6 dagar, `REFRESH_AFTER_MS`;
+  hård TTL 30 dagar, `buildCache.HARD_TTL_MS` — stod länge "TTL 7 dagar", vilket
+  var fel åt båda hållen. De 30 dagarna är dessutom det ADR 0018:s TMDB
+  ToS §1.C-resonemang vilar på) persistas mellan CI-körningar via
   `actions/cache`. Kod-deployer hämtar därför nästan inga titlar (cache-träff)
   → ingen strypning, snabb deploy. Veckovis schemalagd deploy (cron i
   `deploy.yml`) sätter en stor `TMDB_BUILD_REFRESH_BUDGET` (+ längre timeout)
   och hämtar färsk metadata för alla stale titlar.
+
+**`.tmdb-cache/` bär sedan BIN-823 även URVALET, inte bara metadatan.**
+`selection-{movie,tv,person}.json` är listan över vilka id:n som pre-renderas, och
+den är en SPÄRRHAKE: kod-deployer läser den och gör noll listanrop, veckobygget
+härleder om och unionerar. Två regimflaggor sätts under samma villkor i
+`deploy.yml` och måste följas åt — `TMDB_BUILD_REFRESH_BUDGET` (hur mycket
+metadata som får uppdateras) och `TMDB_SELECTION_REFRESH` (om urvalet ska
+härledas om). Förlorar man cachen kostar nästa bygge en full härledning under
+fastak, och ett urval som ändå blir för tunt FÄLLER bygget (täckningsgolvet) i
+stället för att deploya en förkrympt sajt. `SELECTION_ALLOW_THIN=1` stänger av
+både golvet och sitemapens kast, och sätts i `ci.yml` (dummynyckel) OCH
+`preview.yml` (ingen cache-restore, ingen step-timeout — ett tunt urval är där
+det normala). `deploy.yml` sätter den ALDRIG, och det är den egenskapen hela
+skyddet vilar på. Hela resonemanget: ADR 0018.
 
 Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
 `noindex` by default, så en icke-pre-renderad titel indexeras opålitligt

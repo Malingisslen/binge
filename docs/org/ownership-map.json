@@ -173,7 +173,9 @@
         "src/app/page.tsx",
         "src/app/sitemap.ts",
         "src/lib/analytics.ts",
-        "src/lib/tmdb/seoCoverage.ts"
+        "src/lib/tmdb/seoCoverage.ts",
+        "src/lib/tmdb/selectionManifest.ts",
+        "src/lib/seo/selectionSeed.ts"
       ]
     },
     "16": {

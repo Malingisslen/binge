@@ -8,6 +8,8 @@ import {
 } from '@/lib/tmdb/client';
 import { SEO_FALLBACK_PERSON_IDS } from '@/lib/tmdb/seoCoverage';
 import { collectPersonIds } from '@/lib/tmdb/seoPersonIds';
+import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
+import { SEED_PERSON_IDS } from '@/lib/seo/selectionSeed';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { prunePersonSeed } from '@/lib/tmdb/personSeed';
 import { buildPersonDescription } from '@/lib/seo/contentFloor';
@@ -26,7 +28,9 @@ export const dynamicParams = false;
  *
  * Personer utanför topp-N hanteras via catch-all + client-side rendering.
  *
- * Konstanter delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage.
+ * Urvalet delas med src/app/sitemap.ts via urvalsmanifestet (BIN-823): den här
+ * routen härleder och skriver, sitemapen läser samma fil. Tidigare körde båda
+ * varsin kopia av samma härledning.
  */
 
 const cachedGetPerson = cache((id: number) => fetchForBuild('person', getPerson, id));
@@ -39,21 +43,27 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
   // ("felet ligger inte i TMDB-lagret") som då blir falsk.
   startBuildWatchdog();
   try {
-    // Delad pipeline med src/app/sitemap.ts (collectPersonIds) — buildSignal
-    // injiceras per fetch så ingen byggtids-hämtning når Next 60s-taket.
-    // aggregate: etiketten täcker ~2100 anrop i två sekventiella faser, så den
-    // har inget eget 20 s-tak. Utan flaggan hade ett FRISKT bygge skrivit STUCK
-    // varje puls, och en rad som alltid syns slutar betyda något.
-    const ids = await trackBuildCall(
-      'params:person-ids',
-      () => collectPersonIds({ signal: buildSignal }),
-      { aggregate: true },
-    );
-    // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
-    // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
-    const safe = ids.length > 0 ? ids : SEO_FALLBACK_PERSON_IDS;
-    return safe.map(id => ({ id: String(id) }));
+    // buildSignal injiceras per fetch så ingen byggtids-hämtning når Next
+    // 60s-taket. aggregate: etiketten täcker ~2100 anrop i två sekventiella
+    // faser, så den har inget eget 20 s-tak. Utan flaggan hade ett FRISKT bygge
+    // skrivit STUCK varje puls, och en rad som alltid syns slutar betyda något.
+    // BIN-823: den här härledningen — 100 listsidor + ~2 000 rollistor — är den
+    // dyraste i hela bygget och den som satt fast i 2 672 sekunder 2026-08-08
+    // (BIN-815). Nu körs den bara i veckobygget eller när manifestet saknas, och
+    // då under ett fastak; en vanlig kod-deploy läser filen och gör noll anrop.
+    const ids = await resolveSelection({
+      type: 'person',
+      seedIds: SEED_PERSON_IDS,
+      fallbackIds: SEO_FALLBACK_PERSON_IDS,
+      derive: () =>
+        trackBuildCall('params:person-ids', () => collectPersonIds({ signal: buildSignal }), {
+          aggregate: true,
+        }),
+    });
+    return ids.map(id => ({ id: String(id) }));
   } catch (err) {
+    // Täckningsgolvet ska fälla bygget, inte tystas av fallbacken.
+    if (err instanceof SelectionFloorError) throw err;
     console.warn('[person/[id]] generateStaticParams failed:', err);
     return SEO_FALLBACK_PERSON_IDS.map(id => ({ id: String(id) }));
   }

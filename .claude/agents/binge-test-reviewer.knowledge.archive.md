@@ -16012,3 +16012,683 @@ hand-typed `/tv/<id>/sasong/0/` route and the calendar too. `tasks/todo.md` is U
 makes no completion claim. `accepted-deviations.md` read; nothing here is listed.
 
 **Verdict: pass (0 blocking).** One non-blocking LOW finding (HA).
+
+## 2026-08-08 — BIN-679 r5: the false-only pin on EpisodeRow's forwarded `watched` (three files, 17 lines, comment+test only)
+
+**Diff reviewed** (`git diff --cached`, index == worktree for all three; shas re-pinned at end
+unchanged: `SeasonList.test.tsx` 84a5726b, `SeasonList.tsx` 65fbfbd2, `canonicalSpecials.ts` 9a42757e):
+
+- `src/components/tv/SeasonList.test.tsx` +6: inside `hands season 0 to the reactions thread,
+  and labels the row S0`, the hoisted `episodeReactions` spy loop gains
+  `expect(call[0].watched).toBe(false);` plus a 5-line comment ("EpisodeRow has no test file of
+  its own, so hardcoding `watched` there was invisible to the entire 2683-test suite until this
+  line — nothing else in the repo renders EpisodeReactions under test").
+- `src/components/tv/SeasonList.tsx` +6: comment only, on `const SPECIALS_KEY = 0` — warns it is
+  read as BOTH the accordion key and a literal season number, so a `-1` "disambiguation" would
+  zero the watched-count while the checkboxes (which pass literal `0`) kept working.
+- `src/lib/tv/canonicalSpecials.ts` +7/-2: comment only, "display-only" → "data-only" plus a
+  parenthetical separating the two senses (what the FILE holds vs whether the SECTION is tickable).
+
+This closes the r4 finding (the seventh mutant, one step past the call site) — filed by me,
+taken by the coordinator, who reported it red-alone 1-of-14 in the shared tree and asked me to
+re-derive rather than trust it, and separately asked whether omitting my second suggested
+assertion (`watched === true` for ep 83 in `reads the checked state from season 0`) leaves a hole.
+
+**Rig.** Shared worktree untouched by instruction. Isolated worktree from the INDEX:
+`git write-tree` → `345daf94`, `git commit-tree -p HEAD` → `44c315c4`, `git worktree add --detach
+<scratch>/wt2 44c315c4`; `node_modules` junction written from a heredoc `.bat` (the `printf`
+form mangled `\n`ode_modules again — first attempt failed exactly as the principles file warns),
+run via `cmd //c "<abs>.bat"`, "Junction created" line required; `vitest.review.config.ts`
+spreading the base config with `cacheDir: <scratch>/vcache-r5`, `rm -rf` that cacheDir before
+EVERY run, mutator script exiting 3 unless the pattern matches exactly once, `grep -n` +
+`md5sum` on all targets before AND after each run in one command. Both files are 100% CRLF.
+
+**Runs.**
+
+- Control, full tree: `Tests 2 failed | 2681 passed | 4 skipped (2687)`, 136 s. The 2 failures are
+  `src/lib/design/consistency.test.ts` recursive-tsx-scan cases timing out at 5000 ms — an FS-speed
+  artifact of the cold isolated worktree; the failing pair differs run to run (`legacy token
+  aliases` + `raw Tailwind red-*` in one run, `legacy token aliases` + `bare "Laddar…"` in another),
+  which is the tell that it is a timeout and not a coverage fact. Targets md5-identical before/after.
+- **M1 `watched={watched}` → `watched={true}`** (EpisodeRow.tsx:109, the `<EpisodeReactions>` prop),
+  full tree: `3 failed | 2680 passed` — the 2 env timeouts plus, alone, `SeasonList.test.tsx >
+  hands season 0 to the reactions thread, and labels the row S0`. The coordinator's claim
+  re-derived independently: the new line kills the spoiler-gate-open mutant, and kills it
+  tree-wide-alone. Grep before AND after showed the mutant present; md5 stable.
+- **M2 `watched={!watched}`** (inversion), file suite: `1 failed | 13 passed (14)`, the same test
+  alone. So the coordinator's specific worry is unfounded — the fixture is all-unwatched, so
+  inversion produces `true` and the `toBe(false)` assertion catches it. One value DOES separate
+  inversion from hardcoding.
+- **M3 `watched={false}`**, full tree: `2 failed | 2681 passed | 4 skipped` — i.e. identical to the
+  control; **survives**. This is the hole. A single-value pin kills the OPPOSITE hardcode and the
+  inversion, never the SAME-value hardcode.
+- **Remedy** (my suggested second assertion, in the CHECKED-state case, written non-vacuously):
+  `const gate = new Map(episodeReactions.mock.calls.map(c => [c[0].episode, c[0].watched]));
+  expect(gate.get(83)).toBe(true); expect(gate.get(14)).toBe(false);` → M3 re-run is red **alone**
+  (`reads the checked state from season 0, not from a numbered season`, 1 failed | 13 passed), and
+  the clean control with the remedy is 14/14 green. `Map.get` on a missing key returns `undefined`,
+  so the assertion cannot go vacuous the way `.every` on `[]` would.
+- **M4 `const SPECIALS_KEY = 0` → `-1`**, file suite: red ALONE on `counts watched specials against
+  the curated list, not the TMDB season` (the `1/22` tripwire). The new SeasonList.tsx comment's
+  warning is therefore backed by a live test, not just prose — no finding.
+
+**Reachability re-verified, not inherited.** `grep -rl EpisodeReactions src --include=*.test.ts*`
+→ one hit, `SeasonList.test.tsx`; same for `EpisodeRow`. `src/components/tv/` contains exactly one
+test file. `EpisodeRow` is also imported by `SeasonEpisodePanel.tsx` and `SeasonPageClient.tsx`,
+neither of which has a test file — so the numbered-season path (the 99% case) is pinned ONLY
+through the specials-section test in a file whose describe block is about season 0.
+
+**Findings.**
+1. LOW-MED, non-blocking — `SeasonList.test.tsx:177`: false-only pin; `watched={false}` survives
+   the full tree. Failure mode is the gate stuck CLOSED (reactions never open for anyone), so no
+   leak and no cross-user reach; that is why it is not blocking. Remedy above, verified red-alone.
+2. LOW — `SeasonList.test.tsx:174-176`: the comment overstates. "hardcoding `watched` there was
+   invisible … until this line" is true only for `true`. Either add the remedy or narrow the
+   wording to "hardcoding it to `true`". (Comment-overstates-coverage class, same as the
+   understating form.)
+3. LOW — homing: the assertion is borrowed coverage for a shared, untouched component. It does
+   protect numbered seasons today (M1 is the same line), but the pin dies silently the day the
+   specials section stops going through `EpisodeRow`. Proper home is an `EpisodeRow.test.tsx`
+   driving the real row for a NUMBERED season, both `watched` values.
+
+Nothing weakened, deleted, `.skip`ped or loosened; the diff is +17/-2 with the only test change an
+ADDED assertion. `firestore.rules` untouched → no `vitest.rules.config.ts` work owed.
+`tasks/todo.md` is UNSTAGED, is the BIN-679 plan, and makes no claim about this review round.
+`accepted-deviations.md` read; nothing here is listed there.
+
+**Teardown** (the dangerous half): `.bat`-driven `rmdir` of the junction first, then asserted
+`wt2/node_modules` gone AND `C:/binge/node_modules` still 448 entries, only then
+`git worktree remove --force`; re-asserted 448 + `node_modules/vitest/dist/cli.js` present +
+`git worktree list` back to `C:/binge` alone + `git status --porcelain` byte-identical to the
+start + HEAD still `b20bf69`. No `npm ci` needed this time.
+
+**Verdict: pass (0 blocking).** Three non-blocking findings (1 LOW-MED, 2 LOW).
+
+## 2026-08-08 — BIN-679 r6 (FINAL): the Map-form both-values pin verified, and a header count that survives
+
+**Diff reviewed** (staged, index == worktree at start and end):
+`src/components/tv/SeasonList.test.tsx` `ef3268fd` (+20/-1), `src/components/tv/SeasonList.tsx`
+`a118fff4` (+7/-0, comment only), `src/lib/tv/canonicalSpecials.ts` `163a42ad` (+5/-4, comment
+only). HEAD `b20bf69` throughout. Untouched files read: `EpisodeRow.tsx` `091f089f`,
+`EpisodeReactions.tsx` `da56906e`.
+
+Round 5 filed three findings; all three were taken:
+1. the same-value survivor `watched={false}` → closed with the Map form in
+   `reads the checked state from season 0`;
+2. the comment that overstated its own coverage → rewritten to say the file mocks
+   `EpisodeReactions` away and the `if (!watched) return` branch is untested;
+3. the borrowed-coverage point → said out loud in the comment and filed as BIN-821.
+Plus the code reviewer's fix: the mock's declared props now include `watched: boolean`.
+
+**Rig.** Isolated worktree `wt-r6-165055` built from the INDEX (`git write-tree` →
+`git commit-tree` → `git worktree add --detach`, commit `07dc9100`), `node_modules` junction to
+`C:\binge\node_modules` written via a `.bat` (the Write tool — a bash `printf` with
+`"%s\node_modules"` expands `\n` and mangles the path), `vitest.review.config.ts` overriding
+`cacheDir` to a scratch dir wiped before EVERY run.
+
+**Mutations** (each bracketed by `grep -c MUTANT` before AND after the run, plus `md5sum` on all
+three targets; restore by `git checkout --` inside the isolated worktree only):
+
+| # | mutation | result |
+|---|---|---|
+| control | clean | 14/14 green |
+| M1 | `EpisodeRow.tsx` `watched={watched}` → `watched={false}` (EpisodeReactions prop) | **1/14 red ALONE** — `reads the checked state from season 0`, at `gate.get(83)`: "expected false to be true" |
+| M4 | same prop → `watched={true}` | 2/14 red — both `hands season 0 to the reactions thread` and `reads the checked state` |
+| M2 | `SeasonList.tsx` `const SPECIALS_KEY = 0` → `-1` | **1/14 red ALONE** — `counts watched specials against the curated list` ("Unable to find … 1/22") |
+| M3 | `SeasonList.tsx` header `({specials.episodeNumbers.length} avs)` → `({0} avs)` | **SURVIVES 14/14** |
+| M5 | `EpisodeRow.tsx` `{!isUnaired && (` → `{true && (` (unaired gate around EpisodeReactions) | SURVIVES 14/14 |
+| control-2 | restored, clean md5s | 14/14 green |
+
+**Answers to the three questions asked.**
+- *Is the Map form non-vacuous, incl. zero episodes?* Yes, twice over. `Map.get` on a missing key
+  is `undefined`, and `expect(undefined).toBe(true)` fails — unlike `.every` on `[]`. And the test
+  cannot even reach those lines with an empty panel: `getAllByRole('checkbox')` throws first and
+  `expect(boxes.map(b => b.checked)).toEqual([false, true])` pins the count at 2. The Map is also
+  built BEFORE the un-tick click, so the later `fireEvent.click` cannot pollute it.
+- *Is the split coherent?* Yes, and the loop's surviving `expect(call[0].watched).toBe(false)` is
+  now a strict SUBSET: M4 (hardcode true) reddens both tests, M1 (hardcode false) reddens only the
+  Map case, and `watched={!watched}` would redden both. So the loop line kills nothing the Map pair
+  does not. It stays legitimate documentation because the `it` it lives in discriminates on
+  `season`/`tmdbId`/`episode`. Merging the two cases would be equally fine; splitting them is not a
+  defect — the true value only EXISTS in the checked-state fixture.
+- *An eighth mutant on the forwarded props?* No. The full enumeration is now exhausted:
+  `SpecialEpisodeRow` → `EpisodeRow` {episode, seasonNumber, tmdbId, watched, onToggle} (r2/r3/r4
+  each red-alone), the callback's hand-back {0, episode_number, w} (r2 + r4's un-tick), and
+  `EpisodeRow` → `EpisodeReactions` {tmdbId, season, episode, watched} (r3 + this round's M1/M4).
+  The survivors that remain are NOT props: M3, the section header's `(22 avs)` count — the same
+  curated-list length as the pinned `1/22` denominator, so the two renderings of one number can
+  diverge with nothing red (cosmetic, BIN-580 code untouched by this diff, LOW); and M5, EpisodeRow's
+  `!isUnaired` gate, which no fixture in the file exercises — impact is nil because
+  `EpisodeReactions` itself returns the gate copy for `watched === false` and an unaired episode is
+  never watched (LOW, BIN-821's scope).
+- The staged `SPECIALS_KEY` comment claims its own live tripwire ("the `1/22` case … reddens on
+  exactly that mutation"). M2 confirms it verbatim, red-alone. The rewritten
+  `EpisodeReactions`-mock comment also checks out: `grep -rl EpisodeReactions src --include=*.test.tsx`
+  returns exactly one file (this one), and `EpisodeReactions.tsx:17` really is `if (!watched)`.
+
+**Infrastructure incident (reported, not hidden).** Mid-review, a SIBLING session removed the stale
+`scratchpad/wt` worktree left behind by round 5 — that `git worktree remove --force` followed MY
+junction and emptied `C:\binge\node_modules` (0 entries, `.bin` gone). `npm ci` to self-heal was
+**refused by the classifier**, so recovery was not mine to do; the sibling's own `npm ci` restored
+it (448). It then churned again mid-run (435 → 58 → 468 → 448), producing one
+`Test Files no tests` and one `Cannot find module '@exodus/bytes/encoding-lite.js'` — both discarded
+as toolchain artifacts, never read as coverage facts, and each affected mutation re-run to a real
+result afterwards. Teardown was done the safe way: `rmdir` the junction from a `.bat` FIRST, assert
+the junction gone AND `C:/binge/node_modules` still 448, only then `git worktree remove --force`;
+re-asserted 448 + `vitest/dist/cli.js` + `git worktree list` back to `C:/binge` alone + every staged
+sha index == worktree + HEAD still `b20bf69`. The round-5 leftover directory is deleted, so it can
+no longer bait another session's cleanup. Note for whoever commits: `node_modules/.bin` was still
+missing at the end, so a `npx eslint`/`tsc` gate may need a `npm ci` first.
+
+**Verdict: pass (0 blocking).** Two non-blocking findings, both LOW, both outside the staged diff's
+own lines.
+
+## 2026-08-08 — BIN-679 r7 (CLOSING): the header-count probe verified red-alone, in a junction-free rig
+
+**Diff reviewed** (staged, index == worktree at start AND end, HEAD `b20bf69` throughout):
+`src/components/tv/SeasonList.test.tsx` `b6ca804d` (+27/-1), `src/components/tv/SeasonList.tsx`
+`a118fff4` (+7/-0, comment only, UNCHANGED since r6 so its r6 verdict carries),
+`src/lib/tv/canonicalSpecials.ts` `57e88748` (+11/-4, comment only).
+Movers since r6: the test file (`ef3268fd` → `b6ca804d`) and canonicalSpecials (`163a42ad` →
+`57e88748`). Untouched files re-read: `EpisodeRow.tsx`, `RelatedSeriesStrip.tsx`,
+`TVShowPageClient.test.tsx`, `tasks/todo.md`, `.claude/rules/accepted-deviations.md`.
+
+**Delta content.** One assertion ADDED (`expect(screen.getByText('(22 avs)')).toBeTruthy()` in
+`shows the specials section … lists ONLY the allow-listed episodes`) — exactly the r6 LOW probe —
+plus the mock's prop type gaining `watched: boolean`, `(own ticket)` → `(BIN-821)`, an antecedent
+fix, and canonicalSpecials' cost claim corrected. Nothing weakened, deleted, skipped or loosened:
+`git diff --cached --numstat` is +27/-1 on the test file and the single deleted line is a comment
+line rewritten in place.
+
+**Rig — no junction, per the coordinator's standing warning** (`C:\binge\node_modules` had been
+destroyed twice that day by junction-following teardowns). Isolated worktree
+`scratchpad/wt-r7-170802` from the INDEX (`git write-tree` `d12c4e26` → `git commit-tree`
+`6bee3199` → `git worktree add --detach`), then its OWN `npm ci --prefix <wt> --no-audit
+--no-fund`: 722 packages in 42 s, 448 top-level entries, `vitest/dist/cli.js` present. Own
+`node_modules` ⇒ the default `node_modules/.vite` cache is already isolated; wiped before EVERY
+run anyway. Every run bracketed by `md5sum` on all three mutation targets and `grep -c MUTANT`
+before AND after.
+
+| # | mutation | result |
+|---|---|---|
+| control | clean | 14/14 green |
+| M3 | `SeasonList.tsx` header `({specials.episodeNumbers.length} avs)` → `({0} avs)` | **1/14 red ALONE** — `shows the specials section …`: "Unable to find an element with the text: (22 avs)" (was 14/14 GREEN at r6) |
+| M1 | `EpisodeRow.tsx` `watched={watched}` → `watched={false}` (EpisodeReactions prop) | **1/14 red ALONE** — `reads the checked state from season 0`, "expected false to be true" (r6's close, re-derived against the new test bytes) |
+| control-2 | restored (`git checkout --` inside the isolated worktree), md5s back to control | 14/14 green |
+| typecheck | `npx tsc --noEmit` in the worktree | exit 0 |
+
+**Comment claims checked, all true.** `grep -rn "<EpisodeReactions" src` → one hit,
+`EpisodeRow.tsx:105`, so "EpisodeRow is the only place in the tree that renders EpisodeReactions"
+holds; `TVShowPageClient.test.tsx` (the only other test naming SeasonList) does
+`vi.mock('@/components/tv/SeasonList', () => ({ default: () => null }))`, so "this is the only test
+file that reaches EpisodeRow" holds too. canonicalSpecials' rewritten cost paragraph holds:
+`RelatedSeriesStrip` renders curated labels + `titleHref` only (no fetch), while
+`CanonicalSpecialsPanel` calls `useTVSeason(tmdbId, 0)` on expand — and the file's own
+`does not fetch season 0 until the section is expanded` case pins the laziness.
+
+**Findings: 0 blocking.** Two LOW, both named as out of scope by the task and by
+`accepted-deviations.md`-style prior decisions: `EpisodeRow`'s `!isUnaired` gate around
+`EpisodeReactions` (survives, but INERT — the leaf returns its gate copy whenever `watched` is
+false and an unaired episode is never watched) and `EpisodeRow`/`EpisodeReactions` having no test
+file of their own (BIN-821). Neither is in the staged diff's lines.
+
+**Teardown.** `git worktree remove --force` failed `error: failed to delete …: Filename too long`
+against the real `node_modules` but still unregistered the worktree; `rm -rf <wt>` finished the
+job. `C:/binge/node_modules` verified 448 before and after, `.bin/vitest` present,
+`git worktree list` back to `C:/binge` alone (a sibling's `rig679` worktree, seen mid-teardown, was
+left untouched and removed by its own session). Final re-pin: all three staged shas unchanged,
+index == worktree, HEAD still `b20bf69`, `git status --porcelain` unchanged apart from the two
+knowledge files this entry belongs to.
+
+**Verdict: pass (0 blocking).**
+
+## 2026-08-08 — BIN-823 SEO selection ratchet (19→22 staged files): FAIL (2 blocking)
+
+**Diff reviewed.** `git diff --cached`, index == worktree at every step (re-pinned 3×; the
+INDEX MOVED MID-REVIEW — a round-2 fix landed while I was mutating, adding
+`.claude/rules/deployment.md`, `docs/org/adr/0005-…` and `src/app/titleParams.watchdog.test.ts`
+to the staged set and rewriting `selectionManifest.ts`, `selectionManifest.test.ts`,
+`seoCoverage.ts`, `seoPersonIds.ts`, `sitemap.ts` and all three route pages; every decisive
+mutation was RE-DERIVED against the new bytes). New: `selectionManifest.ts` (+ratchet, floor,
+`resolveSelection`), `selectionSeed.ts` (116 GSC ids), 4 new test files. Changed: three
+`generateStaticParams`, `sitemap.ts` (no longer fetches TMDB), `seoCoverage.ts`,
+`seoPersonIds.ts`, `buildCache.ts`, `buildFetch.ts`, ci.yml/deploy.yml env flags, ADR 0018.
+
+**Rig.** Isolated worktree from `git write-tree` + `commit-tree`, own `npm ci` (722 pkgs, ~40 s),
+`rm -rf node_modules/.vite` before EVERY run, `grep -n MUTANT` before AND after each run in the
+same command. Shared `C:/binge/node_modules` verified at 448 entries before and after; both
+worktrees torn down. Control r1 2745 passed/4 skipped; control r2 (post-fix bytes) 2747/4.
+
+**Mutations (r1 bytes).** M1 drop `err.message.startsWith('[selection]')` rethrow in movie route →
+2745/2745 GREEN (survived). M2 `SEO_TITLE_TARGET_IDS` 30000→15000 → GREEN. M3 delete
+`assertCoverageFloor(...)` from `resolveSelection` → RED ALONE 1/2749. M4 force RESCUE budget on
+the refresh path → RED (the long-budget test). M5 `withAggregateTimeout` fires at 0 regardless of
+budget → only the REFRESH test red; the RESCUE test survived, i.e. it proves "something gave up",
+not "the rescue budget was honoured". M6 person route `type:'person'`→`'movie'` → GREEN. M7
+`allowThinSelection()`→`true` → 6 red (floor well pinned; the ALLOW_THIN split in
+`selectionResolve.test.ts` is honest). M8 FULL revert of movie route wiring → 2745/2745 GREEN.
+M9 `sitemap.selectionOrThrow` back to silent fallback → the 2 new throw tests red (reversal #1
+accepted). M10 remove the `buildFetch` passthrough mock with a warm `TMDB_CACHE_DIR` → "all credit
+fetches reject" FAILS (reversal #2's justification verified).
+
+**Mutations (r2 bytes, re-derived).** R1 drop `if (err instanceof SelectionFloorError) throw err;`
+→ 2747/2747 GREEN. R2 `SEO_TITLE_TARGET_IDS`→15000 → GREEN. R3 drop `|| tooThin` → GREEN.
+R5 revert seed-inclusive `previousCount` → GREEN. R6 remove the `try/catch` around
+`withAggregateTimeout` (throwing derive) → GREEN. All four r2 survivors trace to
+`selectionResolve.test.ts` being byte-identical across the fix round.
+
+**Probes.** (a) `titleParams.watchdog.test.ts` at r1 bytes: 10 of 15 FAIL in this checkout because
+it reads the repo's REAL `.tmdb-cache/selection-*.json` via the default path; re-run with
+`TMDB_CACHE_DIR=$(mktemp -d)` → 11 passed. Handed-down "2743 passed" was a claim about another
+machine. CLOSED by r2 (own mkdtemp + `TMDB_SELECTION_REFRESH=1` + `SELECTION_ALLOW_THIN=1`);
+re-verified green in the SHARED tree with the real cache present. (b) scratch probe proving the
+pre-r2 wedge: a failed cold derive writes an EMPTY manifest BEFORE the floor throws, and every
+later code deploy then reads it as fresh and never re-derives — the r2 `tooThin` guard fixes it
+and is untested. (c) real repo cache scan: `movie-{1,2,3}.json` hold this suite's fixture payload,
+written 19:30 2026-08-08 pre-mock, still inside `REFRESH_AFTER_MS` → named an `rm` in the review.
+
+**Verdict: fail (2 blocking).** B1 = the `SelectionFloorError` rethrow at all three route call
+sites is unpinned, and the sitemap's belt-and-braces cannot see the failure because the degenerate
+manifest is written before the floor throws (green build → ~150 pages deployed → sitemap publishes
+the seeds as canonical). B2 = `selectionResolve.test.ts` untouched in r2, leaving `tooThin`, the
+throwing-derive catch and the seed-inclusive `previousCount` unpinned. Medium: the
+`SEO_TITLE_TARGET_IDS > SELECTION_CEILING` relation (silently defeats the ratchet); per-route
+`type`/`seedIds` literals. Both deliberate reversals ACCEPTED, each proven by mutation.
+Also found: `::warning::` lines leak from the resolve tests into CI annotations;
+`RESCUE_DERIVE_TIMEOUT_MS`'s value is unpinned in both directions (the test advances by the
+constant itself); `preview.yml` restores no `.tmdb-cache` and never sets `SELECTION_ALLOW_THIN`
+(decided, per ci.yml's comment). Final re-pin: all 22 staged shas index == worktree, HEAD `cd8c59e`.
+
+## 2026-08-08 — BIN-823 r3 (closing): selection ratchet, 23 staged files
+
+**Diff reviewed** (`git diff --cached`, HEAD `cd8c59e`): 23 files, +2049/-183 — new
+`selectionManifest.ts` / `selectionSeed.ts` / four new test files, three routes rewired to
+`resolveSelection`, `sitemap.ts` switched from deriving to reading the manifest, ADR 0018,
+ci.yml `SELECTION_ALLOW_THIN=1`, deploy.yml `TMDB_SELECTION_REFRESH`.
+
+**Rig**: isolated worktree from `git write-tree` + `npm ci --prefix` (722 pkgs, 33 s, own
+`node_modules`), `rm -rf node_modules/.vite` before EVERY run, mutant grepped before AND
+after each run in one command, mutator exits non-zero unless the pattern count is exactly 1.
+
+**Mutations run** (control `selectionParams.test.ts` 9/9, `selectionResolve.test.ts` 17/17,
+`sitemap.test.ts` 9/9, watchdog 11 + 4 skipped, full suite 2762 passed / 4 skipped — matched
+the coordinator's claim):
+- M1 delete `if (err instanceof SelectionFloorError) throw err;` — movie **1/9 red-alone**;
+  re-derived for tv **1/9** and person **1/9** (last round's blocking #1 genuinely closed).
+- M2 person route `type:'person'`→`'movie'` — **1/9 red-alone**.
+- M3 movie route `fallbackIds: SEO_FALLBACK_MOVIE_IDS`→`[111,222]` — **9/9 GREEN** (survives).
+- M4 movie route `seedIds: SEED_MOVIE_IDS`→`[111,222]` — **1/9 red-alone**.
+- M5 drop `|| tooThin` from `mustDerive` — **1/17 red-alone** (blocking #2, part 1 closed).
+- M6 rethrow instead of `derived = {ok:false}` — **2/26 red** (part 2 closed).
+- M7 `previousCount = resolvedIds(previous, seedIds).length` → `previous.ids.length` —
+  **26/26 GREEN** (part 3 NOT closed; the named test is non-discriminating because
+  `max(2000, 0.8×2)` is dominated by the absolute term).
+- M8 full revert of the movie route's ratchet wiring — **3 failed** (prior medium 5 closed).
+- M9 `sitemap.ts` stops throwing on a missing manifest — **2 failed** (reversal pinned).
+- M10 `RESCUE_DERIVE_TIMEOUT_MS` 15→90 min — 1 failed, but only via the `REFRESH>RESCUE×2`
+  fixture; M10b 15→**60 min survives 289/289** ⇒ the literal is unpinned above the 45-min
+  build-step cap.
+- M11 remove the movie route's whole `try/catch` — **9/9 GREEN**, falsifying the test file's
+  own comment that the positive twin kills it (the catch is dead code now).
+- Watchdog harness re-verified after its `beforeEach` gained a temp cache dir: second-label
+  mutation `'top-movies'`→`'zzz-mutant'` still **1/15 red-alone**.
+
+**Verdict**: pass (0 blocking). Four non-blocking findings: the vacuous `previousCount` test
+(remedy: a `tooThin`-band fixture asserting `derive` is not called), two false coverage claims
+in `selectionParams.test.ts`'s comments (fallbackIds, try/catch), the unpinned RESCUE budget
+(remedy: relation pin against deploy.yml's 45 min), `::warning::` annotations on green runs.
+Deviation judged: asserting the SEEDS rather than `SEO_FALLBACK_*` in case (b) is CORRECT.
+Poisoned `.tmdb-cache/movie-{1,2,3}.json` confirmed deleted; the three `selection-*.json` in
+the repo cache are real derived manifests (7583/6987/1000 ids), not test pollution.
+
+**Mid-review split**: all 23 blobs matched index==worktree at the start; at the final check 8
+had diverged — a concurrent session was landing a follow-up (`SEO_PERSON_TARGET_IDS` 1000→800
+because target==ceiling makes the ratchet a no-op, a new `it.each` behaviour test, the stderr
+`beforeEach` spy, comment corrections). Verdict pinned to the INDEX shas; staging any mover
+requires a fresh review of those bytes.
+
+## 2026-08-09 — BIN-823 r6 (final): the four fix-round tests re-derived, plus three new residuals
+
+**Scope**: staged diff, 31 files (`git diff --cached`), HEAD `cd8c59e`. Files opened with Read:
+`src/lib/tmdb/selectionManifest.ts`, `selectionManifest.test.ts`, `selectionResolve.test.ts`,
+`seoCoverage.ts`, `seoPersonIds.ts`, `src/app/selectionParams.test.ts`, `src/app/person/[id]/page.tsx`,
+`src/lib/seo/selectionSeed.ts`, plus diffs of `sitemap.test.ts`, `seoPersonIds.test.ts`, `sitemap.ts`,
+`deploy.yml`.
+
+**Rig**: isolated worktree from `git write-tree` + `git commit-tree`, own `npm ci` (722 pkgs, 54 s),
+`rm -rf node_modules/.vite` before every run, mutant grepped BEFORE and AFTER each run in one command.
+Control: 6 selection test files = 85 passed. Wider control: `src/lib/tmdb/ src/app/ src/lib/seo/`
+= 45 files / 437 passed / 4 skipped.
+
+**Mutations run**
+
+| # | mutation | result |
+|---|---|---|
+| M1 | `SEO_PERSON_TARGET_IDS` 800→1000 | 2/35 red (it.each row 1 + `toBeLessThan`) — coordinator's claim confirmed |
+| M2 | `SELECTION_CEILING.person` 1000→800 | 2/35 red — same two. The pin is two-sided on the RELATION |
+| M3 | `previousCount = resolvedIds(previous, seedIds).length` → `previous ? previous.ids.length : 0` | 1/62 red-ALONE (`räknar fröna i previousCount`) — the rewritten test discriminates |
+| M4 | drop `tooThin` from `mustDerive` | 1/18 red-alone (`härleder om när … under golvet`) — complementary to M3's test, neither rides the other |
+| M5 | `RESCUE_DERIVE_TIMEOUT_MS` 15→60 min | 1/18 red-alone (`räddningstaket ryms inom … 45-minutersgräns`) — fix 3 confirmed |
+| M6 | `REFRESH_DERIVE_TIMEOUT_MS` 150→200 min (past deploy.yml's refresh-branch `175`) | **374/374 GREEN — surviving mutant, new finding** |
+| M7 | strip `::warning::` from the derive-THREW stderr line | **18/18 GREEN — surviving mutant, new finding** |
+| M8 | strip `::warning::` from the stale-rescue stderr line | 1/18 red-alone — that half IS pinned |
+| M9 | `sitemap.ts` `if (manifest === null)` → `if (false)` (reversal reverted) | 2/9 red — the fallback→throw reversal meets all four criteria |
+
+**Fix-round verdicts**
+1. `räknar fröna i previousCount` rewrite — real (M3 red-alone). Cannot pass for the wrong reason:
+   the flag is genuinely deleted (M3 proves it, since `SELECTION_ALLOW_THIN` would zero the floor and
+   keep the mutant green), and `tooThin`'s presence is pinned by a different test (M4). Residual: the
+   exact boundary (`previousCount == 2000`) is unpinned, `<`→`<=` inert. Marginal, not filed.
+2. `selectionParams.test.ts` comment corrections — both factual claims verified by reading code, not
+   prose: `resolveSelection` swallows every non-floor error (readSelectionManifest/writeSelectionManifest
+   have their own try/catch, `withAggregateTimeout` is wrapped), so the routes' `catch` is dead but for
+   the rethrow; SEED lists are 74/10/32 entries, so `ids.length > 0` always holds and `fallbackIds` is
+   unreachable.
+3. `RESCUE < 45 min` — real (M5). deploy.yml line 164 confirms the `schedule ? 175 : 45` ternary.
+4. stderr `beforeEach` spy — leak closed (0 `::warning::` lines in a 437-test run with `> file 2>&1`),
+   but M7 shows the throw branch's prefix rides its neighbour's.
+
+**New findings (all non-blocking)**
+- `selectionManifest.test.ts:286` — `it.each` `$härledning`/`$överlever` never interpolate (non-ASCII
+  keys vs vitest's `\w` regex); all three rows print `härledning undefinedärledning … : $överlever`.
+- `selectionResolve.test.ts:266` — `toContain('::warning::')` satisfied by the stale-rescue warning (M7).
+- `buildFetch.ts:234` / `selectionResolve.test.ts:210` — the 175-min refresh branch has no relation pin (M6).
+
+**Challenge answered**: the three-row `it.each` is not a tautology — it drives the real `mergeManifest`
+twice and asserts an outcome derivable from the stated contract; M1+M2 make it a two-sided tripwire on
+`SEO_PERSON_TARGET_IDS < SELECTION_CEILING.person`. Taking the ceiling as a parameter would LOSE that
+(mergeManifest reads the module constant). Rows 2/3 flip under no mutation of shipped code — they
+document the rejected "raise the derivation" design, which is what their comment says.
+
+**Mid-review split**: at the final pin, 2 of 31 blobs had diverged — `.claude/agents/binge-code-reviewer.knowledge*.md`,
+a sibling reviewer writing its own notes. Every `src/**`, `.github/**`, `docs/**`, `tasks/**` blob was
+index == worktree at both the first and the final check; HEAD never moved from `cd8c59e`.
+
+**Verdict**: pass (0 blocking), 3 non-blocking findings.
+
+## 2026-08-09 — BIN-823 r7 (final): the ::warning:: neighbour was a PRODUCTION defect; timeout twin still owed
+
+**Diff reviewed**: the same 31-path staged set (`git diff --cached`), HEAD `cd8c59e`. First check: all 31
+blobs index == worktree. Round scope: verify the three r6 non-blocking findings' fixes against the STAGED
+bytes, plus non-regression on already-cleared surfaces.
+
+**Rig**: isolated worktree from the index — `TREE=$(git write-tree); C=$(git commit-tree $TREE -p HEAD -m review-r5);
+git worktree add --detach <scratch>/wt-r5-001823 $C` + its OWN `npm ci` (722 packages, 36 s). `rm -rf
+node_modules/.vite` before every run; every mutation grepped before AND after the suite in one command.
+Control on the three selection files: **63 passed**.
+
+**Fix 1 — `it.each` ASCII keys.** Verified under `--reporter=verbose`: three distinct rows,
+`härledning 800 / 1000 / 3000 mot person-taket → ur-roterat id kvar: true / false / false`. Under M6
+(`SEO_PERSON_TARGET_IDS` 800→1000) the failing row prints its own size — the point of the rename.
+M6 = 2 red (the row + `toBeLessThan`), as documented.
+
+**Fix 2 — `REFRESH_DERIVE_TIMEOUT_MS` cap pin.** M1 `150 * 60_000` → `200 * 60_000`: **red-ALONE 1/63**
+(`expected 12000000 to be less than 10500000`). Read `deploy.yml:164` directly — the ternary is
+`(schedule || (workflow_dispatch && full_refresh)) && 175 || 45`, both branches now pinned. Regression
+check M8 `RESCUE 15 → 60 min`: still red-ALONE 1/63.
+
+**Fix 3 — the `::warning::` neighbour, challenged as asked.**
+- M2, strip `::warning::` from the THROW branch: **red-ALONE 1/63** (was green before the fix). The
+  prefix is now pinned in that branch by that branch.
+- M3, the realistic regression (re-append the timeout write to the `catch`, i.e. the pre-fix shared-`else`
+  shape): **red-ALONE 1/63** at `expect(written).not.toContain('nådde sitt tak')`. So the negative
+  assertion pins a real contract — a throw must not be reported as a timeout — and is not a restatement:
+  the alternate implementation that flips it is the one that actually shipped.
+- Fixture reaches the branch for the claimed reason: fresh manifest (`derivedAt = NOW`) ⇒ `stale` false,
+  `TMDB_SELECTION_REFRESH=1` ⇒ `mustDerive` from refresh ⇒ the `stale && !refresh` line never runs. M2's
+  failure output shows exactly ONE written line. Confirmed.
+- Two warnings for one failure: structurally impossible now — the `if (!derived.ok)` write is inside the
+  `try` (reached only when the race RESOLVES `{ok:false}`) and the `catch` write only when it REJECTS.
+  A stale-manifest code-deploy whose derive throws still writes two lines, but they are two TRUE and
+  different claims (rescue notice + throw), not one failure told twice.
+- **NEW GAP (non-blocking): the positive twin.** `if (!derived.ok)` → `if (!derived.ok && false)` — the
+  timeout branch writes NOTHING — **survived 63/63**. Remedy verified **red-ALONE 1/64**: a case with a
+  FRESH manifest + refresh flag, never-returning derive, `advanceTimersByTimeAsync(REFRESH+1)`,
+  `toContain('::warning::')` + `toContain('nådde sitt tak')` + `not.toContain('kastade')`.
+- Zero-warning path in PRODUCTION, worth naming: a derive that SUCCEEDS with `[]` (all list pages
+  swallowed by `Promise.allSettled` — the ADR itself measures 4 375 vs ~9 850 film-id) writes no warning
+  at all, `mergeManifest` returns `previous` unchanged and the floor passes. Observability hole of the
+  same class as the one just fixed.
+
+**Non-regression**: M5 `previousCount = resolvedIds(previous, seedIds).length` → `previous?.ids.length ?? 0`
+red-ALONE 1/63. M7 delete `if (err instanceof SelectionFloorError) throw err;` in the person route
+red-ALONE 1/9 in `selectionParams.test.ts`. Full suite in the rig: **2767 passed / 4 skipped**, exit 0,
+and `grep -c '::warning::'` over the ENTIRE captured output = **0** — no GitHub Actions annotations leak
+from a green run. (One earlier full run showed `consistency.test.ts` timing out at 5 s — a cold-FS
+artifact of the temp worktree; green on the re-run.) No `.only/.skip/.todo/xit/as any` in any staged
+test file.
+
+**Mid-review movers (fifth shape, worst variant yet)**: at the final pin, 7 of 31 blobs had diverged in
+the WORKTREE while every index blob stayed byte-identical to the first check (`selectionResolve.test.ts`
+73ee12e, `sitemap.ts` 564e70a, `deployment.md` 4b2032e, ADR 4b… f1fb57d etc. unchanged). The unstaged
+delta contains (i) the exact remedy for my new gap — `toContain('nådde sitt tak')` added to the RESCUE
+timeout case, which works only through that unique word, since its stale fixture also satisfies the
+`toContain('::warning::')` line beside it; (ii) doc halves (ADR 0018 + `.claude/rules/deployment.md`) that
+fix a self-contradiction in the STAGED set: staged `preview.yml` sets `SELECTION_ALLOW_THIN: '1'` while
+the staged docs say it is set "BARA i `ci.yml`"; (iii) NEW unreviewed production behaviour —
+`sitemap.ts`'s `if (allowThinSelection()) return [...seedIds]`, removing the sitemap's build-failing throw
+on a missing manifest. HEAD never moved from `cd8c59e`; teardown left `C:/binge/node_modules` at 448
+entries with `.bin/vitest` present.
+
+**Verdict**: pass (0 blocking) against the staged bytes — 3 non-blocking findings (timeout-warning
+positive twin; silent empty-derive path; staged doc/flag contradiction), two of which already exist
+UNSTAGED.
+
+### Addendum, same day — the movers were STAGED mid-verdict; re-reviewed on the new index
+
+Between the mover diff above and the verdict, a sibling session ran `git add` on all seven. New index
+blobs: `sitemap.ts` c7da055, `sitemap.test.ts` 54e6576, `selectionResolve.test.ts` bc1e818,
+`deployment.md` 1b4fd6e, ADR 0018 ac08020 (+ the two code-reviewer knowledge files). HEAD still `cd8c59e`.
+Built a SECOND rig from the new `git write-tree` (own `npm ci`, 37 s) and re-ran:
+
+- Control on the four selection/sitemap files: 73 passed.
+- **M4 re-run (`if (!derived.ok)` → `&& false`, timeout writes nothing): now red-ALONE 1/73** at
+  `ger upp härledningen efter räddningstaket…`. My new gap is CLOSED by the staged bytes. The line that
+  does the work is `toContain('nådde sitt tak')`; the `toContain('::warning::')` beside it is still
+  satisfied by that fixture's stale-rescue neighbour, so it is documentation, not a second probe.
+- **The newly-staged `sitemap.ts` production change** (`if (allowThinSelection()) return [...seedIds];`,
+  removing the build-failing throw on a missing manifest under the CI/preview flag) is pinned in three
+  directions: guard deleted → 1 red alone; `[...seedIds]` → `[]` → 1 red alone; guard inverted → 3 red
+  (both throw cases + the new one). Its test also fixes a real leak (`afterEach` now deletes
+  `SELECTION_ALLOW_THIN`, without which the two throw cases become silent no-ops).
+- The staged doc contradiction is gone: ADR 0018 + `.claude/rules/deployment.md` now name both `ci.yml`
+  and `preview.yml`, matching the staged workflows.
+- Full suite on the new index: **2768 passed / 4 skipped**, exit 0, `grep -c '::warning::'` over the whole
+  captured output = 0.
+
+**Revised verdict**: pass (0 blocking). Remaining non-blocking note: a derive that SUCCEEDS with `[]`
+still writes no warning at all and silently keeps the previous selection.
+
+## 2026-08-09 — BIN-823 r8 (ledger round): the `< CAP` relation pin is satisfied at 44/45
+
+**Diff reviewed**: the same 32-path staged set, HEAD `cd8c59e` (unmoved). First check: all 32 blobs
+index == worktree. Scope by sha-delta against the r7 addendum: `sitemap.test.ts` 54e6576 and
+`deployment.md` 1b4fd6e UNCHANGED (prior verdicts carry); movers were `selectionResolve.test.ts`
+bc1e818→f283e1a (+1 test), `sitemap.ts` c7da055→d14fe6b (comment-only), ADR 0018 ac08020→93f3800
+(cost-model correction, docs). `titleParams.watchdog.test.ts` f9891ca and `seoPersonIds.test.ts`
+1c05ec8 read on these bytes per the gate; both unchanged since their earlier passes.
+
+**Rig**: isolated worktree from `git write-tree` + its OWN `npm ci` (722 packages, 49 s);
+`rm -rf node_modules/.vite` before every run; every mutation grepped BEFORE and AFTER the suite in
+one command. Control on the four selection/sitemap files: **72 passed**. Full suite in the rig:
+**2769 passed / 4 skipped**, exit 0, `grep -c '::warning::'` over the whole captured output = **0**.
+That matches the handed-down count exactly, verified here rather than inherited.
+
+**Mutations**
+- M1 insert `SELECTION_ALLOW_THIN: '1'` into `deploy.yml` → **red-ALONE 1/30**. The new
+  `deploy.yml sätter ALDRIG SELECTION_ALLOW_THIN` test discriminates.
+- M2 rename `TMDB_SELECTION_REFRESH` → `..._MUTANT` → **survived 30/30** (`toContain` is
+  prefix-satisfiable). M2b delete the whole line → **red-ALONE 1/30**. Companion assertion is real;
+  the prefix hole is cosmetic, not filed.
+- M3 `RESCUE_DERIVE_TIMEOUT_MS` 15 → 40 min → **survived 40/40**. Re-derived on the post-mover
+  bytes at 44 min (one minute inside the 45-min step cap) → **survived 50/50**. Proposed pin
+  `expect(45*60_000 - RESCUE).toBeGreaterThanOrEqual(25*60_000)` is green clean (20/20) and
+  **red-ALONE 1/44** under the 40-min mutant.
+- M4 `REFRESH_DERIVE_TIMEOUT_MS` 150 → 170 min → **survived 29/29**. Correctly prose: the file
+  discloses the refresh retreat cannot complete, the failure mode is a red weekly build that
+  deploys nothing, and the mid-review mover adds "SÄNK DEN INTE PÅ KÄNSLA … Spårat i BIN-826".
+- M5 delete `if (allowThinSelection()) return [...seedIds];` in `sitemap.ts` → **red-ALONE 1/19**;
+  M6 `[...seedIds]` → `[]` → **red-ALONE 1/19**. Guard re-pinned on the new (comment-moved) bytes.
+- M7 remove `delete process.env.SELECTION_ALLOW_THIN` from `sitemap.test.ts`'s `afterEach` →
+  **survived 74/74** with `--no-file-parallelism`. The cleanup is correct hygiene but its comment's
+  stated mechanism is wrong: the two throw cases sit ABOVE the setter in file order, so they cannot
+  be no-opped from within the file. The real exposure is a leak from a PRIOR file in the same
+  worker, which an `afterEach` cannot prevent — a `beforeEach` delete would.
+- M8 `fetchForBuild('movie', getMovie, id)` → `getMovie(id, fetchOpts())` → **red-ALONE 1/21**.
+
+**Comment claims checked**: `collectIds` really has two copies (movie, tv) — grep; `sitemap.ts`
+really makes zero TMDB calls — its imports are manifest/seed/constants only.
+
+**Mid-review mover (fifth shape again)**: at the final pin `buildFetch.ts` had moved
+797ebdc → 15d41e8 in BOTH index and worktree — a sibling staged a comment-only block while the rig
+ran. Rebuilt a SECOND rig from the new tree (own `npm ci`, 37 s), control 39 passed, re-derived M3
+at 44 min → survived 50/50. Verdict is pinned to the post-mover shas. Teardown of both rigs failed
+as `Filename too long` (expected); `git worktree list` shows only `C:/binge`, shared
+`node_modules` back at 448 with `.bin/vitest` present.
+
+**Proxy greps**: no `.only/.skip/.todo/xit(` and no `any` in any of the 8 staged test files. Test
+diff numstat shows deletions only in `sitemap.test.ts` (109/45, the documented deliberate reversal,
+passed in an earlier round) and `seoPersonIds.test.ts` (32/2 — an `it` title and one comment, no
+assertion removed).
+
+**Verdict**: pass (0 blocking). Three non-blocking: the rescue headroom pin; the `afterEach`
+comment's mechanism; and the still-open silent empty-derive path carried from r7.
+
+## 2026-08-09 — BIN-823 r9 (ledger round): the margin pin closes the headroom gap; the beforeEach is unpinnable hygiene
+
+**Diff reviewed**: the same 32-path staged set, HEAD `cd8c59e` (unmoved). First check: all 32 blobs
+index == worktree. Scope by sha-delta against r8: three movers, all comment/assertion level —
+`selectionResolve.test.ts` f283e1a→0f5ae83 (the rescue pin rewritten), `sitemap.test.ts`
+54e6576→366cf6c (`delete process.env.SELECTION_ALLOW_THIN` added to `beforeEach`, comment rewritten),
+`buildFetch.ts` 15d41e8→09bafed (comment only: the abandoned pipeline no longer claims it "cannot
+live on unbounded", now names the 2 672 s measurement and ADR 0018's budget-competition correction).
+`sitemap.ts` d14fe6b, `deployment.md` 1b4fd6e, `titleParams.watchdog.test.ts` f9891ca and
+`seoPersonIds.test.ts` 1c05ec8 UNCHANGED — prior verdicts carry; read again on these bytes per the
+gate. ADR 0018 93f3800→840212e (docs). `tasks/todo.md` is ` M` (unstaged) and not in this commit.
+
+**Rig**: isolated worktree from `git write-tree` + its OWN `npm ci` (722 packages, 31 s);
+`rm -rf node_modules/.vite` before every run; every mutation grepped BEFORE and AFTER the suite in
+one command. Control on the five selection/sitemap/params files: **81 passed**.
+
+**Finding 1 (rescue headroom) — CLOSED, characterised from both sides of the `>=`.**
+New form: `const RENDER_BUDGET_MS = 25 * 60_000; expect(45*60_000 - RESCUE_DERIVE_TIMEOUT_MS).toBeGreaterThanOrEqual(RENDER_BUDGET_MS)`.
+- `RESCUE` 15 → **40 min**: red-ALONE 1/81 (was 40/40 green under `toBeLessThan(45m)`).
+- `RESCUE` 15 → **44 min**: red-ALONE 1/81 (was 50/50 green — the exact survivor r8 filed).
+- `RESCUE` 15 → **20 min**: green 81/81 — the boundary is exactly `<= 20`, i.e. the `>=` is real.
+- `RESCUE` 15 → **21 min**: red-ALONE 1/81.
+Read `deploy.yml` from the index myself: `timeout-minutes: (schedule || (workflow_dispatch &&
+full_refresh)) && 175 || 45`; no `SELECTION_ALLOW_THIN` anywhere; `TMDB_SELECTION_REFRESH` present.
+`ci.yml:93` and `preview.yml:55` are the two setters, matching the staged docs.
+
+**Finding 3 (sitemap cleanup comment) — fixed, and the fix is unpinnable by construction.**
+Three-point leak probe, leak injected at MODULE scope (`process.env.SELECTION_ALLOW_THIN='1'` above
+`let dir`), sitemap.test.ts alone (10 tests):
+- P1 both hook deletes present → **10 passed**. Protection works.
+- P2 `beforeEach` delete removed, `afterEach` kept → **10 passed**. A cross-file leak can only reach
+  the file's FIRST test, and that test (URL shape, all manifests present) is flag-insensitive.
+- P3 both removed → **2 failed** (`kastar hellre än att publicera…`, `kastar även när bara person…`).
+So the leak is genuinely dangerous and the `beforeEach` is strictly more robust, but neither hook's
+delete is individually mutation-detectable today. Reported as informational, not filed. The comment's
+central claim ("only a beforeEach can stop a leak from another file") is true; its practical exposure
+is narrower than it reads.
+
+**Finding 2 (buildFetch asymmetry) — unchanged verdict.** The refresh pair still discloses that its
+retreat cannot complete, the failure mode is a red weekly build that deploys nothing, and the block
+now carries "SÄNK DEN INTE PÅ KÄNSLA … Spårat i BIN-826". `REFRESH < 175 min` stays a bare relation
+(170 min survives, r8) and that is the correct call under the claimed-vs-disclosed rule. The comment
+mover is prose only and contradicts nothing: the 2 672 s measurement is now cited in the same
+paragraph that used to be read as "the abandoned queue is gone".
+
+**Finding 4** — filed on BIN-826, not built. Correct: a derive that succeeds with `[]` writing no
+warning is observability, and the ticket exists.
+
+**Full suite in the rig**: **2769 passed / 4 skipped (2773)**, 229 files, exit 0,
+`grep -c '::warning::'` over the whole captured output = **0**. Matches the handed-down count,
+verified here rather than inherited. The 4 skips are `titleParams.watchdog.test.ts`'s `it.runIf`
+route exclusions (1 movie + 1 tv + 2 person), the documented-legit shape.
+
+**Proxy greps**: no `.only/.skip/.todo/xit(` and no `any` in any of the 8 staged test files. Test
+numstat shows deletions only in `sitemap.test.ts` (114/45 — the documented deliberate reversal, plus
+this round's 5-line comment swap) and `seoPersonIds.test.ts` (32/2, an `it` title and a comment).
+
+**New non-blocking finding (LOW)**: the cap literals `45 * 60_000` and `175 * 60_000` are hardcoded
+in `selectionResolve.test.ts` while the same file already reads `.github/workflows/deploy.yml` for
+the flag test. Lowering `timeout-minutes` — the realistic direction — leaves both margin pins
+silently stale. One `expect(deployYml).toContain('&& 175 || 45')` beside the existing companion
+assertion closes it.
+
+**Teardown**: `git worktree remove --force` failed as `Filename too long` (expected, already
+unregistered); `git worktree list` shows only `C:/binge`; shared `node_modules` 448 entries with
+`.bin/vitest` present, before and after.
+
+**Verdict**: pass (0 blocking). Three non-blocking: the hardcoded workflow caps; the unpinnable
+`beforeEach` hygiene (informational); and the carried-forward silent empty-derive path (BIN-826).
+
+## 2026-08-09 — BIN-823 r10 (ledger round): the workflow-cap tripwire discriminates, with two named survivors
+
+**Diff reviewed**: same 32-path staged set, HEAD `cd8c59e` (unmoved). First check: all 32 blobs
+index == worktree. Sha-delta against r9 gives exactly two code/test movers plus two doc movers:
+- `src/lib/tmdb/selectionResolve.test.ts` `0f5ae83 → 38f265a` — **+5 lines only**: a 4-line comment
+  and `expect(deployYml).toContain('&& 175 || 45');` appended as the LAST assertion of the existing
+  `deploy.yml sätter ALDRIG SELECTION_ALLOW_THIN` test. This is r9's own LOW finding, taken.
+- `src/lib/tmdb/buildFetch.ts` `09bafed → 2659887` — **comment only** (`--numstat 7/4`, one hunk, zero
+  non-comment changed lines): the abandoned-queue paragraph now separates "the CAP's own timer is
+  unref:ad" from "the abandoned queue is not", and names the 429-backoff (≤5 s/attempt) as what can
+  keep the event loop busy. Nothing it claims is asserted anywhere, and nothing it un-claims was.
+- `.github/workflows/ci.yml` `96793e0 → db7f4e6` (comment block above `SELECTION_ALLOW_THIN: '1'`),
+  `docs/RUNBOOK.md`. Unchanged and carrying their r9 verdicts: `sitemap.test.ts` 366cf6c,
+  `sitemap.ts` d14fe6b, `titleParams.watchdog.test.ts` f9891ca, `seoPersonIds.test.ts` 1c05ec8,
+  `selectionParams.test.ts` bae702d, `selectionManifest*.ts(.test)` 799f457/4788d5f/aa2706f,
+  `selectionSeed*` 420f04c/015196d, ADR 0018 840212e, `deployment.md` 1b4fd6e.
+
+**Rig**: isolated worktree from `git write-tree` (`bd4ebab`) + its OWN `npm ci` (722 packages, 29 s),
+no junction. `rm -rf node_modules/.vite` before EVERY run; every mutation grepped BEFORE and AFTER
+the suite in one command; `git status --porcelain` in the worktree empty after each restore.
+Control on `selectionResolve.test.ts`: **20 passed**.
+
+**The task's question — does `toContain('&& 175 || 45')` discriminate, or pass for the wrong reason?
+Both, and the split is worth keeping.** deploy.yml:164 is
+`timeout-minutes: ${{ (schedule || (workflow_dispatch && full_refresh)) && 175 || 45 }}`, and the
+literal occurs exactly once in the file. It is also the ONLY test in `src/**` that reads a workflow
+(`grep -rln workflows/ src --include=*.test.ts` → one hit).
+- `45` → **30** (the realistic direction — lowering the build step's cap): **red-ALONE 1/20**, failing
+  at line 254 as intended. The comment's claim is TRUE.
+- `175` → **150**: **red-ALONE 1/20**.
+- `45` → **450**: **survives 20/20**. `toContain` is substring-satisfiable, so `|| 450` still contains
+  `|| 45`. Safe direction — raising the real cap only makes the margin pin over-conservative.
+- **Decoy**: lower the live line to `|| 30` AND insert `# tidigare: && 175 || 45` above it:
+  **survives 20/20**. This is the general weakness the task suspected — `toContain` pins that the
+  string exists SOMEWHERE in the file, never that it is the value in force.
+**Verified strictly-better one-liner, identical cost**, applied in the rig and re-run:
+`expect(deployYml).toMatch(/^\s*timeout-minutes:.*&& 175 \|\| 45 \}\}\s*$/m)` → clean **20/20**,
+`450` **red-ALONE 1/20**, decoy **red-ALONE 1/20**. Filed as the round's single LOW.
+
+**Re-derived on the new bytes (the r9 close, since `buildFetch.ts` moved)**: `RESCUE` 15 → **21 min**
+red-ALONE 1/20; 15 → **20 min** green 20/20. The `>=`-boundary is exactly 20, as recorded. The
+companions in the same `it` are unaffected: the new line is LAST, so `not.toContain('SELECTION_ALLOW_THIN')`
+and `toContain('TMDB_SELECTION_REFRESH')` still fail first when they should.
+
+**Flag consistency re-checked myself** (r7's self-contradiction class): `SELECTION_ALLOW_THIN` is set
+in `ci.yml:95` and `preview.yml:55` and nowhere in `deploy.yml`; `.claude/rules/deployment.md` and
+ADR 0018 both name exactly those two setters. ci.yml's new comment says the same. No contradiction.
+
+**Full suite in the rig**: **2769 passed / 4 skipped (2773)**, 229 files, `grep -c '::warning::'` over
+the whole captured output = **0**. Matches the handed-down count, run here rather than inherited.
+**Proxy greps**: no `.only/.skip/.todo/xit(`, no `any` in any of the 8 staged test files. Test numstat
+identical to r9 (`sitemap.test.ts` 114/45, `seoPersonIds.test.ts` 32/2) — no new deletions.
+**Teardown**: worktree removed, `git worktree list` shows only `C:/binge`, shared `node_modules`
+448 entries with `.bin/vitest` present before and after.
+
+**Mid-review INDEX mover (reported, not blocking)** — exactly one, caught by the end-of-review re-pin:
+`.claude/rules/deployment.md` `1b4fd6e → e5a5c85`, a concurrent session correcting the cache-TTL
+bullet ("TTL 7 dagar" → soft refresh 6 d `REFRESH_AFTER_MS` / hard TTL 30 d `buildCache.HARD_TTL_MS`,
+the number ADR 0018's TMDB ToS §1.C argument rests on). It was STAGED, not left in the worktree, so
+the first-check loop (which prints only mismatches) stayed silent — **print the sha, not just the
+mismatch, or a staged mover is invisible to your own protocol.** Doc prose about the metadata cache,
+no test reads it, no `src/**` blob moved, so every mutation result above still describes the index
+being committed. My own knowledge-file edits sit unstaged and need `git add` if they belong in this
+commit — not run on the coordinator's behalf.
+
+**Verdict**: pass (0 blocking). One LOW: the bare `toContain` on the workflow cap (remedy verified
+above). Carried forward, unchanged: the `REFRESH < 175 min` bare relation (correctly left as
+disclosed prose + BIN-826) and the silent empty-derive path (BIN-826).

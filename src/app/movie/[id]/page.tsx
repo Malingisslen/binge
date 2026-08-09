@@ -15,6 +15,8 @@ import {
   cappedTitleIds,
   latinDisplayIds,
 } from '@/lib/tmdb/seoCoverage';
+import { resolveSelection, SelectionFloorError } from '@/lib/tmdb/selectionManifest';
+import { SEED_MOVIE_IDS } from '@/lib/seo/selectionSeed';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { fetchForBuild, buildSignal, startBuildWatchdog, trackBuildCall } from '@/lib/tmdb/buildFetch';
 import { buildContentFloor } from '@/lib/seo/contentFloor';
@@ -34,9 +36,10 @@ export const dynamicParams = false;
  * client-side rendering — godtagbart kompromiss eftersom long-tail har
  * minimal söktrafik.
  *
- * Page-konstanterna delas med src/app/sitemap.ts via @/lib/tmdb/seoCoverage —
- * sitemap och pre-render MÅSTE adressera samma URL-mängd, annars genererar
- * Google "Genomsökt – inte indexerad" för URLs i ena men inte andra.
+ * Sitemap och pre-render MÅSTE adressera samma URL-mängd, annars genererar
+ * Google "Genomsökt – inte indexerad" för URLs i ena men inte andra. Sedan
+ * BIN-823 vilar den pariteten på en ARTEFAKT, inte på delade konstanter:
+ * härledningen här skriver urvalsmanifestet och sitemap.ts läser det.
  */
 
 // React's cache() dedupar fetchen inom samma render-pass — Next anropar
@@ -63,8 +66,8 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
     for (const r of results) {
       if (r.status === 'fulfilled') {
         // Curation: skip titles that render in a non-Latin alphabet — same rule
-        // browsing surfaces already apply (titleFilter.ts). Keeps sitemap +
-        // pre-render addressing the same set (both filter identically here).
+        // browsing surfaces already apply (titleFilter.ts). The sitemap inherits
+        // the filtering through the manifest (BIN-823), so this is its only site.
         for (const id of latinDisplayIds(r.value.results)) ids.add(id);
       }
     }
@@ -72,16 +75,28 @@ export async function generateStaticParams(): Promise<{ id: string }[]> {
   };
 
   try {
-    const [popular, topRated] = await Promise.all([
-      collectIds(p => getPopularMovies(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-movies'),
-      collectIds(p => getTopRatedMovies(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-movies'),
-    ]);
-    const ids = cappedTitleIds([...popular], [...topRated]);
-    // Tom lista (t.ex. CI utan giltig TMDB-nyckel) bryter Next 16:s static
-    // export → fall tillbaka på en handfull välkända IDs så builden lyckas.
-    const safe = ids.length > 0 ? ids : SEO_FALLBACK_MOVIE_IDS;
-    return safe.map(id => ({ id: String(id) }));
+    // BIN-823: urvalet persisteras mellan byggen. `derive` — de 1 000 listanropen
+    // — körs BARA i veckobygget eller om manifestet saknas/är för gammalt; en
+    // vanlig kod-deploy läser bara filen. Tidigare kördes det här varje deploy,
+    // och eftersom TMDB:s ranking roterar veckovis roterade urvalet med den:
+    // titlar ramlade ur, föll till catch-all-routens noindex och avindexerades.
+    const ids = await resolveSelection({
+      type: 'movie',
+      seedIds: SEED_MOVIE_IDS,
+      fallbackIds: SEO_FALLBACK_MOVIE_IDS,
+      derive: async () => {
+        const [popular, topRated] = await Promise.all([
+          collectIds(p => getPopularMovies(p, { signal: buildSignal() }), SEO_TITLE_PAGES, 'popular-movies'),
+          collectIds(p => getTopRatedMovies(p, { signal: buildSignal() }), SEO_TOP_RATED_PAGES, 'top-movies'),
+        ]);
+        return cappedTitleIds([...popular], [...topRated]);
+      },
+    });
+    return ids.map(id => ({ id: String(id) }));
   } catch (err) {
+    // Täckningsgolvet kastar med flit — då SKA bygget falla i stället för att
+    // deploya en förkrympt sajt. Fånga därför bara det som inte är golvet.
+    if (err instanceof SelectionFloorError) throw err;
     console.warn('[movie/[id]] generateStaticParams TMDB-fetch failed:', err);
     return SEO_FALLBACK_MOVIE_IDS.map(id => ({ id: String(id) }));
   }

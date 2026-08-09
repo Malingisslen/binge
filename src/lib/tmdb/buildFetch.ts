@@ -74,11 +74,13 @@ let networkFetches = 0;
 // catch-all [...path]) är statiska listor utan nätverk.
 //
 // INTE instrumenterad: allt som hämtar i den SENARE fasen `Generating static
-// pages` — sitemap.ts:s egen kopia av `collectIds` (störst), plus app/page.tsx,
-// discover, films, series, provider/[id] och genre/[slug]. Vakthunden lever kvar
-// dit men pulsen bär ingen fasmarkör, så `inflight=0` är BARA bevis under
-// page-collection. `collectIds` finns i tre nästan identiska kopior; bryts de ut
-// till en delad hjälpare ska registreringen följa med.
+// pages` — app/page.tsx, discover, films, series, provider/[id] och
+// genre/[slug]. Vakthunden lever kvar dit men pulsen bär ingen fasmarkör, så
+// `inflight=0` är BARA bevis under page-collection. Sitemapen stod tidigare
+// först i den listan; sedan BIN-823 läser den urvalsmanifestet och gör noll
+// nätanrop, så den kan inte längre vara en hängning. `collectIds` finns i två
+// nästan identiska kopior (movie, tv); bryts de ut till en delad hjälpare ska
+// registreringen följa med.
 //
 // Timern är unref:ad. En vakthund som själv kunde hålla Node-processen vid liv
 // vore ett nytt sätt att hänga bygget — det enda utfall den här ändringen inte
@@ -209,6 +211,84 @@ export function buildFetchCount(): number {
  *  generateStaticParams (getPopular…/getTopRated…). */
 export function buildSignal(): AbortSignal {
   return AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS);
+}
+
+// ── Urvalsregim (BIN-823) ────────────────────────────────────────────────────
+//
+// Egen env-flagga i stället för att åka snålskjuts på TMDB_BUILD_REFRESH_BUDGET.
+// De två styr olika saker — budgeten hur många DETALJSVAR som får re-hämtas,
+// den här om URVALET av id:n ska härledas om — och deploy.yml sätter dem under
+// samma villkor bara för att båda hör till veckobygget. Att läsa budgetens
+// värde som en regimsignal hade knutit ihop dem för alltid.
+
+/** Sant bara i veckobygget (schedule) och manuell full_refresh-dispatch. */
+export function isSelectionRefresh(): boolean {
+  return process.env.TMDB_SELECTION_REFRESH === '1';
+}
+
+// Kod-deploy som tvingas härleda (manifest saknas/inaktuellt): måste rymmas väl
+// inom byggstegets 45-minuterstak med hela sidrendreringen kvar efteråt.
+export const RESCUE_DERIVE_TIMEOUT_MS = 15 * 60_000;
+// Veckobygget SKA få ta 1,5–2 h (eget 175-minuterstak). Ett gemensamt kort tak
+// hade fällt den körning som är hela poängen med regimen.
+//
+// ASYMMETRI ATT KÄNNA TILL: räddningsparet fungerar som avsett (15 inom 45 —
+// gott om tid att bygga färdigt på det gamla urvalet), men det HÄR paret gör det
+// inte. Slår 150-minuterstaket till återstår ~25 min av 175 för en sidrendrering
+// som tar 90–120 min, så den mjuka reträtten hinner inte i mål och körningen
+// slutar som steg-timeout ändå. Det är ofarligt — ett rött veckobygge är precis
+// beteendet före BIN-823, och det deployar ingenting — men konstanten ska inte
+// läsas som ett fungerande skydd på refresh-vägen. Där är reträtten best-effort.
+//
+// SÄNK DEN INTE PÅ KÄNSLA. Granskningen 2026-08-08 föreslog 45 min ("en frisk
+// härledning tar ~40 s"). Men de 40 sekunderna gäller VARM cache; den enda kalla
+// mätningen vi har är 2 672 s = 44,5 min för person ensam — ett 45-minuterstak
+// hade dödat den med en halv minuts marginal, alltså precis den körning taket
+// ska rädda. Taket ska rymmas i `175 − rendreringstiden`, och rendreringen mättes
+// till 90–120 min, vilket ger ett fönster på 55–85 min. 44,5 under 55 med tio minuters
+// marginal — för tunt för att välja blint när båda ändarna är enskilda mätningar.
+// Rätt värde kräver några veckors data. Spårat i BIN-826, som ändå ska röra det
+// här blocket; ändra det EN gång, med siffror.
+export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
+
+/**
+ * Kör en härledning med ett tak på HELA fasen.
+ *
+ * Per-anrops-aborten (BUILD_FETCH_TIMEOUT_MS) räcker inte här, och det är inte
+ * en teori: 2026-08-08 satt `params:person-ids` i 2 672 sekunder trots att varje
+ * enskild förfrågan under den hade sin 20-sekundersgräns. Etiketten täcker
+ * ~2 100 anrop mot en 8-slot-semafor med 429-retry — köns totala livslängd har
+ * ingen övre gräns i den konstruktionen, bara varje enskild plats i den.
+ *
+ * Vid timeout returneras `{ ok: false }` och den övergivna promisen lämnas att
+ * lösa sig själv. Varje enskild förfrågan i den dör fortfarande på sin egen
+ * abort, så den kan inte hänga FASEN — men påstå inte att den är borta:
+ * mätningen ovan är just en pipeline som levde 2 672 s med 20-sekundersaborter
+ * på varje led. Takets EGEN timer är unref:ad; den övergivna kön är det inte —
+ * dess köade semaforväntare och 429-backoff (upp till 5 s per försök, se
+ * client.ts) kan hålla eventloopen sysselsatt tills kön runnit ut. Den kan
+ * dessutom fortsätta dra semaforplatser och refresh-budget medan
+ * reträttbygget rendrerar.
+ * Det är samma konkurrens som ADR 0018 redovisar under "Rättelse om
+ * budgetkonkurrens", och den är accepterad — inte bortkonstruerad.
+ * Anroparen faller tillbaka på befintligt urval + frön, och täckningsgolvet
+ * avgör om det är gott nog att deploya eller om bygget ska fällas.
+ */
+export async function withAggregateTimeout<T>(
+  run: () => Promise<T>,
+  timeoutMs: number,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<{ ok: false }>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false }), timeoutMs);
+    // Får aldrig hålla Node-processen vid liv — samma regel som vakthunden.
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([run().then(value => ({ ok: true as const, value })), expiry]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function fetchForBuild<T>(

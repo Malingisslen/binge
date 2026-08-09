@@ -6,24 +6,27 @@
  *  - src/app/tv/[id]/page.tsx           (generateStaticParams)
  *  - src/app/person/[id]/page.tsx       (generateStaticParams)
  *
- * …och en plats genererar sitemap:
- *  - src/app/sitemap.ts
+ * …och src/app/sitemap.ts måste adressera exakt samma URL-mängd.
  *
  * Tidigare drev varje fil sina egna konstanter (POPULAR_PAGES=250 i movie/tv,
  * POPULAR_PAGES=100 i sitemap, ingen person i sitemap). Det skapade en
  * "sitemap har 4k IDs men 5k pre-renderas"-diskrepans som bidrog till
  * "Genomsökt – inte indexerad" i Google Search Console — Google sökte upp
- * URLs via crawling som inte fanns i sitemap.
+ * URLs via crawling som inte fanns i sitemap. Att lyfta konstanterna hit var
+ * första halvan av fixen.
  *
- * Genom att lyfta konstanterna hit garanteras att sitemap och pre-render
- * adresserar exakt samma URL-mängd.
+ * Andra halvan kom med BIN-823: sitemapen härleder inte längre alls, utan läser
+ * urvalsmanifestet som de tre routerna skrev. Pariteten vilar därmed på EN
+ * artefakt i stället för på att två kodvägar råkar ge samma svar. Konstanterna
+ * här styr numera bara den färska härledningen.
  *
  * Byggtids-effekt vid SEO_TITLE_PAGES=500:
  *   500 pages × 20 results × 2 källor × 2 mediatyper = 40 000 TMDB-results
  *   innan dedup. ~50-60% overlap mellan popular/top_rated → ~10-12k unika
  *   per mediatyp = ~25k pre-renderade titlar. En KALL full-hämtning tar
- *   ≈ 1.5-2 h — men det gäller bara den veckovisa schemalagda refreshen (egen
- *   150-min-timeout). Kod-deployer är budget-bundna (~7-15 min), se buildFetch.ts.
+ *   ≈ 1.5-2 h — men det gäller bara den veckovisa schemalagda refreshen (eget
+ *   175-min-tak på byggsteget; 150 min är namnet på REFRESH_DERIVE_TIMEOUT_MS och
+ *   en annan sak). Kod-deployer är budget-bundna (~7-15 min), se buildFetch.ts.
  *
  * Byggtids-resiliens (2026-06): varje byggtids-TMDB-anrop har en
  * AbortSignal.timeout (src/lib/tmdb/buildFetch.ts) så ingen sida kan nå Next
@@ -49,23 +52,56 @@ export const SEO_TITLE_PAGES = 500;
 // effekten på unika IDs är mindre än SEO_TITLE_PAGES.
 export const SEO_TOP_RATED_PAGES = 500;
 
-// Tak för pre-renderade IDs per mediatyp efter dedup. Säkerhetsnet om TMDB
-// returnerar oväntat många unika ids. Sätt högt — vill inte cap:a den
-// faktiska täckningen.
-export const SEO_TITLE_TARGET_IDS = 15000;
+// SÄKERHETSNÄT för en ENSKILD härledning, inte täckningstaket.
+//
+// Det riktiga taket bor sedan BIN-823 i selectionManifest.SELECTION_CEILING och
+// tillämpas EFTER att den färska härledningen unionerats med föregående urval.
+// Skillnaden är hela spärrhaken: kapas den råa härledningen först når de id:n
+// som roterat ut ur TMDB:s topplistor aldrig fram till mergen, och då kan de
+// inte behållas — urvalet skulle rotera precis som före BIN-823, fast tystare.
+//
+// Höjt från 15 000 till 30 000 av just det skälet: värdet ska ligga långt över
+// vad TMDB rimligen kan returnera (~10–12k unika per mediatyp enligt räkningen
+// ovan) och bara fånga ett absurt svar. Sänk det inte tillbaka till taknivån.
+export const SEO_TITLE_TARGET_IDS = 30000;
 
 // Person pre-renderas via top-billed cast från populära filmer.
 // SOURCE_MOVIE_PAGES × 20 filmer × CAST_PER_MOVIE cast = innan dedup.
 export const SEO_PERSON_SOURCE_MOVIE_PAGES = 100;
 export const SEO_PERSON_CAST_PER_MOVIE = 10;
-export const SEO_PERSON_TARGET_IDS = 1000;
+// SPÄRRHAKENS ANDNINGSUTRYMME för personsidorna — inte ett säkerhetsnät som
+// titlarnas tal, och inte heller "hur många personsidor vi bygger".
+//
+// Den invariant som faktiskt avgör om en spärrhake fungerar är TAK > HÄRLEDNING,
+// inget annat. Är de lika stora fyller varje färsk härledning taket ensam, mergen
+// hamnar alltid över, och evakueringen tar exakt de id:n som ramlat ur veckans
+// härledning — resultatet blir identiskt med den färska listan och spärrhaken är
+// en matematisk nolloperation. Titlarna klarar sig av en lycklig omständighet:
+// härledningen ger ~10–12k mot ett tak på 15 000, alltså 3–5k luft.
+//
+// Personsidorna hade ingen sådan luft (1 000 mot tak 1 000) och saknade därmed
+// spärrhake helt fram till integrationsgranskningen 2026-08-08. Sänkt till 800
+// för att skapa den: vi härleder de 800 mest framträdande varje vecka och taket
+// rymmer 1 000, så de senast ur-roterade får ligga kvar och fortsätta vara
+// indexerade i stället för att svara noindex veckan efter.
+//
+// Andrummet är 200 PLATSER, inte 200 veckor: en ur-roterad person överlever
+// ungefär `200 / veckans utbyte` veckor. Vid ~50 utbytta i veckan blir det en
+// månad; byts fler än 200 ut på en vecka är skyddet i praktiken borta igen.
+// Mät utbytet innan du drar slutsatser — sänk i så fall det här talet (taket är
+// en kostnadsfråga, det här är gratis).
+//
+// Att i stället HÖJA talet (3 000 prövades under BIN-823) hjälper inte — ett id
+// som ramlat ur härledningen evakueras ändå, bara mot en djupare lista. Sänk
+// alltså aldrig taket till det här talet, och höj aldrig det här talet till taket.
+export const SEO_PERSON_TARGET_IDS = 800;
 
 /**
  * Slå ihop populär- och topp-rankade title-IDs, deduppa och cappa till
- * SEO_TITLE_TARGET_IDS — den ENDA källan för "vilken title-URL-mängd
- * adresserar vi?". Både sitemap (src/app/sitemap.ts) och pre-rendren
- * (src/app/{movie,tv}/[id]/page.tsx) MÅSTE kalla denna så de träffar EXAKT
- * samma id-mängd; annars genererar Google "Genomsökt – inte indexerad".
+ * SEO_TITLE_TARGET_IDS. Anropas av de två titel-routernas `derive` (den färska
+ * härledningen). Sitemapen kallar den INTE längre — den läser manifestet, så
+ * paritetsinvarianten är strukturell i stället för att bero på att två anropare
+ * kör samma funktion (BIN-823).
  *
  * Ordningen är load-bearing: `popular` först, sedan `topRated`. Set bevarar
  * insättningsordning, så slicen tar de första SEO_TITLE_TARGET_IDS unika
@@ -91,9 +127,10 @@ export interface SeoTitledItem {
  * Non-Latin-displaying titles (e.g. 侠岚) are already hidden from every browsing
  * surface via hasNonLatinTitle (titleFilter.ts — used on home/discover/lists/
  * recs). This extends the same curation to the SEO pre-render + sitemap so those
- * titles aren't offered to Google either. Apply this identically inside EVERY
- * collector BEFORE cappedTitleIds/the person cap, so sitemap and pre-render keep
- * addressing the exact same URL set (the load-bearing parity invariant).
+ * titles aren't offered to Google either. Apply this inside every route's
+ * `derive`, BEFORE cappedTitleIds/the person cap — the sitemap inherits the
+ * filtering through the manifest rather than re-applying it (BIN-823), so a
+ * collector that skips this quietly widens BOTH sides at once.
  *
  * Display-based on purpose: a foreign film with a Latin display title (e.g.
  * "Parasite", original 기생충) still renders fine and stays indexed — only titles
