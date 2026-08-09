@@ -2533,6 +2533,13 @@
           "verified": true
         },
         {
+          "from": "delete-account-section",
+          "to": "web-app",
+          "payload": "BIN-817: clearPublicProfileSignature(uid) — removes binge:pubprofile-sig:{uid} from localStorage, which clearFirestorePersistence does NOT reach (IndexedDB only). Runs after deleteUser resolves, so every guarded abort (stale-session preflight, token read failure, cascade or deleteUser throw) leaves the device untouched while the account still exists. Other localStorage keys still survive deletion and are tracked separately",
+          "transport": "client-cache-clear",
+          "verified": true
+        },
+        {
           "from": "email-verification-banner",
           "to": "firebase-auth",
           "payload": "resendEmailVerification() → sendEmailVerification(currentUser)",
