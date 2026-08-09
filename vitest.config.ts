@@ -28,6 +28,10 @@ export default defineConfig({
       // recap-upload.mjs's pure logic lives in an admin-free sibling module so it can run here
       // too — the script itself imports firebase-admin and is never matched by this glob.
       'functions/scripts/**/*.{test,spec}.mjs',
+      // The blast-radius router (docs/org/route.mjs) decides whether a stakeholder panel is
+      // convened and whether a sprint may pick a ticket up at all, so its tests belong in the
+      // suite everything else runs in — its own `--selftest` flag is wired to no gate (BIN-802).
+      'docs/org/**/*.{test,spec}.mjs',
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,

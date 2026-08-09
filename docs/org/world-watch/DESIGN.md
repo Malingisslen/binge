@@ -120,6 +120,16 @@ high-stakes list + tier rules below are the spec; `route.mjs` is their executabl
 - **Skip** — trivial / doc-only: only Technical Writer owns it, or the set holds no code
   at all (docs, plans, repo tooling under `scripts/`).
 
+**The router does not clear itself (BIN-805, founder's call 2026-08-08).** `CODE_ROOTS`
+mirrors the repo's own production globs, so `docs/` and `scripts/` are not code — which
+meant `docs/org/route.mjs`, the file that decides who reviews everything else, routed
+`skip`. Narrow exception, not a widening: `route.mjs`, its test, and the gate scripts
+(`scripts/check-workflow-map.mjs` + its test) count as code; the rest of `docs/` and
+`scripts/` routes exactly as before, so an ordinary helper-script tweak still pulls in no
+reviewer. Because `docs/` belongs to Technical Writer #21, such a path IS owned — so the
+tier now asks whether a *code* role owns it, and code owned only by #21 seats
+**#14 Software Architect** under `reasonCode: "unmapped-code"` (field `unownedCode`).
+
 **Unmapped ≠ trivial (BIN-788, 2026-08-06).** The ownership map enumerates files, so a
 new file next to ten owned siblings used to match nothing and route `skip` — an unknown
 blast radius reported as a cleared one. Two rules close that:

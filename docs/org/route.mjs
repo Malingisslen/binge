@@ -23,7 +23,9 @@
 // Output (default): one JSON object on stdout —
 //   { tier, reason, reasonCode, highStakes: [...], panel: [roleNum...],
 //     roles: [{num,title,slug,matched:[...],inherited:[...]}], dropped: [...],
-//     unmapped: [...], unmappedCode: [...] }
+//     unmapped: [...], unmappedCode: [...], unownedCode: [...] }
+//   `unmappedCode` = code no pattern matched; `unownedCode` = code no *code* role reviews
+//   (that plus code owned only by the Technical Writer). The tier reads `unownedCode`.
 //   tier "skip" → panel []. Exit code is always 0 for a successful route (skip is a valid
 //   outcome, not an error); 1 only on a usage/IO error or a failed --selftest.
 //
@@ -83,6 +85,23 @@ const UNMAPPED_FALLBACK_ROLE = 14;
 // tooling (scripts/, docs/) and prose are NOT code here — a linter tweak or a doc edit
 // must keep routing `skip`, or every ownership gap turns into a review nobody needs.
 const CODE_ROOTS = ['src/', 'functions/', 'extension/', 'shared/'];
+
+// …with ONE deliberate exception (BIN-805, Malin's call 2026-08-08, alternative (a)):
+// the router itself and the repo's gate scripts ARE code here, even though they live
+// under docs/ and scripts/. They reach no user, but they decide who reviews everything
+// else — a change to route.mjs that quietly widens `skip` would clear its own review, and
+// a change to the workflow-map linter can make a CI/deploy gate stop failing. The narrow
+// list is the whole point: the alternative (all of docs/ + scripts/ as code) would pull a
+// reviewer into every helper-script tweak, so the rest of that tooling keeps routing as
+// before. Test siblings are listed too — deleting a gate's test is the same hole as
+// deleting the gate. The commit-gate hooks themselves live outside this repo
+// (C:/claude-plugins), so they never appear in a blast radius here.
+const TOOLING_CODE_FILES = new Set([
+  'docs/org/route.mjs',
+  'docs/org/route.test.mjs',
+  'scripts/check-workflow-map.mjs',
+  'scripts/check-workflow-map.test.mjs',
+]);
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
   'firestore.indexes.json',
@@ -125,7 +144,7 @@ function dirOf(path) {
 // gates directory inheritance, so a doc edit never inherits a code role.
 export function isCodePath(path) {
   const p = normalize(path);
-  if (CODE_ROOT_FILES.has(p)) return true;
+  if (CODE_ROOT_FILES.has(p) || TOOLING_CODE_FILES.has(p)) return true;
   return CODE_ROOTS.some((r) => p.startsWith(r)) && CODE_EXT_RE.test(p);
 }
 
@@ -209,6 +228,14 @@ export function route(paths) {
   let reasonCode;
   const codeOwners = ownerList.filter((o) => o.num !== TECH_WRITER);
   const ownedOnlyByWriter = ownerList.length === 1 && ownerList[0].num === TECH_WRITER;
+
+  // Code with NO code-owning role: either nothing matched it at all (`unmappedCode`), or
+  // the only role that matched is the Technical Writer — who is never the sole reviewer of
+  // a code change. That second case is the one `docs/org/route.mjs` itself lands in, since
+  // #21 owns all of `docs/` (BIN-805). Both get the same answer: seat the architect and
+  // name the path so the map gets fixed.
+  const pathsOwnedByCodeRole = new Set(codeOwners.flatMap((o) => o.matched));
+  const unownedCode = clean.filter((path) => isCodePath(path) && !pathsOwnedByCodeRole.has(path));
   if (highStakes.length > 0) {
     tier = 'top';
     reasonCode = 'high-stakes';
@@ -217,12 +244,12 @@ export function route(paths) {
     tier = 'medium';
     reasonCode = 'owned';
     reason = 'single medium-impact area → one owning role';
-  } else if (unmappedCode.length > 0) {
-    // NOT a skip: nobody owns this code, which is an unknown blast radius, not a cleared
-    // one. Seat the architect and say the map needs the path added.
+  } else if (unownedCode.length > 0) {
+    // NOT a skip: nobody reviews this code, which is an unknown blast radius, not a
+    // cleared one. Seat the architect and say the map needs the path added.
     tier = 'medium';
     reasonCode = 'unmapped-code';
-    reason = `unmapped code path(s) ${unmappedCode.join(', ')} — no owning role in docs/org/ownership-map.json; seating #${UNMAPPED_FALLBACK_ROLE} Software Architect. Add the path to docs/role-responsibilities.md and regenerate the map.`;
+    reason = `code path(s) with no owning role: ${unownedCode.join(', ')} — nothing in docs/org/ownership-map.json reviews them (Technical Writer #${TECH_WRITER} does not count for code); seating #${UNMAPPED_FALLBACK_ROLE} Software Architect. Add the path to docs/role-responsibilities.md and regenerate the map.`;
   } else if (ownedOnlyByWriter) {
     tier = 'skip';
     reasonCode = 'doc-only';
@@ -232,8 +259,8 @@ export function route(paths) {
     reasonCode = 'no-code-paths';
     reason = 'no code paths (docs / plans / scratch) — deliberately trivial, not unmapped';
   }
-  if (tier !== 'skip' && reasonCode !== 'unmapped-code' && unmappedCode.length > 0) {
-    reason += `; also ${unmappedCode.length} unmapped code path(s): ${unmappedCode.join(', ')}`;
+  if (tier !== 'skip' && reasonCode !== 'unmapped-code' && unownedCode.length > 0) {
+    reason += `; also ${unownedCode.length} code path(s) with no owning role: ${unownedCode.join(', ')}`;
   }
 
   // Panel selection
@@ -279,6 +306,7 @@ export function route(paths) {
     dropped,
     unmapped,
     unmappedCode,
+    unownedCode,
   };
 }
 
@@ -300,8 +328,8 @@ function mdBlock(r) {
     const role = r.roles.find((x) => x.num === n);
     return role ? `#${n} ${role.title}` : `#${n}${ROLE_TITLES[n] ? ` ${ROLE_TITLES[n]}` : ''}`;
   });
-  const gap = r.unmappedCode?.length
-    ? `\n\n_⚠ Unowned code path(s): ${r.unmappedCode.join(', ')} — add them to \`docs/role-responsibilities.md\` and regenerate \`docs/org/ownership-map.json\`._`
+  const gap = r.unownedCode?.length
+    ? `\n\n_⚠ Unowned code path(s): ${r.unownedCode.join(', ')} — add them to \`docs/role-responsibilities.md\` and regenerate \`docs/org/ownership-map.json\`._`
     : '';
   return `## Stakeholders\n\nTier **${r.tier}** · ${names.join(', ')}\n\n_Routed via \`docs/org/route.mjs\` (${r.reason}). Run \`/stakeholder-review\` before building if this is a plan._${gap}`;
 }
@@ -325,9 +353,17 @@ function selftest() {
     { paths: ['src/components/pages/MoviePageClient.tsx'], tier: 'medium', mustSeat: 26, reasonCode: 'owned' },
     // Code nobody owns at all is an UNKNOWN blast radius, not a cleared one.
     { paths: ['src/lib/no-such-dir/brandNew.ts'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
-    // …but repo tooling and prose still route skip — inheritance never fires off code.
-    { paths: ['scripts/check-workflow-map.mjs'], tier: 'skip', reasonCode: 'no-code-paths' },
-    { paths: ['docs/org/route.mjs'], tier: 'skip', reasonCode: 'doc-only' },
+    // …but ordinary repo tooling and prose still route skip — inheritance never fires
+    // off code.
+    { paths: ['scripts/gen-app-icons.mjs'], tier: 'skip', reasonCode: 'no-code-paths' },
+    { paths: ['tasks/todo.md'], tier: 'skip', reasonCode: 'no-code-paths' },
+
+    // ── BIN-805 ──────────────────────────────────────────────────────────────────────
+    // The router and the gate scripts review everything else, so they can no longer
+    // clear themselves as doc-only.
+    { paths: ['docs/org/route.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    { paths: ['docs/org/route.test.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    { paths: ['scripts/check-workflow-map.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.
     { paths: ['firestore.rules', 'src/lib/no-such-dir/brandNew.ts'], tier: 'top', mustSeat: 4 },
   ];
@@ -351,10 +387,11 @@ function selftest() {
   console.log('\nall selftest cases passed.');
 }
 
-const argv = process.argv.slice(2);
-if (argv[0] === '--selftest') {
-  selftest();
-} else {
+function main(argv) {
+  if (argv[0] === '--selftest') {
+    selftest();
+    return;
+  }
   const wantMd = argv[0] === '--md';
   const args = wantMd ? argv.slice(1) : argv;
   let paths = args;
@@ -366,4 +403,12 @@ if (argv[0] === '--selftest') {
   }
   const r = route(paths);
   console.log(wantMd ? mdBlock(r) : JSON.stringify(r, null, 2));
+}
+
+// Run the CLI only when this file IS the entry point. Without the guard, merely
+// importing `route` (which docs/org/route.test.mjs does) ran the CLI with the test
+// runner's argv, printed a usage error and called process.exit(1) — i.e. the module
+// was untestable, which is half of why it had no tests (BIN-802).
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main(process.argv.slice(2));
 }
