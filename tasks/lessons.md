@@ -158,7 +158,7 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
 - **Rule:** The router is the single risk signal, and its answer is only valid for the fileset and the day it was run on. Re-run `docs/org/route.mjs` on the batch's ACTUAL files at selection, every run; never inherit a tier from a prior plan, a ticket comment, or a previous run's withdrawal note. If a hold is going to override the router, print the router's raw output next to the hold reason so the contradiction is visible at the moment it is made — an override that cites only prose is indistinguishable from a stale copy-paste. And when reading a `skip`: check the paths are actually IN the ownership map before trusting it, because an unmapped path is a silent false-negative on the very mechanism the plan-before-large-changes rule depends on.
 - **Example:** BAD — carry "critique owed, cannot convene" forward from yesterday's plan, withdraw two green batches, report them as blocked on a reviewer. GOOD — run the router at selection, get `skip` for both, ship them; or if holding anyway, write "router says skip, holding because X" so X can be challenged.
 
-## [Design] A ratchet needs headroom, and deepening the input is not headroom (2026-08-08)
+### [Design] A ratchet needs headroom, and deepening the input is not headroom (2026-08-08)
 
 - **Trigger:** Any "keep what we had, union with what's fresh, cap the total" design —
   selection manifests, LRU-with-grace, retention buffers.
@@ -177,3 +177,50 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
   in the manifest. It isn't, at any input depth ≥ ceiling. Shipped: derive 800, ceiling
   1000, so the ~200 most-recently-dropped keep their pages. Pinned as a three-row
   behaviour test, not a comparison of two constants.
+
+### [Workflow] Two lists decide who reviews a change — the router advises, `reviewGates` blocks — and widening one never widens the other
+
+- **Date:** 2026-08-09
+- **Trigger:** BIN-805 shipped in `24f6612` with the decision "the risk router and the gate
+  scripts ARE code". That decision was written into `docs/org/route.mjs`, which is the list
+  that *advises* who should look. The list that actually *blocks the commit* —
+  `.claude/shared-plugin.json` → `reviewGates` — was untouched. Every one of its patterns is
+  `^src/…`, `^functions/`, `^src/lib/firebase/`, `vitest.*\.config\.ts$`, `\.(ts|tsx)$`,
+  `^\.github/(workflows|actions)/`; none matches `docs/org/route.mjs` or `scripts/*.mjs`.
+  Today's reviewers only opened route.mjs because `vitest.config.ts` rode along in the same
+  diff and dragged them in. A follow-up commit touching route.mjs alone — the exact scenario
+  BIN-805 was filed about ("a change that quietly widens `skip` would clear its own review")
+  — still reaches zero reviewers. Identical shape to `cd8c59e` two days earlier, where
+  `.github/` turned out to have no gate at all while `.claude/rules/deployment.md` already
+  treated it as load-bearing: two sources, opposite answers, and the automated one wins.
+- **Rule:** When a ticket's outcome is "X now counts as code / X is now sensitive", change
+  BOTH lists in the same commit, and prove the blocking one with its own probe (a staged
+  diff containing only X must name a reviewer). A router tier is advice that a human or an
+  agent may act on; only `reviewGates` refuses the commit. Whenever you audit a shipped
+  review rule, check WHERE it runs before believing it runs.
+- **Example:** BAD — land the router change, see `tier: medium` in the CLI output, call the
+  ticket done. GOOD — land the router change, add `^docs/org/.*\.mjs$` + `^scripts/.*\.mjs$`
+  to the gate, then stage route.mjs alone and confirm the gate names an agent (BIN-830).
+
+### [Testing] A module whose CLI runs at import cannot be tested — and a test file outside the runner's include globs is silently never run
+
+- **Date:** 2026-08-09
+- **Trigger:** BIN-802 set out to add the first tests for `docs/org/route.mjs` and hit two
+  invisible walls. (1) The file's CLI block executed at module scope, so `import { route }`
+  consumed the *test runner's* argv, blocked reading stdin, and called `process.exit(1)`.
+  The symptom was not an error — it was vitest hanging for ~15 minutes with no output, which
+  reads as a slow suite, not a broken import. (2) `vitest.config.ts`'s `include` globs only
+  covered `src/**`, `functions/src/**` and `functions/scripts/**`, so a test placed at
+  `docs/org/route.test.mjs` would have existed, been green when run by hand, and never once
+  been executed by `npm test` — the acceptance criterion "runs in the same suite as
+  everything else" silently unmet. The repo's other tooling test (`check-workflow-map.test.mjs`)
+  runs under `node --test` in a *separate* CI step, which is why nobody had noticed.
+- **Rule:** Before writing the first test for a script, (a) guard the CLI behind an
+  entry-point check (`process.argv[1] === fileURLToPath(import.meta.url)`) and wrap it in
+  `main(argv)` so the module is importable, and (b) confirm the new file's path is inside
+  the runner's `include` globs — add the glob additively rather than relocating the test or
+  copying a second, differently-invoked test convention. A hanging suite with no output is
+  an import-time side effect until proven otherwise.
+- **Example:** BAD — write the test, run `npx vitest run <file>` directly, see green, ship.
+  GOOD — run the whole `npm test` and confirm the new file's name appears in the run's file
+  list; a test the gate never executes is indistinguishable from no test at all.

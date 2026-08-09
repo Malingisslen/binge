@@ -1,3 +1,38 @@
+# Sprint 2026-08-09 — selection and per-batch disposition
+
+Re-authored at close-out (BIN-835): the run's own plan lived only inside the held batch's
+stash and left main with no record of what was selected. This is that record.
+
+Selection: 8 tickets across 5 batches. Router re-run at HEAD on each batch's actual files.
+
+| Batch | Tickets | Router tier | Disposition |
+| --- | --- | --- | --- |
+| A auth-account-deletion | BIN-816, BIN-813 | `top` (full panel) | **Not dispatched.** BIN-816 also carries a founder parking brake from 2026-08-08. No worker in an unattended run can convene a panel; both commented, neither transitioned. |
+| B infra-tooling | BIN-822 | `skip` at selection → `medium` once the fix required `package.json` | **Built, then held.** Outcome verification failed on all three lenses (correctness, data-safety, intent) AND the owed critique (#14) could not be convened. Nothing reached main. Stash `a1170fb`, patch `.claude/state/sprint-patches/batch-0-20260809-202930.patch`. |
+| C org-router | BIN-802, BIN-805 | `medium`, panel `[7 QA/Test Engineer]` | **Shipped** — `24f6612`, pushed to main (deploy run 31331426451). The #7 critique was never run; that inconsistency with batch B is filed as BIN-831. |
+| D watchlist-write-path | BIN-655, BIN-689 | `medium` (DBA) | **Not dispatched** — same reason as A, one tier down. BIN-655 commented; BIN-689 was not. |
+| E data-social | BIN-766 | — | **Not dispatched.** No artifact, no written reason recorded by the run. |
+
+Artifacts on disk for 2026-08-09: exactly two patch files, both hash-unique
+(`batch-0-20260809-202930.patch`, `batch-1-20260809-204500.patch`), matching batches B and C.
+
+## Follow-ups filed at close-out
+
+BIN-830 (commit gate never got BIN-805's decision), BIN-831 (medium batch shipped without
+its critique; zero role-org metrics events for the day), BIN-832 (`mdBlock` untested and
+unexported), BIN-833 (two divergent router test corpora), BIN-834 (route.mjs/scripts still
+unowned; CLAUDE.md + header comment name the wrong field), BIN-835 (this record + per-planned-batch
+close-out assertion), BIN-836/837/838 (BIN-822 sub-scopes: session-end worktree cleanup,
+the shared-plugins move, CI coverage of `test:scripts`).
+
+## Deviation log
+
+Folded back at close-out. Two entries became lessons (`tasks/lessons.md` + digest): the
+router-advises / gate-blocks split, and the import-time-CLI + include-glob pair from BIN-802.
+The rest are recorded in the shipped tickets' comments.
+
+---
+
 # BIN-815 — make the hanging build say what it is stuck on (2026-08-07b)
 
 Tier `medium`, panel `[3 Financial Controller]`, router re-run at HEAD on the actual
