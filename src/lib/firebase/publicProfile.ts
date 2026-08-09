@@ -81,16 +81,64 @@ export async function getPublicProfileCards(
   return out;
 }
 
-// Signature of the display fields — lets the owner skip a no-op projection write
-// on every load (DBA #27: don't re-write on every authenticated session).
-function cardSignature(src: PublicCardSource): string {
-  return JSON.stringify([
+export const publicProfileSignatureKey = (uid: string) => `binge:pubprofile-sig:${uid}`;
+
+// BIN-817: the localStorage signature must not be READABLE. Until 2026-08-09 this
+// function returned the JSON array itself, so displayName/username/photoURL/bio sat
+// in plaintext on disk, keyed by uid, with no expiry — undisclosed in the privacy
+// policy and surviving account deletion (clearFirestorePersistence drops IndexedDB
+// only). The comparison never needed the content, only "did it change".
+//
+// The exact field list and ORDER below is load-bearing in two directions: it is what
+// the hash covers, and `legacySignature` must reproduce the pre-2026-08-09 string
+// byte-for-byte so an existing key can be recognised without a redundant write.
+// `createdAt` is deliberately absent (it is written to the projection but never
+// changes after the first write) — do not add it to either function.
+function signatureFields(src: PublicCardSource): [string, string | null, string | null, string, boolean] {
+  return [
     src.displayName ?? '',
     src.username ?? null,
     src.photoURL ?? null,
     src.bio ?? '',
     src.isPublic ?? false,
-  ]);
+  ];
+}
+
+// The pre-2026-08-09 on-disk form. Kept ONLY to recognise a key written by the old
+// build: matching it means the profile is unchanged, so the key is upgraded to the
+// hash in place and NO Firestore write is spent. Never written.
+function legacySignature(src: PublicCardSource): string {
+  return JSON.stringify(signatureFields(src));
+}
+
+// FNV-1a (32-bit), base36. Synchronous on purpose: syncMyPublicProfile's cheap
+// bail-out runs BEFORE the lazy fsdb() import, and `crypto.subtle` would drag an
+// await into that path (and is absent from this module's test `window` stub).
+//
+// A collision does NOT merely skip a no-op: it skips a REAL write, so the projection
+// keeps showing the previous name/bio until the next field change. That is tolerable
+// here and nowhere near a security boundary — the projection READ is gated on
+// users/{uid}, not on the projection's own isPublic (firestore.rules), so a stale
+// card can never turn a private profile public — but do not copy this hash into a
+// place where a missed write would matter. Base36 can never start with `[`, which is
+// what keeps the legacy-vs-hash format check unambiguous.
+function hashSignature(src: PublicCardSource): string {
+  const input = JSON.stringify(signatureFields(src));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+// Owner-only, best-effort: drop the local signature so account deletion leaves no
+// trace of the profile card on the device. Exported so the key name lives in exactly
+// one place — AuthContext's deletion cascade calls this rather than re-spelling it.
+export function clearPublicProfileSignature(uid: string): void {
+  try {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(publicProfileSignatureKey(uid));
+  } catch { /* private mode */ }
 }
 
 // Owner-only: write/repair MY publicProfiles/{uid} from my own profile. Covers
@@ -99,10 +147,20 @@ function cardSignature(src: PublicCardSource): string {
 // is only a cosmetic stale name (visibility is live-gated by the rule), never a
 // leak, so a missed sync is harmless. Never throws.
 export async function syncMyPublicProfile(uid: string, src: PublicCardSource): Promise<void> {
-  const sigKey = `binge:pubprofile-sig:${uid}`;
-  const sig = cardSignature(src);
+  const sigKey = publicProfileSignatureKey(uid);
+  const sig = hashSignature(src);
   try {
-    if (typeof window !== 'undefined' && window.localStorage.getItem(sigKey) === sig) return;
+    if (typeof window !== 'undefined') {
+      const stored = window.localStorage.getItem(sigKey);
+      if (stored === sig) return;
+      // A key written by the pre-BIN-817 build still proves the profile is unchanged.
+      // Upgrade it to the hash in place and skip the write — otherwise every existing
+      // user would pay one redundant projection write on their first post-deploy load.
+      if (stored !== null && stored === legacySignature(src)) {
+        try { window.localStorage.setItem(sigKey, sig); } catch { /* private mode */ }
+        return;
+      }
+    }
   } catch { /* private mode — fall through and write */ }
   try {
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
@@ -138,6 +196,9 @@ export async function syncMyPublicProfile(uid: string, src: PublicCardSource): P
   }
 }
 
-// NOTE: account-deletion erases publicProfiles/{uid} via the deletion cascade
-// (collectDeletionRefs → snaps.publicProfileSnap.ref), so no dedicated delete
-// helper is needed here.
+// NOTE: account-deletion erases the publicProfiles/{uid} DOC via the deletion
+// cascade (collectDeletionRefs → snaps.publicProfileSnap.ref). The device-local
+// signature key is NOT covered by that cascade — clearFirestorePersistence only
+// drops IndexedDB — so AuthContext.deleteAccount calls clearPublicProfileSignature
+// above, after the point of no return. Erasing one without the other is what
+// BIN-817 was filed about.

@@ -139,7 +139,17 @@ vi.mock('@/lib/firebase/db', () => ({
 }));
 
 vi.mock('@/lib/firebase/appCheck', () => ({ initAppCheck: async () => {} }));
-vi.mock('@/lib/firebase/publicProfile', () => ({ syncMyPublicProfile: vi.fn(async () => {}) }));
+// Hoisted for the same reason as `deletion` above: BIN-817's assertions are that
+// clearPublicProfileSignature was NOT reached on every guarded abort, and an inline
+// vi.fn() inside the factory is unreachable from the test body.
+const publicProfile = vi.hoisted(() => ({
+  syncMyPublicProfile: vi.fn(async () => {}),
+  clearPublicProfileSignature: vi.fn(() => {}),
+}));
+vi.mock('@/lib/firebase/publicProfile', () => ({
+  syncMyPublicProfile: publicProfile.syncMyPublicProfile,
+  clearPublicProfileSignature: publicProfile.clearPublicProfileSignature,
+}));
 // Säkerhetsgranskning 2026-08-05: hoisted rather than inline vi.fn()s inside the
 // factories, because the assertion the fix needs is that these were NOT reached —
 // an inline spy is unreachable from the test body, which is why the ordering
@@ -254,6 +264,7 @@ beforeEach(() => {
   deletion.collectUserDataSnapshots.mockClear();
   deletion.collectDeletionRefs.mockClear();
   deletion.applyDeletionPlan.mockClear();
+  publicProfile.clearPublicProfileSignature.mockClear();
   authTime.current = new Date().toUTCString(); // fresh session unless a test ages it
   authCallback = null;
   authObj.currentUser = null;
@@ -1099,6 +1110,47 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
 
     expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
     expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  // BIN-817: the profile card's localStorage signature is not covered by the
+  // Firestore cascade OR by clearFirestorePersistence (IndexedDB only), so before
+  // this it survived Art. 17 erasure on the device. It must be removed — but only
+  // once the account is actually gone: every guarded abort leaves the account
+  // intact, and the device state has to match.
+  it('removes the profile-card signature from the device once the account is gone', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(publicProfile.clearPublicProfileSignature).toHaveBeenCalledWith('u1');
+    const [authDelete] = deleteUserMock.mock.invocationCallOrder;
+    const [clearSig] = publicProfile.clearPublicProfileSignature.mock.invocationCallOrder;
+    expect(authDelete).toBeLessThan(clearSig); // never before the point of no return
+  });
+
+  it('leaves the signature alone when the freshness gate refuses', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+
+    expect(publicProfile.clearPublicProfileSignature).not.toHaveBeenCalled();
+  });
+
+  it('leaves the signature alone when the Auth deletion itself fails', async () => {
+    // The account still exists, so the device cache still belongs to a live user.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deleteUserMock.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('network');
+    });
+
+    expect(publicProfile.clearPublicProfileSignature).not.toHaveBeenCalled();
   });
 
   it('an unparsable authTime is treated as stale, not as fresh', async () => {

@@ -189,6 +189,26 @@ men:
   bara via admin). Vi dokumenterar inte detta i UI eftersom "pseudo-
   radering" skulle förvirra GDPR-kraven.
 
+### Enhetslokal data vid radering (localStorage)
+
+Raderingskaskaden når Firestore och Auth. Enhetens egen lagring når den bara där den
+uttryckligen anropas, och de två sorterna städas olika:
+
+- **IndexedDB** (Firestores offline-cache) — `clearFirestorePersistence()` sist i
+  `deleteAccount`.
+- **localStorage** — inget generellt svep. `binge:pubprofile-sig:{uid}`, profilkortets
+  skrivspärr, tas bort explicit via `clearPublicProfileSignature(uid)` efter att
+  Auth-användaren är borta. Fram till BIN-817 (2026-08-09) höll den nyckeln dessutom
+  visningsnamn, användarnamn, bild-URL och bio i **klartext**; den är nu en hash, så
+  även en nyckel som överlever på en delad enhet (privat läge, kastad exception)
+  röjer ingenting. Nya localStorage-nycklar som härleds ur persondata ska följa samma
+  två regler: lagra en hash, och rensa i kaskaden.
+
+Listan ovan är **inte** uttömmande: `binge:fcm:tokenId:{uid}`, `binge:groupInvite:{groupId}`
+och `binge-session-pid-*` överlever också raderingen och är ännu inte genomgångna. De
+spåras i en egen biljett — `binge:groupInvite` bär en levande inbjudningstoken, vilket är
+en säkerhetsfråga och inte en dokumentationsfråga.
+
 > **Historik-/incident-not (BIN-505, 2026-07-14):** en tidigare rules-brist gjorde
 > `users/{uid}` (email/hemkommun/kostnader) och watchlist-`notes` läsbara för
 > publik/vänner. Fixad + internt breach-register enligt GDPR Art. 33(5):

@@ -21,7 +21,7 @@ import { fsdb, getDb, clearFirestorePersistence } from '@/lib/firebase/db';
 import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
-import { syncMyPublicProfile } from '@/lib/firebase/publicProfile';
+import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase/publicProfile';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
@@ -1018,6 +1018,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // GDPR: utan rensning ligger den raderade användarens watchlist m.m.
     // kvar i IndexedDB på enheten. Fel sväljs i helpern.
     await clearFirestorePersistence();
+
+    // BIN-817: clearFirestorePersistence rör bara IndexedDB. Profilkortets
+    // signaturnyckel bor i localStorage och överlevde annars raderingen. Ligger
+    // HÄR, efter deleteUser, av samma skäl som cache-rensningen: kastar något i
+    // kaskaden finns kontot kvar, och då ska enhetens tillstånd också göra det.
+    clearPublicProfileSignature(id);
   }, [user?.username]);
 
   const value = useMemo(

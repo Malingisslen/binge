@@ -16,12 +16,31 @@ vi.mock('./db', () => ({
 }));
 vi.mock('./utils', () => ({ toDate: (v: unknown) => (v ? new Date(0) : null) }));
 
-import { getPublicProfileCard, getPublicProfileCards, syncMyPublicProfile } from './publicProfile';
+import {
+  getPublicProfileCard,
+  getPublicProfileCards,
+  syncMyPublicProfile,
+  clearPublicProfileSignature,
+  publicProfileSignatureKey,
+} from './publicProfile';
+
+// The on-disk form written by the pre-BIN-817 build. Spelled out literally rather
+// than imported: the point of these tests is that the shipped code still recognises
+// THIS exact string, so deriving it from the module under test would be circular.
+const legacySig = (
+  displayName: string,
+  username: string | null,
+  photoURL: string | null,
+  bio: string,
+  isPublic: boolean,
+) => JSON.stringify([displayName, username, photoURL, bio, isPublic]);
+
+let store: Record<string, string>;
 
 beforeEach(() => {
   getDocMock.mockReset();
   setDocMock.mockReset();
-  const store: Record<string, string> = {};
+  store = {};
   vi.stubGlobal('window', {
     localStorage: {
       getItem: (k: string) => store[k] ?? null,
@@ -115,5 +134,91 @@ describe('syncMyPublicProfile', () => {
 
     await syncMyPublicProfile('u5', { displayName: 'A', username: null, photoURL: 'https://x.example/p.jpg', bio: '', createdAt: null });
     expect((setDocMock.mock.calls[1][1] as Record<string, unknown>).photoURL).toBe('https://x.example/p.jpg');
+  });
+});
+
+// BIN-817: the signature key sat on disk as readable JSON — displayName, username,
+// photoURL and bio in plaintext, keyed by uid, no expiry, undisclosed in the privacy
+// policy and surviving account deletion. These pin the two things that make the fix
+// real: nothing readable is stored, and an existing key is still RECOGNISED so the
+// changeover doesn't bill every user a redundant projection write.
+describe('syncMyPublicProfile — the stored signature is not readable (BIN-817)', () => {
+  it('stores no readable profile field, and nothing shaped like the old JSON array', async () => {
+    await syncMyPublicProfile('u1', {
+      displayName: 'Malin Gisslén',
+      username: 'malin',
+      photoURL: 'https://x.example/malin.jpg',
+      bio: 'bor i Göteborg',
+      isPublic: true,
+      createdAt: null,
+    });
+    const stored = store[publicProfileSignatureKey('u1')];
+    expect(stored).toBeDefined();
+    for (const secret of ['Malin', 'Gisslén', 'malin', 'malin.jpg', 'Göteborg', 'true']) {
+      expect(stored).not.toContain(secret);
+    }
+    // Base36 only — never starts with '[', which is what keeps the legacy-format
+    // check unambiguous.
+    expect(stored).toMatch(/^[0-9a-z]+$/);
+  });
+
+  it('is deterministic — identical input produces an identical signature', async () => {
+    const src = { displayName: 'A', username: 'a', photoURL: null, bio: 'b', isPublic: false, createdAt: null };
+    await syncMyPublicProfile('u1', src);
+    const first = store[publicProfileSignatureKey('u1')];
+    store = {};
+    await syncMyPublicProfile('u1', { ...src });
+    expect(store[publicProfileSignatureKey('u1')]).toBe(first);
+  });
+
+  it('separates two profiles that differ only in a trailing field', async () => {
+    await syncMyPublicProfile('u1', { displayName: 'A', username: null, photoURL: null, bio: '', isPublic: false, createdAt: null });
+    await syncMyPublicProfile('u2', { displayName: 'A', username: null, photoURL: null, bio: '', isPublic: true, createdAt: null });
+    expect(store[publicProfileSignatureKey('u1')]).not.toBe(store[publicProfileSignatureKey('u2')]);
+    expect(setDocMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('syncMyPublicProfile — changeover from the old plaintext key (BIN-817)', () => {
+  const src = { displayName: 'Malin', username: 'malin', photoURL: null, bio: 'hej', isPublic: true, createdAt: null };
+
+  it('an old-format key with UNCHANGED fields costs no write, and is upgraded to the hash', async () => {
+    store[publicProfileSignatureKey('u1')] = legacySig('Malin', 'malin', null, 'hej', true);
+    await syncMyPublicProfile('u1', src);
+    expect(setDocMock).toHaveBeenCalledTimes(0);
+    const upgraded = store[publicProfileSignatureKey('u1')];
+    expect(upgraded).not.toContain('Malin');
+    expect(upgraded.startsWith('[')).toBe(false);
+  });
+
+  it('an old-format key with a CHANGED field still writes once, and stores the hash', async () => {
+    store[publicProfileSignatureKey('u1')] = legacySig('Malin', 'malin', null, 'gammal bio', true);
+    await syncMyPublicProfile('u1', src);
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+    expect(store[publicProfileSignatureKey('u1')]).not.toContain('hej');
+  });
+
+  it('after the upgrade the next identical load is still a no-op', async () => {
+    store[publicProfileSignatureKey('u1')] = legacySig('Malin', 'malin', null, 'hej', true);
+    await syncMyPublicProfile('u1', src);
+    await syncMyPublicProfile('u1', { ...src });
+    expect(setDocMock).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('clearPublicProfileSignature (BIN-817)', () => {
+  it('removes only the named uid\'s key', () => {
+    store[publicProfileSignatureKey('u1')] = 'abc';
+    store[publicProfileSignatureKey('u2')] = 'def';
+    clearPublicProfileSignature('u1');
+    expect(store[publicProfileSignatureKey('u1')]).toBeUndefined();
+    expect(store[publicProfileSignatureKey('u2')]).toBe('def');
+  });
+
+  it('never throws when localStorage is unavailable (Safari private mode)', () => {
+    vi.stubGlobal('window', {
+      localStorage: { removeItem: () => { throw new Error('QuotaExceededError'); } },
+    });
+    expect(() => clearPublicProfileSignature('u1')).not.toThrow();
   });
 });
