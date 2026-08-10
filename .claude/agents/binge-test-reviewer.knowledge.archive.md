@@ -17599,3 +17599,79 @@ Full suite: `npm test` → 2916 passed / 235 files / 4 skipped, matches the hand
 **Verdict: pass (0 blocking)**. Both round-2-promised fixes are real and mutation-verified at the correct grain; the new test's second assertion (`call === 3`) is independently load-bearing, not decorative; the sentinel change is a clean re-statement of an already-accepted unpinned-plumbing convention.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10 — BIN-848 round 3: `checkedUids`, a second passthrough field into the same untestable log line
+
+**Diff reviewed** (`git diff --cached`, two files): `functions/src/retentionCleanup/index.ts` adds a
+`checkedUids` field to `collectRevokedPushTokens`'s return type (JSDoc explains why: without it, a
+run that checked nothing — no `fcmTokens` docs at all, or the scan died — is indistinguishable from
+a healthy run that checked everyone and found them all live, which is exactly the reading the
+post-deploy permission check depends on). Three write sites, mirroring `skippedAuthBatches`'s
+existing three: `byOwner.size === 0` early return → `checkedUids: 0`; the end-of-function success
+return → `checkedUids: byOwner.size`; the outer `Promise.all(...).catch()` handler in the exported
+`onSchedule` body (scan died entirely) → `checkedUids: 0`. `tasks/todo.md` is rewritten to require
+**both** `skippedAuthBatches: 0` AND `checkedUids > 0` before treating the sweep as live, with the
+vacuous-early-return failure mode spelled out (the reason `skippedAuthBatches: 0` alone can lie).
+
+**No test file changed.** `functions/src/retentionCleanup/logic.test.ts` is untouched (still 37/37,
+confirmed by running it) and no new test file was added anywhere.
+
+**Question asked**: is that omission honest, or does `checkedUids` deserve different treatment from
+its sibling `skippedAuthBatches` — round 2's identical shape, archived above and folded into the
+active knowledge file's retentionCleanup bullet — because THIS field is now load-bearing for a
+written human verification step (the `tasks/todo.md` gate), where the sibling counts in the same
+`logger.info` call (`expiredSessions`, `deletedSessions`, etc.) are pure telemetry nobody reads a
+decision off of?
+
+**Verdict reached: no escalation, same reasoning as round 2, non-blocking.** The applicable
+discriminator (already stated in the active knowledge file for `skippedAuthBatches`) is not "does a
+human decision depend on this field" — `skippedAuthBatches` already gated that exact same
+`tasks/todo.md` verification step, alone, before `checkedUids` existed, and was accepted anyway. The
+real discriminator is whether the field BRANCHES or re-derives new logic versus trivially forwarding
+a value that already lives inside the file's accepted-gap pagination boundary. `checkedUids` is
+`byOwner.size` — the size of the exact Map whose CONSTRUCTION (the `collectionGroup('fcmTokens')`
+pagination loop + `d.ref.parent.parent?.id` owner-uid derivation) is the specific piece already
+graded non-blocking in round 2's archive entry, for the specific reason that a pagination bug there
+is uid-VALUE-keyed and cannot misattribute a revocation to a live account. Reading `.size` off that
+same Map introduces no new branch and no new derivation; it is pure plumbing of a value that was
+already in scope, exactly like `skippedAuthBatches` forwarding `skippedBatches` from the
+mutation-tested `revokedUidsInBatches`. The three write sites were traced by hand (index.ts:214,
+228, 299) and each assigns the value the docstring claims — no site swaps in a wrong variable
+(e.g. `revoked.length`, which would silently degrade the new field to "some accounts were revoked"
+instead of "some accounts were asked about," inverting its whole purpose) — verified by reading, not
+by test, since none exists to run.
+
+**What would flip this**: if `checkedUids` were EVER computed by anything other than a bare
+`.size`/pass-through — a filter, a threshold, a second lookup — the extract-then-test pattern already
+used one layer down for `revokedUidsInBatches` (BIN-566/848 round 2's `SweepIo`-shaped pure decision
+function, injected `lookup` port, no admin import) would apply and a dedicated pin would be owed.
+Also worth a future, unforced improvement (not filed as a gap): if the pagination loop itself is ever
+extracted behind a port (mirroring `revokedUidsInBatches`), pulling the three-way `checkedUids`
+branch into that same pure layer would make it directly testable at near-zero marginal cost — but
+that is riding along with a hypothetical future refactor of the untested pagination half, not
+something owed by this diff alone.
+
+**Commands run**: `git diff --cached --stat` / full diff (2 files); `Read` on both staged files in
+full, plus `functions/src/retentionCleanup/logic.ts` and `logic.test.ts` (unchanged, confirms the
+extracted decision layer this diff does NOT touch); `.claude/rules/accepted-deviations.md` read in
+full — no entry names `retentionCleanup`/`checkedUids`/`BIN-848` specifically, the closest is the
+`tmdbTosSweep` coverage-gate entry, which does not apply (different orchestrator, different sweep).
+`grep -rn "retentionCleanup|checkedUids|skippedAuthBatches" src/test` → only a comment reference in
+`firestore-rules.test.ts` (BIN-480, about `createdAt`), confirming `index.ts`'s orchestration —
+including both passthrough fields — has zero automated coverage of any kind (no rules/emulator test
+exists for this sweep, unlike `tmdbTosSweep`'s `SweepIo`-ported emulator test). Root `vitest.config.ts`
+confirmed to deliberately exclude `functions/src/**` entrypoints from its `include` glob (comment:
+"functions/src is deliberately NOT included: its firebase-admin-importing... entrypoints"), so this
+is a structural exclusion, not an oversight to flag. State handed down and independently
+unnecessary-to-re-verify here (no source/test file this round's diff touches feeds it):
+`tsc --noEmit` clean in `functions/`, eslint clean, `logic.test.ts` 37/37, full suite 2916 unchanged.
+
+**No knowledge-file edit landed this round**: the Edit tool call updating the active
+`binge-test-reviewer.knowledge.md` bullet (adding a short clause noting this round confirms the
+discriminator against a second instance of the pattern) was refused by the auto-mode classifier.
+This archive entry is the durable record until that edit can be retried in a session where it is
+permitted; the active file's existing bullet (Extract-then-test & layering, the retentionCleanup
+entry) already states the discriminator this round applied, so no principle is missing — only the
+one-line "confirmed again on `checkedUids`" annotation is undelivered.
+
+**REVIEW-VERDICT: pass (0 blocking)**

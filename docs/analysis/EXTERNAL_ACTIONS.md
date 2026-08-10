@@ -36,7 +36,32 @@ Post-deploy verification:
 ```bash
 curl -I https://binge.nu | grep -iE "content-security-policy|strict-transport|x-content-type|x-frame|referrer-policy|permissions-policy"
 firebase functions:log --only episodeReleaseNotify   # expect the "episodeNotify done {...}" line
+firebase functions:log --only retentionCleanup       # see the IAM check below
 ```
+
+**retentionCleanup needs an IAM role no other function needs.** Its fifth sweep (BIN-848)
+is the only place in `functions/` that calls an Auth *user-management* API — `getUsers()`,
+to find push tokens belonging to accounts deleted or suspended in the Console. Everything
+else only does `verifyIdToken`, which is offline against public keys and needs no
+permission. Without `firebaseauth.users.get` on the runtime service account, every batch
+throws, nothing is deleted, and **the deploy stays green** — the permission is only
+exercised at runtime.
+
+Accept the sweep as live only on a `retentionCleanup done` line carrying BOTH
+`skippedAuthBatches: 0` AND `checkedUids > 0`. Either alone is insufficient: the scan
+returns early when no `fcmTokens` doc exists anywhere, logging `skippedAuthBatches: 0`
+without having asked Auth anything. `checkedUids` is how many uids were actually put to
+Auth; `skippedAuthBatches: -1` means the whole scan died.
+
+- Don't wait a day — Cloud Scheduler → `firebase-schedule-retentionCleanup-europe-west1`
+  → **Force run**.
+- `checkedUids: 0` **with `skippedAuthBatches: 0`**? No device has a push token at all.
+  Tick push in Inställningar on one device, then force-run again. (`checkedUids: 0` with
+  `-1` is the dead-scan case above, not this one.)
+- Denied? One `getUsers batch failed, skipping` error per batch with
+  `auth/insufficient-permission`. Grant the runtime service account
+  `roles/firebaseauth.viewer` (read-only, contains `firebaseauth.users.get`) and re-run.
+  The other four sweeps are unaffected — each is caught independently.
 
 ## Function secrets
 

@@ -175,7 +175,21 @@ async function collectStaleReleaseMarkers(nowMs: number): Promise<DocumentRefere
  * siblings. If device count ever makes it expensive, move the WHOLE function to a
  * sparser schedule rather than hiding a weekly branch inside a daily one.
  */
-async function collectRevokedPushTokens(): Promise<{ refs: DocumentReference[]; skippedAuthBatches: number }> {
+async function collectRevokedPushTokens(): Promise<{
+  refs: DocumentReference[];
+  skippedAuthBatches: number;
+  /**
+   * How many uids were actually put to Auth. Logged because without it a run
+   * that checked nothing (no token docs at all, or the scan died) is
+   * indistinguishable from a healthy run that checked everyone and found them
+   * all live — and that is the exact reading the post-deploy permission check
+   * depends on: this sweep is the only caller of an Auth user-management API in
+   * this codebase, and a missing IAM role makes it silently inert while the
+   * deploy stays green. Acceptance bar and the remedy live in
+   * docs/analysis/EXTERNAL_ACTIONS.md's post-deploy block.
+   */
+  checkedUids: number;
+}> {
   const db = getFirestore();
   // uid → its token docs. Built in ONE paginated pass; the owner uid comes from
   // the ref (fcmTokens is always users/{uid}/fcmTokens/{tokenId}), the same
@@ -200,7 +214,7 @@ async function collectRevokedPushTokens(): Promise<{ refs: DocumentReference[]; 
     if (snap.size < PAGE_SIZE) break;
     cursor = snap.docs[snap.docs.length - 1];
   }
-  if (byOwner.size === 0) return { refs: [], skippedAuthBatches: 0 };
+  if (byOwner.size === 0) return { refs: [], skippedAuthBatches: 0, checkedUids: 0 };
 
   const auth = getAuth();
   // A batch that throws (network, quota, an Auth outage) is skipped, never
@@ -214,7 +228,7 @@ async function collectRevokedPushTokens(): Promise<{ refs: DocumentReference[]; 
 
   const refs: DocumentReference[] = [];
   for (const uid of revoked) refs.push(...(byOwner.get(uid) ?? []));
-  return { refs, skippedAuthBatches: skippedBatches };
+  return { refs, skippedAuthBatches: skippedBatches, checkedUids: byOwner.size };
 }
 
 /**
@@ -285,7 +299,7 @@ export const retentionCleanup = onSchedule(
         // getAuth() itself), so nothing was checked. A 0 here would make the
         // summary line byte-identical to a run where nobody was revoked, which
         // is the exact ambiguity this field exists to remove.
-        return { refs: [] as DocumentReference[], skippedAuthBatches: -1 };
+        return { refs: [] as DocumentReference[], skippedAuthBatches: -1, checkedUids: 0 };
       }),
     ]);
 
@@ -310,6 +324,10 @@ export const retentionCleanup = onSchedule(
       // checked at all. Either way the zero above is "unknown", not "nobody
       // was revoked".
       skippedAuthBatches: revokedPushTokens.skippedAuthBatches,
+      // Pairs with the line above: `skippedAuthBatches: 0` only means "Auth
+      // answered for everyone" when this is non-zero. Zero here means there was
+      // nothing to ask about.
+      checkedUids: revokedPushTokens.checkedUids,
     });
   },
 );

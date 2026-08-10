@@ -136,4 +136,29 @@ och inte kräver någon Identity Toolkit-rättighet). Saknar körtidens tjänste
 verkningslöst.
 
 Läs EN `retentionCleanup done`-rad i Cloud Logging efter första körningen och kräv
-`skippedAuthBatches: 0` — inte `-1`, inte `>0` — innan svepet räknas som levande.
+**`skippedAuthBatches: 0` OCH `checkedUids > 0`** innan svepet räknas som levande.
+
+Båda leden behövs. Push-grinden hittade att kontrollen annars kan gå igenom tomt:
+scanet returnerar tidigt när det inte finns ett enda `fcmTokens`-dokument, alltså före
+`getAuth()` och före varje `getUsers()`-anrop — och loggar då `skippedAuthBatches: 0`
+utan att ha frågat Auth om någonting. `checkedUids` är antalet uid som faktiskt lades
+fram för Auth; är det noll har rättigheten inte prövats.
+
+Vänta inte ett dygn: Cloud Scheduler → `firebase-schedule-retentionCleanup-europe-west1`
+→ Force run, sedan `firebase functions:log --only retentionCleanup`.
+
+Är `checkedUids: 0` **och `skippedAuthBatches: 0`** finns ingen enhet med push-token alls
+— kryssa i push i Inställningar på en enhet och kör om. (`checkedUids: 0` med `-1` är
+i stället att hela scanet dog.)
+
+**Regeln bor inte här.** Den här filen raderas när planen är genomförd, så acceptansbaren
+och IAM-remedyn ligger i `docs/analysis/EXTERNAL_ACTIONS.md`s post-deploy-block, där de
+gäller varje framtida deploy.
+
+Saknas rättigheten syns det som ett fel per batch (`getUsers batch failed, skipping`,
+`auth/insufficient-permission`) och `skippedAuthBatches > 0`. Ingenting raderas — svepet
+failar säkert, det gör bara ingenting. Botas med rollen `roles/firebaseauth.viewer` på
+funktionens körtidskonto.
+
+- Radera `tasks/todo.md` när efterkontrollen i loggen är gjord — den andra kopian av
+  regeln ska inte överleva sitt fönster.

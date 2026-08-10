@@ -7033,3 +7033,78 @@ bullet (nested-guard-the-reporter + outage-sentinel, generalized from this diff'
 changes). accepted-deviations.md re-read in full: none of its 8 entries apply.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-10 — BIN-848 follow-up: `checkedUids` closes a vacuous post-deploy permission check (functions/src/retentionCleanup/index.ts, tasks/todo.md)
+
+**Trigger.** Push gate found a real gap in BIN-848's own shipped acceptance test after
+`3090ff7` (12 reviews, 3 rounds, all pass): the plan told Malin to read one
+`retentionCleanup done` log line and require `skippedAuthBatches: 0` before trusting that
+the runtime service account actually has `firebaseauth.users.get` — the first Auth
+user-management call anywhere in `functions/`. But `collectRevokedPushTokens` returns
+`{ refs: [], skippedAuthBatches: 0 }` on `byOwner.size === 0` (no `fcmTokens` docs at all)
+— strictly BEFORE `getAuth()` and before any `getUsers()` call. So the exact value the
+post-deploy check was reading as proof of success can be produced by a run that asked Auth
+nothing. If the runtime SA is missing the permission and there happen to be zero token docs
+at check time (very plausible on a low-traffic app right after this ships), the operator
+reads "green" and never finds out the sweep is dead until real accounts need it reaped.
+
+**The fix.** Widened the return type to carry `checkedUids: number` — `byOwner.size` on the
+success path (real count of uids actually put to `getUsers()`, across however many batches
+attempted, whether or not some later throw), `0` on the empty-input bail-out, `0` on the
+whole-scan-failure `.catch()` default (which already carries `skippedAuthBatches: -1`).
+Logged next to `skippedAuthBatches` in the single summary line. `tasks/todo.md`'s
+post-deploy instructions rewritten: acceptance is now `skippedAuthBatches: 0` **AND**
+`checkedUids > 0`.
+
+**What I verified.**
+1. **Three return sites, all consistent.** Read the full diff (`git diff --cached`) plus
+   the surrounding unchanged function bodies in `index.ts` (full file Read, not just the
+   diff hunks) to confirm `checkedUids`'s semantics hold on every path: (a) empty-input
+   bail-out → `0`, correct — nothing was ever handed to Auth; (b) success path →
+   `byOwner.size`, correct — every uid in `byOwner` is passed into
+   `revokedUidsInBatches([...byOwner.keys()], ...)` regardless of whether an individual
+   batch later throws, so "attempted" is the honest semantic, not "confirmed answered"; (c)
+   outer `.catch()` whole-scan-failure default → `0`, correct — the collection-group scan
+   or `getAuth()` itself died, so nothing was ever attempted either. Cross-checked against
+   `revokedUidsInBatches`'s own doc comment in `logic.ts` (unchanged, not in this diff, Read
+   in full anyway since the semantics depend on it) — `chunkUids(uids)` iterates every uid
+   in the input regardless of per-batch throws, confirming `checkedUids = byOwner.size`
+   really does mean "put to Auth" for the whole set, not just the batches that succeeded.
+2. **Logging exposure.** `checkedUids` is a bare integer count of uids that own at least one
+   push-token doc, written into a structured Cloud Logging entry alongside five other
+   already-shipped counts (`expiredSessions`, `deletedSessions`, etc. — same log line,
+   pre-existing). Cloud Logging requires GCP project IAM (`roles/logging.viewer` or
+   broader); this project has no public log sink. Not a PII leak, not a new exposure class:
+   a count is not an identifier, and every sibling count on the same line already carries
+   equivalent information density (e.g. `revokedPushTokens: refs.length`). No finding.
+3. **Fail-safe direction.** Confirmed by reading every return statement: `refs: []` is
+   unchanged on both bail-out paths, `deleteInBatches` only ever receives what
+   `collectRevokedPushTokens`/the `.catch()` default hands it. `checkedUids` is written to
+   the log only, never branched on inside `retentionCleanup`'s own body (grepped: only
+   consumer is the `logger.info` call). Pure additive observability — verifies the "pure
+   observability" framing in the diff's own code comments rather than just trusting them.
+4. **Scope check.** `git diff --cached --stat` — exactly the two files named in the brief
+   (`functions/src/retentionCleanup/index.ts`, `tasks/todo.md`). `logic.ts` untouched
+   (confirmed via targeted grep, not just the stat), so BIN-848's already-reviewed
+   `revokedUidsInBatches` contract (per-batch isolation, nested-guard-the-reporter,
+   ≤100 cap) carries forward unchanged and needed no re-review.
+5. **accepted-deviations.md** re-read in full (7 entries at this date) — none apply; this
+   diff touches no rules, no anon/session identity, no blocking/reports surfaces.
+
+**Fold.** Generalized the existing "Admin-SDK sweeps" bullet's outer-`.catch()`-sentinel
+lesson (BIN-848 round 2, entry above) into a THREE-path taxonomy: outer-catch default,
+early-return bail-out (this entry, new), and now explicitly named as the SAME failure class
+— a single summary field cannot attest both "no errors" and "the guarded call actually
+ran". The generalizable instruction folded into the active principles file: any zero/
+success sentinel meant to prove an EFFECT occurred (not just "no exception") needs a paired
+"was anything actually attempted" counter, checked on every return path including bail-outs
+that never reach the guarded call — not just the two paths (success, outer-catch) obvious
+from a single review pass.
+
+**Severity.** Low/Info in isolation (pure logging addition, no trust-boundary change) — but
+the CLASS is worth keeping distinct from ordinary sentinel bugs: it is a check specifically
+designed to prove a NEW PERMISSION GRANT before Malin trusts a security-relevant sweep, and
+the gap would have made that proof pass vacuously on the exact kind of low-traffic day this
+ships into.
+
+**REVIEW-VERDICT: pass (0 blocking)**
