@@ -58,6 +58,11 @@ Auth; `skippedAuthBatches: -1` means the whole scan died.
 - `checkedUids: 0` **with `skippedAuthBatches: 0`**? No device has a push token at all.
   Tick push in Inställningar on one device, then force-run again. (`checkedUids: 0` with
   `-1` is the dead-scan case above, not this one.)
+- **Checked 2026-08-10: the role is already there.** The runtime service account is the
+  project's default compute SA, which holds `roles/editor`, and `roles/editor` includes
+  `firebaseauth.users.get` (verified with `gcloud iam roles describe roles/editor`). So no
+  grant was needed on this project. Re-check only if the function is ever moved to a
+  dedicated, least-privileged service account — that is exactly when this breaks.
 - Denied? One `getUsers batch failed, skipping` error per batch with
   `auth/insufficient-permission`. Grant the runtime service account
   `roles/firebaseauth.viewer` (read-only, contains `firebaseauth.users.get`) and re-run.

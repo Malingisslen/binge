@@ -162,3 +162,20 @@ funktionens körtidskonto.
 
 - Radera `tasks/todo.md` när efterkontrollen i loggen är gjord — den andra kopian av
   regeln ska inte överleva sitt fönster.
+
+## Deployad och kontrollerad 2026-08-10
+
+`firebase deploy --only functions:retentionCleanup` klar (revision 15). Tvingad körning
+via Cloud Scheduler svarade:
+
+`{"checkedUids":0,"skippedAuthBatches":0,...,"revokedPushTokens":0,"deletedRevokedTokens":0}`
+
+Det är **det tomma fallet**, alltså exakt vad `checkedUids` byggdes för att avslöja: det
+finns inte ett enda `fcmTokens`-dokument i produktion, så Auth fick aldrig en fråga och
+körningen bevisar ingenting om rättigheten.
+
+Rättigheten kontrollerades i stället direkt: körtidskontot är projektets default compute-SA
+med `roles/editor`, och den rollen innehåller `firebaseauth.users.get`. Ingen grant behövs.
+
+Kvar att göra en gång, av Malin: kryssa i push på en enhet, kör svepet igen och se att
+`checkedUids > 0` med `skippedAuthBatches: 0`. Först då är kedjan prövad end-to-end.
