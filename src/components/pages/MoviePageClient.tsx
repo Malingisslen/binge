@@ -40,7 +40,7 @@ import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { movieContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { franchiseByCollectionId } from '@/lib/seo/franchises';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
-import { seProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
+import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import { toneForGenreIds } from '@/lib/duotone';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
@@ -122,12 +122,16 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     // block (so it can never clobber good denormalized ids) and [] for a present
     // but empty one — see seProviderIds.ts for why that distinction is load-bearing.
     const providerIds = seProviderIdsForRefresh(movie);
+    // BIN-814: the subscription-only subset, from the SAME detail object, so the
+    // advisor's answer and the availability answer can never come from different fetches.
+    const subscriptionProviderIds = seSubscriptionProviderIdsForRefresh(movie);
     void refreshTmdbFields('movie', movie.id, {
       // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(movie.title, movie.original_title) || undefined,
       posterPath: movie.poster_path,
       providers: providerIds,
+      subscriptionProviders: subscriptionProviderIds,
       genreIds: movie.genres?.map(g => g.id),
       runtime: movieRuntime,
     });
@@ -225,6 +229,17 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   // Swedish cinemas with a known future digital date.
   const todayStr = new Date(now).toISOString().slice(0, 10);
   const cinemaInfo = cinemaToStreaming(movie, todayStr);
+
+  // BIN-814: the two provider answers, derived ONCE from the same offer buckets and
+  // shared by every write path on this page (StatusButton, the "Bevaka släpp" CTA).
+  // Derived once on purpose: the movie page previously spelled the broad list out at
+  // each call site, and the StatusButton one was missed when the subset was added —
+  // so the app's default way to add a film wrote only half the pair, and the fresh
+  // providersCheckedAt stamp then gated the repair out for 60 days. TVShowPageClient
+  // already hoists its equivalent into one `statusButtonProps` object; this matches it.
+  const allProviderIds = Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))));
+  const subscriptionProviderIdsForMovie = Array.from(new Set(subscription.map(p => canonicalProviderId(p.provider_id))));
+
   const handleBevaka = () => {
     void addItem(buildWatchlistAddPayload({
       tmdbId: movie.id,
@@ -240,7 +255,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       // `status` is written unconditionally and no payload shape can protect it.
       // (BIN-593 made watchedAt safe on its own; status still isn't.)
       current: watchlistItem,
-      providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
+      providers: allProviderIds,
+      subscriptionProviders: subscriptionProviderIdsForMovie,
       genreIds: movie.genres.map(g => g.id),
     }));
     toast(`Bevakar släppet av ${displayTitle}`);
@@ -395,7 +411,8 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
                 title={displayTitle}
                 posterPath={movie.poster_path}
                 releaseYear={parseInt(year, 10) || null}
-                providers={Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id))))}
+                providers={allProviderIds}
+                subscriptionProviders={subscriptionProviderIdsForMovie}
                 genreIds={movie.genres.map(g => g.id)}
               />
               <div>

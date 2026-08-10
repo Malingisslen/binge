@@ -21,6 +21,8 @@ interface StatusButtonProps {
   releaseYear: number | null;
   totalSeasons?: number | null;
   providers?: number[];
+  /** BIN-814: the flatrate/free/ads subset, carried alongside `providers`. */
+  subscriptionProviders?: number[];
   genreIds?: number[];
   tmdbStatus?: string | null;
 }
@@ -33,6 +35,7 @@ export default function StatusButton({
   releaseYear,
   totalSeasons,
   providers,
+  subscriptionProviders,
   genreIds,
   tmdbStatus,
 }: StatusButtonProps) {
@@ -101,13 +104,13 @@ export default function StatusButton({
     if (status === 'sedd') {
       await markSeen({
         tmdbId, mediaType, title, posterPath, releaseYear,
-        totalSeasons, providers, genreIds, tmdbStatus,
+        totalSeasons, providers, subscriptionProviders, genreIds, tmdbStatus,
       }, { countsAsViewing });
       return;
     }
     await addItem(buildWatchlistAddPayload({
       tmdbId, mediaType, status, title, posterPath, releaseYear,
-      current, providers, genreIds, tmdbStatus,
+      current, providers, subscriptionProviders, genreIds, tmdbStatus,
       // Explicit null (not omitted): this surface owns the season count from
       // its own props, so an absent prop clears it rather than carrying over.
       totalSeasons: totalSeasons ?? null,

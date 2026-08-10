@@ -75,6 +75,12 @@ export function mapWatchlistDoc(d: QueryDocumentSnapshot<DocumentData>): Watchli
     dropped,
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
+    // BIN-814: the third WatchlistItem mapper. Nothing downstream of THIS one asks a
+    // money question today (it feeds computeProfileStats, which is descriptive), but
+    // the `as WatchlistItem` cast at the end means an omitted field never reaches
+    // typecheck — so the absence would be invisible the day a money surface does read
+    // from here. `null` is the honest value: "not backfilled", distinct from `[]`.
+    subscriptionProviders: (data.subscriptionProviders as number[] | undefined) ?? null,
     genreIds: (data.genreIds as number[]) ?? [],
     // BIN-640: same fallback as the owner's own mapper. This path feeds the
     // PUBLIC profile's "Senaste 30 dagarna → Tillagda" counter, which is where a

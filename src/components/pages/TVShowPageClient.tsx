@@ -48,7 +48,7 @@ import { buildContentFloor, hasSubstantialText } from '@/lib/seo/contentFloor';
 import { tvContentFloorInput } from '@/lib/seo/contentFloorInput';
 import { formatNextEpisodeLabel } from '@/lib/episodeLabel';
 import { canonicalProviderId, dedupeProvidersByCanonicalId, affiliateWrap } from '@/lib/tmdb/providers';
-import { seProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
+import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
 import ClientOnly from '@/components/utils/ClientOnly';
 import { useStreamingOffers } from '@/hooks/useStreamingOffers';
 import { CheapestPathVerdict } from '@/components/title/CheapestPathVerdict';
@@ -125,12 +125,16 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     // block (so it can never clobber good denormalized ids) and [] for a present
     // but empty one — see seProviderIds.ts for why that distinction is load-bearing.
     const providerIds = seProviderIdsForRefresh(show);
+    // BIN-814: the subscription-only subset, from the SAME detail object, so the
+    // advisor's answer and the availability answer can never come from different fetches.
+    const subscriptionProviderIds = seSubscriptionProviderIdsForRefresh(show);
     void refreshTmdbFields('tv', show.id, {
       // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(show.name, show.original_name) || undefined,
       posterPath: show.poster_path,
       providers: providerIds,
+      subscriptionProviders: subscriptionProviderIds,
       genreIds: show.genres?.map(g => g.id),
       tmdbStatus: show.status,
       runtime: showRuntime,
@@ -238,7 +242,11 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     posterPath: show.poster_path,
     releaseYear: parseInt(yearStart, 10) || null,
     totalSeasons: show.number_of_seasons,
+    // BIN-814: both provider answers from the same offer buckets, in one add — see
+    // the twin in MoviePageClient for why omitting the subset locks the advisor onto
+    // the broad fallback for 60 days.
     providers: Array.from(new Set([...subscription, ...rent, ...buy].map(p => canonicalProviderId(p.provider_id)))),
+    subscriptionProviders: Array.from(new Set(subscription.map(p => canonicalProviderId(p.provider_id)))),
     genreIds: show.genres.map(g => g.id),
     tmdbStatus: show.status,
   };

@@ -6444,3 +6444,148 @@ independently confirmed true on a clean tree.
 read fail-open call — none touched by this diff.
 
 **Verdict:** pass, 0 blocking.
+
+### 2026-08-09 — BIN-814 subscriptionProviders hasOnly ratchet (staged, PASS)
+
+**Scope:** `firestore.rules` adds `subscriptionProviders` to `isValidWatchlistItem`'s
+`hasOnly`, no value bind (bare `number[]`, matches the neighbouring unbound `providers`).
+Client-side split of one denormalized provider array into two (`providers` = watch-at-all,
+`subscriptionProviders` = flatrate/free/ads only, feeding the subscription advisor's
+keep-or-pause reasoning) across `MoviePageClient.tsx`, `TVShowPageClient.tsx`,
+`WatchlistContext.tsx` (`refreshTmdbFields`/`docToItem`), `useSubscriptionAdvisor.ts`/
+`.helpers.ts`, `taste/backfill.ts`/`.helpers.ts`, `tmdb/providers.ts`, new
+`tmdb/seProviderIds.ts`. `src/test/rules/firestore-rules.test.ts` gets 3 new tests.
+
+**Finding 1 — ratchet test seeding path (Info, not filed as blocking).** The second
+test (`an UNRELATED later write still succeeds on a doc that carries the field`) seeds
+the "doc carries the field" state via a plain authenticated `setDoc` under the SAME
+ruleset it then tests, not `withSecurityRulesDisabled` (used elsewhere in this exact
+file for legacy-doc simulation, e.g. the `notes` legacy tests at line ~441). Traced
+what happens under the dev's own mutation (field removed from `hasOnly`, rerun):
+the SEED write (`setDoc(ref, { subscriptionProviders: [8] }, {merge:true})`, no
+assertFails/assertSucceeds wrapper) is itself rejected by the mutated `hasOnly`
+before the "unrelated write" line runs — Firestore throws on the awaited call, test
+fails, but on the SEED line, not the ASSERTION line the comment names. Confirmed this
+is harmless here only because `hasOnly` is a pure key-set check with no notion of
+provenance — a doc that got the field via a bypass-seed vs. a live write under
+permissive rules produces an IDENTICAL post-merge key set for the mutated rule to
+evaluate, so the regression is still caught either way. Folded into the knowledge
+file as a general pattern: this equivalence does NOT hold for a VALUE ratchet whose
+behavior depends on the resource's *prior stored value* (`vetoRemaining <=`,
+`tmdbFieldsRefreshedAt <= request.time`) — there, a live-seed-under-mutated-rules
+test could fail to even construct the "already contaminated" precondition, silently
+skipping the scenario it claims to guard. Recommended (not required) fix: reseed via
+`withSecurityRulesDisabled` to decouple the doc's provenance from the ruleset under
+test, matching the file's own established pattern one section up.
+
+**Finding 2 — deploy ordering.** `firestore.rules`' comment and `tasks/todo.md`
+both state rules-before-client, matching every client write path (`refreshTmdbFields`
+merges `providers` + `subscriptionProviders` together via `planTmdbFieldsRefresh`).
+No code assumes the reverse. Correct per the project's `deploy.yml` hosting-only
+constraint (`.claude/rules/deployment.md`).
+
+**Finding 3 — value-bind asymmetry (explicitly not a finding).** `subscriptionProviders`
+has no type/length bind, matching the pre-existing `providers` field (also unbound in
+`isValidWatchlistItem` — verified by reading the full validator). Both are self-owned
+docs' bare numeric-id arrays, consumed ONLY through `PROVIDER_MAP`/`getProvider()`
+lookups (unknown ids render a grey fallback chip, canonicalProviderId passes unknown
+ids through unchanged) — never interpolated into a query, URL, or admin decision.
+Same risk class as the accepted "blocking is hygiene" pattern: worst case is junk
+provider ids in one's own advisor UI. Not filing "bind the array" absent a consuming
+surface that starts trusting array contents as more than a lookup key.
+
+**Finding 4 — privacy exposure (none, verified not assumed).** Read the full watchlist
+read-rule block: public/friends visibility already exposes `providers` (superset,
+includes rent/buy) via the SAME `effectiveVisibility`-gated read paths.
+`subscriptionProviders` is a subset of `providers`, sourced from the same public
+per-title TMDB SE catalog (which platforms carry the TITLE), NOT the user's own
+subscription list (`users/{uid}.myProviders`, deliberately excluded from
+`publicProfiles` per an existing rules comment). No new exposure class; strictly less
+data than what's already public through the sibling field.
+
+**GDPR:** new FIELD on an already-covered subcollection (`users/{uid}/watchlist`), not
+a new subcollection — no `userData.ts` collector change needed per the established
+"new field on covered doc → no" rule. None made; correct.
+
+**Verdict:** PASS, 0 blocking. Verified `npm run test:rules` mutation claim (248
+green / 2 fail on hasOnly-removal / byte-identical restore) is internally consistent
+with the rule structure (only the two field-presence tests should trip; the
+"rejects an unknown field" test is unrelated to this specific key and should stay
+green either way).
+
+### 2026-08-10 — BIN-814 re-review after growth (money-surface fan-out + backfill rewrite, PASS)
+
+**Scope:** re-review of the same ticket after the diff grew from the prior pass to 56
+files: `tmdbFieldsRefresh.ts` (`shouldStampProvidersAtAdd` now pair-gated),
+`backfill.ts`/`.helpers.ts` (rewritten selection via `needsBackfill`, new
+`subscriptionProviders` write branch), four money-surface consumers
+(`spendSnapshot.ts`, `householdAggregate.ts`, `serviceValue.ts`,
+`useSubscriptionAdvisor.ts`) switched from reading `providers` to a new shared
+`src/lib/watchlist/subscriptionProviders.ts` helper, `RecCard`/`TitleCard` now supply
+`subscriptionProviders`, `tmdbTosSweep` clears both fields together. `firestore.rules`
+itself byte-identical to the prior-approved diff (re-diffed, confirmed).
+
+**Dispatcher Q1 — bounded deferral, not unbounded re-fetch cost (verified, not just
+argued).** Traced every path that can leave the stamp/field pair incomplete:
+- Add-time (`shouldStampProvidersAtAdd`): omitting the stamp on a partial pair means
+  the NEXT title-page view (which fetches TMDB regardless of watchlist stamp state,
+  for page rendering) rewrites both fields via `planTmdbFieldsRefresh` — zero
+  *additional* TMDB cost, since that fetch already happens.
+- Backfill (`needsBackfill`/`buildBackfillUpdate`): `providersCheckedAt` is stamped
+  UNCONDITIONALLY on every run regardless of whether either provider field actually
+  wrote (a response with no SE block writes neither field but still stamps) — this is
+  what stops perpetual re-selection. Confirmed by the diff's own new test
+  (`needsBackfill — the run must terminate for a title with no SE block`, four cases
+  including "does NOT re-select a freshly stamped row that still has no provider
+  fields"), which is the exact convergence property, not a restated assumption. Cost
+  is capped at one fetch per 60-day window per title, same as before BIN-814 — the
+  pair-gate changes WHEN a doc's stamp lands, never whether the 60-day cap holds.
+- `planTmdbFieldsRefresh`'s `providersNeeded` gate checks `fields.providers != null`
+  only (not the pair) — so the repair path is NOT itself pair-gated, which is what
+  makes the add-time omission self-correcting rather than sticky. Conclusion: the
+  worst case of the pair gate is a bounded deferral (one extra title-page view or up
+  to one 60-day backfill cycle), never an unbounded loop. No finding.
+
+**Dispatcher Q2 — rules unchanged, no-bind is intentional and safe for the new call
+sites (verified).** Re-read `isValidWatchlistItem` in full: `subscriptionProviders` has
+NO type/length bind, identical treatment to the pre-existing `providers` (also
+unbound) — this is the SAME accepted asymmetry already judged in the prior pass
+(Finding 3), not new. `RecCard`/`TitleCard` passing the identical canonicalized
+`number[]` for both `providers` and `subscriptionProviders` therefore cannot be
+rejected by `hasOnly` (key-set only) or by any value bind (there is none on either
+field) — confirmed by reading the full validator, not inferred.
+
+**Dispatcher Q3 — deploy order.** `tasks/todo.md`'s "Deployordning (ej förhandlingsbar)"
+still reads rules → `functions:tmdbTosSweep` → push, matching `firestore.rules`'
+own comment and every client write path (title page, backfill, add path all derive +
+write the pair together in one call). Unchanged from the prior pass.
+
+**Dispatcher Q4 — `mutateEnabled`.** Grepped the full staged diff: the only hit is a
+`tasks/todo.md` line stating it was NOT touched. No code in the diff references it.
+
+**Money-surface fan-out (in scope only as a cost/correctness cross-check, not a trust
+boundary):** `subscriptionProviderIds()` (new shared helper) now backs
+`spendSnapshot.ts`, `householdAggregate.ts`, `serviceValue.ts` (×2 call sites) and
+`useSubscriptionAdvisor.ts`'s film-anchor branch. Read all four call sites plus the
+helper: three-way `null`/`[]`/populated semantics preserved consistently everywhere
+(`null` → broad-array fallback, `[]` → real "not on any subscription" answer). Test
+reviewer's own archive records a same-day blocking finding that `householdAggregate.ts`
+and `spendSnapshot.ts` initially shipped this switch with zero dedicated coverage
+(sibling-sweep-gap class) — re-read both test files in the CURRENT staged diff and
+confirmed dedicated rent-only-excluded + null-fallback test pairs now exist in both,
+matching `serviceValue.test.ts`'s pattern. No user-data exposure or ownership boundary
+touched by any of this — purely internal cost-derivation logic reading the caller's own
+watchlist.
+
+**Worktree hygiene note:** `src/lib/taste/backfill.helpers.ts` showed transient `MM`
+mid-review (an unstaged line re-inserting `contentChanged = true` into the
+`subscriptionProviders` write branch — exactly the bug BIN-814 fixed, i.e. a live
+sibling mutation-testing run). Resolved to clean `M` with index-matching hash before
+this file was Read or judged; re-diffed `--cached` afterward to confirm the staged
+bytes never carried the mutant.
+
+**Not re-filed (accepted-deviations.md read in full):** Tillsammans anon-vote/
+session-expiry, blocking-as-hygiene, create-only reports, groups.ts rollback race,
+visibility read fail-open — none touched by this diff.
+
+**Verdict:** pass, 0 blocking.

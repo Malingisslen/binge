@@ -328,3 +328,52 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     expect(toast).not.toHaveBeenCalled();
   });
 });
+
+// BIN-814. StatusButton is the middle link in the provider hand-off: the page
+// derives both provider answers and passes them down; the hooks below write them.
+// Both ends are pinned (the page→button props in MoviePageClient/TVShowPageClient's
+// tests, the hook→Firestore write in useMarkSeen/WatchlistContext's) — but until now
+// nothing asserted the button actually forwards what it was given. Deleting both
+// forwards left this file 14/14 green, which is how the movie page's missing prop
+// survived a whole review round.
+describe('StatusButton — forwards both provider fields to the write (BIN-814)', () => {
+  const VIAPLAY = 76;
+  const withProviders = () => (
+    <StatusButton
+      tmdbId={603} mediaType="movie" title="The Matrix" posterPath={null} releaseYear={1999}
+      providers={[VIAPLAY, 8]} subscriptionProviders={[8]}
+    />
+  );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+  });
+
+  it('carries the subscription subset into addItem on an ordinary status pick', async () => {
+    render(withProviders());
+    fireEvent.click(screen.getByRole('button', { name: /Lägg till|Vill se|Status/ }));
+    await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
+
+    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    const payload = watchlist.addItem.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.providers).toEqual([VIAPLAY, 8]);
+    expect(payload.subscriptionProviders).toEqual([8]);
+  });
+
+  it('carries it into markSeen on the sedd path too', async () => {
+    render(withProviders());
+    fireEvent.click(screen.getByRole('button', { name: /Lägg till|Vill se|Status/ }));
+    await act(async () => { fireEvent.click(screen.getByText('Sedd')); });
+
+    expect(markSeen).toHaveBeenCalledTimes(1);
+    const input = markSeen.mock.calls[0][0] as Record<string, unknown>;
+    expect(input.providers).toEqual([VIAPLAY, 8]);
+    expect(input.subscriptionProviders).toEqual([8]);
+  });
+});

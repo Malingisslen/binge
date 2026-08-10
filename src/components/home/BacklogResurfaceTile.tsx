@@ -1,5 +1,6 @@
 'use client';
 
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import Link from 'next/link';
 import { titleHref, posterUrl } from '@/lib/tmdb/client';
 import { getProvider, type SwedishProvider } from '@/lib/tmdb/providers';
@@ -12,8 +13,13 @@ import type { WatchlistItem } from '@/types';
 // resurfaces forgotten vill_se titles streamable on a service the user already
 // pays for. The picking is pure (lib/backlogResurface); this just renders.
 
-function matchedProvider(item: WatchlistItem, mine: Set<number>): SwedishProvider | undefined {
-  const id = (item.providers ?? []).find(p => mine.has(p));
+// Exported for its own test: the label is the tile's actual claim ("finns på
+// Viaplay"), and until BIN-814 there was no test file for this component at all, so
+// the rule it applies could be changed with nothing failing.
+export function matchedProvider(item: WatchlistItem, mine: Set<number>): SwedishProvider | undefined {
+  // BIN-814: must match the picker's rule exactly — the label names the service the
+  // title is INCLUDED on, so a rent-only offer must not produce one.
+  const id = subscriptionProviderIds(item).find(p => mine.has(p));
   return id != null ? getProvider(id) : undefined;
 }
 

@@ -51,6 +51,8 @@ export interface BuildWatchlistAddPayloadInput {
   lastWatchedSeason?: number | null;
   lastWatchedEpisode?: number | null;
   providers?: number[];
+  /** BIN-814: the flatrate/free/ads subset. Always supply it when supplying `providers`. */
+  subscriptionProviders?: number[];
   genreIds?: number[];
   tmdbStatus?: string | null;
 }
@@ -109,6 +111,12 @@ export function buildWatchlistAddPayload(input: BuildWatchlistAddPayloadInput): 
   carry('lastWatchedSeason', input.lastWatchedSeason, current?.lastWatchedSeason);
   carry('lastWatchedEpisode', input.lastWatchedEpisode, current?.lastWatchedEpisode);
   carry('providers', input.providers, current?.providers);
+  // BIN-814: carried BESIDE providers, never instead of it. An add that writes the
+  // broad field also stamps providersCheckedAt (shouldStampProvidersAtAdd), and the
+  // title-page repair is gated on that stamp — so an add that omitted the subset
+  // would lock the advisor onto the broad fallback for a full 60 days, on the most
+  // common way a title enters the library. That is the ticket's own headline case.
+  carry('subscriptionProviders', input.subscriptionProviders, current?.subscriptionProviders);
   carry('genreIds', input.genreIds, current?.genreIds);
   carry('tmdbStatus', input.tmdbStatus, current?.tmdbStatus);
 

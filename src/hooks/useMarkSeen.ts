@@ -21,6 +21,8 @@ export interface MarkSeenInput {
   releaseYear: number | null;
   totalSeasons?: number | null;
   providers?: number[];
+  /** BIN-814: carried with `providers` so a re-mark cannot leave the two apart. */
+  subscriptionProviders?: number[];
   genreIds?: number[];
   tmdbStatus?: string | null;
 }
@@ -103,6 +105,10 @@ export function useMarkSeen() {
           lastWatchedSeason: last?.season_number,
           lastWatchedEpisode: last?.episode_number,
           providers: input.providers,
+          // BIN-814: the two provider fields must never be written apart. Accepting
+          // the subset into MarkSeenInput and then not forwarding it is worse than
+          // not accepting it — the caller believes it landed.
+          subscriptionProviders: input.subscriptionProviders,
           genreIds: input.genreIds,
           tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
         }), opts);
@@ -119,6 +125,8 @@ export function useMarkSeen() {
       // See the TV branch: null means "unknown, preserve", not "clear".
       totalSeasons: input.totalSeasons ?? undefined,
       providers: input.providers,
+      // BIN-814: see the TV branch — the pair travels together or not at all.
+      subscriptionProviders: input.subscriptionProviders,
       genreIds: input.genreIds,
       tmdbStatus: input.tmdbStatus ?? undefined,
     }), opts);

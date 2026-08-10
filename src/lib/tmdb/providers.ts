@@ -366,20 +366,10 @@ export function dedupeProvidersByCanonicalId<T extends { provider_id: number; pr
   return Array.from(kept.values());
 }
 
-// Plockar ut SE-streamingproviders från en TMDB-detalj (movie eller TV).
-// Använder samma kategorier (flatrate + free + ads — inte rent/buy) och samma
-// canonical-mapping som vi sparar på watchlist-items. Returnerar en
-// dedupad lista av canonical provider_ids. Tom array betyder att TMDB inte
-// listar någon SE-streamingtjänst för titeln.
-export function extractSEProviders(detail: {
-  'watch/providers'?: { results: { SE?: { flatrate?: { provider_id: number }[]; free?: { provider_id: number }[]; ads?: { provider_id: number }[] } } };
-}): number[] {
-  const se = detail['watch/providers']?.results?.SE;
-  if (!se) return [];
-  const raw = [
-    ...(se.flatrate ?? []),
-    ...(se.free ?? []),
-    ...(se.ads ?? []),
-  ].map(p => canonicalProviderId(p.provider_id));
-  return Array.from(new Set(raw));
-}
+// BIN-814 (2026-08-09): `extractSEProviders` lived here and returned the
+// subscription-ish categories (flatrate/free/ads) — but with the WRONG empty value:
+// an absent SE block gave `[]`, which blanks a good denormalized array instead of
+// meaning "this fetch learned nothing". Its one production caller (taste-backfill)
+// therefore fought the title page over `watchlist.providers`. Both provider
+// derivations now live in `./seProviderIds`, share the undefined-vs-[] contract, and
+// write two distinct fields. Do not reintroduce a third extractor here.

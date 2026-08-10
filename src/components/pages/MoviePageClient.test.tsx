@@ -123,7 +123,14 @@ vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: vi.fn() }) 
 vi.mock('@/components/title/JsonLd', () => ({
   JsonLd: () => null, movieSchema: () => ({}), breadcrumbSchema: () => ({}),
 }));
-vi.mock('@/components/title/StatusButton', () => ({ default: () => null }));
+// Rendered as null (the real one needs auth + watchlist context), but the props it
+// RECEIVES are recorded. BIN-814: a `() => null` mock made the movie page's primary
+// add control unobservable, and that is precisely where the subscription-provider
+// prop went missing while every other call site on the page had it.
+const statusButtonProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+vi.mock('@/components/title/StatusButton', () => ({
+  default: (props: Record<string, unknown>) => { statusButtonProps.last = props; return null; },
+}));
 vi.mock('@/components/title/RatingStars', () => ({ default: () => null }));
 vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
 vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
@@ -263,11 +270,17 @@ describe('MoviePageClient — what the lazy refresh actually sends (BIN-468)', (
   it('never sends updatedAt-adjacent fields it has no business writing', () => {
     const payload = lastRefreshPayload();
 
-    // The title page owns the static group + providers. nextAir*/digitalReleaseDate
-    // belong to the calendar's repair path — the 2026-07-11 attempt that wrote them
-    // from here was reverted for clobbering fresher values (see BIN-468's body).
+    // The title page owns the static group + BOTH provider fields. nextAir*/
+    // digitalReleaseDate belong to the calendar's repair path — the 2026-07-11
+    // attempt that wrote them from here was reverted for clobbering fresher values
+    // (see BIN-468's body).
+    //
+    // BIN-814: `subscriptionProviders` joined the set deliberately. The two provider
+    // fields must be written TOGETHER from one detail object — a page that sent only
+    // the broad one would leave the advisor reading a subscription answer derived
+    // from an older fetch, which is the drift this ticket ended.
     expect(Object.keys(payload).sort()).toEqual(
-      ['genreIds', 'posterPath', 'providers', 'runtime', 'title'],
+      ['genreIds', 'posterPath', 'providers', 'runtime', 'subscriptionProviders', 'title'],
     );
   });
 });
@@ -372,5 +385,38 @@ describe('MoviePageClient — the content floor adds text, it never replaces it 
     render(<MoviePageClient id="603" />);
 
     expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
+  });
+});
+
+// BIN-814. The StatusButton is how a film actually enters the library — far more
+// than the "Bevaka släpp" CTA next to it. It has to hand down BOTH provider answers,
+// because the add stamps providersCheckedAt and a half-written pair would leave the
+// advisor and all three money surfaces on the broad fallback. The two lists must
+// also be genuinely different where TMDB says they are: rent-only offers belong in
+// `providers` and must NOT appear in `subscriptionProviders`.
+describe('MoviePageClient — the add control gets both provider answers (BIN-814)', () => {
+  it('passes the broad list and the subscription subset, and they differ correctly', () => {
+    statusButtonProps.last = null;
+    signedInWithSettledLibrary();
+    tmdb.movie = {
+      ...movie,
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],  // included
+            rent: [{ provider_id: 76, provider_name: 'Viaplay' }],     // rentable only
+            buy: [{ provider_id: 76, provider_name: 'Viaplay' }],
+          },
+        },
+      },
+    };
+    render(<MoviePageClient id="603" />);
+
+    const props = statusButtonProps.last!;
+    expect(props).not.toBeNull();
+    expect(props.providers).toEqual(expect.arrayContaining([8, 76]));
+    expect(props.subscriptionProviders).toEqual([8]);
+    // The decisive assertion: Viaplay is reachable, but not on a subscription.
+    expect(props.subscriptionProviders).not.toContain(76);
   });
 });

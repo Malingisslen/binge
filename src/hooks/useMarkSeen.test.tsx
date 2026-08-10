@@ -125,3 +125,50 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     expect(toast.show).toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
   });
 });
+
+// BIN-814. `markSeen` is how most titles reach 'sedd'/'mina', and the add it performs
+// also stamps providersCheckedAt — which gates the title-page repair out for 60 days.
+// Accepting `subscriptionProviders` into MarkSeenInput and then quietly not forwarding
+// it is the worst of both: the caller believes the field landed, and the advisor keeps
+// reading the broad array on exactly the titles the split exists for. Both branches
+// (film and series) forward it, so both are pinned.
+describe('useMarkSeen — the two provider fields reach the write together (BIN-814)', () => {
+  const VIAPLAY = 76;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+  });
+
+  it('forwards the subscription subset on the FILM branch', async () => {
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => {
+      await result.current({ ...film, providers: [VIAPLAY], subscriptionProviders: [] });
+    });
+
+    const payload = watchlist.addItem.mock.calls[0][0];
+    expect(payload.providers).toEqual([VIAPLAY]);
+    // The empty array is the whole point: rent-only on Viaplay. It has to be
+    // WRITTEN, not dropped, or the row stays null and falls back to the broad list.
+    expect(payload.subscriptionProviders).toEqual([]);
+  });
+
+  it('forwards the subscription subset on the SERIES branch', async () => {
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => {
+      await result.current({ ...series, providers: [VIAPLAY], subscriptionProviders: [VIAPLAY] });
+    });
+
+    const payload = watchlist.addItem.mock.calls[0][0];
+    expect(payload.providers).toEqual([VIAPLAY]);
+    expect(payload.subscriptionProviders).toEqual([VIAPLAY]);
+  });
+
+  it('omits both when the caller knows neither, so stored values survive', async () => {
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => { await result.current(film); });
+
+    const payload = watchlist.addItem.mock.calls[0][0];
+    expect('providers' in payload).toBe(false);
+    expect('subscriptionProviders' in payload).toBe(false);
+  });
+});

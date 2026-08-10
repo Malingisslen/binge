@@ -1,417 +1,236 @@
-# Sprint 2026-08-09 — selection and per-batch disposition
+# Plan 2026-08-09b — BIN-817 + BIN-814
 
-Re-authored at close-out (BIN-835): the run's own plan lived only inside the held batch's
-stash and left main with no record of what was selected. This is that record.
-
-Selection: 8 tickets across 5 batches. Router re-run at HEAD on each batch's actual files.
-
-| Batch | Tickets | Router tier | Disposition |
-| --- | --- | --- | --- |
-| A auth-account-deletion | BIN-816, BIN-813 | `top` (full panel) | **Not dispatched.** BIN-816 also carries a founder parking brake from 2026-08-08. No worker in an unattended run can convene a panel; both commented, neither transitioned. |
-| B infra-tooling | BIN-822 | `skip` at selection → `medium` once the fix required `package.json` | **Built, then held.** Outcome verification failed on all three lenses (correctness, data-safety, intent) AND the owed critique (#14) could not be convened. Nothing reached main. Stash `a1170fb`, patch `.claude/state/sprint-patches/batch-0-20260809-202930.patch`. |
-| C org-router | BIN-802, BIN-805 | `medium`, panel `[7 QA/Test Engineer]` | **Shipped** — `24f6612`, pushed to main (deploy run 31331426451). The #7 critique was never run; that inconsistency with batch B is filed as BIN-831. |
-| D watchlist-write-path | BIN-655, BIN-689 | `medium` (DBA) | **Not dispatched** — same reason as A, one tier down. BIN-655 commented; BIN-689 was not. |
-| E data-social | BIN-766 | — | **Not dispatched.** No artifact, no written reason recorded by the run. |
-
-Artifacts on disk for 2026-08-09: exactly two patch files, both hash-unique
-(`batch-0-20260809-202930.patch`, `batch-1-20260809-204500.patch`), matching batches B and C.
-
-## Follow-ups filed at close-out
-
-BIN-830 (commit gate never got BIN-805's decision), BIN-831 (medium batch shipped without
-its critique; zero role-org metrics events for the day), BIN-832 (`mdBlock` untested and
-unexported), BIN-833 (two divergent router test corpora), BIN-834 (route.mjs/scripts still
-unowned; CLAUDE.md + header comment name the wrong field), BIN-835 (this record + per-planned-batch
-close-out assertion), BIN-836/837/838 (BIN-822 sub-scopes: session-end worktree cleanup,
-the shared-plugins move, CI coverage of `test:scripts`).
-
-## Deviation log
-
-Folded back at close-out. Two entries became lessons (`tasks/lessons.md` + digest): the
-router-advises / gate-blocks split, and the import-time-CLI + include-glob pair from BIN-802.
-The rest are recorded in the shipped tickets' comments.
+Två oberoende ändringar, två commits. Båda har gått genom rollpanel/kritik före planen
+(router kördes på faktiska filer, se nedan). Malins beslut: 817 → väg A via panel;
+814 → alternativ (a) bred definition + laga rådgivarhaken nu, med ett nytt fält.
 
 ---
 
-# BIN-815 — make the hanging build say what it is stuck on (2026-08-07b)
+## BIN-817 — hasha profil-signaturen (commit 1)
 
-Tier `medium`, panel `[3 Financial Controller]`, router re-run at HEAD on the actual
-files. **The critique ran today and is on the ticket**; its conditions are this plan's
-acceptance criteria, not a separate step.
+**Router:** `node docs/org/route.mjs src/lib/firebase/publicProfile.ts src/app/integritet/page.tsx`
+→ `tier: medium`, panel [4]. Malin begärde panel → 5 stolar: #4 Security Architect,
+#5 Legal/GDPR Counsel, #6 DPO, #27 DBA + Codebase Archaeologist (blindspot).
+Utfall: **enhälligt approve-with-conditions, väg A (hasha)**. Inga blockeringar.
+Bortvalda: #18 Community Manager (stake är lokal lagring, inte community-yta).
 
-## Scope — deliberately points 1 and 4 only
+### Vad som byggs
+`src/lib/firebase/publicProfile.ts:86` `cardSignature()` returnerar idag
+`JSON.stringify([displayName, username, photoURL, bio, isPublic])`, som skrivs i klartext
+till `binge:pubprofile-sig:{uid}`. Den ska returnera en hash i stället.
 
-The critique's binding condition 1 is explicit: *ship the observability alone first, land
-it, and use the next real hang to identify what is actually stuck before building retry or
-concurrency changes on speculation.* So:
+1. **Synkron, icke-kryptografisk hash** (FNV-1a → base36). INTE `crypto.subtle`:
+   - `syncMyPublicProfile` bailar synkront på rad 105 *före* `await fsdb()`; en async hash
+     drar in en await i den billiga vägen (#27, Arkeologen).
+   - `publicProfile.test.ts` stubbar `window` utan `crypto.subtle` (Arkeologen).
+   - Ingen säkerhetsgräns: värsta kollisionsfall är en utebliven kosmetisk no-op-write,
+     vilket filens egen kommentar redan accepterar (#4, #6 säger uttryckligen "no
+     crypto-grade requirement", #27 "small inline sync string hash").
+2. **Exakt samma fältuppsättning och ordning** som idag. `createdAt` ingår INTE (Arkeologen:
+   avsiktligt uteslutet, får inte smygas in).
+3. **Utdatakodning får aldrig börja med `[`** — det är hur gammalt format känns igen.
+4. **Legacy-jämförare, inte tvångsomskrivning.** Nuvarande JSON-logik behålls verbatim som
+   `legacySignature()` (döps om, skrivs inte om från minnet — Arkeologen). Läsordning:
+   lagrat värde matchar ny hash → returnera; matchar `legacySignature()` → **ingen
+   Firestore-write**, men uppgradera nyckeln till hashformatet; annars skriv.
+   Detta uppfyller biljettens acceptanskriterium "utan att orsaka en onödig omskrivning för
+   varje befintlig användare". (#4 och #27 accepterade en engångs-write per användare som
+   alternativ; jämföraren är fem rader och slipper den helt.)
+5. **Rensa nyckeln vid kontoradering.** Ny export `clearPublicProfileSignature(uid)` i
+   publicProfile.ts (nyckelnamnet bor på ett ställe). Anropas i `AuthContext.deleteAccount`
+   **efter** `await deleteUser(currentUser)`, bredvid `clearFirestorePersistence()` —
+   aldrig före point-of-no-return (Arkeologen; ordningen är återuppbyggd efter en verklig
+   incident 2026-08-05). Try/catch enligt husets private-mode-mönster.
+6. **INTE vid utloggning.** Nyckeln är uid-namnrymdad → ingen korsanvändarläcka, och när
+   värdet är en hash finns ingen persondata kvar att rensa. (#4 ville ha det, Arkeologen
+   avrådde, #27 kallade det en petitess. Avgjort: hashningen tar bort själva skälet.)
+7. **Uppdatera den nu felaktiga kommentaren** publicProfile.ts:141-143 — den säger att
+   raderingskaskaden räcker, vilket bara gäller Firestore-doc:et.
+8. **`docs/data-retention-policy.md`:** en rad som namnger nyckeln och dess radering (#6 —
+   dokumentet har idag inga localStorage-poster alls).
+9. **Ingen ändring i integritetspolicyn §8**, och `§8`:s "listan är inte uttömmande"-brasklapp
+   ska stå kvar orörd (#5 — den är det som gör en lucka till ett förbiseende och inte en
+   felaktig utsaga).
 
-- **Point 1 (observability)** — built here.
-- **Point 4 (cache survives a failed build)** — built here. Cheap and strictly better than
-  today regardless of what the hang turns out to be.
-- **Point 2 (per-fetch timeout + retry)** — NOT built. The critique found the ticket's
-  premise factually false at HEAD: `buildFetch.ts` already applies a 20 s
-  `AbortSignal.timeout` to every build-time fetch, through an abort-aware semaphore. A
-  45–175 minute hang is happening *despite* a 20-second per-call ceiling, so the stuck
-  thing is not an unbounded TMDB fetch. Adding a retry here would spend Actions minutes on
-  the wrong layer.
-- **Point 3 (lower concurrency)** — NOT built. Same reason: speculation until point 1
-  reports.
+### Acceptans (bindande)
+- [ ] `binge:pubprofile-sig:{uid}` innehåller inget läsbart namn, användarnamn, bild-URL eller bio.
+- [ ] Oförändrad profil → noll Firestore-writes. Ändrad profil → exakt en.
+- [ ] Nyckel i gammalt JSON-format med oförändrade fält → **ingen** write, men nyckeln
+      uppgraderas till hash.
+- [ ] Nyckel i gammalt format med ändrat fält → en write, ny hash lagras.
+- [ ] `deleteAccount` tar bort nyckeln, men **bara** på lyckad väg — inte när
+      freshness-porten eller nätet kastar.
+- [ ] Hashen är deterministisk för identisk indata (inga Date/locale-beroenden).
 
-## What changes
-
-### A. `src/lib/tmdb/buildFetch.ts` — a watchdog heartbeat
-
-A module-level in-flight map plus one `setInterval` per worker process printing, every
-30 s:
-
-```
-[build-fetch] pid=1234 inflight=2 fetched=418/1500 oldest=41s
-[build-fetch]   STUCK 41s  params:popular-movies/p3
-```
-
-The diagnostic value is in the line it prints when **nothing** is in flight — but that
-inference is only sound if every build-time call is registered. The timer is `.unref()`ed.
-
-### B. Register the calls that actually run in the phase that hangs
-
-All three `generateStaticParams` that make network calls in `Collecting page data` —
-`movie/[id]` (1000 list fetches), `tv/[id]` (1000) and `person/[id]` (~2100 via
-`collectPersonIds`) — call `startBuildWatchdog()` and wrap their fetches in
-`trackBuildCall`. The other four (`provider`, `genre`, `billigaste`, `forsvinner`) are
-static lists with no network.
-
-`sitemap.ts`'s copy is deliberately NOT instrumented: it runs in a later phase. The
-watchdog outlives that boundary, so a hang there still prints `inflight=0` — recorded in
-`buildFetch.ts` so nobody reads that line as proof.
-
-### C. `.github/workflows/deploy.yml` — save the TMDB cache when the build fails
-
-`actions/cache/restore` + `actions/cache/save` with
-`if: always() && steps.tmdb-cache.outputs.cache-primary-key != ''`, keyed on
-`run_id`-`run_attempt`. The guard states the real precondition — the restore step ran, so a
-key exists. A step that was never *reached* has an EMPTY conclusion, not `'skipped'`, so the
-obvious-looking `conclusion != 'skipped'` check would have been a tick that never fires.
-
-**Honest limit, recorded in the workflow comment:** `timeout-minutes` sits on the Build
-*step*, not the job, and there is no job-level cap — so `always()` steps do run and the save
-almost certainly fires on the 2026-08-07 event. Still to be confirmed on the next real hang
-rather than assumed.
-
-## It took three review rounds to instrument the right file
-
-Worth recording, because two of the three wrong answers looked obviously right.
-
-- **Round 1** registered only `fetchForBuild`, and started the watchdog only on a cache
-  *miss*. On a warm cache — the regime a code deploy runs in — no timer existed at all.
-- **Round 2** registered the sitemap and gave its ~4000 previously-unbounded calls a
-  `buildSignal()`. Both wrong. `sitemap.xml` has no dynamic segment, so it runs in
-  *Generating static pages*, not the phase that hangs. Worse, `AbortSignal.timeout` starts
-  counting at **creation**: creating 2000 signals in one synchronous burst behind an 8-slot
-  semaphore aborts most of them while still queued. A reviewer measured it against the real
-  semaphore — 64 dispatched, 146 aborted of 210 — which would have shipped a sitemap with
-  **zero** `/person/` URLs. That change is fully reverted.
-- **Round 3** instrumented `movie/[id]` and `tv/[id]` `generateStaticParams`. **Round 4**
-  added `person/[id]`, which the integration reviewer caught as the biggest caller in that
-  phase (~2100 calls) — and gave aggregate labels their own stuck threshold, because two
-  reviewers independently noticed that a healthy build would otherwise print STUCK every
-  tick and train the reader to ignore the line.
-
-The stakeholder critique's premise — "a 20 s timeout already applies to every build-time
-fetch" — is still not quite true (the sitemap's list calls have none), but round 2 proved
-that adding one naively is worse than leaving it. That is now its own question, not this
-ticket's.
-
-## Acceptance criteria
-
-- [x] A heartbeat every 30 s during `Collecting page data`, including when zero fetches are
-      in flight and on a fully warm cache. [tests in buildFetch.test.ts + titleParams.watchdog.test.ts]
-- [x] The heartbeat **repeats** — a one-tick-then-die watchdog is indistinguishable from
-      today's silence. [mutant kills 6 tests]
-- [x] `movie/[id]`, `tv/[id]` and `person/[id]` register their fetches; unwrapping one
-      route's `trackBuildCall` fails exactly that route's tests and leaves the siblings
-      green. [mutation-verified]. `startBuildWatchdog()` in those routes is belt-and-braces
-      and deliberately NOT separately pinned — the first `trackBuildCall` starts the same
-      singleton interval, so the call is inert by construction.
-- [x] A stuck call is named with its label and its age, and the age grows across ticks.
-- [x] The STUCK list is capped at 5 **oldest** plus a count. Reversing the sort fails a
-      test, and so does sorting by label instead of by age — the fixture's names run
-      backwards against their ages on purpose. [mutation-verified]
-- [x] An aggregate label (`params:person-ids`, ~2100 calls, no 20 s ceiling of its own) has
-      its own generous threshold, so a healthy build never prints STUCK for it — while a
-      real hang still does. [mutation-verified]
-- [x] The watchdog timer is unref'd. [mutant kills 1 test]
-- [x] `trackBuildCall` registers, names and de-registers on both success and throw, and
-      costs no refresh budget. [4 tests]
-- [x] Retries are NOT added; `networkFetches`, `refreshBudget()` and the 1500 default are
-      untouched. [critique conditions 2, 3, 5]
-- [x] `TMDB_BUILD_REFRESH_BUDGET` and the 175-minute timeout are untouched.
-      [critique condition 6]
-- [x] `sitemap.ts` and `seoPersonIds.ts` are back at HEAD — round 2's change to them was a
-      regression, not an improvement.
-- [x] The cache is saved on a failed build step, keyed per attempt, and the workflow states
-      that survival of a hard timeout kill is unverified. [critique condition 4]
-
-## Still owed after this ships
-
-The critique's condition 1 stands: **use the next real hang to identify the culprit before
-building retries or a concurrency change.** This batch buys the evidence; it does not claim
-to fix the hang.
+### Uppföljning (egen biljett, byggs inte här)
+De fem övriga oredovisade localStorage-nycklarna. #5 och #4 är eniga om att
+`binge:groupInvite:{groupId}` (levande inbjudningstoken) och `binge-session-pid-*` är en
+**säkerhetsfråga, inte en policytext-fråga**, och inte får buntas in i ett copy-ärende.
+ADR: #5:s tolkningsfråga (räknas en icke-reversibel hash av persondata fortfarande som
+persondata som måste redovisas i §8?) skrivs som daterad intern position, inte som fastslagen
+rätt.
 
 ---
 
-# Sprint 2026-08-07 — selection
+## BIN-814 — en definition för providers + laga rådgivarhaken (commit 2)
 
-Fourth pass in three days on a backlog that's mostly self-referential process debt
-(the sprint engine reviewing its own review mechanics). Comments were read on all 45
-open candidates before anything was judged — 19 already carry a recorded decision from
-Malin, 1 is an unanswered parking brake, 2 are now obsolete (their fix landed under a
-different ticket today), and 14 needs-approval items are real but not clearly hers to
-want built right now. 10 tickets selected across 6 disjoint-file batches.
+**Router:** `node docs/org/route.mjs src/lib/taste/backfill.ts src/lib/tmdb/seProviderIds.ts`
+→ `tier: medium`, panel [28]. Kritik från #28 Recommendations/Scoring-Integrity: inhämtad,
+**approve-with-conditions**. Planen nedan bär dess villkor.
 
-## Batch A — watchlist (agent: direct)
+**Malins beslut:** (a) bred definition vinner + laga hyr-haken nu + spara båda svaren
+(nytt fält), inte extra TMDB-anrop.
 
-Same domain, kept together on purpose (per the 2026-08-06 sprint's own reasoning): all
-three touch watched/progress semantics, and a cross-batch conflict there would be
-silent, not a merge error.
+### Varför ett fält inte räcker (verifierat, inte antaget)
+#28 flaggade att rådgivaren redan filtrerar ankare på `getProvider(pid).type === 'flatrate'`
+och bad om verifiering av Amazon-sömmen mot skarp data. Jag körde fyra titlar mot TMDB SE:
+- **Amazon: sömmen är stängd.** `119 Amazon Prime Video` ligger under `flatrate`,
+  `10 Amazon Video` under `rent`/`buy`. Skilda id:n.
+- **Viaplay: sömmen är ÖPPEN och bekräftad.** `76 Viaplay` returneras under `rent` och `buy`
+  på alla fyra titlarna — och 76 är typad `flatrate` i `SWEDISH_PROVIDERS`. Samma sak gäller
+  `489/1944 TV4 Play`. En flat `number[]` kan därför aldrig skilja "ingår" från "går att hyra",
+  och alternativ (a) ensamt gör den bristen konsekvent i stället för nyckfull.
 
-- [ ] **BIN-655** [Tier B · build · Malin: "BYGG" 2026-08-06] `addItem` is two functions
-  wearing one name — split the bulk-import path from the human mark-seen path.
-  Files: `src/contexts/WatchlistContext.tsx`, `src/lib/watchlistWrites.ts` (+ tests).
-  Acceptance:
-  - Two distinct entry points exist (bulk/sync vs. human mark-seen) instead of one
-    `addItem` inferring intent from opts flags. [diff]
-  - Bulk callers (CSV import, onboarding, Collection/Companion "add all") never count a
-    rewatch or re-stamp `watchedAt`/`ratedAt`. [diff]
-  - All existing call sites migrated to the correct entry point; typecheck + full suite
-    green. [diff]
+### Vad som byggs
+1. **`firestore.rules`** — lägg `subscriptionProviders` i `isValidWatchlistItem`s `hasOnly`,
+   med samma EN-VÄGS-SPÄRR-varning som `tmdbFieldsRefreshedAt` (ADR 0009): ta aldrig bort
+   posten medan en prod-doc bär fältet — rulla tillbaka klientskrivaren först.
+   **Deployas FÖRE klienten.** Merge-writes utvärderas mot hela post-merge-doc:et, så en
+   klient som skriver fältet mot gamla regler får permission-denied på varje watchlist-write.
+2. **`src/lib/tmdb/seProviderIds.ts`** — andra hjälparen `seSubscriptionProviderIdsForRefresh`
+   (flatrate + free + ads) bredvid den befintliga breda, med **samma undefined-kontrakt**:
+   saknat SE-block → `undefined` ("lärde mig ingenting"), närvarande men tomt → `[]`.
+   Skriv om filens "får inte slås ihop"-kommentar: frågan är avgjord, de är nu två
+   avsiktliga svar på två olika frågor, inte en olöst dubblett.
+3. **`src/lib/tmdb/providers.ts`** — `extractSEProviders` utgår. Den var den smala
+   definitionen med fel tomvärde (`[]` vid saknat block = klobbrar en bra array). Enda
+   produktionsanropet är backfillen. Testerna flyttas till seProviderIds-syskonet.
+4. **`src/lib/taste/backfill.ts` + `backfill.helpers.ts`** — backfillen skriver båda fälten
+   från samma TMDB-svar, med undefined-kontraktet: returnerar hjälparen `undefined` skrivs
+   fältet **inte** (idag skulle den skriva `[]` och radera en bra array).
+   `providersCheckedAt` stämplas **ändå** (#28:s uttryckliga rekommendation: punkt 2 skyddar
+   redan arrayen, och att inte stämpla bränner bara TMDB-budget på titlar vars saknade
+   SE-block sällan ändras).
+5. **`src/lib/watchlist/tmdbFieldsRefresh.ts` + `WatchlistContext.tsx` + titelsidorna** —
+   samma två fält i providers-gruppen, samma stämpel, samma färskhetsgrind.
+6. **`src/types/domain.ts`** — `subscriptionProviders: number[] | null`.
+7. **`src/hooks/useSubscriptionAdvisor.ts`** — filmankare läser
+   `subscriptionProviders ?? providers`. Fallbacken är avsiktlig: en doc som ännu inte
+   backfillats beter sig som idag (för generöst) i stället för att tappa ankaret helt och
+   föreslå paus på fel grund under utrullningen.
+8. **ProviderChips/visning rör inte** — den ska fortsätta visa den breda listan.
 
-- [ ] **BIN-679** [Tier C · build-review · requiresPlanMode · Malin: "bygg" 2026-08-06]
-  Let curated Season-0 specials (Doctor Who 2005) be marked watched without regressing
-  the progress marker.
-  **Write a short plan block here before touching code** (watch-status-model-adjacent,
-  a CLAUDE.md sensitive domain) — her "bygg" approved the feature, not a skipped plan.
-  Files: `src/contexts/WatchlistContext.tsx` (`updateProgress`), the BIN-580 specials
-  section component, `src/hooks/useSubscriptionAdvisor.helpers.ts` (read-only), tests.
-  Acceptance:
-  - A written plan for the model change is recorded here before code. [diff]
-  - Ticking a curated special never regresses `lastWatchedSeason/Episode`,
-    `continueWatching`, or group progress sync for an otherwise-caught-up title. [diff]
-  - "Samla klart" meter inclusion/exclusion of specials is an explicit, documented
-    choice. [diff]
-  - Parks In Review for Malin's visual sign-off (UI-visible). [run]
+### Acceptans (bindande — #28:s villkor inbakade)
+- [ ] Regression: en `vill_se`-film med `subscriptionProviders` som **inte** innehåller en
+      abonnerad tjänst sätter **inte** `hasWillSeeAnchor` för den tjänsten, även om
+      `providers` gör det. (Detta är #28:s must-have, pinnad mot Viaplay-fallet.)
+- [ ] Backfill och titelsida producerar identiska `providers` för samma TMDB-svar.
+- [ ] Saknat SE-block → varken `providers` eller `subscriptionProviders` skrivs; en bra
+      befintlig array överlever.
+- [ ] Saknat SE-block → `providersCheckedAt` stämplas ändå.
+- [ ] Doc utan `subscriptionProviders` → rådgivaren faller tillbaka på `providers`.
+- [ ] `npm run test:rules` grön med det nya fältet i hasOnly.
 
-- [ ] **BIN-689** [Tier A/B · build-review · single #28 pending · Malin: "JA — bygg,
-  eget litet pass" 2026-08-06] BIN-598 part 2 — centralize the "watchedAt counts only
-  when status is sedd" predicate (7 hand-copied call sites).
-  Files: `src/hooks/useServiceValue.ts`, `src/components/watchlist/DiaryPageClient.tsx`,
-  `src/components/pages/UserProfilePageClient.tsx`, `src/app/stats/page.tsx`,
-  `src/components/WatchlistPage.tsx`, `src/lib/taste/stats.ts`, `src/lib/diary.ts`, new
-  shared helper under `src/lib/`.
-  Starting point: stash `7d56bff15021ef21cbaf54822f95bad988e4c89a` (9 files, previously
-  reviewer-approved) — verify against current main before reusing, don't apply blind.
-  Acceptance:
-  - Predicate extracted to ONE shared helper (test-extraction pattern). [diff]
-  - All 7 listed call sites migrated to it; the two documented "leave alone" spots
-    (UserProfilePageClient's in-place sort, `/stats`'s legacy "Sedd" counter) stay
-    untouched. [diff]
-  - A test kills the mutant "remove the sedd-gate". [diff]
-  - Parks for #28 Recommendations / Scoring-Integrity Engineer sign-off before Done
-    (router: single, this batch can't convene it). [run]
+### Vad integrationsgranskningen hittade — och vad som gjordes
 
-## Batch B — data (agent: direct)
+Första bygget var **inte** komplett. Fyra av sex blockerande fynd var äkta och tre av dem
+var regressioner jag själv införde. Alla lagade före commit:
 
-- [ ] **BIN-646** [Tier B · build · Malin: "bygg den nu ändå" 2026-08-06 — router
-  confirms `skip` on the real files] mediaTypeDocId rest: validate the write side (2
-  of 3 original points already shipped by hand in `a4a1470`).
-  Files: `src/lib/mediaTypeDocId.ts`, `src/lib/watchlistWrites.test.ts`.
-  Acceptance:
-  - `mediaTypeDocId()`'s write path rejects/normalizes a non-canonical id instead of
-    silently producing a doc-id its own reader later refuses (~90 call sites — bound
-    the change to id normalization, not new throw-everywhere behavior without a
-    fallback). [diff]
-  - The missing `planQuickRateWrite` zero-discovery-value test case
-    (`src/lib/watchlistWrites.test.ts:264`) is added. [diff]
-  - `mediaTypeDocId.parity.test.ts` and `mediaTypeDocId.test.ts` stay green — the
-    client/server divergence this ticket's siblings (BIN-624/759) depend on is not
-    accidentally re-closed. [diff]
+1. **Fixen träffade inte sitt eget huvudfall.** `addItem` skrev bara `providers` och
+   stämplade `providersCheckedAt` — och titelsidans reparation är grindad på just den
+   stämpeln, så det nya fältet kunde inte landa på 60 dagar. Att lägga till en hyr-bara-
+   film (det vanligaste sättet en titel kommer in) hade alltså lämnat rådgivaren på den
+   breda fallbacken. Fältet bärs nu genom `buildAddPayload`, `StatusButton`,
+   `QuickAddButton` och `useMarkSeen`.
+2. **Tre pengaskärmar blev SÄMRE.** `spendSnapshot`, `householdAggregate` och
+   `serviceValue` läser `providers`, och backfillen skriver nu rent/buy dit där den
+   förut skrev den smala listan — så en hyrfilm hade börjat räknas som "aktiv utgift"
+   och skyddat tjänsten från dödvikts-domen. Regeln bor nu i
+   `src/lib/watchlist/subscriptionProviders.ts` och alla fyra ytorna delar den.
+3. **ToS-svepet rörde inte det nya fältet.** TMDB-härledd data utan TTL bryter §1.C, och
+   ett svep som bara rensade `providers` hade lämnat `providers: []` bredvid en
+   månadsgammal abonnemangslista — samma drift som biljetten skulle avsluta.
+   `PROVIDERS_GROUP.fields` täcker båda nu. **Kräver manuell functions-deploy.**
+4. **Backfillen kunde aldrig konvergera.** Urvalet gick på fält-frånvaro, men ett svar
+   utan SE-block skriver inget fält — så titeln hade hämtats om varje körning i
+   evighet. Urvalet går nu på stämpeln (`needsBackfill`, utbruten och testad).
 
-- [ ] **BIN-814** [Tier B · build-review] `watchlist.providers` has two writers with
-  different definitions of "providers" (title page: all 5 categories incl. rent/buy;
-  taste backfill: subscription-only 3) — content depends on who ran last, and it can
-  silently change what counts as a "vill se"-anchor in the subscription advisor.
-  Default direction (no recorded decision, so picking the one BIN-468 already pinned):
-  **option 1 in the ticket** — broad definition (incl. rent/buy) wins; the taste
-  backfill stops writing the field and reads it instead.
-  Files: `src/lib/tmdb/seProviderIds.ts`, `src/lib/taste/backfill.ts`, both title-page
-  call sites, tests.
-  Acceptance:
-  - Exactly one writer for `watchlist.providers`/`providersCheckedAt`; the taste
-    backfill reads via the shared helper instead of deriving its own subset. [diff]
-  - A test pins that re-running the backfill after a title-page visit doesn't narrow
-    the stored provider set. [diff]
-  - `useSubscriptionAdvisor`'s `hasWillSeeAnchor` behavior is called out explicitly in
-    the diff/commit (it's the one advisor-facing consequence of this choice). [diff]
-  - Parks In Review — the definition choice has a small user-facing advisor effect, so
-    Malin should see which of the 3 options got picked before it's Done. [run]
+Två fynd var inte äkta: en mutant och två röda tester som redan var lagade i arbetsträdet
+när granskarna läste — de såg ett träd i rörelse.
 
-## Batch C — social (agent: direct)
+**Fjärde rundan hittade den femte ytan.** `pickBacklogResurface` +
+`BacklogResurfaceTile` — Hem-brickan som ordagrant säger *"finns nu på din tjänst"* och
+sätter etiketten *"finns på Viaplay"* — läste den breda arrayen. Före den här ändringen
+skrev backfillen den SMALA listan dit, så brickan hade råkat ha rätt; efter den hade en
+hyr-bara-film dykt upp på Hem som "ingår i din tjänst". Det är den enda av alla fynd som
+var direkt synligt ljugande för användaren. Lagad, plus `VillSePickerPage`s "kan ses
+direkt"-sortering. Samma runda: TV-sidans test mockade `StatusButton` blint precis som
+filmsidans gjorde — den mocken registrerar propparna nu på båda sidor.
 
-- [ ] **BIN-766** [Tier B · build-review · single #27 pending · Malin: "egen
-  granskningssession med #27 först, sedan bygg" 2026-08-06] `communityRatings` reuses
-  the watchlist doc-id verbatim — a malformed id splits a title's rating average in two.
-  Files: `functions/src/communityRatings/logic.ts`, `logic.test.ts`, `index.ts`
-  (delegates only — `index.ts` imports firebase-admin, untestable in root vitest).
-  Starting point: stash `441bf4df1d04155d987712e58222b77af1ccd4e4` (3 files, previously
-  built) — verify against current main, don't apply blind; last outcome-verification
-  said `data-safety=fail` for an unknown reason, re-check before reusing wholesale.
-  Acceptance:
-  - Rating-aggregate doc id is derived via `mediaTypeDocId(pathMediaType,
-    parseTmdbIdFromDocId(docIdRaw))`, not the raw watchlist doc-id. [diff]
-  - A malformed legacy id (e.g. `movie_042`) now aggregates into the SAME bucket as the
-    canonical id for that title. [diff]
-  - Parks for #27 Database Administrator / Data-layer Engineer sign-off before Done
-    (router: single, this batch can't convene it) — including their open question about
-    the `firestore.rules:250` doc-id form check. [run]
+**Tredje rundan hittade fyra till** — samma defektklass som runda två, i syskonfiler:
+`MoviePageClient`s egen `<StatusButton>` (appens vanligaste sätt att lägga till en film)
+skickade bara det breda fältet medan TV-tvillingen skickade båda; backfillens
+migrationsgren satte `contentChanged` och hade därmed bumpat `updatedAt` på HELA
+biblioteket i första körningen (fyra läsare faller tillbaka på den stämpeln — "Fortsätt
+titta"-sorteringen, taste/stats, "din senaste 5★" och `addedAt`-reparationen som
+PERSISTERAR värdet); och `spendSnapshot` + `householdAggregate` hade ingen enda test som
+band det nya beteendet — att backa dem till den breda arrayen var grönt.
 
-## Batch D — auth-frontend (agent: direct)
+Två strukturella åtgärder togs så klassen inte kan återkomma: provider-listorna härleds
+nu **en gång** på filmsidan och delas av alla skrivvägar (som TV-sidan redan gjorde), och
+`shouldStampProvidersAtAdd` kräver **paret** — en add som bara bär det breda fältet
+stämplar inte alls, vilket gör utelämnandet självläkande i stället för att göra varje
+anropsställe ansvarigt för att minnas. Filmsidans knapp mockades dessutom till `() => null`
+i testet, vilket är exakt varför proppen kunde försvinna obemärkt; mocken registrerar
+propparna nu.
 
-- [ ] **BIN-813** [Tier A · build] Delete-account flow: a second "Radera igen"
-  click after the token has aged past ~5 min can hit the pre-check branch, which
-  always says "Ingenting har raderats" even when the cascade already ran.
-  Files: `src/components/settings/DeleteAccountSection.tsx`,
-  `DeleteAccountSection.test.tsx`.
-  Acceptance:
-  - The pre-check branch remembers (session-scoped) that a deletion cascade was already
-    attempted, and drops the "Ingenting har raderats." promise clause on a subsequent
-    rejection instead of repeating a claim that may now be false. [diff]
-  - The "Försök igen" button's re-entry into this flow is covered by a test. [diff]
-  - BIN-777's existing exact-string tests still pass (no accidental copy regression on
-    the branches this doesn't touch). [diff]
+**Andra granskningsrundan hittade ett femte:** `useMarkSeen` tog emot
+`subscriptionProviders` i sin input-typ men skickade det aldrig vidare till
+`buildAddPayload` — sämre än att inte ta emot det alls, eftersom anroparen tror att
+fältet landade. Min egen tidigare ändring hade inte applicerats och jag såg det inte i
+grep-utdatat. Lagat i båda grenarna (film + serie) och pinnat med tre tester; mutanten
+som återinför tappet dödar två av dem. Ingen påstådd täckning i den här filen är kvar
+oprövad.
 
-## Batch E — infra (agent: direct, requiresPlanMode)
-
-- [ ] **BIN-815** [Tier C · build-review · requiresPlanMode] Deploy build hangs in
-  "Collecting page data" — 4 of 6 runs on 2026-08-07 timed out rather than failing fast.
-  Files: TBD after investigation — likely `.github/workflows/deploy.yml`,
-  `next.config.mjs`, or the byggtids-TMDB SEO pre-rendering cache/timeout code
-  (`docs/deployment.md`'s domain).
-  **Write the short investigation-plan block here before editing deploy.yml** —
-  deploy/hosting is a CLAUDE.md sensitive domain regardless of ticket size.
-  Acceptance:
-  - Root cause identified and written down (which step hangs, why it hangs instead of
-    failing). [diff]
-  - A hang now fails within a bounded time instead of running to the workflow timeout
-    (existing 6-day/budget guards untouched — see `deployment.md`). [diff]
-  - Fix verified via `gh run list --workflow=deploy.yml` showing a subsequent green
-    run. [run]
-
-## Batch F — scheduled-jobs (agent: direct, requiresPlanMode)
-
-- [ ] **BIN-727** [Tier C (functions/**) · build · requiresPlanMode · Malin: "bygg"
-  2026-08-06, #27 DBA already ran a blind critique and rescoped it — conditions below
-  are theirs, already binding] Scheduled-job orchestration is untested (12 of 13 have
-  their Firestore logic inside the `onSchedule` wrapper).
-  Files: `functions/src/retentionCleanup/` (+ new `SweepIo`-style port + emulator
-  test), `functions/src/availableNotify/` (+ emulator test).
-  Acceptance:
-  - `retentionCleanup`'s read→apply→write loop is exercised against a real Firestore
-    emulator via an injected IO port (tmdbFieldsSweep/SweepIo pattern), not a mock.
-    [diff]
-  - A doc dated exactly at the TTL threshold is NOT deleted; re-running over the same
-    data deletes zero additional docs. [diff]
-  - `availableNotify`: a second run doesn't re-send, and a user who declined never
-    reaches `sendPushToUser`. [diff]
-  - `communityRatings`'s dedup check never lands outside the counting transaction — a
-    test forces a concurrent re-run and shows nothing double-counts. [diff]
-  - `tmdbFieldsSweep` untouched; `mutateEnabled` never referenced. [diff]
-  - Report explicitly that green here ≠ live: `retentionCleanup` and
-    `reclaimOrphanFollows` aren't in the deploy chain and need Malin's manual functions
-    deploy. [diff]
-
-## Batch G — frontend-copy (agent: direct)
-
-- [ ] **BIN-795** [Tier A · build] Privacy policy doesn't mention the theme choice
-  persisted in `localStorage` (unlike the two documented `sessionStorage` keys).
-  Files: `src/app/integritet/page.tsx`.
-  Acceptance:
-  - Storage section lists the theme key with type (localStorage, persistent), purpose,
-    and "no third party access". [diff]
-  - No new consent UI, no new legal basis. [diff]
-
-## Needs you (Tier D / routed elsewhere / genuinely her call)
-
-- **BIN-802, BIN-803, BIN-805** — real, low-risk tech debt in this repo's own risk
-  router (`docs/org/route.mjs` has zero tests; `docs/org/ownership-map.json` was
-  hand-edited despite its own "auto-generated, do not hand-edit" header; `CODE_ROOTS`
-  excludes `docs/`/`scripts/` so the router routes its own code `skip`). Genuinely
-  buildable in this repo, just not picked this round for capacity — good next-sprint
-  candidates, no urgency (nothing user-facing).
-- **BIN-804** — the new `reasonCode` contract (BIN-788) has no documented consumer yet.
-  Partly a binge doc update (CLAUDE.md), partly cross-repo (sprint-selection reads).
-  Low urgency.
-- **BIN-806, BIN-798, BIN-790, BIN-793** — process/audit debt in the sprint tooling.
-  BIN-806's named batches (BIN-759, BIN-468) already shipped today, so its remaining
-  ask (retroactively re-run reviewers over old commits) has low marginal value now.
-  BIN-798 and BIN-790 are mostly resolved already (per their own latest comments) with
-  a residual claude-plugins-side design question neither this repo nor a sprint can
-  close. BIN-793's baseline drift is trivial (`--update-baseline`) — fold into the next
-  commit that touches `docs/workflow-map.html` rather than a standalone ticket.
-- **BIN-797** — `firestore.rules` allows `movie_0`, which the client already refuses to
-  read (orphaned doc, not a forged vote). Low severity; her own prior guidance was to
-  fold it into BIN-624's eventual rules session rather than a standalone change.
-- **BIN-807, BIN-808, BIN-809** — real gaps (a past commit bundled a workflow-map edit
-  with tooling code; BIN-789's crash-boundary mechanical detection was never built;
-  BIN-583's cross-row dedupe — shipped today — is only tested in the helper layer, not
-  the component that applies it). BIN-809 in particular is worth an early pick next
-  round: it's a test gap on a panel's BINDING condition for code already live.
-- **BIN-810** — should the other three "don't resync the pair" warnings in
-  `mediaTypeDocId` get the same softening as BIN-759's? Genuinely her call, not urgent.
-- **BIN-811** — should "Fortsätter som film" also anchor on finished-watching series,
-  not just followed ones? Product/UX call, not a defect.
-
-## Already answered — recorded decision, not re-asked (full detail in the structured
-## plan returned to the orchestrator)
-
-BUILD (selected above): BIN-655, BIN-679, BIN-689, BIN-646, BIN-766, BIN-727.
-BLOCKED (waits on something only she/an external clock can supply): BIN-624 (half 2
-waits on #27's free-read count, her chosen option B), BIN-781 (her "bygg nu" can't run
-— sole target file lives outside this repo), BIN-754 (same — "build, but never inside a
-sprint"), BIN-419/BIN-170/BIN-454/BIN-402 (each waits on a specific future date or her
-own manual step), BIN-541 (waits on her reading the vendor's quota dashboard), BIN-559
-(she asked for a written plan, not code, first), BIN-613 (her yes was explicit "as its
-own job, never inside a sprint" — touches deploy.yml itself), BIN-590 (her build
-decision needs a plan+critique pass this sprint didn't have capacity for — top pick
-next round), BIN-565 (waits on real traffic growth past free tier, her stated trigger).
-EXCLUDED (she said no / not now, settled): BIN-658, BIN-603, BIN-558, BIN-521, BIN-189,
-BIN-791 (routes to a dedicated claude-plugins session; its remaining "curiosity" point
-is deprioritized).
-
-## Parked (unanswered — do not build, do not re-ask)
-
-- **BIN-779** (2026-08-06T11:16): "säg till om jag ska ta den i en separat körning,
-  eller om den ska ligga kvar. Jag gör inget förrän du valt." Still unanswered.
-
-## Obsolete (already fixed under a different ticket — verified against current main)
-
-- **BIN-801** — `docs/org/route.mjs`'s NUL byte is gone (confirmed: `indexOf(0) === -1`
-  on the current file). Fixed as a side effect of BIN-788/789 (`eb6352e`).
-- **BIN-787** — both batches it worried about (BIN-759, BIN-468) are shipped on main
-  today (`261d0bb`, `2eda858`). Nothing left to restore.
-
-## Deviation log
-
-(none yet — filled in during execution)
+### Deployordning (ej förhandlingsbar — FYRA steg, inte tre)
+1. `firebase deploy --only firestore:rules`
+   Måste ligga före klienten. `hasOnly`-posten är en envägsspärr: när en prod-doc väl bär
+   fältet faller varje efterföljande merge-write utan den, även en orelaterad betygsättning.
+2. `firebase deploy --only functions:tmdbFieldsSweep`
+   **Funktionen heter `tmdbFieldsSweep`** — `tmdbTosSweep` är katalogen (`functions/src/index.ts:274`).
+   Ett filter som namnger katalogen matchar ingen funktion och deployar tyst noll, varpå
+   svepet fortsätter köra den gamla fältlistan och `subscriptionProviders` skulle sakna TTL
+   helt (TMDB ToS §1.C). Detta står här för att jag först skrev fel namn.
+3. `git push`
+4. `gh workflow run deploy.yml`
+   Push ensamt räcker INTE för den här leveransen. `deploy.yml`s spärr avbryter varje
+   push-triggad deploy där `firestore.rules` eller `functions/**` ändrats (rad 40–55), så
+   hosting skulle aldrig gå ut: koden låg i main medan binge.nu serverade det gamla bygget,
+   och deploy-signalen lyste rött utan att något var fel. `workflow_dispatch` hoppar över
+   spärren.
 
 ---
 
-# Archive — Sprint 2026-08-06c
+### Medvetet INTE gjort — en egen biljett
+`functions/src/streamingOffers/logic.ts` grindar MOTN-arbetsmängden på
+`providers.length > 0`. Nu när `providers` bär rent/buy växer den mängden (nästan allt
+går att hyra), och budgeten är hårda 300 anrop per faktureringscykel med 9 per körning.
+Effekten är inte högre kostnad utan ett längre full-refresh-intervall. Att smalna av
+grinden till abonnemangsdelmängden skulle samtidigt ta bort erbjudanden från hyr/köp-
+raderna på titelsidorna, så det är ett produktval — inte en självklar fix. Samma familj,
+och biljetten ska ta alla tre i ETT beslut: `functions/src/insights/rollup.ts` räknar nu
+in hyr/köp i `topProviders`, och det gör `src/app/stats/page.tsx:40` också (både staplarna
+och "N av M med streamingdata"-raden). Ingen av de tre påstår något om abonnemang, så
+ingen av dem ljuger — men de svarar nu på en bredare fråga än förut.
 
-11 tickets selected across 6 batches; see commit history around `eb6352e`..`2eda858`
-for what actually shipped (BIN-788/789/759/468/583/796 landed; BIN-679/689/797 did not
-make it into this pass and were re-evaluated above).
+Två mindre saker som granskningen namngav och som medvetet lämnas: samma prick-komponent
+betyder nu "ingår i abonnemanget" på `/my/vill-se` och "finns att få tag på" på de andra
+biblioteksflikarna (varje sida har en egen ärlig bildtext, men en användare som växlar
+flik ser samma prick betyda två saker), och 60-dagarsfönstret finns som två skilda
+konstanter med samma värde i `backfill.helpers.ts` och `tmdbFieldsRefresh.ts` — prosan i
+båda filerna argumenterar numera utifrån att de är lika.
 
-# Archive — Batch 2026-08-06 — de fyra biljetter panelen släppte igenom
-
-Byggda för hand: BIN-555 (ägarlöst gruppdokument), BIN-777 (felrutan vid
-kontoradering), BIN-767 (integritetspolicyns sessionStorage-nycklar), BIN-646 (2 av 3
-punkter). Se `a4a1470`.
+## Kvarstående för Malin
+Inget blockerande. Två uppföljningsbiljetter skapas efter commit:
+de fem övriga localStorage-nycklarna (säkerhet, inte policytext) och ADR:n för #5:s
+tolkningsfråga.

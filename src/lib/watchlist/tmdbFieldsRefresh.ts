@@ -61,8 +61,25 @@ export function needsProvidersRefresh(stamp: Date | null | undefined, now: numbe
  * stamp ONLY on a genuine new add that actually carries provider data; otherwise leave
  * the stamp absent for backfill / the title-page fallback to own. (BIN-468.)
  */
-export function shouldStampProvidersAtAdd(isNewAdd: boolean, providers: number[] | undefined): boolean {
-  return isNewAdd && Array.isArray(providers) && providers.length > 0;
+export function shouldStampProvidersAtAdd(
+  isNewAdd: boolean,
+  providers: number[] | undefined,
+  subscriptionProviders?: number[] | undefined,
+): boolean {
+  // BIN-814: the stamp certifies the whole providers GROUP as freshly checked, and
+  // the group is now two fields. An add that supplied only the broad list must NOT
+  // stamp: the stamp would gate the title-page repair out for 60 days and leave
+  // `subscriptionProviders` null, so the advisor and all three money surfaces would
+  // sit on the broad fallback — for a title the user just added, which is the most
+  // common way one enters the library.
+  //
+  // Leaving the stamp ABSENT is the safe direction and the one BIN-468 already
+  // documents above: absent reads as stale, and the repair refills the group on the
+  // next title-page view. This makes the omission self-correcting instead of making
+  // every add call site individually responsible for remembering the pair.
+  return isNewAdd
+    && Array.isArray(providers) && providers.length > 0
+    && Array.isArray(subscriptionProviders);
 }
 
 /**
@@ -74,6 +91,13 @@ export interface TmdbDenormFields {
   title?: string;
   posterPath?: string | null;
   providers?: number[];
+  /**
+   * BIN-814: the flatrate/free/ads subset of `providers`. Travels with it and is
+   * gated by the same stamp — the two must always describe the same TMDB response,
+   * or the advisor reads a subscription answer derived from a different fetch than
+   * the availability answer beside it.
+   */
+  subscriptionProviders?: number[];
   genreIds?: number[];
   tmdbStatus?: string | null;
   runtime?: number | null;
@@ -95,6 +119,16 @@ export interface TmdbRefreshStamps {
  *    supplied AND providersCheckedAt is stale — so a fresher advisor value is never
  *    clobbered, and the title page never falsely certifies providers as freshly checked.
  * `stamp` is the serverTimestamp() sentinel. NEVER writes updatedAt.
+ *
+ * BIN-814 — this gate is DELIBERATELY asymmetric with `shouldStampProvidersAtAdd`
+ * above, and the asymmetry is load-bearing. That one refuses to stamp unless BOTH
+ * provider fields are supplied; this one proceeds on `fields.providers` alone. That
+ * is exactly what makes an add-time omission self-correcting rather than sticky: an
+ * add that knew only the broad list leaves the stamp absent, the group therefore
+ * reads stale, and the next title-page view lands here and writes both fields. Make
+ * the two gates agree — in either direction — and that recovery path closes: pair-gate
+ * this one and a half-written row can never be repaired; drop the pair from the add
+ * gate and the row is stamped fresh for 60 days with the subset missing.
  */
 export function planTmdbFieldsRefresh(
   current: TmdbRefreshStamps,
@@ -117,6 +151,7 @@ export function planTmdbFieldsRefresh(
   }
   if (providersNeeded) {
     payload.providers = fields.providers;
+    if (fields.subscriptionProviders != null) payload.subscriptionProviders = fields.subscriptionProviders;
     payload.providersCheckedAt = stamp;
   }
   return payload;

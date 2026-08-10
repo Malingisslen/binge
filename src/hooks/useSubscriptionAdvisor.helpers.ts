@@ -52,6 +52,14 @@ export function splitTvByProgress(
   return { started, unstarted };
 }
 
+// BIN-814. Vilka provider-id:n en vill_se-FILM får bidra med som ankare, dvs. som
+// skäl att inte pausa en tjänst. Regeln själv bor i lib/watchlist — fyra ytor
+// behöver den, och en delad regel som bor inne i EN konsument är precis så de två
+// definitionerna gled isär från början. Re-exporteras här därför att serier hämtar
+// sina ankar-id:n på ett helt annat sätt (färskt TMDB-svar, flatrate/free/ads) och
+// läsaren behöver se att båda vägarna svarar på samma fråga.
+export { subscriptionProviderIds as subscriptionAnchorIds } from '@/lib/watchlist/subscriptionProviders';
+
 // Härleder en tjänsts rådgivar-status ur redan-beräknade signaler. Extraherad
 // verbatim ur useSubscriptionAdvisor-hookkroppen (BIN-411) så precedensen får
 // egna regressionstester utan att montera Firebase/React Query.

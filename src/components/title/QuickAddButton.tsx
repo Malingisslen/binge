@@ -21,11 +21,13 @@ interface QuickAddButtonProps {
   posterPath: string | null;
   releaseYear: number | null;
   providers?: number[];
+  /** BIN-814: the flatrate/free/ads subset, carried alongside `providers`. */
+  subscriptionProviders?: number[];
   genreIds?: number[];
 }
 
 export default function QuickAddButton({
-  tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds,
+  tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds,
 }: QuickAddButtonProps) {
   const { uid, loading: authLoading } = useAuth();
   const goToLogin = useSignedOutRedirect();
@@ -68,12 +70,12 @@ export default function QuickAddButton({
     // 'sedd' (film: terminal · TV: "alla avsnitt sedda" → 'mina') går via den
     // delade markSeen-vägen, som även nudgar ett betyg om titeln saknar ett.
     if (status === 'sedd') {
-      await markSeen({ tmdbId, mediaType, title, posterPath, releaseYear, providers, genreIds });
+      await markSeen({ tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds });
       return;
     }
     await addItem(buildWatchlistAddPayload({
       tmdbId, mediaType, status, title, posterPath, releaseYear,
-      current, providers, genreIds,
+      current, providers, subscriptionProviders, genreIds,
     }));
     toast(`${title} — ${labelFor(status)}`);
   }

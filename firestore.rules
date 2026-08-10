@@ -117,7 +117,14 @@ service cloud.firestore {
         // på en helt orelaterad användaråtgärd. ADR 0009. EN-VÄGS-SPÄRR: ta aldrig
         // bort denna post medan någon prod-doc bär stämpeln (rollback → samma
         // permission-denied-klass). Rulla i så fall tillbaka klient-skrivaren först.
-        'tmdbFieldsRefreshedAt'
+        'tmdbFieldsRefreshedAt',
+        // BIN-814: abonnemangs-delmängden av `providers` (flatrate/free/ads, utan
+        // rent/buy). Skrivs av titelsidan och taste-backfillen i samma svep som
+        // `providers`, från samma TMDB-svar. SAMMA EN-VÄGS-SPÄRR som stämpeln ovan:
+        // tas posten bort medan en prod-doc bär fältet faller varje efterföljande
+        // merge-write på hasOnly — även en helt orelaterad betygsättning. Reglerna
+        // måste därför deployas FÖRE klienten, aldrig efter.
+        'subscriptionProviders'
       ])
       // BIN-143: bind rating-VÄRDET, inte bara nyckeluppsättningen. En ägd
       // watchlist-doc skrivs direkt av användaren; utan denna kunde någon skriva

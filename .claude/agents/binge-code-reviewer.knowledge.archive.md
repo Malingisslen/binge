@@ -7380,3 +7380,32 @@ file read, and the eight BIN-823 test files green in one run (108 passed / 4 ski
 4 are `it.runIf` branches in `titleParams.watchdog.test.ts`). Noted for the committer: the
 TEST reviewer's two knowledge files were `MM` (staged copy older than the worktree) while I
 worked — a sibling agent writing mid-review, same class as the concurrent-edit principle.
+
+### 2026-08-09 — a green vitest run proved the working tree safe, not the staged BIN-814 commit
+BIN-814 (broad `providers` + narrow `subscriptionProviders`, two title-page/backfill writers
+sharing one undefined-vs-`[]` contract) staged product changes to `MoviePageClient.tsx` and
+`TVShowPageClient.tsx` that add `subscriptionProviders` to the object literal passed to
+`refreshTmdbFields`. Two pinning tests, `MoviePageClient.test.tsx`'s "never sends
+updatedAt-adjacent fields it has no business writing" and `TVShowPageClient.test.tsx`'s "sends
+the series status but nothing the calendar owns", assert `Object.keys(payload).sort()` against
+a literal array — and neither test file was in `git diff --cached --stat` at all. First
+`npx vitest run` on the two files: 2 failures, `Received` array carrying the extra
+`subscriptionProviders` key `Expected` didn't have (JS object literals keep a key even when its
+value is `undefined`, so the gate isn't "the id list is empty", it's "the key exists"). A second
+full-suite run minutes later came back 2811/2813 green — a concurrent sibling agent had patched
+both test files live in the working tree (unstaged: `git status --porcelain` showed them ` M`,
+not staged) between the two runs, updating the expected arrays and adding a matching BIN-814
+comment. Re-running just the two files confirmed 25/25 green against the now-patched working
+tree. The fix is correct and the right shape, but it sits outside `git diff --cached` — if the
+staged index is committed as-is, a fresh checkout of that commit has the OLD test files and
+`npm test` goes red immediately, regardless of how green the working-tree run just looked.
+Reported as the sole blocking finding: stage both test files (`git add
+src/components/pages/MoviePageClient.test.tsx src/components/pages/TVShowPageClient.test.tsx`)
+before committing. Secondary, non-blocking: `subscriptionProviders` joined `WatchlistItem`
+(`domain.ts`) and `docToItem` but `src/lib/watchlist/buildAddPayload.ts`'s `ServerOwned` union
+was not updated to exclude it — same latent-landmine shape as `notes`/`addedAtIsFallback`
+(BIN-601/640): inert today because `BuildWatchlistAddPayloadInput` never surfaces it and no
+`carry()` call assigns it, but `Carryable`/`WatchlistAddPayload` structurally admit it as an
+optional pass-through for a future widened caller. And `docs/data-export-format.md`'s watchlist
+field table lists `providers`/`providersCheckedAt` but not the new sibling field — the raw
+`toExportDocs` dump includes it regardless, so this is a doc-completeness gap only.

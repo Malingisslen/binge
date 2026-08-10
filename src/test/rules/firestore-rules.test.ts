@@ -203,6 +203,48 @@ describe('users/{uid}/watchlist/{id} providersCheckedAt gate (BIN-468)', () => {
   });
 });
 
+// BIN-814: `subscriptionProviders` is the flatrate/free/ads subset of `providers`.
+// The hasOnly allowlist is the whole risk here, and it bites in a direction that has
+// nothing to do with this field: a merge-write is evaluated against the ENTIRE
+// post-merge doc, so once a doc carries the field, an allowlist that lacks it fails
+// every LATER write too — a rating, a status change, anything. That is why the rules
+// deploy has to precede the client, and why the second test below is the one that
+// matters.
+describe('users/{uid}/watchlist/{id} subscriptionProviders (BIN-814)', () => {
+  it('allows writing both provider fields in one merge', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertSucceeds(setDoc(ref, {
+      providers: [76, 8], subscriptionProviders: [8], providersCheckedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+
+  it('an UNRELATED later write still succeeds on a doc that carries the field', async () => {
+    // The regression the one-way ratchet guards: drop 'subscriptionProviders' from
+    // hasOnly while a prod doc has it, and this rating write starts failing with
+    // permission-denied for a reason the user's action has nothing to do with.
+    //
+    // The doc is seeded with rules DISABLED on purpose. Seeding it through the
+    // client would make the seed itself the first thing an allowlist regression
+    // rejects, and the test would fail one line early — passing for the right
+    // reason by accident. This way the assertion below is the only thing that can
+    // fail, which is what makes it a ratchet test rather than a write test.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), {
+        ...validWatchlist(), subscriptionProviders: [8],
+      });
+    });
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await assertSucceeds(setDoc(ref, { rating: 4 }, { merge: true }));
+  });
+
+  it('rejects an unknown provider field (the allowlist is still closed)', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    await setDoc(ref, validWatchlist());
+    await assertFails(setDoc(ref, { rentProviders: [2] }, { merge: true }));
+  });
+});
+
 // BIN-185: recaps/{id} — public-read AI recap cache, written ONLY by the offline
 // /recap Admin-SDK batch (bypasses rules). Clients read directly on the hot path;
 // they can never write or overwrite (a forged recap would be permanent public content).

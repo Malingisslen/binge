@@ -60,7 +60,14 @@ export const STATIC_GROUP: FieldGroup = {
  */
 export const PROVIDERS_GROUP: FieldGroup = {
   name: 'providers',
-  fields: ['providers'],
+  // BIN-814: `subscriptionProviders` is the flatrate/free/ads subset of `providers`,
+  // written by the same writers in the same pass and gated by the SAME stamp. It has
+  // to be cleared with its sibling for two reasons: it is TMDB-derived data and would
+  // otherwise have no TTL at all (the §1.C six-month ceiling this sweep exists to
+  // enforce), and a sweep that cleared only one would leave `providers: []` beside a
+  // months-old subscription list — two fields describing different fetches, which is
+  // the drift BIN-814 was filed to end.
+  fields: ['providers', 'subscriptionProviders'],
   stamp: 'providersCheckedAt',
 };
 

@@ -27,7 +27,7 @@ function existing(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
     dropped: false,
     rewatchCount: 0,
     providers: [8],
-    providersCheckedAt: null,
+    subscriptionProviders: null, providersCheckedAt: null,
     visibility: null,
     genreIds: [18, 10765],
     tmdbStatus: 'Ended',
@@ -164,5 +164,44 @@ describe('WatchlistAddPayload — never carries read-derived fields (BIN-640)', 
       addedAtIsFallback: true,
     };
     expect(payload.tmdbId).toBe(1);
+  });
+});
+
+// BIN-814. The add path is the most common way a title enters the library, and it
+// also stamps providersCheckedAt — which gates the title-page repair out for 60
+// days. An add that wrote only the broad field would therefore lock the advisor onto
+// the fallback for exactly the titles the split exists for.
+describe('buildWatchlistAddPayload — the two provider fields travel together', () => {
+  const base = {
+    tmdbId: 1, mediaType: 'movie' as const, status: 'vill_se' as const,
+    title: 'A film', posterPath: null, releaseYear: 2026,
+  };
+
+  it('writes the subscription subset alongside the broad list', () => {
+    const p = buildWatchlistAddPayload({
+      ...base, current: null, providers: [76, 8], subscriptionProviders: [8],
+    });
+    expect(p.providers).toEqual([76, 8]);
+    expect(p.subscriptionProviders).toEqual([8]);
+  });
+
+  it('an empty subset is written, not dropped — it is a real answer', () => {
+    // A rent-only-on-Viaplay film. `[]` here is what stops it anchoring Viaplay.
+    const p = buildWatchlistAddPayload({
+      ...base, current: null, providers: [76], subscriptionProviders: [],
+    });
+    expect(p.subscriptionProviders).toEqual([]);
+  });
+
+  it('a re-mark that knows neither omits both, preserving what is stored', () => {
+    const p = buildWatchlistAddPayload({ ...base, current: null });
+    expect('providers' in p).toBe(false);
+    expect('subscriptionProviders' in p).toBe(false);
+  });
+
+  it('carries the stored subset forward when the caller does not supply one', () => {
+    const current = { providers: [76], subscriptionProviders: [8] } as never;
+    const p = buildWatchlistAddPayload({ ...base, current });
+    expect(p.subscriptionProviders).toEqual([8]);
   });
 });

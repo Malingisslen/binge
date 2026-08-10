@@ -1,7 +1,7 @@
 import { fsdb } from '@/lib/firebase/db';
 import { getMovie, getTVShow } from '@/lib/tmdb/client';
-import { extractSEProviders } from '@/lib/tmdb/providers';
-import { buildBackfillUpdate } from './backfill.helpers';
+import { seProviderIdsForRefresh, seSubscriptionProviderIdsForRefresh } from '@/lib/tmdb/seProviderIds';
+import { buildBackfillUpdate, needsBackfill, STALE_AFTER_MS } from './backfill.helpers';
 
 export type { BackfillUpdate } from './backfill.helpers';
 export { buildBackfillUpdate } from './backfill.helpers';
@@ -13,24 +13,6 @@ export interface BackfillProgress {
   refreshed: number;
   skipped: number;
   failed: number;
-}
-
-// Items där TMDB redan bekräftat samma SE-providers nyligare än så här
-// hoppas över i nästa backfill-körning. SE-katalogerna rör sig ofta nog att
-// 60 dagar är en bra balans mellan färskhet och TMDB-rate-limit-budget.
-const STALE_AFTER_MS = 60 * 24 * 60 * 60 * 1000;
-
-// Firestore Timestamp duck-typas på toMillis() — instanceof skulle kräva en
-// statisk firebase/firestore-import (se lazy-laddningen i lib/firebase/db.ts).
-function timestampToMs(val: unknown): number | null {
-  if (val instanceof Date) return val.getTime();
-  if (
-    typeof val === 'object' && val !== null &&
-    typeof (val as { toMillis?: unknown }).toMillis === 'function'
-  ) {
-    return (val as { toMillis(): number }).toMillis();
-  }
-  return null;
 }
 
 // Walkar användarens watchlist och fyller i / uppdaterar genreIds + providers
@@ -46,16 +28,7 @@ export async function backfillGenreIds(
   const { db, doc, collection, getDocs, updateDoc, serverTimestamp } = await fsdb();
   const snap = await getDocs(collection(db, 'users', uid, 'watchlist'));
   const cutoffMs = Date.now() - STALE_AFTER_MS;
-  const needs = snap.docs.filter(d => {
-    const data = d.data();
-    const g = data.genreIds;
-    const p = data.providers;
-    const missingGenres = !Array.isArray(g) || g.length === 0;
-    const missingProviders = !Array.isArray(p);
-    const checkedAtMs = timestampToMs(data.providersCheckedAt);
-    const isStale = checkedAtMs == null || checkedAtMs < cutoffMs;
-    return missingGenres || missingProviders || isStale;
-  });
+  const needs = snap.docs.filter(d => needsBackfill(d.data(), cutoffMs));
 
   const state: BackfillProgress = {
     total: needs.length,
@@ -81,17 +54,30 @@ export async function backfillGenreIds(
       try {
         const detail = mediaType === 'movie' ? await getMovie(tmdbId) : await getTVShow(tmdbId);
         const genreIds = detail.genres?.map(g => g.id) ?? [];
-        const uniqueProviders = extractSEProviders(detail);
+        // BIN-814: the SAME derivation the title page uses, so the two writers can no
+        // longer disagree about what `providers` means. Both fields come from this one
+        // detail object, and both are `undefined` when it carries no SE block.
+        const uniqueProviders = seProviderIdsForRefresh(detail);
+        const uniqueSubscriptionProviders = seSubscriptionProviderIdsForRefresh(detail);
 
         const existingGenres = Array.isArray(data.genreIds) ? data.genreIds as number[] : [];
         const existingProviders = Array.isArray(data.providers) ? data.providers as number[] : null;
+        const existingSubscriptionProviders = Array.isArray(data.subscriptionProviders)
+          ? data.subscriptionProviders as number[]
+          : null;
 
-        const { update, contentChanged } = buildBackfillUpdate(
+        const { update, contentChanged, wroteSubscriptionProviders } = buildBackfillUpdate(
           existingGenres, existingProviders, genreIds, uniqueProviders, serverTimestamp(),
+          existingSubscriptionProviders, uniqueSubscriptionProviders,
         );
 
         await updateDoc(doc(db, 'users', uid, 'watchlist', d.id), update);
-        if (contentChanged) state.updated += 1;
+        // BIN-814: filling in the subscription subset counts as "updated" for the
+        // progress readout — the row really did gain a field — but it is NOT
+        // `contentChanged`, which is reserved for the user-visible change that may
+        // bump `updatedAt`. Keeping the two apart is what stops the first run from
+        // re-dating every row in the library.
+        if (contentChanged || wroteSubscriptionProviders) state.updated += 1;
         else state.refreshed += 1;
       } catch {
         state.failed += 1;

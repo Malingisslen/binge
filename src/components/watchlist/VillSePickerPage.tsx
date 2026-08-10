@@ -1,5 +1,7 @@
 'use client';
 
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
+import { orderVillSePicks } from '@/lib/watchlist/villSeOrder';
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Film, Tv } from 'lucide-react';
@@ -62,17 +64,9 @@ export default function VillSePickerPage() {
     // BIN-167: tidsbudgeten gömmer inte titlar med okänd längd — de behålls
     // nedtonade (unknownRuntime) och sjunker till botten.
     const lensed = applyRuntimeBudget(byMood, runtimeMax);
-    // Valögonblickets sortering: det du kan se direkt (finns på dina
-    // tjänster) överst, därefter senast tillagd. Nedtonade (okänd längd)
-    // hamnar sist så listan leder med de säkra valen.
-    const onMine = (i: WatchlistItem) => i.providers.some(p => myProviders.has(p));
-    return [...lensed].sort((a, b) => {
-      if (a.unknownRuntime !== b.unknownRuntime) return a.unknownRuntime ? 1 : -1;
-      const am = onMine(a.item) ? 0 : 1;
-      const bm = onMine(b.item) ? 0 : 1;
-      if (am !== bm) return am - bm;
-      return b.item.addedAt.getTime() - a.item.addedAt.getTime();
-    });
+    // Valögonblickets sortering bor i orderVillSePicks — se den för varför
+    // "kan ses direkt" måste läsa abonnemangsdelmängden och inte den breda listan.
+    return orderVillSePicks(lensed, myProviders);
   }, [items, mediaFilter, mood, runtimeMax, myProviders]);
 
   const header = (
@@ -198,7 +192,12 @@ export default function VillSePickerPage() {
                           <span className="text-[10px] text-ink-3 text-center line-clamp-3 leading-tight">{item.title}</span>
                         </div>
                       )}
-                      <PosterProviderDots providers={item.providers} myProviders={user?.myProviders ?? []} />
+                      {/* BIN-814: the SUBSCRIPTION subset, so a filled dot and the
+                          ranking below say the same thing. Passing the broad array
+                          here would render a rent-only title's Viaplay dot filled
+                          ("tjänst du har") while the sort pushed it last, and the
+                          caption promises those two agree. */}
+                      <PosterProviderDots providers={subscriptionProviderIds(item)} myProviders={user?.myProviders ?? []} />
                     </div>
                     <div className="text-xs font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
                       {item.title}
@@ -226,7 +225,7 @@ export default function VillSePickerPage() {
             </p>
           )}
           <p className="mt-2 text-xxs text-ink-3">
-            Prickar på postern = streamingtjänst (färg per tjänst, hovra för namn). Fylld prick = tjänst du har. Titlar på dina tjänster visas först.
+            Prickar på postern = tjänst där titeln ingår i abonnemanget (färg per tjänst, hovra för namn). Fylld prick = tjänst du har. Titlar du kan se direkt visas först. Hyr- och köpalternativ visas på titelsidan.
           </p>
           <div style={{ marginTop: 16 }}>
             <JustWatchCredit />

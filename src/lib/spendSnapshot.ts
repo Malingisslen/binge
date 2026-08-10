@@ -1,3 +1,4 @@
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { getProvider, canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
@@ -53,7 +54,9 @@ export function computeSpendSnapshot(
   const activeProviderIds = new Set<number>();
   for (const it of items) {
     if (!isKeepReasonStatus(it.status)) continue;
-    for (const p of it.providers ?? []) activeProviderIds.add(p);
+    // BIN-814: the subscription subset, not the broad availability array — a title
+    // you would have to RENT on a service does not make that service active spend.
+    for (const p of subscriptionProviderIds(it)) activeProviderIds.add(p);
   }
 
   let totalKr = 0;

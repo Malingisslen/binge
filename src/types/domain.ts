@@ -42,7 +42,17 @@ export interface WatchlistItem {
   lastWatchedEpisode: number | null;
   dropped: boolean;
   rewatchCount: number;
+  // "Var går titeln att se ALLS" — flatrate + free + ads + rent + buy. Driver
+  // provider-ikonerna på bibliotekskortet.
   providers: number[];
+  // BIN-814: "vilka av mina ABONNEMANG täcker titeln" — flatrate/free/ads, utan
+  // rent/buy. Det ENDA provider-fält streamingrådgivarens behåll-eller-pausa-
+  // resonemang får läsa: att en film går att hyra på Viaplay är inget skäl att
+  // fortsätta betala för Viaplay, och `providers` kan inte skilja de två fallen
+  // (76 Viaplay och 489 TV4 Play returneras under rent/buy men är typade flatrate).
+  // `null` = doc:et är skrivet före uppdelningen och inte backfillat än — läsare
+  // faller tillbaka på `providers` så länge.
+  subscriptionProviders: number[] | null;
   // Senast vi frågade TMDB om watch/providers.results.SE för denna titel.
   // null = aldrig frågat (cold). Sätts av backfillen oavsett om TMDB
   // returnerade providers eller tom lista — gör att vi kan särskilja

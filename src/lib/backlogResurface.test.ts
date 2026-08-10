@@ -30,3 +30,26 @@ describe('pickBacklogResurface', () => {
     expect(pickBacklogResurface(items, [8], 2).map(i => i.tmdbId)).toEqual([1, 2]);
   });
 });
+
+// BIN-814. This tile makes the app's most literal subscription claim — "finns nu på
+// din tjänst", with a per-title "finns på Viaplay". It must therefore read the
+// SUBSCRIPTION subset. The broad `providers` array cannot distinguish "included" from
+// "rentable there", because the SE catalogue returns Viaplay (76) and TV4 Play (489)
+// under rent/buy while both are typed flatrate — so reading it tells the user that a
+// title they would pay extra for is already covered.
+describe('pickBacklogResurface — a rentable title is not "finns på din tjänst" (BIN-814)', () => {
+  it('excludes a title that is only RENTABLE on a service the user pays for', () => {
+    const rentOnly = mk({ tmdbId: 1, providers: [76], subscriptionProviders: [] });
+    expect(pickBacklogResurface([rentOnly], [76])).toEqual([]);
+  });
+
+  it('includes the same title when the subscription actually carries it', () => {
+    const included = mk({ tmdbId: 1, providers: [76], subscriptionProviders: [76] });
+    expect(pickBacklogResurface([included], [76]).map(i => i.tmdbId)).toEqual([1]);
+  });
+
+  it('a row written before the split (null) keeps todays behaviour via the fallback', () => {
+    const notBackfilled = mk({ tmdbId: 1, providers: [76], subscriptionProviders: null });
+    expect(pickBacklogResurface([notBackfilled], [76]).map(i => i.tmdbId)).toEqual([1]);
+  });
+});

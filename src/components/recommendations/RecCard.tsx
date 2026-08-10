@@ -72,7 +72,13 @@ export default function RecCard({ item, providers }: Props) {
             title={title}
             posterPath={item.poster_path}
             releaseYear={year}
+            // BIN-814: this surface is handed the FLATRATE bucket only (RecRow reads
+            // providerMap[...].flatrate), so the same list is honestly both answers.
+            // Passing it as the subset too is what stops the add from stamping
+            // providersCheckedAt with the subset absent, which would gate the
+            // title-page repair out for 60 days and leave the advisor on the fallback.
             providers={providers?.map(p => canonicalProviderId(p.provider_id))}
+            subscriptionProviders={providers?.map(p => canonicalProviderId(p.provider_id))}
             genreIds={item.genre_ids}
           />
         </div>

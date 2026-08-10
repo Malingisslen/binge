@@ -9,6 +9,8 @@ import {
   isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
+  subscriptionAnchorIds,
+  deriveProviderStatus,
   selectBundleSuggestions,
   CATCHUP_THRESHOLD,
 } from './useSubscriptionAdvisor.helpers';
@@ -69,7 +71,7 @@ function makeWatchlistItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     dropped: false,
     rewatchCount: 0,
     providers: [],
-    providersCheckedAt: null,
+    subscriptionProviders: null, providersCheckedAt: null,
     visibility: null,
     genreIds: [],
     tmdbStatus: null,
@@ -94,6 +96,89 @@ describe('splitTvByProgress', () => {
 
   it('tom lista → två tomma listor', () => {
     expect(splitTvByProgress([])).toEqual({ started: [], unstarted: [] });
+  });
+});
+
+// --- subscriptionAnchorIds (BIN-814) ---
+
+// Viaplay (76) är typad flatrate i SWEDISH_PROVIDERS men returneras av SE-katalogen
+// även under rent/buy — live-verifierat 2026-08-09. Det är hela skälet till att
+// watchlist-doc:et bär TVÅ provider-fält: den breda arrayen kan inte skilja
+// "ingår i abonnemanget" från "går att hyra där", och rådgivaren frågar det första.
+describe('subscriptionAnchorIds — en hyrbar titel är inget skäl att behålla abonnemanget', () => {
+  const VIAPLAY = 76;
+  const NETFLIX = 8;
+
+  it('använder abonnemangsfältet när det finns, inte den breda listan', () => {
+    const rentOnlyOnViaplay = makeWatchlistItem({
+      mediaType: 'movie',
+      status: 'vill_se',
+      providers: [VIAPLAY],          // går att hyra där
+      subscriptionProviders: [],     // men ingår inte i något abonnemang
+    });
+    expect(subscriptionAnchorIds(rentOnlyOnViaplay)).toEqual([]);
+  });
+
+  it('behåller tjänsten när titeln FAKTISKT ingår i abonnemanget', () => {
+    const includedInViaplay = makeWatchlistItem({
+      mediaType: 'movie',
+      status: 'vill_se',
+      providers: [VIAPLAY, NETFLIX],
+      subscriptionProviders: [VIAPLAY],
+    });
+    expect(subscriptionAnchorIds(includedInViaplay)).toEqual([VIAPLAY]);
+  });
+
+  it('faller tillbaka på den breda listan för docs skrivna före uppdelningen', () => {
+    // null = aldrig backfillat. Att tappa ankaret här vore värre än att vara för
+    // generös: rådgivaren skulle föreslå paus av en tjänst med en vill_se-titel på.
+    const notBackfilledYet = makeWatchlistItem({
+      mediaType: 'movie',
+      status: 'vill_se',
+      providers: [VIAPLAY],
+      subscriptionProviders: null,
+    });
+    expect(subscriptionAnchorIds(notBackfilledYet)).toEqual([VIAPLAY]);
+  });
+
+  it('en tom lista är ett RIKTIGT svar och skiljer sig från null', () => {
+    // [] betyder "kollat, inget abonnemang täcker den". null betyder "inte kollat".
+    // Skulle docToItem mappa saknat fält till [] i stället för null vore skillnaden
+    // borta och varje ej backfillad film skulle tappa sitt ankare på en gång.
+    expect(subscriptionAnchorIds(makeWatchlistItem({ providers: [VIAPLAY], subscriptionProviders: [] }))).toEqual([]);
+    expect(subscriptionAnchorIds(makeWatchlistItem({ providers: [VIAPLAY], subscriptionProviders: null }))).toEqual([VIAPLAY]);
+  });
+
+  // Hela kedjan, inte bara hjälparen: en hyrbar film ska landa som paus-KANDIDAT.
+  // Det är det #28 krävde — att pinna beteendet det breda fältet skulle bryta.
+  it('hela vägen: en hyr-bara-film gör Viaplay till en pauskandidat igen', () => {
+    const film = makeWatchlistItem({
+      mediaType: 'movie', status: 'vill_se',
+      providers: [VIAPLAY], subscriptionProviders: [],
+    });
+    const anchorsForViaplay = subscriptionAnchorIds(film).includes(VIAPLAY);
+    expect(anchorsForViaplay).toBe(false);
+    expect(deriveProviderStatus({
+      hasActiveShow: false,
+      hasUpcomingShow: false,
+      hasWillSeeAnchor: anchorsForViaplay,
+      isFree: false,
+      effectiveMonthlyCost: 449,
+    })).toBe('pause');
+  });
+
+  it('hela vägen: samma film INKLUDERAD i Viaplay håller kvar tjänsten', () => {
+    const film = makeWatchlistItem({
+      mediaType: 'movie', status: 'vill_se',
+      providers: [VIAPLAY], subscriptionProviders: [VIAPLAY],
+    });
+    expect(deriveProviderStatus({
+      hasActiveShow: false,
+      hasUpcomingShow: false,
+      hasWillSeeAnchor: subscriptionAnchorIds(film).includes(VIAPLAY),
+      isFree: false,
+      effectiveMonthlyCost: 449,
+    })).toBe('upcoming');
   });
 });
 

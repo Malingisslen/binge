@@ -137,9 +137,29 @@ describe('tvActiveProviderIdsFromItems (BIN-513)', () => {
     tmdbId: 1, mediaType: 'tv', status: 'mina', rating: null, notes: null,
     title: 'Show', posterPath: null, releaseYear: null,
     totalSeasons: null, lastWatchedSeason: null, lastWatchedEpisode: null,
-    dropped: false, rewatchCount: 0, providers: [76], providersCheckedAt: null,
+    dropped: false, rewatchCount: 0, providers: [76], subscriptionProviders: null, providersCheckedAt: null,
     visibility: null, genreIds: [], tmdbStatus: null,
     addedAt: new Date(0), updatedAt: new Date(0), watchedAt: null, ...o,
+  });
+
+  // BIN-814. This function's SECOND call site of the shared rule, and the one the
+  // household dead-weight verdict and the per-service value card's TV lens read. The
+  // fixture above defaults `subscriptionProviders` to null, which always falls back
+  // to the broad array — so without these two cases the rule at this call site is
+  // unpinned, and reverting it to `it.providers` stays green.
+  it('EXCLUDES a series that is only RENTABLE on the owned service', () => {
+    // Viaplay is typed flatrate, so the broad array cannot tell the two apart.
+    const ids = tvActiveProviderIdsFromItems(
+      [tv({ providers: [76], subscriptionProviders: [] })], [76],
+    );
+    expect(ids).toEqual([]);
+  });
+
+  it('still counts the same series when the subscription actually carries it', () => {
+    const ids = tvActiveProviderIdsFromItems(
+      [tv({ providers: [76], subscriptionProviders: [76] })], [76],
+    );
+    expect(ids).toEqual([76]);
   });
 
   it('EXCLUDES a finished Ended+caught-up series (avslutad) — it must stay dead-weight-eligible', () => {
@@ -214,8 +234,30 @@ describe('tvActiveProviderIdsFromItems (BIN-513)', () => {
 });
 
 describe('watchedForValueFromItems', () => {
-  const item = (o: Partial<{ providers: number[]; runtime: number | null; watchedAt: Date | null }>) => ({
-    providers: [76], runtime: 100, watchedAt: new Date(inJune), ...o,
+  // subscriptionProviders MIRRORS providers unless a case overrides it — the ordinary
+  // row is a title that is included in the subscriptions it is listed on. Defaulting
+  // it to a fixed [76] instead would silently decouple the two for every case that
+  // only overrides `providers`, and those cases would then assert nothing.
+  const item = (o: Partial<{ providers: number[]; subscriptionProviders: number[] | null; runtime: number | null; watchedAt: Date | null }>) => ({
+    providers: o.providers ?? [76],
+    subscriptionProviders: o.providers ?? [76],
+    runtime: 100,
+    watchedAt: new Date(inJune),
+    ...o,
+  });
+
+  // BIN-814: the whole point of the second field on this surface. Viaplay (76) is
+  // typed flatrate, so the broad array cannot say whether the user watched the film
+  // ON their subscription or paid to rent it — and a rental must not be counted as
+  // value the subscription delivered.
+  it('a film RENTED on an owned service is not value that service provided', () => {
+    const rented = item({ providers: [76], subscriptionProviders: [] });
+    expect(watchedForValueFromItems([rented], [76], monthStart, monthEnd)).toHaveLength(0);
+  });
+
+  it('falls back to the broad array for a row written before the split', () => {
+    const notBackfilled = item({ providers: [76], subscriptionProviders: null });
+    expect(watchedForValueFromItems([notBackfilled], [76], monthStart, monthEnd)).toHaveLength(1);
   });
 
   it('includes films watched in the window, attributed to an owned service', () => {

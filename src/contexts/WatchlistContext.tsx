@@ -54,6 +54,10 @@ function docToItem(data: Record<string, unknown>): WatchlistItem {
     dropped,
     rewatchCount: (data.rewatchCount as number) ?? 0,
     providers: (data.providers as number[]) ?? [],
+    // BIN-814: absent → null, NOT [] — the advisor must be able to tell "not
+    // backfilled yet" (fall back to `providers`) from "checked, covered by no
+    // subscription" (a real empty answer, and a real reason to consider pausing).
+    subscriptionProviders: (data.subscriptionProviders as number[] | undefined) ?? null,
     providersCheckedAt: data.providersCheckedAt ? toDate(data.providersCheckedAt) : null,
     visibility: (data.visibility as ItemVisibility) ?? null,
     genreIds: (data.genreIds as number[]) ?? [],
@@ -806,7 +810,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // have SETTLED — during a cold load `items` is [] so an in-library re-mark would
       // otherwise misread as new. When unsettled we can't tell → don't stamp; backfill
       // / the title-page fallback owns it.
-      ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers)
+      // `?? undefined`: the payload type allows null, and null here means "not
+      // supplied" for stamping purposes exactly like undefined — only a real array
+      // (including an empty one) certifies the group.
+      ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers, item.subscriptionProviders ?? undefined)
         ? { providersCheckedAt: serverTimestamp() }
         : {}),
       // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this

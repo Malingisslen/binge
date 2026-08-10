@@ -160,7 +160,12 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // Testharness: exponerar mutatorerna så testet kan trigga dem. Refsen pekar
 // alltid på den SENASTE closuren (de återskapas när items-state ändras), så ett
 // anrop efter en seedad snapshot ser de seedade titlarna (BIN-332).
-let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>, opts?: { countsAsViewing?: boolean }) => Promise<void>) | null = null;
+// BIN-814: `subscriptionProviders` is OPTIONAL here, not omitted. Mechanically
+// omitting it (as the first pass did) makes it structurally impossible for any
+// fixture in this file to supply the field — which silently un-tests addItem's
+// stamping decision, the one place that decides whether providersCheckedAt is
+// written at all.
+let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }, opts?: { countsAsViewing?: boolean }) => Promise<void>) | null = null;
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
 let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
@@ -198,7 +203,7 @@ function Harness() {
   return <div>ready</div>;
 }
 
-function newTitle(tmdbId: number, mediaType: MediaType = 'tv'): Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'> {
+function newTitle(tmdbId: number, mediaType: MediaType = 'tv'): Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] } {
   return {
     tmdbId,
     mediaType,
@@ -214,7 +219,7 @@ function newTitle(tmdbId: number, mediaType: MediaType = 'tv'): Omit<WatchlistIt
     providers: [],
     genreIds: [],
     tmdbStatus: null,
-  } as Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility'>;
+  } as Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] };
 }
 
 function firstTitleAddedCount() {
@@ -428,6 +433,45 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
       snapshotCallback!(snap(docs));
     });
   }
+
+  // BIN-814. The pure gate lives in tmdbFieldsRefresh and is exhaustively tested
+  // there — but the DECISION that matters is the composition here: addItem is what
+  // actually writes providersCheckedAt, and stamping with the subset missing would
+  // gate the title-page repair out for 60 days on a title the user just added. The
+  // caller was unpinned until now: reverting it to the pre-ticket two-argument form
+  // left this whole file green.
+  it('stamps providersCheckedAt on a genuine new add carrying BOTH provider fields', async () => {
+    await mountSeeded([]);
+    await act(async () => {
+      await addItemRef!({ ...newTitle(900, 'movie'), providers: [76, 8], subscriptionProviders: [8] });
+    });
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.providers).toEqual([76, 8]);
+    expect(payload.subscriptionProviders).toEqual([8]);
+    expect(payload.providersCheckedAt).toBe('ts');
+  });
+
+  it('does NOT stamp when the add carries only the broad list — the repair must stay open', async () => {
+    await mountSeeded([]);
+    await act(async () => {
+      await addItemRef!({ ...newTitle(901, 'movie'), providers: [76, 8] });
+    });
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.providers).toEqual([76, 8]);
+    expect('subscriptionProviders' in payload).toBe(false);
+    // Absent stamp reads as stale, so the next title-page view writes both fields.
+    expect('providersCheckedAt' in payload).toBe(false);
+  });
+
+  it('stamps when the subset is supplied and genuinely EMPTY (rent-only is an answer)', async () => {
+    await mountSeeded([]);
+    await act(async () => {
+      await addItemRef!({ ...newTitle(902, 'movie'), providers: [76], subscriptionProviders: [] });
+    });
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.subscriptionProviders).toEqual([]);
+    expect(payload.providersCheckedAt).toBe('ts');
+  });
 
   it('updateStatus forwards the seeded currentStatus + currentRewatchCount to buildStatusUpdate', async () => {
     // En sedd film med 2 tidigare omtittningar. En stale-closure eller off-by-one

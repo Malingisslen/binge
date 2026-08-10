@@ -101,7 +101,14 @@ vi.mock('@tanstack/react-query', async (importOriginal) => ({
 vi.mock('@/components/title/JsonLd', () => ({
   JsonLd: () => null, tvSchema: () => ({}), breadcrumbSchema: () => ({}),
 }));
-vi.mock('@/components/title/StatusButton', () => ({ default: () => null }));
+// Rendered as null (the real one needs auth + watchlist context), but the props it
+// RECEIVES are recorded. BIN-814: the movie twin had a blind `() => null` mock here
+// and that is exactly how its subscription-provider prop went missing unnoticed —
+// the mock hid the app's primary add control from every test. Same seam, same fix.
+const statusButtonProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+vi.mock('@/components/title/StatusButton', () => ({
+  default: (props: Record<string, unknown>) => { statusButtonProps.last = props; return null; },
+}));
 vi.mock('@/components/title/RatingStars', () => ({ default: () => null }));
 vi.mock('@/components/title/CommunityRating', () => ({ default: () => null }));
 vi.mock('@/components/title/ProviderTag', () => ({ default: () => null }));
@@ -221,8 +228,13 @@ describe('TVShowPageClient — what the lazy refresh actually sends (BIN-468)', 
     // tmdbStatus is the one extra field the TV page denormalizes. nextAir*/
     // digitalReleaseDate stay with the calendar's repair path — writing them from
     // here is the 2026-07-11 attempt that was reverted for clobbering fresher data.
+    //
+    // BIN-814: `subscriptionProviders` joined the set deliberately. The two provider
+    // fields must be written TOGETHER from one detail object — a page that sent only
+    // the broad one would leave the advisor reading a subscription answer derived
+    // from an older fetch, which is the drift this ticket ended.
     expect(Object.keys(payload).sort()).toEqual(
-      ['genreIds', 'posterPath', 'providers', 'runtime', 'title', 'tmdbStatus'],
+      ['genreIds', 'posterPath', 'providers', 'runtime', 'subscriptionProviders', 'title', 'tmdbStatus'],
     );
   });
 });
@@ -263,5 +275,39 @@ describe('TVShowPageClient — the content floor adds text, it never replaces it
     render(<TVShowPageClient id="1399" />);
 
     expect(screen.getByText(FLOOR_TAIL)).toBeTruthy();
+  });
+});
+
+// BIN-814. The TV page hands its StatusButton a shared `statusButtonProps` object, so
+// both render sites carry whatever it holds — which is exactly why the object's
+// contents need pinning rather than trusting the spread.
+describe('TVShowPageClient — the add control gets both provider answers (BIN-814)', () => {
+  beforeEach(() => {
+    watchlist.loading = false;
+    watchlist.snapshotSettled = true;
+    tmdb.isLoading = false;
+    statusButtonProps.last = null;
+  });
+
+  it('passes the broad list and the subscription subset, and they differ correctly', () => {
+    tmdb.show = {
+      ...show,
+      'watch/providers': {
+        results: {
+          SE: {
+            flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],  // included
+            rent: [{ provider_id: 76, provider_name: 'Viaplay' }],     // rentable only
+            buy: [{ provider_id: 76, provider_name: 'Viaplay' }],
+          },
+        },
+      },
+    };
+    render(<TVShowPageClient id="1399" />);
+
+    const props = statusButtonProps.last!;
+    expect(props).not.toBeNull();
+    expect(props.providers).toEqual(expect.arrayContaining([8, 76]));
+    expect(props.subscriptionProviders).toEqual([8]);
+    expect(props.subscriptionProviders).not.toContain(76);
   });
 });

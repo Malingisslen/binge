@@ -96,8 +96,13 @@ describe('FIELD_GROUPS definition', () => {
     );
   });
 
-  it('providers group = just providers (gated by providersCheckedAt)', () => {
-    expect([...PROVIDERS_GROUP.fields]).toEqual(['providers']);
+  it('providers group = BOTH provider fields (gated by providersCheckedAt)', () => {
+    // BIN-814: subscriptionProviders is the flatrate/free/ads subset, written by the
+    // same writers in the same pass and gated by this same stamp. Clearing only its
+    // sibling would leave TMDB-derived data with no TTL at all — the §1.C six-month
+    // ceiling this sweep exists to enforce — and would strand `providers: []` beside
+    // a months-old subscription list, which the advisor then prefers.
+    expect([...PROVIDERS_GROUP.fields].sort()).toEqual(['providers', 'subscriptionProviders'].sort());
   });
 
   it('nextair group = next-air trio + digitalReleaseDate (calendar read-repair lane)', () => {
@@ -209,8 +214,13 @@ describe('buildClearedPayload (per-group, DPO hard field-allowlist)', () => {
 
   it('clears exactly one group: its data fields + its own stamp, nothing else', () => {
     const payload = buildClearedPayload([PROVIDERS_GROUP], DELETE);
-    expect(Object.keys(payload).sort()).toEqual(['providers', 'providersCheckedAt'].sort());
+    expect(Object.keys(payload).sort()).toEqual(
+      ['providers', 'subscriptionProviders', 'providersCheckedAt'].sort(),
+    );
     expect(payload.providers).toBe(DELETE);
+    // BIN-814: the two provider fields must be cleared TOGETHER. Clearing one leaves
+    // the advisor reading a subscription list older than the sweep's own contract.
+    expect(payload.subscriptionProviders).toBe(DELETE);
     expect(payload.providersCheckedAt).toBe(DELETE);
   });
 
@@ -226,7 +236,7 @@ describe('buildClearedPayload (per-group, DPO hard field-allowlist)', () => {
   it('clears the union when multiple groups are passed — still a single flat payload (one write)', () => {
     const payload = buildClearedPayload([PROVIDERS_GROUP, NEXTAIR_GROUP], DELETE);
     expect(Object.keys(payload).sort()).toEqual(
-      ['providers', 'providersCheckedAt', 'nextAirDate', 'nextAirCode', 'nextAirProvider', 'digitalReleaseDate', 'nextAirUpdatedAt'].sort(),
+      ['providers', 'subscriptionProviders', 'providersCheckedAt', 'nextAirDate', 'nextAirCode', 'nextAirProvider', 'digitalReleaseDate', 'nextAirUpdatedAt'].sort(),
     );
   });
 

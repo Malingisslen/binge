@@ -30,6 +30,7 @@
 //    field in the output shape — account-sharing implications are out of scope
 //    (ADR 0010: copy stays silent).
 
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId, canonicalUniqueProviders, getProvider, resolveProviderMonthlyCost } from '@/lib/tmdb/providers';
 import { resolveCampaignCost, type ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { isKeepReasonStatus } from '@/lib/spendSnapshot';
@@ -237,7 +238,10 @@ export function buildHouseholdContribution(
   providerCosts: Record<number, number>,
   providerTiers: Record<number, string>,
   providerCampaigns: Record<number, ProviderCampaign>,
-  items: readonly Pick<WatchlistItem, 'status' | 'providers'>[],
+  // BIN-814: subscriptionProviders belongs in the Pick, not just providers — a
+  // narrower row shape would fall back to the broad array and let a rentable title
+  // shield a service from the dead-weight verdict.
+  items: readonly Pick<WatchlistItem, 'status' | 'providers' | 'subscriptionProviders'>[],
 ): HouseholdContributionContent {
   const providerIds = canonicalUniqueProviders(myProviders);
 
@@ -254,7 +258,9 @@ export function buildHouseholdContribution(
   const active = new Set<number>();
   for (const it of items) {
     if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
-    for (const p of it.providers ?? []) active.add(canonicalProviderId(p));
+    // BIN-814: subscription subset only — a rentable title must not shield a
+    // service from the household dead-weight verdict.
+    for (const p of subscriptionProviderIds(it)) active.add(canonicalProviderId(p));
   }
 
   return {

@@ -16692,3 +16692,352 @@ commit — not run on the coordinator's behalf.
 **Verdict**: pass (0 blocking). One LOW: the bare `toContain` on the workflow cap (remedy verified
 above). Carried forward, unchanged: the `REFRESH < 175 min` bare relation (correctly left as
 disclosed prose + BIN-826) and the silent empty-derive path (BIN-826).
+
+
+## 2026-08-09 — BIN-814 re-review: four fixed defects judged, sibling sweep gap found
+
+**Scope**: re-review of the staged BIN-814 diff after two prior blocking findings (unstaged
+title-page fixes; rules ratchet seeding through the client) were resolved. This round judged
+four NEW test additions the integration reviewer had prompted, plus a full re-scan of the
+whole staged diff (48 files).
+
+**The four judged items, each mutation-verified live (mutant → restore → hash-confirmed
+identical to the staged blob):**
+
+1. `src/lib/taste/backfill.test.ts` `needsBackfill` describe block. Verified the convergence
+   property is REAL, not restated: `needsBackfill({genreIds:[28], providersCheckedAt:freshStamp}, cutoff)`
+   expects `false` even though `providers` is entirely absent from the fixture — a predicate
+   selecting on field-absence (`missingProviders = !('providers' in data)`) fails exactly 2
+   tests when added back in (verified: "does NOT re-select…" and "accepts a Firestore
+   Timestamp…", both green-to-red, matches the reviewer's claimed count exactly). Clean.
+
+2. `src/lib/watchlist/buildAddPayload.test.ts` — the `as never` cast on a partial `current`
+   fixture (`{ providers: [76], subscriptionProviders: [8] } as never`) is a pre-existing,
+   lint-clean idiom in this codebase (23 files use `as never`; `npx eslint` on the test file:
+   0 errors). Does not weaken the oracle — `carry()` reads via optional chaining regardless of
+   fixture completeness, and the assertion (`toEqual([8])`) would fail on a typo'd field name
+   just as surely as a full `WatchlistItem`. Mutation (delete the `carry('subscriptionProviders', …)`
+   line): 3 failures, matching the reviewer's claim exactly.
+
+3. `src/lib/advisor/serviceValue.test.ts` — changing `item()`'s `subscriptionProviders`
+   default from a fixed value to `o.providers ?? [76]` (mirroring `providers` unless
+   overridden) is the correct fix: mutating the two `attributeProvider(subscriptionProviderIds(it), …)`
+   call sites in `serviceValue.ts` back to `attributeProvider(it.providers ?? [], …)` produces
+   exactly 1 failure ("a film RENTED on an owned service…"), with "skips items not on an owned
+   service" staying green for the RIGHT reason (mirrored default → same value as before, no
+   accidental pass).
+
+4. `functions/src/tmdbTosSweep/logic.test.ts` — three assertions widened (added
+   `subscriptionProviders` to expected key sets), no `toBe`/`toEqual` narrowed or deleted.
+   Mutation (`PROVIDERS_GROUP.fields` back to `['providers']` only): 3 failures, matching the
+   reviewer's claimed count exactly.
+
+**New finding this round (BLOCKING, not one of the four): a sibling sweep gap.**
+`subscriptionProviderIds()` (new in `src/lib/watchlist/subscriptionProviders.ts`) replaced
+`it.providers`/`it.providers ?? []` at FOUR call sites in this diff: `serviceValue.ts` (×2,
+tested per #3 above), `householdAggregate.ts:263`, and `spendSnapshot.ts:59`. Reverting BOTH
+of the latter two back to `it.providers ?? []` **simultaneously** and running
+`householdAggregate.test.ts` + `spendSnapshot.test.ts` + `serviceValue.test.ts` together:
+58/58 green, zero failures — proving neither file's EXISTING suite (both left untouched by
+this diff — confirmed via `git diff --cached --stat`, neither appears) exercises the new
+"a rentable-but-not-subscribed title must not count as active spend / must not shield a
+service from the dead-weight verdict" behavior at all. This is the identical defect class the
+integration reviewer had just fixed in `serviceValue.ts`, recurring unfixed in two sibling
+consumers of the same new helper within the same commit. Restored both files from the
+scratchpad backup, hash-confirmed identical to the staged index blob before and after.
+
+**Also discovered and independently verified mid-review: a real production gap that self-resolved.**
+`src/hooks/useMarkSeen.ts`'s STAGED (index) version added `subscriptionProviders?: number[]`
+to `MarkSeenInput`'s type but did not forward it into either `addItem` call inside `markSeen`
+(TV or film branch) — meaning the "mark seen" write path, arguably the single most common way
+a title's provider fields get written, silently dropped the field on the floor. Caught via
+the routine full-diff sha re-pin (index vs worktree mismatch on this file when no other file
+had one). Mutation-confirmed the gap by reverting the two `subscriptionProviders: input.subscriptionProviders,`
+forwarding lines and running `useMarkSeen.test.tsx`: at that moment the test file was HEAD-only
+(no BIN-814 tests yet), so the gap was real and completely unpinned. Before the verdict could
+be written, a sibling session staged BOTH the fix (the two forwarding lines) and a new
+`describe('useMarkSeen — the two provider fields reach the write together (BIN-814)')` block
+(3 new tests: film branch, series branch, omits-both-when-unknown). Re-ran the same mutation
+against the newly staged bytes: exactly 2 failures (film + series branch), the pre-existing
+BIN-641 suite stayed fully green. Restored, hash-confirmed clean. Reported per the "mover
+carries a fix, re-verify it, don't wave it through" protocol — in this case the mover fully
+closed its own gap and needed no further action, but the sequence (index bug → found by
+sha re-pin → sibling fix lands mid-review → re-verified) is exactly the shape the knowledge
+file's "Fifth shape" entry describes and is worth citing as a second live occurrence.
+
+**Mechanics**: full `git diff --cached --name-only` sha loop (index vs worktree) run twice —
+once at the start (all clean) and once mid-review (caught the `useMarkSeen.ts`/`.test.tsx`
+transition from unstaged→staged live) — and once immediately before the verdict (all 48 files
+index==worktree, zero mismatches). `rm -rf node_modules/.vite/vitest` before every mutation
+run. Full clean-control suite: 230 files / 2827 passed / 4 skipped (close to the handed-down
+2824/230 claim — small variance expected from a live re-run, not investigated further since
+this session's own count is authoritative).
+
+**Verdict**: fail (2 blocking) — `src/lib/advisor/householdAggregate.ts` and
+`src/lib/spendSnapshot.ts` each need the same {rent-only-excluded, null-fallback-preserved}
+test pair `serviceValue.test.ts` already has, mutation-verified missing by reverting both
+simultaneously (58/58 green). The four originally-flagged items are clean; the two previously
+resolved blocking findings (title-page fixes, rules ratchet seeding) remain resolved and were
+re-verified by direct Read + diff of the staged bytes.
+
+## 2026-08-10 — BIN-814 final review, round 3 (56 files, PASS-blocking on one new gap)
+
+**Scope**: same ticket's third pass. The two previously-blocking gaps (`spendSnapshot.ts`,
+`householdAggregate.ts` missing the {rent-only, included, null-fallback} triple) are FIXED —
+`src/lib/spendSnapshot.test.ts` and `src/lib/advisor/householdAggregate.test.ts` both now carry
+the triple, confirmed by direct Read (not diff-trusted). New/changed test files this round:
+`src/lib/taste/backfill.test.ts` (an inverted assertion + a new "does not bump updatedAt on
+migration" describe block), `src/lib/watchlist/tmdbFieldsRefresh.test.ts` (`shouldStampProvidersAtAdd`
+gained a third param, three pre-existing assertions edited, one new describe block),
+`src/components/pages/MoviePageClient.test.tsx` (StatusButton mock changed from `() => null` to a
+props recorder + one new test), `src/hooks/useMarkSeen.test.tsx` (three tests carried from the
+previous round, re-verified this round).
+
+**FIRST-command sha loop**: all 56 staged files index==worktree at the start. Mid-review, a
+sibling security-reviewer session appended its own dated entry to
+`.claude/agents/binge-security-reviewer.knowledge.archive.md` (unstaged, MM status) — outside
+this review's scope (not a test file, not one of the files mutated), so it does not affect the
+verdict; noted per the "Fourth/Fifth shape" protocol rather than silently ignored.
+
+**Mutation-verified, all restored from scratchpad backups and hash-confirmed byte-identical
+to the staged blob afterward**:
+1. `src/lib/advisor/serviceValue.ts:106` — `tvActiveProviderIdsFromItems`'s
+   `attributeProvider(subscriptionProviderIds(it), ownedProviderIds)` reverted to
+   `attributeProvider(it.providers ?? [], ownedProviderIds)` → **`serviceValue.test.ts` 30/30
+   GREEN** (`rm -rf node_modules/.vite/vitest` + `npx vitest run` before AND after grep-confirming
+   the mutation was live). Root cause: every `tv()` fixture in that file defaults
+   `subscriptionProviders: null`, so the fallback (`?? item.providers ?? []`) always equals
+   `it.providers` and the divergent (rent-only) case is never constructed for THIS function —
+   only for its sibling `watchedForValueFromItems`, which does have the divergent fixture. This
+   is the sweep-gap class already in the principles file (BIN-814 round 1: `subscriptionProviderIds()`
+   at 4 call sites, 2 uncovered), recurring at finer grain: "serviceValue.ts ×2" in that entry
+   undercounted — one of the two call sites in that SAME file was fixed, the other wasn't, and
+   "the file has dedicated BIN-814 tests" reads true either way. Feeds the household dead-weight
+   verdict (via `useSubscriptionAdvisor`? — no, `tvActiveProviderIdsFromItems` is consumed by
+   `rollupServiceValue`'s `tvActiveProviderIds` param, i.e. the per-service value card's TV lens)
+   and is the same "a rentable title is not a subscription reason" money-surface bug BIN-814
+   exists to fix. **BLOCKING.**
+2. `src/lib/taste/backfill.helpers.ts` — appended `contentChanged = true;` inside the
+   `wroteSubscriptionProviders` branch (reverting to the OLD pre-diff behaviour the ticket
+   deliberately inverted) → `backfill.test.ts` 1/19 RED alone (`filling in the subset does NOT
+   bump updatedAt, and is not contentChanged`). Confirms the inversion the plan described as a
+   defect-fix (not a weakening): the reasoning is the "system write, not something the user did"
+   convention already established for `addedAt.ts`/BIN-593/598, and a companion test (`a REAL
+   provider change alongside it still bumps updatedAt`) proves the bump is decoupled, not
+   disabled. Legitimate.
+3. `src/lib/watchlist/tmdbFieldsRefresh.ts` — dropped the `&& Array.isArray(subscriptionProviders)`
+   clause from `shouldStampProvidersAtAdd` → 1/25 RED alone (`does NOT stamp when only the broad
+   list was supplied`). The three pre-existing assertions edited to add the third param preserve
+   their original true/false verdicts (diffed line-by-line against `git diff --cached`) — no
+   widening.
+4. `src/components/pages/MoviePageClient.tsx` — deleted the
+   `subscriptionProviders={subscriptionProviderIdsForMovie}` JSX prop on `<StatusButton>` → 1/1
+   RED alone on the new "add control gets both provider answers" test. Not vacuous: the test
+   resets `statusButtonProps.last = null` before render and asserts `not.toBeNull()` first, so a
+   component that fails to render the button at all would also be caught (the mock is now a
+   props-recorder, not `() => null`, which is what the ticket's own history says killed this
+   exact mutant only after the mock was upgraded).
+5. `src/hooks/useMarkSeen.ts` — removed the `subscriptionProviders: input.subscriptionProviders`
+   line from the film-branch `buildWatchlistAddPayload` call → 1/11 RED alone (`forwards the
+   subscription subset on the FILM branch`), TV branch's own line untouched and its sibling test
+   stayed green as expected (each branch's line is independently mutated/pinned).
+
+**Full suite**: not re-run in isolation this round (all five targeted mutations individually
+verified red-alone + restored-clean against their own test files); no reason to doubt the
+handed-down 2840/230/4-skipped given every touched file round-tripped clean.
+
+**Verdict**: fail (1 blocking) — `tvActiveProviderIdsFromItems` in `src/lib/advisor/serviceValue.ts`
+needs a fixture where `subscriptionProviders` diverges from `providers` (rent-only case), mirroring
+the fixture pattern its own sibling function and `spendSnapshot`/`householdAggregate` already have.
+Everything else in this round's diff — the backfill inversion, the `shouldStampProvidersAtAdd`
+arity change, the MoviePageClient mock upgrade, the useMarkSeen forwarding — is real, non-vacuous,
+and correctly pinned.
+
+## 2026-08-10 — BIN-814 round 3 review: call-site sweep closed, new caller-composition gap found in addItem
+
+**Diff reviewed**: `git diff --cached` (62 files) — BIN-814's providers/subscriptionProviders split,
+round 3 of the sprint's own integration review (per `tasks/todo.md`'s "Fjärde rundan hittade den
+femte ytan" / "Andra granskningsrundan" narrative). New substantive test files this pass:
+`src/lib/backlogResurface.test.ts` (3 tests, the 5th money surface — Home's "finns nu på din
+tjänst" tile), `src/components/pages/TVShowPageClient.test.tsx` (StatusButton mock upgraded from
+blind `() => null` to a props-capturing stub, mirroring the movie twin, + a divergence test),
+`src/lib/watchlist/tmdbFieldsRefresh.test.ts` (4 new tests for `planTmdbFieldsRefresh`'s subset
+write branch), `src/lib/advisor/serviceValue.test.ts` (the two divergent `tv()` cases for
+`tvActiveProviderIdsFromItems`, closing my own 2026-08-09 finding). Plus ~12 mechanical
+`subscriptionProviders: null` fixture additions (type-satisfaction only, verified none change an
+existing assertion's meaning) and full substantive coverage across `householdAggregate.test.ts`,
+`spendSnapshot.test.ts`, `buildAddPayload.test.ts`, `useMarkSeen.test.tsx`, `MoviePageClient.test.tsx`,
+`seProviderIds.test.ts`, `providers.test.ts`, `backfill.test.ts` (+ new `needsBackfill` convergence
+tests), `functions/src/tmdbTosSweep/logic.test.ts` (both provider fields cleared together), and
+`src/test/rules/firestore-rules.test.ts` (a textbook ratchet test: seeds a doc with
+`withSecurityRulesDisabled` so only the "unrelated later write still succeeds" assertion can fail).
+
+**Verified closed**: my prior round's blocking finding (`tvActiveProviderIdsFromItems`'s call site
+unpinned because every `tv()` fixture defaulted `subscriptionProviders: null`) — two new cases
+(`providers:[76], subscriptionProviders:[]` → excludes; `subscriptionProviders:[76]` → includes)
+now flank it. Read the fixture and the production line; the divergent case is real (Viaplay 76,
+not a value every other fixture in the file also holds), so this is a genuine close, not a
+decoy — did not re-mutate it live (already verified 2026-08-09 and diff is additive/unchanged
+since), but the shape matches the closed pattern exactly.
+
+**New finding, verified live**: `src/contexts/WatchlistContext.tsx:816` —
+`shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers,
+item.subscriptionProviders ?? undefined)` inside `addItem` — has ZERO coverage in
+`WatchlistContext.test.tsx`. The pure function has 8 dedicated tests
+(`tmdbFieldsRefresh.test.ts`, both the original 3 cases retrofitted to 3-arg and a new
+4-test "the stamp needs the whole pair" describe block), but nothing in `WatchlistContext.test.tsx`
+drives the real `addItem` composition with a fixture where `providers` and `subscriptionProviders`
+genuinely differ or where one is supplied and the other omitted.
+
+Mutation (backup: `cp` to scratchpad, sha before `dc25c81b…`):
+```
+- ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers, item.subscriptionProviders ?? undefined)
++ ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers) /*MUTANT*/
+```
+`rm -rf node_modules/.vite/vitest`, `grep -n MUTANT` before AND after the run (both hits), ran
+`npx vitest run src/contexts/WatchlistContext.test.tsx`:
+```
+ Test Files  1 passed (1)
+      Tests  91 passed (91)
+```
+91/91 green — the mutant survives completely. Restored from the scratchpad backup; `git hash-object`
+matched the pre-mutation sha (`dc25c81b…`) and `git diff --stat -- src/contexts/WatchlistContext.tsx`
+was empty after restore, confirming a clean revert.
+
+Root cause of the blind spot: `WatchlistContext.test.tsx`'s own `addItemRef`/`newTitle()` types are
+`Omit<WatchlistItem, … | 'subscriptionProviders'>` — the mechanical fixture-widening pass that added
+`subscriptionProviders: null` to a dozen OTHER test files' builders instead EXCLUDED the field from
+this file's harness type, so no fixture in the file can even supply it. This is the same defect class
+as the round-1/round-2 sweep gaps (a shared new field/derivation with an untested call site) but a
+DIFFERENT call site than the one already swept (`subscriptionProviderIds()`'s four consumers) —
+it's the STAMP-DECISION composition inside `addItem`, not a read-side derivation.
+
+**Verdict**: fail (1 blocking) — everything else in the diff is real, non-vacuous, and correctly
+pinned; the `addItem`/`shouldStampProvidersAtAdd` composition is the one gap. Folded into the
+active knowledge file's "Mutate the CALLER" bullet in place.
+
+## 2026-08-10 — BIN-814 final confirmation pass: prior gap closed and mutation-reverified, two new zero-coverage call sites found
+
+**Diff reviewed**: `git diff --cached` (62 files, same BIN-814 diff as the two rounds above). Task
+framing: "you passed this diff last round" (no matching archive entry exists for that claimed pass —
+treated as an unverified coordinator claim per the "verify, never inherit" rule) plus two production
+files said to have changed since: `src/components/watchlist/VillSePickerPage.tsx` (now imports
+`subscriptionProviderIds()` for its "kan ses direkt" sort AND its `PosterProviderDots` prop) and
+`src/lib/taste/backfill.helpers.ts` (claimed comment-only).
+
+**Re-verified live, not inherited**: the round-3 blocking finding (`WatchlistContext.tsx`'s `addItem`
+composing `shouldStampProvidersAtAdd` with zero coverage) is CLOSED in the current test file — three
+new tests exist at `WatchlistContext.test.tsx:443-474`. Backed by a fresh mutation, not by trusting
+the file's own comment: reverted the call at `WatchlistContext.tsx:816` to the pre-ticket 2-arg form
+(`shouldStampProvidersAtAdd(cond, item.providers) /*MUTANT*/`), `rm -rf node_modules/.vite/vitest`,
+`grep -n MUTANT` before AND after `npx vitest run src/contexts/WatchlistContext.test.tsx` — 2 of 3
+new tests failed (`stamps … carrying BOTH provider fields`, `stamps when the subset is … EMPTY`),
+92/94 total, exactly matching the task's own claimed numbers. Restored from a scratchpad backup,
+`git hash-object` matched the pre-mutation sha `dc25c81b…` (also matching the round-3 archive entry's
+recorded sha), `git diff --stat` empty after restore.
+
+**`backfill.helpers.ts`'s "comment-only" claim did NOT hold on first read of the raw diff** — the
+diff shows a new `wroteSubscriptionProviders` interface field, `STALE_AFTER_MS`, `timestampToMs`,
+`needsBackfill`, and a changed `buildBackfillUpdate` signature/logic, none of which is comment-only.
+But `backfill.test.ts` already carries dedicated tests for every one of those (the "an absent SE
+block must never blank a good array" and "subscriptionProviders travels with providers" describe
+blocks, plus `needsBackfill`'s own describe block) from a PRIOR round — so relative to the LAST
+reviewed state, only the new JSDoc paragraph on the `contentChanged` field is new, and it documents a
+behavior ("a REAL provider change alongside it still bumps updatedAt") that is already pinned by an
+existing test. No new test owed. The lesson: "comment-only" claims about a file must be checked
+against what THIS diff review is scoped to (the delta since the last pass), not read as "the whole
+file's diff is a comment" — the raw `git diff` output for a big-diff file will look alarming either
+way.
+
+**New finding, NOT flagged by the task's framing, found via the sweep-gap grep**: `grep -rn
+subscriptionProviderIds src/` turned up two more call sites the prior two rounds' grep missed —
+`VillSePickerPage.tsx:71` (the sort predicate `onMine`) and `:209` (the `PosterProviderDots`
+`providers` prop), plus `BacklogResurfaceTile.tsx:19`'s `matchedProvider()` (confirmed via
+`git diff --cached -- src/components/home/BacklogResurfaceTile.tsx` — it switched from
+`item.providers` to `subscriptionProviderIds(item)` in this same diff). All three are REAL behavior
+changes (which title ranks "kan ses direkt" first; which poster dot renders filled; which service
+label a Home tile shows) and none has ANY test coverage — `Glob src/components/watchlist/*.test.tsx`
+and `Glob src/components/home/BacklogResurfaceTile*` both came back empty, so unlike every `lib/`
+call site (which each got a dedicated BIN-814 fixture pair across the three rounds), these three have
+neither dedicated nor incidental coverage. Not mutation-tested (nothing to mutate against — the gap
+is total, no test file exists), which is the maximal form of "unpinned" and needs no live proof.
+
+**Verdict**: fail (2 blocking) — `VillSePickerPage.tsx` and `BacklogResurfaceTile.tsx` (grouped as one
+blocking finding each, since each is its own file/component with its own missing test) are gaps of
+the exact class this ticket's own history (rounds 1–3) repeatedly found and closed everywhere else.
+Folded into the active knowledge file's "Mutate the CALLER" / sweep-gap bullet in place, naming these
+as call sites the earlier rounds' grep missed because they sit in untested `src/components/**` files.
+
+## 2026-08-10 — BIN-814 confirmation pass: two prior gaps closed, one new gap found (StatusButton/QuickAddButton forwarding)
+
+**Diff reviewed**: `git diff --cached` on BIN-814's staged tree at HEAD `e1fc999`, 65 files
+(`+2056/-608`), spanning `firestore.rules`, `functions/src/tmdbTosSweep/**`,
+`src/lib/advisor/**`, `src/lib/taste/**`, `src/lib/tmdb/{providers,seProviderIds}.ts`,
+`src/lib/watchlist/{buildAddPayload,tmdbFieldsRefresh,villSeOrder,subscriptionProviders}.ts`,
+`src/contexts/WatchlistContext.tsx`, `src/hooks/{useMarkSeen,useSubscriptionAdvisor,
+usePublicProfile,useSessionTasteVectors}.ts`, `src/components/{home/BacklogResurfaceTile,
+pages/{Movie,TVShow}PageClient,recommendations/RecCard,title/{QuickAddButton,StatusButton,
+TitleCard},watchlist/VillSePickerPage}.tsx`, `src/test/rules/firestore-rules.test.ts`,
+`src/types/domain.ts`, plus knowledge-file self-edits and `tasks/todo.md`.
+
+**Read**: every file above with the Read tool, including full-file reads of
+`BacklogResurfaceTile.tsx`/`.test.ts`, `villSeOrder.ts`/`.test.ts`, `VillSePickerPage.tsx`,
+`subscriptionProviders.ts`, `WatchlistContext.tsx` (both halves, 1148 lines),
+`WatchlistContext.test.tsx` (both halves, 2182 lines), `firestore-rules.test.ts` (first 951 of
+2129 lines — confirmed via `git diff --cached` that the BIN-814 diff to this file is exactly
+lines 206–246, already inside the read range), `tmdbFieldsRefresh.ts`, `householdAggregate.ts`/
+`.test.ts`, `serviceValue.ts`/`.test.ts`, `seProviderIds.test.ts`, `backfill.test.ts`,
+`useMarkSeen.ts`/`.test.ts`, `QuickAddButton.tsx`/`.test.ts`, `StatusButton.tsx`.
+
+**Mutations run** (`rm -rf node_modules/.vite/vitest` before every run; scratchpad-backup →
+mutate → grep-confirm landed → run → grep-confirm still landed → restore → `git status
+--porcelain` confirm worktree==index):
+
+1. `BacklogResurfaceTile.tsx`'s `matchedProvider`: `subscriptionProviderIds(item).find(...)` →
+   `(item.providers ?? []).find(...)`. Red-ALONE on "names no service for a title that is only
+   RENTABLE" (expected `undefined`, got the Viaplay object).
+2. `villSeOrder.ts`'s `orderVillSePicks`: `subscriptionProviderIds(i).some(...)` →
+   `(i.providers ?? []).some(...)`. Red-ALONE on "ranks an INCLUDED title above one that is only
+   rentable" (expected `[2,1]`, got `[1,2]`).
+3. `WatchlistContext.tsx`'s `addItem`: the `shouldStampProvidersAtAdd(...)` 3-arg call → an
+   inlined 2-arg-equivalent condition (`Array.isArray(item.providers) && item.providers.length >
+   0`, dropping the `subscriptionProviders` check). Red-ALONE on "does NOT stamp when the add
+   carries only the broad list" (expected `'providersCheckedAt' in payload === false`, got
+   `true`).
+   Combined run: 103/103 clean control (`BacklogResurfaceTile.test.ts` + `villSeOrder.test.ts` +
+   `WatchlistContext.test.tsx`), all three mutants together → exactly 3 red (one per mutant, no
+   collateral), restore → 103/103 again.
+4. `QuickAddButton.tsx`: dropped `subscriptionProviders` from both the `markSeen({...})` call
+   object and the `buildWatchlistAddPayload({...})` call. `QuickAddButton.test.tsx` alone: 8/8
+   green (mutant invisible). Full suite: 232/232 files, 2862/2862 tests green (mutant invisible
+   tree-wide).
+5. Same mutation shape in `StatusButton.tsx` (both call sites). `StatusButton.test.tsx` alone:
+   14/14 green (mutant invisible).
+   Root cause: both test files mock `useMarkSeen`/`useWatchlist` as bare `vi.fn()`s and assert
+   only `toHaveBeenCalledTimes`/`not.toHaveBeenCalled`, never the call's argument shape — so
+   `subscriptionProviders` reaching the write is provable nowhere in these two files.
+
+All five restored from scratchpad backups, `git status --porcelain` on each showed `M `/`A `
+(staged, worktree==index) confirming byte-identical restore, and a final clean run gave the
+task's own claimed baseline exactly: 232 files / 2862 passed / 4 skipped.
+
+**Why (4)/(5) is a genuinely NEW gap and not a restatement of (1)–(3)**: `useMarkSeen.test.tsx`
+(hub) has a dedicated `describe('the two provider fields reach the write together (BIN-814)')`
+pinning BOTH branches forward `subscriptionProviders` into the `addItem` payload — real
+coverage, verified. `MoviePageClient.test.tsx`/`TVShowPageClient.test.tsx` (supplier) upgraded
+their `StatusButton` mock from `() => null` to a prop-capturing spy and pin that the PAGE derives
+and hands down the correct value, with a decisive fixture (Netflix flatrate + Viaplay
+rent/buy-only → `subscriptionProviders` must equal `[8]`, must NOT contain `76`) — also real,
+also mutation-plausible (not independently re-verified this round; the shape matches the
+already-proven `seProviderIds.test.ts` fixture pattern). Neither test exercises the CODE INSIDE
+`StatusButton.tsx`/`QuickAddButton.tsx` that takes the received prop and forwards it onward —
+that middle link has zero coverage from either end.
+
+**Verdict**: fail (1 blocking) for the QuickAddButton/StatusButton forwarding gap. The two
+tickets this pass was sent to confirm (BacklogResurfaceTile, VillSePickerPage/villSeOrder,
+WatchlistContext's `shouldStampProvidersAtAdd` call site) are genuinely closed and mutation-
+verified — pass on those three. Folded into the active knowledge file's "Mutate the CALLER" /
+sweep-gap bullet in place, generalizing to: pinning the hub and pinning the supplier does not
+pin the middle link — grep every component between the two pinned ends for the threaded prop
+name, and treat "the component's own test mocks the destination hook as a bare `vi.fn()` with
+only call-count assertions" as the tell.

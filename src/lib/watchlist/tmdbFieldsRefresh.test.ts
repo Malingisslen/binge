@@ -85,19 +85,56 @@ describe('needsProvidersRefresh (providers-group fallback gate)', () => {
 // a re-mark reuses cached/[] providers and would falsely re-certify + suppress backfill.
 describe('shouldStampProvidersAtAdd', () => {
   it('stamps on a genuine new add with real providers', () => {
-    expect(shouldStampProvidersAtAdd(true, [8, 76])).toBe(true);
+    // BIN-814 widened the contract: "real providers" now means the PAIR. The third
+    // argument is not padding — see the dedicated describe below for why an add that
+    // knows only the broad list must leave the stamp absent.
+    expect(shouldStampProvidersAtAdd(true, [8, 76], [8])).toBe(true);
   });
   it('does NOT stamp on a re-mark of an existing item (even with providers)', () => {
-    expect(shouldStampProvidersAtAdd(false, [8, 76])).toBe(false);
+    expect(shouldStampProvidersAtAdd(false, [8, 76], [8])).toBe(false);
   });
   it('does NOT stamp a new add that carries no provider data (let backfill own it)', () => {
-    expect(shouldStampProvidersAtAdd(true, [])).toBe(false);
-    expect(shouldStampProvidersAtAdd(true, undefined)).toBe(false);
+    expect(shouldStampProvidersAtAdd(true, [], [])).toBe(false);
+    expect(shouldStampProvidersAtAdd(true, undefined, undefined)).toBe(false);
   });
 });
 
 describe('planTmdbFieldsRefresh (decoupled per-group write plan)', () => {
   const fields = { title: 'Dune', posterPath: '/d.jpg', providers: [8], genreIds: [878], tmdbStatus: 'Released', runtime: 155 };
+
+  // BIN-814: the providers GROUP is two fields now. They are gated by one stamp and
+  // must be written together — a plan that emitted only the broad one would leave the
+  // advisor reading a subscription answer derived from an older fetch, which is the
+  // drift the ticket ended.
+  const pairFields = { ...fields, providers: [8, 76], subscriptionProviders: [8] };
+
+  it('writes BOTH provider fields when the providers group is stale', () => {
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, pairFields, NOW, STAMP)!;
+    expect(p.providers).toEqual([8, 76]);
+    expect(p.subscriptionProviders).toEqual([8]);
+    expect(p.providersCheckedAt).toBe(STAMP);
+  });
+
+  it('writes an EMPTY subset — "no subscription covers this" is a real answer', () => {
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, { ...fields, providers: [76], subscriptionProviders: [] }, NOW, STAMP)!;
+    expect(p.subscriptionProviders).toEqual([]);
+  });
+
+  it('writes NEITHER when the providers group is fresh', () => {
+    const current = { tmdbFieldsRefreshedAt: null, providersCheckedAt: new Date(NOW - 1000) };
+    const p = planTmdbFieldsRefresh(current, pairFields, NOW, STAMP)!;
+    expect('providers' in p).toBe(false);
+    expect('subscriptionProviders' in p).toBe(false);
+  });
+
+  it('omits the subset when the caller did not supply one, rather than clearing it', () => {
+    const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: null };
+    const p = planTmdbFieldsRefresh(current, fields, NOW, STAMP)!;
+    expect(p.providers).toEqual([8]);
+    expect('subscriptionProviders' in p).toBe(false);
+  });
 
   it('returns null when neither group needs a write (both stamps fresh)', () => {
     const current = { tmdbFieldsRefreshedAt: new Date(NOW - 1000), providersCheckedAt: new Date(NOW - 1000) };
@@ -144,5 +181,31 @@ describe('planTmdbFieldsRefresh (decoupled per-group write plan)', () => {
     expect('providers' in p).toBe(false);
     expect('providersCheckedAt' in p).toBe(false);
     expect(p.title).toBe('Dune');
+  });
+});
+
+// BIN-814. The stamp certifies the whole providers GROUP, and the group is two
+// fields now. An add that carries only the broad list must leave the stamp absent —
+// absent reads as stale and the title-page repair refills both, whereas a stamp
+// would lock the subset out for 60 days on a title the user just added.
+describe('shouldStampProvidersAtAdd — the stamp needs the whole pair (BIN-814)', () => {
+  it('stamps when both fields are supplied', () => {
+    expect(shouldStampProvidersAtAdd(true, [76, 8], [8])).toBe(true);
+  });
+
+  it('stamps when the subset is supplied and genuinely EMPTY', () => {
+    // Rent-only on Viaplay: [] is a real answer, not a missing one.
+    expect(shouldStampProvidersAtAdd(true, [76], [])).toBe(true);
+  });
+
+  it('does NOT stamp when only the broad list was supplied', () => {
+    // The self-correcting direction: no stamp → the group reads stale → the next
+    // title-page view writes both fields.
+    expect(shouldStampProvidersAtAdd(true, [76, 8], undefined)).toBe(false);
+  });
+
+  it('still refuses on a re-mark, and on an empty broad list', () => {
+    expect(shouldStampProvidersAtAdd(false, [76], [76])).toBe(false);
+    expect(shouldStampProvidersAtAdd(true, [], [])).toBe(false);
   });
 });

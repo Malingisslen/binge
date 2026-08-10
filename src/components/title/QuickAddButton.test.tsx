@@ -238,3 +238,53 @@ describe('QuickAddButton — the write also waits for the watchlist snapshot (BI
     expect(toast).toHaveBeenCalledTimes(1);
   });
 });
+
+// BIN-814. Same middle-link gap as StatusButton: the card surfaces derive the
+// provider pair and pass it down, the hooks write it, and nothing asserted this
+// component forwards it. Deleting both forwards left this file 8/8 green.
+describe('QuickAddButton — forwards both provider fields to the write (BIN-814)', () => {
+  const VIAPLAY = 76;
+  const withProviders = () => (
+    <QuickAddButton
+      tmdbId={1399} mediaType="tv" title="Game of Thrones" posterPath={null} releaseYear={2011}
+      providers={[VIAPLAY, 8]} subscriptionProviders={[8]}
+    />
+  );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    watchlist.getItem.mockReturnValue(null);
+  });
+
+  it('carries the subscription subset into addItem', async () => {
+    render(withProviders());
+    await act(async () => { fireEvent.click(screen.getByTitle(/Följer|Lägg till/)); });
+    await act(async () => { fireEvent.click(screen.getByText('Följ')); });
+
+    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    const payload = watchlist.addItem.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.providers).toEqual([VIAPLAY, 8]);
+    expect(payload.subscriptionProviders).toEqual([8]);
+  });
+
+  // The sedd path goes through markSeen instead of addItem, and its twin
+  // StatusButton pins both. Pinning only one of the two here would leave the pair
+  // asymmetrically covered for no reason.
+  it('carries the subscription subset into markSeen on the sedd path', async () => {
+    render(withProviders());
+    await act(async () => { fireEvent.click(screen.getByTitle(/Följer|Lägg till/)); });
+    // TV's terminal option is labelled "Sedd (alla avsnitt)" — statusLabel, not 'Sedd'.
+    await act(async () => { fireEvent.click(screen.getByText('Sedd (alla avsnitt)')); });
+
+    expect(markSeen).toHaveBeenCalledTimes(1);
+    const input = markSeen.mock.calls[0][0] as Record<string, unknown>;
+    expect(input.providers).toEqual([VIAPLAY, 8]);
+    expect(input.subscriptionProviders).toEqual([8]);
+  });
+});

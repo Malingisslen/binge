@@ -51,7 +51,7 @@ function show(tmdbId: number, title: string): WatchlistItem {
     dropped: false,
     rewatchCount: 0,
     providers: [],
-    providersCheckedAt: null,
+    subscriptionProviders: null, providersCheckedAt: null,
     visibility: null,
     genreIds: [18],
     tmdbStatus: null,

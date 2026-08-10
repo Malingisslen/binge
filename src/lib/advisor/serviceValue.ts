@@ -7,6 +7,7 @@
 // Distinct from spendSnapshot (BIN-99, forward-looking *cost* of the whole
 // library). This measures *value received per service* over a closed month.
 
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import { canonicalProviderId } from '@/lib/tmdb/providers';
 import { librarySubState } from '@/lib/libraryView';
 import { isKeepReasonStatus } from '@/lib/spendSnapshot';
@@ -54,7 +55,10 @@ export function attributeProvider(titleProviderIds: number[], ownedProviderIds: 
 // episodeProgress) — so this is a films-this-month lens; TV-episode hours are a
 // separate follow-up aggregation.
 export function watchedForValueFromItems(
-  items: readonly { providers: number[]; runtime?: number | null; watchedAt: Date | null }[],
+  // BIN-814: subscriptionProviders is REQUIRED in the row shape, not optional — a
+  // caller that omitted it would silently fall back to the broad array and re-
+  // introduce the rent-counts-as-usage bug this function was fixed for.
+  items: readonly { providers: number[]; subscriptionProviders: number[] | null; runtime?: number | null; watchedAt: Date | null }[],
   ownedProviderIds: number[],
   monthStartMs: number,
   monthEndMs: number, // exclusive
@@ -64,7 +68,7 @@ export function watchedForValueFromItems(
     if (!it.watchedAt) continue;
     const ms = it.watchedAt.getTime();
     if (ms < monthStartMs || ms >= monthEndMs) continue;
-    const providerId = attributeProvider(it.providers, ownedProviderIds);
+    const providerId = attributeProvider(subscriptionProviderIds(it), ownedProviderIds);
     if (providerId == null) continue;
     out.push({ providerId, runtimeMinutes: it.runtime ?? null, watchedAtMs: ms });
   }
@@ -99,7 +103,7 @@ export function tvActiveProviderIdsFromItems(
     if (it.mediaType !== 'tv') continue;
     if (!isKeepReasonStatus(it.status)) continue; // shared BIN-528 guard
     if (librarySubState(it) === 'avslutad') continue;
-    const attributed = attributeProvider(it.providers ?? [], ownedProviderIds);
+    const attributed = attributeProvider(subscriptionProviderIds(it), ownedProviderIds);
     if (attributed != null) out.push(attributed);
   }
   return out;

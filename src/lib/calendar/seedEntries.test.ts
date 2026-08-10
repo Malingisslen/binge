@@ -6,7 +6,7 @@ const item = (over: Partial<WatchlistItem>): WatchlistItem => ({
   tmdbId: 1399, mediaType: 'tv', status: 'mina', rating: null, notes: null,
   title: 'Test', posterPath: '/p.jpg', releaseYear: null, totalSeasons: null,
   lastWatchedSeason: null, lastWatchedEpisode: null, dropped: false,
-  rewatchCount: 0, providers: [], providersCheckedAt: null, visibility: null,
+  rewatchCount: 0, providers: [], subscriptionProviders: null, providersCheckedAt: null, visibility: null,
   genreIds: [18], tmdbStatus: null, runtime: null,
   addedAt: new Date(0), updatedAt: new Date(0), watchedAt: null,
   ...over,

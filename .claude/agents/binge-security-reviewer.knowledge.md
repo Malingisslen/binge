@@ -36,7 +36,23 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
 
 ## Firestore rules — presence/type/pins/ratchets
 - **`hasOnly` bounds the KEY SET only** — never presence, never values. A merge-written field needs the entry
-  AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93).
+  AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with NO
+  value bind (a bare `number[]`, e.g. `providers`) is fine to leave unbound if a SIBLING already-shipped field
+  of the identical shape/consumption (rendered only through an id→lookup table, never interpolated/executed)
+  is unbound too — don't demand a new bind an existing analogous field never got (BIN-814 `subscriptionProviders`
+  next to `providers`).
+- **A "doc already carries the field, does an unrelated write survive" ratchet test must seed via
+  `withSecurityRulesDisabled`, not a live authenticated write, when mutation-testing by editing the deployed
+  rule itself.** Seeding live under the SAME (mutated) ruleset being tested can't reach the target scenario —
+  the seed write is rejected by the same `hasOnly` before the "unrelated write" line ever runs, so the test
+  still fails on mutation but for the wrong line, and the comment's claim ("an unrelated write on an
+  already-contaminated doc") goes unexercised. Harmless when the only guard in play is `hasOnly` itself (key
+  provenance is irrelevant to a key-set check, so the mutation is still caught) — but would be a live false-negative
+  gap for a VALUE ratchet whose behavior depends on the resource's prior state (`vetoRemaining <=`,
+  `tmdbFieldsRefreshedAt <= request.time`), where the live seed path might not even be reachable at all under
+  the mutated rule and the "already contaminated" state could never be constructed to test against.
+  BIN-814's second test (`firestore-rules.test.ts`) has this shape; not reflagged because the field it guards
+  is `hasOnly`-only. Tighten with rules-disabled seeding before reusing this test as a template for a VALUE ratchet.
 - **`resource.data.get(k,D)` defends a MISSING key only.** A present-but-mistyped value (`isHost:'yes'`)
   returns as-is → equality type-errors → allow-expr fails → slot bricked (plantable DoS). Use
   `resource == null ? true : resource.data.get(k,D) is <T> ? <equality> : <heal to safe value>`, heal one-way.

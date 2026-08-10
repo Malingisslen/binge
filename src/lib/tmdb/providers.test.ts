@@ -6,9 +6,12 @@ import {
   canonicalProviderId,
   getProviderColor,
   hasFreeProvider,
-  extractSEProviders,
   dedupeProvidersByCanonicalId,
 } from './providers';
+// BIN-814: the SE extraction moved out of providers.ts. The canonicalisation cases
+// below still belong here — they are about THIS module's alias map — so they drive
+// it through the helper that now owns the flatrate/free/ads categories.
+import { seSubscriptionProviderIdsForRefresh } from './seProviderIds';
 
 describe('SWEDISH_PROVIDERS catalog', () => {
   it('has at least the core Swedish streaming services', () => {
@@ -97,21 +100,14 @@ describe('getProviderColor', () => {
   });
 });
 
-describe('extractSEProviders', () => {
-  it('returns empty array when watch/providers is missing', () => {
-    expect(extractSEProviders({})).toEqual([]);
-  });
-
-  it('returns empty array when SE region is missing', () => {
-    expect(extractSEProviders({ 'watch/providers': { results: {} } })).toEqual([]);
-  });
-
-  it('returns empty array when SE has no flatrate/free/ads', () => {
-    expect(extractSEProviders({ 'watch/providers': { results: { SE: {} } } })).toEqual([]);
-  });
-
+// BIN-814: the absent-vs-empty cases that used to live here moved to
+// seProviderIds.test.ts along with the extraction — and the expected value CHANGED
+// (an absent SE block is `undefined` now, not `[]`, which is the whole fix). What
+// stays here is what this module still owns: that the alias map collapses correctly
+// when a real SE payload is run through it.
+describe('SE extraction through this module\'s alias map', () => {
   it('combines flatrate + free + ads', () => {
-    const result = extractSEProviders({
+    const result = seSubscriptionProviderIdsForRefresh({
       'watch/providers': {
         results: {
           SE: {
@@ -127,7 +123,7 @@ describe('extractSEProviders', () => {
   });
 
   it('canonicalises alias ids (TV4 Play 1944 → 489)', () => {
-    const result = extractSEProviders({
+    const result = seSubscriptionProviderIdsForRefresh({
       'watch/providers': { results: { SE: { flatrate: [{ provider_id: 1944 }] } } },
     });
     expect(result).toEqual([489]);
@@ -136,7 +132,7 @@ describe('extractSEProviders', () => {
   it('dedupes when same canonical id appears across categories', () => {
     // En tjänst kan listas både i flatrate och ads (canonical 489 = TV4 Play
     // via både 489 och alias 1944).
-    const result = extractSEProviders({
+    const result = seSubscriptionProviderIdsForRefresh({
       'watch/providers': {
         results: {
           SE: {
@@ -170,7 +166,7 @@ describe('B1 — C More legacy id maps to TV4 Play (id 489)', () => {
     expect(canonicalProviderId(1944)).toBe(489); expect(canonicalProviderId(C_MORE_LEGACY_ID)).toBe(489);
   });
   it('dedupes a title listed under both 489 and C More legacy', () => {
-    const result = extractSEProviders({ 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 489 }, { provider_id: C_MORE_LEGACY_ID }] } } } });
+    const result = seSubscriptionProviderIdsForRefresh({ 'watch/providers': { results: { SE: { flatrate: [{ provider_id: 489 }, { provider_id: C_MORE_LEGACY_ID }] } } } });
     expect(result).toEqual([489]);
   });
 });
@@ -216,8 +212,8 @@ describe('BIN-64 — provider-katalog SE-completeness (live-verifierat 2026-06-2
     expect(getProvider(1773)?.name).toBe('SkyShowtime');
   });
 
-  it('extractSEProviders känner igen en titel som TMDB listar under nutida id (283 → 323)', () => {
-    const result = extractSEProviders({
+  it('seSubscriptionProviderIdsForRefresh känner igen en titel som TMDB listar under nutida id (283 → 323)', () => {
+    const result = seSubscriptionProviderIdsForRefresh({
       'watch/providers': { results: { SE: { flatrate: [{ provider_id: 1968 }, { provider_id: 283 }] } } },
     });
     // Både Amazon-kanalen (1968) och bas-id:t (283) → en enda Crunchyroll (323).

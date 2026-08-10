@@ -85,3 +85,30 @@ describe('computeSpendSnapshot (BIN-99)', () => {
     expect(snap.idleKr).toBe(snap.totalKr);
   });
 });
+
+// BIN-814. "Active spend" means a service whose SUBSCRIPTION carries something in the
+// backlog. Viaplay (76) is typed flatrate but the SE catalogue also lists it under
+// rent/buy, so the broad `providers` array cannot tell the two apart — and a film you
+// would still have to pay to rent is not the subscription earning its fee.
+describe('computeSpendSnapshot — a rentable title is not active spend (BIN-814)', () => {
+  it('a vill_se film that is only RENTABLE on an owned service leaves it idle', () => {
+    const items = [mk({ status: 'vill_se', providers: [76], subscriptionProviders: [] })];
+    const snap = computeSpendSnapshot([76], items, {});
+    expect(snap.activeKr).toBe(0);
+    expect(snap.idleProviders.map(p => p.id)).toEqual([76]);
+  });
+
+  it('the same film INCLUDED in that subscription makes it active', () => {
+    const items = [mk({ status: 'vill_se', providers: [76], subscriptionProviders: [76] })];
+    const snap = computeSpendSnapshot([76], items, {});
+    expect(snap.idleKr).toBe(0);
+    expect(snap.idleProviders).toEqual([]);
+  });
+
+  it('a row written before the split (null) keeps counting, via the broad fallback', () => {
+    // Losing the signal here would advise pausing a service the user has backlog on.
+    const items = [mk({ status: 'vill_se', providers: [76], subscriptionProviders: null })];
+    const snap = computeSpendSnapshot([76], items, {});
+    expect(snap.idleProviders).toEqual([]);
+  });
+});

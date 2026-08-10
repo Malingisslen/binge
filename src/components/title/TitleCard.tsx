@@ -141,7 +141,12 @@ export default function TitleCard({ item, providers, showNotInterested }: TitleC
             title={title}
             posterPath={item.poster_path}
             releaseYear={year}
+            // BIN-814: the only bucket this surface is given is flatrate (search
+            // builds providerMap from `data.flatrate`), so the same list is honestly
+            // both answers here — and supplying the subset is what keeps the add from
+            // stamping providersCheckedAt with it absent.
             providers={providers ? dedupedProviders.map(p => canonicalProviderId(p.provider_id)) : undefined}
+            subscriptionProviders={providers ? dedupedProviders.map(p => canonicalProviderId(p.provider_id)) : undefined}
             genreIds={item.genre_ids}
           />
         </div>

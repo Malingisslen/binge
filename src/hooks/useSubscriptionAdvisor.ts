@@ -22,6 +22,7 @@ import {
   isCaughtUpOnEndedShow,
   aggregateAdvisorLoading,
   splitTvByProgress,
+  subscriptionAnchorIds,
   advisorTmdbIds,
   deriveProviderStatus,
   selectBundleSuggestions,
@@ -216,7 +217,10 @@ export function useSubscriptionAdvisor(
         nextEpisodeCode: null,
         isEnded: false,
         releaseDate: film.releaseYear ? `${film.releaseYear}-01-01` : null,
-        providerIds: film.providers,
+        // BIN-814: subscription-only, never the broad availability array — see
+        // subscriptionAnchorIds. TV reaches the same distinction independently, up in
+        // `advisedShows`, which builds its ids from flatrate/free/ads only.
+        providerIds: subscriptionAnchorIds(film),
       }));
 
     const allAnchors = [...followingAdvised, ...willSeeAdvised, ...willSeeFilmAdvised];

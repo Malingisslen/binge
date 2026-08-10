@@ -198,6 +198,34 @@ describe('buildHouseholdContribution (BIN-184 write side)', () => {
     const c = buildHouseholdContribution([], {}, {}, {}, items as never);
     expect(c.activeProviderIds).toEqual([431, 489]);
   });
+
+  // BIN-814. The household dead-weight verdict says "nobody here has backlog on X".
+  // A title someone could RENT on X is not backlog on X — and the broad `providers`
+  // array cannot express that, because Viaplay (76) and TV4 Play (489) are returned
+  // under rent/buy while both are typed flatrate.
+  it('a rent-only title does NOT shield a service from the dead-weight verdict', () => {
+    const items = [
+      { status: 'vill_se', providers: [76], subscriptionProviders: [] },
+    ] as const;
+    const c = buildHouseholdContribution([], {}, {}, {}, items as never);
+    expect(c.activeProviderIds).toEqual([]);
+  });
+
+  it('the same title included in the subscription still counts as backlog', () => {
+    const items = [
+      { status: 'vill_se', providers: [76], subscriptionProviders: [76] },
+    ] as const;
+    const c = buildHouseholdContribution([], {}, {}, {}, items as never);
+    expect(c.activeProviderIds).toEqual([76]);
+  });
+
+  it('a row written before the split (null) still counts, via the broad fallback', () => {
+    const items = [
+      { status: 'vill_se', providers: [1944], subscriptionProviders: null },
+    ] as const;
+    const c = buildHouseholdContribution([], {}, {}, {}, items as never);
+    expect(c.activeProviderIds).toEqual([489]); // still canonicalised
+  });
 });
 
 describe('contributionContentEquals (dirty-check)', () => {
