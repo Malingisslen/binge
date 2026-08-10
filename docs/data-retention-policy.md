@@ -308,13 +308,15 @@ spårat som följdticket.
 **Console-bypass (känd begränsning):** `deleteAccount`-cascaden körs bara vid
 självservice-radering i appen. Raderar en admin ett konto direkt i Firebase
 Auth Console körs INGEN klient-cascade (det finns ingen Auth-`onDelete`-trigger),
-så cascade-bara-data (avsnitts-reaktioner, fcmTokens m.fl.) blir kvar. För den
+så cascade-bara-data (avsnitts-reaktioner m.fl.) blir kvar. För den
 **säkerhetskänsliga** delen — plaintext-invite-tokenet i `joinAttempts` (BIN-329)
 — är detta nu täppt: den schemalagda `retentionCleanup`-sweepen raderar varje
 joinAttempt äldre än 1 timme oavsett hur kontot försvann (admin SDK kringgår
 reglerna). Reaktioner/övrig cascade-bara-data efter en Console-radering är
 fortfarande en öppen, bredare lucka (låg känslighet — inget hemligt) som ägs av
 en framtida server-side reaper för konton vars ägar-uid inte längre finns.
+**`fcmTokens` är däremot INTE längre kvar i den luckan** — de har ett eget svep
+sedan BIN-848, se §"Push-tokens för konton Auth inte längre erkänner" nedan.
 
 ## Retention-policy för icke-raderad data
 
@@ -414,6 +416,46 @@ så samma användare inte får en andra push för samma digitala släppdatum. Do
   om, och när). Ett förnyat släppdatum stämplar om `updatedAt` → markören
   nollställer sin egen klocka. Ingen `firestore.indexes.json`-post krävs (svepet
   pagesar på `__name__` via det automatiska collection-group-indexet, som de andra).
+
+### Push-tokens för konton Auth inte längre erkänner (BIN-848, 2026-08-10)
+
+`users/{uid}/fcmTokens/*` för uid vars Auth-användare **saknas eller är spärrad**.
+
+- **Problemet:** `sendPushToUser` grindar på profildokumentets
+  `notificationSettings.pushEnabled` och frågar aldrig Auth. En radering eller
+  spärr gjord i Firebase-konsolen kör ingen klientkaskad och lämnar varje
+  Firestore-dokument på plats — så personens enhet fortsätter få notiser i
+  evighet. FCM:s egen självläkning (`registration-token-not-registered`) slår
+  inte till: token är fullt giltig på en levande webbläsare.
+- **Varför klienten inte kan laga det:** när behörigheten väl är återkallad har
+  den ingen rätt att radera sitt eget token-dokument. Samma form som
+  `joinAttempts` och släpp-markörerna — därför samma svep.
+- **Beslut:** `retentionCleanup` samlar ägar-uid för alla `fcmTokens`-dokument i
+  ett paginerat collection-group-pass och slår upp dem via Admin-SDK:ns
+  `getUsers()` i batchar om högst 100. Token-dokumenten raderas för uid som
+  ligger i svarets `notFound`-lista, och för konton som returneras med
+  `disabled: true`.
+- **Tre säkerhetsregler, alla avsiktliga.** Det här är det enda svepet vars
+  falska positiv förstör något ett LEVANDE konto använder:
+  1. "Raderad" läses ur svarets egna `notFound`-lista — aldrig härlett ur att ett
+     uid saknas i `users`. Spärrade konton returneras nämligen I `users`.
+  2. En `getUsers()`-batch som kastar (nätfel, kvot, Auth-avbrott) raderar
+     ingenting alls för den batchen. "Kunde inte verifiera" är inte "borta".
+  3. Svepet fångas separat i handlern, så ett Auth-avbrott aldrig svälter de fyra
+     Firestore-baserade svepen.
+- **Fördröjning:** upp till 24 timmar. Accepterat — notiserna gäller personens
+  egen watchlist och egna vänner, inte tredje parts data, och token-dokumenten kan
+  raderas direkt i konsolen om det brådskar.
+- **Detta är INTE "avregistrera när sessionen tar slut".** En stängd webbläsare
+  ska fortsätta få push; det är hela poängen med push. Bara centralt återkallade
+  konton omfattas.
+- **Konsekvens att känna till:** låser du upp ett spärrat konto igen kommer push
+  inte tillbaka av sig själv — personen måste öppna appen och godkänna notiser på
+  nytt. Kryssrutan i Inställningar kommer dessutom **se förkryssad ut**, eftersom
+  kontoflaggan `pushEnabled` lämnas orörd och servern inte kan rensa enhetens
+  lokala pekare: hen måste slå AV och PÅ den igen för att få tillbaka notiser. #27 DBA lyfte det som skäl att lämna `disabled`-hinken till ett eget
+  beslut; Malin namngav uttryckligen spärrade konton som fallet hon ville ha
+  täckt, så hinken byggdes.
 
 ### Framtida (ej byggt)
 

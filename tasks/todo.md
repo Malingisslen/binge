@@ -1,218 +1,139 @@
-# Plan 2026-08-10 — BIN-844 + BIN-845
+# Plan 2026-08-10b — BIN-848 (omskriven och smalnad)
 
-Två uppföljningar på gårdagens leverans. Malin bad om dem "i en ny sprint"; de går inte att
-sprinta — BIN-844 routar `top` (full panel, rör grupper + auth) och en obemannad sprint får
-inte röra den, och båda biljetterna var skrivna som frågor. Hon är närvarande, så panelen
-konvenerades här och besluten togs live.
+## Hur biljetten kom hit
 
----
+Jag filade BIN-848 som "en session som tar slut utan klick på Logga ut avregistrerar inte
+push". **Malin invände, och hade rätt.** Att inte avregistrera när en session bara lapsar
+är hela poängen med push — stänger man webbläsaren ska notiser fortsätta komma. Två av
+mina tre exempel var dessutom samma händelse räknad flera gånger: "en annan flik loggade
+ut" och "en flik startar mitt i en utloggning" betyder båda att någon FAKTISKT klickade
+Logga ut, och `disablePushForUser` avregistrerar för hela webbläsaren.
 
-## Panelen (BIN-844, tier `top`)
+Biljetten är omskriven till det som faktiskt återstår.
 
-`node docs/org/route.mjs src/lib/groupInviteCache.ts src/lib/firebase/groups.ts
-src/hooks/useSession.ts src/lib/firebase/messaging.ts src/contexts/AuthContext.tsx`
-→ `tier: top`, high-stakes på `groups.ts` + `AuthContext.tsx`, panel `[27, 5, 4, 6, 18]`.
+## Det smala fallet
 
-Fyra roller seatade + Codebase Archaeologist: **#4 Säkerhetsarkitekt, #5 Juridik/GDPR,
-#6 DPO, #18 Community Manager**. Bortvald: **#27 DBA** — ändringen rör enhetslokal lagring,
-ingen Firestore-struktur, inget datalager. Ingen blockering; fyra approve-with-conditions.
+Verifierat: appen har **ingen** lösenordsändring eller återställning (`updatePassword`,
+`sendPasswordResetEmail`, `reauthenticate`, `revokeRefreshTokens` finns ingenstans). En
+inloggning kan därför bara återkallas utifrån — i praktiken av Malin i Firebase-konsolen.
 
-### Vad panelen ändrade i biljetten
+`sendPushToUser` grindar bara på profilens `notificationSettings.pushEnabled` och läser
+sedan `users/{uid}/fcmTokens/*`. Den frågar aldrig Auth. Så:
 
-**1. Biljettens premiss höll inte.** BIN-844 antog att `binge:groupInvite:{groupId}`
-överlever en kontoradering som en levande nyckel. Den gör inte det: bara en grupps ÄGARE
-cachar klartexten, och raderingskaskaden raderar hela den ägda gruppen — token pekar på
-något som inte finns. Den verkliga exponeringen är **utloggning på delad dator**.
+- **Konsol-radering** — Auth-användaren borta, all Firestore-data kvar, push fortsätter.
+- **Konsol-spärr** — allt kvar, push fortsätter.
+- FCM:s självläkning slår inte till: token är fullt giltig på en levande webbläsare.
 
-**2. Och den verkliga läckan var en annan.** DPO och Arkeologen fann oberoende att
-`disablePushForUser` bara anropas från reglaget i inställningarna. Utloggning avregistrerar
-INTE push. Loggar du ut på en delad dator fortsätter dina notiser komma dit — med innehåll.
-Malins ursprungliga val ("rensa inbjudningslänken + push-token") hade tagit bort en
-*pekare* till token-doc:et utan att stoppa en enda notis. Etiketten lovade något koden inte
-kunde leverera; det lades tillbaka till henne.
+## Kritik: #27 DBA (router `medium`, panel `[27]`)
 
-**3. En äkta konflikt, eskalerad.** #4 ville rensa inbjudningslänken vid utloggning
-(devtools når klartexten oavsett vad UI:t visar). #18 och Arkeologen visade kostnaden:
-panelen är ägargrindad, så nästa inloggade person ser den aldrig via appen — men ägaren
-förlorar sin egen länk, och enda vägen tillbaka är "Generera ny", som ogiltigförklarar den
-länk hen redan skickat till folk som inte klickat än. Interpretativt och användarpåverkande
-→ Malins beslut, inte mitt.
+**approve-with-conditions.** Villkoren, och vad som görs med dem:
 
-### Malins beslut 2026-08-10
-- **Push stängs av på riktigt vid utloggning.** Hon tar priset: inget slår på push igen
-  automatiskt, så hon måste kryssa i det i Inställningar efter varje inloggning, på varje
-  enhet.
-- **Inbjudningslänken rensas bara vid radering**, inte vid utloggning.
+| Villkor | Status |
+|---|---|
+| Tre hinkar: `notFound` → radera, `disabled` → eget beslut, övriga → skippa | **Ja.** Se nedan om `disabled`. |
+| En kastande `getUsers()`-batch = "skippa, radera inte" — aldrig hopblandad med notFound | **Ja**, per batch. |
+| ≤100 identifierare per `getUsers()`-anrop | **Ja.** |
+| Bygg uid→refs i EN paginerad `collectionGroup('fcmTokens')`-pass, uid via `d.ref.parent.parent.id` | **Ja.** |
+| Rör inte `notificationSettings.pushEnabled` | **Ja.** Att radera tokens räcker; `sendPushToUser` no-oppar rent på tom `tokensSnap`. |
+| Kör veckovis, inte dagligen | **NEJ — medvetet avsteg, se nedan.** |
 
----
+### Avstegen, och varför
 
-## BIN-844 — vad som byggs
+**Cadence.** #27 vill ha veckovis som `reclaimOrphanFollows`, med argumentet att
+konsolåtgärder är sällsynta. Sant — men svepet läggs i `retentionCleanup`, vars egen
+dokumenterade uppgift redan ÄR skyddsnätet för "konton raderade via Firebase Console, som
+inte kör någon klientkaskad". Alternativet vore en femte schemalagd funktion med egen
+deploy, egen post i workflow-kartans universum och eget CI-krav — mer maskineri än svepet
+självt. Scanet är `collectionGroup('fcmTokens').select()`, alltså en handfull dokument i
+dagsläget och bundet av samma `PAGE_SIZE` som de andra fyra. Kostnaden är brus mot
+25 SEK/mån-taket. Om enhetsantalet någon gång gör scanet dyrt är rätt åtgärd att flytta
+hela funktionen till en glesare kadens, inte att gömma en veckovis gren inuti en daglig.
 
-1. **`AuthContext.signOut` anropar `disablePushForUser(uid)` FÖRE `firebaseSignOut`.**
-   Två ordningar är bindande och ingen är uppenbar:
-   - `auth.currentUser` är null i samma stund `firebaseSignOut` resolvar → uid måste fångas
-     synkront först (Arkeologens landmina; `deleteAccount` gör redan rätt, `signOut` inte).
-   - `disablePushForUser` RADERAR `users/{uid}/fcmTokens/{id}`. När Auth-användaren är borta
-     har klienten ingen token och `firestore.rules` avvisar skrivningen. Det är
-     `deleteAccount`s ordningsregel åt andra hållet: där måste den lokala städningen ligga
-     EFTER point-of-no-return, här måste den serversidiga ligga FÖRE.
-   - Följd som skrivs in i koden: cleanup:en kan därför **inte** ligga i auth-lyssnarens
-     `uid→null`-gren där resten av utloggningshygienen bor (BIN-732). En session som tar
-     slut via tyst utgång eller återkallelse fortsätter pusha hit. Känd lucka, inte ett
-     förbiseende.
-   - Best-effort: offline eller nekad skrivning lämnar token registrerad. Blockera aldrig
-     utloggningen — en användare som inte kan logga ut är värre än en vars notiser följer med.
-2. **`clearAllInviteTokens()`** i `groupInviteCache.ts` — prefix-svep, collect-then-remove
-   (en index-loop med `removeItem` inuti hoppar över varannan nyckel; det finns inget annat
-   prefix-svep i repot att kopiera, så det här blir referensen). Anropas **bara** från
-   `deleteAccount`, efter `deleteUser`.
-3. **`clearLocalPushTokenId(uid)`** i `messaging.ts` — bara den dinglande lokala pekaren, för
-   raderingsvägen där `disablePushForUser` inte går att använda (kaskaden har redan raderat
-   doc:et). Aldrig vid utloggning: den tar bort pekaren utan att avregistrera något, vilket
-   är exakt förvirringen den här biljetten fick reda ut.
-4. **Lämnas orörda, som beslutat:** `binge-session-pid-*` / `binge-my-sessions`,
-   `binge:wasLoggedIn`, `binge:rec-rotation:*`.
+**`disabled`-hinken byggs.** #27 vill lämna den till Malin eftersom en spärr kan vara
+tillfällig och radering av token tar bort den tysta återhämtningen — personen måste öppna
+appen och godkänna notiser igen efter en upplåsning. **Malin namngav "spärrat konto"
+uttryckligen som fallet hon vill ha fixat**, så beslutet är redan givet. Kostnaden är
+liten och gäller någon hon medvetet spärrat — men den är icke-uppenbar och rapporteras
+till henne i klartext.
 
-### Dokumentation (villkor från #5 och #6, i SAMMA commit)
-- `docs/data-retention-policy.md`: flytta `groupInvite` och `fcm:tokenId` ur
-  "överlever också raderingen … ännu inte genomgångna" till en beskrivning som matchar vad
-  som nu gäller. Namnge de tre kvarlämnade med den faktiska motiveringen. Skriv rakt ut att
-  rensning av `fcm:tokenId` är dinglande-pekare-städning, inte ny Art. 17-täckning — den
-  serversidiga doc:en tas redan av kaskaden.
-- Korsreferens till **ADR 0015** för `binge-session-pid-*`: att den överlever utloggning är
-  inte ett nytt beslut utan samma avvägning Malin redan ratificerade mot full panel
-  2026-07-16. Ska vara spårbar som en sammanhängande position, inte återupptäckas som en
-  öppen fråga.
-- **#5:s tolkningsposition om hashning** (öppen sedan BIN-817) skrivs ned daterad: en
-  icke-reversibel hash är inte automatiskt anonym data; frågan avgörs per fält av indatans
-  entropi, inte av att hashning skett. Hög entropi (uid, genererad token) → inte persondata.
-  Låg entropi (visningsnamn, användarnamn, fritext) → fortfarande persondata.
-  `binge:pubprofile-sig` hamnar på den senare sidan. Formuleras som arbetsposition, inte
-  som fastslagen rätt.
-- §8:s "listan är inte uttömmande"-brasklapp rörs INTE. Tre av sex nycklar står kvar utanför
-  den itemiserade listan, så den är fortfarande sann och fortfarande bärande.
+## Vad som byggs
 
-### Acceptans (bindande)
-- [ ] Utloggning avregistrerar push serversidigt, och uid:t fångas före `firebaseSignOut`.
-- [ ] En kastande `disablePushForUser` stoppar aldrig utloggningen.
-- [ ] Prefix-svepet tar ALLA `binge:groupInvite:*` och inget annat, och överlever ett
-      localStorage som kastar.
-- [ ] Svepet körs vid radering, och **inte** när freshness-porten eller `deleteUser` kastar.
-- [ ] Inget anropar `clearLocalPushTokenId` från utloggningsvägen.
-- [ ] Retentionsdokumentet beskriver det som faktiskt gäller efter ändringen.
+`functions/src/retentionCleanup/` får ett femte svep:
 
----
+1. Paginera `collectionGroup('fcmTokens')` med `.select()` (bara ref:en behövs) +
+   `orderBy('__name__')` + `PAGE_SIZE`, som de fyra befintliga. Ägar-uid via
+   `d.ref.parent.parent.id` — samma härledning `reclaimOrphanFollows` redan använder.
+2. Bygg `Map<uid, DocumentReference[]>` under scanet.
+3. `getUsers()` mot `Map.keys()` i batchar om ≤100. Svaret är
+   `{ users, notFound }` — `disabled` finns i `users` med `disabled: true`, ALDRIG
+   härlett ur frånvaro. En kastande batch fångas, loggas och hoppas över.
+4. Radera token-doc:en för uid i `notFound` eller med `disabled: true`.
+5. `docs/data-retention-policy.md` uppdateras: nytt svep, vad det täcker, och 24-timmars-
+   fördröjningen.
 
-## BIN-845 — vad som byggs
+## Acceptans (bindande)
 
-Router: `medium`, panel `[3]`. Kritik från **#3 Financial Controller**: approve-with-conditions.
+- [x] Ett uid som Auth inte känner till → dess tokens raderas.
+- [x] Ett uid vars Auth-användare är `disabled` → dess tokens raderas.
+- [x] Ett levande, ospärrat uid → tokens rörs **inte**.
+- [x] En `getUsers()`-batch som kastar → INGEN radering för den batchen, och de övriga
+      batcharna påverkas inte. *(Testgranskaren hade rätt: detta var en
+      flerbatch-utsaga som ingen test pinnade. `revokedUidsInBatches` bröts ut med en
+      injicerad `lookup`-port och har nu sju egna tester + fyra dödade mutationer.)*
+- [x] `notFound` läses ur svarets `notFound`-fält, inte ur "saknas i `users`".
+- [x] Batchstorleken överskrider aldrig 100.
+- [x] Ett Auth-fel startar aldrig de fyra befintliga svepen — de körs oberoende.
+- [x] Andra körningen hittar ingenting (idempotent).
 
-1. `src/app/stats/page.tsx` och `functions/src/insights/rollup.ts` läser
-   abonnemangsdelmängden. Malins val: staplarna ska svara på "vad kan jag se på det jag
-   betalar för". Ren fältbyte, noll marginalkostnad (samma dokumentantal, samma schema).
-2. **#3:s villkor:** raden "N av M titlar med streamingdata" (`stats/page.tsx`) räknas idag
-   på det breda fältet. Smalnar staplarna men inte raden överdriver den hur många titlar som
-   är representerade — den måste följa med.
-3. `functions/src/streamingOffers/logic.ts` lämnas orörd.
+## Granskningsrunda 1 (alla fyra: pass, 0 blockerande)
 
-### #3 korrigerade biljettens kostnadsbeskrivning — och den ska rättas
-Jag skrev att arbetsmängden "växer" som en kostnad den här biljetten tar på sig. Fel:
-`isIntentTitle` ändras inte, så det är **status quo som ratificeras**, ingen marginalkostnad.
-Skillnaden spelar roll för hur det loggas senare.
+Fem frivilliga fynd, fyra lagade i runda 2:
+1. Retentionsdokumentet svarade **två gånger** på samma fråga — `fcmTokens` stod kvar i
+   "öppen lucka, ägs av en framtida reaper" hundra rader ovanför sitt eget svep. Rättat.
+2. Kryssrutan hade ljugit igen, via den andra dörren: låser man upp ett spärrat konto är
+   `pushEnabled` orört och servern kan inte rensa enhetens lokala pekare, så rutan visas
+   ikryssad över en enhet utan registrering. Exakt det BIN-844:s `hasLocalPushToken`
+   fanns till för. Nu utskrivet i dokumentet med vad personen måste göra.
+3. Körningens egen sammanfattning kunde inte skilja "ingen var återkallad" från "varenda
+   `getUsers()`-batch kastade". `skippedAuthBatches` loggas nu.
+4. `functions/src/index.ts` beskrev retentionCleanup som två svep. Det är fem.
+5. `docs/workflow-map.html`s hygien-flöde säger fortfarande "four targets". **Inte
+   lagat här** — kartändringar går aldrig i samma commit som funktionskod (lessons-
+   digest 2026-07-10). Egen commit efter denna.
 
-Och en tröskel jag inte kände till: `computeHealth(workSetSize, 9, …)` slår till `warn` över
-279 och `critical` över 558, och critical-notisen till admin föreslår ordagrant **MOTN Pro
-($39/mån)** — ~15× taket på 25 SEK/mån. Att lämna `isIntentTitle` bred håller mätvärdet
-närmare den tröskeln.
+## Deploy
 
-**Mätt 2026-08-10, före commit** (`streamingHealth/current` i produktion):
-`workSetSize: 24`, `refreshIntervalDays: 3`, `status: ok`. Warn börjar vid 280
-(`ceil(280/9) = 32 > 31`), critical vid 559. Vi ligger på 8,6 % av warn-golvet — det
-krävs ungefär tolv gångers tillväxt av arbetsmängden för att ens nå varning, och
-admin-notisen med MOTN Pro-förslaget avfyras bara vid en statusövergång. Villkoret är
-därmed uppfyllt och "lämna `isIntentTitle` bred" är säkert på dagens siffror.
+`firebase deploy --only functions:retentionCleanup`. Ingen regeländring, ingen
+klientändring — alltså ingen hosting-deploy och ingen `gh workflow run` den här gången.
 
-Ursprunglig formulering av villkoret, för spårbarhet: kontrollera nuvarande
-`workSetSize` före commit; är den redan nära
-279 ska det stå i biljetten, för då kan naturlig biblioteks-tillväxt avfyra uppsäljningen
-utan en enda kodändring. Rekommendationen är aldrig sprintens att acceptera.
+## Granskningsrunda 2 (alla fyra: pass, 0 blockerande)
 
----
+Två fynd till, båda lagade — samma felklass som runda 1:s tredje, en gång till:
+1. **Loggningen kunde avbryta svepet.** `onBatchError` anropades oskyddat i `catch`-blocket,
+   så en logger som själv kastar hade avbrutit alla återstående batchar OCH kastat bort de
+   uid tidigare batchar redan hunnit återkalla — tvärtemot vad funktionens egen docstring
+   lovade. Nu inkapslad; en nionde mutation (ta bort skyddet) dödar testet.
+2. **En total scan-krasch loggade som en ren körning.** Den yttre `.catch` returnerade
+   `skippedAuthBatches: 0`, alltså exakt samma sammanfattning som "ingen var återkallad".
+   Returnerar nu `-1`.
 
-## Vad integrationsgranskningen hittade — fyra blockerande, alla äkta
+Testgranskaren rättade också min egen siffra: den fjärde mutationen dödade 3 tester, inte 4.
 
-Första bygget var inte klart. Alla fyra lagade före commit:
+## Kvar efter denna commit
 
-1. **Utloggning hade kunnat hänga för alltid, tyst.** `deleteDoc` mot
-   `persistentLocalCache` resolvar först på server-ack — offline settlar den aldrig.
-   Ett bart `await` hade alltså låst utloggningen, utan spinner och utan felmeddelande
-   (båda anropsställena är `void signOut()`), för exakt de användare som HAR push på.
-   Att fånga en rejection täcker inte en hängning. Nu `Promise.race` mot 2 sekunder,
-   och anropet hoppas helt över när enheten inte har någon token.
-2. **Bildtexten överdrev fortfarande.** Varje skrivare som sätter
-   `subscriptionProviders` stämplar `providersCheckedAt` i samma payload — så en
-   hyr-bara-titel är `[]` MED stämpel, och disjunktionen `|| providersCheckedAt`
-   räknade in precis de rader som inte ritar någon stapel. Villkoret som #3 ställde
-   hade alltså inverterats till sin motsats. Disjunktionen borttagen; mitt eget test
-   pinnade en form produktionen aldrig skriver och är omskrivet.
-3. **Din uppgörelse gick inte att hålla.** Kryssrutan läste `pushEnabled`, som är
-   KONTO-nivå. Efter en utloggning och ny inloggning hade den visats **ikryssad** över
-   en enhet som inte fick något — så "kryssa i det igen" var inte tillgängligt. Rutan
-   speglar nu både kontoflaggan och att enheten faktiskt har en token
-   (`hasLocalPushToken`).
-4. **Det fanns en TREDJE sammanställning.** `taste/stats.ts` (publika profilens
-   "Topp-tjänster") låg kvar på det breda fältet, så samma bibliotek hade rapporterat
-   olika siffror på /stats och på profilen. Nu samma regel.
+- Egen kart-commit: `docs/workflow-map.html`s `flow-hygiene` säger fortfarande "four
+  targets" och saknar två steg (fcmTokens-scanet + `getUsers()`-uppslaget). Dessutom
+  saknar `flow1` BIN-844:s utloggningssteg, som stale-flaggan pekar på.
+- `docs/role-responsibilities.md:430` beskriver retentionCleanup som två svep — efter
+  denna commit är den TRE svep efter (BIN-329, BIN-464, BIN-848). Inte infört här.
 
-Testgranskningen bidrog med två: svep-testet påstod att det pinnade
-"nycklar som bara innehåller prefixet" utan att göra det (decoy tillagd), och
-`signOutMock` var den enda mocken i filen som aldrig rensades mellan tester.
+## Efter deployen — verifiera i loggen
 
-## Deploy — och en halv landning tills den körs
+Detta är **första gången någon funktion i repot anropar Auths användar-API**
+(`insights/api.ts` gör bara `verifyIdToken`, som verifieras offline mot publika nycklar
+och inte kräver någon Identity Toolkit-rättighet). Saknar körtidens tjänstekonto
+`firebaseauth.users.get` kastar varenda batch, ingenting raderas, och svepet är tyst
+verkningslöst.
 
-`deploy.yml` skickar bara hosting. `functions/src/insights/rollup.ts` ändras här, så:
-
-1. `firebase deploy --only functions:rollupInsights`
-   Namnet är verifierat mot `functions/src/index.ts:154` — **`rollupInsights`**, inte
-   `insightsRollup`. Kontrollen är inte formalia: förra leveransen namngav en katalog i
-   stället för en funktion och hade deployat noll funktioner utan att säga till.
-2. push
-3. `gh workflow run deploy.yml` — spärren avbryter varje push som rör `functions/**`.
-
-Tills steg 1 körts visar `/stats` och den publika profilen abonnemangsdelmängden medan
-`/insikter` fortsätter räkna det breda fältet. Ingen larmar på det, men de dagsdaterade
-`insights/{YYYY-MM-DD}`-doc:en får ett hack i kurvan som är en definitionsändring, inte
-en dataförändring — värt att veta innan någon tolkar den som ett tapp.
-
-## En optimering som togs tillbaka
-
-Integrationsgranskningen föreslog (som valfritt) att även `useFcmToken` skulle grinda
-på `hasLocalPushToken`, så att en återvändande användare slipper ladda
-messaging-chunken och prenumerera på en kanal som inte kan leverera. Jag byggde det —
-och kodgranskningen visade att det införde en riktig bugg: effektens beroenden är
-`[uid, pushEnabled, toast]`, och inget av dem ändras när en token dyker upp. På en
-ANDRA enhet för ett konto som redan har push på skriver kryssrutan token:en men lämnar
-`pushEnabled` på `true` — inget beroende ändras, effekten körs aldrig om, och
-förgrundslyssnaren saknas tills sidan laddas om.
-
-Optimeringen är borttagen igen. Att byta en verklig bugg mot en effektivisering ingen
-bett om är fel väg. En riktig fix kräver en signal hooken kan prenumerera på (en
-token-version som enable/disable räknar upp) — filad, inte improviserad.
-
-## Två nyanser granskningen namngav och som lämnas
-
-- **De tre sammanställningarna matchar på FÄLTET, inte på alias-hopslagning.** Rollupen
-  canonicaliserar (Max = 384/1899/1825 blir en rad); `/stats` och den publika profilen
-  gör det inte. Skillnaden är äldre än den här biljetten och oförändrad av den, men
-  kommentarerna säger "samma regel" — det gäller vilket fält som räknas, inte hur
-  alias viks ihop.
-- **`NotificationsSection`s egen `disablePushForUser`-anrop har ingen timeout.** Samma
-  aldrig-settlar-risk som utloggningen fick en spärr mot: kryssar man av push offline
-  blir rutan permanent inaktiverad tills sidan laddas om. Mildare (användaren står
-  kvar på sidan och ser att inget händer) och äldre än biljetten — men regeln är
-  nedskriven på ett ställe nu och inte på dess tvilling.
-
-## Kvar för Malin
-Inget blockerande. En egen biljett skapas för den kända luckan: en session som tar slut via
-tyst utgång eller återkallelse (inte ett klick på Logga ut) avregistrerar inte push, eftersom
-den städningen kräver en autentiserad skrivning som lyssnargrenen inte kan göra.
+Läs EN `retentionCleanup done`-rad i Cloud Logging efter första körningen och kräv
+`skippedAuthBatches: 0` — inte `-1`, inte `>0` — innan svepet räknas som levande.

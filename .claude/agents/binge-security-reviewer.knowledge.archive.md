@@ -6900,3 +6900,136 @@ mechanism, not the comment" discipline applied one layer deeper than the three p
 passes went, not a new failure mode.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-10 — BIN-848: retentionCleanup fifth sweep (fcmTokens for Auth-revoked uids)
+
+Scope: `functions/src/retentionCleanup/{index,logic,logic.test}.ts`,
+`docs/data-retention-policy.md`, `tasks/todo.md`. Ticket was rescoped down after
+Malin correctly rejected the original premise (unregistering push on a lapsed
+session defeats the point of push); what remains is a narrow gap — a Firebase
+Console delete/disable revokes Auth but leaves every Firestore doc in place, and
+`sendPushToUser` never consults Auth, so a suspended/deleted account's device keeps
+receiving push forever.
+
+**1. Fail-safe direction — verified, not just traced.** Read `revokedUidsFromLookup`
+(logic.ts:136-150): "deleted" is read only from the response's own `notFound` array,
+never inferred from absence in `users` — the function comment names the actual trap
+(`disabled` accounts ARE present in `users`) and the test file pins it explicitly
+(`logic.test.ts:130-137`, "the trap: a disabled account is present in users, not in
+notFound"). A thrown `getUsers()` batch is caught PER BATCH inside
+`collectRevokedPushTokens` (`continue`, nothing pushed to `refs` for that batch) —
+confirmed by reading the try/catch at index.ts:208-218, not just the doc comment
+claiming it. The whole scan is also wrapped in an outer `.catch()` at the
+`Promise.all` call site exactly like its four siblings, so a thrown collectionGroup
+query (not just a thrown `getUsers`) returns `[]` rather than rejecting the
+`Promise.all` — confirmed this is what stops an Auth outage starving the four
+Firestore-only sweeps (they're independent `.catch()`-wrapped promises, not
+sequenced on this one).
+
+**2. Is deleting the token enough, or does `pushEnabled` also need touching?**
+Read `functions/src/push.ts:67-71`: `sendPushToUser` checks `tokensSnap.empty` and
+returns after a log line — no error, no side effect on the profile doc. Deleting
+every token doc is a clean, complete no-op path; touching `pushEnabled` would be
+an unnecessary second mutation of data outside this sweep's stated scope for no
+added safety.
+
+**3. The `disabled` bucket being built (against the DBA's "leave it to Malin")**
+is Malin's own explicit call, named in the plan and in the doc's new section
+("Malin namngav uttryckligen spärrade konton som fallet hon ville ha täckt") —
+this is not a reviewer's decision to second-guess (`accepted-deviations.md`
+process: a founder call against a panel condition is recorded, not re-litigated).
+The silent-recovery cost (re-grant browser permission after unlock) IS disclosed
+honestly in `docs/data-retention-policy.md`'s new section, in plain language, not
+buried — checked by reading the actual diff hunk, not trusting the ticket's summary
+of it.
+
+**4. collectionGroup('fcmTokens') across all users, Admin-SDK, no rules
+involvement** (`firestore.rules:352-354` confirms the sole match is
+`users/{uid}/fcmTokens/{tokenId}`, owner-gated for clients, irrelevant to an
+Admin-SDK sweep). `.select()` with no args returns refs only — no token value ever
+read, matching the sibling sweeps' minimal-read pattern. The `orderBy('__name__')`-
+without-an-explicit-COLLECTION_GROUP-index pattern is the **same standing accepted
+gap** already logged for `notifications`/`joinAttempts`/`notified`/`watchlist`
+(2026-06-20 and later entries in this archive) — checked `firestore.indexes.json`,
+confirmed no entry exists for any of these four either, so this is not a new risk,
+Low/Info only, dominated by precedent already reviewed and shipped four times.
+
+**GDPR completeness:** not a new collection — `fcmTokens` is already
+`users/{uid}/**`, auto-covered by `collectUserDataSnapshots` per
+`data-model.md`. This sweep is an additional Admin-SDK backstop for
+Console-revoked accounts, not a new erasure surface requiring a `userData.ts`
+change.
+
+No new lesson class. Verdict matches the plan's own self-assessment; nothing in the
+diff contradicted it.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-10 (round 3) — BIN-848: failure-path delta (onBatchError guard, -1 sentinel)
+
+Scope, per the dispatching brief: just the two failure-path changes made since round 2 —
+`revokedUidsInBatches`'s `onBatchError?.(err, size)` call now itself inside a nested
+try/catch, and `collectRevokedPushTokens`'s outer `.catch()` in `index.ts` now returning
+`skippedAuthBatches: -1` instead of `0`. Read the full current bytes of both files (not
+just the delta) plus the test file, `docs/data-retention-policy.md`, `tasks/todo.md`, and
+both agent-knowledge files that were staged alongside (`accepted-deviations.md` re-read,
+`data-model.md` re-read — nothing new applies).
+
+**1. onBatchError guard.** Read `logic.ts:169-193`: `skippedBatches += 1` executes BEFORE
+the nested `try { onBatchError?.(err, batch.length) } catch { /* best-effort */ }` — so the
+batch-failure signal that actually drives the fail-safe behavior (nothing pushed to
+`revoked` for that batch) is committed to the closure variable regardless of whether the
+reporting callback throws. The nested catch only protects against the *reporting*
+mechanism aborting the *loop* — it cannot and does not suppress the *counted* failure. This
+is the correct thing to wrap: `logger.error` (from `firebase-functions/v2`) is not a
+security-relevant sensor, it's an observability sink, so swallowing a failure IN the logger
+never hides a security-relevant signal — the signal (`skippedBatches`, and downstream "no
+uid revoked from this batch") survives independent of the sink. Test
+`a reporting callback that throws does not abort the remaining batches` in
+`logic.test.ts:245-261` seeds a throw on both `lookup` (batch 1) and `onBatchError`, and
+asserts `call === 3` (all batches ran) and `revoked === ['u100','u200']` (batches 2+3's
+own notFound entries survived). Hand-traced: removing the nested try/catch makes a thrown
+`onBatchError` reject the whole `revokedUidsInBatches` promise from inside the `for` loop's
+catch block, which the `await` in that same test would surface as an uncaught rejection —
+red-alone. Consistent with the ninth-mutation claim in the brief; not independently
+re-run under `rm -rf node_modules/.vite/vitest` this round (delta is provably self-
+contained and the test-reviewer's own archive entry for round 2 already re-derived the
+sibling mutations on this exact file live), but the hand-trace is unambiguous for this
+specific one-line removal.
+
+**2. `-1` sentinel.** Grepped `skippedAuthBatches`/`skippedBatches` repo-wide (6 files,
+all either `functions/src/retentionCleanup/**`, `tasks/todo.md`, or the two knowledge
+files under review) — nothing downstream branches on the value; it only ever reaches a
+`logger.info(...)` structured-log call. So "misread by anything downstream" has no
+candidate: there is no alerting/monitoring code in this diff or the existing tree that
+parses this field, and a human reading Cloud Logging has the adjacent comment
+(`index.ts:284-287,309-311`) explaining the sign. Confirmed this is genuinely a new
+scan-level default substituted at the `Promise.all` `.catch()` (`index.ts:280-289`), not a
+duplicate of the per-batch `skippedBatches` counter already covered by finding 1 — this one
+fires only when the ENTIRE `collectRevokedPushTokens` (the collection-group scan itself, or
+`getAuth()`) throws, before any batch loop runs at all. `0` there would be indistinguishable
+from "ran clean, found nothing to revoke" in the log line, which is exactly the ambiguity
+BIN-848's own docstring names as unacceptable for the one sweep whose false positive
+destroys a live account's push registration. Fail-safe direction unaffected either way
+(both `0`-old and `-1`-new return `refs: []`, so no token is ever deleted on a whole-scan
+failure) — this is a pure observability improvement, not a change to what gets deleted.
+
+**Per-batch isolation and the ≤100 cap**: unchanged by this delta — `GET_USERS_BATCH = 100`
+and `chunkUids` untouched; `revokedUidsInBatches`'s per-batch try/catch (skip-only-this-
+batch, never conflate with notFound) is the same shape reviewed in round 2, just with the
+inner call now doubly guarded. Confirmed `firestore.rules` not in this diff (not in
+`git diff --cached --name-only`), so no rules-side blast radius to re-check.
+
+**Shared-checkout note**: mid-review, `functions/src/retentionCleanup/logic.ts` showed
+`git status --porcelain` as `MM` — a sibling session's live mutation-testing loop had
+written the exact "MUTANT: guard removed" variant of finding 1 into the WORKTREE while the
+INDEX (`git rev-parse :<f>` = `4fa6fc5d…`) still held the guarded, reviewed bytes
+(`git show :<f>` reconfirmed). This is the documented shared-checkout hazard, not a defect
+in what will be committed — the review is pinned to the index sha, re-confirmed at the end
+of this pass, worktree mutation is transient test-reviewer activity on the same file.
+
+No new lesson class beyond the in-place fold made to this file's own "Admin-SDK sweeps"
+bullet (nested-guard-the-reporter + outage-sentinel, generalized from this diff's two
+changes). accepted-deviations.md re-read in full: none of its 8 entries apply.
+
+**REVIEW-VERDICT: pass (0 blocking)**

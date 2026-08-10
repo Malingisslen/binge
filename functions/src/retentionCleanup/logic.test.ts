@@ -9,6 +9,10 @@ import {
   NOTIFICATION_MAX_AGE_MS,
   JOIN_ATTEMPT_MAX_AGE_MS,
   RELEASE_MARKER_MAX_AGE_MS,
+  revokedUidsFromLookup,
+  chunkUids,
+  GET_USERS_BATCH,
+  revokedUidsInBatches,
 } from './logic';
 
 const now = 1_000_000_000_000; // fixed "now" for deterministic boundaries
@@ -113,5 +117,160 @@ describe('isStaleReleaseMarker (BIN-464)', () => {
     const graceWindowMs = 3 * 24 * 60 * 60 * 1000;
     expect(RELEASE_MARKER_MAX_AGE_MS).toBeGreaterThan(graceWindowMs);
     expect(RELEASE_MARKER_MAX_AGE_MS).toBe(30 * 24 * 60 * 60 * 1000);
+  });
+});
+
+// BIN-848. This is the only sweep in retentionCleanup whose false positive
+// destroys something a LIVE account is using — a working push registration — so
+// the buckets are pinned individually rather than as one "revoked" blob.
+describe('revokedUidsFromLookup (BIN-848)', () => {
+  it('takes a uid Auth does not know — read from notFound, not from absence', () => {
+    expect(revokedUidsFromLookup({ users: [], notFound: [{ uid: 'gone' }] })).toEqual(['gone']);
+  });
+
+  it('takes a disabled account, which Auth RETURNS in users', () => {
+    // The trap: a disabled account is present in `users`, not in `notFound`.
+    // Inferring "gone" from absence would miss it entirely.
+    expect(revokedUidsFromLookup({
+      users: [{ uid: 'barred', disabled: true }],
+      notFound: [],
+    })).toEqual(['barred']);
+  });
+
+  it('leaves a live account alone', () => {
+    expect(revokedUidsFromLookup({
+      users: [{ uid: 'alive', disabled: false }],
+      notFound: [],
+    })).toEqual([]);
+  });
+
+  it('treats a missing disabled flag as live, never as revoked', () => {
+    expect(revokedUidsFromLookup({ users: [{ uid: 'alive' }], notFound: [] })).toEqual([]);
+  });
+
+  it('never infers a deletion from absence in users', () => {
+    // A uid asked for but returned in neither list. Whatever that means, it is
+    // not a licence to delete — only the explicit notFound list is.
+    expect(revokedUidsFromLookup({ users: [], notFound: [] })).toEqual([]);
+  });
+
+  it('skips a notFound entry that is not a uid lookup', () => {
+    // The SDK's notFound is a union covering email/phone lookups too. We only
+    // ever ask by uid, so anything else is unexpected and must not be guessed at.
+    expect(revokedUidsFromLookup({
+      users: [],
+      notFound: [{ email: 'x@example.com' }, { uid: 'gone' }],
+    })).toEqual(['gone']);
+  });
+
+  it('collects both buckets in one response', () => {
+    const out = revokedUidsFromLookup({
+      users: [{ uid: 'alive', disabled: false }, { uid: 'barred', disabled: true }],
+      notFound: [{ uid: 'gone' }],
+    });
+    expect(out.sort()).toEqual(['barred', 'gone']);
+  });
+});
+
+describe('chunkUids (BIN-848)', () => {
+  it('never exceeds the Admin SDK cap of 100 per call', () => {
+    const uids = Array.from({ length: 250 }, (_, i) => `u${i}`);
+    const chunks = chunkUids(uids);
+    expect(chunks.every(c => c.length <= GET_USERS_BATCH)).toBe(true);
+    expect(chunks.map(c => c.length)).toEqual([100, 100, 50]);
+  });
+
+  it('loses no uid across the split', () => {
+    const uids = Array.from({ length: 205 }, (_, i) => `u${i}`);
+    expect(chunkUids(uids).flat()).toEqual(uids);
+  });
+
+  it('returns nothing for an empty input', () => {
+    expect(chunkUids([])).toEqual([]);
+  });
+});
+
+describe('revokedUidsInBatches (BIN-848)', () => {
+  const alive = (uid: string) => ({ uid, disabled: false });
+
+  it('splits the lookup at the SDK cap and loses no uid', async () => {
+    const seen: string[][] = [];
+    const uids = Array.from({ length: 250 }, (_, i) => `u${i}`);
+    await revokedUidsInBatches(uids, async (batch) => {
+      seen.push(batch);
+      return { users: batch.map(alive), notFound: [] };
+    });
+    expect(seen.map(b => b.length)).toEqual([100, 100, 50]);
+    expect(seen.flat()).toEqual(uids);
+  });
+
+  it('a batch that throws skips ONLY itself — the others still revoke', async () => {
+    const uids = Array.from({ length: 250 }, (_, i) => `u${i}`);
+    let call = 0;
+    const { revoked, skippedBatches } = await revokedUidsInBatches(uids, async (batch) => {
+      call += 1;
+      if (call === 2) throw new Error('auth outage');
+      return { users: batch.map(alive), notFound: [{ uid: batch[0] }] };
+    });
+    // Batch 1 and 3 each named their first uid as gone; batch 2 named nobody.
+    expect(revoked).toEqual(['u0', 'u200']);
+    expect(skippedBatches).toBe(1);
+    expect(call).toBe(3);
+  });
+
+  it('a batch that throws contributes NO uid — not even a partial one', async () => {
+    const { revoked, skippedBatches } = await revokedUidsInBatches(['a', 'b'], async () => {
+      throw new Error('quota');
+    });
+    expect(revoked).toEqual([]);
+    expect(skippedBatches).toBe(1);
+  });
+
+  it('reports every failed batch so a total outage cannot read as a clean run', async () => {
+    const uids = Array.from({ length: 250 }, (_, i) => `u${i}`);
+    const { revoked, skippedBatches } = await revokedUidsInBatches(uids, async () => {
+      throw new Error('down');
+    });
+    expect(revoked).toEqual([]);
+    expect(skippedBatches).toBe(3);
+  });
+
+  it('hands the caller each failure with the batch size', async () => {
+    const errors: number[] = [];
+    await revokedUidsInBatches(['a', 'b', 'c'], async () => { throw new Error('x'); },
+      (_err, size) => errors.push(size));
+    expect(errors).toEqual([3]);
+  });
+
+  it('a reporting callback that throws does not abort the remaining batches', async () => {
+    const uids = Array.from({ length: 250 }, (_, i) => `u${i}`);
+    let call = 0;
+    const { revoked, skippedBatches } = await revokedUidsInBatches(
+      uids,
+      async (batch) => {
+        call += 1;
+        if (call === 1) throw new Error('auth outage');
+        return { users: batch.map(alive), notFound: [{ uid: batch[0] }] };
+      },
+      () => { throw new Error('logger blew up'); },
+    );
+    // Batch 1 failed and its logger failed too; batches 2 and 3 still ran.
+    expect(revoked).toEqual(['u100', 'u200']);
+    expect(skippedBatches).toBe(1);
+    expect(call).toBe(3);
+  });
+
+  it('an all-live lookup revokes nobody and skips nothing', async () => {
+    const { revoked, skippedBatches } = await revokedUidsInBatches(['a', 'b'],
+      async (batch) => ({ users: batch.map(alive), notFound: [] }));
+    expect(revoked).toEqual([]);
+    expect(skippedBatches).toBe(0);
+  });
+
+  it('never calls the lookup for an empty uid list', async () => {
+    let calls = 0;
+    const out = await revokedUidsInBatches([], async () => { calls += 1; return { users: [], notFound: [] }; });
+    expect(calls).toBe(0);
+    expect(out).toEqual({ revoked: [], skippedBatches: 0 });
   });
 });

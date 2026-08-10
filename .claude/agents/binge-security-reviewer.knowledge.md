@@ -274,7 +274,16 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   doc), unit-tested for key-set equality + disjointness from `FORBIDDEN_FIELDS`. Whole-DB sweeps add a
   dry-run-by-default gate, cursor + budget, and an audit `lastRun` write every run.
 - A shared `Set`/`Map` accumulator returned only at loop-end fails twice on a throw from unit K: K+1..M skipped,
-  1..K-1's already-landed writes discarded (re-pushed next phase). try/catch-continue per unit.
+  1..K-1's already-landed writes discarded (re-pushed next phase). try/catch-continue per unit. **The unit's own
+  error-REPORTING callback (a logger passed in for "skip only this unit") needs its own nested try/catch too** —
+  an unguarded `onError?.(err)` inside the per-unit `catch` defeats the very isolation the outer try/catch exists
+  for if the logger itself throws (BIN-848's `revokedUidsInBatches`: the counter/skip decision must increment
+  BEFORE the guarded callback runs, so a throwing reporter can't even suppress its own unit's accounting).
+  **And when an outer `.catch()` substitutes a default for a whole-scan failure, that default's count fields need
+  a sentinel a legitimate empty run can't produce** (`skippedBatches: -1`, never `0`) — otherwise "the entire scan
+  died" and "nobody needed action" write the same audit-log line, silently. Applies only to values that are
+  purely logged/observed; a value anything downstream branches on needs the distinction proven live, not just
+  asserted in a comment.
 - **collectionGroup matches by LEAF collection id regardless of parent path** — grep other writers/readers of
   that leaf name (`notified`/`state`/`meta` can alias another feature) before trusting one.
   `collectionGroup('watchlist')` also matches `groups/{id}/watchlist/{tmdbId}`, safe ONLY because those docs lack

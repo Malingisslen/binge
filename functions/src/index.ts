@@ -187,8 +187,10 @@ export { communityRatingMaintain } from './communityRatings';
 export { reclaimOrphanFollows } from './reclaimOrphanFollows';
 
 // ── Retention cleanup (BIN-65) ───────────────────────────────────────────────
-// retentionCleanup: daglig scan → raderar utgångna Tillsammans-sessioner (past
-// expiresAt, recursiveDelete inkl. participants/swipes) + notiser >90 dagar.
+// retentionCleanup: daglig scan, FEM svep → utgångna Tillsammans-sessioner (past
+// expiresAt, recursiveDelete inkl. participants/swipes), notiser >90 dagar,
+// joinAttempts >1h, släppmarkörer >30d, och push-tokens vars Auth-konto är
+// raderat eller spärrat (BIN-848 — Console-bypassens enda städväg).
 // Trösklar från docs/data-retention-policy.md. Bounded/paginerad (BIN-50-mönster).
 export { retentionCleanup } from './retentionCleanup';
 
