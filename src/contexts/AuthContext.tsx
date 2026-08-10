@@ -22,6 +22,8 @@ import { initAppCheck } from '@/lib/firebase/appCheck';
 import { collectUserDataSnapshots } from '@/lib/firebase/userData';
 import { collectDeletionRefs, applyDeletionPlan } from '@/lib/firebase/accountDeletion';
 import { syncMyPublicProfile, clearPublicProfileSignature } from '@/lib/firebase/publicProfile';
+import { disablePushForUser, clearLocalPushTokenId, hasLocalPushToken } from '@/lib/firebase/messaging';
+import { clearAllInviteTokens } from '@/lib/groupInviteCache';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 import { getProvider, canonicalProviderId } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
@@ -139,6 +141,11 @@ const AuthContext = createContext<AuthState>({
 // 2 min lämnar ~3 min marginal i stället för ~1. Kostnaden är noll i praktiken:
 // den som nekas måste logga in igen ändå, och gör då om försöket på sekunder.
 const RECENT_LOGIN_MAX_AGE_MS = 2 * 60 * 1000;
+
+// BIN-844: how long sign-out waits for the push token to be unregistered before
+// giving up and signing out anyway. Long enough for a normal round-trip, short
+// enough that nobody experiences it as a stuck button.
+const PUSH_UNREGISTER_TIMEOUT_MS = 2000;
 
 // Försöker claima ett auto-genererat username från Google displayName /
 // email-localpart. Returnerar det claimade värdet vid lyckat utfall, annars
@@ -679,6 +686,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // what reaches the OTHER tabs, but it lands a network round-trip later and
     // never lands at all if `firebaseSignOut` throws.
     clearNextPath();
+    // BIN-844: unregister push BEFORE the sign-out, and capture the uid first.
+    //
+    // Two orderings are load-bearing and neither is obvious:
+    //  1. `auth.currentUser` is null the moment `firebaseSignOut` resolves, so the
+    //     uid is unrecoverable afterwards.
+    //  2. `disablePushForUser` DELETES users/{uid}/fcmTokens/{id}. Once the Auth
+    //     user is gone the client holds no token and firestore.rules refuses that
+    //     write. This is deleteAccount's ordering rule pointing the other way:
+    //     there the local cleanup must FOLLOW the point of no return, here the
+    //     server-side cleanup must PRECEDE it.
+    //
+    // It also means this cannot live in the auth listener's uid→null branch where
+    // the rest of the sign-out hygiene sits (BIN-732) — by the time that branch
+    // runs the write is already impossible. So a session ending by silent expiry
+    // or revocation keeps pushing to this device: a known gap, not an oversight.
+    //
+    // Best-effort. Offline, or a denied write, leaves the token registered and push
+    // still arriving here. Never block the sign-out over it — a user who cannot
+    // sign out is worse off than one whose notifications follow them.
+    const signingOutUid = auth.currentUser?.uid;
+    if (signingOutUid && hasLocalPushToken(signingOutUid)) {
+      // The timeout is not belt-and-braces, it is the whole guard. `deleteDoc`
+      // against persistentLocalCache resolves on SERVER ACK, so offline it never
+      // settles at all — a bare `await` here would hang sign-out forever, silently,
+      // for exactly the users who have push on. Neither call site surfaces anything —
+      // one is `void signOut()`, the other passes it straight to onClick — so there
+      // would be no spinner and no error: the visitor would simply stay signed in on
+      // the shared device, which is the leak this ticket exists to close. Catching a
+      // rejection does not cover a hang.
+      //
+      // A delete that has not been acked when the timer wins is discarded by the
+      // `clearFirestorePersistence()` below — same outcome as an offline failure
+      // today (the token survives, push keeps arriving), not a new failure mode.
+      await Promise.race([
+        disablePushForUser(signingOutUid).catch(() => { /* best-effort — see above */ }),
+        new Promise<void>(resolve => setTimeout(resolve, PUSH_UNREGISTER_TIMEOUT_MS)),
+      ]);
+    }
     await firebaseSignOut(auth);
     // Clear React Query cache so the next user (on shared device) or a
     // re-signed-in user starts with empty server-state instead of the
@@ -1024,6 +1069,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // HÄR, efter deleteUser, av samma skäl som cache-rensningen: kastar något i
     // kaskaden finns kontot kvar, och då ska enhetens tillstånd också göra det.
     clearPublicProfileSignature(id);
+    // BIN-844: same event, same reasoning — device-local leftovers the Firestore
+    // cascade cannot reach. The invite plaintexts point at groups the cascade has
+    // already deleted (only an OWNER ever caches one), and the push-token pointer
+    // is dangling because the cascade removed users/{uid}/fcmTokens/* itself. Both
+    // are hygiene, not new Art. 17 coverage — say so rather than implying erasure.
+    // Deliberately NOT swept on sign-out: that is Malin's 2026-08-10 call, see
+    // clearAllInviteTokens' own comment for the owner-cost that decided it.
+    clearAllInviteTokens();
+    clearLocalPushTokenId(id);
   }, [user?.username]);
 
   const value = useMemo(

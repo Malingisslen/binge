@@ -1,236 +1,218 @@
-# Plan 2026-08-09b — BIN-817 + BIN-814
+# Plan 2026-08-10 — BIN-844 + BIN-845
 
-Två oberoende ändringar, två commits. Båda har gått genom rollpanel/kritik före planen
-(router kördes på faktiska filer, se nedan). Malins beslut: 817 → väg A via panel;
-814 → alternativ (a) bred definition + laga rådgivarhaken nu, med ett nytt fält.
+Två uppföljningar på gårdagens leverans. Malin bad om dem "i en ny sprint"; de går inte att
+sprinta — BIN-844 routar `top` (full panel, rör grupper + auth) och en obemannad sprint får
+inte röra den, och båda biljetterna var skrivna som frågor. Hon är närvarande, så panelen
+konvenerades här och besluten togs live.
 
 ---
 
-## BIN-817 — hasha profil-signaturen (commit 1)
+## Panelen (BIN-844, tier `top`)
 
-**Router:** `node docs/org/route.mjs src/lib/firebase/publicProfile.ts src/app/integritet/page.tsx`
-→ `tier: medium`, panel [4]. Malin begärde panel → 5 stolar: #4 Security Architect,
-#5 Legal/GDPR Counsel, #6 DPO, #27 DBA + Codebase Archaeologist (blindspot).
-Utfall: **enhälligt approve-with-conditions, väg A (hasha)**. Inga blockeringar.
-Bortvalda: #18 Community Manager (stake är lokal lagring, inte community-yta).
+`node docs/org/route.mjs src/lib/groupInviteCache.ts src/lib/firebase/groups.ts
+src/hooks/useSession.ts src/lib/firebase/messaging.ts src/contexts/AuthContext.tsx`
+→ `tier: top`, high-stakes på `groups.ts` + `AuthContext.tsx`, panel `[27, 5, 4, 6, 18]`.
 
-### Vad som byggs
-`src/lib/firebase/publicProfile.ts:86` `cardSignature()` returnerar idag
-`JSON.stringify([displayName, username, photoURL, bio, isPublic])`, som skrivs i klartext
-till `binge:pubprofile-sig:{uid}`. Den ska returnera en hash i stället.
+Fyra roller seatade + Codebase Archaeologist: **#4 Säkerhetsarkitekt, #5 Juridik/GDPR,
+#6 DPO, #18 Community Manager**. Bortvald: **#27 DBA** — ändringen rör enhetslokal lagring,
+ingen Firestore-struktur, inget datalager. Ingen blockering; fyra approve-with-conditions.
 
-1. **Synkron, icke-kryptografisk hash** (FNV-1a → base36). INTE `crypto.subtle`:
-   - `syncMyPublicProfile` bailar synkront på rad 105 *före* `await fsdb()`; en async hash
-     drar in en await i den billiga vägen (#27, Arkeologen).
-   - `publicProfile.test.ts` stubbar `window` utan `crypto.subtle` (Arkeologen).
-   - Ingen säkerhetsgräns: värsta kollisionsfall är en utebliven kosmetisk no-op-write,
-     vilket filens egen kommentar redan accepterar (#4, #6 säger uttryckligen "no
-     crypto-grade requirement", #27 "small inline sync string hash").
-2. **Exakt samma fältuppsättning och ordning** som idag. `createdAt` ingår INTE (Arkeologen:
-   avsiktligt uteslutet, får inte smygas in).
-3. **Utdatakodning får aldrig börja med `[`** — det är hur gammalt format känns igen.
-4. **Legacy-jämförare, inte tvångsomskrivning.** Nuvarande JSON-logik behålls verbatim som
-   `legacySignature()` (döps om, skrivs inte om från minnet — Arkeologen). Läsordning:
-   lagrat värde matchar ny hash → returnera; matchar `legacySignature()` → **ingen
-   Firestore-write**, men uppgradera nyckeln till hashformatet; annars skriv.
-   Detta uppfyller biljettens acceptanskriterium "utan att orsaka en onödig omskrivning för
-   varje befintlig användare". (#4 och #27 accepterade en engångs-write per användare som
-   alternativ; jämföraren är fem rader och slipper den helt.)
-5. **Rensa nyckeln vid kontoradering.** Ny export `clearPublicProfileSignature(uid)` i
-   publicProfile.ts (nyckelnamnet bor på ett ställe). Anropas i `AuthContext.deleteAccount`
-   **efter** `await deleteUser(currentUser)`, bredvid `clearFirestorePersistence()` —
-   aldrig före point-of-no-return (Arkeologen; ordningen är återuppbyggd efter en verklig
-   incident 2026-08-05). Try/catch enligt husets private-mode-mönster.
-6. **INTE vid utloggning.** Nyckeln är uid-namnrymdad → ingen korsanvändarläcka, och när
-   värdet är en hash finns ingen persondata kvar att rensa. (#4 ville ha det, Arkeologen
-   avrådde, #27 kallade det en petitess. Avgjort: hashningen tar bort själva skälet.)
-7. **Uppdatera den nu felaktiga kommentaren** publicProfile.ts:141-143 — den säger att
-   raderingskaskaden räcker, vilket bara gäller Firestore-doc:et.
-8. **`docs/data-retention-policy.md`:** en rad som namnger nyckeln och dess radering (#6 —
-   dokumentet har idag inga localStorage-poster alls).
-9. **Ingen ändring i integritetspolicyn §8**, och `§8`:s "listan är inte uttömmande"-brasklapp
-   ska stå kvar orörd (#5 — den är det som gör en lucka till ett förbiseende och inte en
-   felaktig utsaga).
+### Vad panelen ändrade i biljetten
+
+**1. Biljettens premiss höll inte.** BIN-844 antog att `binge:groupInvite:{groupId}`
+överlever en kontoradering som en levande nyckel. Den gör inte det: bara en grupps ÄGARE
+cachar klartexten, och raderingskaskaden raderar hela den ägda gruppen — token pekar på
+något som inte finns. Den verkliga exponeringen är **utloggning på delad dator**.
+
+**2. Och den verkliga läckan var en annan.** DPO och Arkeologen fann oberoende att
+`disablePushForUser` bara anropas från reglaget i inställningarna. Utloggning avregistrerar
+INTE push. Loggar du ut på en delad dator fortsätter dina notiser komma dit — med innehåll.
+Malins ursprungliga val ("rensa inbjudningslänken + push-token") hade tagit bort en
+*pekare* till token-doc:et utan att stoppa en enda notis. Etiketten lovade något koden inte
+kunde leverera; det lades tillbaka till henne.
+
+**3. En äkta konflikt, eskalerad.** #4 ville rensa inbjudningslänken vid utloggning
+(devtools når klartexten oavsett vad UI:t visar). #18 och Arkeologen visade kostnaden:
+panelen är ägargrindad, så nästa inloggade person ser den aldrig via appen — men ägaren
+förlorar sin egen länk, och enda vägen tillbaka är "Generera ny", som ogiltigförklarar den
+länk hen redan skickat till folk som inte klickat än. Interpretativt och användarpåverkande
+→ Malins beslut, inte mitt.
+
+### Malins beslut 2026-08-10
+- **Push stängs av på riktigt vid utloggning.** Hon tar priset: inget slår på push igen
+  automatiskt, så hon måste kryssa i det i Inställningar efter varje inloggning, på varje
+  enhet.
+- **Inbjudningslänken rensas bara vid radering**, inte vid utloggning.
+
+---
+
+## BIN-844 — vad som byggs
+
+1. **`AuthContext.signOut` anropar `disablePushForUser(uid)` FÖRE `firebaseSignOut`.**
+   Två ordningar är bindande och ingen är uppenbar:
+   - `auth.currentUser` är null i samma stund `firebaseSignOut` resolvar → uid måste fångas
+     synkront först (Arkeologens landmina; `deleteAccount` gör redan rätt, `signOut` inte).
+   - `disablePushForUser` RADERAR `users/{uid}/fcmTokens/{id}`. När Auth-användaren är borta
+     har klienten ingen token och `firestore.rules` avvisar skrivningen. Det är
+     `deleteAccount`s ordningsregel åt andra hållet: där måste den lokala städningen ligga
+     EFTER point-of-no-return, här måste den serversidiga ligga FÖRE.
+   - Följd som skrivs in i koden: cleanup:en kan därför **inte** ligga i auth-lyssnarens
+     `uid→null`-gren där resten av utloggningshygienen bor (BIN-732). En session som tar
+     slut via tyst utgång eller återkallelse fortsätter pusha hit. Känd lucka, inte ett
+     förbiseende.
+   - Best-effort: offline eller nekad skrivning lämnar token registrerad. Blockera aldrig
+     utloggningen — en användare som inte kan logga ut är värre än en vars notiser följer med.
+2. **`clearAllInviteTokens()`** i `groupInviteCache.ts` — prefix-svep, collect-then-remove
+   (en index-loop med `removeItem` inuti hoppar över varannan nyckel; det finns inget annat
+   prefix-svep i repot att kopiera, så det här blir referensen). Anropas **bara** från
+   `deleteAccount`, efter `deleteUser`.
+3. **`clearLocalPushTokenId(uid)`** i `messaging.ts` — bara den dinglande lokala pekaren, för
+   raderingsvägen där `disablePushForUser` inte går att använda (kaskaden har redan raderat
+   doc:et). Aldrig vid utloggning: den tar bort pekaren utan att avregistrera något, vilket
+   är exakt förvirringen den här biljetten fick reda ut.
+4. **Lämnas orörda, som beslutat:** `binge-session-pid-*` / `binge-my-sessions`,
+   `binge:wasLoggedIn`, `binge:rec-rotation:*`.
+
+### Dokumentation (villkor från #5 och #6, i SAMMA commit)
+- `docs/data-retention-policy.md`: flytta `groupInvite` och `fcm:tokenId` ur
+  "överlever också raderingen … ännu inte genomgångna" till en beskrivning som matchar vad
+  som nu gäller. Namnge de tre kvarlämnade med den faktiska motiveringen. Skriv rakt ut att
+  rensning av `fcm:tokenId` är dinglande-pekare-städning, inte ny Art. 17-täckning — den
+  serversidiga doc:en tas redan av kaskaden.
+- Korsreferens till **ADR 0015** för `binge-session-pid-*`: att den överlever utloggning är
+  inte ett nytt beslut utan samma avvägning Malin redan ratificerade mot full panel
+  2026-07-16. Ska vara spårbar som en sammanhängande position, inte återupptäckas som en
+  öppen fråga.
+- **#5:s tolkningsposition om hashning** (öppen sedan BIN-817) skrivs ned daterad: en
+  icke-reversibel hash är inte automatiskt anonym data; frågan avgörs per fält av indatans
+  entropi, inte av att hashning skett. Hög entropi (uid, genererad token) → inte persondata.
+  Låg entropi (visningsnamn, användarnamn, fritext) → fortfarande persondata.
+  `binge:pubprofile-sig` hamnar på den senare sidan. Formuleras som arbetsposition, inte
+  som fastslagen rätt.
+- §8:s "listan är inte uttömmande"-brasklapp rörs INTE. Tre av sex nycklar står kvar utanför
+  den itemiserade listan, så den är fortfarande sann och fortfarande bärande.
 
 ### Acceptans (bindande)
-- [ ] `binge:pubprofile-sig:{uid}` innehåller inget läsbart namn, användarnamn, bild-URL eller bio.
-- [ ] Oförändrad profil → noll Firestore-writes. Ändrad profil → exakt en.
-- [ ] Nyckel i gammalt JSON-format med oförändrade fält → **ingen** write, men nyckeln
-      uppgraderas till hash.
-- [ ] Nyckel i gammalt format med ändrat fält → en write, ny hash lagras.
-- [ ] `deleteAccount` tar bort nyckeln, men **bara** på lyckad väg — inte när
-      freshness-porten eller nätet kastar.
-- [ ] Hashen är deterministisk för identisk indata (inga Date/locale-beroenden).
-
-### Uppföljning (egen biljett, byggs inte här)
-De fem övriga oredovisade localStorage-nycklarna. #5 och #4 är eniga om att
-`binge:groupInvite:{groupId}` (levande inbjudningstoken) och `binge-session-pid-*` är en
-**säkerhetsfråga, inte en policytext-fråga**, och inte får buntas in i ett copy-ärende.
-ADR: #5:s tolkningsfråga (räknas en icke-reversibel hash av persondata fortfarande som
-persondata som måste redovisas i §8?) skrivs som daterad intern position, inte som fastslagen
-rätt.
+- [ ] Utloggning avregistrerar push serversidigt, och uid:t fångas före `firebaseSignOut`.
+- [ ] En kastande `disablePushForUser` stoppar aldrig utloggningen.
+- [ ] Prefix-svepet tar ALLA `binge:groupInvite:*` och inget annat, och överlever ett
+      localStorage som kastar.
+- [ ] Svepet körs vid radering, och **inte** när freshness-porten eller `deleteUser` kastar.
+- [ ] Inget anropar `clearLocalPushTokenId` från utloggningsvägen.
+- [ ] Retentionsdokumentet beskriver det som faktiskt gäller efter ändringen.
 
 ---
 
-## BIN-814 — en definition för providers + laga rådgivarhaken (commit 2)
+## BIN-845 — vad som byggs
 
-**Router:** `node docs/org/route.mjs src/lib/taste/backfill.ts src/lib/tmdb/seProviderIds.ts`
-→ `tier: medium`, panel [28]. Kritik från #28 Recommendations/Scoring-Integrity: inhämtad,
-**approve-with-conditions**. Planen nedan bär dess villkor.
+Router: `medium`, panel `[3]`. Kritik från **#3 Financial Controller**: approve-with-conditions.
 
-**Malins beslut:** (a) bred definition vinner + laga hyr-haken nu + spara båda svaren
-(nytt fält), inte extra TMDB-anrop.
+1. `src/app/stats/page.tsx` och `functions/src/insights/rollup.ts` läser
+   abonnemangsdelmängden. Malins val: staplarna ska svara på "vad kan jag se på det jag
+   betalar för". Ren fältbyte, noll marginalkostnad (samma dokumentantal, samma schema).
+2. **#3:s villkor:** raden "N av M titlar med streamingdata" (`stats/page.tsx`) räknas idag
+   på det breda fältet. Smalnar staplarna men inte raden överdriver den hur många titlar som
+   är representerade — den måste följa med.
+3. `functions/src/streamingOffers/logic.ts` lämnas orörd.
 
-### Varför ett fält inte räcker (verifierat, inte antaget)
-#28 flaggade att rådgivaren redan filtrerar ankare på `getProvider(pid).type === 'flatrate'`
-och bad om verifiering av Amazon-sömmen mot skarp data. Jag körde fyra titlar mot TMDB SE:
-- **Amazon: sömmen är stängd.** `119 Amazon Prime Video` ligger under `flatrate`,
-  `10 Amazon Video` under `rent`/`buy`. Skilda id:n.
-- **Viaplay: sömmen är ÖPPEN och bekräftad.** `76 Viaplay` returneras under `rent` och `buy`
-  på alla fyra titlarna — och 76 är typad `flatrate` i `SWEDISH_PROVIDERS`. Samma sak gäller
-  `489/1944 TV4 Play`. En flat `number[]` kan därför aldrig skilja "ingår" från "går att hyra",
-  och alternativ (a) ensamt gör den bristen konsekvent i stället för nyckfull.
+### #3 korrigerade biljettens kostnadsbeskrivning — och den ska rättas
+Jag skrev att arbetsmängden "växer" som en kostnad den här biljetten tar på sig. Fel:
+`isIntentTitle` ändras inte, så det är **status quo som ratificeras**, ingen marginalkostnad.
+Skillnaden spelar roll för hur det loggas senare.
 
-### Vad som byggs
-1. **`firestore.rules`** — lägg `subscriptionProviders` i `isValidWatchlistItem`s `hasOnly`,
-   med samma EN-VÄGS-SPÄRR-varning som `tmdbFieldsRefreshedAt` (ADR 0009): ta aldrig bort
-   posten medan en prod-doc bär fältet — rulla tillbaka klientskrivaren först.
-   **Deployas FÖRE klienten.** Merge-writes utvärderas mot hela post-merge-doc:et, så en
-   klient som skriver fältet mot gamla regler får permission-denied på varje watchlist-write.
-2. **`src/lib/tmdb/seProviderIds.ts`** — andra hjälparen `seSubscriptionProviderIdsForRefresh`
-   (flatrate + free + ads) bredvid den befintliga breda, med **samma undefined-kontrakt**:
-   saknat SE-block → `undefined` ("lärde mig ingenting"), närvarande men tomt → `[]`.
-   Skriv om filens "får inte slås ihop"-kommentar: frågan är avgjord, de är nu två
-   avsiktliga svar på två olika frågor, inte en olöst dubblett.
-3. **`src/lib/tmdb/providers.ts`** — `extractSEProviders` utgår. Den var den smala
-   definitionen med fel tomvärde (`[]` vid saknat block = klobbrar en bra array). Enda
-   produktionsanropet är backfillen. Testerna flyttas till seProviderIds-syskonet.
-4. **`src/lib/taste/backfill.ts` + `backfill.helpers.ts`** — backfillen skriver båda fälten
-   från samma TMDB-svar, med undefined-kontraktet: returnerar hjälparen `undefined` skrivs
-   fältet **inte** (idag skulle den skriva `[]` och radera en bra array).
-   `providersCheckedAt` stämplas **ändå** (#28:s uttryckliga rekommendation: punkt 2 skyddar
-   redan arrayen, och att inte stämpla bränner bara TMDB-budget på titlar vars saknade
-   SE-block sällan ändras).
-5. **`src/lib/watchlist/tmdbFieldsRefresh.ts` + `WatchlistContext.tsx` + titelsidorna** —
-   samma två fält i providers-gruppen, samma stämpel, samma färskhetsgrind.
-6. **`src/types/domain.ts`** — `subscriptionProviders: number[] | null`.
-7. **`src/hooks/useSubscriptionAdvisor.ts`** — filmankare läser
-   `subscriptionProviders ?? providers`. Fallbacken är avsiktlig: en doc som ännu inte
-   backfillats beter sig som idag (för generöst) i stället för att tappa ankaret helt och
-   föreslå paus på fel grund under utrullningen.
-8. **ProviderChips/visning rör inte** — den ska fortsätta visa den breda listan.
+Och en tröskel jag inte kände till: `computeHealth(workSetSize, 9, …)` slår till `warn` över
+279 och `critical` över 558, och critical-notisen till admin föreslår ordagrant **MOTN Pro
+($39/mån)** — ~15× taket på 25 SEK/mån. Att lämna `isIntentTitle` bred håller mätvärdet
+närmare den tröskeln.
 
-### Acceptans (bindande — #28:s villkor inbakade)
-- [ ] Regression: en `vill_se`-film med `subscriptionProviders` som **inte** innehåller en
-      abonnerad tjänst sätter **inte** `hasWillSeeAnchor` för den tjänsten, även om
-      `providers` gör det. (Detta är #28:s must-have, pinnad mot Viaplay-fallet.)
-- [ ] Backfill och titelsida producerar identiska `providers` för samma TMDB-svar.
-- [ ] Saknat SE-block → varken `providers` eller `subscriptionProviders` skrivs; en bra
-      befintlig array överlever.
-- [ ] Saknat SE-block → `providersCheckedAt` stämplas ändå.
-- [ ] Doc utan `subscriptionProviders` → rådgivaren faller tillbaka på `providers`.
-- [ ] `npm run test:rules` grön med det nya fältet i hasOnly.
+**Mätt 2026-08-10, före commit** (`streamingHealth/current` i produktion):
+`workSetSize: 24`, `refreshIntervalDays: 3`, `status: ok`. Warn börjar vid 280
+(`ceil(280/9) = 32 > 31`), critical vid 559. Vi ligger på 8,6 % av warn-golvet — det
+krävs ungefär tolv gångers tillväxt av arbetsmängden för att ens nå varning, och
+admin-notisen med MOTN Pro-förslaget avfyras bara vid en statusövergång. Villkoret är
+därmed uppfyllt och "lämna `isIntentTitle` bred" är säkert på dagens siffror.
 
-### Vad integrationsgranskningen hittade — och vad som gjordes
-
-Första bygget var **inte** komplett. Fyra av sex blockerande fynd var äkta och tre av dem
-var regressioner jag själv införde. Alla lagade före commit:
-
-1. **Fixen träffade inte sitt eget huvudfall.** `addItem` skrev bara `providers` och
-   stämplade `providersCheckedAt` — och titelsidans reparation är grindad på just den
-   stämpeln, så det nya fältet kunde inte landa på 60 dagar. Att lägga till en hyr-bara-
-   film (det vanligaste sättet en titel kommer in) hade alltså lämnat rådgivaren på den
-   breda fallbacken. Fältet bärs nu genom `buildAddPayload`, `StatusButton`,
-   `QuickAddButton` och `useMarkSeen`.
-2. **Tre pengaskärmar blev SÄMRE.** `spendSnapshot`, `householdAggregate` och
-   `serviceValue` läser `providers`, och backfillen skriver nu rent/buy dit där den
-   förut skrev den smala listan — så en hyrfilm hade börjat räknas som "aktiv utgift"
-   och skyddat tjänsten från dödvikts-domen. Regeln bor nu i
-   `src/lib/watchlist/subscriptionProviders.ts` och alla fyra ytorna delar den.
-3. **ToS-svepet rörde inte det nya fältet.** TMDB-härledd data utan TTL bryter §1.C, och
-   ett svep som bara rensade `providers` hade lämnat `providers: []` bredvid en
-   månadsgammal abonnemangslista — samma drift som biljetten skulle avsluta.
-   `PROVIDERS_GROUP.fields` täcker båda nu. **Kräver manuell functions-deploy.**
-4. **Backfillen kunde aldrig konvergera.** Urvalet gick på fält-frånvaro, men ett svar
-   utan SE-block skriver inget fält — så titeln hade hämtats om varje körning i
-   evighet. Urvalet går nu på stämpeln (`needsBackfill`, utbruten och testad).
-
-Två fynd var inte äkta: en mutant och två röda tester som redan var lagade i arbetsträdet
-när granskarna läste — de såg ett träd i rörelse.
-
-**Fjärde rundan hittade den femte ytan.** `pickBacklogResurface` +
-`BacklogResurfaceTile` — Hem-brickan som ordagrant säger *"finns nu på din tjänst"* och
-sätter etiketten *"finns på Viaplay"* — läste den breda arrayen. Före den här ändringen
-skrev backfillen den SMALA listan dit, så brickan hade råkat ha rätt; efter den hade en
-hyr-bara-film dykt upp på Hem som "ingår i din tjänst". Det är den enda av alla fynd som
-var direkt synligt ljugande för användaren. Lagad, plus `VillSePickerPage`s "kan ses
-direkt"-sortering. Samma runda: TV-sidans test mockade `StatusButton` blint precis som
-filmsidans gjorde — den mocken registrerar propparna nu på båda sidor.
-
-**Tredje rundan hittade fyra till** — samma defektklass som runda två, i syskonfiler:
-`MoviePageClient`s egen `<StatusButton>` (appens vanligaste sätt att lägga till en film)
-skickade bara det breda fältet medan TV-tvillingen skickade båda; backfillens
-migrationsgren satte `contentChanged` och hade därmed bumpat `updatedAt` på HELA
-biblioteket i första körningen (fyra läsare faller tillbaka på den stämpeln — "Fortsätt
-titta"-sorteringen, taste/stats, "din senaste 5★" och `addedAt`-reparationen som
-PERSISTERAR värdet); och `spendSnapshot` + `householdAggregate` hade ingen enda test som
-band det nya beteendet — att backa dem till den breda arrayen var grönt.
-
-Två strukturella åtgärder togs så klassen inte kan återkomma: provider-listorna härleds
-nu **en gång** på filmsidan och delas av alla skrivvägar (som TV-sidan redan gjorde), och
-`shouldStampProvidersAtAdd` kräver **paret** — en add som bara bär det breda fältet
-stämplar inte alls, vilket gör utelämnandet självläkande i stället för att göra varje
-anropsställe ansvarigt för att minnas. Filmsidans knapp mockades dessutom till `() => null`
-i testet, vilket är exakt varför proppen kunde försvinna obemärkt; mocken registrerar
-propparna nu.
-
-**Andra granskningsrundan hittade ett femte:** `useMarkSeen` tog emot
-`subscriptionProviders` i sin input-typ men skickade det aldrig vidare till
-`buildAddPayload` — sämre än att inte ta emot det alls, eftersom anroparen tror att
-fältet landade. Min egen tidigare ändring hade inte applicerats och jag såg det inte i
-grep-utdatat. Lagat i båda grenarna (film + serie) och pinnat med tre tester; mutanten
-som återinför tappet dödar två av dem. Ingen påstådd täckning i den här filen är kvar
-oprövad.
-
-### Deployordning (ej förhandlingsbar — FYRA steg, inte tre)
-1. `firebase deploy --only firestore:rules`
-   Måste ligga före klienten. `hasOnly`-posten är en envägsspärr: när en prod-doc väl bär
-   fältet faller varje efterföljande merge-write utan den, även en orelaterad betygsättning.
-2. `firebase deploy --only functions:tmdbFieldsSweep`
-   **Funktionen heter `tmdbFieldsSweep`** — `tmdbTosSweep` är katalogen (`functions/src/index.ts:274`).
-   Ett filter som namnger katalogen matchar ingen funktion och deployar tyst noll, varpå
-   svepet fortsätter köra den gamla fältlistan och `subscriptionProviders` skulle sakna TTL
-   helt (TMDB ToS §1.C). Detta står här för att jag först skrev fel namn.
-3. `git push`
-4. `gh workflow run deploy.yml`
-   Push ensamt räcker INTE för den här leveransen. `deploy.yml`s spärr avbryter varje
-   push-triggad deploy där `firestore.rules` eller `functions/**` ändrats (rad 40–55), så
-   hosting skulle aldrig gå ut: koden låg i main medan binge.nu serverade det gamla bygget,
-   och deploy-signalen lyste rött utan att något var fel. `workflow_dispatch` hoppar över
-   spärren.
+Ursprunglig formulering av villkoret, för spårbarhet: kontrollera nuvarande
+`workSetSize` före commit; är den redan nära
+279 ska det stå i biljetten, för då kan naturlig biblioteks-tillväxt avfyra uppsäljningen
+utan en enda kodändring. Rekommendationen är aldrig sprintens att acceptera.
 
 ---
 
-### Medvetet INTE gjort — en egen biljett
-`functions/src/streamingOffers/logic.ts` grindar MOTN-arbetsmängden på
-`providers.length > 0`. Nu när `providers` bär rent/buy växer den mängden (nästan allt
-går att hyra), och budgeten är hårda 300 anrop per faktureringscykel med 9 per körning.
-Effekten är inte högre kostnad utan ett längre full-refresh-intervall. Att smalna av
-grinden till abonnemangsdelmängden skulle samtidigt ta bort erbjudanden från hyr/köp-
-raderna på titelsidorna, så det är ett produktval — inte en självklar fix. Samma familj,
-och biljetten ska ta alla tre i ETT beslut: `functions/src/insights/rollup.ts` räknar nu
-in hyr/köp i `topProviders`, och det gör `src/app/stats/page.tsx:40` också (både staplarna
-och "N av M med streamingdata"-raden). Ingen av de tre påstår något om abonnemang, så
-ingen av dem ljuger — men de svarar nu på en bredare fråga än förut.
+## Vad integrationsgranskningen hittade — fyra blockerande, alla äkta
 
-Två mindre saker som granskningen namngav och som medvetet lämnas: samma prick-komponent
-betyder nu "ingår i abonnemanget" på `/my/vill-se` och "finns att få tag på" på de andra
-biblioteksflikarna (varje sida har en egen ärlig bildtext, men en användare som växlar
-flik ser samma prick betyda två saker), och 60-dagarsfönstret finns som två skilda
-konstanter med samma värde i `backfill.helpers.ts` och `tmdbFieldsRefresh.ts` — prosan i
-båda filerna argumenterar numera utifrån att de är lika.
+Första bygget var inte klart. Alla fyra lagade före commit:
 
-## Kvarstående för Malin
-Inget blockerande. Två uppföljningsbiljetter skapas efter commit:
-de fem övriga localStorage-nycklarna (säkerhet, inte policytext) och ADR:n för #5:s
-tolkningsfråga.
+1. **Utloggning hade kunnat hänga för alltid, tyst.** `deleteDoc` mot
+   `persistentLocalCache` resolvar först på server-ack — offline settlar den aldrig.
+   Ett bart `await` hade alltså låst utloggningen, utan spinner och utan felmeddelande
+   (båda anropsställena är `void signOut()`), för exakt de användare som HAR push på.
+   Att fånga en rejection täcker inte en hängning. Nu `Promise.race` mot 2 sekunder,
+   och anropet hoppas helt över när enheten inte har någon token.
+2. **Bildtexten överdrev fortfarande.** Varje skrivare som sätter
+   `subscriptionProviders` stämplar `providersCheckedAt` i samma payload — så en
+   hyr-bara-titel är `[]` MED stämpel, och disjunktionen `|| providersCheckedAt`
+   räknade in precis de rader som inte ritar någon stapel. Villkoret som #3 ställde
+   hade alltså inverterats till sin motsats. Disjunktionen borttagen; mitt eget test
+   pinnade en form produktionen aldrig skriver och är omskrivet.
+3. **Din uppgörelse gick inte att hålla.** Kryssrutan läste `pushEnabled`, som är
+   KONTO-nivå. Efter en utloggning och ny inloggning hade den visats **ikryssad** över
+   en enhet som inte fick något — så "kryssa i det igen" var inte tillgängligt. Rutan
+   speglar nu både kontoflaggan och att enheten faktiskt har en token
+   (`hasLocalPushToken`).
+4. **Det fanns en TREDJE sammanställning.** `taste/stats.ts` (publika profilens
+   "Topp-tjänster") låg kvar på det breda fältet, så samma bibliotek hade rapporterat
+   olika siffror på /stats och på profilen. Nu samma regel.
+
+Testgranskningen bidrog med två: svep-testet påstod att det pinnade
+"nycklar som bara innehåller prefixet" utan att göra det (decoy tillagd), och
+`signOutMock` var den enda mocken i filen som aldrig rensades mellan tester.
+
+## Deploy — och en halv landning tills den körs
+
+`deploy.yml` skickar bara hosting. `functions/src/insights/rollup.ts` ändras här, så:
+
+1. `firebase deploy --only functions:rollupInsights`
+   Namnet är verifierat mot `functions/src/index.ts:154` — **`rollupInsights`**, inte
+   `insightsRollup`. Kontrollen är inte formalia: förra leveransen namngav en katalog i
+   stället för en funktion och hade deployat noll funktioner utan att säga till.
+2. push
+3. `gh workflow run deploy.yml` — spärren avbryter varje push som rör `functions/**`.
+
+Tills steg 1 körts visar `/stats` och den publika profilen abonnemangsdelmängden medan
+`/insikter` fortsätter räkna det breda fältet. Ingen larmar på det, men de dagsdaterade
+`insights/{YYYY-MM-DD}`-doc:en får ett hack i kurvan som är en definitionsändring, inte
+en dataförändring — värt att veta innan någon tolkar den som ett tapp.
+
+## En optimering som togs tillbaka
+
+Integrationsgranskningen föreslog (som valfritt) att även `useFcmToken` skulle grinda
+på `hasLocalPushToken`, så att en återvändande användare slipper ladda
+messaging-chunken och prenumerera på en kanal som inte kan leverera. Jag byggde det —
+och kodgranskningen visade att det införde en riktig bugg: effektens beroenden är
+`[uid, pushEnabled, toast]`, och inget av dem ändras när en token dyker upp. På en
+ANDRA enhet för ett konto som redan har push på skriver kryssrutan token:en men lämnar
+`pushEnabled` på `true` — inget beroende ändras, effekten körs aldrig om, och
+förgrundslyssnaren saknas tills sidan laddas om.
+
+Optimeringen är borttagen igen. Att byta en verklig bugg mot en effektivisering ingen
+bett om är fel väg. En riktig fix kräver en signal hooken kan prenumerera på (en
+token-version som enable/disable räknar upp) — filad, inte improviserad.
+
+## Två nyanser granskningen namngav och som lämnas
+
+- **De tre sammanställningarna matchar på FÄLTET, inte på alias-hopslagning.** Rollupen
+  canonicaliserar (Max = 384/1899/1825 blir en rad); `/stats` och den publika profilen
+  gör det inte. Skillnaden är äldre än den här biljetten och oförändrad av den, men
+  kommentarerna säger "samma regel" — det gäller vilket fält som räknas, inte hur
+  alias viks ihop.
+- **`NotificationsSection`s egen `disablePushForUser`-anrop har ingen timeout.** Samma
+  aldrig-settlar-risk som utloggningen fick en spärr mot: kryssar man av push offline
+  blir rutan permanent inaktiverad tills sidan laddas om. Mildare (användaren står
+  kvar på sidan och ser att inget händer) och äldre än biljetten — men regeln är
+  nedskriven på ett ställe nu och inte på dess tvilling.
+
+## Kvar för Malin
+Inget blockerande. En egen biljett skapas för den kända luckan: en session som tar slut via
+tyst utgång eller återkallelse (inte ett klick på Logga ut) avregistrerar inte push, eftersom
+den städningen kräver en autentiserad skrivning som lyssnargrenen inte kan göra.

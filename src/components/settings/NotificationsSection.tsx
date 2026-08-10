@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { enablePushForUser, disablePushForUser, isPushSupported } from '@/lib/firebase/messaging';
+import { enablePushForUser, disablePushForUser, isPushSupported, hasLocalPushToken } from '@/lib/firebase/messaging';
 import { SettingsSection } from './SettingsSection';
 
 /**
@@ -29,11 +29,30 @@ export function NotificationsSection() {
     return next;
   });
 
+  // BIN-844: `pushEnabled` is ACCOUNT-level and cannot say whether THIS device is
+  // registered. Since sign-out now unregisters the device without touching the
+  // account flag, a checkbox bound to `pushEnabled` alone would render ticked after
+  // the next sign-in while nothing arrives here — and the user would have no reason
+  // to touch it. So the box reflects both: the account wants push AND this device
+  // holds a token.
+  //
+  // Read in an effect, not during render: localStorage does not exist on the server,
+  // and reading it inline would make the first client render disagree with the markup
+  // it hydrates. Declared ABOVE the `!user || !uid` early return — a hook after it
+  // would change hook order between renders.
+  const [hasDeviceToken, setHasDeviceToken] = useState(false);
+  useEffect(() => {
+    if (uid) setHasDeviceToken(hasLocalPushToken(uid));
+    // `busyKeys` in the deps re-reads after a toggle settles, so enabling push
+    // ticks the box without a reload.
+  }, [uid, busyKeys]);
+
   if (!user || !uid) return null;
   // Servicen-stöd-check kan bara köras klient-sidigt; rendera ändå (med
   // disabled-meddelande om FCM inte stöds) så användaren förstår varför.
   const supported = typeof window !== 'undefined' ? isPushSupported() : true;
   const pushEnabled = user.notificationSettings.pushEnabled;
+  const pushOnThisDevice = pushEnabled && hasDeviceToken;
 
   // Samma busy-guard + try/catch+toast som handleToggle — annars kan snabba
   // klick fyra parallella skrivningar och ett offline-fel sväljs tyst (UI:t
@@ -142,7 +161,7 @@ export function NotificationsSection() {
         <label className="flex items-center gap-2 cursor-pointer text-base">
           <input
             type="checkbox"
-            checked={pushEnabled}
+            checked={pushOnThisDevice}
             disabled={busyKeys.has('push')}
             onChange={(e) => { void handleToggle(e.target.checked); }}
             className="accent-acc-deep w-[14px] h-[14px]"

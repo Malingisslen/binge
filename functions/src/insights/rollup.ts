@@ -26,7 +26,7 @@ import {
 import type { RollupData } from './types';
 // BIN-326: pure helpers live in rollup.helpers.ts (no firebase-admin import) so
 // they unit-test under the root vitest toolchain — see that file's header.
-import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, type WatchlistLite, tallyProviderIds } from './rollup.helpers';
 // BIN-350: dated history doc-id keys on the Stockholm wall-clock day so it agrees
 // with the /insikter reader range BIN-343 already switched to Stockholm (otherwise
 // the near-midnight baseline read can land a day off the UTC-keyed rollup doc).
@@ -50,7 +50,7 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
   for (;;) {
     let q = db
       .collectionGroup('watchlist')
-      .select('status', 'mediaType', 'rating', 'title', 'tmdbId', 'providers', 'genreIds')
+      .select('status', 'mediaType', 'rating', 'title', 'tmdbId', 'providers', 'subscriptionProviders', 'genreIds')
       .orderBy('__name__')
       .limit(PAGE_SIZE);
     if (cursor) q = q.startAfter(cursor);
@@ -64,6 +64,13 @@ async function readWatchlist(): Promise<WatchlistLite[]> {
         title: String(x.title ?? ''),
         tmdbId: resolveTmdbId(x.tmdbId as number | string | null | undefined, d.id),
         providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
+        // BIN-845: null (not []) when absent — a doc written before BIN-814 split
+        // the field has no subscription answer, and falling back to the broad one
+        // is right there. `[]` would mean "checked, covered by nothing", which is
+        // a different claim.
+        subscriptionProviders: Array.isArray(x.subscriptionProviders)
+          ? (x.subscriptionProviders as number[])
+          : null,
         genreIds: Array.isArray(x.genreIds) ? (x.genreIds as number[]) : [],
       });
     }
@@ -122,7 +129,12 @@ export async function computeRollup(): Promise<RollupData> {
   // Fold TMDB's alias ids onto the canonical service before tallying, so a
   // service stored under several ids (e.g. Max = 384/1899/1825 across docs of
   // different vintages) counts as ONE row instead of splitting the panel.
-  const providers = watchlist.flatMap((w) => w.providers).map(canonicalProviderId);
+  // BIN-845: the subscription subset, mirroring the client's own stats page. This
+  // tally answers "which services carry what people track", and since BIN-814 the
+  // broad `providers` field also holds rent and buy — counting those would inflate
+  // every rent-store-adjacent service. Rows written before the split have no subset
+  // and fall back to the broad array, same rule the client uses.
+  const providers = watchlist.flatMap(tallyProviderIds).map(canonicalProviderId);
   const genres = watchlist.flatMap((w) => w.genreIds);
 
   return {

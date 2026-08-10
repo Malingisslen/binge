@@ -1,3 +1,4 @@
+import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
 import type { WatchlistItem } from '@/types';
 
 export interface ProfileStats {
@@ -48,7 +49,10 @@ export function computeProfileStats(items: WatchlistItem[]): ProfileStats {
       cur.weight += w;
       genreCount.set(gid, cur);
     }
-    for (const pid of item.providers) {
+    // BIN-845: the subscription subset, matching /stats and the monthly rollup. This
+    // feeds the public profile's "Topp-tjänster" list, and leaving it on the broad
+    // array would make the same library report two different numbers on two screens.
+    for (const pid of subscriptionProviderIds(item)) {
       providerCount.set(pid, (providerCount.get(pid) ?? 0) + 1);
     }
 

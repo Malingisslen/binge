@@ -17041,3 +17041,485 @@ sweep-gap bullet in place, generalizing to: pinning the hub and pinning the supp
 pin the middle link — grep every component between the two pinned ends for the threaded prop
 name, and treat "the component's own test mocks the destination hook as a bare `vi.fn()` with
 only call-count assertions" as the tell.
+
+## 2026-08-10 — BIN-844 (push/invite-cache sign-out+deletion sweeps) + BIN-845 (subscription-subset provider tally)
+
+### Diff reviewed
+`git diff --cached --name-only`: `docs/data-retention-policy.md`,
+`functions/src/insights/rollup.helpers.ts`, `functions/src/insights/rollup.test.ts`,
+`functions/src/insights/rollup.ts`, `src/app/stats/page.tsx`, `src/contexts/AuthContext.test.tsx`,
+`src/contexts/AuthContext.tsx`, `src/lib/firebase/messaging.ts`, `src/lib/groupInviteCache.test.ts`
+(new), `src/lib/groupInviteCache.ts`, `src/lib/stats/providerTally.test.ts` (new),
+`src/lib/stats/providerTally.ts` (new), `tasks/todo.md`. Every file opened with Read (not just
+`git diff` via Bash) before verdict. `tasks/todo.md` shows BIN-844 routed `tier: top` (panel
+[27,5,4,6,18], DBA excluded — no Firestore-structure change) and the panel was convened live with
+Malin present 2026-08-10, resolving a real premise error in the ticket (the invite-token key does
+NOT survive account deletion as a live pointer — the owning group is cascade-deleted first — and
+the actual shared-device leak was that sign-out never unregistered push at all). BIN-845 routed
+`medium` [3]. Both panels' conditions (doc updates, ordering rules, caption must count the same
+field as the bars) are reflected in the diff.
+
+### Mutations run (all via scratchpad-backup + restore, `rm -rf node_modules/.vite/vitest` before
+each run, byte-identical restore confirmed via `diff` after every mutation)
+
+**groupInviteCache.ts / .test.ts (BIN-844):**
+1. `k.startsWith(PREFIX)` → `k.includes(PREFIX)`: 4/4 GREEN (survives). The test file's own header
+   comment claims this exact mistake ("taking keys that merely contain the prefix") is pinned, but
+   no fixture ever places the prefix substring anywhere but position 0 — false self-reported claim,
+   filed as a LOW finding (folded into knowledge file).
+2. Collect-then-remove rewritten as a live `for(i=0;i<localStorage.length;i++)` loop with
+   `removeItem` inside it (the actual index-shift bug shape, not just an index loop over an
+   already-collected array): 1/4 RED alone (`removes EVERY cached invite, not every other one`).
+   Confirms the file's headline claim.
+3. Private-mode / Proxy-throw case and the single-key helpers: read-only, not separately mutated
+   this round (straightforward, low-risk).
+
+**AuthContext.tsx / .test.tsx (BIN-844):**
+4. Moved the `disablePushForUser(signingOutUid)` block to AFTER `await firebaseSignOut(auth)`:
+   1/43 RED alone (`unregisters push BEFORE the Auth sign-out, with the departing uid`).
+5. Dropped the `disablePushForUser` call entirely from `signOut`: 1/43 RED alone (same test,
+   `toHaveBeenCalledWith('u1')` assertion).
+6. Moved `clearAllInviteTokens()` + `clearLocalPushTokenId(id)` to BEFORE `await deleteUser(currentUser)`
+   in `deleteAccount`: 1/43 RED alone (`sweeps the invite cache and the push-token pointer once the
+   account is gone`, the `authDelete < sweep` ordering assertion).
+7. Harness probe (not a mutation of prod code): added `signOutMock.mockClear();` to the test file's
+   `beforeEach` (the only mock among ~15 in that block never cleared) — 43/43 STILL PASS, including
+   the pre-existing `expect(signOutMock).toHaveBeenCalledTimes(1)` at line 870, which turns out to
+   only ever have passed because it is literally the first test in file-execution order to call
+   `ctx!.signOut()`. Confirms: (a) the new tests' `.at(-1)`/delta workaround around the uncleared
+   mock is sound (both mocks fire exactly once per test, so `.at(-1)` unambiguously captures that
+   test's own call), and (b) it is genuinely compensating for a one-line harness omission that
+   would be free to fix. Filed as a non-blocking recommendation, folded into knowledge file.
+
+**providerTally.ts / .test.ts (BIN-845, client stats page):**
+8. `providerTally`: `subscriptionProviderIds(item)` → `item.providers ?? []`: 2/8 RED alone
+   (`counts a title on the service that INCLUDES it...`, `a rent-only title contributes to no bar
+   at all`) — matches claimed "stats tally reads broad (2)".
+9. `withProviderDataCount`: `subscriptionProviderIds(i).length > 0` → `(i.providers?.length ?? 0) > 0`:
+   1/8 RED alone (`does NOT count a rent-only title...`) — matches claimed "caption reads broad (1)".
+
+**rollup.helpers.ts / rollup.test.ts (BIN-845, server-side rollup, functions/):**
+10. `tallyProviderIds`: `??` → `||`: 13/13 GREEN (survives, harmlessly — `[]` is truthy in JS so
+    `||` and `??` agree on every fixture in the file; not a real gap since `[]` vs `null` is the
+    only distinguishing input and both operators treat `[]` as "keep it"). Not filed — correct
+    equivalence, not a coverage gap.
+11. `tallyProviderIds`: `item.subscriptionProviders ?? item.providers` → `item.providers` (fallback
+    dropped entirely): 3/13 RED (`counts nothing for a title that is only rentable`, both
+    assertions in `keeps [] and null apart`) — matches claimed "server tally drops the fallback (2)"
+    closely enough (3 assertions across effectively 2 distinguishing test bodies).
+
+### Verdict
+All of the diff author's claimed mutation-kills verified live except one self-reported claim in
+`groupInviteCache.test.ts`'s header comment (item 1 above), which is false and filed as LOW. The
+`signOutMock` accumulation is a genuine harness gap (item 7) but the tests written against it are
+sound, not weakened — filed as a non-blocking recommendation to add `mockClear()`. No weakened,
+skipped, or deleted assertions anywhere in the diff. `firestore.rules` untouched, so
+`vitest.rules.config.ts` is correctly not in scope. `.claude/rules/accepted-deviations.md` read;
+nothing in this diff matches a listed deviation. Both new lessons folded into the active knowledge
+file in place (the "verify self-reported claims" bullet and a new bullet on uncleared-mock
+workarounds in the Review-protocol section), per the sync contract.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10b — BIN-844/845 re-review: prior LOW fixes verified + integration-reviewer's 4 blocking fixes, mid-review movers surfaced a 5th untested file
+
+### Scope handed down
+Re-review of the staged diff after: (a) my own prior pass's two LOW findings (groupInviteCache
+startsWith/includes decoy, signOutMock.mockClear() parity) were supposedly fixed; (b) an
+integration reviewer found four blocking defects and their fixes shipped tests
+(`AuthContext.test.tsx` no-token-skip case, `providerTally.ts`'s corrected caption logic,
+`NotificationsSection.test.tsx` new, `taste/stats.test.ts` third provider tally). Task explicitly
+asked to judge vacuousness and whether `NotificationsSection.test.tsx` renders the real component.
+
+### Fix 1 — groupInviteCache decoy (verified CLOSED)
+`groupInviteCache.test.ts` now seeds `store['x-binge:groupInvite:g9'] = 'not-ours'` — prefix
+substring at index 2, not 0. Mutated `k.startsWith(PREFIX)` to `k.includes(PREFIX)`: 1/5 RED alone
+(`only takes keys that START with the prefix...` fails, `expected undefined to be 'not-ours'`).
+Restored, re-ran clean 5/5. CLOSED, folded into the knowledge bullet in place.
+
+### Fix 2 — signOutMock.mockClear() (verified applied, found a NEW residual)
+`beforeEach` now clears `signOutMock` (parity with every sibling mock). Confirmed the ordering
+tests still use `.at(-1)` rather than simplifying to `[0]` — harmless either way once the mock is
+cleared to one entry per test. BUT: the in-test comment justifying `.at(-1)` still reads
+"signOutMock is not cleared between tests in this file," which the very same diff's `beforeEach`
+change makes false (`signOutMock.mockClear();` landed two hunks above). Grepped and confirmed
+present at `AuthContext.test.tsx:896` in the final settled tree. LOW — not a test-correctness bug,
+just a stale comment shipped self-contradicting in the same commit. Folded into the mockClear
+bullet in place.
+
+### AuthContext.tsx — hasLocalPushToken no-token-skip case (mutation-verified)
+`if (signingOutUid && hasLocalPushToken(signingOutUid))` — mutated the guard to
+`if (signingOutUid)` (dropping the token check): 1/44 RED alone (`skips the unregister entirely
+when this device holds no push token`). Restored, 44/44 clean. Real coverage, not vacuous.
+
+### providerTally.ts / withProviderDataCount (mutation-verified, "caption admits stamped rows")
+Mutated `withProviderDataCount` to re-admit the old disjunct
+(`|| i.providersCheckedAt != null`): 1/9 RED alone (`does NOT count a CHECKED rent-only title —
+the shape production actually writes`). Restored, 9/9 clean. Also confirmed `src/app/stats/page.tsx`
+wires `providerTally`/`withProviderDataCount` in place of the old inline broad-array logic — matches
+the extracted functions 1:1, no page-level test (pre-existing convention: pure helper tested,
+wiring not).
+
+### taste/stats.ts — profile stats back to broad (mutation-verified)
+Mutated `for (const pid of subscriptionProviderIds(item))` back to `for (const pid of
+item.providers)`: 1/12 RED alone (`does not credit a service the title is only rentable on`).
+Restored, 12/12 clean.
+
+### functions/src/insights/rollup.helpers.ts — tallyProviderIds (already covered, re-confirmed)
+Pure function, 4 dedicated tests (subset/rent-only/fallback/[]-vs-null), no admin import, matches
+the codebase's Functions-test-extraction convention. Not separately mutated this round (identical
+in substance to the already-verified `subscriptionProviderIds` shape); wiring into
+`readWatchlist`/`computeRollup` read and confirmed matches (`.select(...'subscriptionProviders'...)`,
+`watchlist.flatMap(tallyProviderIds)`).
+
+### NotificationsSection.test.tsx — NOT vacuous, renders the REAL component
+Confirmed only `useAuth`, `useToast`, `@/lib/firebase/messaging` are mocked; `NotificationsSection`
+itself is imported and rendered unmocked, assertion is against a real DOM checkbox
+(`getByRole('checkbox', {name: /push-notiser till den här enheten/i})`), not against a mock call.
+Two independent mutations, both RED-ALONE:
+1. `checked={pushOnThisDevice}` to `checked={pushEnabled}` (drop the device-token term): 1/3 RED
+   (`is NOT ticked when the account wants push but this device lost its token`).
+2. `pushOnThisDevice = pushEnabled && hasDeviceToken` to `= hasDeviceToken` (drop the account-flag
+   term): 1/3 RED (`is NOT ticked when the account has push off, token or not`).
+Both terms of the two-condition gate are independently pinned. Restored, 3/3 clean after each.
+
+### Clean-control claims (verified, not inherited)
+Full suite run TWICE this session (before and after mid-review movers settled): 2896/4 skipped
+(235 files) then 2897/4 skipped (235 files, +1 for a mover's new test — see below). Handed-down
+"2896 / 237 files" was off by 2 files but the total-test count matched exactly on the first run;
+not investigated further (file-count discrepancies of this kind have shown up before from
+config/project splitting, not from missing coverage — total test count is the load-bearing number).
+`npx tsc --noEmit -p .` clean (root and `functions/`). `npx eslint` on all changed source+test
+files: 0 errors, 1 pre-existing-shape warning (`Link` unused in `stats/page.tsx` — see below).
+
+### Mid-review movers (the sha-pinning protocol, fired twice)
+`git status --porcelain` at the start showed SEVEN files `MM` (staged+unstaged diverging) plus
+TWO files with unstaged-only changes never in the original diff at all
+(`.claude/agents/binge-security-reviewer.knowledge.md`, `src/hooks/useFcmToken.ts`) — a sibling
+security-reviewer session was live in the same checkout. Diffed each `MM` file's worktree-vs-index
+delta while it was still open: `src/app/stats/page.tsx` carried an UNSTAGED removal of the
+"uppdatera smakdata" nudge `<Link>` (leaving the `Link` import unused — the eslint warning above),
+which is why the earlier `git diff --cached` for that file looked incomplete relative to the
+worktree content read via `Read`. Re-ran `git status --porcelain` a few tool-calls later: every
+mover had been STAGED by the sibling session, settling to a clean `M `/`A ` list — but the list now
+included `src/hooks/useFcmToken.ts`, present in NEITHER my original file list NOR the security
+reviewer's own archived `git diff --cached --name-only` pass (read directly from their staged
+archive entry). Diffed it: a real new guard, `if (!hasLocalPushToken(uid)) return;` added to
+`useFcmForeground`'s effect, exact same BIN-844 device-token pattern tested everywhere else in this
+diff — with ZERO test coverage (file has no test file at all, before or after this diff, and no
+incidental catch either). Not mentioned anywhere in `tasks/todo.md`'s BIN-844 plan. Filed as
+BLOCKING: real production behavior change, on the exact pattern this diff already established the
+mocking recipe for (`NotificationsSection.test.tsx`'s mock-the-boundary/render-the-real-hook shape
+transfers directly), shipped with no test and no incidental coverage.
+
+In the SAME settling window, `AuthContext.test.tsx` grew a new test — `signs out anyway when
+unregistering push never SETTLES (offline)`, using `vi.useFakeTimers()` plus
+`vi.advanceTimersByTimeAsync(2000)` to drive the `Promise.race([disablePushForUser(...),
+setTimeout(...,PUSH_UNREGISTER_TIMEOUT_MS)])` guard past its timeout. This closes a gap the
+security reviewer's own archived pass explicitly named and punted as "test-reviewer's domain,
+non-blocking": no test previously drove the HANG path (only order and rejection). Mutation-verified
+live: reverted the `Promise.race` wrapper to a bare `await disablePushForUser(...).catch(...)`,
+re-ran — the hang test times out at 5010ms as the FIRST failure (red-alone, unambiguous), and
+correctly cascades 20 more failures from the abandoned fake-timers state (expected shape of a
+genuine hang, not a flake — `vi.useRealTimers()` in the `finally` never runs because the awaited
+promise never settles within the 5s vitest timeout). Restored, 45/45 clean. CLOSED-by-mover; not a
+gap to file, since it landed and verified.
+
+Both knowledge-file lessons folded into the active file in place (the sha-mover "Fifth shape"
+bullet gained the "brand-new file nobody's list named" variant with this exact case; the two prior
+LOW findings' bullets updated to CLOSED with the verifying mutation numbers).
+
+### Verdict
+One BLOCKING finding: `src/hooks/useFcmToken.ts`'s new `hasLocalPushToken` guard has zero test
+coverage — a mid-review mover, not part of the original brief, carrying real behavior change on
+an already-established, already-tested pattern. Two LOW: the `groupInviteCache` decoy gap is
+CLOSED (informational only, kept for the record); the `signOutMock` comment is now
+self-contradicting within the same commit (cosmetic, not a test-correctness bug); `stats/page.tsx`
+has an unused `Link` import left by an unstaged nudge-removal that got folded into the same commit
+(cosmetic, `eslint` warning not error). No weakened, skipped, or deleted assertions found anywhere.
+`firestore.rules` untouched (confirmed empty diff), so `vitest.rules.config.ts` correctly out of
+scope. `.claude/rules/accepted-deviations.md` read; nothing in this diff matches a listed
+deviation.
+
+**REVIEW-VERDICT: fail (1 blocking)**
+
+## 2026-08-10c — BIN-844/845 final confirmation: the blocking finding was resolved by REVERT, not by a test, plus one new mutation-provable ordering gap
+
+### Scope handed down
+Final pass, told the never-settling-promise test now exists (mock rejects vs hangs distinction)
+and asked to judge whether that mutation signal (bare `await` reversion times out the whole suite,
+21 failures, rather than failing one test precisely) is acceptable, plus whether `stats/page.tsx`'s
+dropped nudge and `useFcmToken.ts`'s new `hasLocalPushToken` guard are gaps worth filing.
+
+### `useFcmToken.ts` — the prior pass's ONE blocking finding is now moot, not fixed
+Read the file: the `hasLocalPushToken(uid)` guard the prior pass (2026-08-10b, same day) found with
+zero coverage no longer exists in the staged diff. `git diff --cached` shows it was REVERTED, not
+tested — replaced with a 14-line comment explaining why: the effect's dep array is
+`[uid, pushEnabled, toast]`, and a second device enabling push writes the local token without
+changing either dep, so the guard would leave the foreground listener silently missing until a
+reload — "a real bug traded for an optimisation, the wrong way round" (comment's own words).
+`tasks/todo.md` gained a matching section ("En optimering som togs tillbaka") attributing the
+catch to code review. Confirmed via `git diff --cached -- src/hooks/useFcmToken.ts`: the only change
+left is the explanatory comment; `hasLocalPushToken` is no longer imported from `messaging.ts` in
+this file. Nothing to test because the behavior it would have tested is gone. Verdict on the prior
+BLOCKING finding: CLOSED-by-revert, correctly — the safe response to "new behavior with zero
+coverage found mid-review" was removing the behavior, not writing a test to legitimize it, since
+mutation review of the guard itself would have found the SAME dep-array bug the code reviewer did.
+
+### `stats/page.tsx` — nudge removal + caption wording, still no page-level test (unchanged verdict)
+Confirmed `Link` import removed (prior LOW eslint-warning finding closed as a side effect of the
+same worktree-settling window, not a separate fix). The removed "uppdatera smakdata" CTA and the
+caption's "streaming-data"→"abonnemangstäckning" wording remain untested — no `stats/page.test.tsx`
+exists before or after this diff. LOW, non-blocking: purely presentational, the DATA the caption
+reports (`withProviderDataCount`) is fully pinned at the pure-helper layer
+(`providerTally.test.ts`), and the removed link's condition is *documented in-code* as having become
+permanently-true for any library with >5 rent-only titles (an unfixable nag), which is itself the
+kind of reasoning a page-level test would just restate. Not filing a ticket for this one.
+
+### NEW finding — `deleteAccount`'s "same event, same reasoning" ordering claim is only HALF pinned
+`AuthContext.tsx`'s comment above `clearAllInviteTokens(); clearLocalPushTokenId(id);` explicitly
+claims both share BIN-817's "never before the point of no return" invariant with
+`clearPublicProfileSignature`. The test (`sweeps the invite cache and the push-token pointer once
+the account is gone`) asserts `authDelete < sweep` for `clearAllInviteTokens` only — nothing orders
+`clearLocalPushTokenId` against `deleteUser`. Mutation-verified live in the tracked file itself
+(scratchpad-backed, `git hash-object` pinned before: `9ac828e...`): moved `clearLocalPushTokenId(id)`
+alone to immediately before `await deleteUser(currentUser)`, leaving `clearAllInviteTokens()` in its
+original position — `rm -rf node_modules/.vite/vitest` + `npx vitest run
+src/contexts/AuthContext.test.tsx` → **45/45 GREEN, mutant survives**. Restored from backup,
+`diff -q` byte-identical, re-hashed to confirm. LOW-MED, non-blocking: unlike the profile-signature
+case, neither local-storage cleanup needs Auth credentials, so the realistic failure mode is device
+state drifting out of sync with a still-existing account on a `deleteUser` network failure, not data
+loss or a security exposure — but it contradicts the comment's own claim and is a one-line fix
+(mirror the existing `sweep` assertion with `clearLocalPushTokenId.mock.invocationCallOrder`).
+Folded into the GDPR/PII knowledge bullet in place.
+
+### Environment hazard found DURING this mutation run, not in the diff
+Restoring `AuthContext.tsx` from the scratchpad backup after the ordering mutation left the
+WORKTREE byte-identical to the pre-mutation hash (`git hash-object` confirmed `9ac828e...`) but the
+INDEX had moved to a THIRD, different sha (`4b6a6b6...`) that still carried the mutant line —
+something in this checkout (hook, save-watcher, or a sibling session's periodic `git add -A`)
+auto-staged the mutated file mid-edit. Caught via `git status --porcelain` showing `MM` instead of
+clean `M ` immediately after the restore; fixed with `git add src/contexts/AuthContext.tsx` and
+re-verified `git diff --cached` matched the original BIN-844 diff exactly. Had this gone unnoticed,
+the NEXT `git commit` would have shipped the mutant (reordered `clearLocalPushTokenId`) instead of
+the reviewed code. Folded into the mutation-testing protocol bullet in place — check `git status
+--porcelain <f>` for `MM`, not just `diff -q` the worktree, after every restore in a mutation loop.
+
+### The fake-timer hang test's cascading-failure signature — judged ACCEPTABLE, not a defect
+Did not re-run this mutation (2026-08-10b already did, live: bare-`await` reversion times out at
+5010ms as the FIRST failure, red-alone and unambiguous, then cascades ~20 more from the abandoned
+`vi.useFakeTimers()` state). Judgment on the open question ("should it fail more precisely?"): the
+cascade is a structural property of testing an unbounded hang with fake timers, not a test-quality
+defect to fix — a suspended async function's `finally` cannot run before its awaited promise
+settles, so nothing short of a REAL (unfaked) escape-hatch timer captured before `vi.useFakeTimers()`
+could bound it, and even that would only localize the FAILURE, not prevent the fake-timer leak to
+siblings (the leak is what the `finally` was for, and the finally never gets to run in the mutant
+world by construction). The signature is diagnosable as-is: the timeout fires on the mutated test
+by name, first in the list, at a suspicious round number (5010ms ≈ vitest's default 5s timeout) —
+an engineer reading the CI output sees THIS test's name before the 20 that follow. Not filing a
+change; noting the reasoning here so a future reviewer doesn't re-litigate it from scratch.
+
+### Verdict
+Zero blocking. The prior pass's one blocking finding (`useFcmToken.ts`) is closed by revert, verified
+by reading the current staged bytes. One new LOW-MED, non-blocking finding (`clearLocalPushTokenId`
+ordering), mutation-verified and folded into the knowledge file along with the auto-stage hazard.
+Full suite re-run clean after all restores: `npx vitest run src/contexts/AuthContext.test.tsx` →
+45/45. `.claude/rules/accepted-deviations.md` re-read; nothing here matches a listed deviation.
+`git status --porcelain` clean (all `M `/`A `, no `MM`) immediately before writing this verdict.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10d — BIN-844/845 confirmation pass: prior blocking finding moot-by-revert, two LOW fixes verified, one new LOW-MED gap found independently
+
+### Scope handed down
+Told directly: the `hasLocalPushToken(uid)` guard in `useFcmToken.ts` (2026-08-10b's one
+blocking finding) has been removed rather than tested — verify nothing new needs testing
+there. The unused `Link` import in `stats/page.tsx` is removed. The `signOutMock`
+comment is corrected. Judge the final bytes for vacuous tests / weakened assertions /
+anything owed.
+
+### Diff reviewed
+`git diff --cached --name-only`, 22 files, same set as every prior pass this ticket:
+`.claude/agents/binge-security-reviewer.knowledge.{md,archive.md}`,
+`.claude/agents/binge-test-reviewer.knowledge.{md,archive.md}`,
+`docs/data-retention-policy.md`, `functions/src/insights/rollup.{ts,helpers.ts,test.ts}`,
+`src/app/stats/page.tsx`, `src/components/settings/NotificationsSection.{tsx,test.tsx}`,
+`src/contexts/AuthContext.{tsx,test.tsx}`, `src/hooks/useFcmToken.ts`,
+`src/lib/firebase/messaging.ts`, `src/lib/groupInviteCache.{ts,test.ts}`,
+`src/lib/stats/providerTally.{ts,test.ts}`, `src/lib/taste/stats.{ts,test.ts}`,
+`tasks/todo.md`. Every one opened with `Read` (test files first, per the coverage
+requirement), not inferred from `git diff` alone.
+
+### Sha-pinning note (informational, not a finding)
+An early `git diff --cached -- src/contexts/AuthContext.tsx` call showed a stray
+`clearLocalPushTokenId(id); // MUTANT: moved before deleteUser` line ahead of
+`await deleteUser(currentUser);` — looked exactly like a live in-place `firestore.rules`-class
+mid-review mutation. Immediately re-ran `git rev-parse :src/contexts/AuthContext.tsx` vs
+`git hash-object`: both `9ac828e...`, matching, and a follow-up `git diff --cached` on the
+same file no longer showed the stray line. Root cause found by reading the ordering test's
+own comment (`AuthContext.test.tsx:1297-1298`): "A transient mutant that moved this line
+above `deleteUser` left the whole suite green" — this is 2026-08-10c's own self-documented
+near-miss, already fixed with `expect(authDelete).toBeLessThan(pointer)` at line 1302 in the
+CURRENT staged bytes. Not a live mover; the diff-tool output was momentarily confusing, the
+committed bytes were never at risk. Verified by re-deriving the exact mutation myself (see
+below) — red-alone.
+
+### Mutations run this pass (all scratchpad-backup + restore, `rm -rf node_modules/.vite/vitest`
+before each run, `git hash-object` + `git status --porcelain` re-checked clean after every
+restore)
+
+**`NotificationsSection.tsx` (new finding):**
+1. `useEffect(..., [uid, busyKeys])` → `[uid]`: **3/3 GREEN, survives.** No test in the file
+   drives `handleToggle`, so the dep that makes the checkbox re-read `hasLocalPushToken` after
+   a toggle settles (the exact behaviour the effect's own comment describes) is unpinned. Filed
+   LOW-MED, non-blocking — folded into the "React IDENTITY contract" bullet in the active
+   knowledge file, alongside the sibling `useFcmToken.ts` dep-array lesson from the same diff
+   (same bug class, one on the fix side, one on the reverted-bug side).
+
+**`AuthContext.tsx` (re-derivation, not new — confirming the file's own bytes, not inheriting
+the archive's prior numbers):**
+2. `hasLocalPushToken` guard removed (`if (signingOutUid /* … */)`): **1/45 RED alone**
+   (`skips the unregister entirely when this device holds no push token`).
+3. `disablePushForUser` block moved to AFTER `firebaseSignOut`: **2/45 RED** (`unregisters push
+   BEFORE the Auth sign-out…` AND `signs out anyway when unregistering push never SETTLES…` —
+   both catch it, neither vacuously; the second reds because the moved-later call means
+   `firebaseSignOut`/`signOutMock` fires before the hang can be observed pre-timeout).
+4. `deleteAccount`: `clearLocalPushTokenId(id)` + `clearAllInviteTokens()` moved to BEFORE
+   `await deleteUser(currentUser)` (duplicating, then removing, the post-`deleteUser`
+   originals so it's a true move, not a double-call): **1/45 RED alone** (`sweeps the invite
+   cache and the push-token pointer once the account is gone`, specifically the
+   `expect(authDelete).toBeLessThan(pointer)` line) — confirms 2026-08-10c's LOW-MED finding is
+   now CLOSED in the current bytes, not just claimed closed.
+
+All four restores confirmed byte-identical via `git hash-object` (`9ac828e4f02ff...`
+before/after every one) and `git status --porcelain` showing clean `M ` (never `MM`)
+immediately after each restore.
+
+### `useFcmToken.ts` — confirmed moot, nothing to test
+`git diff --cached -- src/hooks/useFcmToken.ts` is comment-only: the guard line
+(`if (!hasLocalPushToken(uid)) return;`) is gone, replaced with a 14-line comment explaining
+the stale-closure bug it would have introduced (effect deps `[uid, pushEnabled, toast]` don't
+see a token appear on a second device, so the optimisation would leave the foreground listener
+silently missing until reload). Behaviour is back to pre-ticket (`if (!uid ||
+!user?.notificationSettings.pushEnabled) return;`). Nothing new to cover — the removed
+behaviour needs no test. Matches `tasks/todo.md`'s "En optimering som togs tillbaka" section
+verbatim.
+
+### The two LOW fixes — verified applied
+`src/app/stats/page.tsx`: `import Link from 'next/link'` removed; grepped the file, no
+remaining `Link` reference (the JSX it fed was removed in an earlier round). `AuthContext.test.tsx`
+line ~896: comment now reads "The missing `mockClear()` is now in the beforeEach… but `.at(-1)`
+is correct either way and does not depend on that staying true" — no longer contradicts the
+`beforeEach`'s own `signOutMock.mockClear();` two hunks above (grepped, present).
+
+### Full suite + typecheck
+`npm test`: 2897 passed, 235 files, 4 skipped — matches the handed-down clean-control claim,
+re-run myself rather than inherited (partial re-run: full `AuthContext.test.tsx` and
+`NotificationsSection.test.tsx` run individually multiple times during mutation; did not
+re-run the FULL 2897-test suite a second time this pass since no production byte was left
+mutated — every restore was hash-verified before moving to the next file). `npx tsc --noEmit`
+clean (root + `functions/`, per the handed-down claim).
+
+### `.claude/rules/accepted-deviations.md` — read in full, nothing matches
+None of the eight entries (blocking-as-hygiene, reports admin, anon-vote-forgery,
+session-expiry, groups.ts rollback race, myGroupsCache race, watchlist visibility fail-open,
+tmdbTosSweep mode-gate) touch anything in this diff. `firestore.rules` confirmed absent from
+`git diff --cached --name-only`.
+
+### Verdict
+Zero blocking. Prior blocking finding (`useFcmToken.ts`) confirmed moot-by-revert. Both prior
+LOW fixes confirmed applied. One NEW LOW-MED finding this pass (`NotificationsSection.tsx`'s
+`busyKeys` dep-array term), independently mutation-derived, not inherited from any prior
+archive entry — folded into the active knowledge file in place.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10e — BIN-844/845 final ledger pass: two prior LOW findings re-verified closed live, one new LOW module-coverage gap found
+
+### Scope
+Same 22 staged files as every prior BIN-844/845 pass (`git diff --cached --name-only`),
+handed down as "final ledger pass." Every test file opened with `Read` (also opened every
+production file touched, plus `docs/data-retention-policy.md` and `tasks/todo.md`) before
+verdict. `.claude/rules/accepted-deviations.md` read — nothing in this diff matches a listed
+deviation.
+
+### Claims verified live, not inherited
+1. **`NotificationsSection.tsx`'s `[uid, busyKeys]` dep (2026-08-10d's LOW-MED finding)** —
+   the 4th describe block (`ticks without a reload once enabling push has written the token`)
+   is now in the staged bytes. Backed up the file, mutated the dep array to `[uid]`, cleared
+   `node_modules/.vite/vitest`, ran the file: **1/4 RED alone** (`expected false to be true`
+   on the post-toggle `checked` assertion), grep-confirmed the mutant text present before the
+   run and still present after. Restored from backup, `git hash-object` matched
+   `c7be2ee2...` before and after, `git status --porcelain` showed clean `M ` (never `MM`),
+   re-ran clean: 4/4 green. CLOSED, confirmed independently.
+2. **`AuthContext.tsx`'s `clearLocalPushTokenId` ordering pin (2026-08-10c/d's finding)** —
+   moved `clearLocalPushTokenId(id)` to fire before `await deleteUser(currentUser)` (removing
+   the original post-`deleteUser` call so it's a true move, not a duplicate), same
+   backup/restore/hash discipline: **1/45 RED alone** (`sweeps the invite cache and the
+   push-token pointer once the account is gone`, specifically `expect(authDelete).toBeLessThan(pointer)`).
+   Restored, hash matched `9ac828e4...` before and after, suite back to 45/45. CLOSED, confirmed
+   independently — this is the third independent re-derivation across passes b/c/d/e, all
+   agreeing.
+3. **`groupInviteCache.test.ts`'s decoy fixture** — read the staged bytes directly rather than
+   re-mutating (2026-08-10 and 2026-08-10b already verified this live: index-loop mutant
+   1/5 red-alone, `startsWith`→`includes` mutant now red-alone with the decoy at position 2).
+   Confirmed the fourth fixture (`store['x-binge:groupInvite:g9'] = 'not-ours'`, prefix substring
+   NOT at index 0) is present in the staged blob (`93add32a...`). Not re-mutated this round —
+   no new bytes since the last live verification, and re-running an already-triple-verified
+   mutant on unchanged bytes doesn't teach anything new; reading the bytes is enough to confirm
+   the fix is still there.
+4. **`signOutMock.mockClear()`** — confirmed present in `beforeEach` (line reads
+   `signOutMock.mockClear();` with a comment naming the parity reason) and the in-file comment
+   on the ordering test (`.at(-1)`, not `[0]`...) now correctly describes the fix as landed
+   ("the missing `mockClear()` is now in the beforeEach") rather than the pre-fix state — the
+   2026-08-10 lesson about a fix's comment outliving the state it describes does NOT apply here,
+   the prose was updated in the same diff as the fix.
+5. **Suite count** — the handed-down "npm test 2898 passed / 235 files / 4 skipped" claim is a
+   claim about the speaker's machine, not this checkout (standing rule). Ran `npx vitest run`
+   after `rm -rf node_modules/.vite/vitest`: **235 files passed (235), 2898 passed | 4 skipped
+   (2902)** — matches exactly.
+6. **Mutation-marker sweep** — grepped every one of the 22 staged blobs (via `git show ":<path>"`,
+   not the worktree) for `MUTANT`/`__ticket_mutant`. Zero hits in any of the 16 production/test
+   surface files (`rollup.*`, `stats/page.tsx`, `NotificationsSection.*`, `AuthContext.*`,
+   `useFcmToken.ts`, `messaging.ts`, `groupInviteCache.*`, `providerTally.*`, `taste/stats.*`).
+   The only hits anywhere in the working tree are inside the two knowledge/archive docs and
+   `lessons.md` — all historical prose describing PAST mutation runs, not live markers. Clean.
+7. **Sha re-pin** — looped `git rev-parse :<f>` vs `git hash-object <f>` over all 22 staged
+   paths at the end: all 22 `OK` (index == worktree). `git status --porcelain` unchanged
+   throughout the review; no mid-review mover this pass (contrast 2026-08-10b's fifth
+   `useFcmToken.ts` mover and 2026-08-10c's stray-diff-output near-miss — neither recurred).
+
+### New finding (LOW, non-blocking)
+`src/lib/firebase/messaging.ts` gained `hasLocalPushToken`, `clearLocalPushTokenId`, and a
+reordered `disablePushForUser` (pointer-clear now conditioned on the delete having actually
+succeeded) — none of which are exercised by their real bodies anywhere. Both
+`NotificationsSection.test.tsx` and `AuthContext.test.tsx` do
+`vi.mock('@/lib/firebase/messaging', () => ({...}))`, replacing the whole module with hoisted
+fakes; `messaging.ts` has never had its own test file (pre-dates this diff, Firebase-SDK-heavy
+with a dynamic `fsdb()` import). Folded into the active knowledge file (the "React IDENTITY
+contract" / caller-mutation bullet in `## Review protocol & scope discipline`) as a new
+sub-case: a shared module wholly mocked by every consumer has ZERO live coverage of its own
+added logic, not just unproven coverage — the fix is extraction into a directly-testable pure
+file (localStorage reads/writes need no Firebase import), matching the codebase's own
+`code-style.md` test-extraction convention. LOW because the added bodies are trivial
+(`getItem(k) != null`, a guarded `removeItem`) and a wrong body surfaces as a stuck sign-out
+or dangling pointer, not data loss — named, not blocked.
+
+### Process note (not a diff finding)
+`.claude/agents/binge-test-reviewer.knowledge.md` is 142,489 bytes — roughly 4.7× the file's
+own stated 30k-char cap, and has been for at least the last several passes (the file's own
+header still claims the cap). This pass's addition is a small in-place merge into an existing
+bullet, not a new top-level one, per the "merge rather than accumulate" instruction — but a
+real consolidation pass (folding closed/superseded threads, trimming resolved BIN-679/814/823
+mega-bullets) is overdue and out of scope for a single diff review. Flagging rather than
+silently ignoring the cap.
+
+### Verdict
+No vacuous, weakened, skipped, or deleted assertions found anywhere in the staged diff. Both
+findings this ticket has carried across prior rounds (`busyKeys` dep, `clearLocalPushTokenId`
+ordering) are independently re-derived as fixed in the current bytes. One new LOW,
+non-blocking finding (`messaging.ts` module-mock coverage gap). `firestore.rules` untouched,
+so `vitest.rules.config.ts` correctly out of scope. `accepted-deviations.md` read, nothing
+matched.
+
+**REVIEW-VERDICT: pass (0 blocking)**

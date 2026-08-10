@@ -19,6 +19,20 @@ export function useFcmForeground() {
   const { show: toast } = useToast();
 
   useEffect(() => {
+    // BIN-844 note, deliberately NOT a `hasLocalPushToken(uid)` guard here.
+    //
+    // Since sign-out unregisters the device without touching the account-level
+    // `pushEnabled`, this hook does subscribe on devices that can no longer receive —
+    // wasted chunk load and a dead listener. Guarding on the local token was tried and
+    // reverted: this effect's deps are `[uid, pushEnabled, toast]`, and none of them
+    // changes when a token appears. On a SECOND device for an account that already
+    // has push on, ticking the Settings box writes the token but leaves `pushEnabled`
+    // at `true` — no dep changes, the effect never re-runs, and the foreground
+    // listener is missing until a reload. Trading a real bug for an optimisation is
+    // the wrong way round.
+    //
+    // Doing it properly needs a signal this hook can subscribe to (a token version
+    // bumped by enable/disable). Filed rather than improvised.
     if (!uid || !user?.notificationSettings.pushEnabled) return;
     if (!isPushSupported()) return;
 

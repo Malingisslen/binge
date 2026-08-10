@@ -112,10 +112,16 @@ export async function disablePushForUser(uid: string): Promise<void> {
       try {
         const { db, doc, deleteDoc } = await fsdb();
         await deleteDoc(doc(db, 'users', uid, 'fcmTokens', tokenId));
+        // BIN-844: drop the pointer ONLY once the doc is really gone. It used to be
+        // removed unconditionally, which meant a failed or abandoned delete (offline,
+        // or the 2s sign-out race giving up) left the token registered server-side
+        // with nothing left on this device pointing at it — unreachable from the
+        // Settings toggle, which needs the id to delete it. Keeping the pointer makes
+        // the next attempt able to finish the job.
+        localStorage.removeItem(`binge:fcm:tokenId:${uid}`);
       } catch (err) {
         firestoreErr = err;
       }
-      localStorage.removeItem(`binge:fcm:tokenId:${uid}`);
     }
   }
 
@@ -129,6 +135,43 @@ export async function disablePushForUser(uid: string): Promise<void> {
   }
 
   if (firestoreErr) throw firestoreErr;
+}
+
+/**
+ * BIN-844 — does THIS device hold a push registration for this account?
+ *
+ * `notificationSettings.pushEnabled` is an ACCOUNT-level field, so it cannot answer
+ * that: after a sign-out unregisters this device the flag stays true, and the
+ * settings checkbox would render ticked while nothing arrives here. The local token
+ * pointer is the only per-device fact available, which makes this the honest input
+ * for the toggle's checked state.
+ */
+export function hasLocalPushToken(uid: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(`binge:fcm:tokenId:${uid}`) != null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * BIN-844 — drop only the LOCAL pointer to this device's token doc.
+ *
+ * For the account-deletion path, where `disablePushForUser` cannot be used: it
+ * deletes `users/{uid}/fcmTokens/{id}`, and after the account is gone that write
+ * has no owner. The deletion cascade already removes those docs, so all that is
+ * left is this dangling key. Do NOT reach for this on sign-out — it removes the
+ * pointer without unregistering anything, which is precisely the confusion this
+ * ticket had to untangle: clearing the key does not stop push.
+ */
+export function clearLocalPushTokenId(uid: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(`binge:fcm:tokenId:${uid}`);
+  } catch {
+    /* ignore private mode */
+  }
 }
 
 /**

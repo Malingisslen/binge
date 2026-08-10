@@ -204,10 +204,72 @@ uttryckligen anropas, och de två sorterna städas olika:
   röjer ingenting. Nya localStorage-nycklar som härleds ur persondata ska följa samma
   två regler: lagra en hash, och rensa i kaskaden.
 
-Listan ovan är **inte** uttömmande: `binge:fcm:tokenId:{uid}`, `binge:groupInvite:{groupId}`
-och `binge-session-pid-*` överlever också raderingen och är ännu inte genomgångna. De
-spåras i en egen biljett — `binge:groupInvite` bär en levande inbjudningstoken, vilket är
-en säkerhetsfråga och inte en dokumentationsfråga.
+- **localStorage, forts. (BIN-844, 2026-08-10)** — två nycklar till städas nu, och en
+  tredje sak görs som INTE är en localStorage-fråga:
+  - `binge:groupInvite:{groupId}` — svepas med prefix av `clearAllInviteTokens()` vid
+    **radering**, inte vid utloggning. Enbart hygien: bara en grupps ÄGARE cachar
+    klartexten, och kaskaden raderar hela den ägda gruppen, så nyckeln pekar på något
+    som inte längre finns. Att svepa vid utloggning övervägdes och valdes bort av Malin
+    mot en delad panel: appen visar värdet bara för ägaren, medan svepet hade kostat
+    ägaren den egna länken — enda vägen tillbaka är "Generera ny", som ogiltigförklarar
+    länken som redan delats med folk som inte klickat än.
+  - `binge:fcm:tokenId:{uid}` — tas bort av `clearLocalPushTokenId(uid)` vid radering.
+    **Detta är städning av en dinglande pekare, inte ny Art. 17-täckning:** serversidans
+    `users/{uid}/fcmTokens/*` raderas redan av kaskaden (se "Operationell metadata"
+    ovan). Att rensa nyckeln stoppar ingen notis.
+  - **Utloggning avregistrerar nu push på riktigt** — `signOut` anropar
+    `disablePushForUser(uid)` FÖRE `firebaseSignOut`, vilket raderar
+    `users/{uid}/fcmTokens/{id}`. Det var den faktiska delad-enhet-läckan: notiser
+    fortsatte nå en dator man loggat ut från. Ordningen är bindande — efter utloggningen
+    har klienten ingen behörighet att radera doc:et.
+
+    **Avregistreringen är best-effort, och det är tre saker den inte gör.** Den hoppas
+    över helt om enheten saknar den lokala token-pekaren — en webbläsare vars
+    localStorage rensats har fortfarande en registrerad token serversidigt som ingen
+    utloggning når. Den släpps efter 2 sekunder om skrivningen inte hunnit bekräftas
+    (offline eller trög uppkoppling), och då står token kvar och notiserna fortsätter.
+    Och en session som tar slut via tyst utgång eller återkallelse — utan klick på
+    Logga ut — kan inte göra skrivningen alls, eftersom den kräver en levande token.
+    Alla tre lämnar samma tillstånd som före ändringen; ingen av dem gör det värre.
+
+**Medvetet kvarlämnade, genomgångna och beslutade** (inte "ännu inte tittade på"):
+`binge-session-pid-{sessionId}` / `binge-my-sessions`, `binge:wasLoggedIn` och
+`binge:rec-rotation:{rowKey}`. Motivering: bekvämlighet — att rensa sessionslistan hade
+kostat en återvändande användare sina Tillsammans-sessioner vid varje utloggning, även
+hemma. För `binge-session-pid-*` är detta **inte ett nytt beslut**: det är samma
+avvägning (efemär data, olistad-länk-tillit, bekvämlighet före minimering) som redan
+ratificerades mot full panel 2026-07-16 — se **ADR 0015**. Ska läsas som en
+sammanhängande position, inte återupptäckas som en öppen fråga.
+
+Listan är fortfarande **inte** uttömmande, och §8:s motsvarande brasklapp ska stå kvar:
+tre av de sex ursprungligen flaggade nycklarna ligger fortfarande utanför den itemiserade
+listan.
+
+### Arbetsposition: räknas en hash av persondata som persondata? (2026-08-10)
+
+Nedtecknad av #5 Juridik/GDPR, öppen sedan BIN-817. **Detta är en arbetsposition, inte ett
+påstående om fastslagen rätt.**
+
+En icke-reversibel hash är inte automatiskt anonym data enligt skäl 26 — pseudonymisering
+minskar identifierbarheten men tar inte bort den. Om ett hashat värde fortfarande är
+persondata avgörs av om återställning är *rimligen sannolik* givet indatans entropi:
+
+- **Hög entropi** (ett uid, en genererad token) → behandlas som **inte** persondata;
+  återställning är ogenomförbar.
+- **Låg eller uppräknelig entropi** (visningsnamn, användarnamn, annan fritext ur ett
+  begränsat rum) → behandlas som **fortfarande** persondata; en ordboks- eller
+  rainbow-table-attack mot ett litet kandidatrum är ett "medel som rimligen kan komma
+  att användas".
+
+Tumregel för den här kodbasen: att hasha ett fält uppfyller **säkerhetsmålet** (ingen
+klartext-PII på en delad enhet) men tar inte i sig bort fältet ur redovisnings- eller
+raderingsomfånget — den bedömningen görs per fält utifrån entropi, inte automatiskt av
+att hashning skett. `binge:pubprofile-sig` (härlett ur visningsnamn/användarnamn/bio)
+hamnar på "fortfarande persondata"-sidan och täcks korrekt av §8:s brasklapp snarare än
+att betraktas som nyligen anonymiserat.
+
+Omprövas om IMY publicerar vägledning eller om EU-domstolen snävar in eller vidgar
+testet för pseudonymisering kontra anonymisering.
 
 > **Historik-/incident-not (BIN-505, 2026-07-14):** en tidigare rules-brist gjorde
 > `users/{uid}` (email/hemkommun/kostnader) och watchlist-`notes` läsbara för

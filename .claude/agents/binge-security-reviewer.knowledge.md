@@ -41,18 +41,14 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   of the identical shape/consumption (rendered only through an id→lookup table, never interpolated/executed)
   is unbound too — don't demand a new bind an existing analogous field never got (BIN-814 `subscriptionProviders`
   next to `providers`).
-- **A "doc already carries the field, does an unrelated write survive" ratchet test must seed via
-  `withSecurityRulesDisabled`, not a live authenticated write, when mutation-testing by editing the deployed
-  rule itself.** Seeding live under the SAME (mutated) ruleset being tested can't reach the target scenario —
-  the seed write is rejected by the same `hasOnly` before the "unrelated write" line ever runs, so the test
-  still fails on mutation but for the wrong line, and the comment's claim ("an unrelated write on an
-  already-contaminated doc") goes unexercised. Harmless when the only guard in play is `hasOnly` itself (key
-  provenance is irrelevant to a key-set check, so the mutation is still caught) — but would be a live false-negative
-  gap for a VALUE ratchet whose behavior depends on the resource's prior state (`vetoRemaining <=`,
-  `tmdbFieldsRefreshedAt <= request.time`), where the live seed path might not even be reachable at all under
-  the mutated rule and the "already contaminated" state could never be constructed to test against.
-  BIN-814's second test (`firestore-rules.test.ts`) has this shape; not reflagged because the field it guards
-  is `hasOnly`-only. Tighten with rules-disabled seeding before reusing this test as a template for a VALUE ratchet.
+- **A "does an unrelated write survive on an already-contaminated doc" ratchet test must seed via
+  `withSecurityRulesDisabled`, not a live write, when mutation-testing by editing the deployed rule itself** —
+  a live seed under the mutated ruleset gets rejected by the same `hasOnly` before the target line runs, so the
+  mutation is still caught but the seeded scenario itself goes unexercised. Harmless for a pure `hasOnly` guard
+  (key-set check doesn't care about seed provenance); a live false-negative gap for a VALUE ratchet whose
+  behavior depends on prior state (`vetoRemaining <=`, `tmdbFieldsRefreshedAt <= request.time`). BIN-814's
+  second test has this shape, not reflagged (its field is `hasOnly`-only) — tighten before reusing as a
+  VALUE-ratchet template.
 - **`resource.data.get(k,D)` defends a MISSING key only.** A present-but-mistyped value (`isHost:'yes'`)
   returns as-is → equality type-errors → allow-expr fails → slot bricked (plantable DoS). Use
   `resource == null ? true : resource.data.get(k,D) is <T> ? <equality> : <heal to safe value>`, heal one-way.
@@ -152,6 +148,17 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   else a same-uid sign-out/in inherits the spent latch and gets no auto-retry); a MONOTONIC epoch must NOT
   (reset lets a pre-sign-out run re-qualify as `isCurrent()`); a per-TAB counter must not either, but key it
   `Map<uid,n>` — else it's shared across every account in that tab.
+- **A bare `await` on a client write against `persistentLocalCache` can HANG forever, not just fail — judging
+  only whether it throws misses this.** `setDoc`/`updateDoc`/`deleteDoc` resolve only on server ACK; offline
+  they never settle. My own prior pass on BIN-844's `disablePushForUser` inside `signOut` approved a bare
+  try/catch await this way, missing it could hang sign-out forever on a shared device — worse than the leak
+  the ticket closed. The fix (`Promise.race` vs a short timeout) is honest only if the abandoned write is
+  DISCARDED, not silently replayed later — verify against the SDK's own doc comments: `terminate()` does NOT
+  cancel pending writes (their promises never resolve), but `clearIndexedDbPersistence()` wipes "pending writes
+  and cached documents", so only a `terminate()`-then-`clearIndexedDbPersistence()` pairing (this repo's
+  `clearFirestorePersistence`) makes the discard true — confirm that exact pairing before accepting a "same
+  outcome as before" claim. Any destructive/blocking flow firing a write before its point of no return needs
+  this race, not a bare await.
 - **Per-uid listener state that resets only inside `if (!uid)` leaks across a truthy→truthy uid switch**
   (shared device, no sign-out): `notesByTmdbId` keeps A's map until B's first snapshot, so a shared tmdbId
   shows A's note under B's title. Reset unconditionally at the effect's TOP — and guard a cross-account
@@ -217,14 +224,13 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   holds only once the profile LOADED. Name a REAL excluded key (`?fromGroup=`: a mount-time Firestore read on
   a badge-bearing page).
   **BIN-669 (a route guard remembering the DEPARTING user's page across `signOut()`, which never navigates):**
-  fix = `isSigningOut()` ref-backed PREDICATE, not consume-once (a consuming reader answers "yes" then "no"
-  across React's double effect-run, remembering on the second pass). Raise BEFORE the async sign-out call, lower
-  only in a `finally` AFTER every step, clear the stored path on both the way in and out. The flag lives in ONE
-  TAB's memory, but Firebase Auth's default persistence broadcasts `signOut()` to every same-origin tab via a
-  storage event — a second tab gets `uid → null` too with its OWN `isSigningOut()` defaulting false, and still
-  remembers ITS page (same leak, narrower vector — residual, not a fix defect). A "denies the contents" claim
-  needs the ACTUAL read rule, not the subcollection's: an unlisted-link parent (`groups/{id}`) can allow read
-  by design while its subcollections stay member-gated — true for content, false for the parent's fields.
+  fix = `isSigningOut()` ref-backed PREDICATE, not consume-once (a consuming reader flips yes→no across React's
+  double effect-run). Raise before the async sign-out call, lower only in a `finally` after every step, clear
+  the stored path both ways. Residual: the flag is ONE TAB's memory, but Firebase Auth broadcasts `signOut()`
+  to every same-origin tab — a second tab's OWN `isSigningOut()` defaults false and still remembers its page
+  (narrower vector, not a fix defect). A "denies the contents" claim needs the ACTUAL read rule, not the
+  subcollection's: an unlisted-link parent (`groups/{id}`) can allow read by design while subcollections stay
+  member-gated.
 - **Consume-on-read makes the consuming effect NON-IDEMPOTENT** — a second run (StrictMode, extra identity
   change) reads null and falls back to default; gate with a ref latch set INSIDE the success branch (unreachable
   on a FAILED sign-in), nothing between latch and navigate may throw, destination never login. Read only AFTER

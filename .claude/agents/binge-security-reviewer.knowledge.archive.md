@@ -6589,3 +6589,314 @@ session-expiry, blocking-as-hygiene, create-only reports, groups.ts rollback rac
 visibility read fail-open — none touched by this diff.
 
 **Verdict:** pass, 0 blocking.
+
+### 2026-08-10 — BIN-844 (sign-out push unregister + invite-cache sweep) + BIN-845 (rollup provider-tally subset)
+
+Full `top`-tier panel [27,5,4,6,18] ran live pre-code (recorded in `tasks/todo.md`),
+DBA bounced (device-local storage only, no Firestore schema). Reviewed every staged
+file with `Read`: `AuthContext.tsx` + `.test.tsx`, `src/lib/firebase/messaging.ts`,
+`src/lib/groupInviteCache.ts` + `.test.ts`, `docs/data-retention-policy.md`,
+`functions/src/insights/rollup.ts` + `rollup.helpers.ts` + `.test.ts`,
+`src/app/stats/page.tsx`, `src/lib/stats/providerTally.ts` + `.test.ts`,
+`tasks/todo.md`.
+
+**Premise correction was itself the finding, and it was made BEFORE this review** —
+the ticket assumed `binge:groupInvite` was the live shared-device leak; the panel
+(DPO + Archaeologist) traced it to `disablePushForUser` never being called from
+`signOut` at all, only from the settings toggle. Confirmed by reading `messaging.ts`
+and `AuthContext.tsx` pre-fix history in the diff itself — the fix targets the real
+mechanism, not the originally-filed one. Judged the SHIPPED fix, not the ticket text.
+
+**1. Ordering, verified live in the code (not just the comment):** `signOut`
+captures `const signingOutUid = auth.currentUser?.uid` SYNCHRONOUSLY (no await
+before the read), calls `await disablePushForUser(signingOutUid)` wrapped in a
+local `try {} catch {}` (never rethrows), THEN `await firebaseSignOut(auth)`.
+`disablePushForUser` itself: reads the per-uid localStorage tokenId, `deleteDoc`s
+`users/{uid}/fcmTokens/{id}` (rules confirmed at firestore.rules:352 —
+`allow read, write: if isOwner(uid)`, live auth still holds `uid` at this point),
+and only that ONE failure mode (`firestoreErr`) is rethrown at the end — the
+FCM-SDK half (`getMessagingInstance` + `deleteToken`) is caught internally and
+never propagates. So the outer catch in `signOut` is reachable only for the
+Firestore delete failing, and it swallows it. Confirmed non-blocking: no code path
+between the capture and `firebaseSignOut` can throw past the try/catch.
+`AuthContext.test.tsx`'s `invocationCallOrder` comparison
+(`disablePushForUser` before `firebaseSignOut`) and the "signs out anyway when
+unregistering push throws" test both hold under mutation-shaped reasoning (deleting
+either the capture-before-await or the try/catch by hand breaks one of the two
+pinned tests).
+
+**2. The stated gap (silent expiry/revocation bypasses the fix) is accurately
+characterized.** The write requires a LIVE ID token; the auth listener's
+uid→null branch (BIN-732's home for the rest of sign-out hygiene) fires strictly
+AFTER the token is already gone, so there is structurally no point to relocate the
+call to. This is the same shape as `deleteAccount`'s freshness gate needing to run
+BEFORE the point of no return — not a new pattern, an inversion of an existing one,
+and the code comment says so. Not a blocking gap: it doesn't regress anything (push
+already keept arriving post sign-out before this ticket, for ALL sign-outs, not
+just silent ones), it's a partial fix documented as partial, and Malin parked the
+full closure ("silent expiry" case) as a separate ticket rather than building it
+blind. Accepted as shipped-partial, not silently declared complete — `tasks/todo.md`
+"Kvar för Malin" section states the residual explicitly.
+
+**3. Invite-cache non-sweep is honestly scoped in both code and
+`data-retention-policy.md`:** the comment and the doc both say plainly that clearing
+the cache "revokes nothing server-side" and a devtools read gets the plaintext
+either way — this closes a same-account-signed-out-still-on-device read, not a
+credential. No overclaim found (grepped for "closes"/"stops"/"prevents" language
+near the invite-cache comments — none present; language is consistently
+"hygiene"/"pointer"/"does not stop").
+
+**4. Three deliberately-kept keys** (`binge-session-pid-*`/`binge-my-sessions`,
+`binge:wasLoggedIn`, `binge:rec-rotation:*`) cross-reference ADR 0015 in the updated
+doc rather than re-litigating — matches the already-accepted deviation in
+`accepted-deviations.md` ("Tillsammans session-expiry", `binge-session-pid-*`
+survival). Not re-flagged.
+
+**5. BIN-845 (`rollup.ts`/`rollup.helpers.ts`/`stats/page.tsx`/`providerTally.ts`):**
+confirmed a pure field-selection change — `.select()` widened to also fetch
+`subscriptionProviders` (admin SDK, own scheduled aggregate function, no client
+exposure change), and a new pure helper (`tallyProviderIds` /
+`subscriptionProviderIds`-based `providerTally`) picks which array a tally counts.
+No `firestore.rules` touched (confirmed via `git diff --cached --name-only` —
+absent), no new collection, no new read/write path, both consuming surfaces already
+read only the caller's own data (admin dashboard aggregate / the signed-in user's
+own watchlist via `useWatchlist`). No security or data-exposure implication.
+
+**Also found (non-blocking, cost/perf not security):** `disablePushForUser` now
+runs on EVERY sign-out, including users who never enabled push — it unconditionally
+calls `getMessagingInstance()` (lazy-loads the `firebase/messaging` chunk +
+`isSupported()` + `getMessaging(app)`) at the bottom of the function regardless of
+whether a `tokenId` was found in localStorage. Previously this chunk only loaded
+from the settings toggle. Not a security finding — no credential exercised, no data
+touched — flagged as a product/perf observation only.
+
+**Not re-filed (`accepted-deviations.md` + `.claude/rules/data-model.md` both read
+in full this review):** Tillsammans anon-vote/session-expiry, blocking-as-hygiene,
+create-only reports, watchlist visibility read fail-open, groups.ts rollback race —
+none touched by this diff.
+
+**Verdict:** pass, 0 blocking.
+
+### 2026-08-10 — RE-REVIEW of the same BIN-844 diff after the integration reviewer's
+fix round: this was a self-correction, not a fresh review
+
+My own prior entry above (same date, same ticket) PASSED a version of `signOut` that
+could hang forever offline — approved because I checked only whether the awaited
+`disablePushForUser` call could THROW past its try/catch, never whether it could
+simply never resolve. The integration reviewer caught it afterwards, along with a
+second defect (the settings checkbox reading account-level `pushEnabled` instead of
+the per-device token) that I had ALSO missed, structurally: my prior file list did
+not even include `NotificationsSection.tsx`/`.test.tsx`, because at review time
+`hasLocalPushToken` didn't exist yet — the checkbox bug was introduced by the very
+absence of the fix I'd approved. Read every file in `git diff --cached --name-only`
+with `Read` this pass, including both files missed before:
+`src/components/settings/NotificationsSection.tsx` + `.test.tsx`,
+`src/lib/firebase/messaging.ts`, `src/contexts/AuthContext.tsx` + `.test.tsx`,
+`src/lib/groupInviteCache.ts` + `.test.ts`, `docs/data-retention-policy.md`,
+`functions/src/insights/rollup.ts`/`rollup.helpers.ts`/`rollup.test.ts`,
+`src/app/stats/page.tsx`, `src/lib/stats/providerTally.ts` + `.test.ts`,
+`tasks/todo.md`, and the three `.claude/agents/*` knowledge files also in the diff
+(test-reviewer's own archive entry for this same round, read for consistency —
+no contradiction found). `firestore.rules` confirmed untouched (empty `git diff
+--cached -- firestore.rules`).
+
+**Finding 1 (the hang) — verified fixed, not just re-asserted.** `signOut` now wraps
+the call: `await Promise.race([disablePushForUser(signingOutUid).catch(()=>{}), new
+Promise(resolve => setTimeout(resolve, PUSH_UNREGISTER_TIMEOUT_MS))])` with
+`PUSH_UNREGISTER_TIMEOUT_MS = 2000`, guarded by `hasLocalPushToken(uid)` so the call
+(and its `firebase/messaging` chunk load) is skipped entirely for the common
+never-enabled-push case — this also closes the "also found" perf note from my prior
+entry (bottom). Judged the two questions the dispatcher posed directly:
+- **Is the discard claim honest?** Verified against the Firestore Web SDK's OWN
+  `.d.ts` doc comments (`node_modules/@firebase/firestore/dist/index.d.ts`), not the
+  code comment's say-so: `terminate()` — "does not cancel any pending writes, and any
+  promises that are awaiting a response from the server will not be resolved... next
+  time you start this instance, it will resume sending these writes." So `terminate()`
+  ALONE would make the abandoned delete durable and eventually replayed — which would
+  make the code's "discarded" claim FALSE. But `clearFirestorePersistence()`
+  (`src/lib/firebase/db.ts`) calls `terminate(db)` THEN `clearIndexedDbPersistence(db)`,
+  and that second function's doc comment is explicit: "Clears the persistent storage.
+  **This includes pending writes** and cached documents." That exact pairing is what
+  makes the claim true, and it's present and unconditional (runs right after
+  `firebaseSignOut` in every `signOut`, not just the push branch). Traced the dangling
+  promise itself: on `terminate()`, the pending `deleteDoc` await "will not be
+  resolved" (SDK's words) — i.e. it hangs in limbo rather than rejecting — so
+  `disablePushForUser`'s own `localStorage.removeItem(...)` (which sits AFTER that
+  await, outside the try/catch) is never reached either. Net effect confirmed
+  IDENTICAL to the pre-ticket baseline on the offline path: local pointer intact,
+  server doc intact, no new "hasLocalPushToken says no token but server still has one"
+  state — the class of regression I checked for and did not find.
+- **Is 2s the right shape?** Reasonable: generous for a normal Firestore round-trip,
+  short against a fire-and-forget `void signOut()` call site with no spinner either
+  way. Applies equally to "genuinely offline" and "merely slow" — a write that would
+  have succeeded at 2.5s is also discarded, which is a minor product cost (not
+  security) and consistent with "best-effort, never block sign-out."
+- **Residual, not re-filed as blocking:** no test drives the actual TIMEOUT/hang path
+  (a `disablePushForUser` mock that never settles, under fake timers, asserting
+  `signOut` still resolves within the race window) — the shipped tests cover ORDER
+  and REJECTION, not HANG, which is exactly the dimension my prior pass got wrong.
+  The code is independently verified correct against the SDK's docs above, so this is
+  a coverage gap (test-reviewer's domain) rather than an active defect — flagged as a
+  non-blocking recommendation, not a blocker.
+
+**Finding 2 (the checkbox) — verified as claimed, no new trust boundary.**
+`hasLocalPushToken(uid)` in `messaging.ts` is a pure `window.localStorage.getItem`
+read behind try/catch; it gates only the checkbox's display state
+(`pushOnThisDevice = pushEnabled && hasDeviceToken`), never a write or an
+authorization decision. `NotificationsSection.tsx`'s `useEffect` deps are
+`[uid, busyKeys]` — re-reads on both an account switch (BIN-592-class check: the key
+is uid-namespaced, so no cross-account bleed) and after a toggle settles. Declared
+above the `!user || !uid` early return (correct hook-order placement, matches its own
+comment). No security finding.
+
+**Also confirmed:** `docs/data-retention-policy.md` update is honest — plainly states
+push-unregister-on-signout closes the real leak, and that a silently-expired/revoked
+session (no click on "Logga ut") is a KNOWN gap the write can't reach (needs a live
+ID token). `tasks/todo.md`'s "Kvar för Malin" states the same residual — matches code.
+`groupInviteCache`/`clearAllInviteTokens` unchanged in substance from my prior pass;
+re-confirmed the sweep is deletion-only, never sign-out, per Malin's recorded
+2026-08-10 decision — not re-litigated. BIN-845 (rollup/stats/providerTally) diff is
+unchanged from my prior pass in every file that matters to security — re-confirmed no
+`firestore.rules` change, no new collection, admin-SDK-only field widening; nothing
+new to say.
+
+**Lesson folded into the active knowledge file in place** (Cross-account and
+cross-session leak classes section): a bare `await` on a `persistentLocalCache` write
+inside a destructive/blocking flow needs a race against a timeout, and the
+"discarded, not replayed" claim for the abandoned write must be checked against the
+SDK's own `terminate()`/`clearIndexedDbPersistence()` doc comments, not inherited from
+the fix's own comment. Compressed two other bullets (the `withSecurityRulesDisabled`
+ratchet-seeding bullet and the BIN-669 sub-paragraph) to make room under the 30k cap.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-10 — CONFIRMATION pass on the same BIN-844+845 diff, three post-review movers
+
+Dispatcher claimed only three files changed since the RE-REVIEW entry above: `useFcmToken.ts`
+(an optional `hasLocalPushToken(uid)` guard tried, then reverted for a stale-closure bug —
+second device's foreground listener would miss until reload), `stats/page.tsx` (unused `Link`
+import removed), `AuthContext.test.tsx` (a comment corrected). Did not inherit this — re-ran
+`git diff --cached --name-only` (unchanged 22-file list from the RE-REVIEW pass) and `Read` all
+22 staged files fresh, including the three named movers and the ones the claim said were
+untouched (`AuthContext.tsx`, `messaging.ts`, `groupInviteCache.ts`, `docs/data-retention-policy.md`
++ both knowledge/archive files + `rollup.*`/`NotificationsSection.*`/`providerTally.*`/
+`taste/stats.*`/`tasks/todo.md`).
+
+**Claim verified true, not assumed.** `useFcmToken.ts`'s diff against HEAD is comment-only — the
+guard line (`if (!hasLocalPushToken(uid)) return;`) that the test-reviewer's knowledge file caught
+as an unreviewed mid-run mover is genuinely gone; the effect's guard is back to
+`if (!uid || !user?.notificationSettings.pushEnabled) return;`, matching pre-ticket behaviour. The
+new comment's own reasoning (effect deps `[uid, pushEnabled, toast]` can't see a token appear) is
+correct and doesn't overclaim. No functional change on this surface — not a security-relevant
+mover, confirmed by reading the bytes rather than the framing.
+
+**`docs/data-retention-policy.md` re-checked specifically for the failure mode named in the
+dispatch** (a doc describing a guard that no longer exists): its BIN-844 section only describes
+`AuthContext.signOut` calling `disablePushForUser` before `firebaseSignOut`, and the best-effort
+caveats (skips with no local token, 2s release, silent-expiry gap) — it never mentions
+`useFcmToken`'s foreground-subscribe guard at all. Two unrelated mechanisms share the
+`hasLocalPushToken` helper name (sign-out unregister vs. checkbox display state in
+`NotificationsSection.tsx` vs. the reverted foreground-subscribe optimisation); the doc's claims
+track only the first, which is unchanged. No stale claim found.
+
+**`stats/page.tsx`'s remaining diff hunk (removing the unused `Link` import)** is the mechanical
+tail of the BIN-845 nudge removal already reviewed in the prior pass (the JSX stopped rendering
+`<Link>` then; the import lingered until now) — cosmetic, no behaviour change.
+
+**`AuthContext.test.tsx`'s diff against HEAD is unchanged in substance from the RE-REVIEW pass**
+(same mocks, same ordering/hang/checkbox tests, all previously reviewed); the only NEW line since
+is the `.at(-1)` comment now correctly saying `mockClear()` is in `beforeEach`, closing the LOW
+self-contradiction the test-reviewer flagged in their own knowledge file. Test-only, no trust
+boundary.
+
+**`firestore.rules` and `.claude/rules/accepted-deviations.md` confirmed ABSENT from
+`git diff --cached --name-only`** — not silently trusted from the prompt, checked directly.
+
+No new findings. No new lesson class — the dispatcher's framing held up under independent
+re-verification this time, which is the expected case, not a pattern change.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-10 — LEDGER pass on BIN-844+845: the one mover (`disablePushForUser`'s
+pointer-clear made conditional on delete success)
+
+Fourth pass on this diff. Re-ran `git diff --cached --name-only` (same 22 files as
+every prior pass) and `Read` every one of them, incl. both knowledge/archive pairs
+and `tasks/todo.md` in full. `firestore.rules` confirmed absent from the staged
+diff (`git diff --cached --name-only | grep firestore.rules` empty); `fcmTokens`'s
+rule re-confirmed at `firestore.rules:352` (`allow read, write: if isOwner(uid)`),
+unchanged.
+
+**The named mover, verified against the actual bytes, not the dispatch prose.**
+`messaging.ts`'s `disablePushForUser` moved `localStorage.removeItem(tokenId key)`
+from AFTER the try/catch (ran on every path: success, reject, or the code never
+reaching it at all on a genuine hang) to INSIDE the try, immediately after the
+`deleteDoc` await succeeds — so it now runs only on confirmed server deletion.
+Traced all three outcomes by hand:
+- **Success:** unchanged — doc gone, pointer gone, consistent.
+- **Settles with a rejection** (permission-denied, a delayed deadline-exceeded that
+  arrives before `clearFirestorePersistence()`'s `terminate()` cuts it off): this is
+  the ACTUAL closed gap. Old code wiped the pointer regardless of outcome; the
+  server doc survives a rejected delete, so the old behavior produced an orphaned
+  server-side registration with the ONLY client-side handle to it gone. Concretely
+  worse than that sounds in isolation: `AuthContext.signOut` gates the whole
+  unregister attempt on `hasLocalPushToken(uid)` (skip if false, added by this same
+  ticket to avoid loading the messaging chunk for users who never enabled push) — so
+  the old bug didn't just orphan one doc, it permanently disabled every FUTURE
+  sign-out's retry for that uid on that device, because the very next sign-out would
+  see no local pointer and skip calling `disablePushForUser` at all. That is a
+  self-inflicted defeat of the retry mechanism the ticket's own 2s-race design
+  depends on to eventually self-heal a slow/flaky delete. The new code preserves the
+  pointer exactly when the retry needs it.
+- **Genuine hang** (offline, `persistentLocalCache` never acks): confirmed identical
+  in old and new code — the function is suspended inside `await deleteDoc(...)`, so
+  neither the old (outside-catch) nor new (inside-try) `removeItem` line is ever
+  reached either way, independent of this change. No behavior delta here.
+
+**No new trust boundary.** The pointer is a pure localStorage bookkeeping key,
+uid-namespaced (no cross-account bleed per the existing BIN-592-class check), gates
+only a UI checkbox's display state and whether a client-side retry attempt fires —
+never an authorization decision. The write it gates (`deleteDoc` on
+`users/{uid}/fcmTokens/{id}`) is still owner-scoped by rules regardless of what the
+local pointer says. Settings-toggle path checked too: on a failed disable, pointer
+retention now correctly keeps `hasLocalPushToken` true, so the checkbox stays
+truthfully TICKED (device still registered) instead of the old behavior of falsely
+showing unticked while push kept arriving — the exact shared-device misrepresentation
+class this whole ticket exists to close, now closed one layer deeper than the three
+prior passes credited it.
+
+**Does this change the retention doc's "none of the three leaves a worse state than
+before" claim?** No — that sentence is about whether attempting-vs-not-attempting the
+unregister (skip-if-no-pointer / 2s-abandon / silent-expiry-gap) can regress below
+pre-BIN-844 baseline, and remains true unchanged. This fix operates one layer inside
+that: it's about whether a FAILED attempt leaves the RETRY mechanism intact, which
+the doc doesn't discuss at that granularity and doesn't misstate either. Not a
+required doc edit — noted as a completeness nit only (Low, non-blocking): the doc
+could optionally mention that a failed disable preserves the pointer for retry, but
+its existing claims stay accurate without it.
+
+**Test coverage gap noted, not filed as a security finding (test-reviewer's
+domain):** no `messaging.test.ts` exists at all — `disablePushForUser`'s conditional-
+removal logic is exercised nowhere directly; both `AuthContext.test.tsx` and
+`NotificationsSection.test.tsx` mock the module entirely. No trust boundary rides on
+this gap (confirmed above), so not blocking, but flagged for the test reviewer.
+
+**Mutation-marker sweep (requested explicitly this pass):** grepped every staged
+file's INDEX bytes (`git show ":<path>"`, not the worktree) for
+`MUTANT|__mutant__|_poc_|mutation-marker` — hits only inside the four `.claude/agents/*
+knowledge*.md` files as narrative prose recounting past incidents (BIN-624/645/844
+mutation-testing war stories) and one `AuthContext.test.tsx` comment ("a transient
+mutant that moved this line above `deleteUser`") explaining why an ordering
+assertion exists — neither is an injected marker. Grepped the actual code/doc files
+(messaging.ts, AuthContext.tsx/.test.tsx, groupInviteCache.ts/.test.ts,
+NotificationsSection.tsx/.test.tsx, useFcmToken.ts, rollup.ts/.helpers.ts/.test.ts,
+stats/page.tsx, providerTally.ts/.test.ts, taste/stats.ts/.test.ts,
+data-retention-policy.md, tasks/todo.md) individually for
+`/\* MUTANT|// MUTANT:|MUTANT_MARKER|__mutant` — zero hits. `src/test/rules/` has no
+stray `*mutant*`/`*_poc*` harness file. Clean.
+
+No new lesson class — this is the existing "verify a claimed fix against the actual
+mechanism, not the comment" discipline applied one layer deeper than the three prior
+passes went, not a new failure mode.
+
+**REVIEW-VERDICT: pass (0 blocking)**

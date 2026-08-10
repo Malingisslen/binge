@@ -140,3 +140,29 @@ describe('computeProfileStats — recent30 30-dagarsfönster (BIN-339)', () => {
     expect(stats.recent30.rated).toBe(1);
   });
 });
+
+// BIN-845. The third descriptive tally, and the one that renders on the PUBLIC
+// profile ("Topp-tjänster"). It must count the same field as /stats and the monthly
+// rollup — leaving it broad made the same library report two different numbers on
+// two screens.
+describe('computeProfileStats — provider counts use the subscription subset (BIN-845)', () => {
+  const VIAPLAY = 76;
+  const NETFLIX = 8;
+
+  it('does not credit a service the title is only rentable on', () => {
+    const stats = computeProfileStats([
+      mkItem({ providers: [VIAPLAY, NETFLIX], subscriptionProviders: [NETFLIX] }),
+    ]);
+    const ids = stats.topProviders.map(p => p.providerId);
+    expect(ids).toContain(NETFLIX);
+    expect(ids).not.toContain(VIAPLAY);
+  });
+
+  it('falls back to the broad list for a row written before the split', () => {
+    const stats = computeProfileStats([
+      mkItem({ providers: [VIAPLAY], subscriptionProviders: null }),
+    ]);
+    const ids = stats.topProviders.map(p => p.providerId);
+    expect(ids).toContain(VIAPLAY);
+  });
+});

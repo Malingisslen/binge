@@ -150,6 +150,27 @@ vi.mock('@/lib/firebase/publicProfile', () => ({
   syncMyPublicProfile: publicProfile.syncMyPublicProfile,
   clearPublicProfileSignature: publicProfile.clearPublicProfileSignature,
 }));
+// BIN-844: hoisted for the same reason as the rest — the load-bearing assertions
+// are about ORDER (push must be unregistered BEFORE the Auth sign-out, because the
+// Firestore delete needs a live token) and about NOT being reached on a guarded
+// abort. An inline spy can express neither.
+const pushCleanup = vi.hoisted(() => ({
+  disablePushForUser: vi.fn(async () => {}),
+  clearLocalPushTokenId: vi.fn(() => {}),
+  // Defaults to TRUE so the sign-out path is actually exercised; a test that wants
+  // the no-token case says so explicitly. Defaulting to false would make every
+  // ordering assertion below vacuous.
+  hasLocalPushToken: vi.fn(() => true),
+}));
+vi.mock('@/lib/firebase/messaging', () => ({
+  disablePushForUser: pushCleanup.disablePushForUser,
+  clearLocalPushTokenId: pushCleanup.clearLocalPushTokenId,
+  hasLocalPushToken: pushCleanup.hasLocalPushToken,
+}));
+const inviteCache = vi.hoisted(() => ({ clearAllInviteTokens: vi.fn(() => {}) }));
+vi.mock('@/lib/groupInviteCache', () => ({
+  clearAllInviteTokens: inviteCache.clearAllInviteTokens,
+}));
 // Säkerhetsgranskning 2026-08-05: hoisted rather than inline vi.fn()s inside the
 // factories, because the assertion the fix needs is that these were NOT reached —
 // an inline spy is unreachable from the test body, which is why the ordering
@@ -259,12 +280,21 @@ beforeEach(() => {
   sendEmailVerification.mockClear();
   updateProfileMock.mockClear();
   claimUsername.mockClear();
+  // BIN-844: the one mock in this block that was never cleared, which is why the
+  // new ordering tests had to compensate with `.at(-1)`. Cleared for parity.
+  signOutMock.mockClear();
   deleteUserMock.mockClear();
   getIdTokenResultMock.mockClear();
   deletion.collectUserDataSnapshots.mockClear();
   deletion.collectDeletionRefs.mockClear();
   deletion.applyDeletionPlan.mockClear();
   publicProfile.clearPublicProfileSignature.mockClear();
+  pushCleanup.disablePushForUser.mockClear();
+  pushCleanup.disablePushForUser.mockImplementation(async () => {});
+  pushCleanup.clearLocalPushTokenId.mockClear();
+  pushCleanup.hasLocalPushToken.mockClear();
+  pushCleanup.hasLocalPushToken.mockImplementation(() => true);
+  inviteCache.clearAllInviteTokens.mockClear();
   authTime.current = new Date().toUTCString(); // fresh session unless a test ages it
   authCallback = null;
   authObj.currentUser = null;
@@ -850,6 +880,102 @@ describe('AuthContext — a session ending forgets the return path (BIN-732)', (
     expect(signOutMock).toHaveBeenCalledTimes(1);
   });
 
+  // BIN-844. The real shared-device leak was never the invite link — it was that
+  // signing out unregistered nothing, so the departing user's notifications kept
+  // arriving on the machine. Two orderings carry the fix and both are easy to get
+  // wrong, so both are pinned: the uid must be read BEFORE firebaseSignOut (it is
+  // null afterwards) and the Firestore delete must happen BEFORE it too (afterwards
+  // the client has no credentials for that write).
+  it('unregisters push BEFORE the Auth sign-out, with the departing uid', async () => {
+    renderAuth();
+    await login({ username: 'malin' });
+
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(pushCleanup.disablePushForUser).toHaveBeenCalledWith('u1');
+    // `.at(-1)`, not `[0]`. It was written when signOutMock was the one mock in this
+    // file never cleared between tests, so its invocationCallOrder carried entries
+    // from earlier ones and `[0]` compared two different sign-outs. The missing
+    // `mockClear()` is now in the beforeEach, so `[0]` would work — but `.at(-1)` is
+    // correct either way and does not depend on that staying true.
+    const push = pushCleanup.disablePushForUser.mock.invocationCallOrder.at(-1)!;
+    const out = signOutMock.mock.invocationCallOrder.at(-1)!;
+    expect(push).toBeLessThan(out);
+  });
+
+  it('signs out anyway when unregistering push throws', async () => {
+    // Offline, or a denied write. The token stays registered and push keeps
+    // arriving — bad, but a user who cannot sign out is worse.
+    renderAuth();
+    await login({ username: 'malin' });
+    pushCleanup.disablePushForUser.mockRejectedValueOnce(new Error('offline'));
+    const before = signOutMock.mock.calls.length;
+
+    await act(async () => { await expect(ctx!.signOut()).resolves.toBeUndefined(); });
+
+    // The sign-out itself must still have happened — counted as a delta, since
+    // this mock accumulates across the file.
+    expect(signOutMock.mock.calls.length).toBe(before + 1);
+  });
+
+  it('skips the unregister entirely when this device holds no push token', async () => {
+    // Most sign-outs. Without this guard every one of them would lazy-load the
+    // firebase/messaging chunk and round-trip to Firestore for nothing.
+    renderAuth();
+    await login({ username: 'malin' });
+    pushCleanup.hasLocalPushToken.mockReturnValue(false);
+
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(pushCleanup.disablePushForUser).not.toHaveBeenCalled();
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs out anyway when unregistering push never SETTLES (offline)', async () => {
+    // The dimension two review passes missed, and the reason the timeout exists at
+    // all: `deleteDoc` against persistentLocalCache resolves on server ack, so
+    // offline it neither resolves nor rejects. A bare `await` hangs sign-out forever
+    // — no spinner, no error, visitor still signed in on the shared device. A test
+    // that only makes the mock REJECT cannot tell the two apart.
+    vi.useFakeTimers();
+    try {
+      renderAuth();
+      await login({ username: 'malin' });
+      pushCleanup.disablePushForUser.mockImplementationOnce(() => new Promise<void>(() => {}));
+
+      let settled = false;
+      const pending = ctx!.signOut().then(() => { settled = true; });
+
+      // Before the timer fires, the sign-out is genuinely still waiting.
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(signOutMock).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+        await pending;
+      });
+
+      expect(settled).toBe(true);
+      expect(signOutMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT sweep the invite cache on sign-out', async () => {
+    // Malin's 2026-08-10 call against a split panel: the app only ever shows the
+    // plaintext to the group's owner, and clearing it would cost the owner their
+    // own link — the way back is "Generera ny", which kills the link already
+    // shared with people who have not clicked yet.
+    renderAuth();
+    await login({ username: 'malin' });
+
+    await act(async () => { await ctx!.signOut(); });
+
+    expect(inviteCache.clearAllInviteTokens).not.toHaveBeenCalled();
+  });
+
   it('a sign-out that FAILS still leaves nothing remembered', async () => {
     // A network error leaves them signed in, so the lost path costs nothing —
     // but a half-finished handover must never be the case that keeps it.
@@ -1151,6 +1277,56 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
     });
 
     expect(publicProfile.clearPublicProfileSignature).not.toHaveBeenCalled();
+  });
+
+  // BIN-844: the deletion path also sweeps the two device-local leftovers the
+  // Firestore cascade cannot reach. Same ordering rule as the profile signature —
+  // after the point of no return only.
+  it('sweeps the invite cache and the push-token pointer once the account is gone', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(inviteCache.clearAllInviteTokens).toHaveBeenCalledTimes(1);
+    expect(pushCleanup.clearLocalPushTokenId).toHaveBeenCalledWith('u1');
+    // `.at(-1)` throughout: these counters are global and monotonic, and not every
+    // mock in this file is cleared between tests, so `[0]` can pick up a call from an
+    // earlier one and compare two different deletions.
+    const authDelete = deleteUserMock.mock.invocationCallOrder.at(-1)!;
+    const sweep = inviteCache.clearAllInviteTokens.mock.invocationCallOrder.at(-1)!;
+    const pointer = pushCleanup.clearLocalPushTokenId.mock.invocationCallOrder.at(-1)!;
+    expect(authDelete).toBeLessThan(sweep);
+    // The pointer clear needs its POSITION pinned too, not just its argument. A
+    // transient mutant that moved this line above `deleteUser` left the whole suite
+    // green — and the consequence is real: a deleteUser that throws leaves a live
+    // account whose device has lost the pointer to its own token doc, so the
+    // Settings toggle can no longer delete it.
+    expect(authDelete).toBeLessThan(pointer);
+  });
+
+  it('leaves both alone when the freshness gate refuses', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+
+    expect(inviteCache.clearAllInviteTokens).not.toHaveBeenCalled();
+    expect(pushCleanup.clearLocalPushTokenId).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call disablePushForUser from the deletion path', async () => {
+    // The cascade already removed users/{uid}/fcmTokens/*; disablePushForUser
+    // would try to delete a doc for an account that no longer exists, with no
+    // credentials left to do it. Only the local pointer is dropped here.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(pushCleanup.disablePushForUser).not.toHaveBeenCalled();
   });
 
   it('an unparsable authTime is treated as stale, not as fresh', async () => {

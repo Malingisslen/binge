@@ -41,7 +41,15 @@ export interface WatchlistLite {
   rating: number | null;
   title: string;
   tmdbId: number;
+  /** BIN-814: broad — where a title is obtainable at all, incl. rent and buy. */
   providers: number[];
+  /**
+   * BIN-845: the flatrate/free/ads subset. `null` means the doc predates the
+   * BIN-814 split and has no subscription answer yet — readers fall back to
+   * `providers`. `[]` is a real answer ("no subscription covers this") and must
+   * not be conflated with it.
+   */
+  subscriptionProviders: number[] | null;
   genreIds: number[];
 }
 
@@ -50,6 +58,22 @@ export interface WatchlistLite {
  * NOT bare tmdbId — a movie and a TV show sharing a TMDB number are distinct titles
  * and must not fold into one row with a bogus summed count + first-seen label.
  */
+/**
+ * BIN-845 — the provider ids a rolled-up tally may count.
+ *
+ * The subscription subset, not the broad `providers` array: since BIN-814 the broad
+ * one also carries rent and buy, and counting those inflates every service that
+ * happens to run a rent store. `null` means the doc predates the split and has no
+ * subscription answer — fall back to the broad array rather than dropping the row,
+ * which is the same rule the client's own stats page uses. `[]` is a real answer and
+ * must NOT fall back.
+ *
+ * Extracted so the distinction is testable without the Admin SDK.
+ */
+export function tallyProviderIds(item: Pick<WatchlistLite, 'providers' | 'subscriptionProviders'>): number[] {
+  return item.subscriptionProviders ?? item.providers;
+}
+
 export function topTitles(
   items: WatchlistLite[],
   limit: number,

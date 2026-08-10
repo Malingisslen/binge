@@ -1,7 +1,7 @@
 'use client';
 
+import { providerTally, withProviderDataCount } from '@/lib/stats/providerTally';
 import { useMemo } from 'react';
-import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import ProviderDot from '@/components/ui/ProviderDot';
 import StatCard from '@/components/ui/StatCard';
@@ -35,25 +35,17 @@ function StatsContent() {
       ratingDist[bucket] = (ratingDist[bucket] ?? 0) + 1;
     }
 
-    const providerStats: Record<number, number> = {};
-    for (const item of items) {
-      for (const pid of item.providers ?? []) {
-        providerStats[pid] = (providerStats[pid] ?? 0) + 1;
-      }
-    }
+    const providerStats = providerTally(items);
 
     const topProviders = Object.entries(providerStats)
       .map(([id, count]) => ({ id: Number(id), count, provider: getProvider(Number(id)) }))
       .filter(p => p.provider)
       .sort((a, b) => b.count - a.count);
 
-    // "Med streaming-data" = titlar vi faktiskt har SE-providers för. Räkna
-    // providers-arrayen (som staplarna använder) ELLER providersCheckedAt —
-    // addItem sätter providers men inte providersCheckedAt, så enbart
-    // providersCheckedAt gav felaktigt "0 av N" trots att staplar visas.
-    const withProviderData = items.filter(
-      i => (i.providers?.length ?? 0) > 0 || i.providersCheckedAt != null
-    ).length;
+    // "Med streaming-data" = titlar vi faktiskt har SE-providers för. Räknas på
+    // SAMMA fält som staplarna (BIN-845) — annars påstår raden att fler titlar är
+    // representerade i diagrammet än vad som är fallet.
+    const withProviderData = withProviderDataCount(items);
 
     // BIN-164: dina mest använda taggar (från redan inlästa items, ingen extra
     // läsning). Taggar är privata — de här räknas bara över DIN egen data.
@@ -185,15 +177,14 @@ function StatsContent() {
           <div className="px-3 py-[6px] border-b border-rule-2 flex items-baseline justify-between gap-2">
             <span className="text-sm font-bold text-ink-2">Streamingtjänster</span>
             <span className="text-xxs text-ink-3">
-              Baserat på {stats.withProviderData} av {stats.total} titlar med streaming-data
-              {stats.withProviderData < stats.total - 5 && (
-                <>
-                  {' — '}
-                  <Link href="/settings" className="text-acc-deep hover:underline">
-                    uppdatera smakdata
-                  </Link>
-                </>
-              )}
+              {/* BIN-845: "med abonnemangstäckning", inte "med streaming-data" — siffran
+                  räknar numera bara titlar som ingår i något abonnemang, alltså exakt de
+                  som ritar en stapel. Nudgen är borttagen: en hyr-bara-titel dras nu från
+                  täljaren, men backfillen skulle skriva om `[]` till `[]` och hoppar
+                  dessutom över rader med färsk stämpel — så uppmaningen hade blivit
+                  permanent för ett bibliotek med fler än fem sådana, utan att någonsin
+                  gå att åtgärda. */}
+              Baserat på {stats.withProviderData} av {stats.total} titlar med abonnemangstäckning
             </span>
           </div>
           <div className="px-3 py-2">

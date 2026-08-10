@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { topTitles, expiredInsightDocIds, canonicalProviderId } from './rollup.helpers';
+import { topTitles, expiredInsightDocIds, canonicalProviderId, tallyProviderIds } from './rollup.helpers';
 
 // topTitles takes the WatchlistLite shape; only tmdbId/mediaType/title matter here.
 const wl = (tmdbId: number, title: string, mediaType = 'movie') =>
-  ({ status: 'sedd', mediaType, rating: null, title, tmdbId, providers: [], genreIds: [] });
+  ({ status: 'sedd', mediaType, rating: null, title, tmdbId, providers: [], subscriptionProviders: null, genreIds: [] });
 
 describe('canonicalProviderId', () => {
   it('folds TMDB alias ids onto the canonical service id', () => {
@@ -66,5 +66,33 @@ describe('expiredInsightDocIds (BIN-326 retention)', () => {
     // cutoff for retention 30 from 2026-06-29 = 2026-05-30; that exact day is kept, day before deleted.
     const ids = ['2026-05-29', '2026-05-30', '2026-05-31'];
     expect(expiredInsightDocIds(ids, today, 30)).toEqual(['2026-05-29']);
+  });
+});
+
+// BIN-845. The monthly rollup's provider tally answers "which services carry what
+// people track". Since BIN-814 the broad `providers` array also holds rent and buy,
+// so counting it would inflate every service that runs a rent store — Viaplay and
+// TV4 Play are returned under rent/buy while being typed flatrate, so a type filter
+// cannot undo it downstream.
+describe('tallyProviderIds (BIN-845)', () => {
+  const VIAPLAY = 76;
+
+  it('counts the subscription subset, not the broad availability array', () => {
+    expect(tallyProviderIds({ providers: [VIAPLAY, 8], subscriptionProviders: [8] })).toEqual([8]);
+  });
+
+  it('counts nothing for a title that is only rentable', () => {
+    expect(tallyProviderIds({ providers: [VIAPLAY], subscriptionProviders: [] })).toEqual([]);
+  });
+
+  it('falls back to the broad array for a row written before the split', () => {
+    // null = never backfilled. Dropping the row instead would silently shrink every
+    // tally until the whole corpus has been through a backfill.
+    expect(tallyProviderIds({ providers: [VIAPLAY], subscriptionProviders: null })).toEqual([VIAPLAY]);
+  });
+
+  it('keeps [] and null apart — they are different claims', () => {
+    expect(tallyProviderIds({ providers: [8], subscriptionProviders: [] })).toEqual([]);
+    expect(tallyProviderIds({ providers: [8], subscriptionProviders: null })).toEqual([8]);
   });
 });
