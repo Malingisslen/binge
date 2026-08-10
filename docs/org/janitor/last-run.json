@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-08-03",
+  "lastRun": "2026-08-10",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
   "retroDue": true,
   "acceptRate": null,
-  "notes": "No docs/org/dossier-staleness/ dir (skipped, expected -- binge keeps staleness flags in gitignored local state). World-watch: 1/1 due role scanned (Legal/GDPR Counsel and DPO are monthly, not due until 2026-08-26). Security Architect: issue #44 (Next.js SSRF CVEs) confirmed remediated -- package-lock.json now resolves next@16.2.12, above the 16.2.11 patch -- commented and closed. One new material finding filed as GitHub issue #47: Firebase JS SDK 12.17.0 fixes a ReDoS vulnerability in FirebaseError template replacement; Binge resolves firebase@12.12.1 (below patched), functions/ uses the separate firebase-admin SDK so unaffected there. RETRO DUE: full retro (afterDays=28 from goLive 2026-06-27, due 2026-07-25) still has NOT been run, now 9 days overdue -- flagged for Malin. Cruft sweep: tasks/bin-505-plan.md still open (unchecked checkboxes, security fix in progress) -- left in place. accept-rate metric is butlery-only, skipped here."
+  "notes": "No dossier-staleness dir (gitignored local state, expected). Security Architect weekly world-watch scan due and run. Full org-retro due (44d since go-live, only shakedown logged). Cruft sweep skipped BIN-505 plan (unchecked checkboxes, per rule)."
 }
