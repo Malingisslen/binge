@@ -841,6 +841,12 @@
         {
           "from": "auth-context",
           "to": "web-app",
+          "payload": "BIN-844 sign-out unregisters push BEFORE firebaseSignOut — disablePushForUser was previously reachable only from the Settings toggle, so signing out on a shared device left that device receiving the departing account's notifications, content and all. It must run before the sign-out because deleting the Firestore token doc needs a live token, and it is raced against a 2s timeout: deleteDoc against persistentLocalCache settles on SERVER ack, so offline a bare await never settles at all and would hang the sign-out silently — no spinner, no error — for exactly the visitors the guard exists for. Accepted cost: nothing re-enables push automatically, so push must be re-ticked per device after each sign-in. The Settings checkbox reads BOTH the account flag and a local token pointer, or it would render ticked over a device receiving nothing",
+          "transport": "function-call"
+        },
+        {
+          "from": "auth-context",
+          "to": "web-app",
           "payload": "BIN-732 sign-out handover — the remembered return path is cleared on the auth TRANSITION (uid set→null), not by the tab that clicked \"Logga ut\". Firebase broadcasts a sign-out to every tab on the origin, but BIN-669’s guard was a flag in ONE tab’s memory: a second tab parked on a guarded page also went uid→null, its own provider had never called signOut, and it stored the departing user’s page as the NEXT account’s return path. A remembered path outlives onboarding, so on a shared device a brand-new account could land on /grupper/<id>/ — which discloses the group name and memberUids, since firestore.rules allows any signed-in read of the group doc. `hadSessionRef` distinguishes a handover (set→null) from a signed-out visitor merely booting (null on arrival, whose path a poster-badge tap may legitimately have just stored). Accepted cost: a revoked or expired session also forgets where the visitor was — the guard re-remembers as soon as they hit a guarded page. The click path ALSO clears synchronously before firebaseSignOut, because the listener’s clear lands a round trip later and not at all if the sign-out throws."
         }
       ],
@@ -2400,7 +2406,7 @@
     {
       "id": "flow-hygiene",
       "label": "Data hygiene & retention",
-      "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans four targets against the retention policy: expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop), and releaseNotifyState/{tmdbId}/notified/{uid} markers older than 30 days (BIN-464 — the per-user 'släpps idag' dedup marker, uid-identifying and admin-only so the client account-deletion cascade can't reach it; this sweep is its SOLE GDPR Art. 17 erasure path and its growth bound, covering self-service, abandoned and Console-deleted accounts alike). All deletes go through the Admin SDK, which bypasses firestore.rules entirely.",
+      "description": "Two independent Cloud Scheduler jobs sweep Firestore for stale data the client-side deletion paths structurally can't reach or don't cover. reclaimOrphanFollows (weekly) reads every users/{uid} id into an alive-set, then paginated-scans the following/followers collectionGroups; a follow doc whose owner or counterpart uid isn't in the alive-set — and is older than a 24h grace window — is deleted in batches. This exists because a deleting user can only clean up follow docs they own; inbound follows created by other users on their own subcollections are permission-blocked from the deleter (firestore.rules: allow delete only for the owner). retentionCleanup (daily) paginated-scans five targets against the retention policy: expired sessions/ (recursiveDelete to also reap participants/swipes subcollections), notifications/ older than 90 days across all users, groups/{id}/joinAttempts older than 1 hour (a spent plaintext invite-token backstop), and releaseNotifyState/{tmdbId}/notified/{uid} markers older than 30 days (BIN-464 — the per-user 'släpps idag' dedup marker, uid-identifying and admin-only so the client account-deletion cascade can't reach it; this sweep is its SOLE GDPR Art. 17 erasure path and its growth bound, covering self-service, abandoned and Console-deleted accounts alike), and users/{uid}/fcmTokens/* belonging to accounts Auth no longer honours (BIN-848 — a delete or disable done in the Firebase Console runs no client cascade, and sendPushToUser gates on the profile doc's pushEnabled and never consults Auth, so that person's device keeps receiving notifications forever; FCM's own self-heal can't fire because the token is still valid on a live browser). That fifth sweep is the only place in functions/ that calls an Auth user-management API: it derives owner uids from the token refs, asks getUsers() in batches of at most 100, and deletes only for uids returned in the response's own notFound list or with disabled: true — never inferred from absence in users, since disabled accounts ARE returned there. A batch that throws is skipped and counted, never read as \"gone\". It is NOT an unregister-on-session-end: a closed browser must keep receiving push. All deletes go through the Admin SDK, which bypasses firestore.rules entirely.",
       "covers": [
         "reclaimOrphanFollows",
         "retentionCleanup"
@@ -2453,6 +2459,20 @@
           "to": "firestore",
           "payload": "collectionGroup('notified').select('updatedAt') paginated scan → isStaleReleaseMarker (>30 days) → batch.delete: reaps releaseNotifyState/{tmdbId}/notified/{uid} per-user release-dedup markers (BIN-464). Sole GDPR Art. 17 erasure path for this admin-only, uid-keyed marker — no firestore.rules match means the client deletion cascade can't reach it — mirroring the joinAttempts backstop and covering Console-deleted accounts too. Note the age field is updatedAt (what the marker stamps), not createdAt",
           "transport": "firestore-query+batch-write",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firestore",
+          "payload": "collectionGroup('fcmTokens').select().orderBy('__name__') paginated scan → Map<ownerUid, refs> via d.ref.parent.parent.id (BIN-848). Zero-arg select() returns refs only — the scan never reads a token value, and the owner uid comes from the path, so no field needs selecting. Same automatic __name__ collection-group index as the four sweeps above; no firestore.indexes.json entry",
+          "transport": "firestore-query",
+          "verified": true
+        },
+        {
+          "from": "cf-retentionCleanup",
+          "to": "firebase-auth",
+          "payload": "getUsers() over the collected uids in batches of ≤100 (Admin SDK cap) → revoked = the response's own notFound entries + any user returned with disabled: true → batch.delete their fcmTokens docs. Read notFound explicitly, NEVER absence from users: disabled accounts are returned IN users, so inferring deletion from absence would over-delete live accounts' push registrations. A batch that throws is skipped and counted in skippedAuthBatches — \"could not verify\" is not \"gone\" — and the whole scan is caught separately so an Auth outage can't starve the four Firestore-only sweeps. The only Auth user-management call in functions/: without firebaseauth.users.get on the runtime service account every batch throws and the sweep is silently inert while the deploy stays green, which is what checkedUids in the summary log exists to expose",
+          "transport": "admin-auth-lookup+firestore-batch-write",
           "verified": true
         }
       ],

@@ -427,8 +427,10 @@ findings here too.
   mirrors; the community-rating `FieldValue.increment` aggregate with transaction +
   `lastEventId` idempotency (BIN-148).
   → `functions/src/communityRatings/index.ts`, `src/hooks/usePublicProfile.ts`
-- **Retention/TTL cleanup** — `retentionCleanup` (sessions/notifications) and
-  `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window).
+- **Retention/TTL cleanup** — `retentionCleanup` (daily; five sweeps: sessions,
+  notifications, joinAttempts, release-dedup markers, and push tokens for accounts
+  Auth no longer honours) and `reclaimOrphanFollows` (weekly orphan sweep,
+  `GRACE_MS` race window).
   → `functions/src/{retentionCleanup,reclaimOrphanFollows}/`
 - **Account-deletion cascade** — the 450-op chunked `writeBatch` over 25
   collections; inbound followers are deliberately left for the weekly orphan sweep.
@@ -441,9 +443,12 @@ findings here too.
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).
 
 **Watch-items (diagnostic):**
-- 🔴 `retentionCleanup` + `reclaimOrphanFollows` are **code-ready but not in the
-  deploy pipeline** — they need a manual `firebase deploy --only functions`. Until
-  activated, sessions/notifications accumulate past their policy TTLs with no alert.
+- 🟡 `retentionCleanup` + `reclaimOrphanFollows` are **live** (see
+  `docs/analysis/EXTERNAL_ACTIONS.md`), but absent from `deploy.yml` **by design** —
+  it ships hosting only, so every functions change needs a manual targeted deploy.
+  The real residual is that there is still **no health metric** for last-run /
+  docs-deleted: a sweep that silently stops running raises no alert. Closest thing
+  today is the per-run `retentionCleanup done` log line, which must be read by hand.
 - 🔴 **PITR + scheduled backups are not yet enabled** (Blaze-gated); there is no
   scripted backup-health check, no restore dry-run, and no post-restore validation
   playbook. Pre-Blaze data loss is effectively irreversible.
@@ -512,7 +517,7 @@ dir. Grounded findings, roughly by severity:
 | Gap | What's missing | Touches |
 |---|---|---|
 | **Backup / DR verification** | PITR + backups are documented as setup steps, but nothing confirms a backup landed, alerts on schedule failure, or tests restore. DR is runbook-only and untested. | DevOps (#8), Security (#4), DPO (#6), DBA (#27) |
-| **Retention cleanup not deployed** | `retentionCleanup` + `reclaimOrphanFollows` are code-ready but absent from `deploy.yml`; no health metric for "last run / docs deleted". Data accrues past policy until manually shipped. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
+| **No health metric for the retention sweeps** | `retentionCleanup` + `reclaimOrphanFollows` are deployed and running, but absent from `deploy.yml` by design (hosting-only) — so each functions change needs a manual targeted deploy, and nothing alerts if a sweep stops running or starts failing. The `retentionCleanup done` log line must be read by hand. | DevOps (#8), DPO (#6), Controller (#3), DBA (#27) |
 | **Schema-version safety** | No `schemaVersion` on Firestore docs — lazy migration can't prove completeness, and a stale legacy value can persist indefinitely undetected. | Architect (#14), QA (#7), DBA (#27) |
 | **Recommendation/taste drift** | Cascade + taste weights are frozen constants; no engagement tracking, A/B test, or drift detector validates them post-launch. | Data Analyst (#22), Architect (#14), Scoring (#28) |
 | **Notification delivery** | At-most-once is enforced, but there's no per-user delivery record, no user-facing "did you get this?", and no admin delivery-rate SLO. | DevOps (#8), Trust & Safety (#12), PM (#9) |
