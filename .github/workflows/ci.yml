@@ -59,6 +59,17 @@ jobs:
       - name: Workflow map linter self-tests
         run: node --test scripts/check-workflow-map.test.mjs
 
+      # Every NEXT_PUBLIC_* the client reads must be handed to the production
+      # build. NEXT_PUBLIC_FCM_VAPID_KEY was not, from May 2026 to 2026-08-10,
+      # and push could not register a single device in production the whole
+      # time — with a green CI and a green deploy, because these values are
+      # inlined at build time and a missing one is just `undefined` at runtime.
+      - name: Public env vars must be wired for deploy
+        run: node scripts/check-public-env.mjs
+
+      - name: Public env linter self-tests
+        run: node --test scripts/check-public-env.test.mjs
+
       # ONE run of the suite, with coverage attached (BIN-534). This used to be
       # two steps — `npm test` plus a second `npm run test:coverage` — which ran
       # every test twice per CI run for a report-only number.

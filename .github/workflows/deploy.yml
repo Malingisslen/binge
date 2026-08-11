@@ -82,6 +82,20 @@ jobs:
       - name: Workflow map linter self-tests
         run: node --test scripts/check-workflow-map.test.mjs
 
+      # Every NEXT_PUBLIC_* read by src/ must be handed to the build below.
+      # Duplicated from ci.yml for the same reason the map linter is: ci.yml
+      # ignores main, and this repo pushes direct to main — so on the ONLY path
+      # a production change actually takes, this file is the whole gate. The
+      # commit that introduced NEXT_PUBLIC_FCM_VAPID_KEY without wiring it went
+      # straight to main and would never have reached a ci.yml run.
+      # Runs before Build on purpose: ~200 ms, and it fails ahead of a build
+      # that can take 45 minutes.
+      - name: Public env vars must be wired for deploy
+        run: node scripts/check-public-env.mjs
+
+      - name: Public env linter self-tests
+        run: node --test scripts/check-public-env.test.mjs
+
       - name: Test
         run: npm test
 
@@ -172,6 +186,17 @@ jobs:
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
           NEXT_PUBLIC_APP_CHECK_SITE_KEY: ${{ secrets.NEXT_PUBLIC_APP_CHECK_SITE_KEY }}
+          # Utan den här kan enablePushForUser inte ens börja: den kastar på
+          # rad 1 och skriver aldrig en fcmTokens-doc, så sendPushToUser hittar
+          # inga tokens och varenda push tystnar. Den saknades i den här listan
+          # från maj till 2026-08-10 — push var dött i prod hela tiden, och
+          # ingenting sa det: kryssrutan gick bara inte att kryssa i, och
+          # NEXT_PUBLIC_*-variabler inlineas vid byggtid så en saknad nyckel
+          # syns aldrig i något bygge. Guarden mot en ny lucka är steget
+          # "Public env vars must be wired for deploy" ovan — i DEN HÄR filen,
+          # för ci.yml ignorerar main och skulle aldrig ha kört på commiten
+          # som orsakade det här.
+          NEXT_PUBLIC_FCM_VAPID_KEY: ${{ secrets.NEXT_PUBLIC_FCM_VAPID_KEY }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           NEXT_PUBLIC_APP_ENV: production
           NEXT_PUBLIC_GIT_SHA: ${{ github.sha }}
