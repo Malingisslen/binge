@@ -17675,3 +17675,194 @@ entry) already states the discriminator this round applied, so no principle is m
 one-line "confirmed again on `checkedUids`" annotation is undelivered.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10 — check-public-env.mjs / .test.mjs round 2: dead survivor re-confirmed, one new gap, one new near-miss confirmed closed
+
+### Diff reviewed (staged, 4 files)
+- `.github/workflows/ci.yml` — adds a "Public env vars must be wired for deploy" + "Public env
+  linter self-tests" step pair after the workflow-map linter self-tests.
+- `.github/workflows/deploy.yml` — same two steps in the Test job (before `npm test`, with a
+  comment explaining ci.yml never runs on `main` so this is the only path a real deploy takes),
+  plus wiring `NEXT_PUBLIC_FCM_VAPID_KEY: ${{ secrets.NEXT_PUBLIC_FCM_VAPID_KEY }}` into the
+  build step's env block with a long Swedish postmortem comment (push silently dead in prod
+  May→2026-08-10).
+- `scripts/check-public-env.mjs` (new, 174 lines) — `readVarsFromSource` (regex-scrapes
+  `NEXT_PUBLIC_[A-Z0-9_]+` out of source text), `readVarsFromWorkflow` (strict reader: only
+  `NAME: ${{ secrets.NAME }}` with matching left/right names), `readAssignedVars` (loose reader:
+  any `NEXT_PUBLIC_X: <non-whitespace>` line), `findUnwired`, `findWronglyWired` (the
+  never-ship-list inverse check), `analyzeWorkflow(sourceVars, workflowText)` (the seam routing
+  `findUnwired` to the strict reader and `findWronglyWired` to the loose one), `collectSourceText`
+  (git grep, stuck I/O, untested — accepted), `main()` (branches on `wronglyWired.length`/
+  `unwired.length` to decide `return 0`/`return 1`, guarded by the BIN-802 entry-point check so
+  importing the file from the test doesn't run it).
+- `scripts/check-public-env.test.mjs` (new, 129 lines, 14 `node:test` cases) — see transcript
+  below for full mutation coverage.
+
+### Round-1 survivor re-checked
+Round 1 reported dropping `.sort()` from `findUnwired` survived 8/8 (no fixture ever produced
+two unwired names). Round 2 added `reports every unwired name, in sorted order` (`NEXT_PUBLIC_ZEBRA`
++ `NEXT_PUBLIC_ALPHA`, asserts `['NEXT_PUBLIC_ALPHA', 'NEXT_PUBLIC_ZEBRA']`). Re-derived live:
+snapshot to scratchpad, dropped `.sort()`, `grep -n sort` to confirm the mutant landed, ran in the
+same command as the mutant edit → 13 pass / 1 fail (test 11 alone). Restored, `git hash-object`
+== `git rev-parse :scripts/check-public-env.mjs` == `df86b0c…`. **Confirmed dead.**
+
+### Mutations re-run (all from the round-2 handoff, all re-derived live, backup/restore + hash
+pin around every one)
+1. Drop the `m[1] === m[2]` backreference in `readVarsFromWorkflow` (accept a mismatched
+   `NAME: ${{ secrets.OTHER }}` as wired) → 1 red (test 10 alone). Matches the handoff's claim
+   exactly.
+2. `analyzeWorkflow` routes `findWronglyWired` through the STRICT reader instead of the loose one
+   (the historical mutant the function exists to prevent, per its own doc comment) → 2 red (tests
+   12, 14). Matches the handoff's claim exactly. Also live-verified the FIELD-SWAP variant
+   (`unwired`/`wronglyWired` keys swapped in the returned object) — also 2/14 red (same two
+   tests), a new mutant not in the handoff, confirmed caught.
+3. `readAssignedVars` returns nothing (`const m = null`) → **4 red** (tests 7, 8 direct callers;
+   12, 14 via `analyzeWorkflow`), not the handoff's claimed "2 red". Genuinely dies either way —
+   not a blocking finding — but the count was wrong; folded into the existing "never inherit a
+   handed-down mutation count" principle.
+4. `readVarsFromSource` returns empty (`return new Set()`) → **3 red** (tests 1, 11, 14), not the
+   handoff's claimed "was 7 red". Diagnosed why: tests 2, 5, 6 also call `readVarsFromSource` but
+   assert an EMPTY result regardless of what it returns (`findUnwired(source, ...) === []`), so
+   they're vacuous against this specific mutant — a different failure mode than mutation 3's
+   "missed call sites", both folded into the same principle with the distinction named.
+
+### New survivor found (not in the round-1 or round-2 handoff)
+Dropping the trailing `\S` from `readAssignedVars`'s regex — `/^\s*(NEXT_PUBLIC_[A-Z0-9_]+):\s*\S/`
+→ `/^\s*(NEXT_PUBLIC_[A-Z0-9_]+):\s*/` — so a bare `NEXT_PUBLIC_X:` with no value (YAML-null)
+counts as "assigned". Verified live: mutant applied, `grep -n` confirmed, `node --test` in the
+same command → **14/14 green, no discriminating test**. Every fixture in the file gives the key
+some value (`'true'`, `${{ secrets.X }}`); none tests a bare colon. LOW — narrow, unrealistic paste
+shape — filed as a new bullet under Parsers/regex rather than blocking.
+
+### New gap found, not asked for but same class as the analyzeWorkflow question
+`main()`'s exit-code branch (`return 1` on `wronglyWired.length > 0` / `unwired.length > 0`,
+`return 0` otherwise, feeding `process.exit(main())`) has ZERO coverage in `node --test` — no test
+calls `main()`. Verified live: flipped one `return 1` → `return 0`, ran the full suite in the same
+command → 14/14 green, unaffected. This is the caller-switching-on-the-verdict class (existing
+principle, BIN-611/815/823 lineage) one layer up: a linter script's OWN gate decision, unpinned,
+which if broken silently recreates the exact "green CI, broken prod" failure this script exists
+to prevent. LOW-MED, non-blocking on a 2-branch function, but named explicitly and folded into the
+existing bullet since it's a fresh flavor (CLI entry point) of an established pattern.
+
+### Judgment: is `analyzeWorkflow` honest coverage or ceremony (vs. the `skippedAuthBatches`
+### I/O-wiring call from earlier the same day)?
+Genuinely different, not an over-correction. `skippedAuthBatches` (BIN-848, same day) is an
+ALREADY-mutation-verified value forwarded verbatim into an untestable `logger.info(...)` call with
+no branch of its own and every sibling field in that log line equally unpinned by the file's own
+accepted convention — inert plumbing. `analyzeWorkflow` is a live COMPOSITION decision: which of
+two DIFFERENT pure readers (strict vs. loose) answers which of two DIFFERENT questions (is it
+wired vs. does it appear at all), and its own doc comment states a real historical mutant escaped
+the sub-functions' own unit tests without it. Proved live: the strict/loose swap is caught (2/14)
+ONLY by `analyzeWorkflow`'s three dedicated tests — none of `readVarsFromWorkflow`'s or
+`readAssignedVars`'s own unit tests can see a wiring bug at their call site by construction. Three
+tests for a two-line seam is proportionate here; the discriminator is "is there a real, provable
+mutant only the seam's own tests can kill", not test-count-vs-line-count.
+
+### Non-overlap / non-vacuity spot-check
+Live-verified `findUnwired`'s `providedInline`/`mustNotShip` exemption terms are load-bearing for
+tests 5 and 6 (dropping both filter terms → 2 red, tests 5 and 6 alone) — not vacuous positives
+riding on an empty `workflowVars` set. All 14 test names read as distinct claims; test 13
+(`analyzeWorkflow` both-empty) and test 14 (`analyzeWorkflow` both-non-empty) are complementary,
+not redundant — the field-swap mutant above proves 13 alone can't catch a swap (both sides empty
+either way) while 12+14 do.
+
+### State confirmed
+`node --test scripts/check-public-env.test.mjs` → 14/14. `node scripts/check-public-env.mjs` → OK
+(13 names), exit 0. All four staged files' `git hash-object` == `git rev-parse :<path>` at both
+the start and the end of the review (no mid-review movers): ci.yml `2166589…`, deploy.yml
+`4b924ad…`, check-public-env.mjs `df86b0c…`, check-public-env.test.mjs `923299b…`.
+Read every one of the four staged files directly (not diff-only) before writing this entry.
+
+### Verdict
+No blocking findings. Two LOW items filed into the knowledge file (the `\S`-boundary regex gap,
+the untested `main()` exit-code branch) rather than raised as blockers — both are narrow, both
+would very plausibly be caught by code review or the manual smoke check given the file's small
+size, and neither touches the two behaviors that actually caused the three-month production
+incident this script exists to prevent (both of which ARE mutation-killed: the missing-var case
+and the backreference/typo case).
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-10 (round 3) — check-public-env.mjs / .test.mjs: both round-2 findings fixed, one new (missingInline) fixed, one new gap found in analyzeWorkflow's reader pairing
+
+Diff reviewed (`git diff --cached`): `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`,
+`scripts/check-public-env.mjs` (206 lines), `scripts/check-public-env.test.mjs` (169 lines, 18
+tests). Round 2's two findings (`\S` boundary now `[ \t]*\S`, `main()`'s untested exit-code
+branching extracted to `exitCodeFor`) are addressed, plus a third bucket `missingInline` (found
+by the integration reviewer) closing "PROVIDED_INLINE names were exempt from everything,
+including existing".
+
+Coordinator's claimed mutation counts vs. measured (all runs: python3 line-anchored replace on a
+scratchpad-snapshotted copy, `rm -rf node_modules/.vite/vitest` before each, `git hash-object`
+verified restore each time):
+
+- **`\S` boundary** (`readAssignedVars`'s `[ \t]*\S` reverted to `\s*\S`) — claimed 1 red,
+  **measured 0 red (18/18 green) — SURVIVOR.** Probed exactly which inputs the two forms
+  disagree on: `\S` itself is whitespace-complement regardless of what precedes it, so on a
+  per-line-split string (no embedded `\n`) the two forms produce IDENTICAL results for every
+  realistic case (`NAME:`, `NAME: `, `NAME:\r`, `NAME: value`, `NAME: >` all agree). The only
+  input where they diverge is a non-tab/space whitespace char sitting between colon and value
+  (verified: `NAME:\u00A0value` — NBSP — matches `\s*\S` but not `[ \t]*\S`), which never occurs
+  in a real workflow YAML file. So the mutation is a real but practically-inert survivor, and the
+  code comment's stated rationale ("would let a wrapped YAML value count") does not correspond to
+  any actual discriminating input — a folded/literal block indicator (`>`, `|`) is itself `\S`
+  and matches under BOTH forms. LOW, informational: report the corrected count, don't block on it.
+- **`missingInline` never populated** (`analyzeWorkflow`'s `missingInline: […].filter(…)` replaced
+  with `missingInline: []`) — claimed 1 red, **measured 1 red** (`a workflow-provided literal that
+  disappears from the workflow is caught`). Confirmed.
+- **`exitCodeFor` ignoring each bucket** — `missingInline` term dropped: 1 red (test 18 alone).
+  `unwired` term dropped: 1 red (test 18 alone). `wronglyWired` term dropped: 1 red (test 18
+  alone). All three confirmed, each isolated to the one dedicated exit-code test.
+- **`exitCodeFor` always 0** — claimed "all red", **measured 1 red** (test 18 only) — CORRECTION.
+  Only the dedicated `exitCodeFor` unit test exercises the function; nothing else in the 18-test
+  file calls it (main()'s CLI wiring is untested by design per the BIN-802 CLI-at-import lesson),
+  so "whole suite dies" does not hold for this test file as it stands.
+- **`analyzeWorkflow` field swap, missingInline half** (`missingInline` filter changed to read the
+  STRICT `readVarsFromWorkflow` output instead of the loose `readAssignedVars` output) — 1 red
+  (`a workflow-provided literal that is present is not reported` — `NEXT_PUBLIC_APP_ENV:
+  production` doesn't match the strict `secrets.X` form, so it would wrongly report as missing).
+  Confirmed the intended seam is pinned on THIS half.
+- **`analyzeWorkflow` field swap, unwired half — NEW GAP, not previously named.** Swapped
+  `unwired: findUnwired(sourceVars, readVarsFromWorkflow(workflowText))` to
+  `findUnwired(sourceVars, assigned)` (the LOOSE reader) — **survives 18/18 green.** Every
+  `analyzeWorkflow`-level fixture in the file has the strict and loose readers agree for the
+  variable under test (fully wired via a real `${{ secrets.NAME }}` reference, or fully absent
+  from the workflow text), so no fixture exercises the case the strict reader exists FOR: a
+  variable wired to the WRONG secret name, or wired as a bare literal, while still present in
+  `sourceVars`. The file's own docstring on `analyzeWorkflow` claims "the pairing has to be pinned
+  somewhere, and this is that seam" — true for the `missingInline` direction (tested above), false
+  for `unwired`, which is the field `main()` actually uses to decide "did nobody remember the
+  variable" — the exact incident class the script exists to prevent. Remedy: one more
+  `analyzeWorkflow`-level test with `sourceVars = {NEXT_PUBLIC_X}` and workflow text
+  `NEXT_PUBLIC_X: ${{ secrets.WRONG_NAME }}` (or a bare literal), asserting `unwired` still
+  contains `NEXT_PUBLIC_X` even though `readAssignedVars` would count it as "assigned". MED,
+  blocking — this is the composed function the CLI runs, and the missing fixture is a one-liner.
+- **`readVarsFromWorkflow`'s `m[1] === m[2]` backreference check dropped** — 1 red (`a name wired
+  to a DIFFERENT secret does not count as wired`). Confirmed.
+- **`findUnwired` drops the `providedInline` exemption** — 2 red (`workflow-provided literals are
+  not reported as missing secrets`, `a workflow-provided literal that disappears from the workflow
+  is caught`). **`findUnwired` drops the `mustNotShip` exemption** — 1 red (`the emulator switch
+  is exempt`). **`findWronglyWired` hardcoded to `[]`** — 4 red. All confirmed, none vacuous.
+- **`readVarsFromSource`'s char class narrowed `[A-Z0-9_]+` → `[A-Z_]+`** (drops digits) —
+  survives 18/18. Checked against real data: `git grep -h -o -E 'NEXT_PUBLIC_[A-Z0-9_]+' -- src
+  .github/workflows` lists all 13 real names in the repo today, and NONE contain a digit — so
+  this is a genuinely untested char-class term but is INERT against current production data, not
+  a live risk. LOW, name it, don't block.
+- **The two edited tests** (`a correctly wired workflow yields no verdict either way`, `a missing
+  variable and a never-ship variable are reported together`) are not vacuous shape assertions —
+  verified live that `analyzeWorkflow`'s `wronglyWired` field hardcoded to `[]` reds exactly these
+  two (`the never-ship check sees a literal…`, and `a missing variable and a never-ship variable
+  are reported together`), i.e. they discriminate a real mutant, not merely a renamed/reshaped
+  object. They do NOT catch the `unwired`-reader-swap gap above (same root cause: their fixtures
+  don't put `assigned` and `wired` in disagreement either).
+- **18 tests, judged**: none earn nothing. Every test in the file was the sole or one of few
+  catches for a distinct mutant across the sweep above; no vacuous/shape-only test found. If
+  anything the file is short one test (the `unwired`-reader-swap gap above), not over-tested.
+
+Full baseline re-confirmed clean before and after the whole sweep: `node --test
+scripts/check-public-env.test.mjs` → 18/18, `node scripts/check-public-env.mjs` → OK, 13 names.
+`git hash-object`/`git rev-parse :scripts/check-public-env.mjs` matched throughout
+(`9419ed422225c5ca2bb49a61ca6dd5aae6750ea6`), worktree byte-identical to the pre-mutation
+scratchpad snapshot after every restore.
+
+**REVIEW-VERDICT: fail (1 blocking)**
