@@ -35,6 +35,16 @@ const DAY_MS = 86_400_000;
 
 /** A title is "intent" iff: film in vill_se OR tv in mina, AND currently on a provider. */
 export function isIntentTitle(item: IntentItem): boolean {
+  // BIN-856: an unusable id is not an intent title. `resolveTmdbId` yields NaN
+  // when the field is non-numeric AND the doc id has no digits-only suffix —
+  // the watchlist rules whitelist the `tmdbId` key without binding its type,
+  // so a client can write one. Such an item can never be fetched, and because
+  // readExisting skips it, it never gains a `checkedAt` and never leaves tier 0
+  // ("never checked", always sorted first) — so it would be re-picked on EVERY
+  // run forever, spending a reserved vendor call each time. The guard lives
+  // here rather than at the call site so it is covered by logic.test.ts;
+  // index.ts imports firebase-admin and cannot be unit-tested.
+  if (!Number.isFinite(item.tmdbId)) return false;
   if (!Array.isArray(item.providers) || item.providers.length === 0) return false;
   if (item.mediaType === 'movie') return item.status === 'vill_se';
   if (item.mediaType === 'tv') return item.status === 'mina';

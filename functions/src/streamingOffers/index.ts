@@ -4,7 +4,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId } from './logic';
-import { fetchOffers, RATE_LIMITED } from './motn';
+import { fetchOffers, RATE_LIMITED, REQUEST_REJECTED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
 import { mediaTypeDocId, parseMediaTypeFromDocId, resolveTmdbId } from '../shared/mediaTypeDocId';
 import { motnBillingCycleId } from '../util/dayId';
@@ -60,6 +60,9 @@ async function readWorkSet(): Promise<WorkItem[]> {
         status: String(x.status ?? ''),
         providers: Array.isArray(x.providers) ? (x.providers as number[]) : [],
       };
+      // BIN-856: isIntentTitle also rejects a non-finite tmdbId — see its own
+      // comment for why such an item would otherwise burn a vendor call every
+      // run forever. The guard lives in logic.ts so logic.test.ts can pin it.
       if (isIntentTitle(it)) items.push(it);
     }
     if (snap.size < PAGE_SIZE) break;
@@ -171,6 +174,10 @@ export const streamingOffersRefresh = onSchedule(
     let written = 0;
     let sawRateLimited = false;
     let sawClean = false; // at least one real (non-429, non-null) vendor response this run
+    // BIN-856: vendor calls actually SPENT, which is not the same as batch.length
+    // now that a rejected request breaks the loop early. This is the number that
+    // matters against the monthly cap, so it's the number the closing log reports.
+    let attempted = 0;
     for (const { tmdbId, mediaType } of batch) {
       // Reserve a MOTN slot for this billing cycle BEFORE spending the call (a
       // crash + Scheduler retry can't overshoot the cap). Never refunded on
@@ -180,6 +187,7 @@ export const streamingOffersRefresh = onSchedule(
         logger.warn('streamingOffersRefresh: MOTN cycle cap reached mid-run — stopping', { motnCycle });
         break;
       }
+      attempted += 1;
       const result = await fetchOffers(tmdbId, mediaType);
       if (result === RATE_LIMITED) {
         // 429: could be the real monthly quota gone, or a transient trip of the
@@ -188,6 +196,17 @@ export const streamingOffersRefresh = onSchedule(
         // the cap) once a SECOND run in a row also sees a 429.
         sawRateLimited = true;
         logger.warn('streamingOffersRefresh: MOTN 429 — stopping this run (confirms after a repeat)', { motnCycle });
+        break;
+      }
+      // BIN-856: the vendor rejected the request we BUILT (4xx that isn't 404
+      // or 429 — see classifyStatus). That's our defect, not this title's, so
+      // every remaining title in the batch would fail identically while each
+      // one still consumes a reserved vendor slot. Stop immediately: the
+      // `output_language=sv` build spent 198 of the 300-call monthly cap this
+      // way, nine identical 400s a day, because a rejected request was
+      // indistinguishable from an ordinary per-title miss.
+      if (result === REQUEST_REJECTED) {
+        logger.error('streamingOffersRefresh: MOTN rejected our request — stopping run to stop burning vendor quota', { motnCycle, attempted });
         break;
       }
       if (result === null) continue; // per-title failure -> retry next run
@@ -260,7 +279,7 @@ export const streamingOffersRefresh = onSchedule(
     }
 
     logger.info('streamingOffersRefresh done', {
-      workSet: workSet.length, attempted: batch.length, written, status: health.status, intervalDays: health.refreshIntervalDays,
+      workSet: workSet.length, batch: batch.length, attempted, written, status: health.status, intervalDays: health.refreshIntervalDays,
     });
   },
 );

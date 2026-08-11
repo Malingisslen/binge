@@ -112,7 +112,28 @@ export async function fetchExpiringChanges(
       break;
     }
     if (!res.ok) {
-      logger.warn(`leavingRollup: changes -> ${res.status}`);
+      // BIN-856: keep the vendor's own error text, not just the status. Its
+      // sibling client (streamingOffers/motn.ts) logged only the number, and
+      // that is why a 400 which said in plain words exactly what was wrong
+      // ("parameter \"output_language\" has an invalid value: sv") read as
+      // ordinary flakiness for a month. Same vendor, same key, same blind
+      // spot — so the same fix belongs on both halves of the account.
+      // Redact the key before logging: an auth error is exactly the kind of
+      // prose that quotes the credential it rejected, and redacting before
+      // truncating matters because an echoed key sits at the START of a short
+      // message. Truncated because a 5xx can return a whole HTML page.
+      const body = await res.text().catch(() => '');
+      const detail = { body: body.replaceAll(key, '[redacted]').slice(0, 300) };
+      // Integration review: a 4xx here is OUR defect (bad parameter, bad key),
+      // not vendor flakiness, and its consequence is the BIN-856 shape exactly
+      // — `complete` stays false, so the public "vad försvinner" rollup is
+      // silently never updated and the previous list is served indefinitely.
+      // That deserves `error`, not the `warn` a transient 5xx gets.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+        logger.error(`leavingRollup: MOTN rejected our request (${res.status}) — rollup left stale`, detail);
+      } else {
+        logger.warn(`leavingRollup: changes -> ${res.status}`, detail);
+      }
       return { changes, shows, rateLimited, pagesFetched, complete };
     }
 

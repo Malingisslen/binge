@@ -30,6 +30,25 @@ describe('isIntentTitle', () => {
   it('excludes TV in vill_se (legacy/unmigrated) — only mina counts for TV', () => {
     expect(isIntentTitle(item({ mediaType: 'tv', status: 'vill_se', providers: [8] }))).toBe(false);
   });
+
+  // BIN-856 quota protection. resolveTmdbId returns NaN when the watchlist
+  // doc's `tmdbId` is non-numeric AND its doc id has no digits-only suffix —
+  // a shape a client can write, since the rules whitelist the key without
+  // binding its type. Such an item can never be fetched, and readExisting
+  // skips it too, so it never gains a `checkedAt` and never leaves tier 0
+  // ("never checked", always sorted first). Without this guard it is
+  // re-selected on EVERY run forever, spending one reserved vendor call each
+  // time against a 300-call monthly cap. Otherwise-perfect item, so the id is
+  // the only thing under test here.
+  it('excludes a title whose id could not be resolved, however valid it looks', () => {
+    expect(isIntentTitle(item({ mediaType: 'movie', status: 'vill_se', providers: [8], tmdbId: NaN }))).toBe(false);
+    expect(isIntentTitle(item({ mediaType: 'tv', status: 'mina', providers: [337], tmdbId: NaN }))).toBe(false);
+  });
+
+  it('excludes non-finite ids generally, not just NaN', () => {
+    expect(isIntentTitle(item({ providers: [8], tmdbId: Infinity }))).toBe(false);
+    expect(isIntentTitle(item({ providers: [8], tmdbId: -Infinity }))).toBe(false);
+  });
 });
 
 describe('streamingOffersDocId (BIN-523)', () => {
