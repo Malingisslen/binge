@@ -156,6 +156,52 @@ export function hasLocalPushToken(uid: string): boolean {
 }
 
 /**
+ * Is this device's push registration REALLY still there?
+ *
+ * `hasLocalPushToken` answers from the localStorage pointer alone, and the pointer is
+ * not the registration. Three things delete `users/{uid}/fcmTokens/{id}` without
+ * touching it: FCM's own self-heal on an unregistered token (functions/src/push.ts),
+ * BIN-848's sweep, and a sign-out whose delete lands after the page has gone. After
+ * any of them the Settings box renders ticked over a device that receives nothing —
+ * the BIN-844 lie one door further in. So the doc is the truth source.
+ *
+ * **The fail direction is the whole design.** This may only answer `false` on an
+ * explicit server "that doc does not exist". Offline, a cache-only answer or a thrown
+ * read all keep the optimistic answer, because the alternative trades a box that lies
+ * one way for a box that lies the other — and THAT one makes people re-tick push on a
+ * device that already works, leaving a second orphan token doc behind. Confirmed as a
+ * binding condition by #19 Customer Support.
+ *
+ * Self-heals as a side effect: a pointer proven to outlive its doc is dropped, so the
+ * next call is free.
+ */
+export async function hasLivePushToken(uid: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (!hasLocalPushToken(uid)) return false;
+  let tokenId: string | null = null;
+  try {
+    tokenId = window.localStorage.getItem(`binge:fcm:tokenId:${uid}`);
+  } catch {
+    return true;
+  }
+  if (!tokenId) return false;
+
+  try {
+    const { db, doc, getDoc } = await fsdb();
+    const snap = await getDoc(doc(db, 'users', uid, 'fcmTokens', tokenId));
+    if (snap.exists()) return true;
+    // Absence read from the local cache proves nothing — an offline session has
+    // never seen this doc and would report every live registration as gone.
+    if (snap.metadata.fromCache) return true;
+    clearLocalPushTokenId(uid);
+    return false;
+  } catch {
+    // Network, rules, quota. "Could not check" is not "gone".
+    return true;
+  }
+}
+
+/**
  * BIN-844 — drop only the LOCAL pointer to this device's token doc.
  *
  * For the account-deletion path, where `disablePushForUser` cannot be used: it

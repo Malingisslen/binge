@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/contexts/ToastContext';
-import { enablePushForUser, disablePushForUser, isPushSupported, hasLocalPushToken } from '@/lib/firebase/messaging';
+import { enablePushForUser, disablePushForUser, isPushSupported, hasLocalPushToken, hasLivePushToken } from '@/lib/firebase/messaging';
 import { SettingsSection } from './SettingsSection';
 
 /**
@@ -40,12 +40,28 @@ export function NotificationsSection() {
   // and reading it inline would make the first client render disagree with the markup
   // it hydrates. Declared ABOVE the `!user || !uid` early return — a hook after it
   // would change hook order between renders.
+  //
+  // Two passes, and the order matters. The synchronous pointer answers first so the
+  // box paints exactly as it does today, then the Firestore doc refines it — because
+  // the pointer can outlive the registration it points at (FCM's self-heal, BIN-848's
+  // sweep, a sign-out delete that lands after unload). Only `hasLivePushToken` may
+  // move the box from ticked to empty, and only on a server-confirmed absence.
   const [hasDeviceToken, setHasDeviceToken] = useState(false);
+  const pushBusy = busyKeys.has('push');
   useEffect(() => {
-    if (uid) setHasDeviceToken(hasLocalPushToken(uid));
-    // `busyKeys` in the deps re-reads after a toggle settles, so enabling push
-    // ticks the box without a reload.
-  }, [uid, busyKeys]);
+    if (!uid) return;
+    setHasDeviceToken(hasLocalPushToken(uid));
+    let cancelled = false;
+    // The guard is load-bearing: this effect re-runs on `busyKeys`, so a slow read
+    // from the previous run could otherwise land after a newer one and overwrite it.
+    void hasLivePushToken(uid).then(live => { if (!cancelled) setHasDeviceToken(live); });
+    return () => { cancelled = true; };
+    // The push toggle's own busy state, NOT the whole `busyKeys` set: the set is
+    // shared by all six toggles, so depending on it re-ran this Firestore read on
+    // every click anywhere in the section. Depending on the boolean re-reads after
+    // the push toggle settles — which is what makes the box tick without a reload —
+    // and ignores the other five.
+  }, [uid, pushBusy]);
 
   if (!user || !uid) return null;
   // Servicen-stöd-check kan bara köras klient-sidigt; rendera ändå (med
@@ -162,12 +178,26 @@ export function NotificationsSection() {
           <input
             type="checkbox"
             checked={pushOnThisDevice}
-            disabled={busyKeys.has('push')}
+            disabled={pushBusy}
             onChange={(e) => { void handleToggle(e.target.checked); }}
             className="accent-acc-deep w-[14px] h-[14px]"
           />
           Skicka push-notiser till den här enheten
         </label>
+      )}
+
+      {/*
+        The account wants push, this device has no registration. Without a line here
+        the only signal is an empty box, which is what "nobody finds out their push
+        died" looks like. #19 Customer Support required a blame-free cause in the
+        wording: an un-tick the user did not cause otherwise reads as "something is
+        wrong with my account".
+      */}
+      {supported && pushEnabled && !hasDeviceToken && (
+        <p className="text-xs text-ink-3 mt-1">
+          Den här enheten skickar inte push just nu — det händer till exempel efter en
+          webbläsarrensning. Kryssa i rutan för att slå på push igen.
+        </p>
       )}
 
       <label className="flex items-center gap-2 cursor-pointer text-base mt-3">
