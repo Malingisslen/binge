@@ -192,11 +192,18 @@ export function NotificationsSection() {
         died" looks like. #19 Customer Support required a blame-free cause in the
         wording: an un-tick the user did not cause otherwise reads as "something is
         wrong with my account".
+
+        `pushEnabled` is account-level, so this covers TWO situations at once: a
+        device that lost its registration, and a device that never had one because
+        push was enabled on a different one. The copy must therefore not presuppose
+        the first — an earlier draft said "igen" and named a browser wipe as the
+        cause, which is simply wrong on a second device.
       */}
       {supported && pushEnabled && !hasDeviceToken && (
         <p className="text-xs text-ink-3 mt-1">
-          Den här enheten skickar inte push just nu — det händer till exempel efter en
-          webbläsarrensning. Kryssa i rutan för att slå på push igen.
+          Push är inte påslagen på den här enheten. Varje enhet har sin egen
+          inställning, och den nollställs om du rensar webbläsaren — kryssa i rutan
+          för att slå på den här.
         </p>
       )}
 

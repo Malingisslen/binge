@@ -93,7 +93,7 @@ describe('NotificationsSection — the box re-reads after a toggle settles (BIN-
 // renders ticked over a device that receives nothing. That is the BIN-844 lie one
 // door further in, so the document is the truth source now.
 describe('NotificationsSection — the document decides, not the pointer', () => {
-  const hint = () => screen.queryByText(/skickar inte push just nu/i);
+  const hint = () => screen.queryByText(/inte påslagen på den här enheten/i);
 
   it('un-ticks when the pointer survived but the registration is gone', async () => {
     messaging.hasLocalPushToken.mockReturnValue(true);
@@ -113,7 +113,7 @@ describe('NotificationsSection — the document decides, not the pointer', () =>
     // An un-tick nobody caused reads as "something is wrong with my account" unless
     // the copy names a blame-free cause (#19 Customer Support's binding condition).
     expect(hint()).not.toBeNull();
-    expect(hint()!.textContent).toMatch(/webbläsarrensning/i);
+    expect(hint()!.textContent).toMatch(/rensar webbläsaren/i);
   });
 
   it('says nothing when the device really is registered', async () => {
@@ -187,7 +187,7 @@ describe('NotificationsSection — a stale read cannot overwrite a newer one', (
     // Account flag is false after the toggle, so assert on the device fact the guard
     // protects: the hint would only appear if the stale `false` had won.
     auth.user = { notificationSettings: { pushEnabled: true } };
-    expect(screen.queryByText(/skickar inte push just nu/i)).toBeNull();
+    expect(screen.queryByText(/inte påslagen på den här enheten/i)).toBeNull();
   });
 });
 
@@ -203,7 +203,7 @@ describe('NotificationsSection — nothing to tick, nothing to say', () => {
     await act(async () => { render(<NotificationsSection />); });
 
     expect(screen.getByText(/stöds inte i den här webbläsaren/i)).not.toBeNull();
-    expect(screen.queryByText(/skickar inte push just nu/i)).toBeNull();
+    expect(screen.queryByText(/inte påslagen på den här enheten/i)).toBeNull();
   });
 });
 
@@ -232,5 +232,27 @@ describe('NotificationsSection — an unrelated toggle costs no read', () => {
     await act(async () => { fireEvent.click(box()); });
 
     expect(messaging.hasLivePushToken.mock.calls.length).toBeGreaterThan(afterMount);
+  });
+});
+
+// `pushEnabled` is account-level, so the hint also renders on a device that never had
+// push because it was enabled on a different one. The copy must not presuppose a loss
+// — an earlier draft said "slå på push igen" and named a browser wipe as the cause,
+// both of which are simply false for this person.
+describe('NotificationsSection — the hint also speaks to a second device', () => {
+  it('does not claim this device once had push', async () => {
+    // Phone has push; this laptop has never registered.
+    auth.user = { notificationSettings: { pushEnabled: true } };
+    messaging.hasLocalPushToken.mockReturnValue(false);
+    messaging.hasLivePushToken.mockResolvedValue(false);
+
+    await act(async () => { render(<NotificationsSection />); });
+
+    const text = screen.getByText(/inte påslagen på den här enheten/i).textContent ?? '';
+    expect(text).toMatch(/varje enhet har sin egen inställning/i);
+    // Anchored on the banned phrase, not the bare substring "igen": Swedish's -ligen
+    // adverb suffix (tydligen, möjligen, uppenbarligen) contains it, so an unanchored
+    // match would fail on a future copy edit that changed nothing about the claim.
+    expect(text).not.toMatch(/slå på push igen/i);
   });
 });
