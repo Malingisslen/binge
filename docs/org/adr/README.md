@@ -59,3 +59,5 @@ put to Malin and her answer.>
 - [0015](0015-tillsammans-write-binding-scope.md) — Tillsammans write binding: anon-forgery residual accepted (A1); expiry gate re-declined (BIN-24 re-affirmed)
 - [0016](0016-leavingrollup-resumable-cursor-rejected.md) — BIN-543: resumable MOTN pagination cursor rejected (window drift = silently wrong, not just stale) in favor of a slower single-day cadence
 - [0017](0017-media-type-doc-id-namespacing.md) — BIN-560: personal-library doc ids namespaced `${mediaType}_${tmdbId}`; reset-not-backfill (Fork A) + store-mediaType-as-field (Fork B); export schema → MAJOR 2.0
+- [0018](0018-seo-selection-ratchet.md) — BIN-823: the SEO selection becomes a persisted ratchet instead of being re-derived per build
+- [0019](0019-aborted-deletion-marker-scope.md) — BIN-816: aborted-deletion marker stays device-local (cross-device gap accepted); the surviving auth account is a documented DELAY, not a breach, and BIN-816 grows to include the server-side reaper that holds that window (Malin)
