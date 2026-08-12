@@ -1,14 +1,14 @@
 # binge-security-reviewer — knowledge (principles)
 
 **Edited IN PLACE.** Fold each lesson into the bullet it belongs to; merge duplicates, supersede
-contradictions, never append at the bottom. A bullet earns its place only by changing what a review DOES.
-Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new lesson pays by compressing an old one.
+contradictions, never append at bottom. A bullet earns its place only by changing what a review does. Dated
+record → `…archive.md` (append-only). Cap 30k — a new lesson pays by compressing an old one.
 
 ## Seed checklist
-- **Public-read:** `reviews/**`, `lists` (isPublic), `usernames`, `sessions/**`, `reports` (create-only, never
-  client-read). A NEW public-read collection must be intentional + minimal.
-- **Ownership:** every per-user read/write enforces `request.auth.uid` (`users/{uid}/blocked` = hygiene, not a
-  boundary). A secret in `NEXT_PUBLIC_` is a finding.
+- **Public-read:** `reviews/**`,`lists`(isPublic),`usernames`,`sessions/**`,`reports`(create-only, never
+  client-read). NEW public-read collection must be intentional+minimal.
+- **Ownership:** every per-user read/write enforces `request.auth.uid` (`blocked`=hygiene, not boundary). Secret
+  in `NEXT_PUBLIC_` is a finding.
 
 ## How to prove a finding
 - **Rules-trace = hypothesis — write a live PoC.** Throwaway `src/test/rules/_poc-*.test.ts` on the real
@@ -20,32 +20,28 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   once masked a broken ratchet (BIN-540). Tooling-blocked → restore anyway, label DERIVED.
   **A stale module-transform cache FABRICATES results either way — three times now** (latest: BIN-636's
   untouched client regex read as accepting `movie_042`): one mutation per `npx vitest run <file> --no-cache`,
-  `rm -rf node_modules/.vite/vitest` between runs, never a mutate/restore loop in one process, dump the
-  mutated LINE in the same command; one clear-then-rerun doesn't earn trust either — re-run before trusting
-  EITHER verdict. **A leftover mutation-harness file INSIDE `src/test/rules/` (not scratchpad) corrupts every
-  LATER run**: BIN-624's stray `__bin624_mutant.test.ts` sat untracked there, globbed into `npm run
-  test:rules`, reporting 474/10-failed against a real 244/244. `git status --porcelain` the test dir before
-  trusting any count; delete a stray `*mutant*`/`*_poc*` file there before believing the suite.
+  `rm -rf node_modules/.vite/vitest` between runs, never a mutate/restore loop in one process, dump the mutated
+  LINE in the same command; re-run before trusting EITHER verdict. **A leftover mutation-harness file INSIDE
+  `src/test/rules/`** corrupts every LATER run (BIN-624's stray `__bin624_mutant.test.ts`, 474/10-failed vs a
+  real 244/244): `git status --porcelain` the test dir first, delete a stray `*mutant*`/`*_poc*` file.
 - **A test title is not coverage** — an `it()` naming "rejects 0 → 1" actually asserted `5`. A mock with FEWER
   FIELDS than the real hook can't exercise what the missing one gates (a `useAuth` mock lacking `user` encodes
   ABSENT, not null). Deny tests whose rule `get()`s the writer's own profile must seed via
   `withSecurityRulesDisabled`, else they pass vacuously. A test reading its subject back through a SECOND
-  validator proves nothing — assert the STORED bytes, or the writer's guard can be deleted and the reader
-  covers for it.
+  validator proves nothing — assert the STORED bytes.
 
 ## Firestore rules — presence/type/pins/ratchets
 - **`hasOnly` bounds the KEY SET only** — never presence, never values. A merge-written field needs the entry
   AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with NO
   value bind (a bare `number[]`, e.g. `providers`) is fine to leave unbound if a SIBLING already-shipped field
   of the identical shape/consumption (rendered only through an id→lookup table, never interpolated/executed)
-  is unbound too — don't demand a new bind an existing analogous field never got (BIN-814 `subscriptionProviders`
-  next to `providers`).
+  is unbound too — don't demand a bind an existing analogous field never got (BIN-814 `subscriptionProviders`).
 - **A "does an unrelated write survive on an already-contaminated doc" ratchet test must seed via
   `withSecurityRulesDisabled`, not a live write, when mutation-testing by editing the deployed rule itself** —
   a live seed under the mutated ruleset gets rejected by the same `hasOnly` before the target line runs, so the
-  mutation is still caught but the seeded scenario goes unexercised. Harmless for a pure `hasOnly` guard; a
-  live false-negative gap for a VALUE ratchet whose behavior depends on prior state (`vetoRemaining <=`,
-  `tmdbFieldsRefreshedAt <= request.time`). Tighten before reusing as a VALUE-ratchet template.
+  mutation is still caught but the scenario goes unexercised. Harmless for a pure `hasOnly` guard; a live
+  false-negative gap for a VALUE ratchet depending on prior state (`vetoRemaining <=`,
+  `tmdbFieldsRefreshedAt <= request.time`). Tighten before reuse as a VALUE-ratchet template.
 - **`resource.data.get(k,D)` defends a MISSING key only.** A present-but-mistyped value (`isHost:'yes'`)
   returns as-is → equality type-errors → allow-expr fails → slot bricked (plantable DoS). Use
   `resource == null ? true : resource.data.get(k,D) is <T> ? <equality> : <heal to safe value>`, heal one-way.
@@ -57,8 +53,8 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   passes.
 - **A range bound is not a ratchet.** `is int && >=0 && <=1` stops "set it absurd", not "reset after spending
   down" (live-confirmed 0→1 veto re-grant). Use
-  `v <= (resource == null || !(resource.data.get('v',1) is int) ? 1 : resource.data.get('v',1))`. **Tells:** an
-  ADR saying "budget"/"cap"/"once per X"; one field ratcheted, its neighbour not.
+  `v <= (resource == null || !(resource.data.get('v',1) is int) ? 1 : resource.data.get('v',1))`. **Tell:** an
+  ADR saying "budget"/"cap"/"once per X" with one field ratcheted, its neighbour not.
 - **Pin an existing field with the REQUEST-doc idiom**
   `!('x' in request.resource.data) || request.resource.data.x == resource.data.get('x', null)`; the stored-doc
   idiom short-circuits TRUE on legacy docs missing the field — forgeable (BIN-276/365). An UNGUARDED equality
@@ -67,19 +63,18 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   every legitimate client mutation of a pinned field.
 - **A client-writable timestamp a server reads as "fresh → skip action" needs `<= request.time`, not just
   `is timestamp`** — else `Timestamp.fromMillis(futureMs)` defeats the sweep forever. `serverTimestamp()`
-  resolves to exactly `request.time` (`<=`, not `<`), so every honest writer must use the sentinel; promoting
-  an unvalidated field to this ratchet makes any legacy doc holding a FUTURE value fail ALL later merge-writes
-  (`is timestamp` does NOT reject a JS `Date`). A "re-stamp without rewriting data" path must re-verify against
-  the authoritative source in the SAME call.
+  resolves to exactly `request.time` (`<=`, not `<`); promoting an unvalidated field to this ratchet makes any
+  legacy doc holding a FUTURE value fail ALL later merge-writes (`is timestamp` does NOT reject a JS `Date`). A
+  "re-stamp without rewriting data" path must re-verify against the authoritative source in the SAME call.
 - **A reaper's "undateable = kept forever" restraint is safe only if the CREATE rule makes the date
   mandatory.** `hasOnly(['token','createdAt'])` requires neither key — `setDoc({token})` skips the reaper
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480).
-- Exact-self-leave: `size() == resource.data.memberUids.size() - 1` + `hasAll` + `!(request.auth.uid in
+- Exact-self-leave: `size()==resource.data.memberUids.size()-1` + `hasAll` + `!(request.auth.uid in
   request.resource.data.memberUids)` proves the caller removed themself.
-- Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*`
-  — fires even when new fields ride along. `usernames/{username}` has `allow create`, no `allow update`, so
-  writing an existing doc is an `update` → default-denied, closing the availability TOCTOU.
-  `collectionGroup(...).orderBy('__name__')` needs a `COLLECTION_GROUP` index — standing accepted gap.
+- Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*` —
+  fires even when new fields ride along. `usernames/{username}` has `allow create`, no `allow update`, so
+  writing an existing doc default-denies, closing the availability TOCTOU. `collectionGroup(...).orderBy('__name__')`
+  needs a `COLLECTION_GROUP` index — standing accepted gap.
 
 ## Anon/session identity and caller binding
 - **A caller-agnostic "anon" branch that doesn't format-constrain the KEY it accepts lets anyone pre-claim a
@@ -93,10 +88,10 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   the ACT — the `swipes` rules never read it, so the one-veto cap is UI-only, and nothing caps an anon
   link-holder minting fresh slots (BIN-624 form-guards the doc id, not the count — see Admin-SDK section).
 - **Confirm a flag is genuinely cosmetic before rating its immutability gap** — grep whether any rule/function
-  reads it for access (participant `delete` gates on `hostUid == request.auth.uid`, not `participant.isHost`).
-  Cross-account write is structurally impossible when the target uid comes from the closed-over auth context or
-  the doc PATH, never a parameter. Verify a format-guard fix three ways: live PoC; trace every legitimate writer
-  for false positives; confirm the format from the generator, not a comment.
+  reads it for access (participant `delete` gates on `hostUid`, not `participant.isHost`). Cross-account write
+  is structurally impossible when the target uid comes from the closed-over auth context or the doc PATH,
+  never a parameter. Verify a format-guard fix three ways: live PoC; trace every legitimate writer; confirm
+  the format from the generator, not a comment.
 
 ## GDPR export/delete completeness
 - `collectUserDataSnapshots` auto-covers ONLY `users/{uid}/**` + a fixed collectionGroup list; every NEW
@@ -112,13 +107,12 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   UserDataSnapshots`, locked by `dataExport.coverage.test.ts`) is the structural defense (BIN-347).
 - CG export queries (`likes`/`comments`/`reactions`) need (a) a `uid` FIELD per doc — doc-id alone is
   unqueryable, so backfill — and (b) an owner-scoped recursive-wildcard read rule (`match /{path=**}/likes/{id}
-  { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; }`); nested per-doc rules don't
-  cover CG. **Collector change needed?** New subcollection → yes; new FIELD on covered doc → no; new doc-ID
-  SCHEME in a covered subcollection → no (`getDocs` is doc-id-agnostic); tab-local ephemeral state isn't a
-  collection.
+  { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; }`); nested per-doc rules don't cover
+  CG. **Collector change needed?** New subcollection → yes; new field on a covered doc, or new doc-ID scheme in
+  a covered subcollection → no; tab-local ephemeral state isn't a collection.
 - A TTL reaper as sole erasure path needs a SYMBOLIC test (`MARKER_MAX_AGE_MS > functionalWindowMs`), not a
-  hardcoded number. Plaintext join tokens get two layers: client cascade + Admin-SDK CG reaper (Art. 17
-  backstop for abandoned joins/Console-deleted accounts).
+  hardcoded number. Plaintext join tokens get two layers: client cascade + Admin-SDK CG reaper (Art.17 backstop
+  for abandoned joins/Console-deleted accounts).
 - **A read rule conditioned on more than plain membership (reciprocity `exists()`, roles, `isAdmin()`) can break
   the OWNER's own export/delete.** Split `read` into `get` + `list`: `get` gets an unconditional same-uid
   carve-out; `list` keeps the strict gate. Suites that always seed the actor's own doc MASK this (BIN-184).
@@ -126,8 +120,8 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   `!snap.exists()` branch, justified by a comment naming ONE screen — **any sign-in call site outside that
   screen mints consent from a page that showed neither** (BIN-668: `onClick={signIn}` in two other components).
   An attestation is only as wide as its grep pattern — a handler passed by REFERENCE never matches `grep
-  'signIn()'`; grep the BARE identifier. Fix by routing to the notice-bearing screen, rendered UNCONDITIONALLY;
-  never backfill phantom consent; enumerate ALL orderings on a consent-bearing write race (BIN-535).
+  'signIn()'`; grep the BARE identifier. Fix by routing to the notice-bearing screen, rendered
+  UNCONDITIONALLY; never backfill phantom consent; enumerate ALL orderings on a write race (BIN-535).
 
 ## Cross-account and cross-session leak classes
 - **Invalidate a per-account cache/ref/mirror on the OWNER IDENTITY, never on the owned VALUE.** A value-keyed
@@ -148,24 +142,22 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   `clearIndexedDbPersistence()` (this repo's `clearFirestorePersistence`) does. Any destructive/blocking flow
   firing a write before its point of no return needs this race, not a bare await.
 - **Per-uid listener state that resets only inside `if (!uid)` leaks across a truthy→truthy uid switch**
-  (shared device, no sign-out): `notesByTmdbId` keeps A's map until B's first snapshot, so a shared tmdbId
-  shows A's note under B's title. Reset unconditionally at the effect's TOP — and guard a cross-account
-  MIGRATION effect with a ref set INSIDE the same synchronous snapshot callback that sets the state it reads
-  (`itemsUidRef.current = uid` alongside `setItems`), so a passing guard proves read source and write
-  destination are the same account. **The guard doesn't travel with the ref — check every call site sharing
-  it, not just effects with one already** (BIN-598's shared `findItem()` read the same `itemsRef` but skipped
-  the `itemsUidRef` check: WRITE PATH is closure-bound/safe, but a WRITE DECISION read off the shared ref can
-  fire on a FOREIGN account's cached item after a same-device switch). **FIXED + mutation-verified
-  (2026-08-04):** `findItem` returns `undefined` when `itemsUidRef.current !== uid`.
+  (shared device, no sign-out): `notesByTmdbId` keeps A's map until B's first snapshot. Reset unconditionally
+  at the effect's TOP — and guard a cross-account MIGRATION effect with a ref set INSIDE the same synchronous
+  snapshot callback that sets the state it reads (`itemsUidRef.current = uid` alongside `setItems`). **The
+  guard doesn't travel with the ref — check every call site sharing it** (BIN-598's shared `findItem()` read
+  the same `itemsRef` but skipped the `itemsUidRef` check, so a WRITE DECISION off the shared ref could fire on
+  a FOREIGN account's cached item post-switch). FIXED + mutation-verified: `findItem` returns `undefined` when
+  `itemsUidRef.current !== uid`.
 - **A deny-list redaction on a doc with no `hasOnly` write-whitelist eventually leaks a newly-accreted field**
   (whole-doc reads; client redaction never stops a raw SDK/REST read). Fix: (1) source → `allow read: if
   isOwner(uid)`; (2) top-level positive-whitelist projection (`publicProfiles/{uid}`), `hasOnly` PLUS
   per-field binds; (3) gate visibility LIVE via a privileged `get()` on the SOURCE doc, never a mirrored flag;
   (4) `isSignedIn() &&` before the friend-branch `exists()`; (5) **audit EVERY client call site reading a
   FOREIGN `users/{uid}` BEFORE tightening** — rules-only is an outage.
-- **Retiring a field you can't drop from `hasOnly`:** the `update` guard needs the three-way OR — absent /
-  null / unchanged from `resource.data.get(k, null)`; null-guarding `create` alone breaks every ordinary edit
-  on a legacy doc. Prefer a whitelist-copy helper over spread+delete (a removed TYPE is not a runtime strip).
+- **Retiring a field you can't drop from `hasOnly`:** the `update` guard needs the three-way OR — absent/
+  null/unchanged from `resource.data.get(k, null)`; null-guarding `create` alone breaks ordinary edits on a
+  legacy doc. Prefer a whitelist-copy helper over spread+delete (a removed TYPE is not a runtime strip).
 - **A shared helper collapsing a three-way distinction into a two-way return re-opens the ghost-vs-private
   class** (`getPublicProfileCard` mapped both `!exists()` and permission-denied to `null`, so private users
   vanished from the follow list). One anonymous fallback row for both IS the fix. Check
@@ -181,9 +173,9 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   anyone else yet.** Ask whether the mutated state could have been independently, VALIDLY re-established
   before the delayed rollback fires (a stalled join's late `arrayRemove` strips a uid a completed rejoin
   added); fix: re-`getDoc` first. No re-check needed for a rollback that DELETES a doc `addDoc`-minted in the
-  SAME call before its id/token left the function (BIN-555 createGroup: no invite token handed out yet) —
-  delete-the-whole-doc, not `arrayRemove` the lone member, is also the right SHAPE there: `arrayRemove` would
-  leave an ownerless orphan hidden from the owner's own `array-contains` query.
+  SAME call before its id/token left the function (BIN-555: no invite token handed out yet) — delete-the-
+  whole-doc, not `arrayRemove` the lone member, is the right SHAPE: `arrayRemove` leaves an ownerless orphan
+  hidden from the owner's own `array-contains` query.
 
 ## Server-only collections, public rollups, external input
 - A top-level collection with NO rules block is default-denied — safe ONLY because this rules file has no
@@ -201,12 +193,11 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   the origin (Firebase's popup copies the URL to the auth handler) and is ATTACKER-SUPPLIED (`?invite=`
   auto-joins on mount); `sessionStorage` fixes both, but the WRITE SITE can still express a query — hence a
   `RETURN_QUERY_KEYS` allowlist on BOTH legs. The PATH half can't be allowlisted (it IS the feature);
-  "onboarding OUTRANKS the stored path" holds only once the profile LOADED.
-  **BIN-669 (a route guard remembering the DEPARTING user's page across `signOut()`, which never navigates):**
-  fix = `isSigningOut()` ref-backed PREDICATE, not consume-once (a consuming reader flips yes→no across
-  React's double effect-run); raise before the sign-out call, lower only in a `finally`. Residual: `signOut()`
-  broadcasts to every same-origin tab, but the flag is ONE TAB's memory — a second tab still remembers its
-  page (narrower, not a fix defect).
+  "onboarding OUTRANKS the stored path" holds only once the profile LOADED. **BIN-669** (a route guard
+  remembering the DEPARTING user's page across `signOut()`, which never navigates): fix = `isSigningOut()`
+  ref-backed PREDICATE, not consume-once (a consuming reader flips yes→no across React's double effect-run);
+  raise before the sign-out call, lower only in a `finally`. Residual: the flag is ONE TAB's memory — a second
+  tab still remembers its page (narrower, not a fix defect).
 - **Consume-on-read makes the consuming effect NON-IDEMPOTENT** — a second run (StrictMode, extra identity
   change) reads null and falls back to default; gate with a ref latch set INSIDE the success branch (unreachable
   on a FAILED sign-in), nothing between latch and navigate may throw. Read only AFTER auth resolves, but
@@ -219,16 +210,21 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
 - App Check is opt-in (reCAPTCHA v3, no-op w/o a site key — never assume enforcement). `request.app != null` is
   the correct v2 idiom but SOFT: only `enforceAppCheck: true` hard-rejects an anon actor budget-draining with
   distinct uncached ids (BIN-361). v2 callables redirect to `*.run.app` — both belong in CSP `connect-src`.
-  Rules can't count sibling writes in a writeBatch either — fix with server-authoritative `onCall`, per-uid
-  cooldown in `runTransaction`, `reporterUid` from auth.
+  Rules can't count sibling writes in a writeBatch — fix with server-authoritative `onCall`, per-uid cooldown
+  in `runTransaction`, `reporterUid` from auth.
 
 ## Secrets and config
 - Secrets via `defineSecret` → `process.env.*`, in headers or a vendor-mandated query param (TMDB), never
-  logged; failure logs carry only the HTTP status. Admin-SDK offline-script path segments need
-  `Number.isInteger` validation (no `/` in a doc id); in CI, user-controlled strings go via `env:`.
-- **Test a gitignore secret pattern with `git check-ignore`** against the RUNBOOK's literal filename AND the
-  tool's DEFAULT download name — `*-recaps-writer*.json` misses `recaps-writer.json`; GCP's
-  `{project}-{hash}.json` matches no `*service-account*` pattern.
+  logged. **A failure log may carry the vendor's own error body only if the literal secret is stripped first**
+  — `body.replaceAll(key, '[redacted]')` BEFORE truncating; `key` guarded non-empty (early `if (!key) return`
+  above the call site) or an empty-string `replaceAll` is catastrophic. One status code's proof of a
+  credential-free format is not proof for every status the branch covers (BIN-856: 400 verified safe, 401/403
+  weren't — redact regardless; re-verify on every sibling call site the fix gets copied to). Admin-SDK
+  offline-script path segments need `Number.isInteger` validation (no `/` in a doc id); in CI, user-controlled
+  strings go via `env:`.
+- **Test a gitignore secret pattern with `git check-ignore`** against the RUNBOOK filename AND the tool's
+  DEFAULT download name — `*-recaps-writer*.json` misses `recaps-writer.json`; GCP's `{project}-{hash}.json`
+  matches no `*service-account*` pattern.
 
 ## Cost, budgets, rate limits, fan-out
 - Sealing a client-writable counter behind a callable closes FORGERY/write-SHAPE, NOT COST or DOC-COUNT.
@@ -241,52 +237,54 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
   callback, so `.add()` duplicates; use idempotent `.doc(id).set()`.
+- **A "stop the whole run on a 4xx we can't have caused per-title" governor needs the per-title id actually
+  validated first — but don't GUESS which status a malformed path-param id draws.** BIN-856 round 2 assumed a
+  REST endpoint 400s a NaN/junk id ("plausible, never verified live"); round 3's live probe showed
+  `movie/{NaN,'',abc,-1,0}` all 404 (bad RESOURCE, not bad REQUEST) → `'no-offers'`→`[]`, the SUCCESS path,
+  never reaching the reject-governor. Real harm is a quieter **quota LEAK**: the item never gets a `checkedAt`
+  (sibling reader skips non-finite), so it's immortal tier-0, re-picked every run forever at one call each
+  (enough such docs still crowd out a run's slots by volume). Fix is identical either way — filter
+  `Number.isFinite`/range before the id enters the work set — so an unverified severity guess never blocks the
+  right fix; verify the vendor's ACTUAL status live, correct a prior round's claim in place, don't re-argue it.
 
 ## Admin-SDK sweeps and scheduled writers
 - **Admin SDK bypasses `firestore.rules` entirely — `hasOnly` offers ZERO protection against what a sweep
   writes.** The backstop is pure logic: a FRESH payload from a fixed allowlist, unit-tested for key-set
   equality + disjointness from `FORBIDDEN_FIELDS`. Whole-DB sweeps add a dry-run-by-default gate, cursor +
   budget, and an audit `lastRun` write every run.
-- A shared `Set`/`Map` accumulator returned only at loop-end fails twice on a throw from unit K: K+1..M skipped,
-  1..K-1's already-landed writes discarded (re-pushed next phase). try/catch-continue per unit. **The unit's own
-  error-REPORTING callback needs its own nested try/catch too** — an unguarded `onError?.(err)` inside the
-  per-unit `catch` defeats the isolation if the logger itself throws (BIN-848: increment the counter BEFORE the
-  guarded callback runs). **Three DIFFERENT code paths can write the same ambiguous "0/success" summary value
-  for a check meant to attest an effect occurred, and a fix for one doesn't cover the others:** (1) an outer
-  `.catch()` substituting a default for a whole-scan failure needs a sentinel a legitimate run can't produce
-  (`skippedBatches: -1`, never `0`); (2) an early-return bail-out before the guarded call ever fires can log the
-  exact same "0 skipped" a fully-successful run would (BIN-848 follow-up: `byOwner.size === 0` returns
-  `skippedAuthBatches: 0` before `getAuth()`/`getUsers()` ran at all — the value a post-deploy "prove this
-  permission works" check was reading as proof, having asked nothing). Fix: pair the summary field with a
-  second counter of what was actually ATTEMPTED (`checkedUids`, real count on the attempted path, `0` on every
-  bail-out/failure path) and require both together. Applies only to purely logged/observed values; a value
-  anything downstream branches on needs the distinction proven live, not asserted in a comment.
+- A shared `Set`/`Map` accumulator returned only at loop-end fails twice on a throw from unit K: K+1..M
+  skipped, 1..K-1's landed writes discarded. try/catch-continue per unit; the per-unit error-REPORTING
+  callback needs its OWN nested try/catch (unguarded `onError?.(err)` defeats isolation if the logger throws —
+  BIN-848: increment the counter before the guarded callback runs). **Three code paths can write the same
+  ambiguous "0/success" summary for a check meant to attest an effect occurred:** outer `.catch()` needs a
+  sentinel a legit run can't produce (`-1`, never `0`); an early-return before the guarded call can log the
+  same "0 skipped" a full success would (BIN-848: `byOwner.size===0` returned `skippedAuthBatches:0` before
+  `getAuth()` ran). Fix: pair the summary with a second ATTEMPTED counter, required together; applies only to
+  purely-logged values — downstream branching needs the distinction proven live.
 - **collectionGroup matches by LEAF collection id regardless of parent path** — grep other writers/readers of
-  that leaf name before trusting one. `collectionGroup('watchlist')` also matches
-  `groups/{id}/watchlist/{tmdbId}`, safe ONLY because those docs lack `status` — prefer `isUserWatchlistDocPath`.
-  Append each page BEFORE the `size < PAGE_SIZE` break. uid must come from the doc PATH
-  (`d.ref.parent.parent?.id`), never client content — re-verify each adopter.
-- Bare-tmdbId keying collides movie and TV titles (independent TMDB namespaces): grouping keys, state doc
-  ids, FCM `tag`s, inbox ids and action URLs all need mediaType (`mediaTypeDocId`). Fixing one collection's
-  keying bug → grep every OTHER collection keyed on the same bare id (BIN-523 failed on this).
+  that leaf name before trusting one (`collectionGroup('watchlist')` also matches `groups/{id}/watchlist/{id}`,
+  safe only because those docs lack `status`). Append each page BEFORE the `size < PAGE_SIZE` break. uid must
+  come from the doc PATH (`d.ref.parent.parent?.id`), never client content.
+- Bare-tmdbId keying collides movie and TV (independent TMDB namespaces): grouping keys, state doc ids, FCM
+  `tag`s, inbox ids and action URLs all need mediaType (`mediaTypeDocId`). Fixing one collection's keying bug →
+  grep every OTHER collection keyed on the same bare id (BIN-523 failed on this).
 - A doc-id namespacing migration on a doc holding a MULTI-WRITER map needs a VALUE-level merge, never a
-  document-level `??` fallback — the first post-cutover write creates a one-entry namespaced doc HIDING every
-  pre-cutover entry (BIN-608 `swipes.votes`). Price the widening (an unattributable legacy key feeds BOTH
-  namespaces — pin it in a test). A doc id is a trust boundary only if it appears in the allow-expression:
-  BIN-624's `canonicalSwipeDocId(tmdbId)` guard on `swipes`' `create` is FORM-bound, not VOLUME-bound
-  (`movie_1`…`movie_999999` still creatable) — don't read it as closing the junk-doc-cost class (ADR 0015).
+  document-level `??` fallback — first post-cutover write creates a one-entry namespaced doc HIDING every
+  pre-cutover entry (BIN-608 `swipes.votes`; pin a legacy-key test). A doc id is a trust boundary only if it
+  appears in the allow-expression: BIN-624's `canonicalSwipeDocId(tmdbId)` guard on `swipes`' `create` is
+  FORM-bound, not VOLUME-bound (`movie_1`…`movie_999999` still creatable) — not closing the junk-doc-cost class
+  (ADR 0015).
 - **A LOOSE doc-id parser makes ALIASES collide in a last-write-wins Map** (`'movie_042'` took genuine
-  `movie_42`'s slot, BIN-618): require the parser be the writer's STRICT inverse. A "fall back to the nearest
+  `movie_42`'s slot, BIN-618): require the parser be the writer's STRICT inverse. A "fall back to nearest
   earlier X" loop needs a monotonic-DECREASING cursor that never overshoots.
 
 ## Deploy order (deploy.yml is hosting-only)
 - Order is direction-dependent and load-bearing — decide it. Name a TARGETED command (`--only
   functions:availableNotify`), never a blanket `--only functions`. Rules/indexes go FIRST when new client code
-  depends on them (a CG export query deployed before its rules makes GDPR export AND deletion throw for
-  everyone); AFTER hosting when a new constraint would deny writes from the OLD still-running client (BIN-540).
-- **`deploy.yml`'s rules/functions drift guard runs FIRST with no `continue-on-error`, so a commit touching
-  `functions/**` fails the job BEFORE the hosting step — hosting doesn't deploy either**, so prod runs the
-  PARENT commit for BOTH surfaces.
+  depends on them (a CG export query deployed before its rules makes export AND deletion throw for everyone);
+  AFTER hosting when a new constraint would deny writes from the OLD still-running client (BIN-540).
+- **`deploy.yml`'s rules/functions drift guard runs FIRST with no `continue-on-error`** — a commit touching
+  `functions/**` fails the job before the hosting step, so prod runs the PARENT commit for BOTH surfaces.
 
 ## Review scope, premises and attestations
 - **An attestation is a load-bearing claim — verify it like code**, whether it sits in a comment, a JSDoc, a
@@ -307,14 +305,15 @@ Dated record → `…knowledge.archive.md` (append-only). Cap 30k — a new less
   added to `hasOnly()`" — verify `firestore.rules` was actually touched; an Admin-SDK-only v1 can defer it, but
   flag the commitment (the moment a client write path adds that key, `hasOnly` rejects the ENTIRE write).
 - **Shared-checkout hazard (markers are gone, but a live sibling session isn't).** A live sibling's mutation
-  loop can land INSIDE your window — 3× now — so a clean `git status` on one file is NOT proof it hasn't moved
-  past it. `Read` serves the WORKTREE: hash against `git rev-parse :<path>` when something looks wrong. While
-  a sibling's loop is live anywhere, distrust one result on any file: re-`Read` + re-run `--no-cache` twice,
-  identical results required — disagreement with no edit of your own IS the signal.
+  loop can land INSIDE your window — 4× now — so a clean `git status` is NOT proof it hasn't moved past it.
+  Distrust one result on any file: re-`Read`/re-run twice, identical required — disagreement with no edit of
+  your own IS the signal. **Review target is the STAGED blob, not the worktree** — `Read` serves the worktree,
+  but `git show :<path>` is immune to a live mutator and is what will actually be committed; poll `git show
+  :<path> | md5sum` vs `md5sum <path>` until aligned, THEN `Read` (BIN-856 round 2: a worktree file cycled
+  through two unstaged mutants mid-review while `git show :path` stayed correct).
 - **Reviewing a FORWARD-REVERT:** prove exactness (`git diff <base> -- <files>` EMPTY → review reduces to "is
   `base` acceptable"); baseline = what is DEPLOYED. Next.js server-runtime advisories are neutral under
   `output: 'export'`.
 
 ## Archive
-Write to it every review, dated. Grep it for a familiar finding, a past PoC shape, or a principle compressed
-past use.
+Write to it every review, dated. Grep for a familiar finding, a past PoC, or a principle compressed past use.

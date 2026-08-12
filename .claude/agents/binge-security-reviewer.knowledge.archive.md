@@ -7108,3 +7108,285 @@ the gap would have made that proof pass vacuously on the exact kind of low-traff
 ships into.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-11 — BIN-856: MOTN 400-outage fix (output_language drop + error-body logging)
+
+Reviewed staged diff: `functions/src/streamingOffers/motn.ts` (modified),
+`functions/src/streamingOffers/motnUrl.ts` (new, admin-free URL builder), `motnUrl.test.ts`
+(new, allowlist-pins the query string to `country=se` only). Root cause per the ticket: every
+MOTN call has 400'd for ~a month because the URL carried `output_language=sv`, which the
+vendor rejects; a 400 maps to the per-title "skip, retry next run" path, so the outage was
+invisible except as a status code. Fix drops the parameter and adds `logger.warn(..., {
+body: body.slice(0,300) })` on any non-ok status, reading `res.text()` first.
+
+**Finding — Medium, treated as blocking (1):** `motn.ts:47-50` — the new `!res.ok` branch logs
+the vendor's raw response body unredacted. This directly reverses a pattern this SAME file was
+verified against on 2026-06-28 (see the earlier entry above, ~line 705: "never logged (the
+logger.warn on non-ok status logs only the HTTP status code, not the key)"). The API key is
+sent only via the `X-RapidAPI-Key` header, never interpolated into the URL, and the diff's own
+comment asserts "no credentials" in the body — but that attestation is verified against exactly
+ONE status code (the 400 case quoted in the ticket, `{"message":"parameter \"output_language\"
+has an invalid value: sv"}`). Every OTHER non-ok status this branch now covers (401/403 on a
+rotated or misconfigured key, 5xx vendor errors, or a future RapidAPI gateway change) is
+unverified — some RapidAPI-hosted vendors' auth-failure bodies do echo request-identifying
+values (e.g. "invalid key ending ..."). The 300-char truncation does not help: an echoed key
+would sit at the start of a short error message. Cost to close is one line —
+`body.replaceAll(key, '[redacted]')` before the `logger.warn` call — so I treated this as
+required-before-ship rather than a deferred hardening note, per the codebase's own
+already-established "secrets never logged" convention. Not an accepted deviation (checked
+`accepted-deviations.md`; nothing there covers vendor-log redaction).
+
+**Verified NOT an issue — point 2 (body-read hang), by live PoC, not just trace:** built a
+local HTTP server that writes response headers immediately then stalls the body for 8s, called
+`fetch(url, { signal: AbortSignal.timeout(3000) })` against it, then `await res.text()`. Result:
+`fetch()` resolved at 68ms (headers only) but `res.text()` rejected with `TimeoutError` at
+~3024ms — confirming Node's `fetch()` AbortSignal covers the ENTIRE request lifecycle including
+subsequent body reads via `.text()`/`.json()`, not just the header phase. So the new `await
+res.text().catch(() => '')` on the error path is bounded by the same 10s ceiling BIN-157
+already established for the whole call, and the `.catch(() => '')` means a timeout yields an
+empty logged body rather than an unhandled rejection or a hang. No regression of the hang class
+BIN-157 fixed. (Generalizable technique — didn't fold into the principles file this pass, out
+of character budget; worth a bullet next time this file has headroom.)
+
+**Point 3 (output_language removal vs stored/exposed data) — confirmed no-op via `parse.ts`:**
+`parseStreamingOptions` consumes only `service.id`, `type`, `link`, `price.amount`,
+`price.currency`, `expiresOn` — none localized. Matches the new module's doc comment exactly.
+`streamingOffers` is the established public-read-no-PII rollup class; this diff doesn't touch
+rules or the write path, only which SE-availability the vendor call itself returns.
+
+**Point 4 (secret handling in the new module) — clean:** `motnUrl.ts` never imports or
+references `process.env.MOTN_API_KEY`; it only builds the URL. The key stays exclusively in
+`motn.ts`, read via `process.env.*` (bound by `defineSecret` in index.ts, per the established
+pattern) and placed only in the `X-RapidAPI-Key` header. `MOTN_HOST` is a public hostname, not
+a secret. Admin-free split matches the stated CI-import reason (mirrors
+`leavingRollup`/`config.ts`'s split for the same toolchain constraint) — checked against no new
+`firestore.rules`/GDPR-cascade surface, since this module touches neither.
+
+Folded into knowledge.md: rewrote the "Secrets and config" opening bullet from a blanket
+"failure logs carry only the HTTP status" to "may carry the vendor's own error body only if the
+literal secret is stripped from it first, even when the vendor's documented format looks
+credential-free — that's one status code's worth of proof, not all of them" (BIN-856).
+Compressed the Admin-SDK "three ambiguous 0/success paths" bullet ~424 chars to make room
+(file was at 29,988/30,000 before this pass).
+
+**REVIEW-VERDICT: fail (1 blocking)**
+
+### 2026-08-12 — BIN-856 round 2: REQUEST_REJECTED stop-the-run + redaction re-verify
+
+Re-reviewed staged diff after round 1's blocking finding (unredacted vendor body): five files —
+`functions/src/streamingOffers/{motn.ts, index.ts, motnRequest.ts (new), motnRequest.test.ts (new)}`,
+`functions/src/leavingRollup/motnChanges.ts`.
+
+**Round-1 fix verified correct and complete.** `motn.ts:28-29,61-62` and
+`motnChanges.ts:71-75,125-126`: `body.replaceAll(key, '[redacted]').slice(0, 300)`, redact
+BEFORE truncate, in both the original file and the newly-touched sibling. Traced `key`'s scope
+in both: both functions early-return (`if (!key) return null/error`) BEFORE any `replaceAll`
+call, so `key` is guaranteed a non-empty string at every call site — an empty-string
+`replaceAll` (which would be catastrophic — matches every gap between every character) is
+structurally impossible here. `motnChanges.ts`'s `key` is the exact same variable used in the
+fetch headers two lines below (line 102), not a shadowed or stale copy. No secret in the new
+`logger.error` calls (`index.ts`'s carries only `{ motnCycle, attempted }`).
+
+**New finding — Blocking (1), High: self-DoS via an unvalidated `tmdbId` entering the immortal
+"never-checked" priority tier.** This diff adds `classifyStatus()` (`motnRequest.ts:70-76`,
+verified via `git show :path` — see hazard note below) mapping any 4xx except 404/429 to
+`'rejected'`, and `index.ts:205-208` breaks the `streamingOffersRefresh` run loop on that
+result to stop burning vendor quota (the ticket's own root cause: 198/300 monthly calls lost to
+a guaranteed-repeat 400). The loop-break is the right fix for THAT cause, but it also converts
+any OTHER cause of a persistent single-title 4xx into an outage for the WHOLE app, not just that
+title — and one such cause is directly reachable by any signed-in user.
+
+Traced the chain: `readWorkSet` (`index.ts:55-64`) pushes every watchlist item into the work
+set with **no validity check on `tmdbId`** — contrast `readExisting` seven lines below
+(`index.ts:96-98`), which explicitly does `if (!Number.isFinite(tmdbId)) continue;` for exactly
+this reason (existing comment there already names the cost concern; this diff raises the stakes
+from "wastes a call" to "kills the run"). `firestore.rules`' `isValidWatchlistItem` (unmodified
+by this diff, but load-bearing) whitelists the `tmdbId` KEY via `hasOnly` without binding its
+TYPE or VALUE — confirmed by reading the full function body (`firestore.rules:91-166`); `rating`,
+`nextAirDate`, `ratedAt`, `tmdbFieldsRefreshedAt` etc. all get explicit type/value binds two
+lines below where they're listed, `tmdbId` and `mediaType` do not. So a signed-in user can write
+`users/{ownUid}/watchlist/{anyDocId}` with a non-numeric or absent `tmdbId` field and a doc id
+with no parseable numeric suffix. `resolveTmdbId` (`shared/mediaTypeDocId.ts:101-104`) then
+returns `NaN` (confirmed: `Number('garbage')` is `NaN`, not integer → falls to
+`parseTmdbIdFromDocId`, which is `NaN` for a non-digit suffix — read in full, `mediaTypeDocId.ts:1-104`).
+`isIntentTitle` (`logic.ts:37-42`) only checks `providers.length>0` and `status`/`mediaType`
+match — both attacker-controlled on the attacker's own doc — so the NaN item passes straight
+into the work set.
+
+`offersUrl('movie', NaN)` (`motnRequest.ts:28-31`) builds `.../shows/movie/NaN?country=se` — a
+request the vendor plausibly answers 400 (never verified live, but plausible and the ticket's
+own framing treats "vendor rejects a malformed request-shape" as the baseline case). Because
+this item can never succeed, it never gets an entry in `readExisting`'s existing-offers list, so
+`selectRefreshBatch`'s `tier()` function (`logic.ts:94-104`) permanently classifies it tier 0
+("never checked") — the HIGHEST priority, sorting before every tier-1/2 title on every single
+run, forever. Once selected into a day's batch, the loop reaches it, gets `REQUEST_REJECTED`,
+and breaks — discarding the rest of that day's budget for every title that would have followed
+it in sort order. This recurs every run the item is selected, indefinitely, from ONE doc under
+ONE attacker's own uid — a self-inflicted, attacker-triggerable, app-wide denial of service on a
+paid vendor integration, exactly the failure mode (silent, indefinite outage) this ticket was
+filed to fix, just moved to a new trigger.
+
+**Fix:** filter non-finite/invalid `tmdbId` out of `readWorkSet` before `items.push(it)`
+(`index.ts:63`) — the exact guard `readExisting` already has, one function away. Zero cost,
+closes the deterministic/attacker-reachable case. Residual (not blocking, flagged as a
+follow-up): a genuinely valid tmdbId that the vendor persistently 4xxs for an unrelated reason
+would hit the same immortal-tier-0 trap; a "N consecutive rejects on the same title → drop /
+alert" circuit breaker would close that too, but it's speculative vendor behavior rather than an
+attacker-reachable path, so not required to ship this round.
+
+**New finding — Medium, non-blocking (flagged per the review brief's explicit ask): 401/403
+(revoked key) stalls the feed with zero admin-facing signal.** Traced `index.ts:174-177,267-268`:
+`REQUEST_REJECTED` sets neither `sawRateLimited` nor `sawClean`, so a run that only sees it
+computes `observation = 'no_signal'`. Read `functions/src/util/notifyOnce.ts` in full and grepped
+`functions/src/streamingOffers/budget.ts`'s `reserveThrottleSignal`: `'no_signal'` is an early-
+return no-op, never reaches `notifyOnceForCycle`/`sendAdminSystemNotification`. `computeHealth`
+(`logic.ts:117-124`) is a pure function of `workSetSize`/budget, not actual fetch success, so
+`streamingHealth` doesn't flag it either. Net effect: a rotated/expired MOTN key breaks the run
+on title 1 every day, forever, with the only trace a Cloud Logging `logger.error` line — no admin
+inbox notification, unlike the 429 path's 2-consecutive-confirmation escalation. Recommended
+wiring `REQUEST_REJECTED` into the same once-per-cycle admin-notify path; not blocking since it's
+an observability gap, not a new trust-boundary crossing.
+
+**Shared-checkout hazard, 4th occurrence.** While reviewing, `motnRequest.ts`'s WORKTREE copy was
+caught mid-mutation by a live sibling process — polled `md5sum` three times inside minutes and
+got three different hashes, none matching the staged blob at that instant; a raw `Read` at one
+point captured an actual mutant (`400||401||403` enumerated instead of the real `>=400&&<500`
+range). Resolved per the (now-updated) principle: `git show :functions/src/streamingOffers/motnRequest.ts`
+is immune to worktree churn and IS what would be committed; polled `git show :path | md5sum` vs
+`md5sum path` until they matched, then `Read` at that moment (hash `6759a7aa…` confirmed both
+before and after the Read call) — that Read is what the findings above are based on. All other
+four files were stable throughout (worktree hash == staged blob hash on first check, no churn).
+
+Folded into knowledge.md: added a new "Cost, budgets, rate limits, fan-out" bullet on
+stop-the-run governors needing the per-title input actually validated (the tier-0-immortality
+class). Extended the "Shared-checkout hazard" bullet with "review the STAGED blob via `git show
+:<path>`, not `Read`'s worktree" as the concrete resolution technique (4th occurrence now).
+Compressed roughly a dozen bullets across the file (Firestore-rules, Admin-SDK, cross-account,
+GDPR, review-scope sections) by 10-60 chars each — no content class dropped, only redundant
+wording — to make room and land at 29,998/30,000.
+
+**REVIEW-VERDICT: fail (1 blocking)**
+
+### 2026-08-12 (later) — BIN-856 round 3: correcting round 2's severity premise, everything else re-verified
+
+Re-reviewed staged diff (same six files as round 2: `functions/src/streamingOffers/{motn.ts, index.ts,
+motnRequest.ts, motnRequest.test.ts}`, `functions/src/leavingRollup/motnChanges.ts`, `tasks/todo.md`), all
+opened via `Read` this round (no shared-checkout churn observed — worktree matched what round 2 pinned).
+
+**(1) Round-2 premise checked against Malin's live probe — CONFIRMED WRONG, and the correction holds up under
+my own re-derivation, not just accepted on say-so.** Round 2 explicitly flagged its own weak point ("plausible,
+never verified live") when it assumed a malformed `tmdbId` (`.../shows/movie/NaN`) draws the same HTTP 400 a
+bad query param does. Malin's probe against the production key (`movie/NaN`, `movie/''`, `movie/abc`,
+`movie/-1`, `movie/0`, all → 404 `{"message":"not found"}`) is the more plausible real-world behavior on
+reflection: a REST API validating a QUERY PARAMETER's VALUE (`output_language=sv`) and a REST API resolving a
+PATH SEGMENT to a resource are different validation layers, and "can't find a resource matching this path" is
+the standard 404 semantic, not 400 ("your request is malformed"). Traced the consequence in `motn.ts`/
+`motnRequest.ts`: `classifyStatus(404)` → `'no-offers'` → `motn.ts:47` returns `[]` — the SUCCESS branch, never
+touching `disposition !== 'ok'` at all, so `REQUEST_REJECTED` is structurally unreachable for this input. Round
+2's "the governor breaks the run, discarding the rest of the day's budget" claim does not hold for this
+specific trigger (a non-numeric/absent `tmdbId`); it would still hold for a genuinely malformed REQUEST shape
+(bad header, wrong content-type) if MOTN 400s those, which this diff doesn't newly introduce.
+
+**Re-derived the ACTUAL bug the guard closes, since round 2's mechanism was wrong: a quota LEAK, not a
+run-stall.** Without `index.ts`'s new `Number.isFinite(it.tmdbId)` filter in `readWorkSet`, an item with
+non-finite `tmdbId` enters the work set, gets selected as immortal tier-0 (`readExisting` skips it via its own
+existing `!Number.isFinite(tmdbId) continue`, so it never accrues a `checkedAt` and never leaves "never
+checked"), reaches `fetchOffers`, draws a 404 → `[]`, and the run loop's success branch (`index.ts:218-224`)
+WRITES a `streamingOffers` doc keyed by `streamingOffersDocId(mediaType, NaN)` with `checkedAt: nowMs` — but
+`readExisting`'s own guard means that write is never recognized as "checked" on the NEXT run either (re-derived
+via `parseTmdbIdFromDocId`: a docId like `movie_NaN` has a non-digit suffix, parses back to `NaN`, still fails
+`Number.isFinite`). So the item is re-picked and re-fetched every single run, forever, spending one
+`reserveMotnSlot` reservation per run (`index.ts:191-196`, before the fetch, never refunded) on a call that can
+never succeed. At `PER_RUN_SELECT=9`, one such doc is a steady ~11%/run tax; enough such docs (attacker- or
+just carelessly-created watchlist items with junk `tmdbId`, since `firestore.rules`' `isValidWatchlistItem`
+`hasOnly`-whitelists the key without binding its type) could fill all 9 slots and crowd out every legitimate
+refresh for the day — the same eventual "stalls the feed" outcome as round 2 claimed, reached by volume rather
+than by the single-item `REQUEST_REJECTED` break.
+
+**Guard placement and completeness — verified correct.** `index.ts:72`:
+`if (isIntentTitle(it) && Number.isFinite(it.tmdbId)) items.push(it);` — checks `it.tmdbId`, the value already
+resolved via `resolveTmdbId(x.tmdbId, d.id)` two lines above (the SAME value that flows unchanged into
+`fetchOffers`/`offersUrl` downstream, never re-derived), at the earliest point before the item enters
+`items[]`/`dedupeIntent`/`selectRefreshBatch` — mirrors `readExisting`'s existing guard exactly, same predicate,
+same reasoning. Confirmed `resolveTmdbId` can return `NaN` here by reading `shared/mediaTypeDocId.ts` in full: a
+watchlist doc with a non-numeric/absent `tmdbId` field and a doc id with no digit suffix falls through both the
+field branch (`Number.isInteger` fails) and the doc-id branch (`parseTmdbIdFromDocId` requires
+`/^[0-9]+$/`) to `NaN`. No gap: this is the ONLY place `WorkItem`s are minted in this file.
+
+**(2) `motnChanges.ts:132` condition — correct, confirmed no dead/wrong branch.** `res.status===429` is handled
+in an earlier, separate branch (lines 109-113: warn + `rateLimited=true` + `break`) that exits the loop before
+reaching the `!res.ok` block, so `res.status !== 429` in the `error`-vs-`warn` condition is redundant-but-
+harmless defensive code, not a live bug. `>=400 && <500 && !==429` → `logger.error` (a 4xx here is OUR defect,
+matches the file's own comment and the BIN-856 shape: `complete` stays false, stale rollup served
+indefinitely); everything else (5xx, and the already-excluded 429) → `logger.warn`. Matches intent. No secret in
+either call: `detail = { body: body.replaceAll(key, '[redacted]').slice(0,300) }` built once, reused for both
+branches; `key` is guaranteed non-empty (early `if (!key) return null` above); neither log-message template
+string interpolates `key`.
+
+**Docblock vs return union — matches exactly.** `motn.ts:19-25`'s four-outcome docblock (`Offer[]`/`null`/
+`RATE_LIMITED`/`REQUEST_REJECTED`) traced against every return statement in `fetchOffers`: missing-key → `null`;
+`'no-offers'` → `[]`; `'rate-limited'` → `RATE_LIMITED`; `'rejected'` → `REQUEST_REJECTED`; `'retry'` (5xx/other)
+→ `null`; `'ok'` → parsed `Offer[]` (which can itself legitimately be `[]`, matching the docblock's own "`[]`
+also means no SE offers" note); catch block (network/timeout) → `null`. No fifth path, no undocumented one.
+
+**`tasks/todo.md` — no secrets.** Read in full: problem statement, router output, build list, an explicit
+"waiting on Malin" section linking to a report file path (no key/token in the path or its contents), and
+acceptance criteria. Clean.
+
+**Round-2 Medium (401/403 stalls the feed silently) — confirmed recorded, not re-filed.** `tasks/todo.md`'s
+"Utanför denna plan — väntar på Malin" section names this exact gap (`streamingHealth` blind to actual fetch
+outcome; a revoked key stalls the flow with no admin signal) and states Malin has explicitly asked to see the
+proposal first, linking `2026-08-11-streaminghealth-forslag.html`. Matches the brief: recorded, out of scope,
+not blocking. Checked `.claude/rules/accepted-deviations.md` — no entry covers this specific gap yet (it's
+correctly NOT there; Malin's "show me the proposal first" is a parking instruction in the ticket/plan, not
+(yet) a ratified accepted-deviations.md entry) — nothing to file, nothing to re-flag.
+
+No blocking findings this round.
+
+Folded into knowledge.md: rewrote the round-2 "stop-the-run governor" bullet (Cost/budgets section) to record
+the corrected mechanism — verify the vendor's ACTUAL status live rather than assuming a plausible one, and
+recharacterized the bug as a quota LEAK (immortal tier-0 re-pick) rather than a run-STALL (the fix is identical
+either way, so this doesn't change the required remediation, only the accurate severity story). Compressed
+~15 bullets across the file by trimming redundant words (no content class dropped) to land at 29,998/30,000
+after the addition.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-12 (round 4) — BIN-856 round 4: guard relocated from call site into isIntentTitle, narrow re-check
+
+Staged diff unchanged in file set from round 3 (`functions/src/streamingOffers/{motn.ts, index.ts, logic.ts,
+logic.test.ts, motnRequest.ts, motnRequest.test.ts}`, `functions/src/leavingRollup/motnChanges.ts`,
+`tasks/todo.md`) — `logic.ts`/`logic.test.ts` are new to the file list this round; everything else re-Read in
+full this round per the marker-free proof-of-review rule.
+
+**(1) Guard relocation traced, no bypass opened.** Round 3 pinned the `Number.isFinite` guard as
+`index.ts:72: if (isIntentTitle(it) && Number.isFinite(it.tmdbId)) items.push(it);`. This round moves the
+`Number.isFinite(item.tmdbId)` check to the FIRST line of `isIntentTitle` itself (`logic.ts:47`), and the call
+site collapses to `if (isIntentTitle(it)) items.push(it);` (`index.ts:66`). `grep -n isIntentTitle` across the
+whole repo: exactly two non-comment call sites, `index.ts:66` (the only place `WorkItem`s are minted —
+confirmed by re-reading `readWorkSet` in full, one `items.push`, no second path) and `logic.test.ts` (the new
+`describe('isIntentTitle')` NaN/Infinity/-Infinity cases, `logic.test.ts:43-51`). No other caller exists, so
+there is no second call site whose security posture could be affected by the predicate getting stricter — the
+relocation is a pure move, not a widening or narrowing of what's reachable. Motive matches the in-code comment
+exactly: `index.ts` imports `firebase-admin` and can't be unit-tested, so the guard has to live in `logic.ts` to
+be pinned by `logic.test.ts` rather than only asserted by inspection.
+
+**(2) motn.ts / motnChanges.ts / motnRequest.ts / motnRequest.test.ts — content re-read in full, byte-for-byte
+matches what round 3's archive entry quoted:** redaction order in both files is still
+`body.replaceAll(key, '[redacted]').slice(0, 300)` (redact-then-truncate, correct order); `classifyStatus`'s
+4xx-except-404/429 → `'rejected'` mapping unchanged; `motn.ts`'s four-outcome docblock still matches every
+`fetchOffers` return; `motnChanges.ts:132` condition still `>=400 && <500 && !==429` → `error`, else `warn`,
+detail built once and reused for both branches, `key` still guaranteed non-empty by the early-return above. No
+functional delta in these four files this round — they're staged as part of the same overall diff but nothing
+in them changed since round 3's review.
+
+**(3) `tasks/todo.md` re-read in full.** No secrets (no literal key value anywhere, only prose describing the
+redaction and a report-file path). Still correctly parks the 401/403 `streamingHealth` observability gap as
+"waiting on Malin, proposal already written" — not re-opened per this round's explicit instruction, and
+confirmed against `accepted-deviations.md` that it has no entry there yet (correct: it's a parking note in a
+ticket, not a ratified deviation).
+
+No blocking findings this round. No new failure class — this is a correct, narrow refactor of round-3's
+already-verified guard, not a new pattern requiring a knowledge.md edit.
+
+**REVIEW-VERDICT: pass (0 blocking)**

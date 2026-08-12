@@ -17866,3 +17866,596 @@ scripts/check-public-env.test.mjs` → 18/18, `node scripts/check-public-env.mjs
 scratchpad snapshot after every restore.
 
 **REVIEW-VERDICT: fail (1 blocking)**
+
+## 2026-08-11 — hasLivePushToken (BIN-849?) push checkbox reads the doc, not the pointer
+
+**Diff reviewed** (5 files staged): `src/lib/firebase/messaging.ts` (+46, new `hasLivePushToken`),
+`src/lib/firebase/messaging.livetoken.test.ts` (new, 109 lines, 7 tests), `src/components/settings/NotificationsSection.tsx`
+(+30, wires the async doc-check into the effect + a "push died" hint paragraph),
+`src/components/settings/NotificationsSection.test.tsx` (+71, 6 new tests in a "the document
+decides, not the pointer" describe block), `tasks/todo.md` (plan, all acceptance boxes still
+unchecked `- [ ]`, honest about not-yet-verified state).
+
+Snapshot shas before mutating: `messaging.ts` 81f5171134eda6eff09883292a26f06b0b690fdc,
+`NotificationsSection.tsx` 82ddedf8ce88fad4267910262564c2906bfbd5a6 — worktree == index both
+before and after every restore in this run (`git status --porcelain` clean `M ` for both
+throughout).
+
+**Mutations run (scratchpad-backup/restore, `rm -rf node_modules/.vite/vitest` before every
+run, grep before+after each mutant):**
+
+1. Remove `if (snap.metadata.fromCache) return true;` (trust-a-cache-absence) →
+   **2/7 red** in `messaging.livetoken.test.ts` ("stays true when … local cache",
+   "a cache-only answer never clears a pointer …"). Matches the handed-down count.
+2. `catch { return true; }` → `return false;` (thrown-read-reads-as-gone) →
+   **1/7 red** ("stays true when the read throws …"). Matches.
+3. Remove `clearLocalPushTokenId(uid);` in the doc-missing branch (no-self-heal) →
+   **1/7 red** ("is false — and drops the stale pointer …"). Matches.
+4. Drop the `hasLivePushToken(uid).then(...)` call from the component's effect
+   (doc-check-dropped-in-component) → **2/10 red** in `NotificationsSection.test.tsx`
+   ("un-ticks when the pointer survived…", "tells the user…"). Matches.
+5. Hint gate `supported && pushEnabled && !hasDeviceToken` — tested per TERM, not as a
+   block, because the handed-down claim was "2 red" for the whole gate:
+   - drop `!hasDeviceToken` only → **1/10 red** ("says nothing when the device really is
+     registered").
+   - drop `pushEnabled` only → covered separately by ("says nothing when the account
+     itself has push off") → **1/10 red** in that direction too.
+   - drop `supported` only (`pushEnabled && !hasDeviceToken && (`) → **0/10 red — GENUINE
+     SURVIVOR.** No fixture in the "document decides" describe block ever sets
+     `isPushSupported` to false, so a browser where push isn't supported at all would
+     show BOTH "Push-notiser stöds inte i den här webbläsaren" AND "Den här enheten
+     skickar inte push just nu — kryssa i rutan…", instructing the user to tick a
+     checkbox that the same render pass doesn't emit. MED, not blocking (cosmetic/
+     confusing, not data-loss) — filed as a finding, not something I fixed.
+   - Collapsing the WHOLE condition to `true` (all three terms at once) reproduces
+     **2/10 red** — the reported number — but that's the two fixtures that already
+     disagree on `pushEnabled`/`hasDeviceToken` flipping together; it doesn't mean the
+     3rd term is covered. Corrected the count; folded the general lesson (aggregate
+     counts on composite guards are ambiguous between "drop one term" / "drop the whole
+     condition") into the existing dual-guard bullet.
+
+**Hunted, not in the handed-down list:**
+
+- **`cancelled` guard in the component's effect — CONFIRMED DEAD.** Removed the
+  `if (!cancelled)` check (`.then(live => { setHasDeviceToken(live); })` unconditional)
+  → **0/10 red**, full file green including the test literally named "paints from the
+  pointer first, so a slow read cannot blank a working box." That test only ever holds
+  ONE promise pending and releases it — no test in the file changes `busyKeys` (the
+  effect's own re-run trigger) while a prior read is still in flight, so the exact race
+  the code's own comment names ("a slow read from the previous run could otherwise land
+  after a newer one and overwrite it") is never driven. Confirmed the reviewer's own
+  suspicion literally — "I am not sure one does" was correct. Folded as a new bullet
+  under "Vacuous / non-discriminating oracles" (async-cancellation-guard pattern, first
+  instance in this file).
+- Optimistic first paint (sync `setHasDeviceToken(hasLocalPushToken(uid))` before the
+  async call) — removed the line → **2/10 red** (the pre-existing "is ticked when the
+  account wants push…" test AND the new "paints from the pointer first" test, in
+  lockstep). Real, not vacuous — no mutation found that flips one without the other,
+  which does make "paints from the pointer first" look like a subset of the pre-existing
+  test rather than incremental proof; noted as LOW/documentation in the reply, not filed
+  as a defect (its own construction — release to the SAME value `true` the default mock
+  already uses — can't currently distinguish itself from the older test; releasing to
+  `false` instead would, but that would overlap with the "un-ticks…" test's job instead).
+- Swapping `snap.exists()` for `snap.metadata.fromCache` in the first condition
+  (`if (snap.metadata.fromCache) return true;` in BOTH slots) → **2/7 red** immediately
+  (the base "exists" test fails on its own already) — well-covered, not a gap.
+
+**Mock shape honesty:** `{ exists: () => boolean; metadata: { fromCache: boolean } }`
+matches the real Firestore JS SDK's `DocumentSnapshot.exists()` method and
+`SnapshotMetadata.fromCache` boolean — verdict: honest, not a shape that passes for a
+reason the real SDK wouldn't.
+
+**State verified independently:** `npx eslint` on all 4 changed/new files — clean.
+`npx tsc --noEmit` — clean. Full `npx vitest run` — **2953 passed, 4 skipped, 237/238
+files passed** — does NOT match the handed-down "2929 passed / 236 files / 4 skipped".
+Traced the gap to THREE unrelated, unstaged, un-reviewed files sitting dirty in the same
+working tree (`scripts/check-public-env.test.mjs`, `scripts/check-workflow-map.test.mjs`,
+`vitest.config.ts`) — a different in-progress ticket (comment references BIN-850) that
+migrates two `node:test` scripts to vitest and widens `vitest.config.ts`'s `include` to
+pick up `scripts/**/*.test.mjs`. `check-workflow-map.test.mjs` currently fails the full
+run with `SyntaxError: Invalid or unexpected token`. None of this is part of the staged
+diff under review (not in `git diff --cached`, not touched by any mutation in this
+session) — reported as an environment-state discrepancy, not folded into this review's
+verdict, since it sits entirely outside the 5 reviewed files.
+
+**Verdict:** 1 blocking. The `cancelled` async-race guard being fully unpinned (0/10 red)
+is graded BLOCKING, not merely LOW/MED: its failure mode is a stale answer overwriting a
+fresh one on the SAME axis the ticket exists to protect (a working device's box reads as
+broken), which per #19 Customer Support's own binding condition is exactly the trigger
+for a user re-ticking push on a device that already works and leaving a second orphan
+token doc — the harm this diff was built to eliminate, reachable through the one path it
+didn't test. The `supported` term of the hint gate (0/10 red, confusing copy pointing at
+a non-existent checkbox) is graded MED, non-blocking — cosmetic, not data-loss. Both
+flagged loudly per the task's explicit ask to "say so plainly if not."
+
+## 2026-08-11 — BIN-849 round 2: cancelled guard + supported term closed, pushBusy dep narrowing raised
+
+**Diff reviewed** (5 files staged, same set as round 1): `src/lib/firebase/messaging.ts`
+(byte-identical to round 1's reviewed blob `81f5171134eda6eff09883292a26f06b0b690fdc`),
+`src/lib/firebase/messaging.livetoken.test.ts` (also byte-identical to round 1,
+`9d9325a5b9876402d2d14d889c90dfeba60c808d`), `src/components/settings/NotificationsSection.tsx`
+(changed from round 1's `82ddedf8ce88fad4267910262564c2906bfbd5a6` to
+`04067cfabaef1888f74f7cd50d1fb2a050fbb026`), `src/components/settings/NotificationsSection.test.tsx`
+(changed to `50f005b1e299457e49be3c5e2e48f19d9233711d`, +51 lines: a new race-condition
+describe block, a new unsupported-browser case, `act()` added around the three
+pre-existing "describes THIS device" renders), `tasks/todo.md` (`5ccc3f54f576e3a75158f87f8b70f2aab67550ac`,
+unchanged content from round 1 — acceptance boxes still literally unchecked `- [ ]`
+despite the ticket being reviewed twice now; not filed, since the doc's own honesty
+about not-yet-verified state was already noted as correct in round 1 and nothing in
+this diff claims otherwise).
+
+**Mutations run (scratchpad-backup/restore, `rm -rf node_modules/.vite/vitest` before
+every run, grep/hash before+after each mutant in the same command where practical):**
+
+1. Remove `if (!cancelled)` in the component's effect → **1/12 red, alone** —
+   "keeps the newer answer when an older read resolves last" (the new dedicated test).
+   CLOSES round 1's blocking finding. Confirmed the fix's own reasoning: the failure
+   is the hint paragraph appearing when it should not (the stale `false` answer won).
+2. Drop `supported` from the hint gate (`supported && pushEnabled && !hasDeviceToken`)
+   → **1/12 red, alone** — "says nothing about this device when push is unsupported
+   here" (the new dedicated test). CLOSES round 1's MED finding.
+3. Narrow `[uid, pushBusy]` to `[uid]` (drop the toggle-settle dep entirely) →
+   **1/12 red, alone** — same race test, fails at `expect(pending.length).toBeGreaterThan(1)`
+   because the effect never re-runs on click. Confirms the new test also pins that
+   the effect depends on SOMETHING that changes when the push toggle settles.
+4. Widen `[uid, pushBusy]` BACK to the pre-fix `[uid, busyKeys]` (the code-review
+   finding's whole point was to stop this) → **12/12 green — GENUINE SURVIVOR.**
+   No test in the file clicks a non-push toggle (`episodeReleases` etc.) and asserts
+   `messaging.hasLivePushToken`'s call count is unchanged, so the suite cannot tell
+   `pushBusy` from the broader `busyKeys` it replaced. LOW-MED, not blocking (cost
+   only — extra reads on unrelated clicks, never a wrong answer on screen). Folded
+   into the existing dep-array bullet in the knowledge file (the BIN-844 `[uid, busyKeys]`
+   entry, since this is a direct sequel to it).
+5. Remove `if (snap.metadata.fromCache) return true;` in `messaging.ts` →
+   **2/7 red** in `messaging.livetoken.test.ts` — matches round 1 exactly (byte-identical
+   file, re-derived rather than inherited per protocol).
+6. `catch { return true; }` → `return false;` → **1/7 red** — matches round 1.
+7. Remove `clearLocalPushTokenId(uid);` in the doc-missing branch → **1/7 red** —
+   matches round 1.
+8. Drop the whole `hasLivePushToken(uid).then(...)` call from the component's effect
+   → **3/12 red** (round 1 reported 2/10 on the pre-race-test file; the growth to 3
+   is the new race test correctly joining, since it too depends on the doc-check
+   existing at all — not a regression in the count, an expected consequence of the
+   suite growing).
+9. (Bonus, not one of the original 8 but checked for completeness) drop `pushEnabled`
+   from the hint gate → **1/12 red, alone** — "says nothing when the account itself
+   has push off", matches round 1's finding that this term was already covered.
+
+**Also verified:** no "not wrapped in act" console output anywhere in the full run
+or the two changed files run in isolation (19/19 green, clean output) — the `act()`
+wrapping added around the three pre-existing render calls does what it claims.
+`npx eslint` on all 4 changed/new source+test files — clean. `npx tsc --noEmit` on
+the whole project — clean. Full `npx vitest run` — **2935 passed, 4 skipped, 237/237
+files** — differs from the handed-down "2931/236" AND from round 1's own recorded
+"2953/237/238", traced to ongoing unrelated churn in the shared checkout (see below),
+not to anything in this diff.
+
+**Index/state hazard, not a code-quality finding but blocking for commit-readiness:**
+mid-mutation-run, `git status --porcelain` showed `src/lib/firebase/messaging.livetoken.test.ts`
+demoted from staged `A` to untracked `??`, while three files from an unrelated ticket
+(`functions/src/streamingOffers/motn.ts`/`motnUrl.ts`/`motnUrl.test.ts`) appeared newly
+staged, and `HEAD` had moved to a sibling session's own commit (`492b95e`, unrelated —
+restores three metrics-events lines). Worktree bytes for the demoted test file still
+hashed identical to the blob originally staged, so the CONTENT review stands, but
+committing at that exact moment would have shipped `messaging.ts`'s new function with
+ZERO test file (untracked ⇒ excluded from `git commit`) while silently bundling an
+unreviewed production change from a different ticket. Folded as a recurrence of the
+existing "Fourth shape" index-mover bullet (BIN-679) — same remedy: name `git add
+src/lib/firebase/messaging.livetoken.test.ts` as a required step, do not run it on the
+coordinator's behalf, and flag the `functions/src/streamingOffers/*` files as needing
+their own explicit decision (in-scope for this commit, or a leftover from another
+session's work-in-progress) before anyone commits.
+
+**Verdict:** 0 blocking code-quality findings — both round-1 findings are closed and
+re-derived red-alone; the `pushBusy` narrowing is a real but LOW-MED, non-blocking cost
+gap (untested, not incorrect). 1 blocking PROCESS finding: the index no longer matches
+reviewed content 1:1 (a staged test file dropped to untracked, unrelated files gained
+staged status) and must be corrected — `git add` the test file, and get an explicit
+answer on the `functions/src/streamingOffers/*` files — before this can be committed
+as the 5-file change it was reviewed as.
+
+## 2026-08-11 — BIN-856: motnUrl.ts extraction, allowlist regression test, response-handling gap
+
+**Diff reviewed** (staged): `functions/src/streamingOffers/motn.ts` (modified),
+`functions/src/streamingOffers/motnUrl.ts` (new), `functions/src/streamingOffers/motnUrl.test.ts`
+(new). Context: every MOTN vendor call had returned HTTP 400 for a month because the URL carried
+`output_language=sv`, which the vendor rejects. Fix extracts URL construction into an admin-free
+`motnUrl.ts` sidecar (no `firebase-functions/v2` import) so it can be unit-tested under the root
+vitest toolchain, following the `leavingRollup/config.ts` precedent (BIN-543). `motn.ts` also
+gained response-body logging on the `!res.ok` branch (BIN-856's actual observability fix — log the
+vendor's error text, not just the status code).
+
+**Read in full** (not diff-only): `motn.ts`, `motnUrl.ts`, `motnUrl.test.ts`, plus for precedent
+comparison `leavingRollup/motnChanges.ts` and `leavingRollup/motnChanges.test.ts`.
+
+**Sha pins** (index == worktree, clean, before AND after the mutation loop):
+- `motn.ts` → `81d217970fe90979c0969a66f13db05912d15b39`
+- `motnUrl.ts` → `031dac9593961e91135b6ca84c84f8eaff5fe8af`
+- `motnUrl.test.ts` → `d83704611ac54d2f7d6b70c4a2f29dba19aaf55c`
+
+**Mutations run** (scratchpad backup, `rm -rf node_modules/.vite/vitest` before each run, restored
++ re-hashed after each):
+1. Re-add `output_language: 'sv'` to `offersUrl`'s `URLSearchParams` → 2/4 red (`never sends
+   output_language` AND `sends ONLY parameters parse.ts actually consumes` both catch it).
+2. Add a DIFFERENT, never-named invalid key (`format: 'json'`) → 1/4 red, ALONE — only the
+   allowlist test (`toEqual(['country'])`) catches it; the `output_language`-specific test stays
+   green as expected. This answers reviewer question 3 directly: the allowlist test, not the
+   named-parameter test, is what generalizes to "any future invalid key," and it does.
+3. Restored, re-hashed, clean control 4/4 green both times.
+
+**Answers to the four assigned questions:**
+1. The "allowlist" test is NOT a tautology — mutation 2 above proves it discriminates against an
+   input class (any unexpected key) the implementation's current triviality doesn't make obvious
+   from reading the source alone.
+2. `motn.ts`'s `fetchOffers` response-handling (404→[], 429→RATE_LIMITED, non-ok→null + the new
+   body-read/log, catch→null) has zero test coverage — confirmed by grep (only `index.ts` and
+   `motnChanges.test.ts`-adjacent files reference `fetchOffers`/`motn.ts`, no `motn.test.ts`
+   exists). Verified this is a genuinely unresolvable-under-CI constraint, not merely asserted:
+   `ls node_modules | grep firebase-functions` at repo root returns nothing (only
+   `functions/node_modules` has it), and `.github/workflows/ci.yml` has no `functions/`-scoped
+   `npm ci` step — so `firebase-functions/v2` cannot resolve under CI's root vitest run. A local
+   `vi.mock('firebase-functions/v2', ...)` probe against `motn.ts` DID import and pass locally —
+   but that's an artifact of this dev checkout already having `functions/node_modules` installed
+   (Node's resolution walks up past `functions/src/streamingOffers/` and finds it there); it is
+   not evidence the same approach would work in CI, and I did not have permission to rename
+   `functions/node_modules` to prove the negative directly (classifier-blocked). Cross-checked
+   against the established precedent in the same module family: `leavingRollup/motnChanges.ts`'s
+   `fetchExpiringChanges` has the IDENTICAL shape (429/non-ok/catch branches, `logger.warn` calls
+   interleaved) and is ALSO completely untested — only its extracted `MAX_PAGES` constant is
+   covered, with the sidecar's own comment stating "importing MAX_PAGES from motnChanges.ts
+   directly broke CI." So this gap is real, pre-existing (not introduced or worsened by this
+   diff), and matches an already-accepted shape elsewhere in the codebase — LOW-MED finding, not
+   blocking, named rather than filed as a fresh defect unique to this diff.
+3. Confirmed by mutation 2 above — yes, any invalid query key is killed alone by the allowlist
+   test, not just `output_language`.
+4. Confirmed three ways: (a) `npx vitest run functions/src/streamingOffers/motnUrl.test.ts` ran
+   and passed 4/4 under the root `vitest.config.ts` (no `--config` flag); (b) root
+   `vitest.config.ts`'s `include` glob `functions/src/**/*.{test,spec}.ts` matches the file by
+   inspection; (c) a full unfiltered `npx vitest run --reporter=verbose` (the same invocation
+   `npm test`/CI's `npm run test:coverage` make) was grepped for `motnUrl` and showed all 4 tests
+   passing inside the full-suite run, not just in isolation.
+
+**Verdict: pass (0 blocking).** One LOW-MED, non-blocking finding filed against `motn.ts`'s
+`fetchOffers` (pre-existing, precedent-matched response-handling gap, not introduced by this
+diff) — reported, not blocking, per the fold-in above.
+
+**Knowledge-file fold-in**: extended the existing "Extract-then-test & layering" bullet on
+`firebase-admin`/`firebase-functions/*` imports with (a) the verification method for the
+"unresolvable" claim (root `node_modules` absence + no `functions/`-scoped CI install step,
+and the local-vs-CI resolution trap a `vi.mock` probe can hide), and (b) the recurring
+untested-response-handling residual across the `motn.ts`/`motnChanges.ts` family, so a future
+review recognizes it as an accepted, precedent-matching shape rather than re-litigating it as a
+fresh gap each time — while still requiring it be named, not silently passed.
+
+## 2026-08-11 (round 2) — BIN-856: motnUrl.ts renamed to motnRequest.ts, classifyStatus added, run-loop wired
+
+**Diff reviewed** (staged, five files): `functions/src/streamingOffers/motn.ts` (modified),
+`functions/src/streamingOffers/index.ts` (modified), `functions/src/streamingOffers/motnRequest.ts`
+(new — round 1's `motnUrl.ts` renamed, module grew a second responsibility: URL construction AND
+`classifyStatus(status)`), `functions/src/streamingOffers/motnRequest.test.ts` (new — renamed from
+`motnUrl.test.ts` with 6 new `classifyStatus` tests added), `functions/src/leavingRollup/motnChanges.ts`
+(modified — round 1's LOW-MED response-body-logging gap now applied here too, matching the sibling fix
+in `motn.ts`). Round 1 reviewed `motnUrl.ts`/`motnUrl.test.ts` and passed 0 blocking; this is a fresh
+review of the renamed/expanded files, not an inherited verdict.
+
+**Read in full**: `motnRequest.ts`, `motnRequest.test.ts`, `motn.ts`, `index.ts`, `motnChanges.ts`,
+`budget.test.ts` (for RATE_LIMITED-break precedent check), `.claude/rules/accepted-deviations.md`.
+
+**Sha pins** (index == worktree throughout, re-checked after every mutation restore):
+- `motnRequest.ts` → `9851ed04f5507a0c675e45489240691c71b8a372` (staged `A`)
+- `motnRequest.test.ts`, `motn.ts`, `index.ts`, `motnChanges.ts` — not independently mutated, read
+  and diffed only.
+
+**Confirmed no stale `motnUrl.*`**: `git log --all -- functions/src/streamingOffers/motnUrl.ts
+functions/src/streamingOffers/motnUrl.test.ts` returns nothing (never committed — round 1's marker
+described a staged, uncommitted state). `find . -iname "motnUrl*"` only hits
+`functions/lib/streamingOffers/motnUrl.{js,js.map,test.js,test.js.map}`, which is `functions/lib/`
+gitignored build output (`functions/.gitignore:2: lib/`), stale from a local `tsc` run, invisible to
+git and CI. Git did not detect the rename as a rename (`git diff --cached --name-status -M` shows `A`
+not `R`) because the file grew substantially (32→77 lines) — expected, not a defect.
+
+**Mutations run** (scratchpad backup at `motnRequest.ts.bak`, `rm -rf node_modules/.vite/vitest`
+before every run, `grep -n MUTANT` before AND after each run in the same command block, restored +
+re-hashed via `git hash-object`/`git rev-parse :<f>` after each):
+1. Reverted the 4xx rule from `status >= 400 && status < 500` to an enumerated
+   `status===400||401||403` list → **1/10 red, and only the SWEPT PROPERTY test** ("never lets a
+   request-shape error masquerade as a per-title miss", the `for (400..500)` loop) catches it — all
+   three dedicated example fixtures (`classifyStatus(400)`/`401`/`403` individually asserted
+   `'rejected'`) stay green, because the enumeration still lists exactly those three codes. This is
+   the load-bearing result: without the property test, this exact regression (the one BIN-856 names
+   as the actual incident mechanism — "enumerating codes just leaves the next unlisted one free to
+   drain the quota") would ship silently.
+2. Made 404 fall into 'rejected' (removed its dedicated branch) → 1/10 red alone (`treats "not in the
+   catalogue" as a real answer` fails: `expected 'rejected' to be 'no-offers'`).
+3. Made 429 fall into 'rejected' (removed its dedicated branch) → 1/10 red alone (`stops the run when
+   the vendor throttles us` fails: `expected 'rejected' to be 'rate-limited'`).
+4. Restored, re-hashed identical to pre-mutation sha after each of the three mutations; clean control
+   10/10 green each time; final restore confirmed via `git status --porcelain` showing clean staged
+   `A` (no unstaged delta).
+
+**Contamination note**: a background full-suite run launched in parallel with mutation 1 (to answer
+question 4) overlapped with the mutation edit/restore cycle and came back "1 failed" — this is
+expected cross-contamination from running a full suite concurrently with in-place mutation edits on
+the same file (per the standing "prove the mutation landed / restore-then-reverify" protocol), not a
+real defect. Re-ran the full suite clean AFTER all mutations were restored and confirmed 10/10 for the
+new tests and `237 passed (237) / 2943 passed, 4 skipped (2947)` for the whole suite.
+
+**Answers to the four assigned questions:**
+1. The new `classifyStatus` tests are NOT merely restating branches. The dedicated per-code examples
+   (400/401/403/429/404/500/502/503) are effectively documentation-that-happens-to-pass; the ONE test
+   that actually protects the stated incident mechanism is the final swept property, proven by
+   mutation 1 above — deleting the property test (mentally) while keeping the six example `it`s would
+   leave the enumerated-list regression completely uncaught.
+2. Mutation testing: yes to both asked mutants — the enumerated-list revert is red-alone via the
+   property test (mutation 1); making 404 or 429 fall into 'rejected' is red-alone via each one's own
+   dedicated example test (mutations 2–3). All three verified with the mutant grepped present
+   immediately before AND after the vitest run, in one command, restored from the scratchpad backup
+   (never `git checkout --`), re-hashed to the pre-mutation sha after every restore.
+3. index.ts's `if (result === REQUEST_REJECTED) break` is unit-untested (as expected — `index.ts`
+   imports `firebase-admin`/`firebase-functions/v2`, unresolvable under the root CI toolchain, no
+   `functions/`-scoped `npm ci` step exists). Checked codebase precedent rather than filing a fresh
+   gap: grepped the same file's pre-existing, same-shape `RATE_LIMITED` break — `if (result ===
+   RATE_LIMITED) { sawRateLimited = true; ...; break; }` sits three lines above the new code, has
+   shipped since BIN-320, and has **never** had a test anywhere (`budget.test.ts` only covers the pure
+   `reserveThrottleSignal`/`reserveSlot` helpers the loop calls into afterward, not the loop's own
+   branch-and-break; no `src/test/rules/**` file references `streamingOffersRefresh` either). The
+   pure classification that actually drives both breaks (`classifyStatus`) is now thoroughly unit- and
+   mutation-tested in `motnRequest.test.ts`; only the one-line "does the imperative loop branch on the
+   signal" wiring is not, which matches this codebase's established test-extraction split (pure logic
+   in an admin-free sibling, tested; the `onSchedule` handler that calls it, not — see
+   `.claude/rules/code-style.md`'s test-extraction convention). **Recommendation: do not force
+   extraction of a `shouldStopBatch` helper for this alone** — the risk that mattered (an unlisted 4xx
+   code silently retrying per-title) lives entirely in `classifyStatus` and is now closed; the residual
+   is "does `index.ts` correctly call the tested function and act on its tested output," a category of
+   bug (typo'd equality check, wrong branch order) that null/RATE_LIMITED already carry unaddressed
+   with no reported incident. Reported as informational, precedent-consistent, non-blocking — not
+   filed as a fresh BIN-856-adjacent gap.
+4. Confirmed three ways, none assumed: (a) `npx vitest run --config vitest.config.ts
+   functions/src/streamingOffers/motnRequest.test.ts --reporter=verbose` ran and passed 10/10 in
+   isolation; (b) root `vitest.config.ts`'s `include: ['functions/src/**/*.{test,spec}.ts', ...]`
+   matches the file by inspection (unchanged from round 1, no `functions/` vitest config of its own
+   exists); (c) a clean full unfiltered `npx vitest run --config vitest.config.ts` (run only AFTER all
+   mutation restores, avoiding the contamination noted above) came back `237 passed (237)` test files,
+   `2943 passed | 4 skipped (2947)` tests — the new file counted among the 237. No stale
+   `motnUrl.test.ts` exists anywhere in git history or the tracked tree (confirmed above).
+
+**Additional finding, not one of the four assigned questions (LOW, non-blocking):** the new
+redact-then-truncate log line (`body.replaceAll(key, '[redacted]').slice(0, 300)`, whose ORDER the
+`motn.ts`/`motnChanges.ts` comments explicitly reason about — "redact BEFORE truncating matters
+because an echoed key sits at the START of a short message") is duplicated verbatim across two
+admin-importing, unit-untestable files (`motn.ts`, `motnChanges.ts`) with zero test coverage of the
+ordering claim itself. This is exactly the kind of one-line boundary bug (swapping the two calls, or
+truncating first) mutation testing would catch immediately, and it would be a cheap extraction into
+the existing admin-free `motnRequest.ts` sidecar (e.g. `redactAndTruncate(body, key, maxLen)`) with a
+direct unit test asserting a key placed at position 0 of a body longer than 300 chars is not visible
+in the output. Not filed as blocking because the log line is admin-console-only (no user-facing blast
+radius) and the ordering is currently correct by inspection — but it is a real, easily-testable gap in
+a diff that is specifically about a vendor-quota incident and specifically added a security-review
+comment about this exact ordering; naming it now is cheaper than waiting for the next round to find it
+independently.
+
+**Verdict: pass (0 blocking).** One LOW informational note (index.ts's REQUEST_REJECTED break, matched
+against the pre-existing untested RATE_LIMITED precedent in the same loop) and one LOW non-blocking
+finding (duplicated, untested redact-before-truncate ordering across `motn.ts`/`motnChanges.ts`) —
+both reported, neither blocking.
+
+**Knowledge-file fold-in**: (a) extended the "Boundary & threshold completeness" section with the
+swept-property-vs-enumerated-example distinction for range classifiers (a classifier's individual
+example fixtures for named exception codes do not catch a revert to an enumerated list covering
+exactly those codes — only a property swept over the whole range does); (b) extended the
+"read accepted-deviations before filing" bullet in "Review protocol & scope discipline" with the
+same-file sibling-precedent check (an untested imperative call site can be judged against an
+equivalent-risk sibling in the SAME file/loop that has shipped untested with no incident, rather than
+filed as a fresh gap, when the pure logic it dispatches on is itself tested). **Also noted but not
+fixed in this pass**: `binge-test-reviewer.knowledge.md` is 164,424 chars against its own stated 30k
+cap — the file has been growing by full-detail merges rather than being condensed, and a dedicated
+compaction pass is owed (out of scope for this review).
+
+## 2026-08-12 — BIN-856 round 3: Number.isFinite quota guard, motnChanges error/warn split, docblock check
+
+**Diff reviewed** (staged, six files): `functions/src/leavingRollup/motnChanges.ts` (modified —
+error/warn severity split on the existing `!res.ok` branch), `functions/src/streamingOffers/index.ts`
+(modified — `readWorkSet` gained `&& Number.isFinite(it.tmdbId)`; run loop wired to
+`REQUEST_REJECTED`, already reviewed round 2, unchanged), `functions/src/streamingOffers/motn.ts`
+(modified — `fetchOffers` docblock rewritten to claim four outcomes), `motnRequest.ts`/
+`motnRequest.test.ts` (staged `A`, byte-identical to round 2 — verified by hash, not assumed),
+`tasks/todo.md` (new plan for this round).
+
+**Read in full**: `motnRequest.ts`, `motnRequest.test.ts`, `motn.ts`, `index.ts`, `motnChanges.ts`,
+`motnChanges.test.ts`, `logic.ts`, `logic.test.ts`, `types.ts`, `tasks/todo.md`,
+`.claude/rules/accepted-deviations.md`. `logic.ts`/`logic.test.ts` are UNSTAGED reference reads (not
+part of this diff) to judge the extraction question, not independently mutated as part of this round.
+
+**Sha pins** (index == worktree for every reviewed path, re-checked immediately before writing the
+verdict, HEAD unmoved at `f6340c5` throughout):
+- `motnChanges.ts` -> `e01e0accb392c3774b37f58f3a45c0b08100c64f`
+- `index.ts` -> `15b951072c747e699f7bfc17167fd662b95c22d5`
+- `motn.ts` -> `3d890359dca1f1c41bffb3a75076639b8b2de8b7`
+- `motnRequest.ts` -> `9851ed04f5507a0c675e45489240691c71b8a372` — **matches round 2's recorded sha
+  exactly**, confirming "unchanged since round 2" rather than assuming it.
+- `motnRequest.test.ts` -> `14cbbef2dbb1c3f5e91ae4b2231ac740d9f0ff7b` (round 2 did not record this
+  file's own sha explicitly, but its content — 10 tests, same names — is unchanged; diffed, not
+  re-mutated, since the file it exercises (`motnRequest.ts`) is byte-identical).
+- `tasks/todo.md` -> `0d586fb78330badb23ddeca396609bdedc7ac5a1`.
+An untracked `README.md` appeared at repo root mid-review (not staged, not part of this diff, no
+content examined) — noted, not investigated, out of scope.
+
+**Suite runs** (both AFTER the `--no-cache` requirement, `rm -rf node_modules/.vite/vitest` first):
+1. Scoped: `npx vitest run --config vitest.config.ts --no-cache functions/src/streamingOffers
+   functions/src/leavingRollup --reporter=verbose` -> 8 test files, 94 passed, `motnRequest.test.ts`
+   present with all 10 named cases green (same names as round 2, confirming no silent rewrite).
+2. Full unfiltered: `npx vitest run --config vitest.config.ts --no-cache` -> `237 passed (237)` test
+   files, `2944 passed | 4 skipped (2948)` — one test more than round 2's `2943/4/2947`, from an
+   unrelated concurrent file elsewhere in the tree (not this diff's files, which added zero new
+   tests this round); `motnRequest.test.ts` counted among the 237.
+3. `npx tsc --noEmit -p tsconfig.json` (cwd `functions/`, i.e. `functions/tsconfig.json`) -> exit 0,
+   no output.
+
+**New behaviour, judged against the four assigned questions:**
+
+1. **`Number.isFinite(it.tmdbId)` guard, `readWorkSet` in `index.ts`.** Currently unpinnable —
+   `index.ts` imports `firebase-admin/firestore`, unresolvable under root vitest (same constraint
+   verified round 2). Traced the mechanism by hand: a watchlist doc with a non-numeric `tmdbId`
+   (rules whitelist the key, never bind its type) makes `resolveTmdbId` fall back to the doc id,
+   which is `NaN` for anything without a digits-only suffix; such an item is pushed into the work
+   set every run, can never be fetched successfully, never gains `checkedAt`, and therefore never
+   leaves tier-0 ("never checked", sorted first) — a permanent one-slot-per-run quota drain, the same
+   failure shape BIN-856's headline bug had (though smaller — one item, not nine).
+   **Recommendation: fold `Number.isFinite(item.tmdbId)` into `isIntentTitle` in `logic.ts` rather
+   than leaving it at the call site.** Grounds: (a) `isIntentTitle` has exactly ONE caller (grepped
+   `isIntentTitle` across `functions/src` — the import in `index.ts` and the test file are the only
+   other hits), so folding the AND-term in is behaviour-preserving with zero divergence risk; (b)
+   `isIntentTitle` already receives the full `IntentItem`, which carries `tmdbId` — no signature
+   change; (c) `logic.test.ts` already has a five-case `describe('isIntentTitle', ...)` block, so the
+   new case (`item({tmdbId: NaN})` -> `false`) costs one `it`, not a new test file or harness; (d)
+   this is a direct instance of the "separate the stuck I/O from the extractable decision" principle
+   (BIN-463/464) and `code-style.md`'s test-extraction convention — the guard IS a decision ("is this
+   item eligible for the work set"), not I/O. Did not implement the move myself (review scope, not
+   build scope) — flagged as a MED, non-blocking, cheap-to-close recommendation, named explicitly per
+   the task's instruction to say so plainly rather than merely noting the gap. Folded into the
+   principles file (bullet 64) as a concrete worked instance.
+
+2. **`motnChanges.ts` error-vs-warn split.** `if (res.status >= 400 && res.status < 500 && res.status
+   !== 429) logger.error(...); else logger.warn(...)`. Traced control flow: the function's own
+   preceding `if (res.status === 429) { rateLimited = true; break; }` already exits the loop (not a
+   `continue`) before this block runs, so `res.status !== 429` in the new condition is provably
+   dead/redundant at this call site — defensive, not a bug, not worth a finding. The severity split
+   itself matches its own comment's rationale (a 4xx here is "our defect", and the consequence —
+   `complete` stays false, the public rollup silently never updates — deserves `error` not `warn`).
+   This is the SAME accepted residual class as round 1/2's response-handling gap (knowledge bullet 59:
+   admin-importing fetch response-handling, zero coverage, precedent-matching, LOW-MED not blocking)
+   — `motnChanges.test.ts` still covers only `MAX_PAGES` (confirmed by reading it: 21 lines, one
+   describe block, no `fetchExpiringChanges` import at all). Reported as LOW-MED per established
+   precedent, not filed as a fresh gap. Folded into bullet 59 as a one-line recurrence note.
+
+3. **`fetchOffers`'s docblock, now claiming four outcomes.** Traced every return statement in the
+   rewritten function body against the docblock's four bullets (`Offer[]`, `null`, `RATE_LIMITED`,
+   `REQUEST_REJECTED`): no-key guard -> `null`; `disposition === 'no-offers'` -> `[]` (an `Offer[]`,
+   matches the docblock's "`[]` also means 'no SE offers' (incl. 404)" clause); `disposition ===
+   'rate-limited'` -> `RATE_LIMITED`; `disposition === 'rejected'` -> `REQUEST_REJECTED`; the
+   remaining `disposition === 'retry'` (5xx) -> `null`; the `try`'s success path ->
+   `parseStreamingOptions(...)`, an `Offer[]`; the `catch` -> `null`. Every code path lands in one of
+   the four documented buckets; the docblock does not overstate or understate. No finding.
+
+4. **Full-suite confirmation.** Done as suite run 2 above — green, `motnRequest.test.ts` present in
+   the unfiltered run, no `.skip`/`.only`/weakened assertions found anywhere in the diff.
+
+**`tasks/todo.md` cross-check**: read in full. Its "Vad som byggs" item 5 (`readWorkSet validerar
+tmdbId`) states the rationale accurately (matches the in-code comment and my own trace above) and
+does NOT claim it is tested — consistent with reality. Its "Medvetet utelämnat" section explicitly
+defers extracting a shared `redactVendorBody()` helper (duplicated verbatim in `motn.ts` and
+`motnChanges.ts`, flagged LOW round 2) with a stated reason, and explicitly explains why
+`motnChanges.ts` gets no `REQUEST_REJECTED`-equivalent branch (its per-page loop already returns
+immediately on any non-ok status, so there is no per-title quota-drain shape to protect against) —
+verified against the code, true. No self-contradicting or overstated claim found in the doc.
+
+**Accepted-deviations check**: read in full; nothing in this diff matches an existing entry (the
+tmdbTosSweep and visibility-fail-open entries are unrelated surfaces). Nothing filed against it.
+
+**Verdict**: pass (0 blocking). Two non-blocking findings recorded above (MED: fold the
+`Number.isFinite` guard into `isIntentTitle`; LOW-MED: `motnChanges.ts`'s new error/warn split is
+accepted-precedent untestable, same as its sibling).
+
+**Also noted, not fixed**: `binge-test-reviewer.knowledge.md` is ~167k chars against its 30k cap,
+still growing — same standing note as the previous entry; a dedicated compaction pass remains owed
+and out of scope here. Made two small in-place folds this round rather than new bullets.
+
+## 2026-08-12 — BIN-856 round 4: Number.isFinite guard folded into isIntentTitle, call site reverted (round-3 recommendation, closed)
+
+**Diff reviewed** (staged, cumulative rounds 1-4; scoped to round 4's own changes per the task):
+`functions/src/streamingOffers/logic.ts` (modified — `isIntentTitle` now opens with
+`if (!Number.isFinite(item.tmdbId)) return false;`), `functions/src/streamingOffers/logic.test.ts`
+(modified — two new `it`s in the `isIntentTitle` describe block: NaN on both movie/tv, and
+±Infinity), `functions/src/streamingOffers/index.ts` (modified — the `readWorkSet` call site
+reverted from `isIntentTitle(it) && Number.isFinite(it.tmdbId)` to plain `isIntentTitle(it)`, plus
+a comment pointing at `logic.ts`), `tasks/todo.md` (rewritten — BIN-857 filed for the deferred
+`redactVendorBody()` extraction, a deploy step + a "prove it in the live log" step added to
+acceptance criteria). Unchanged since round 3, per the task's instruction to verify rather than
+assume: `motn.ts`, `motnRequest.ts`, `motnRequest.test.ts`, `functions/src/leavingRollup/
+motnChanges.ts` — all four confirmed by hash to be byte-identical to round 3's recorded shas
+(below), not diffed or re-mutated.
+
+**Sha pins** (index == worktree for every staged path, checked at the start AND immediately before
+the verdict; HEAD unmoved at `f6340c5` throughout):
+- `motnChanges.ts` -> `e01e0accb392c3774b37f58f3a45c0b08100c64f` (== round 3)
+- `index.ts` -> `00e4eada77522c7e3c6930d583cf8e69ac0b319a` (round 3 was `15b951072c747e699f7bfc17167fd662b95c22d5`)
+- `logic.test.ts` -> `7c673573f912443d68c1ccb4baed6c4d2a0a02e5` (new — not staged round 3)
+- `logic.ts` -> `cc55ed948ab741582ca12cee4d41cf3b875dfe1e` — **matches the coordinator's claimed sha exactly**
+- `motn.ts` -> `3d890359dca1f1c41bffb3a75076639b8b2de8b7` (== round 3)
+- `motnRequest.test.ts` -> `14cbbef2dbb1c3f5e91ae4b2231ac740d9f0ff7b` (== round 3)
+- `motnRequest.ts` -> `9851ed04f5507a0c675e45489240691c71b8a372` (== round 3)
+- `tasks/todo.md` -> `8ce93ce1e0e0421ef84b7bf3bef1e378aa7baf73` (new content this round)
+
+**index.ts precise delta, proven not assumed**: `git diff 15b951072c747e699f7bfc17167fd662b95c22d5 00e4eada77522c7e3c6930d583cf8e69ac0b319a` (blob-to-blob, bypassing the working tree) shows the ONLY
+hunk is the `readWorkSet` guard line — the pre-existing `Number.isFinite` security-review comment
+and `isIntentTitle(it) && Number.isFinite(it.tmdbId)` replaced by the new BIN-856 comment and plain
+`isIntentTitle(it)`. Nothing else in the file (the `attempted` counter, the `REQUEST_REJECTED`
+break, the `logger.info` field rename to `batch: batch.length, attempted`) moved this round — those
+were already present and reviewed in round 2/3, confirmed identical.
+
+**Mutation run** (own, not inherited — scratchpad backup of `logic.ts`, `rm -rf node_modules/.vite/
+vitest` first, mutant grepped present BEFORE and AFTER the vitest run in one command block):
+1. Replaced `if (!Number.isFinite(item.tmdbId)) return false;` with `// MUTANT: guard removed`.
+2. `npx vitest run --config vitest.config.ts --no-cache functions/src/streamingOffers/
+   logic.test.ts --reporter=verbose` -> **2 failed | 25 passed (27)**, and the 2 failures are
+   `isIntentTitle > excludes a title whose id could not be resolved, however valid it looks` and
+   `isIntentTitle > excludes non-finite ids generally, not just NaN` — the two new tests, alone.
+   All 25 pre-existing cases (including every `dedupeIntent`/`selectRefreshBatch`/`computeHealth`
+   case) stayed green — confirms no existing fixture's `item()`/`existing()` default rode this
+   guard for a new reason (both factories default `tmdbId: 1`, finite).
+3. Restored from the scratchpad backup; `git hash-object` on the worktree AND `git rev-parse
+   :functions/src/streamingOffers/logic.ts` both matched `cc55ed948ab741582ca12cee4d41cf3b875dfe1e`
+   (the pre-mutation, staged sha) after restore — index and worktree both clean.
+
+**Answers to the four assigned questions:**
+1. **Yes, independently confirmed** — mutation run above, coordinator's claimed sha
+   (`cc55ed94...`) matches what I independently pinned; not taken on their word.
+2. **Right place, on balance.** `isIntentTitle` is named for USER intent (vill_se/mina + on a
+   provider), and "has a resolvable id" is a data-hygiene concern, not intent — a strict reading
+   could call this a category error. But: (a) `isIntentTitle` has exactly one caller (grepped
+   `functions/src` for `isIntentTitle`, confirmed: `index.ts`'s import and `logic.test.ts` are the
+   only hits — same fact round 3 established, re-verified), so folding the AND-term in is
+   behaviour-preserving with zero divergence risk; (b) the function already receives the full
+   `IntentItem`, which carries `tmdbId` — no signature change; (c) the alternative (leaving it at
+   the call site) is provably untestable (`index.ts` imports `firebase-admin`, unresolvable under
+   root vitest — same constraint verified rounds 2/3); (d) the in-code comment states the "why
+   here, not there" reasoning explicitly, so a future reader isn't left to guess. This matches
+   `.claude/rules/code-style.md`'s test-extraction convention (pure decision separated from the
+   admin-importing caller) more than it strains `isIntentTitle`'s name. I would not push back on
+   this placement; the alternative (an untestable one-line call-site guard, the shape bullet 64
+   otherwise names as the standard gap) is worse.
+3. **No silent weakening found.** Reverting the mutation showed all 25 pre-existing tests pass
+   for the SAME reasons as before (every fixture's `tmdbId` default is finite, confirmed by
+   reading `item()`/`existing()`'s definitions at the top of `logic.test.ts` — both default to
+   `tmdbId: 1`). No existing assertion's pass/fail now depends on the new guard.
+4. **Full suite green with `--no-cache`.** First run (`--no-cache`, no path filter) came back
+   `236 passed (237) / 1 failed` — the failure was `src/lib/design/consistency.test.ts`'s "no bare
+   Laddar…" test timing out at 5000ms, a filesystem-scan test entirely unrelated to this diff
+   (`src/lib/**`, not `functions/**`). Re-ran that file alone: 10/10 green in 2067ms — confirmed
+   environmental (cold-cache fs-glob scan under load), not a regression from this diff. Re-ran the
+   full unfiltered suite a second time, clean: **237 passed (237) test files, 2946 passed | 4
+   skipped (2950)**. Both new `isIntentTitle` cases confirmed present in a scoped
+   `functions/src/streamingOffers` run with `--reporter=verbose`. `npx tsc --noEmit -p
+   tsconfig.json` (functions package) -> exit 0. No `.skip`/`.only`/`.todo` anywhere in the staged
+   diff (grepped).
+
+**`tasks/todo.md` cross-check**: read in full. BIN-857 is filed for the deferred
+`redactVendorBody()` extraction (matches round 2/3's LOW-MED finding — the plan doesn't overclaim
+it as fixed). The new deploy + "prove it live" acceptance-criteria lines are process, not test
+content — no test-quality concern. Nothing in the doc contradicts the code.
+
+**Accepted-deviations check**: read `.claude/rules/accepted-deviations.md` in full; nothing in this
+diff matches an existing entry (tmdbTosSweep and visibility-fail-open are unrelated surfaces).
+Nothing filed against it.
+
+**Verdict**: pass (0 blocking). The round-3 recommendation (fold `Number.isFinite` into
+`isIntentTitle`) was executed exactly as specified and independently re-verified by mutation; the
+call-site revert was proven minimal by a direct blob-to-blob diff, not assumed from the task
+description. No new findings this round.
+
+**Knowledge-file fold-in**: closed out bullet 64's BIN-856 sentence in place (added a "CLOSED
+2026-08-12, independently re-mutated" clause with the mutation numbers and the sole-caller
+verification) rather than adding a new bullet — this is the same lesson reaching its conclusion,
+not a new one. **Also noted, not fixed**: `binge-test-reviewer.knowledge.md` is ~168k chars against
+its 30k cap — same standing note as the last three entries; the owed compaction pass remains out of
+scope for a single-ticket review.
