@@ -54,33 +54,13 @@ jobs:
       - name: Workflow map paths must exist
         run: node scripts/check-workflow-map.mjs
 
-      # Every scripts/**/*.test.mjs, found BY PATTERN rather than named one by one
-      # (BIN-838). These run on Node's built-in runner — no deps needed — and nothing
-      # else runs them: vitest's include globs cover docs/org/** and functions/scripts/**
-      # but not scripts/**. So while this list was hand-maintained, adding a new script
-      # test gave you a file that passed when run by hand and was silently absent from
-      # every CI run. Quote the glob so NODE expands it, not the shell.
-      - name: Script self-tests
-        run: |
-          set -euo pipefail
-          # Two guards, and the FLOOR is the interesting one. A zero-match glob makes
-          # `node --test` exit 0 having run nothing; a floor of zero would still be
-          # silent when just ONE of the files leaves the pattern — and that single case
-          # is exactly what the hand-written list this step replaced caught loudly
-          # ("Could not find '<path>'", exit 1). Growth needs no edit here, which is the
-          # whole point of BIN-838; a SHRINK is a deliberate act and must edit MIN. If
-          # BIN-850 later migrates these files to vitest, this step fails until someone
-          # deletes it — the right direction to fail in.
-          # `-type f -not -path '*/.*'` makes find's set identical to the one Node's
-          # glob actually runs: Node skips dot-directories, find does not.
-          MIN=2
-          COUNT=$(find scripts -type f -name '*.test.mjs' -not -path '*/.*' | wc -l)
-          if [ "$COUNT" -lt "$MIN" ]; then
-            echo "::error::Only $COUNT scripts/**/*.test.mjs matched, expected at least $MIN -- a script self-test left the pattern, or the glob stopped matching."
-            exit 1
-          fi
-          echo "Running $COUNT script self-test file(s)."
-          node --test "scripts/**/*.test.mjs"
+      # The `Script self-tests` step that stood here was removed by BIN-850: these files
+      # now run under the suite (`npm run test:coverage` here; vitest.config.ts includes
+      # scripts/**/*.{test,spec}.mjs, same include either way),
+      # so keeping the step would run them twice, two ways. Its MIN=2 floor did not come
+      # for free — vitest only fails when its WHOLE include set matches nothing — so it
+      # was replaced in the same commit by scripts/scripts-self-tests-present.test.mjs.
+      # BIN-838 built the step; the floor it argued for survives, in the suite.
 
       # Every NEXT_PUBLIC_* the client reads must be handed to the production
       # build. NEXT_PUBLIC_FCM_VAPID_KEY was not, from May 2026 to 2026-08-10,

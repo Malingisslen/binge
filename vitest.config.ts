@@ -32,6 +32,14 @@ export default defineConfig({
       // convened and whether a sprint may pick a ticket up at all, so its tests belong in the
       // suite everything else runs in — its own `--selftest` flag is wired to no gate (BIN-802).
       'docs/org/**/*.{test,spec}.mjs',
+      // BIN-850: the release-path guards under scripts/ — check-public-env.mjs (the linter
+      // that exists because NEXT_PUBLIC_FCM_VAPID_KEY was missing from the production build
+      // for three months, BIN-849) and check-workflow-map.mjs. They had tests, and `npm test`
+      // ran neither: BIN-802's "a test file outside the include globs is silently never run"
+      // in a second directory. They were covered in CI by a bespoke `node --test` step
+      // (BIN-838); that step is removed in the same commit as this line, so the two must
+      // move together. scripts-self-tests-present.test.mjs replaces its MIN floor.
+      'scripts/**/*.{test,spec}.mjs',
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,

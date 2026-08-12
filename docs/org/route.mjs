@@ -384,8 +384,7 @@ function selftest() {
     //
     // The three BIN-805 cases above still pin `unmapped-code`, and that inconsistency is
     // tolerated on purpose: `--selftest` is invoked by NOTHING — not package.json, not
-    // ci.yml, not deploy.yml (whose "Script self-tests" step globs `scripts/**` and never
-    // reaches docs/org/), not a hook. So a stale pin here false-alarms a human running it
+    // ci.yml, not deploy.yml, not a hook. So a stale pin here false-alarms a human running it
     // by hand; it cannot fail a deploy. The equivalent assertions that DO gate are in
     // route.test.mjs, and those are written to survive an ownership improvement. Wiring
     // this block into a gate, or deleting it in favour of route.test.mjs, is its own job.

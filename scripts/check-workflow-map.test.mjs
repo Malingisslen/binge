@@ -1,6 +1,7 @@
 // Tests for the workflow-map freshness linter's content guards.
 //
-// Run: node --test scripts/check-workflow-map.test.mjs
+// Run: npm test (BIN-850 folded this file into the vitest suite; it used to run
+// only via a bespoke `node --test` step in ci.yml/deploy.yml, and never locally).
 //
 // Covers check 4 (content FLOOR, BIN-459) and check 5 (content RATCHET,
 // BIN-470). These are the anti-silent-loss guards — a feature-revert that keeps
@@ -15,7 +16,7 @@
 // containment, so a renamed key would have dropped the rule silently and '/feed' could
 // be "covered" by an unrelated '/feedback'.
 
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';

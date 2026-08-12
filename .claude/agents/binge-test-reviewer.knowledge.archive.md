@@ -19265,3 +19265,187 @@ is ~183,000 characters — over 6x its own stated 30k-char cap (confirmed via `n
 review's own fold-in adds to that debt rather than reducing it. A single word-level correction
 review is not the right scope to attempt the file's overdue consolidation; flagging it here so
 a dedicated pass picks it up rather than it going unnoticed.
+
+## 2026-08-12 — BIN-850: folding two `node --test` files into vitest, and a self-clearing floor
+
+**Diff reviewed** (staged, HEAD 7051a98, nothing committed): `vitest.config.ts` (additive
+`include` entry `scripts/**/*.{test,spec}.mjs`), `scripts/check-public-env.test.mjs` and
+`scripts/check-workflow-map.test.mjs` (one-line import swap each, `import test from 'node:test'`
+→ `import { test } from 'vitest'`, all 44 assertions byte-identical per `git diff HEAD`),
+`scripts/check-public-env.mjs` and `scripts/check-workflow-map.mjs` (shebang → explanatory
+comment, no logic change), `.github/workflows/ci.yml` + `deploy.yml` (the bespoke `Script
+self-tests` step deleted, replaced by a comment naming the successor), and a NEW file
+`scripts/scripts-self-tests-present.test.mjs` (a floor replacing BIN-838's `MIN=2` CI-step
+floor, 405a2fc).
+
+**Shas**: all 8 staged paths' `git rev-parse :<f>` matched `git hash-object <f>` at the start,
+after every mutation-restore, and at the end (re-checked immediately before writing the
+verdict) — no split, no mover.
+
+**Mutations run, real prod file, restore-and-hash-verify each time (`node_modules/.vite/vitest`
+cleared before every run)**:
+
+1. `mv scripts/check-public-env.test.mjs /tmp/` → `npx vitest run scripts/scripts-self-tests-present.test.mjs`: **2/2 FAILED**, both assertions, naming `check-public-env.test.mjs` as gone. Restored, hash matched backup.
+2. `mkdir scripts/sub && mv scripts/check-workflow-map.test.mjs scripts/sub/` → **1 failed (named presence) / 1 passed (floor)** — exactly the author's claimed split. Restored, hash matched.
+3. Direct-edited the real `scripts-self-tests-present.test.mjs`: dropped `'check-workflow-map.test.mjs'` from `REQUIRED` (file itself untouched on disk) → **2/2 GREEN**. `MIN` dropped from 2 to 1 in lockstep with `REQUIRED.length`; nothing reddened. Restored from scratchpad backup, hash matched (`8e91113e2f279ecbfd1a01daab6c25f9`).
+4. Added a genuine third file `scripts/tempThird.test.mjs` (real `import {test} from 'vitest'`, one passing assertion) → **2/2 GREEN** (expected — growth must not fail). Then deleted it again, re-ran → **still 2/2 GREEN**. This reproduces the exact BIN-838/BIN-849 failure class ("a newly added test went silently missing") that this floor exists to prevent, and neither assertion catches it, because `REQUIRED` never named the third file and `MIN` never moved off 2.
+5. `readdirSync(dir, {recursive:true})` vs the vitest glob: built a standalone probe script reading the same directory the same way. Confirmed it correctly follows subdirectory moves (mutation 2 above already proves this indirectly). Then added `scripts/probeStyle.spec.mjs` — `npx vitest list scripts` collects and runs it (`spec-style` test appears), but the probe's `found` set (matching only `.endsWith('.test.mjs')`) does NOT include it. The file's own comment ("Recursive, to describe the SAME set vitest's `scripts/**/*.{test,spec}.mjs` runs") is therefore false for the `.spec.mjs` half.
+6. Confirmed no call site invokes either guard as `./scripts/...` — grepped `.claude/shared-plugin.json` (`docLinters: ["node scripts/check-workflow-map.mjs"]`), `.claude/hooks/map-freshness.mjs`, `docs/org/route.mjs`'s tier tables, `package.json`, and both workflow files; every one uses `node scripts/<name>.mjs`. `git ls-files -s` confirms both `.mjs` files are `100644` (never executable), and both still run standalone and exit 0 (`node scripts/check-public-env.mjs` → OK, 13 vars; `node scripts/check-workflow-map.mjs` → OK, 95 nodes/29 flows/63/63 coverage).
+7. Full clean-control run: `npx vitest run --no-cache` → **241 files, 3030 passed / 4 skipped** — matches the handoff's claim exactly, not inherited.
+8. `npx vitest run scripts` → **4 files (check-public-env.test.mjs, check-workflow-map.test.mjs, functions/scripts/recap-upload.helpers.test.mjs matched by directory-name substring, scripts-self-tests-present.test.mjs), 72 tests** — matches the handoff's claim.
+9. `npm run typecheck` clean. `npx eslint` on all 5 touched `scripts/*.mjs`/`*.test.mjs` files: clean, zero output. `npm run lint` full run: 95 errors, but every one of the 48 files carrying an actual `error`-severity line (not warning) is under `scripts/recaps/**`, which is entirely untracked (`git ls-files scripts/recaps` → 0, `git check-ignore -q` confirms gitignored) — verified by parsing the lint output block-by-block rather than trusting the claim, per house method.
+
+**Verdict**: PASS with two non-blocking findings, folded into the knowledge file's existing
+GATE_SCRIPTS bullet (same file, same day, same "list decides its own floor" class) rather than
+appended as a new one:
+
+- MEDIUM: `MIN = REQUIRED.length` makes `scripts-self-tests-present.test.mjs`'s second
+  assertion (`found.length >= MIN`) provably unable to fail unless the first assertion (named
+  presence) also fails, since `REQUIRED` is by construction a subset of `found` whenever the
+  first passes. The floor gives real protection to the two files named in `REQUIRED` today
+  (redundant with the name check) and ZERO protection to any script test added later unless a
+  human remembers to add its name to `REQUIRED` too — reproducing the exact silent-loss failure
+  BIN-838/BIN-849 exist to prevent, one layer up, for anything beyond the initial two files.
+  Not blocking THIS diff (today's two files are fully protected, doubly so), but the design
+  should be corrected before it's trusted as a growth-safe floor: hardcode `MIN` independent of
+  `REQUIRED.length`.
+- LOW: the floor's own comment overclaims parity with vitest's `.{test,spec}.mjs` glob — the
+  `.spec.mjs` half is silently unmatched. No such file exists today, so inert; cheap one-line
+  fix (match both suffixes).
+- Also confirmed, no finding needed: assertion fidelity (44/44 byte-identical), shebang removal
+  safety (no `./scripts/` call site, never executable, both run standalone), workflow-file
+  diffs (clean step deletion, gate migrates intact), lint/typecheck claims (both independently
+  verified rather than trusted).
+
+**Housekeeping note, not part of this diff's verdict**: `binge-test-reviewer.knowledge.md` is
+~186,000 characters against its own stated 30k-char cap — a prior entry already flagged this
+same overage on 2026-08-12; this review's fold-in (~2.4k chars, merged into an existing bullet
+rather than appended as a new one) is the smallest addition consistent with the sync contract,
+not an attempt at the overdue consolidation.
+
+## 2026-08-12 — BIN-850 re-review: circular floor closed, one comment found inverted
+
+**Diff reviewed**: `scripts/scripts-self-tests-present.test.mjs` only (staged, HEAD 7051a98).
+Confirmed via `git diff --cached --stat` that all other staged paths (`.claude/agents/*.md`,
+`.github/workflows/ci.yml`/`deploy.yml`, `scripts/check-*.mjs`/`.test.mjs`, `vitest.config.ts`)
+are unchanged since the prior BIN-850 review (2026-08-12, archived above) — nothing to re-read
+there.
+
+**Shas**: `git rev-parse :scripts/scripts-self-tests-present.test.mjs` == `git hash-object` ==
+`ce54cbefda869775ac642450e5e0b2037dc4ccb9` at start, after every mutation-restore, and at the
+end. No split, no mover.
+
+**Mutations run, real file, restore-and-hash-verify each time (`node_modules/.vite/vitest`
+cleared before every run)**:
+
+1. Clean control: `npx vitest run scripts --no-cache` → **4 files, 72 tests, all green** —
+   matches the handoff's claim exactly.
+2. Circularity probe A: dropped `'check-workflow-map.test.mjs'` from `REQUIRED`, file left on
+   disk untouched → **2/2 GREEN**. Correct — nothing is actually missing when only the name is
+   removed.
+3. Circularity probe B (the decisive case, matching the MEDIUM finding's own scenario): same
+   `REQUIRED` edit AND moved `check-workflow-map.test.mjs` out of `scripts/` → **the floor test
+   fails ALONE**: `only 1 script self-test(s) collected, expected at least 2` (1 failed / 1
+   passed). Under the old `MIN = REQUIRED.length` this combination was green (verified in the
+   prior round's mutation 3); under the literal `MIN = 2` it reddens. The MEDIUM finding is
+   fixed.
+4. Re-verified the two previously-established behaviors still hold on the new bytes: deleting
+   `check-public-env.test.mjs` outright → **both assertions fail** (2/2 red, named assertion
+   names the file, floor reads `only 1 … expected at least 2`); moving it into a subdirectory
+   (`scripts/subdir_tmp/`) → **named assertion fails ALONE**, floor stays green (`found.length`
+   unchanged at 2 via `recursive: true`). Both restored, hashes matched.
+5. Swap probe for the file's own claim ("a count alone stays green while one file leaves and
+   another arrives"): moved `check-public-env.test.mjs` out AND dropped an unrelated
+   `scripts/__padding_dummy.test.mjs` in its place (holding `found.length` at 2) → **named
+   assertion fails ALONE**, floor stays green. Confirms the claim is true for this file's own
+   protection: the named checks, not the count, are what catch a swap.
+6. Attempted to construct ANY case where the floor still cannot fail (the reviewer's explicit
+   task): since `MIN` no longer derives from `REQUIRED.length`, the floor's only dependency is
+   `found.length`, which is independent of `REQUIRED`'s contents — deleting both tracked files
+   (regardless of what `REQUIRED` says) always drops `found.length` to 0 and reddens the floor.
+   No circular case survives; could not construct one.
+7. `.spec.mjs` fix re-verified: `found` now filters `f.endsWith('.test.mjs') ||
+   f.endsWith('.spec.mjs')`, matching the LOW finding's remedy.
+8. `npx eslint scripts/scripts-self-tests-present.test.mjs` → clean, zero output.
+9. Direct probe of the file's `recursive: true` justification: ran
+   `readdirSync('scripts')` vs `readdirSync('scripts', {recursive:true})` with
+   `check-public-env.test.mjs` physically relocated into a subdirectory. Non-recursive result:
+   the file is entirely absent from the listing (not merely mis-pathed) — `found.length` drops
+   from 2 to 1, reddening the floor test, AND the named assertion fails too (the exact name is
+   nowhere in a non-recursive listing). **Both assertions fail**, not neither.
+
+**Verdict**: PASS, 1 non-blocking (LOW) finding, folded into the knowledge file's existing
+BIN-850 sub-entry (same bullet, same file, same day) rather than appended fresh:
+
+- Both prior findings (MEDIUM circular floor, LOW `.spec.mjs` parity) are genuinely fixed —
+  verified by the decisive mutation each was filed on, not by re-reading the diff.
+- `MIN = 2` and `REQUIRED`'s two entries are value-duplicated today but not redundant: `MIN` is
+  a count floor independent of names (catches ANY shrink below 2, regardless of which file), and
+  `REQUIRED` is a set of specific names (catches a SWAP even when the count holds steady, per
+  mutation 5). Neither subsumes the other; the duplication is coincidental (there happen to be
+  exactly 2 script self-tests today), not circular.
+- NEW LOW: the file's own comment on `recursive: true` states the wrong failure mode. It reads
+  "A non-recursive read would stay green while a file moved into a subdirectory" — mutation 9
+  shows the opposite: a non-recursive read would redden BOTH assertions (a false alarm), not
+  stay green (a hidden gap), when a file is legitimately relocated to a subdirectory vitest's
+  own `**` glob still covers. The code (`recursive: true`) is correct; only the justifying
+  prose has the direction backwards. Comment-only, no behavior change — not blocking.
+
+## 2026-08-13 — BIN-850 re-review: ci.yml/deploy.yml precision fix + shebang-revert confirmation
+
+**Diff reviewed**: `scripts/scripts-self-tests-present.test.mjs` (staged, HEAD 7051a98), comment-only
+delta correcting a LOW I filed in a prior round. Old comment: "The step it replaces lived outside,
+in ci.yml". New comment: "The step it replaces lived outside, in ci.yml AND deploy.yml — and
+deploy.yml is the load-bearing half: ci.yml does not run on main, so on the only path to production
+that step was the whole gate." Escalated by the integration reviewer on the grounds that ci.yml
+never runs on a push to main.
+
+**Verification 1 — workflow triggers (read, not inferred)**:
+- `.github/workflows/ci.yml` lines 3-7: `on: pull_request: branches: [main]` + `push: branches-ignore:
+  [main]`. Never fires on a push TO main.
+- `.github/workflows/deploy.yml` lines 3-5: `on: push: branches: [main]` + weekly cron + manual
+  dispatch. This is the only workflow that runs on a direct push to main.
+- `git diff --cached -- .github/workflows/ci.yml .github/workflows/deploy.yml` confirms the identical
+  `Script self-tests` step (MIN=2 find-based floor, `node --test "scripts/**/*.test.mjs"`) was removed
+  from BOTH files in this commit, with near-identical replacement comments in each.
+- Conclusion: the corrected sentence is TRUE. ci.yml does not run on main; deploy.yml is the load-
+  bearing copy on the only path to production. My original LOW (naming ci.yml alone) named the wrong
+  half for a sentence about where the guard sits — escalation was correct.
+
+**Verification 2 — mutation-testing protocol, mutant BEFORE and AFTER each run, restored via
+scratchpad backup + `git hash-object` / `git rev-parse :<f>` sha match (never `git checkout --`)**:
+- Clean control: `npx vitest run scripts --reporter=verbose` → 4 files, 72 tests, all passing
+  (matches the handed-down clean-control claim). Full suite: `npx vitest run --no-cache` → 241 files,
+  3030 passed / 4 skipped (matches handed-down claim exactly).
+- Mutation A (missing file): deleted `scripts/check-public-env.test.mjs` entirely. Result: BOTH
+  assertions fire — `Test Files 1 failed (1)`, `Tests 2 failed (2)` (both the named-file check and the
+  floor check red). Restored from scratchpad backup; `git hash-object` / `git rev-parse :<f>` both
+  56c097e3263e234a35f651a0d19e9395abe4fd87, matching pre-mutation and each other.
+- Mutation B (moved to subdirectory): moved `check-public-env.test.mjs` into `scripts/tmpsub/`.
+  Result: named check fires ALONE — `Tests 1 failed | 1 passed (2)` (floor test stays green, since
+  `readdirSync(..., {recursive:true})` still counts the relocated file toward the total). Restored;
+  same sha match confirmed.
+- `const MIN = 2;` confirmed literal (line 45), not derived from `REQUIRED.length` — grepped directly.
+- Verdict: all three behavioral claims in the task (missing→both fire; moved→named fires alone;
+  MIN literal 2) verified TRUE by live mutation, not by reading the diff.
+
+**Verification 3 — shebang-revert housekeeping**:
+- `git status --porcelain scripts/check-workflow-map.mjs scripts/check-public-env.mjs` → empty.
+  `git diff --cached` on both → 0 lines. Both files carry `#!/usr/bin/env node` on line 1 (read
+  directly). Confirms both guard scripts are byte-identical to HEAD and out of this diff, as claimed.
+- `tasks/todo.md` (grepped, read in context) records the original parse-error cause as unexplained:
+  "Cause of the original error: still unknown, and no longer load-bearing" — matches the claim that
+  the shebang-removal theory was walked back rather than papered over.
+- Grepped `scripts/scripts-self-tests-present.test.mjs` for any shebang reference — none exists. No
+  comment in the reviewed file describes a state the revert ended.
+
+**index/worktree integrity**: `git status --porcelain` and `git log -1` re-checked at start and end
+of the run; HEAD stayed at 7051a98 throughout, no sibling-session movers, all touched files' shas
+matched pre- and post-mutation.
+
+**Verdict**: PASS, 0 blocking. The corrected sentence is accurate and specific (both workflow copies
+named, load-bearing one identified by trigger, not guessed); no assertion changed and all three
+named behaviors verified live; no comment in the file describes a now-false shebang state. Folded the
+"check both copies, rank by `on:` trigger" technique and the "claimed root cause walked back, not
+reproduced, recorded as unexplained rather than a fixed mechanism" discipline into the existing BIN-
+850 bullet in the principles file (merged, not appended as a new bullet).

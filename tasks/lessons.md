@@ -214,7 +214,8 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
   `docs/org/route.test.mjs` would have existed, been green when run by hand, and never once
   been executed by `npm test` — the acceptance criterion "runs in the same suite as
   everything else" silently unmet. The repo's other tooling test (`check-workflow-map.test.mjs`)
-  runs under `node --test` in a *separate* CI step, which is why nobody had noticed.
+  RAN under `node --test` in a *separate* CI step until BIN-850 folded it into the vitest
+  suite (2026-08-12), which is why nobody had noticed.
 - **Rule:** Before writing the first test for a script, (a) guard the CLI behind an
   entry-point check (`process.argv[1] === fileURLToPath(import.meta.url)`) and wrap it in
   `main(argv)` so the module is importable, and (b) confirm the new file's path is inside

@@ -43,22 +43,34 @@ Area: `.claude/shared-plugin.json`, `docs/org/route.mjs`, `docs/org/ownership-ma
     (`.tmdb-cache/` divergence must not cause drift).
 
 ## Batch B — test-infra (agent: direct)
-Area: `vitest.config.ts`, `scripts/check-public-env.test.mjs`. Disjoint.
+Area: `vitest.config.ts`, `scripts/check-public-env.test.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/scripts-self-tests-present.test.mjs` (new), `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`. Also touches `.claude/shared-plugin.json` and `docs/org/route.mjs` as follow-through — both are Batch A's declared area, and Batch A is already committed at HEAD, so there is no conflict.
 
 - [ ] **BIN-850** [Tier A, build-review — signoff #7 QA/Test] High — `npm test` never runs
   anything under `scripts/`, including the test for yesterday's push-VAPID guard. Router:
   medium, #7. requiresPlanMode: **true** (single + priority ≤2) — expand this block before
   building, don't halt.
-  - Malin's 2026-08-11 decision: **rewrite the test files to the project's engine
-    (vitest), don't touch CI.**
+  - ~~Malin's 2026-08-11 decision: rewrite the test files to the project's engine
+    (vitest), don't touch CI.~~ **SUPERSEDED 2026-08-12**, watched session: asked whether
+    to leave it (CI already runs the guards) or fix it, she answered "fixa det ändå" to a
+    description of moving the tests so they run **both locally and at publish, from one
+    place**. #8 DevOps's blind critique then made deleting the CI step in the SAME commit
+    a binding condition — leaving it would run the same tests twice, two ways, and its own
+    comment says it is designed to start failing once this lands.
   - `vitest.config.ts` `include` gains `scripts/**/*.{test,spec}.mjs` additively.
-  - `scripts/check-public-env.test.mjs` converted `node:test`→vitest (keep
-    `node:assert/strict`, all 92 assertions intact) and appears in a full `npm test` file
-    list.
-  - **Out of scope, file a follow-up:** `scripts/check-workflow-map.test.mjs` throws an
-    unexplained `SyntaxError` under vitest (plain Node + esbuild both accept it). Convert
-    only `check-public-env.test.mjs` here; file the workflow-map one separately per her
-    comment's own split.
+  - BOTH `scripts/check-public-env.test.mjs` and `scripts/check-workflow-map.test.mjs`
+    converted `node:test`→vitest — a one-line import change each; every assertion is
+    byte-identical, verified against HEAD by the test reviewer.
+  - The `Script self-tests` step is deleted from ci.yml AND deploy.yml, and its `MIN=2`
+    floor replaced by `scripts/scripts-self-tests-present.test.mjs` (vitest only fails when
+    its WHOLE include set matches nothing, so a shrink of these two would hide in the
+    aggregate).
+  - ~~Out of scope: `check-workflow-map.test.mjs` throws an unexplained `SyntaxError`
+    under vitest.~~ **Did not reproduce.** The one-line import change was enough. A
+    separate parse failure DID appear mid-build and was blamed on the files' `#!` shebang;
+    the integration reviewer could not reproduce that either, and restoring the shebang in
+    the real repo passes 20/20 — so the shebang removal was reverted and both guards are
+    byte-identical to HEAD. Cause of the original error: still unknown, and no longer
+    load-bearing.
 
 ## Batch C — streaming-functions (agent: direct)
 Area: `functions/src/streamingOffers/motn.ts`, `functions/src/leavingRollup/motnChanges.ts`,
