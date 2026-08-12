@@ -18459,3 +18459,81 @@ verification) rather than adding a new bullet — this is the same lesson reachi
 not a new one. **Also noted, not fixed**: `binge-test-reviewer.knowledge.md` is ~168k chars against
 its 30k cap — same standing note as the last three entries; the owed compaction pass remains out of
 scope for a single-ticket review.
+
+## 2026-08-12 — BIN-856 part 2: streamingHealth's worse-of-two status (Malin's option B)
+
+**Diff reviewed** (staged, 5 files): `functions/src/streamingOffers/{logic.ts, logic.test.ts,
+types.ts, index.ts}`, `tasks/todo.md`. New pure helpers in `logic.ts`: `classifyRunOutcome`,
+`nextRunsWithoutSuccess`, `feedStatusFor`, `worstStatus`. `computeHealth` gained a required
+`delivery: DeliveryState` argument and now returns `status = worstStatus(capacityStatus,
+feedStatus)` instead of capacity alone. `index.ts` wires: reads the previous streak off
+`healthSnap` (captured at the top of the run, before any writes), computes `delivery`, writes
+`streamingHealth/current` via `.set()` without merge (DeliveryState folded into HealthDoc so
+nothing is dropped), and fires two independent notification branches
+(`prev?.capacityStatus !== health.capacityStatus`, `prev?.feedStatus !== health.feedStatus`) —
+the second is a mechanical split of a single pre-existing `prev?.status !== health.status` guard.
+
+**Shas pinned** (index==worktree throughout, re-checked at start, mid-run, and immediately
+before this verdict — no mover): `logic.ts` 463b2b79…, `logic.test.ts` fa46dd5d…, `types.ts`
+454069999…, `index.ts` 43093162…, `tasks/todo.md` 49fa9481…. HEAD stayed at `fb3e670` the whole
+review. A sibling session staged unrelated files (`docs/org/adr/0019-…`, `package.json`
+unstaged, `scripts/shared-guard.mjs` untracked) mid-review — outside scope, not reviewed, noted
+only.
+
+**Mutations run** (scratchpad backup `logic.ts.orig`, restored + hash-verified
+`463b2b7919f46a6f84be002cc4cf86c9b1f5c48e` after each; `rm -rf node_modules/.vite/vitest` before
+every run; grep for the MUTANT marker before and after each run in the same command block):
+
+1. `classifyRunOutcome`: `sawRateLimited` branch `'inconclusive'`→`'no-delivery'` — **red-alone
+   1/44** ("treats being rate-limited as inconclusive, not a broken feed").
+2. `classifyRunOutcome`: `attempted>0 ? 'no-delivery' : 'inconclusive'` → unconditional
+   `'no-delivery'` — **red-alone 1/44** ("treats a run that never called the vendor as
+   inconclusive, not a failure").
+3. `nextRunsWithoutSuccess`: inconclusive branch `return prev` → `return 0` — **red-alone 1/44**
+   ("leaves an in-progress streak untouched when the run proved nothing") — the subtle one named
+   in the task, confirmed killed.
+4a. `feedStatusFor`: warn boundary `>= FEED_WARN_RUNS` → `> FEED_WARN_RUNS` — **3/44 red**
+   (`warns on the second consecutive empty run`, the BIN-856-anniversary test, plus one
+   `computeHealth` case indirectly).
+4b. `feedStatusFor`: critical boundary `>= FEED_CRITICAL_RUNS` → `>` — **2/44 red** (`goes
+   critical on the fourth`, plus one computeHealth case).
+5. `worstStatus`: `SEVERITY[a] >= SEVERITY[b] ? a : b` → `<=` (returns the LESSER — restores the
+   exact BIN-856 bug) — **7/44 red**, verified with `--reporter=verbose`: both dedicated
+   `worstStatus` tests, both new "is NOT ok" / "reports the worse of the two" computeHealth
+   tests, AND — notably — four PRE-EXISTING capacity-boundary tests that predate this diff
+   (`warns past 31 days`, `critical past 62 days`, `exactly 62 days is still warn`, `zero budget
+   … critical`), all now called with a `healthy` (severity-0) `delivery` fixture. This is the
+   proof for item 2 of the task: the old capacity assertions were NOT hollowed by adding the
+   `delivery` param — they still discriminate on capacity, and incidentally also catch the new
+   worst-of bug because `worstStatus(critical, ok)` returning the lesser flips them too.
+
+Full suite: `npx vitest run --no-cache` — first pass 236/237 files, 2 tests timed out in
+`src/lib/design/consistency.test.ts` (5000ms timeout under load from concurrent heavy vitest
+runs); re-ran that file alone (`10/10 green in 9s`) and re-ran the full suite once clean
+(`237/237 files, 2963 passed, 4 skipped, 0 failed`) — confirmed environmental flake, not a
+diff-caused regression (the file has nothing to do with streamingOffers). New describe blocks
+(`classifyRunOutcome`, `nextRunsWithoutSuccess`, `feedStatusFor`, `worstStatus`) present and
+passing in the unfiltered run (confirmed via a scoped `functions/src/streamingOffers/` run: 6
+files, 96 passed, including all four).
+
+**Item 3 (index.ts wiring)**: judged against in-file precedent, not filed. The two-branch
+notification split is a mechanical copy of the single `prev?.status !== health.status` guard
+that was ALREADY shipping untested in this same file before this diff (git diff shows the old
+line removed, two symmetric new ones added) — same precedent class as the BIN-856-part-1
+`REQUEST_REJECTED`/`RATE_LIMITED` break pair archived 2026-08-11, now folded together in the
+principles file as one bullet. The `.set()` without merge is pre-existing structure (unchanged
+shape); correctness that DeliveryState survives it is covered by `computeHealth`'s own
+mutation-tested return shape, not by index.ts.
+
+**Verdict**: pass (0 blocking). No weakened, deleted, or skipped assertions found. `tasks/todo.md`
+read in full — accurately narrates that the "handbrake" (option B) was lifted by Malin's own
+reply and scopes exactly what changed; no self-certification or false-completion language.
+`.claude/rules/accepted-deviations.md` read; nothing here matches a listed deviation (this diff
+does not touch `mutateEnabled`, Tillsammans, or the visibility fail-open rule) so nothing was
+filed against it.
+
+**Knowledge-file fold**: extended the existing "untested imperative call site judged against
+codebase precedent" bullet (Review protocol & scope discipline) in place, adding the new worked
+instance (transition-guard duplication, not just a loop-break signal) and the
+"mutate-the-new-composing-step-to-audit-old-tests" verification technique, rather than starting
+a new bullet.
