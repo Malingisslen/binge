@@ -55,6 +55,28 @@ Report only what you are genuinely confident about — no nitpick spam.
 ## Output
 Findings as `file:line — issue — suggested fix`, grouped blocking vs. optional.
 End with `INTEGRATION REVIEW: clean` or `INTEGRATION REVIEW: N blocking, M optional`.
+## Isolated rigs — run the scripts, don't recall the rule (BIN-822/836/837)
+
+Give an isolated mutation worktree its OWN dependencies: `npm --prefix <rig> ci`. Never
+`mklink /J` the shared `node_modules` into it.
+
+Tear it down with `node scripts/shared-guard.mjs worktree-cleanup <rig>` — it removes a
+`node_modules` junction ITSELF before git touches the worktree, then verifies the shared
+install survived. `git worktree remove --force` and `rm -rf` both walk THROUGH a junction
+and empty this repo's `node_modules`; that killed every commit gate twice in one session on
+2026-08-08, once because a SIBLING session cleaned up a leftover rig it had not built.
+`node scripts/shared-guard.mjs worktree-cleanup --audit` is read-only and lists which
+leftovers still carry one.
+
+A gate dying on `'tsc' is not recognized` is that wipe, not a missing compiler. `npm run
+preflight` names it and prints the `npm ci` remedy; `lint`, `typecheck` and `test` fire it
+automatically before they run.
+
+The logic lives in the shared workflow-guards plugin so all three repos get it;
+`scripts/shared-guard.mjs` is a pointer, not a copy — never add guard logic to it. A
+SessionStart hook already defuses STALE junctions on its own, so a leftover rig you find is
+usually already inert; still never delete one recursively.
+
 ## Proof of review (mechanical — 2026-08-01)
 
 **You no longer write a marker. Do not create, edit or touch one — writing the ledger is refused.**
