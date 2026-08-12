@@ -3,7 +3,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
-import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId } from './logic';
+import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId, classifyRunOutcome, nextRunsWithoutSuccess } from './logic';
 import { fetchOffers, RATE_LIMITED, REQUEST_REJECTED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
 import { mediaTypeDocId, parseMediaTypeFromDocId, resolveTmdbId } from '../shared/mediaTypeDocId';
@@ -133,6 +133,26 @@ async function notifyAdminStreamingStale(): Promise<boolean> {
   );
 }
 
+/**
+ * BIN-856 (2026-08-12, Malin's option B): the feed is not delivering. Kept
+ * separate from notifyAdmin above, which is about outgrowing the free tier and
+ * would be actively misleading here — nothing about a paid plan fixes a broken
+ * request. This is the message that should have arrived on 2026-07-13.
+ */
+async function notifyAdminFeedDown(
+  status: 'warn' | 'critical',
+  runsWithoutSuccess: number,
+  reason: string | null,
+): Promise<boolean> {
+  const why = reason === 'request-rejected'
+    ? 'Leverantören avvisar våra anrop — se felmeddelandet i loggen.'
+    : 'Inget av anropen gav användbart svar.';
+  return sendAdminSystemNotification(
+    status === 'critical' ? 'Streaming-data: flödet är dött' : 'Streaming-data: inget nytt kommer in',
+    `${runsWithoutSuccess} körningar i rad utan en enda lyckad hämtning. ${why} Titlarnas tillgänglighet visar tills vidare senaste kända data.`,
+  );
+}
+
 /** Cloud Scheduler is at-least-once; skip if we already ran within the last 20 hours. */
 const IDEMPOTENCY_WINDOW_MS = 20 * 60 * 60 * 1000; // 20h — safe margin below 24h schedule
 
@@ -174,6 +194,7 @@ export const streamingOffersRefresh = onSchedule(
     let written = 0;
     let sawRateLimited = false;
     let sawClean = false; // at least one real (non-429, non-null) vendor response this run
+    let sawRejected = false; // the vendor refused the request we built (BIN-856)
     // BIN-856: vendor calls actually SPENT, which is not the same as batch.length
     // now that a rejected request breaks the loop early. This is the number that
     // matters against the monthly cap, so it's the number the closing log reports.
@@ -206,6 +227,7 @@ export const streamingOffersRefresh = onSchedule(
       // way, nine identical 400s a day, because a rejected request was
       // indistinguishable from an ordinary per-title miss.
       if (result === REQUEST_REJECTED) {
+        sawRejected = true;
         logger.error('streamingOffersRefresh: MOTN rejected our request — stopping run to stop burning vendor quota', { motnCycle, attempted });
         break;
       }
@@ -270,16 +292,58 @@ export const streamingOffersRefresh = onSchedule(
     const observation = sawRateLimited ? 'rate_limited' : sawClean ? 'clean' : 'no_signal';
     await applyThrottleObservation(budgetRef, observation, STREAMING_HARD_CYCLE_CAP, notifyAdminStreamingStale, { motnCycle });
 
-    const health = computeHealth(workSet.length, PER_RUN_SELECT, new Date(nowMs).toISOString());
-    const prev = (await db.collection('streamingHealth').doc('current').get()).data();
+    // BIN-856 (Malin's option B): carry the delivery streak forward from the
+    // snapshot taken at the TOP of this run — `healthSnap`, read before any of
+    // the work below — and fold this run's outcome into it. Read from that
+    // snapshot rather than re-reading now, so the value can't be disturbed by
+    // anything this run did.
+    const outcome = classifyRunOutcome(attempted, sawClean, sawRateLimited);
+    const prevRuns = (healthSnap.get('runsWithoutSuccess') as number | undefined) ?? 0;
+    const prevSuccessAt = (healthSnap.get('lastSuccessAt') as number | undefined) ?? null;
+    const delivery = {
+      runsWithoutSuccess: nextRunsWithoutSuccess(prevRuns, outcome),
+      lastSuccessAt: outcome === 'delivered' ? nowMs : prevSuccessAt,
+      // Coarse on purpose — the vendor's own sentence goes to the log (motn.ts).
+      // This field only has to say WHICH kind of silence this was.
+      lastFailureReason: outcome === 'no-delivery' ? (sawRejected ? 'request-rejected' : 'no-usable-response') : null,
+    };
+
+    const health = computeHealth(workSet.length, PER_RUN_SELECT, new Date(nowMs).toISOString(), delivery);
+    // Same snapshot the streak came from, not a second read: one question
+    // deserves one answer, and re-reading would take the alarm's edge-trigger
+    // from a LATER snapshot than the counter it is comparing — inconsistent if
+    // the doc ever did move mid-run. Also one Firestore read cheaper.
+    const prev = healthSnap.data();
+    // `.set()` without merge — every field the doc should keep must be in
+    // `health`, which is why DeliveryState is part of HealthDoc rather than
+    // written separately.
     await db.collection('streamingHealth').doc('current').set({ ...health, lastRunAt: nowMs });
-    if ((health.status === 'warn' || health.status === 'critical') && prev?.status !== health.status) {
+
+    // Two alarms, deliberately NOT one. The capacity message tells her to
+    // consider a paid MOTN plan because the library outgrew the free tier —
+    // exactly the wrong advice when the truth is that the feed is broken. Each
+    // fires on its own sub-status changing, so a red `status` always arrives
+    // with the right explanation attached.
+    // `prev.capacityStatus` doesn't exist on a document written before this
+    // change, so fall back to the legacy `status` — which WAS the capacity
+    // status, exactly. Without it the first run after deploy would re-send a
+    // warning she already has, on a library that was already over the line.
+    const prevCapacity = prev?.capacityStatus ?? prev?.status;
+    if ((health.capacityStatus === 'warn' || health.capacityStatus === 'critical')
+        && prevCapacity !== health.capacityStatus) {
       const users = (await db.collection('users').count().get()).data().count;
-      await notifyAdmin(health.status, health.refreshIntervalDays, users);
+      await notifyAdmin(health.capacityStatus, health.refreshIntervalDays, users);
+    }
+    if ((health.feedStatus === 'warn' || health.feedStatus === 'critical')
+        && prev?.feedStatus !== health.feedStatus) {
+      await notifyAdminFeedDown(health.feedStatus, health.runsWithoutSuccess, health.lastFailureReason);
     }
 
     logger.info('streamingOffersRefresh done', {
-      workSet: workSet.length, batch: batch.length, attempted, written, status: health.status, intervalDays: health.refreshIntervalDays,
+      workSet: workSet.length, batch: batch.length, attempted, written,
+      status: health.status, capacityStatus: health.capacityStatus, feedStatus: health.feedStatus,
+      runsWithoutSuccess: health.runsWithoutSuccess, outcome,
+      intervalDays: health.refreshIntervalDays,
     });
   },
 );

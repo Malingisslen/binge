@@ -1,6 +1,6 @@
 // functions/src/streamingOffers/logic.ts
 import { mediaTypeDocId, normalizeMediaType, type MediaType } from '../shared/mediaTypeDocId';
-import type { IntentItem, ExistingOffer, WorkItem, HealthDoc, HealthStatus } from './types';
+import type { IntentItem, ExistingOffer, WorkItem, HealthDoc, HealthStatus, DeliveryState, RunOutcome } from './types';
 
 /**
  * Doc id for the shared streamingOffers document (BIN-523). Movie N and TV N
@@ -124,11 +124,93 @@ export function selectRefreshBatch(
     .slice(0, budget);
 }
 
-export function computeHealth(workSetSize: number, budget: number, nowIso: string): HealthDoc {
+// BIN-856 (2026-08-12, Malin's option B). The job runs daily, so one empty run
+// is a network blip and must not wake her; two in a row is a real signal. Had
+// this existed on 2026-07-11 it would have warned on the 13th instead of
+// letting a total outage run for a month under a green "ok".
+const FEED_WARN_RUNS = 2;
+const FEED_CRITICAL_RUNS = 4;
+
+/**
+ * What one run proved about the feed.
+ *
+ * The distinction that matters — and the one the previous per-run signal
+ * collapsed — is between "we made no vendor calls" and "we made nine and every
+ * one failed". Both used to be `no_signal`; the second is the state that ran
+ * unnoticed for a month.
+ *
+ * `inconclusive` is deliberately generous. A run that asked nothing (empty
+ * batch, or the budget denied before the first call) proves nothing, and being
+ * rate-limited is a normal end-of-cycle condition that already has its own
+ * admin alarm — counting either as a failure would cry wolf. Data that arrived
+ * BEFORE a 429 still counts as delivered: the feed demonstrably works.
+ */
+export function classifyRunOutcome(attempted: number, sawClean: boolean, sawRateLimited: boolean): RunOutcome {
+  if (sawClean) return 'delivered';
+  if (sawRateLimited) return 'inconclusive';
+  return attempted > 0 ? 'no-delivery' : 'inconclusive';
+}
+
+/**
+ * Only a real delivery clears the streak. An `inconclusive` run must leave it
+ * exactly where it was: resetting on "nothing to do" would let a feed that
+ * alternates broken and idle never reach the alarm at all.
+ */
+export function nextRunsWithoutSuccess(prev: number, outcome: RunOutcome): number {
+  if (outcome === 'delivered') return 0;
+  if (outcome === 'no-delivery') return prev + 1;
+  return prev;
+}
+
+/** How bad the delivery side looks, from the consecutive-empty-run count. */
+export function feedStatusFor(runsWithoutSuccess: number): HealthStatus {
+  if (runsWithoutSuccess >= FEED_CRITICAL_RUNS) return 'critical';
+  if (runsWithoutSuccess >= FEED_WARN_RUNS) return 'warn';
+  return 'ok';
+}
+
+const SEVERITY: Record<HealthStatus, number> = { ok: 0, warn: 1, critical: 2 };
+
+/** The more severe of two statuses. */
+export function worstStatus(a: HealthStatus, b: HealthStatus): HealthStatus {
+  return SEVERITY[a] >= SEVERITY[b] ? a : b;
+}
+
+/**
+ * BIN-856: `status` is now the WORSE of two independent questions —
+ *
+ *  - **capacity**: can we cycle the library often enough? (library size ÷ the
+ *    per-run budget; the whole of what `status` used to mean)
+ *  - **delivery**: is data actually arriving? (`delivery.runsWithoutSuccess`)
+ *
+ * The old calculation could not fail. Both its inputs are the library size and
+ * a constant, so a vendor returning 400 to every single call for a month left
+ * it reading a comfortable "ok" — which is exactly what happened. Keeping the
+ * two sub-statuses on the document as well means a red status can say WHICH
+ * half went wrong, and the two feed different admin messages: telling her to
+ * consider a paid plan because the feed is broken would be the wrong advice.
+ */
+export function computeHealth(
+  workSetSize: number,
+  budget: number,
+  nowIso: string,
+  delivery: DeliveryState,
+): HealthDoc {
   // Use MAX_SAFE_INTEGER instead of Infinity: Firestore rejects Infinity/NaN as field values.
   const refreshIntervalDays = budget > 0 ? Math.ceil(workSetSize / budget) : Number.MAX_SAFE_INTEGER;
-  let status: HealthStatus = 'ok';
-  if (refreshIntervalDays > CRITICAL_DAYS) status = 'critical';
-  else if (refreshIntervalDays > WARN_DAYS) status = 'warn';
-  return { computedAt: nowIso, workSetSize, dailyBudget: budget, refreshIntervalDays, status };
+  let capacityStatus: HealthStatus = 'ok';
+  if (refreshIntervalDays > CRITICAL_DAYS) capacityStatus = 'critical';
+  else if (refreshIntervalDays > WARN_DAYS) capacityStatus = 'warn';
+
+  const feedStatus = feedStatusFor(delivery.runsWithoutSuccess);
+  return {
+    computedAt: nowIso,
+    workSetSize,
+    dailyBudget: budget,
+    refreshIntervalDays,
+    status: worstStatus(capacityStatus, feedStatus),
+    capacityStatus,
+    feedStatus,
+    ...delivery,
+  };
 }

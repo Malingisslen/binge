@@ -49,7 +49,37 @@ före bygget. Utfall: **approve-with-conditions**, två bindande villkor (se ned
    nagelfästa den — `index.ts` importerar firebase-admin och går inte att enhetstesta.
    Mutationstestad: tas raden bort faller två tester.
 
-## Utanför denna plan — väntar på Malin
+## Del 2 (2026-08-12) — Malin valde B
+
+Hon läste förslaget och svarade **B**: en enda `status` som visar det sämsta av kapacitet och
+faktiskt utfall. Handbromsen nedan är därmed lyft. Router på de nya filerna: `tier: "medium"`,
+`panel: [13]`, oförändrat.
+
+### Vad som byggs
+
+1. **`classifyRunOutcome(attempted, sawClean, sawRateLimited)`** i `logic.ts` — `'delivered'` |
+   `'no-delivery'` | `'inconclusive'`. Poängen är att skilja "vi gjorde inga anrop" från "vi
+   gjorde nio anrop och alla misslyckades"; dagens `no_signal` buntar ihop dem, och det andra
+   fallet är exakt det som pågick i en månad.
+2. **Räknare + trösklar** — `nextRunsWithoutSuccess` nollställs bara av `'delivered'`;
+   `'inconclusive'` varken höjer eller nollställer. 2 körningar i rad → `warn`, 4 → `critical`
+   (jobbet kör dagligen, så det ger utrymme för ett enstaka nätfel).
+3. **`worstStatus(kapacitet, flöde)`** blir `status`. Kapacitetsberäkningen är ORÖRD.
+4. **Nya fält på hälsodokumentet:** `capacityStatus`, `feedStatus`, `runsWithoutSuccess`,
+   `lastSuccessAt`, `lastFailureReason` — så "varför är den röd" går att svara på.
+5. **Två skilda larm.** Det befintliga larmet handlar om gratistaket ("Överväg MOTN Pro") och
+   får INTE avfyras för ett trasigt flöde — det vore fel råd. Kapacitetslarmet kopplas till
+   `capacityStatus`, ett nytt flödeslarm till `feedStatus`.
+
+### Fällor som är kända i förväg
+
+- `index.ts` skriver hälsodokumentet med `.set({ ...health, lastRunAt })` **utan merge**, så
+  räknaren måste ingå i payloaden eller nollas varje körning.
+- 429 får inte driva flödesräknaren — kvotslut är ett normalt tillstånd med eget larm.
+- `prev?.capacityStatus` är `undefined` på första körningen efter deploy; det får inte
+  avfyra ett falskt larm.
+
+## Ursprunglig parkering (lyft 2026-08-12, se ovan)
 
 **Villkor 2 från roll #13, och medelfyndet i säkerhetsrundan:** `streamingHealth` står kvar på
 `"ok"` efter en månad utan ett enda lyckat anrop, eftersom `computeHealth` bara är en funktion
@@ -86,14 +116,31 @@ som motiverade det.
 
 ## Acceptanskriterier
 
-- [ ] `npx tsc --noEmit -p functions/tsconfig.json` exit 0
-- [ ] Hela vitest-sviten grön, och `motnRequest.test.ts` syns i en ofiltrerad körning
-- [ ] Mutationstestat: en mutant som återinför en uppräknad 4xx-lista måste dödas
-- [ ] Alla tre grindgranskarna pass (säkerhet, test, integration)
-- [ ] **`firebase deploy --only functions:streamingOffersRefresh,functions:leavingRollup`** —
+### Del 1 — MOTN-anropet (commit `d3505f8`, deployad 2026-08-11T22:55Z)
+
+- [x] `npx tsc --noEmit -p functions/tsconfig.json` exit 0
+- [x] Hela vitest-sviten grön, och `motnRequest.test.ts` syns i en ofiltrerad körning
+- [x] Mutationstestat: en mutant som återinför en uppräknad 4xx-lista dödas
+- [x] Alla tre grindgranskarna pass (säkerhet, test, integration) — fyra rundor
+- [x] **`firebase deploy --only functions:streamingOffersRefresh,functions:leavingRollup`** —
       `deploy.yml` shippar BARA hosting, så en fix som landar på main och stannar där ser
       exakt likadan ut som en shippad. Det här steget är inte valfritt.
 - [ ] **Bevis: ett HTTP 200 från MOTN i den skarpa loggen för binge-nu** — inte ett grönt test.
-      Kräver att 20h-idempotensspärren släpps (`streamingHealth/current.lastRunAt`) eftersom
-      dygnets körning redan gått; körningen skriver själv tillbaka ett färskt `lastRunAt`.
-- [ ] `streamingHealth`s LOGIK orörd (`computeHealth` i `logic.ts`) — se avsnittet ovan
+      Manuell körning gick inte: 20h-spärren stoppade den och en backdatering av
+      `streamingHealth/current.lastRunAt` nekades av behörighetskontrollen. **Väntar på den
+      schemalagda körningen 2026-08-12T19:29Z.** ENDA kvarvarande punkten i del 1.
+
+### Del 2 — hälsomätaren (Malins B-svar 2026-08-12)
+
+Kriteriet "`streamingHealth`s LOGIK orörd" fanns här och är **struket** — det beskrev
+handbromsen som hennes B-svar lyfte. Att lämna kvar det hade gjort planbeviset till en
+osann checklista, vilket är precis det BIN-472 handlade om. Ersatt av:
+
+- [x] Kapacitetsberäkningen bit-för-bit orörd (samma `refreshIntervalDays`-stege, samma
+      31/62-trösklar); `status` = `worstStatus(kapacitet, flöde)`
+- [x] Mutationstestat: alla fem — 429-som-haveri, tomt-som-haveri, streak-nollning på
+      `inconclusive`, båda tröskelgränserna, och `worstStatus` som returnerar den MILDARE
+      (vilket skulle återinföra exakt buggen) — dödas var för sig
+- [x] Kvotslut driver INTE flödesräknaren; ett 404 räknas som levererat
+- [x] Två skilda larm — ett trasigt flöde kan aldrig avfyra "överväg betalplan"
+- [ ] Deploy av del 2

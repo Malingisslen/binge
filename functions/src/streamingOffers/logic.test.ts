@@ -1,7 +1,13 @@
 // functions/src/streamingOffers/logic.test.ts
 import { describe, it, expect } from 'vitest';
-import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId } from './logic';
-import type { IntentItem, ExistingOffer, WorkItem } from './types';
+import {
+  isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId,
+  classifyRunOutcome, nextRunsWithoutSuccess, feedStatusFor, worstStatus,
+} from './logic';
+import type { IntentItem, ExistingOffer, WorkItem, DeliveryState } from './types';
+
+/** A feed that has always delivered — the state before anything went wrong. */
+const healthy: DeliveryState = { runsWithoutSuccess: 0, lastSuccessAt: 1, lastFailureReason: null };
 
 /** Terse ExistingOffer builder — mediaType defaults to movie (BIN-523). */
 const existing = (o: Partial<ExistingOffer>): ExistingOffer => ({
@@ -188,28 +194,139 @@ describe('selectRefreshBatch', () => {
 // of the production constant; only the day-boundary math below changed.
 describe('computeHealth', () => {
   it('ok when interval is short', () => {
-    const h = computeHealth(700, 95, '2026-06-20T00:00:00Z');
+    const h = computeHealth(700, 95, '2026-06-20T00:00:00Z', healthy);
     expect(h.refreshIntervalDays).toBe(8); // ceil(700/95)
     expect(h.status).toBe('ok');
   });
   it('warns past 31 days', () => {
-    expect(computeHealth(3000, 95, '2026-06-20T00:00:00Z').status).toBe('warn'); // ceil(3000/95) = 32
+    expect(computeHealth(3000, 95, '2026-06-20T00:00:00Z', healthy).status).toBe('warn'); // ceil(3000/95) = 32
   });
   it('critical past 62 days', () => {
-    expect(computeHealth(6000, 95, '2026-06-20T00:00:00Z').status).toBe('critical'); // ceil(6000/95) = 64
+    expect(computeHealth(6000, 95, '2026-06-20T00:00:00Z', healthy).status).toBe('critical'); // ceil(6000/95) = 64
   });
   it('exactly 31 days is still ok (boundary)', () => {
     // ceil(2945/95) = 31
-    expect(computeHealth(2945, 95, '2026-06-20T00:00:00Z').status).toBe('ok');
+    expect(computeHealth(2945, 95, '2026-06-20T00:00:00Z', healthy).status).toBe('ok');
   });
   it('exactly 62 days is still warn not critical (boundary)', () => {
     // ceil(5890/95) = 62
-    expect(computeHealth(5890, 95, '2026-06-20T00:00:00Z').status).toBe('warn');
+    expect(computeHealth(5890, 95, '2026-06-20T00:00:00Z', healthy).status).toBe('warn');
   });
   it('zero budget returns MAX_SAFE_INTEGER interval (not Infinity) and status critical', () => {
-    const h = computeHealth(100, 0, '2026-06-20T00:00:00Z');
+    const h = computeHealth(100, 0, '2026-06-20T00:00:00Z', healthy);
     expect(h.refreshIntervalDays).toBe(Number.MAX_SAFE_INTEGER);
     expect(h.status).toBe('critical');
     expect(isFinite(h.refreshIntervalDays)).toBe(true);
+  });
+
+  // BIN-856. THE regression this whole section exists for: for a month the doc
+  // read `status: "ok"` while not a single vendor call had succeeded, because
+  // the calculation is a pure function of library size and a constant and can
+  // never observe the outcome. Malin chose option B — one status, the worse of
+  // capacity and delivery.
+  it('is NOT ok when the feed has delivered nothing, however comfortable the capacity', () => {
+    const starved: DeliveryState = { runsWithoutSuccess: 2, lastSuccessAt: 1, lastFailureReason: 'request-rejected' };
+    const h = computeHealth(24, 9, '2026-08-12T00:00:00Z', starved);
+    // Capacity is genuinely fine — ceil(24/9) = 3 days, well inside the green.
+    expect(h.refreshIntervalDays).toBe(3);
+    expect(h.capacityStatus).toBe('ok');
+    // ...and the doc must still refuse to say "ok".
+    expect(h.feedStatus).toBe('warn');
+    expect(h.status).toBe('warn');
+  });
+
+  it('reports the worse of the two, whichever side is worse', () => {
+    const dead: DeliveryState = { runsWithoutSuccess: 4, lastSuccessAt: null, lastFailureReason: 'request-rejected' };
+    // Feed critical, capacity ok -> critical.
+    expect(computeHealth(24, 9, '2026-08-12T00:00:00Z', dead).status).toBe('critical');
+    // Capacity critical, feed ok -> critical (the pre-existing behaviour, unchanged).
+    expect(computeHealth(6000, 95, '2026-08-12T00:00:00Z', healthy).status).toBe('critical');
+  });
+
+  it('carries the diagnosis so "why is it red" is answerable', () => {
+    const starved: DeliveryState = { runsWithoutSuccess: 3, lastSuccessAt: 1786476543035, lastFailureReason: 'request-rejected' };
+    const h = computeHealth(24, 9, '2026-08-12T00:00:00Z', starved);
+    expect(h.runsWithoutSuccess).toBe(3);
+    expect(h.lastSuccessAt).toBe(1786476543035);
+    expect(h.lastFailureReason).toBe('request-rejected');
+  });
+});
+
+/**
+ * BIN-856. The old per-run signal collapsed "we made no calls" and "we made
+ * nine calls and every one failed" into the same `no_signal`. The second is
+ * what ran for a month unnoticed, so the two must be told apart.
+ */
+describe('classifyRunOutcome', () => {
+  it('counts a run that got real data as delivered', () => {
+    expect(classifyRunOutcome(9, true, false)).toBe('delivered');
+  });
+
+  it('counts a run that spent calls and got nothing usable as a non-delivery', () => {
+    // Exactly the BIN-856 shape: nine reserved slots spent, nine 400s, no 429.
+    expect(classifyRunOutcome(9, false, false)).toBe('no-delivery');
+  });
+
+  it('treats a run that never called the vendor as inconclusive, not a failure', () => {
+    // Empty batch, or the budget denied before the first call. Proves nothing
+    // either way — must not accuse a healthy feed.
+    expect(classifyRunOutcome(0, false, false)).toBe('inconclusive');
+  });
+
+  it('treats being rate-limited as inconclusive, not a broken feed', () => {
+    // Quota exhaustion is a normal, expected state with its own separate
+    // alarm. Folding it in here would cry wolf every cycle end.
+    expect(classifyRunOutcome(9, false, true)).toBe('inconclusive');
+  });
+
+  it('counts data that arrived before a 429 as delivered', () => {
+    // Some titles succeeded, then the quota ran out. Data DID arrive.
+    expect(classifyRunOutcome(9, true, true)).toBe('delivered');
+  });
+});
+
+describe('nextRunsWithoutSuccess', () => {
+  it('clears the streak only on real delivery', () => {
+    expect(nextRunsWithoutSuccess(3, 'delivered')).toBe(0);
+  });
+  it('extends the streak on a non-delivery', () => {
+    expect(nextRunsWithoutSuccess(1, 'no-delivery')).toBe(2);
+  });
+  it('leaves an in-progress streak untouched when the run proved nothing', () => {
+    // The trap: letting an inconclusive run reset the counter means a feed
+    // that alternates "broken" and "nothing to do" never reaches the alarm.
+    expect(nextRunsWithoutSuccess(3, 'inconclusive')).toBe(3);
+  });
+});
+
+describe('feedStatusFor', () => {
+  it('forgives a single empty run — one network blip is not an outage', () => {
+    expect(feedStatusFor(0)).toBe('ok');
+    expect(feedStatusFor(1)).toBe('ok');
+  });
+  it('warns on the second consecutive empty run', () => {
+    expect(feedStatusFor(2)).toBe('warn');
+    expect(feedStatusFor(3)).toBe('warn');
+  });
+  it('goes critical on the fourth', () => {
+    expect(feedStatusFor(4)).toBe('critical');
+    expect(feedStatusFor(40)).toBe('critical');
+  });
+  it('would have caught BIN-856 within two days instead of a month', () => {
+    // The job runs daily and the outage began ~2026-07-11. Two runs in is
+    // 2026-07-13 — the day this should have reached her.
+    expect(feedStatusFor(2)).not.toBe('ok');
+  });
+});
+
+describe('worstStatus', () => {
+  it('picks the more severe of the two, in either argument order', () => {
+    expect(worstStatus('ok', 'warn')).toBe('warn');
+    expect(worstStatus('warn', 'ok')).toBe('warn');
+    expect(worstStatus('warn', 'critical')).toBe('critical');
+    expect(worstStatus('critical', 'warn')).toBe('critical');
+  });
+  it('is ok only when both sides are ok', () => {
+    expect(worstStatus('ok', 'ok')).toBe('ok');
   });
 });
