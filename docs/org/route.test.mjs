@@ -15,6 +15,9 @@
 // contract should fail here, which is the point.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { route, isCodePath } from './route.mjs';
 
 describe('folder-ownership inheritance (BIN-788)', () => {
@@ -148,6 +151,57 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     expect(isCodePath('docs/org/ownership-map.json')).toBe(false);
     expect(route(['scripts/serve-spa.mjs']).tier).toBe('skip');
     expect(route(['docs/org/adr/0018-seo-selection-ratchet.md']).tier).not.toBe('top');
+  });
+});
+
+describe('the file that decides who reviews everything else (BIN-851)', () => {
+  // Two lists decide who reviews a change, and widening one never widens the other:
+  // this router ADVISES, `.claude/shared-plugin.json` → reviewGates BLOCKS. Until
+  // BIN-851 neither of them covered shared-plugin.json itself, so a commit that
+  // DELETED a reviewer pattern reached zero reviewers — a gate that could disarm
+  // itself unwitnessed. Both halves are pinned here, in one place, on purpose.
+
+  it('seats the release manager for the commit-gate config', () => {
+    const r = route(['.claude/shared-plugin.json']);
+
+    expect(r.tier).toBe('medium');
+    expect(r.reasonCode).toBe('owned');
+    expect(r.panel).toEqual([25]);
+  });
+
+  it('seats the same owner for the decided-deviations ledger', () => {
+    // The mirror image: this file decides what a reviewer is FORBIDDEN to flag, so
+    // appending to it silently retires a finding class.
+    const r = route(['.claude/rules/accepted-deviations.md']);
+
+    expect(r.tier).toBe('medium');
+    expect(r.panel).toEqual([25]);
+  });
+
+  it('names both files in the BLOCKING gate list too, not just here', () => {
+    // The half that actually refuses a commit. A future edit that drops these
+    // patterns while leaving the dossier bullet in place would keep the two
+    // assertions above green and still reopen the hole.
+    const cfg = JSON.parse(
+      readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude', 'shared-plugin.json'), 'utf8'),
+    );
+    const gate = cfg.reviewGates.find((g) => g.agent === 'binge-integration-reviewer');
+    // Mirror the real hook's decision, not just its patterns: require-review-before-commit
+    // takes `exact` OR a pattern match, then SUBTRACTS `exclude`. This gate carries no
+    // excludes today, so the two are equivalent — but a later `exclude` would disarm the
+    // gate while a patterns-only helper stayed green, which is the exact silent
+    // disarming this test exists to prevent.
+    const exact = new Set(gate.exact || []);
+    const matches = (f) =>
+      (exact.has(f) || (gate.patterns || []).some((p) => new RegExp(p).test(f))) &&
+      !(gate.exclude || []).some((p) => new RegExp(p).test(f));
+
+    expect(matches('.claude/shared-plugin.json')).toBe(true);
+    expect(matches('.claude/rules/accepted-deviations.md')).toBe(true);
+    // Deliberately NOT all of .claude/rules/: lessons-digest.md is appended by every
+    // sprint close-out, and gating routine bookkeeping on a review was the rejected
+    // alternative (Malin's narrow-over-broad call, same as BIN-830).
+    expect(matches('.claude/rules/lessons-digest.md')).toBe(false);
   });
 });
 

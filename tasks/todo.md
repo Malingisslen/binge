@@ -1,4 +1,152 @@
-# Plan 2026-08-12 — BIN-856: MOTN svarar 400 på varje anrop
+# Plan 2026-08-12 — Selection: 10 tickets, 6 batches
+
+Full backlog review (49 open tickets across Backlog/Todo/In Progress). Comments checked on
+every candidate before selection (step 4 of sprint-execute). Most of the backlog is
+already-decided-elsewhere (parked on a review session, routed to a dedicated non-sprint
+pass, or an explicit "not now") — see the close-out report for the full accounting. This
+file only carries what's actually selected to build.
+
+BIN-856 (streamingHealth, In Progress) is NOT in this plan — its code is committed and
+deployed; the only remaining item is a `run`-kind acceptance criterion (proof of an HTTP 200
+in the live log after the 2026-08-12T19:29Z scheduled run). Nothing to select or build.
+
+## Batch A — infra-governance (agent: direct or generalist)
+Area: `.claude/shared-plugin.json`, `docs/org/route.mjs`, `docs/org/ownership-map.json`,
+`docs/org/gen-ownership-map.mjs`, `CLAUDE.md`, `docs/org/world-watch/DESIGN.md`,
+`docs/role-responsibilities.md`. Disjoint from every other batch.
+
+- [ ] **BIN-851** [Tier A, build] High — the file that decides which reviewers block a
+  commit (`.claude/shared-plugin.json`) is itself reviewed by no one (`tier: skip,
+  reasonCode: no-code-paths`). Router: skip. requiresPlanMode: false.
+  - Add `^\.claude/shared-plugin\.json$` to a blocking gate (binge-integration-reviewer).
+  - Give the file an owner in `docs/org/ownership-map.json` so the router stops answering
+    `skip`.
+  - Widening only — no existing gate narrowed.
+- [ ] **BIN-864** [Tier A, build] Low — `scripts/check-public-env.mjs` (the push-VAPID-key
+  guard) matches no gate pattern either. Router: skip. requiresPlanMode: false.
+  - Add `check-public-env` to `reviewGates[3].patterns`' existing alternation (stay narrow,
+    per Malin's 2026-08-08 call).
+  - Check `docs/org/route.mjs`'s `TOOLING_CODE_FILES` for the same gap in the same commit.
+- [ ] **BIN-834** [Tier A, build] Medium — the router permanently instructs a fix nobody
+  will do (owner gap for `route.mjs`/gate scripts). Router: medium, #25 (decided directly by
+  Malin — no critique needed, she wrote the exact wording). requiresPlanMode: false.
+  - Write down that the permanent #14 reserve IS the decision (DESIGN.md), not a TODO.
+  - `CLAUDE.md`'s router-output description names `unownedCode`.
+  - `route.mjs`'s header comment names the right field (`unownedCode`, not `unmappedCode`).
+- [ ] **BIN-803** [Tier A, build] Medium — the ownership map was hand-edited despite
+  "auto-generated, don't edit"; next regen silently drops the fix. Router: skip.
+  requiresPlanMode: false.
+  - Additions (patternCount, `src/lib/watchlist/**`) live in `gen-ownership-map.mjs` and
+    survive a regeneration.
+  - Generator fails when an owned folder gets an unowned sibling (BIN-788 pt.2, never built).
+  - A worktree regeneration produces the same pattern set as the main checkout
+    (`.tmdb-cache/` divergence must not cause drift).
+
+## Batch B — test-infra (agent: direct)
+Area: `vitest.config.ts`, `scripts/check-public-env.test.mjs`. Disjoint.
+
+- [ ] **BIN-850** [Tier A, build-review — signoff #7 QA/Test] High — `npm test` never runs
+  anything under `scripts/`, including the test for yesterday's push-VAPID guard. Router:
+  medium, #7. requiresPlanMode: **true** (single + priority ≤2) — expand this block before
+  building, don't halt.
+  - Malin's 2026-08-11 decision: **rewrite the test files to the project's engine
+    (vitest), don't touch CI.**
+  - `vitest.config.ts` `include` gains `scripts/**/*.{test,spec}.mjs` additively.
+  - `scripts/check-public-env.test.mjs` converted `node:test`→vitest (keep
+    `node:assert/strict`, all 92 assertions intact) and appears in a full `npm test` file
+    list.
+  - **Out of scope, file a follow-up:** `scripts/check-workflow-map.test.mjs` throws an
+    unexplained `SyntaxError` under vitest (plain Node + esbuild both accept it). Convert
+    only `check-public-env.test.mjs` here; file the workflow-map one separately per her
+    comment's own split.
+
+## Batch C — streaming-functions (agent: direct)
+Area: `functions/src/streamingOffers/motn.ts`, `functions/src/leavingRollup/motnChanges.ts`,
+new `functions/src/util/redactVendorBody.ts`. Disjoint.
+
+- [ ] **BIN-857** [Tier A, build-review — signoff #13 Data/Integrations] Low — the same
+  masking-before-truncation logic is duplicated in two MOTN clients, untested. Router:
+  medium, #13. requiresPlanMode: false. Not urgent, pure maintenance.
+  - `functions/src/util/redactVendorBody.ts` exports one shared function both clients
+    import.
+  - Test pins: a key at position 0 in a body >300 chars is masked BEFORE truncation, never
+    after.
+  - Existing MOTN tests in both call sites stay green.
+
+## Batch D — auth-deletion-guard (agent: direct, Tier C — plan expansion required)
+Area: `src/contexts/AuthContext.tsx`, `src/components/onboarding/OnboardingFlow.tsx`,
+`src/components/settings/DeleteAccountSection.tsx` (or wherever it lives — verify path),
+`src/lib/firebase/accountDeletion.ts`, new `functions/src/retentionCleanup/` reaper,
+`docs/data-retention-policy.md`, `.claude/rules/accepted-deviations.md`, `docs/RUNBOOK.md`.
+Disjoint from every other batch.
+
+- [ ] **BIN-816 + BIN-813** [Tier C, build-review — signoff: UX copy + scope growth] High —
+  an aborted account deletion recreates `users/{uid}` with a fresh consent timestamp, and a
+  second delete attempt can falsely claim "nothing was deleted." Router: **top** (full
+  panel — AuthContext.tsx, userData.ts). requiresPlanMode: **true**.
+  - **Panel already ran** 2026-08-11 in a watched session (5 roles + archaeologist,
+    approve-with-conditions, zero blocks). Both escalated questions answered by Malin the
+    same session. Full record: `docs/org/adr/0019-aborted-deletion-marker-scope.md` — read
+    before building, all 9 conditions are binding.
+  - Every write path that can recreate `users/{uid}` (8 identified, incl.
+    `OnboardingFlow.tsx`) goes through one shared chokepoint, not per-call-site patches.
+  - Marker set only after `STALE_SESSION_PREFLIGHT` passes, immediately before the cascade;
+    `deleteAccount()` and its retry are never gated on the marker; the second-attempt
+    "nothing was deleted" message only shows when no write was attempted this session.
+  - A server-side reaper (`retentionCleanup` family) deletes Firebase Auth accounts with no
+    matching `users/{uid}`, on a stated schedule, independent of the client marker — and
+    never deletes on an inconclusive (loading/unreadable) read.
+  - `docs/data-retention-policy.md` names the sweep window (this is what makes "delay, not
+    breach" honest per Malin's Art. 12(3) ruling); `.claude/rules/accepted-deviations.md`
+    records the marker's no-natural-retirement property as a conscious BIN-748 departure.
+  - Manual `firebase deploy --only functions` for the reaper is a required follow-up step,
+    not assumed done by push.
+
+## Batch E — watchlist-daterule (agent: direct, serial — not inside a parallel batch)
+Area: `src/hooks/useServiceValue.ts`, `src/components/pages/DiaryPageClient.tsx`,
+`src/components/pages/UserProfilePageClient.tsx`, `src/app/stats/page.tsx`,
+`src/components/pages/WatchlistPage.tsx`, `src/lib/taste/stats.ts`, `src/lib/diary.ts`, new
+`src/lib/seenDate.ts`. Disjoint from every other batch.
+
+- [ ] **BIN-689** [Tier A, build-review — signoff #28 Recommendations/Scoring-Integrity]
+  Medium — BIN-598 part 2: "watchedAt counts only when status is seen" is hand-copied in 7
+  files. Router: medium, #28. requiresPlanMode: false.
+  - Malin's 2026-08-06 decision: **build it, as its own isolated pass, not bundled with
+    other work in the same files.**
+  - One shared helper (`seenDate()` or equivalent) replaces all 7 hand-copied call sites.
+  - A mutation-style test kills "remove the seen-gate."
+  - Do this as a single serial change — not split across a parallel batch (this is what
+    sank the third review round last time).
+
+## Batch F — crash-boundaries (agent: direct)
+Area: `docs/workflow-map-universe.json`, `scripts/check-workflow-map.mjs`, ten
+`src/app/{feed,films,grupper,my,search,series,[...path]}/error.tsx`. Disjoint.
+
+- [ ] **BIN-808** [Tier A, build-review — signoff #15] Medium — BIN-789 part 2 was never
+  built: no mechanical detection of crash boundaries, and 10 error.tsx wrappers are missing
+  from `boundaries` coverage. Router: medium, #15. requiresPlanMode: false.
+  - Malin's 2026-08-08 decision: **build.**
+  - The 10 error.tsx wrappers appear in `boundaries` (or are explicitly, justifiably
+    excluded).
+  - A file importing `captureError`/`trackEvent` without being a route or function export
+    is caught mechanically, matching `check-workflow-map.mjs`'s existing approach.
+
+## Needs you (Tier D / needs-approval / parked)
+
+See the close-out report (StructuredOutput) for the full list — `alreadyDecided`,
+`needsApproval`, and `parked` buckets. Highlights: BIN-624 (rules change, needs a planned
+panel pass, not a sprint), BIN-766 (needs #27's own review session before rebuild — prior
+attempt failed data-safety), BIN-754/BIN-790/BIN-781 (fix lives in the shared
+`C:/claude-plugins` engine, not this repo), BIN-815 (deploy-hang retry work — her own note
+asks for a scheduling decision, unanswered).
+
+## Deviation log
+
+(none yet — filled in during execution)
+
+---
+
+# Archive — Plan 2026-08-12 — BIN-856: MOTN svarar 400 på varje anrop
 
 ## Problemet (bevisat, inte antaget)
 
@@ -27,93 +175,6 @@ Ingenting nedströms läste någonsin lokaliserad text: `parse.ts` konsumerar ba
 `panel: [13]`, inga high-stakes. En blind kritik från #13 Data / Integrations Engineer kördes
 före bygget. Utfall: **approve-with-conditions**, två bindande villkor (se nedan).
 
-## Vad som byggs
-
-1. **Ny admin-fri `motnRequest.ts`** — `offersUrl()` (bara `country=se`) och `classifyStatus()`.
-   Egen modul så testerna kan importera den utan `firebase-functions/v2`, som inte går att
-   resolva under rot-CI:ns vitest-toolchain. Samma precedens som `leavingRollup/config.ts`.
-2. **`motnRequest.test.ts`** — query-strängen nagelfäst som **allowlist**, inte bara
-   "output_language saknas", plus en svepande egenskapstest över hela 400-499.
-3. **`classifyStatus` + `REQUEST_REJECTED`** *(villkor 1 från roll #13)* — en 4xx som inte är
-   404/429 betyder att **vi** formulerade fel; det upprepas identiskt för varje återstående
-   titel. Körningen stoppas på första förekomsten i stället för att bränna en kvotplats per
-   titel. Det var mekanismen bakom 198 av 300 förbrukade månadsanrop.
-4. **Leverantörens feltext loggas** — med nyckeln maskerad **före** trunkering *(blockerande
-   fynd från säkerhetsgranskningen, runda 1)*. Samma tillägg i `leavingRollup/motnChanges.ts`,
-   som hade exakt samma blindhet *(integrationsgranskningen, valfritt fynd 1)*.
-5. **`isIntentTitle` avvisar ett oläsbart `tmdbId`** *(blockerande fynd från säkerhets-
-   granskningen, runda 2)* — spegling av den guard `readExisting` redan har. Utan den plockas
-   en post med ogiltigt id varje körning för alltid (den kan aldrig lämna tier 0 eftersom
-   `readExisting` hoppar över den), och kostar ett kvotanrop varje gång. Guarden sitter i
-   `logic.ts` och inte på anropsstället i `readWorkSet` just för att `logic.test.ts` ska kunna
-   nagelfästa den — `index.ts` importerar firebase-admin och går inte att enhetstesta.
-   Mutationstestad: tas raden bort faller två tester.
-
-## Del 2 (2026-08-12) — Malin valde B
-
-Hon läste förslaget och svarade **B**: en enda `status` som visar det sämsta av kapacitet och
-faktiskt utfall. Handbromsen nedan är därmed lyft. Router på de nya filerna: `tier: "medium"`,
-`panel: [13]`, oförändrat.
-
-### Vad som byggs
-
-1. **`classifyRunOutcome(attempted, sawClean, sawRateLimited)`** i `logic.ts` — `'delivered'` |
-   `'no-delivery'` | `'inconclusive'`. Poängen är att skilja "vi gjorde inga anrop" från "vi
-   gjorde nio anrop och alla misslyckades"; dagens `no_signal` buntar ihop dem, och det andra
-   fallet är exakt det som pågick i en månad.
-2. **Räknare + trösklar** — `nextRunsWithoutSuccess` nollställs bara av `'delivered'`;
-   `'inconclusive'` varken höjer eller nollställer. 2 körningar i rad → `warn`, 4 → `critical`
-   (jobbet kör dagligen, så det ger utrymme för ett enstaka nätfel).
-3. **`worstStatus(kapacitet, flöde)`** blir `status`. Kapacitetsberäkningen är ORÖRD.
-4. **Nya fält på hälsodokumentet:** `capacityStatus`, `feedStatus`, `runsWithoutSuccess`,
-   `lastSuccessAt`, `lastFailureReason` — så "varför är den röd" går att svara på.
-5. **Två skilda larm.** Det befintliga larmet handlar om gratistaket ("Överväg MOTN Pro") och
-   får INTE avfyras för ett trasigt flöde — det vore fel råd. Kapacitetslarmet kopplas till
-   `capacityStatus`, ett nytt flödeslarm till `feedStatus`.
-
-### Fällor som är kända i förväg
-
-- `index.ts` skriver hälsodokumentet med `.set({ ...health, lastRunAt })` **utan merge**, så
-  räknaren måste ingå i payloaden eller nollas varje körning.
-- 429 får inte driva flödesräknaren — kvotslut är ett normalt tillstånd med eget larm.
-- `prev?.capacityStatus` är `undefined` på första körningen efter deploy; det får inte
-  avfyra ett falskt larm.
-
-## Ursprunglig parkering (lyft 2026-08-12, se ovan)
-
-**Villkor 2 från roll #13, och medelfyndet i säkerhetsrundan:** `streamingHealth` står kvar på
-`"ok"` efter en månad utan ett enda lyckat anrop, eftersom `computeHealth` bara är en funktion
-av bibliotekets storlek och konstanten `PER_RUN_SELECT` — den ser aldrig utfallet. Samma hål
-gör att en återkallad nyckel (401/403) skulle stoppa flödet helt utan larm.
-
-Malin har uttryckligen bett att **få se förslaget innan den delen ändras**. Förslaget ligger i
-`C:/Users/malla/claude-reports/binge/2026-08-11-streaminghealth-forslag.html` (alternativ A/B/C,
-B rekommenderas).
-
-**Handbromsens exakta omfattning:** `computeHealth`, `WARN_DAYS`/`CRITICAL_DAYS`, `HealthDoc`
-och skrivningen till `streamingHealth/current` rörs INTE förrän hon svarat. Den här commiten
-ändrar `logic.ts` på ett enda annat ställe — `isIntentTitle`-guarden i punkt 5 ovan — som inte
-har med hälsologiken att göra. Formuleringen är avsiktligt filspecifik i stället för "logic.ts
-rörs inte": den som granskar om Malins parkerade beslut respekterats ska kunna se skillnad på
-ordvalsglidning och ett brutet löfte.
-
-Not till den som bygger det sedan: `index.ts` skriver hälsodokumentet med `.set({ ...health,
-lastRunAt })` **utan merge**, så en persisterad räknare måste ingå i den payloaden eller nollas
-varje körning. `attempted` inkrementeras före `fetchOffers`, så BIN-856-händelsen själv ger
-`attempted=1, written=0` — villkoret "attempted>0 && written===0" håller på exakt den körning
-som motiverade det.
-
-## Medvetet utelämnat
-
-- **Extrahera `redactVendorBody()` till `functions/src/util/`** (föreslaget av både integrations-
-  och testgranskaren). Bra idé, men det tar bygget till en sjätte produktionsfil för ren
-  polering av ett uttryck som redan är granskat på båda ställena. **Filad som BIN-857** — inte
-  bara som en rad i den här planen, som enligt `code-style.md` ska raderas när den är
-  implementerad.
-- **`motnChanges.ts` får ingen egen `rejected`-gren.** Den returnerar redan direkt vid varje
-  icke-ok svar, så kvotläckaget finns strukturellt inte där: ett ihållande 400 kostar ett anrop
-  per 96 h, inte nio per dygn.
-
 ## Acceptanskriterier
 
 ### Del 1 — MOTN-anropet (commit `d3505f8`, deployad 2026-08-11T22:55Z)
@@ -122,25 +183,21 @@ som motiverade det.
 - [x] Hela vitest-sviten grön, och `motnRequest.test.ts` syns i en ofiltrerad körning
 - [x] Mutationstestat: en mutant som återinför en uppräknad 4xx-lista dödas
 - [x] Alla tre grindgranskarna pass (säkerhet, test, integration) — fyra rundor
-- [x] **`firebase deploy --only functions:streamingOffersRefresh,functions:leavingRollup`** —
-      `deploy.yml` shippar BARA hosting, så en fix som landar på main och stannar där ser
-      exakt likadan ut som en shippad. Det här steget är inte valfritt.
-- [ ] **Bevis: ett HTTP 200 från MOTN i den skarpa loggen för binge-nu** — inte ett grönt test.
-      Manuell körning gick inte: 20h-spärren stoppade den och en backdatering av
-      `streamingHealth/current.lastRunAt` nekades av behörighetskontrollen. **Väntar på den
-      schemalagda körningen 2026-08-12T19:29Z.** ENDA kvarvarande punkten i del 1.
+- [x] **`firebase deploy --only functions:streamingOffersRefresh,functions:leavingRollup`**
+- [ ] **Bevis: ett HTTP 200 från MOTN i den skarpa loggen för binge-nu** — Väntar på den
+      schemalagda körningen 2026-08-12T19:29Z. ENDA kvarvarande punkten i del 1.
 
-### Del 2 — hälsomätaren (Malins B-svar 2026-08-12)
+### Del 2 — hälsomätaren (Malins B-svar 2026-08-12, commit `3e74e5f`)
 
-Kriteriet "`streamingHealth`s LOGIK orörd" fanns här och är **struket** — det beskrev
-handbromsen som hennes B-svar lyfte. Att lämna kvar det hade gjort planbeviset till en
-osann checklista, vilket är precis det BIN-472 handlade om. Ersatt av:
-
-- [x] Kapacitetsberäkningen bit-för-bit orörd (samma `refreshIntervalDays`-stege, samma
-      31/62-trösklar); `status` = `worstStatus(kapacitet, flöde)`
-- [x] Mutationstestat: alla fem — 429-som-haveri, tomt-som-haveri, streak-nollning på
-      `inconclusive`, båda tröskelgränserna, och `worstStatus` som returnerar den MILDARE
-      (vilket skulle återinföra exakt buggen) — dödas var för sig
+- [x] Kapacitetsberäkningen bit-för-bit orörd; `status` = `worstStatus(kapacitet, flöde)`
+- [x] Mutationstestat: alla fem mutanter dödas var för sig
 - [x] Kvotslut driver INTE flödesräknaren; ett 404 räknas som levererat
 - [x] Två skilda larm — ett trasigt flöde kan aldrig avfyra "överväg betalplan"
-- [ ] Deploy av del 2
+- [x] Deploy av del 2 (committed + deployed samma dygn som del 1 per project memory)
+
+## Medvetet utelämnat
+
+- **Extrahera `redactVendorBody()`** — filad som **BIN-857**, nu selected i denna sprint
+  (Batch C).
+- **`motnChanges.ts` får ingen egen `rejected`-gren** — strukturellt onödigt, se original-
+  resonemang i git-historiken.

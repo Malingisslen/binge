@@ -13,9 +13,19 @@ filing a finding** — the commit gate names this file when it blocks, and each 
 definition points here. Do not re-flag anything listed below.
 
 Append-only. Supersede an entry with a newer dated entry; never silently delete — retire it
-verbatim to `.claude/accepted-deviations.archive.md` instead. **`.claude/` is gitignored, so there is
-no git history to fall back on; the archive file IS the history.** Format: **what it deviates
-from** — the deviation — **Why:** rationale — date.
+verbatim to `.claude/accepted-deviations.archive.md` instead; the archive file, not a diff, is
+the readable history of what was retired and when.
+
+**Correction (2026-08-12, BIN-803):** an earlier version of this paragraph said "`.claude/` is
+gitignored, so there is no git history to fall back on". That is false and is now load-bearing:
+this file, `.claude/shared-plugin.json` and the agent knowledge/archive files are all TRACKED —
+`.gitignore` excludes only per-run state: `.claude/state/`, `worktrees/`, `cache/`,
+`hooks/sessions/`, `hooks/__pycache__/`, `linear-tracker.json`, `scheduled_tasks.lock` and
+`*.doctor-backup`. Since BIN-803 a pattern's survival in `docs/org/ownership-map.json`
+depends on whether git tracks it, so a maintainer acting on the old sentence would wrongly add
+these paths to `UNTRACKED_OWNED` or drop them from the map.
+
+Format: **what it deviates from** — the deviation — **Why:** rationale — date.
 
 ---
 

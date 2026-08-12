@@ -1,9 +1,19 @@
 # Accepted Deviations — archive
 
 Entries removed from `accepted-deviations.md` on 2026-07-25 during `/context-diet`, kept
-verbatim. **`.claude/` is gitignored, so git history does NOT preserve these** — this file
-is their only record. Never loaded into context; grep it when you need to know why a
-deviation was once written down, or to reconstruct a decision's history.
+verbatim. This file is their **readable** record — grep it when you need to know why a
+deviation was once written down, or to reconstruct a decision's history. Never loaded
+into context.
+
+**Correction (2026-08-12, BIN-803):** this header used to say "`.claude/` is gitignored, so
+git history does NOT preserve these". That is false — `.claude/rules/`, the agents, the
+hooks and `shared-plugin.json` are all tracked; only per-run state is ignored
+(`state/`, `worktrees/`, `cache/`, `hooks/sessions/`, `hooks/__pycache__/`,
+`linear-tracker.json`, `scheduled_tasks.lock`, `*.doctor-backup`). Git does preserve
+retired entries; this file exists so nobody has to read a diff to find them. The same
+false premise was corrected in `rules/accepted-deviations.md` in the same commit, and it
+matters beyond tidiness: since BIN-803 a path survives into `docs/org/ownership-map.json`
+only if git tracks it.
 
 Two removal reasons appear below:
 - **superseded** — a later dated entry explicitly replaced it, and keeping both in an

@@ -276,6 +276,11 @@ Owns acquisition and the top of the funnel.
   indexed"); `robots.txt` crawl-budget rules; JSON-LD (FAQPage, Organization,
   provider ItemLists); OpenGraph/Twitter share cards.
   → `src/app/sitemap.ts`, `src/lib/tmdb/seoCoverage.ts`, `public/robots.txt`
+- **The pre-render selection ratchet** — which titles get a pre-rendered, indexable
+  page at all: the persisted selection manifest (ceiling, floor, oldest-first
+  eviction) and the committed seed of ids Google already had indexed. A change that
+  shrinks either de-indexes real pages (BIN-823).
+  → `src/lib/tmdb/selectionManifest.ts`, `src/lib/seo/selectionSeed.ts`
 - 12 curated provider landing pages ("Vad streamar på Netflix i Sverige").
   → `src/app/provider/[id]/page.tsx`
 - The anonymous landing page; Plausible conversion goals (`signed_up`,
@@ -391,6 +396,11 @@ Owns the process.
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`
+- **The commit-gate roster itself** — which reviewer agent blocks which staged path
+  (`reviewGates`), and the decided-deviations ledger that tells a reviewer what it may
+  NOT flag. Removing a pattern from either quietly disarms a gate, so the file that
+  decides who reviews everything else needs an owner of its own (BIN-851).
+  → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`
 
 ## 26. Information Architect
 
@@ -575,7 +585,11 @@ knowledge contract that govern how Claude ships code. As of the 2026-06→07 bui
 it absent — this section is the refresh):
 
 - **Commit-gate reviewer agents** — `binge-code-reviewer`, `binge-security-reviewer`,
-  `binge-test-reviewer` run before any commit and stamp freshness markers.
+  `binge-test-reviewer` and `binge-integration-reviewer` (which owns both the whole-diff
+  gate and the push gate) run before any commit. They no longer stamp freshness markers:
+  since 2026-08-01 proof of review is the RECORDED ledger (`reviewProof: "ledger"` in
+  `.claude/shared-plugin.json`) — a hook logs which reviewer read which bytes and the
+  verdict it ended on, and writing a marker or the ledger by hand is refused.
 - **Hooks** — `dossier-freshness`, `exit-plan-suggest-review` (high-stakes plan →
   suggest a stakeholder panel), `require-review-before-commit`, workflow-map + lessons
   guards.
@@ -586,9 +600,15 @@ it absent — this section is the refresh):
 - **A knowledge contract** — `tasks/lessons.md` + its auto-loaded digest
   (`.claude/rules/lessons-digest.md`).
 
-Much of the harness (`.claude/` agents + hooks) is gitignored (local-only, $0
-interactive), while the durable artifacts (role map, world-watch state, ADRs, metrics)
-are committed. Governance is shared between the **Engineering Manager (#25)** (working
+The harness IS committed, and deliberately so: the reviewer agents, their knowledge
+files, every `.claude/rules/*.md`, the hooks and `.claude/shared-plugin.json` are all
+tracked — an unversioned gate is one machine loss away from being gone. Only per-run
+state is ignored (`.claude/state/`, `worktrees/`, `cache/`, `hooks/sessions/`,
+`hooks/__pycache__/`, `linear-tracker.json`, `scheduled_tasks.lock`, `*.doctor-backup`).
+This matters since BIN-803: a pattern only survives into `docs/org/ownership-map.json`
+if git tracks its path, so "the harness is gitignored" would be an instruction to drop
+these files from the map. The durable artifacts (role map, world-watch state, ADRs,
+metrics) are committed too. Governance is shared between the **Engineering Manager (#25)** (working
 agreement, CI gates, deploy drift-guard) and this Agent-Ops layer (the pre-build
 stakeholder panel + the commit-gate reviewers). If Binge ever formalizes a 27th-style
 "executable role," this is the machinery it would own.

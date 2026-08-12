@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 151,
+  "patternCount": 156,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -173,9 +173,9 @@
         "src/app/page.tsx",
         "src/app/sitemap.ts",
         "src/lib/analytics.ts",
-        "src/lib/tmdb/seoCoverage.ts",
+        "src/lib/seo/selectionSeed.ts",
         "src/lib/tmdb/selectionManifest.ts",
-        "src/lib/seo/selectionSeed.ts"
+        "src/lib/tmdb/seoCoverage.ts"
       ]
     },
     "16": {
@@ -276,6 +276,8 @@
       "title": "Engineering Manager / Release Manager",
       "slug": "engineering-manager-release-manager",
       "patterns": [
+        ".claude/rules/accepted-deviations.md",
+        ".claude/shared-plugin.json",
         ".github/dependabot.yml",
         ".github/workflows/deploy.yml",
         "CLAUDE.md"
@@ -296,6 +298,7 @@
       "title": "Database Administrator / Data-layer Engineer",
       "slug": "database-administrator-data-layer-engineer",
       "patterns": [
+        "docs/analysis/EXTERNAL_ACTIONS.md",
         "firestore.indexes.json",
         "firestore.rules",
         "functions/src/communityRatings/index.ts",

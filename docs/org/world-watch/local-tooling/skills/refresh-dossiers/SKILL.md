@@ -5,7 +5,7 @@ description: Re-auditerar bara de roller vars dossier flaggats inaktuell (av dos
 
 # /refresh-dossiers — re-audit only the roles whose code changed
 
-The dossier-freshness hook (`.claude/hooks/dossier-freshness.ps1`) drops a marker for a
+The dossier-freshness hook (`.claude/hooks/dossier-freshness.mjs`) drops a marker for a
 role whenever a file it owns is edited. This skill re-audits **only those flagged
 roles** against the current code, updates their sections of the role map, and clears
 the markers. It **only ever edits documentation** — never app code.
@@ -60,8 +60,20 @@ node docs/org/gen-ownership-map.mjs
 ```
 Never hand-edit `ownership-map.json` — it's generated.
 
+**It may exit 1, and that is a real finding, not a crash** (BIN-803). Besides writing the
+map, it checks whether any tracked code file sits in a directory the map enumerates
+file-by-file without a role naming it, ratcheted against the committed baseline
+`docs/org/ownership-gaps.json` (299 entries today). The map is written BEFORE the check, so
+nothing is lost — but the exit code is telling you a NEW unowned sibling appeared. Name it
+under its owning role in the doc and re-run. Only if genuinely no role should own it:
+`node docs/org/gen-ownership-map.mjs --update-gaps` to re-baseline, deliberately. The same
+check runs in `npm test`, which gates CI and the deploy, so ignoring it here just moves the
+failure to the deploy.
+
 ### 6. Commit the doc changes
-Commit `docs/role-responsibilities.md` (+ `ownership-map.json`/`state.json` if changed)
+Commit `docs/role-responsibilities.md` (+ `ownership-map.json`/`state.json` if changed,
+and `docs/org/ownership-gaps.json` if step 5 re-baselined it — an uncommitted re-baseline
+does not stay quiet, it fails `npm test` on the deploy path)
 with a message like `docs(org): refresh dossiers for roles N, M after <change>`.
 (Markers live under gitignored `.claude/state/` and are never committed.)
 
