@@ -96,11 +96,21 @@ const CODE_ROOTS = ['src/', 'functions/', 'extension/', 'shared/'];
 // before. Test siblings are listed too — deleting a gate's test is the same hole as
 // deleting the gate. The commit-gate hooks themselves live outside this repo
 // (C:/claude-plugins), so they never appear in a blast radius here.
+// BIN-864 + BIN-873 (2026-08-12) added the second pair each: `gen-ownership-map.mjs`
+// computes the ownership map this router reads — it decides who owns what — and
+// `check-public-env.mjs` is the guard that exists because a public env var went missing
+// from the production build for three months with CI and deploy green (BIN-849). Both
+// routed `skip` until now. Keep this set and `reviewGates` in `.claude/shared-plugin.json`
+// IDENTICAL: one advises, the other blocks, and widening one has never widened the other.
 const TOOLING_CODE_FILES = new Set([
   'docs/org/route.mjs',
   'docs/org/route.test.mjs',
+  'docs/org/gen-ownership-map.mjs',
+  'docs/org/gen-ownership-map.test.mjs',
   'scripts/check-workflow-map.mjs',
   'scripts/check-workflow-map.test.mjs',
+  'scripts/check-public-env.mjs',
+  'scripts/check-public-env.test.mjs',
 ]);
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
@@ -364,6 +374,23 @@ function selftest() {
     { paths: ['docs/org/route.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
     { paths: ['docs/org/route.test.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
     { paths: ['scripts/check-workflow-map.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+
+    // ── BIN-864 / BIN-873 ────────────────────────────────────────────────────────────
+    // Same class, two more files. Only `tier` is pinned here, deliberately: these are
+    // unowned today and therefore seat #14, but naming an owner in
+    // docs/role-responsibilities.md is an INTENDED improvement, and a golden case that
+    // pins `unmapped-code` would report that improvement as a failure. What must never
+    // change is that they stop being `skip`.
+    //
+    // The three BIN-805 cases above still pin `unmapped-code`, and that inconsistency is
+    // tolerated on purpose: `--selftest` is invoked by NOTHING — not package.json, not
+    // ci.yml, not deploy.yml (whose "Script self-tests" step globs `scripts/**` and never
+    // reaches docs/org/), not a hook. So a stale pin here false-alarms a human running it
+    // by hand; it cannot fail a deploy. The equivalent assertions that DO gate are in
+    // route.test.mjs, and those are written to survive an ownership improvement. Wiring
+    // this block into a gate, or deleting it in favour of route.test.mjs, is its own job.
+    { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium' },
+    { paths: ['scripts/check-public-env.mjs'], tier: 'medium' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.
     { paths: ['firestore.rules', 'src/lib/no-such-dir/brandNew.ts'], tier: 'top', mustSeat: 4 },
   ];

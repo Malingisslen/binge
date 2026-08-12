@@ -18737,3 +18737,531 @@ instance" passage (Extract-then-test & layering bullet, the one right after
 `--check` oracle correction and the equality-vs-direction-filter ratchet-assertion-shape
 lesson to the SAME sentence that already discusses this file's `main()`, rather than
 starting a new bullet.
+
+## 2026-08-12 — re-review: route.test.mjs self-clearing it.each fix (BIN-864/873)
+
+**Context**: re-review of `docs/org/route.test.mjs` (staged, HEAD `bfb82f4`, nothing
+committed) after the integration reviewer found a defect my earlier pass missed: the
+`it.each` in "the router and the gate scripts cannot clear themselves" pinned
+`reasonCode: 'unmapped-code'`, `panel: [14]`, `unownedCode: [path]` for all eight
+self-reviewing tooling files — the same self-clearing trap already refused for
+`gen-ownership-map.test.mjs`'s gap-baseline assertion ("fixing a gap must never break the
+deploy"). Following the router's own printed remedy (name the file under a role in
+`docs/role-responsibilities.md`) would have flipped those pinned fields and failed
+`npm test`, which gates `deploy.yml`. The fix scopes the `it.each` to the property the
+block is named for (`isCodePath` true, `tier==='medium'`, panel non-empty, panel never
+contains `#21`) and isolates the exact-value pin to one dedicated `it` against
+`docs/org/route.mjs` alone.
+
+**Files read** (via `Read`, not diff/grep): `docs/org/route.test.mjs`, `docs/org/route.mjs`,
+`.claude/shared-plugin.json`, `docs/org/gen-ownership-map.test.mjs`,
+`.claude/rules/accepted-deviations.md`, `docs/org/gen-ownership-map.mjs`,
+`.claude/agents/binge-test-reviewer.knowledge.md` (full, in pages).
+
+**Sha pinning (first command)** — index == worktree on every touched file, checked at
+start and re-checked after every restore:
+`.claude/shared-plugin.json` `a17b3d9…`, `docs/org/gen-ownership-map.mjs` `6044a4a…`,
+`docs/org/route.mjs` `7fa74c9…`, `docs/org/route.test.mjs` `fe28935…`,
+`docs/org/gen-ownership-map.test.mjs` `7edd174…` (untouched by this diff, read for
+precedent only).
+
+**Clean control**: `rm -rf node_modules/.vite/vitest`; `npx vitest run docs/org --no-cache`
+→ 2 files, 38 tests green (was 37 before this diff — matches the claim). `node
+docs/org/route.mjs --selftest` → all 19 cases `ok`.
+
+**Mutation runs against `docs/org/route.mjs`** (each: grep-confirm mutant present →
+`rm -rf node_modules/.vite/vitest` → `vitest run docs/org --no-cache` → grep-confirm mutant
+present in output → restore from scratchpad backup → `git hash-object` == pre-mutation sha):
+
+1. **(a) Drop `'docs/org/route.mjs'` from `TOOLING_CODE_FILES`** (python line-splice,
+   CRLF-safe). 2 failed / 36 passed: the `it.each` row for `docs/org/route.mjs` (fails at
+   `expect(isCodePath(path)).toBe(true)`) and the isolated case. Caught.
+2. **(b) Widen `isCodePath` to `p.startsWith('scripts/') → true`.** 2 failed / 36 passed:
+   `scripts/gen-app-icons.mjs → skip` and `leaves the rest of scripts/ and docs/ routing as
+   before` (both PRE-EXISTING tests, not the `it.each` block itself). Caught by siblings.
+3. **(c) `UNMAPPED_FALLBACK_ROLE = 14 → 21`.** 11 failed / 27 passed, all eight `it.each`
+   rows fail at `expect(r.panel).not.toContain(21)`, plus the isolated case and the
+   `keeps the Technical Writer from being sole reviewer` sibling. Caught cleanly by the
+   loosened `it.each` itself — this is the mutant the loosening was explicitly designed to
+   still catch, and it does.
+4. **(d) `reasonCode = 'unmapped-code'` branch's `tier` forced to `'skip'`.** 9 failed / 29
+   passed: the pre-existing BIN-788 case (`src/lib/no-such-dir/brandNew.ts`) plus all eight
+   `it.each` rows, at `expect(r.tier).toBe('medium')`. Caught.
+5. **(e) `UNMAPPED_FALLBACK_ROLE = 14 → 99`** (neither the writer `21` nor the real fallback
+   `14`, to test whether the isolated case is uniquely load-bearing vs. the `it.each`'s
+   weaker `not.toContain(21)`/`not.toEqual([])`). 2 failed: the pre-existing BIN-788 case
+   AND the isolated case — the `it.each` itself stays green (panel `[99]` satisfies both its
+   assertions). Confirms the isolated case's exact-value pin is real (it independently
+   fails) but for THIS mutant is redundant with the older BIN-788 test, not uniquely
+   load-bearing.
+6. **(g) `reasonCode` string desync** — set to `'unowned-code'` in the tier-decision branch
+   while leaving the panel-selection's `reasonCode === 'unmapped-code'` check untouched (a
+   plausible copy/typo mutant constructed to probe whether a reasonCode-only regression
+   could survive the `it.each`'s weaker checks). Traced by hand and confirmed live: for
+   every one of the eight tooling files the only two candidate owners are `#21`
+   (Technical Writer, docs/ directory owner) or nothing, so panel selection collapses onto
+   `[21]` or `[]` — both already caught by the `it.each`'s own assertions. 11 failed,
+   same set as mutant (c)'s. No mutant constructed produced a reasonCode-only failure
+   invisible to the current `it.each` + BIN-788 + "keeps the Technical Writer…" trio, given
+   the current ownership-map data shape (only role `#21` owns `docs/`).
+
+**Simulation of "naming the owner" (claim 3), reproduced independently**: backed up
+`docs/role-responsibilities.md` and `docs/org/ownership-map.json`; added a line naming
+`scripts/check-public-env.mjs` under role `#8`'s existing bullet; called
+`buildMap`+`findGaps`+wrote the map; called `route(['docs/org/route.mjs'])` directly via
+`node --input-type=module`. Result: `{tier:'medium', reasonCode:'owned', panel:[14],
+unownedCode:[]}` — reasonCode and unownedCode flip exactly as predicted; panel stays `[14]`
+only because role `#14` happened to be both the fallback and (in a separate simulation
+step) the newly-named owner. Confirmed: under the OLD (pre-fix) `it.each` this would have
+been 2 of 3 pinned fields going red for a change that is a pure improvement. Under the
+CURRENT `it.each` all four assertions (`isCodePath`, `tier`, panel-non-empty,
+`not.toContain(21)`) still pass. The isolated case DOES go red under this simulation
+(`reasonCode` no longer `'unmapped-code'`) — confirmed as the intended "signal to update
+it" behaviour, not a defect. Restored both files, hash-verified equal to their pre-edit
+shas.
+
+**Simulation of the ratchet sharp-edge (claim 4)**, reproduced independently: same doc edit
+(naming `scripts/check-public-env.mjs` under role `#8`) → `buildMap`+`findGaps` → gap count
+299 → 302, the three new gaps all being the OTHER previously-unowned `scripts/` siblings
+(`check-public-env.test.mjs`, `check-workflow-map.mjs`, `check-workflow-map.test.mjs`) that
+now inherit from the newly-owned directory. `main(['--check'])` → exit code `1`, printing
+those three as "NEW unowned sibling(s)". Matches the `gen-ownership-map.mjs` comment
+("Sharp edge, measured 2026-08-12…") exactly. This is the ratchet functioning as designed —
+disclosed in a comment, not hidden — and is a genuinely different mechanism from the
+`route.test.mjs` `it.each` trap: it fires locally before commit (dev-loop friction with an
+explicit remedy: pair the dossier edit with `--update-gaps`), not silently at deploy. Not
+filed as a finding.
+
+**Claim 5 (two golden lists at different pin-depths in `--selftest`)**: confirmed via
+`grep -n selftest` across the repo that `route.mjs --selftest` is still "wired to no gate"
+(comment in `vitest.config.ts`, unchanged since BIN-802) — it is a manual diagnostic only,
+never runs under `npm test`/CI/deploy. The three original BIN-805 selftest cases
+(`docs/org/route.mjs`, `docs/org/route.test.mjs`, `scripts/check-workflow-map.mjs`) still
+pin `reasonCode: 'unmapped-code'` + `mustSeat: 14`; the two new BIN-864/873 cases pin only
+`tier: 'medium'`, with an inline comment explaining exactly why (pinning the reasonCode
+there would break under the same "ownership improves" scenario). The inconsistency is real
+but inert today (nothing gates on it), and the comment shows it was a deliberate, not
+accidental, choice for the NEW cases — the three OLDER cases simply weren't revisited to
+match. Reported as LOW/informational, not blocking: a human running `--selftest` by hand
+after naming an owner for `route.mjs`/`route.test.mjs`/`check-workflow-map.mjs` would see a
+false-alarm FAIL there even though nothing is actually broken.
+
+**Restoration discipline**: every mutation restored from the scratchpad backup taken before
+the first edit (`route.mjs.bak`, `route.test.mjs.bak`, `ownership-map.json.bak`,
+`role-responsibilities.md.bak`); `git rev-parse :<f>` vs `git hash-object <f>` re-checked
+equal after every restore, and one final joint check after all six mutants + two
+simulations confirmed all four touched files (`.claude/shared-plugin.json`,
+`docs/org/gen-ownership-map.mjs`, `docs/org/route.mjs`, `docs/org/route.test.mjs`) still
+match their original staged shas. Final clean-control re-run: 2 files, 38 tests green;
+`--selftest` all 19 `ok`.
+
+**Verdict**: the diff is a real fix, not a weakening — it removes an over-specified pin that
+would have broken `npm test`/`deploy.yml` on the router's OWN remedy (the identical trap
+already refused in `gen-ownership-map.test.mjs`), replaces it with the property the block is
+actually named for, and isolates the fragile exact-value assertion to one case that is
+DESIGNED to redden the moment ownership improves. No assertion was deleted without a
+replacement; no test was skipped; the loosened `it.each` still independently kills every
+constructed mutant that a reasonable maintainer would introduce by accident. One LOW,
+non-blocking, informational finding (the `--selftest` pin-depth inconsistency, inert because
+`--selftest` gates nothing). **REVIEW-VERDICT: pass (0 blocking)**.
+
+**Knowledge-file fold**: extended the existing `gen-ownership-map.mjs` self-clearing-ratchet
+passage (Extract-then-test & layering bullet, immediately after the "CLOSED 2026-08-12
+(BIN-803 round 3)" close) in place, appending one paragraph that names the identical trap
+recurring in a hand-written `it.each` golden list rather than a ratchet's equality check,
+the concrete mutants that still discriminate it, why the isolated case is currently
+redundant-but-not-decorative, and the `--selftest`-is-ungated nuance — rather than starting
+a new bullet.
+
+## 2026-08-12 — BIN-864/873/830 re-review: route.test.mjs hoists GATE_SCRIPTS to one shared list
+
+**Diff reviewed** (`docs/org/route.test.mjs`, staged on top of bfb82f4, index==worktree
+throughout at `d233b42...` for the test file, `31fcf8b...` for `route.mjs`, `a17b3d9...`
+for `.claude/shared-plugin.json`): replaced two independently-maintained lists — the
+advising `it.each` iterating all 8 tooling-gate files, the blocking-gate test iterating a
+hand-copied 4-path array (only the BIN-864/873 additions: `gen-ownership-map.mjs/.test.mjs`,
+`check-public-env.mjs/.test.mjs`) — with one hoisted `const GATE_SCRIPTS = [...8 paths]`,
+`it.each`d on the advising side and `for`-looped on the blocking side. Comment also
+corrected: "the router-side TOOLING_CODE_FILES list has been widened four times" → "widened
+once since BIN-805 created it … the blocking gate's own pattern array has moved four
+times" (the two claims had been swapped).
+
+**Mutation 1 — does the fix actually close the self-clearing hole?** Reproduced the
+regression IN MEMORY (never edited the real `.claude/shared-plugin.json` — the classifier
+correctly blocked a direct edit to that shared/tracked infra file, so the mutation was
+run by loading the real JSON, string-replacing just the one pattern entry programmatically
+in a throwaway Node script, and reimplementing `route.test.mjs`'s own
+`integrationGateMatches` verbatim against the mutated in-memory copy): narrowed the
+blocking pattern from `^(docs/org/(route|gen-ownership-map)|scripts/(check-workflow-map|
+check-public-env))(\.test)?\.mjs$` back to `^(docs/org/gen-ownership-map|scripts/
+check-public-env)(\.test)?\.mjs$` (the pre-BIN-864/873 form). Checked against the OLD
+4-item hand-copied array: all 4 return `true` (the old test would have stayed green,
+since it only ever looked at the paths that still matched). Checked against the full
+8-item `GATE_SCRIPTS`: `docs/org/route.mjs`, `docs/org/route.test.mjs`,
+`scripts/check-workflow-map.mjs`, `scripts/check-workflow-map.test.mjs` all return `false`
+— the hoisted `it.each`/`for` loop goes red on exactly those four. Confirms the claim:
+the fix is real, and it is the shared-const shape, not a mutation-tested claim taken on
+faith.
+
+**Mutation 2 — does the shared const make anything circular / newly vacuous?** Deleted
+`'docs/org/route.mjs'` from `GATE_SCRIPTS` (backup+restore, hash-verified both ways,
+`node_modules/.vite/vitest` cleared before the run). Full suite: 37/37 green (one fewer
+test, no failure). Grepped every OTHER call site of `integrationGateMatches` in the file —
+none references `docs/org/route.mjs`; the blocking-side coverage of that file has zero
+redundancy anywhere else. The advising side is partially redundant (two dedicated BIN-805
+`it`s at the file's bottom half separately call `route(['docs/org/route.mjs'])` and pin
+`reasonCode`/`panel`/`unownedCode`/`dropped` exactly), so a shrink is silently invisible on
+the BLOCKING side specifically, for any of the 8 files. **Verdict: not circular** — `GATE_SCRIPTS`
+is a test-owned fixture, never read by either production artifact
+(`route.mjs`'s `TOOLING_CODE_FILES`, `.claude/shared-plugin.json`'s `patterns`), so a
+production-side regression is still caught (verified in Mutation 1). The residual is the
+older, generic one this file's own header already names ("two lists decide who reviews a
+change and widening one never widens the other") turned inward: `GATE_SCRIPTS` is now the
+SOLE place a maintainer names a 9th gate script, and shrinking it (not just failing to grow
+it) is invisible on the blocking side for any entry with no dedicated sibling test. LOW —
+report, don't block; this is strictly better than the two-list status quo it replaced (the
+prior 4-item hand-copied array had ZERO chance of catching a narrowed regex on the other
+four paths, versus a possible future accidental deletion here).
+
+**Change 2 (comment correction) — verified by `git log`:** `git log --oneline -S
+TOOLING_CODE_FILES -- docs/org/route.mjs` returns exactly one commit, `24f6612` (BIN-805) —
+confirming the router-side list was created there and the currently-staged diff is its
+FIRST subsequent widening (BIN-864/873), not a fourth. `.claude/shared-plugin.json`'s
+`reviewGates[].patterns` array, checked via `git show bfb82f4:.claude/shared-plugin.json`
+against the working tree, moved in `cd8c59e` (`.github/` pattern), `6d1cc39`/BIN-830
+(created the `docs/org/route|scripts/check-workflow-map` alternation), and the currently
+staged diff (BIN-851 added two new patterns, BIN-864/873 widened the alternation) — four
+distinct edits total, matching the corrected comment.
+
+**Verdict: pass, 0 blocking.** One LOW finding filed (shrink-blind-spot on the blocking
+side of `GATE_SCRIPTS`), not filed as a gap under `accepted-deviations.md` (not a decided
+deviation, just below the blocking bar). `.claude/rules/accepted-deviations.md` read in
+full; nothing in this diff matches an entry there.
+
+
+## 2026-08-12 — GATE_SCRIPTS: comment mitigation re-examined against same-day BIN-838 precedent
+
+**Diff reviewed:** `docs/org/route.test.mjs`, staged against HEAD bfb82f4, comment-only
+addition since the prior pass on this file (which itself was the full BIN-864/873/851
+hoist: `GATE_SCRIPTS` const extracted from an inline `it.each([...])` array, reused by a
+new `integrationGateMatches` helper hoisted out of the BIN-851 describe block, and a new
+test `'names every one of those scripts in the BLOCKING list too (BIN-864/873)'` added).
+This pass's own diff (verified via the isolated hunk in `git diff --cached`) is a pure
+`//`-comment block inserted directly above the `GATE_SCRIPTS` declaration:
+
+```
+// DO NOT shrink this array to make a test pass. It is the ONLY place the blocking side
+// is checked — measured: dropping an entry leaves the suite green, because no sibling
+// test names any of these files against the commit gate. Removing a path here silently
+// removes its blocking-side coverage, which is the same self-clearing move the array was
+// hoisted to prevent. A file leaves this list only when it also leaves BOTH real lists.
+```
+
+No assertion line, no test body, no fixture changed in this hunk.
+
+**Mutation run:** pinned `git hash-object`/`git rev-parse :docs/org/route.test.mjs` both
+`771a5c9754cc0ee2706a482943dcce0938dbffe3` (index == worktree, no drift) before starting.
+Backed up to scratchpad. Removed one entry (`'scripts/check-public-env.test.mjs'`) from
+`GATE_SCRIPTS`. `grep -n` confirmed the mutant landed (line absent). `rm -rf
+node_modules/.vite/vitest` then `npx vitest run docs/org --no-cache`:
+
+```
+Test Files  2 passed (2)
+     Tests  37 passed (37)
+```
+
+(clean control, same command pre- and post-mutation, was 38/38.) Confirms the comment's
+own "measured: dropping an entry leaves the suite green" claim is accurate — verified
+live, not inherited. `grep` across the file for the eight filenames confirmed none is
+named by any test other than via `GATE_SCRIPTS` itself, supporting "no sibling test names
+any of these files against the commit gate." Restored from scratchpad backup;
+`git hash-object` back to `771a5c9…`; `git status --porcelain` showed clean `M ` (staged
+diff only, no stray unstaged delta); full clean-control re-run after restore: 38/38 green.
+
+**Verdict on the comment's accuracy:** every factual claim in it checks out — not
+overclaimed, not underclaimed. No assertion was touched by this edit (comment-only hunk,
+confirmed both by diff shape and by the restore-to-pinned-sha check).
+
+**Verdict on adequacy of mitigation — REVISED from the prior pass's "comment is enough":**
+`git show 405a2fc --stat` (BIN-838, same day, this repo) shows the identical failure
+class — two hand-maintained CI lists where "nothing else runs them … a newly added test
+was silently absent" — fixed with a `MIN=2` count-floor guard, not a comment, specifically
+because the ticket's own commit message frames the floor as "not decoration." That is a
+same-day, same-repo, exact-match precedent for closing this exact residual mechanically.
+Recommended reversal: add `expect(GATE_SCRIPTS).toHaveLength(8)` (or equivalent) beside
+the comment — one line, same cost class as the BIN-838 floor, and it actually stops CI
+from going green on the shrink the comment only warns against. Reported this plainly
+rather than silently keeping the earlier "comment is sufficient" call.
+
+**Fold-in:** added to `binge-test-reviewer.knowledge.md`'s "Review protocol & scope
+discipline" section (merged as a new bullet, not appended to an unrelated one — no
+existing bullet covered "prose vs mechanical fix for a list-shrink finding").
+
+**Final verdict issued:** pass (0 blocking) — the LOW finding stands as LOW (a manually
+curated 8-entry array with a load-bearing comment above it is still visible to ordinary
+code review, unlike a machine-discovered glob list), but the mitigation recommendation was
+revised from comment-only to comment-plus-length-floor, stated explicitly to the
+requester rather than left as a silent reversal.
+
+## 2026-08-12 — GATE_SCRIPTS follow-up: floor built, dedup companion proven load-bearing (route.test.mjs, HEAD bfb82f4)
+
+**Context:** same-day follow-up to the entry immediately above. The requester built the
+`MIN=2`-style mechanical fix I asked for in the prior review, but with one deliberate
+change: instead of the exact `expect(GATE_SCRIPTS).toHaveLength(8)` I had suggested, they
+shipped a FLOOR plus a no-duplicate companion:
+
+```js
+expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(8);
+expect(new Set(GATE_SCRIPTS).size).toBe(GATE_SCRIPTS.length); // no duplicate padding
+```
+
+Rationale given: an exact-length assertion fails on the desired direction (a ninth real
+gate script added later) — the same "punishes the fix" trap this same commit (bfb82f4)
+already removed from two other assertions in the same file (the ownership-gap baseline,
+and the `unmapped-code`/`[14]` pins in the `it.each` block). Asked me to judge whether the
+floor is decisive and whether the dedup line is meaningful or decoration.
+
+**Review method:** `git status --porcelain` clean except the six files under review
+(`.claude/agents/binge-test-reviewer.knowledge{,.archive}.md`, `.claude/shared-plugin.json`,
+`docs/org/{gen-ownership-map.mjs,route.mjs,route.test.mjs}`); `git rev-parse :docs/org/route.test.mjs`
+== `git hash-object docs/org/route.test.mjs` == `7649e5583608607f8be00d073493b6cd3e957021`
+before starting and re-confirmed after every restore. Read the full file via the `Read`
+tool. Snapshotted it to scratchpad (`route.test.mjs.orig`, sha1 `862e16754a4bd793b5289b1def13b74f26374163`)
+before any mutation; restored from that snapshot after each one (never `git checkout --`,
+per the lessons-digest rule), and re-verified `git hash-object` == the pre-mutation blob
+sha every time.
+
+**Clean control:** `rm -rf node_modules/.vite/vitest` then
+`npx vitest run docs/org/route.test.mjs` → 28 passed (1 test file). (The requester's
+"39 tests green" figure is from a broader run that includes sibling files; this file alone
+is 28.)
+
+**Mutation 1 — shrink alone:** removed `'scripts/check-public-env.test.mjs'` from
+`GATE_SCRIPTS` (array → 7 entries). Result: 1 failed / 26 passed. The lone failure is the
+floor line itself: `AssertionError: expected 7 to be greater than or equal to 8` at
+`route.test.mjs:229`. Matches the requester's claim (they reported 37/37→1 failed/37 passed
+on the fuller run; isolated to this file it's 1/27). Restored, hash re-verified.
+
+**Mutation 2 — growth alone:** appended a 9th entry, `'scripts/__reviewer_probe.mjs'`
+(a path that is real-looking but is NOT in `docs/role-responsibilities.md`'s ownership map
+nor in `.claude/shared-plugin.json`'s `reviewGates` exact/patterns list — i.e. a script that
+would need real onboarding to become a genuine gate script). Result: 2 failed / 27 passed.
+The FLOOR test itself stays green (correct — growth is the desired direction and must never
+fail it). The two failures are exactly the ones that should catch an unonboarded addition:
+`scripts/__reviewer_probe.mjs routes medium, not skip` (fails at `isCodePath(path)).toBe(true)`
+— the probe path isn't recognized as code at all) and `names every one of those scripts in
+the BLOCKING list too` (fails at `integrationGateMatches(path)` — the probe reaches no
+blocking reviewer). This is the correct, desired failure mode: GATE_SCRIPTS growing without
+the two real lists growing to match is caught, but not by the floor test — by the
+list-consistency tests, which is the right division of labor. Restored, hash re-verified.
+
+**Mutation 3 — the decisive one, shrink+pad:** removed the real entry
+`'scripts/check-public-env.test.mjs'` AND appended a duplicate of an existing entry
+(`'docs/org/route.mjs'`) to bring the array back to exactly 8 elements. This is the
+"pad with a repeat" attack a floor-without-a-companion is vulnerable to: length stays 8
+(floor passes), and since the duplicate is a REAL, already-covered path, both `it.each` and
+the blocking `for` loop just iterate it twice — no failure there either. Result: 1 failed /
+27 passed, and the failure IS the dedup line: `AssertionError: expected 7 to be 8
+// Object.is equality` at `new Set(GATE_SCRIPTS).size).toBe(GATE_SCRIPTS.length)`,
+`route.test.mjs:231` — the floor line directly above it (`toBeGreaterThanOrEqual(8)`)
+passed. This proves the dedup assertion is NOT decoration: it is the only line in the file
+that catches a shrink concealed by duplicate-padding, a real coverage loss that the floor
+alone lets through silently. Restored, hash re-verified; clean control re-run 28/28 after
+the last restore.
+
+Also ran `npx eslint docs/org/route.test.mjs` — clean, no output. `git status --porcelain
+docs/org/route.test.mjs` showed only the pre-existing staged `M ` (worktree == index)
+before writing the verdict.
+
+**Verdict issued:** pass (0 blocking). The floor is decisive in the direction that matters
+(shrink alone catches it, growth alone doesn't false-positive), and the dedup companion is
+independently load-bearing, not decoration — it is the one line that defeats the
+shrink-and-pad-with-a-duplicate evasion the floor alone permits. Recommendation to the
+requester: accept the floor-not-equality design as-is; it is strictly better than the
+`toHaveLength(8)` I originally suggested, and the dedup line should stay.
+
+**Lesson folded into the active file:** extended the existing GATE_SCRIPTS/BIN-864/873/851
+bullet (principles file, "Review protocol & scope discipline") in place with the
+floor-vs-equality rationale and the shrink+pad mutation as the standing test for "is this
+dedup/no-duplicate-padding companion assertion meaningful" whenever a list-shrink gap is
+fixed with a floor rather than an exact count.
+
+## 2026-08-12 — GATE_SCRIPTS follow-up: comment-only correction re-review, one stale duplicate found (route.test.mjs, HEAD bfb82f4, staged)
+
+**Context:** fourth attempt in this staged commit to get the `GATE_SCRIPTS` block's comments
+right. The integration reviewer blocked on the header's present-tense "measured: dropping an
+entry leaves the suite green" claim, false since the floor test (added the round before)
+makes a shrink reden. Requester made three targeted corrections and asked me to re-verify:
+(1) shrink measurement now past-tense, names the floor as successor; (2) the header's history
+claim ("earlier draft checked just the four new BIN-864/873 paths") corrected to say NO gate
+script was checked blocking-side at bfb82f4, not "just four" as an earlier version of this
+correction had wrongly implied; (3) "the trap this same commit removed from two other
+assertions" reworded to "took out of the ownership-gap baseline assertion, and out of the
+`it.each` above, whose three over-tight pins moved into one isolated case" — since the pins
+were MOVED, not removed.
+
+**Diff verified as comment-only:** `git cat-file -p <prior-round-blob>` diffed against the
+current worktree file — three hunks, all inside `//` comment lines (the GATE_SCRIPTS header,
+twice, and the floor test's own docstring); no assertion line touched. Confirmed via
+`git diff --cached --stat`: only `docs/org/route.test.mjs` (130 ++/--), `docs/org/route.mjs`
+(27+), `docs/org/gen-ownership-map.mjs` (10+), `.claude/shared-plugin.json`,
+`.claude/agents/binge-test-reviewer.knowledge{,.archive}.md` are staged —
+`docs/org/gen-ownership-map.test.mjs` is NOT in the staged diff.
+
+**Correction 1 — verified TRUE.** Current text: "That shrink WAS measured green, before the
+floor at the end of this block existed; the floor is what makes it loud now." Past tense,
+names the floor. Live re-verification below confirms the underlying fact.
+
+**Correction 2 — verified TRUE against bfb82f4 and against this file's own archive.**
+`git show bfb82f4 -- docs/org/route.test.mjs`'s diff context shows the BIN-851 describe block
+at that commit tested only `.claude/shared-plugin.json` / `.claude/rules/accepted-deviations.md`
+/ `lessons-digest.md` — zero gate-script paths — confirming "At bfb82f4 NO gate script was
+checked on the blocking side at all — the only blocking-side test named the two `.claude`
+files." The prior archive entry (2026-08-12, "BIN-864/873/830 re-review") independently
+recorded "the blocking-gate test iterating a hand-copied 4-path array (only the BIN-864/873
+additions: gen-ownership-map.mjs/.test.mjs, check-public-env.mjs/.test.mjs)" — confirming "an
+earlier draft of this change checked just the four new BIN-864/873 paths, ... never
+committed" is accurate.
+
+**Correction 3 — mostly verified, one clause still imprecise (see finding below).** The
+`it.each` diff (`git diff --cached`) shows the three tight pins (`reasonCode`, `panel`,
+`unownedCode`) removed from the `it.each` body and reappearing verbatim in the new isolated
+test `'seats the unmapped-code fallback while these files have no named owner'` — "moved into
+one isolated case, not removed" is accurate for that half.
+
+**FINDING (blocking) — a duplicate of the exact claim under correction survived uncorrected.**
+`docs/org/route.test.mjs`, inside the `'keeps a floor under the list itself...'` test's own
+docstring (a few lines below the corrected header): "Measured: dropping an entry leaves the
+suite 37/37." This is the SAME "measured: X leaves the suite green" claim the header was just
+fixed for, left present-tense and untouched. Live re-verification (scratchpad snapshot taken
+first, sha `659bd5f8ef435314b57ad63f1822ffa190ca61d2` == index == worktree throughout,
+`rm -rf node_modules/.vite/vitest` before every run):
+
+- Clean control: `npx vitest run docs/org --no-cache` → 2 files, 39 tests green.
+- Shrink alone (removed `'scripts/check-public-env.test.mjs'`, grep-confirmed landed): 1
+  failed / 37 passed (38 total). Failure is the floor line itself:
+  `AssertionError: expected 7 to be greater than or equal to 8` at `route.test.mjs:233`.
+  Restored, hash re-verified `659bd5f8…`, clean control re-run 39/39.
+- Shrink+duplicate-pad (removed the same real entry, appended a duplicate `'docs/org/route.mjs'`
+  to bring the array back to 8): 1 failed / 38 passed (39 total). Failure is the dedup line:
+  `AssertionError: expected 7 to be 8 // Object.is equality` at `route.test.mjs:235`. Restored,
+  hash re-verified, clean control re-run 39/39.
+
+Both mutants die on the same lines as the prior round's proof (floor line, dedup line) — the
+assertions themselves are unchanged, confirmed byte-for-byte via `diff -u` against a
+prior-round blob recovered with `git cat-file -p <sha>` (only the three comment hunks differ).
+But "leaves the suite 37/37" is now demonstrably false: a shrink reddens the suite (1
+failed/37 passed), it does not "leave" it at 37/37 green. This is the identical defect class
+the integration reviewer already blocked the file for, recurring a second time a few lines
+away, inside the very test whose existence makes the old claim false. **BLOCKING** — fix this
+line the same way the header was fixed (past tense, name the floor as what changed the
+outcome), before commit.
+
+**FINDING (low, non-blocking) — commit-boundary imprecision in the same sentence as
+correction 3.** "the same trap this commit took out of the ownership-gap baseline assertion"
+— the ownership-gap-baseline equality→direction-only fix (per bfb82f4's own commit message:
+"It asserts direction only now, and both directions are proven") landed in `bfb82f4` itself
+(`gen-ownership-map.test.mjs`), which is NOT part of the currently staged diff (confirmed:
+absent from `git diff --cached --stat`). "This commit" (the diff being corrected here, still
+uncommitted) only touches `route.test.mjs`/`route.mjs`/a 10-line `gen-ownership-map.mjs`
+change — none of it the test file that carries that fix. The same comment block, 8 lines
+above, is careful to write "At bfb82f4" precisely to mark that exact boundary; this clause
+blurs it back for the ownership-gap half of the claim (the `it.each` half is correctly "this
+commit's" own work, confirmed above). LOW — doesn't contradict adjacent code the way the
+37/37 finding does, but worth tightening given the file's own established at-bfb82f4/at-this-
+commit distinction.
+
+**Other checks:** `npx eslint docs/org/route.test.mjs` clean, no output. Final
+`git status --porcelain` / hash re-check immediately before writing this entry: index ==
+worktree == `659bd5f8ef435314b57ad63f1822ffa190ca61d2`, byte-identical to the scratchpad
+snapshot taken at review start. `.claude/rules/accepted-deviations.md` read in full; nothing
+in this diff matches an entry there.
+
+**Verdict: fail (1 blocking).** The three requested corrections are two-for-three fully clean
+(1 and 2); correction 3 fixed what it targeted (the `it.each` mischaracterization) but the
+sentence it lives in still misattributes a different fix, and — more importantly — an
+uncorrected duplicate of the ORIGINAL blocking claim survives a few lines below in the floor
+test's own docstring. Both flagged for fix before commit.
+
+**Lesson folded into the active file:** extended the same GATE_SCRIPTS/BIN-864/873/851 bullet
+in place — a comment fix at one location (the array's header) does not fix a copy of the same
+claim living in a sibling comment, and grep the whole file for every restatement before
+declaring a correction complete; plus the narrower commit-attribution check (confirm which
+files a staged diff actually touches before crediting "this commit" with a fix that shipped
+in the parent).
+
+## 2026-08-12 — GATE_SCRIPTS header: one-word noun correction ("files" → "alternation entries"), re-review (route.test.mjs, HEAD bfb82f4, staged)
+
+**Context:** fifth pass on the same `GATE_SCRIPTS` comment block, requested by the integration
+reviewer, who found the header self-contradictory: "checked just the four new BIN-864/873
+paths, so narrowing the gate's alternation down to those two new **files** passed every
+test" — four paths, then two files. Requester changed "files" to "alternation entries" and
+asked me to confirm the corrected sentence is now true, that no assertion moved, and that the
+two GATE_SCRIPTS mutants (shrink-alone, shrink+duplicate-pad) still die red-alone. Also noted,
+out of my gate: `.claude/shared-plugin.json`'s test-gate `_note` corrected a separate false
+claim ("npm test never executes them") to name the `Script self-tests` CI/deploy step that
+actually runs `docs/org/route.test.mjs`'s sibling `.mjs` self-tests.
+
+**Diff read:** `git diff --cached` for `docs/org/route.test.mjs` and `.claude/shared-plugin.json`
+(both opened with Read in full). The word swap is the only change inside the GATE_SCRIPTS
+header comment (`route.test.mjs:142-160`); every assertion line in the file is byte-identical
+to the prior reviewed round (confirmed by diffing the `git diff --cached` hunks — no `expect(`
+line appears in either changed hunk). `.claude/shared-plugin.json`'s change is likewise
+comment-only, inside the test-gate's `_note` string.
+
+**Claim checked: is "two new alternation entries covering four paths" accurate, and would
+narrowing to exactly those two entries have passed the pre-hoist draft?** The live blocking
+gate regex (`.claude/shared-plugin.json` → `reviewGates[integration].patterns[2]`):
+`^(docs/org/(route|gen-ownership-map)|scripts/(check-workflow-map|check-public-env))(\.test)?\.mjs$`.
+Built and ran both candidate readings against the four BIN-864/873 paths in `node`:
+- "alternation entries" reading — `^(docs/org/gen-ownership-map|scripts/check-public-env)(\.test)?\.mjs$`
+  (two entries, sharing the trailing `(\.test)?` group): matched all 4/4 paths
+  (`gen-ownership-map.mjs`, `.test.mjs`, `check-public-env.mjs`, `.test.mjs`).
+- "files" reading — `^(docs/org/gen-ownership-map\.mjs|scripts/check-public-env\.mjs)$` (two
+  literal files, no shared optional suffix): matched only 2/4 — both `.test.mjs` siblings
+  failed.
+
+Since the earlier draft's `it.each` covered all four paths (both source and `.test` sibling
+per script), only the "alternation entries" reading is consistent with "passed every test."
+Under the literal "files" reading, the two `.test.mjs` assertions in that draft would have
+failed against a gate narrowed to it — confirming the reviewer's flag was correct and the
+fix resolves it. **Corrected sentence verified TRUE.**
+
+**Mutation re-verification, same two mutants as the prior round, against the CURRENT bytes**
+(sha `e180260f7c1e49cb9cd789b65ed7bf40f969ad51`, index == worktree throughout, scratchpad
+backup taken and hash-compared before/after each mutation, `rm -rf node_modules/.vite/vitest`
+before every run):
+- Clean control: `npx vitest run docs/org --no-cache` → 2 files, **39 passed**.
+- Shrink-alone (dropped `'scripts/check-public-env.test.mjs'`, Grep-confirmed landed): **1
+  failed / 37 passed** (38 total). Failure at the floor line: `AssertionError: expected 7 to
+  be greater than or equal to 8`, `route.test.mjs:235`. Restored, `git hash-object` back to
+  `e180260…`, matches `git rev-parse :docs/org/route.test.mjs`.
+- Shrink+duplicate-pad (dropped the same real entry, appended a duplicate `'docs/org/route.mjs'`
+  to hold length at 8): **1 failed / 38 passed** (39 total). Failure at the dedup line:
+  `AssertionError: expected 7 to be 8`, `route.test.mjs:237`. Restored, hash re-verified
+  `e180260…`, `git status --porcelain` showed clean `M ` (not `MM`) — worktree matches index.
+- Clean control re-run after both restores: 2 files, 39/39 green. `npx eslint
+  docs/org/route.test.mjs` — no output.
+
+Both mutants die on the same lines, with the same failure counts, as the prior round's proof —
+the comment fix touched no assertion.
+
+**Verdict issued: pass (0 blocking).** The corrected noun is accurate and load-bearing (it
+changes whether the sentence's own claim is true, not just cosmetic); no assertion moved; both
+GATE_SCRIPTS mutants remain red-alone at their known lines; clean control 39/39; eslint clean.
+
+**Lesson folded into the active file:** extended the same GATE_SCRIPTS/BIN-864/873/851 bullet
+(principles file, "Review protocol & scope discipline") in place with a new closing clause:
+a prose noun describing what a regex "would match" (files/entries/paths) needs the regex
+actually run under both readings whenever a shared optional group (here `(\.test)?`)
+multiplies one alternation term into several literal matches — the two counts are not
+interchangeable, and picking the wrong noun silently changes whether the surrounding claim is
+true. Not filed as a new bullet: it is the same "verify a claim, don't eyeball it" discipline
+the rest of that bullet already establishes, applied to regex-describing prose specifically.
+
+**Also found, out of scope for this file:** `.claude/agents/binge-test-reviewer.knowledge.md`
+is ~183,000 characters — over 6x its own stated 30k-char cap (confirmed via `node -e
+"...length"`, not byte count, which inflates further on the file's many em-dashes). This
+review's own fold-in adds to that debt rather than reducing it. A single word-level correction
+review is not the right scope to attempt the file's overdue consolidation; flagging it here so
+a dedicated pass picks it up rather than it going unnoticed.

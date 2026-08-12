@@ -184,6 +184,16 @@ export function buildMap(tracked) {
 // fails on files that are NEW since the baseline, which is what "an owned folder GETS an
 // unowned sibling" means. Re-baseline deliberately with --update-gaps.
 //
+// Sharp edge, measured 2026-08-12: naming the FIRST file in a previously-unowned
+// directory makes its CODE-PATH siblings gaps at once, because a directory only starts
+// inheriting once something in it is owned. Only isCodePath siblings count, so the blast
+// is smaller than it sounds — naming `scripts/check-public-env.mjs` produced exactly 3
+// new gaps (its own test plus the two check-workflow-map files), and naming
+// `docs/org/gen-ownership-map.mjs` produced 0, because #21 already pattern-owns `docs/`.
+// The right first response is to name those siblings too, which returns the set to zero;
+// reach for --update-gaps only when no role should own them, because baselining is a
+// permanent record that they have no owner.
+//
 // WHERE this actually blocks (BIN-830: check where a rule RUNS, not where it is written).
 // Nothing calls this script automatically — not package.json, not any workflow or hook;
 // only the interactive /refresh-dossiers skill runs it. The enforcement is
