@@ -77,10 +77,32 @@ jobs:
       - name: Workflow map paths must exist
         run: node scripts/check-workflow-map.mjs
 
-      # Unit-tests the workflow-map linter itself (same check as ci.yml). Runs
-      # on Node's built-in runner — no deps needed.
-      - name: Workflow map linter self-tests
-        run: node --test scripts/check-workflow-map.test.mjs
+      # Every scripts/**/*.test.mjs, found BY PATTERN rather than named one by one
+      # (BIN-838, same step as ci.yml). Nothing else runs these: vitest's include globs
+      # do not cover scripts/**. While the list was hand-maintained a NEW script test
+      # ran nowhere — it passed by hand and was silently absent from every CI run, and
+      # on main this file is the whole gate. Quote the glob so NODE expands it.
+      - name: Script self-tests
+        run: |
+          set -euo pipefail
+          # Two guards, and the FLOOR is the interesting one. A zero-match glob makes
+          # `node --test` exit 0 having run nothing; a floor of zero would still be
+          # silent when just ONE of the files leaves the pattern — and that single case
+          # is exactly what the hand-written list this step replaced caught loudly
+          # ("Could not find '<path>'", exit 1). Growth needs no edit here, which is the
+          # whole point of BIN-838; a SHRINK is a deliberate act and must edit MIN. If
+          # BIN-850 later migrates these files to vitest, this step fails until someone
+          # deletes it — the right direction to fail in.
+          # `-type f -not -path '*/.*'` makes find's set identical to the one Node's
+          # glob actually runs: Node skips dot-directories, find does not.
+          MIN=2
+          COUNT=$(find scripts -type f -name '*.test.mjs' -not -path '*/.*' | wc -l)
+          if [ "$COUNT" -lt "$MIN" ]; then
+            echo "::error::Only $COUNT scripts/**/*.test.mjs matched, expected at least $MIN -- a script self-test left the pattern, or the glob stopped matching."
+            exit 1
+          fi
+          echo "Running $COUNT script self-test file(s)."
+          node --test "scripts/**/*.test.mjs"
 
       # Every NEXT_PUBLIC_* read by src/ must be handed to the build below.
       # Duplicated from ci.yml for the same reason the map linter is: ci.yml
@@ -92,9 +114,6 @@ jobs:
       # that can take 45 minutes.
       - name: Public env vars must be wired for deploy
         run: node scripts/check-public-env.mjs
-
-      - name: Public env linter self-tests
-        run: node --test scripts/check-public-env.test.mjs
 
       - name: Test
         run: npm test
