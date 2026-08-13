@@ -1216,6 +1216,33 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     expect(itemCalls[0][1]).toEqual({ notes: 'DELETE_FIELD' });
   });
 
+  it('eager migration writes NOTHING while a deletion of this account is unfinished (BIN-816)', async () => {
+    // `WatchlistProvider` mounts ABOVE `AppShell`, so it survives the swap to the
+    // limbo screen and keeps running its auto-writers off the snapshot with no
+    // user action at all. `isOwner(uid)` in firestore.rules never requires
+    // users/{uid} to exist, so those writes land after the profile is gone —
+    // and the server sweep, which looks for accounts WITHOUT a profile, can
+    // never see them. Personal data outliving an Art. 17 request, not an untidy
+    // screen (security + test review, 2026-08-13).
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    try {
+      await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+      await flushMigration();
+
+      expect(setDoc).not.toHaveBeenCalled();
+    } finally {
+      window.localStorage.removeItem('binge:deletionStarted:u1');
+    }
+  });
+
+  it('and resumes normally for an account with no deletion in flight (control)', async () => {
+    // Without this, the assertion above passes on a migration that never runs.
+    await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+    await flushMigration();
+
+    expect(callsTo('users/u1/watchlistNotes/tv_50')).toHaveLength(1);
+  });
+
   it('eager migration never writes a previous account\'s notes under the new uid (itemsUidRef cross-account guard)', async () => {
     // Account A (u1) has a legacy inline note; its migration runs.
     const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'A:s privata anteckning' })]);
@@ -1496,6 +1523,23 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
       ]));
     });
     expect(setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('addedAt-reparationen skriver INGENTING under en pabörjad radering (BIN-816)', async () => {
+    // Systemisk skrivning, ingen anvandarhandling — samma resonemang som
+    // notes-migreringen ovan. Den har effekten ligger i samma provider och
+    // overlever pa exakt samma satt att skalet bytts ut mot limbo-skarmen.
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    try {
+      mount();
+      await act(async () => {
+        snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: new Date('2025-11-20T18:30:00Z') })]));
+      });
+
+      expect(setDoc).not.toHaveBeenCalled();
+    } finally {
+      window.localStorage.removeItem('binge:deletionStarted:u1');
+    }
   });
 
   it('does not repair a previous account\'s rows on a same-session uid switch', async () => {

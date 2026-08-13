@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // slugifyUsername/suggestUsernameFromIdentity är pure och rör inte Firestore,
 // men ./username importerar fsdb från ./db för andra exporter — mocka så
@@ -13,7 +13,10 @@ vi.mock('firebase/firestore', () => ({
   serverTimestamp: vi.fn(),
 }));
 
-import { slugifyUsername, suggestUsernameFromIdentity, validateUsername } from './username';
+import { slugifyUsername, suggestUsernameFromIdentity, validateUsername, claimUsername } from './username';
+import { markDeletionStarted, clearDeletionStarted } from '../deletionMarker';
+import { DELETION_IN_PROGRESS } from './userDocWrite';
+import { writeBatch } from 'firebase/firestore';
 
 describe('slugifyUsername', () => {
   it('lowercaserar och stripperar mellanslag', () => {
@@ -68,5 +71,48 @@ describe('suggestUsernameFromIdentity', () => {
     // smyger in en kandidat som validateUsername skulle nita.
     const candidate = suggestUsernameFromIdentity('-foo-', null);
     expect(candidate === null || validateUsername(candidate) === null).toBe(true);
+  });
+});
+
+
+// BIN-816 / ADR 0019 condition 1 — `claimUsername` is one of the two writers that
+// cannot go through `mergeUserDoc`, because `users/{uid}.username` rides in the
+// same atomic batch as the reservation move. It calls `assertProfileWritable`
+// directly instead, and that call is the thing a future refactor is most likely
+// to drop: the chokepoint scan only checks that the TOKEN appears in the file, so
+// `if (false) assertProfileWritable(uid)` would keep the guard test green (test
+// review, 2026-08-13). This pins the behaviour.
+//
+// It matters here more than anywhere else: `tryAutoClaimUsername` reaches this
+// with no user action at all, so an unguarded call re-reserves the very handle
+// the deletion cascade just released.
+describe('claimUsername mot en påbörjad radering (BIN-816)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.mocked(writeBatch).mockReset();
+  });
+
+  it('vägrar, och bygger aldrig ens sin batch', async () => {
+    markDeletionStarted('u1', 1_000);
+
+    await expect(claimUsername('u1', 'nytt', null)).rejects.toThrow(DELETION_IN_PROGRESS);
+
+    // Inte bara "den kastade": grinden ligger FÖRE batchen, så reservationen kan
+    // inte ha skrivits och sedan rullats tillbaka.
+    expect(writeBatch).not.toHaveBeenCalled();
+  });
+
+  it('släpper igenom när ingen radering pågår', async () => {
+    // Kontrollprovet. Utan det passerar påståendet ovan på en funktion som
+    // vägrar för alla.
+    const commit = vi.fn(async () => {});
+    vi.mocked(writeBatch).mockReturnValue({
+      set: vi.fn(), update: vi.fn(), delete: vi.fn(), commit,
+    } as unknown as ReturnType<typeof writeBatch>);
+    clearDeletionStarted('u1');
+
+    await claimUsername('u1', 'nytt', null);
+
+    expect(commit).toHaveBeenCalledTimes(1);
   });
 });

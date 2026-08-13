@@ -177,6 +177,89 @@ för att förhindra imitation. Avvägning:
 Om imitations-rapporter ökar senare — revisit: behåll username-doc med
 `retired: true`-flagga, blockera claim.
 
+**Föräldralösa reservationer (BIN-875, ADR 0020).** Löftet ovan kunde brytas
+permanent fram till 2026-08-13. Kaskaden löste upp vilket handtag som skulle
+frigöras ur profil-dokumentet, och ett avbrutet första försök hade redan raderat
+det — så ett omförsök tappade reservationen tyst och handtaget stod upptaget för
+alltid, av ett konto som inte finns. Två saker stänger det:
+
+- Klienten frågar numera `usernames` på uid i stället, så ett omförsök hittar
+  reservationen oavsett vad som redan är borta.
+- `retentionCleanup` sveper dagligen efter `usernames/{name}` vars `uid` varken
+  matchar ett `users/{uid}`-dokument eller ett levande Auth-konto, och frigör
+  dem. Det täcker den som aldrig återvänder — inklusive den vars Auth-konto
+  sopningen nedan hunnit ta först. Ett avstängt (men existerande) konto behåller
+  sitt handtag; en misslyckad kontroll frigör ingenting.
+
+### Avbruten kontoradering → fördröjning, inte brott
+
+Raderingen tar bort Firestore-data först och Auth-kontot sist — klienten förlorar
+varje skrivrättighet i samma stund som Auth-användaren är borta, så ordningen går
+inte att vända. Ett avbrott däremellan (för gammal token, tappat nät) lämnar
+alltså ett Auth-konto som lever med sin data raderad.
+
+Malins beslut 2026-08-11 (**ADR 0019**): det tillståndet behandlas som en
+**fördröjning inom artikel 12(3):s enmånadsfönster**, inte som ett brott mot
+artikel 17 — **på villkor** att fönstret står skrivet här och att en sopning
+håller det. Villkoret är inte kosmetiskt: utan sopningen finns ingen bortre gräns,
+och då håller inte fördröjningsläsningen.
+
+- **Fönster: 7 dygn.** `retentionCleanup` raderar dagligen Firebase Auth-konton
+  som saknar ett `users/{uid}`-dokument och är äldre än så. Sju dygn ligger långt
+  bortom varje övergående skrivfel vid registrering (de mäts i sekunder) och med
+  god marginal inom enmånadsfönstret, även om en körning skulle missas.
+- **Sopningen kan också VÄGRA.** Ett blast-radius-tak stoppar hela körningen om
+  en orimlig andel av de kontrollerade kontona läses som föräldralösa — skyddet
+  mot att en trasig fråga raderar alla på en gång. Vägran loggas och raderar
+  ingenting, men den skjuter också upp fönstret ovan tills orsaken är åtgärdad.
+  Igenkänning och åtgärd: `docs/RUNBOOK.md` §5d.
+- **En nollträff betyder "kunde inte kolla", inte "fanns inget".** Både
+  profil-kontrollen och Auth-kontrollen måste ha LYCKATS och svarat frånvarande;
+  en misslyckad batch lämnar arbetet till nästa dag och loggas separat.
+- **Enhetslokalt skydd, med kända hål.** Under tiden hindras profilen från att
+  återskapas av en markör i `localStorage` (ADR 0019). Den finns per definition
+  bara på den enhet raderingen startades på: en annan enhet, ett privat fönster
+  eller rensad webbplatsdata har den inte. Det är det medvetet valda priset för
+  att INTE lägga markören i Firestore — ett dokument under `users/{uid}` hade
+  återskapat precis det som ska raderas (#5 Juridik, ADR 0019).
+- **Och sopningen fångar INTE den som återkommer utan markör.** Öppnas appen på
+  en markörlös enhet återskapar `ensureUserProfile` `users/{uid}` — och därmed
+  ser sopningen ovan kontot som friskt och rör det aldrig. Sjudagarsfönstret
+  gäller alltså den som aldrig återvänder någonstans; för den som återvänder på
+  en annan enhet finns ingen bortre gräns förrän hen startar en ny radering.
+  Upptäckt av integrations- och säkerhetsgranskningen 2026-08-13. Det är en
+  öppen punkt, inte något den här texten påstår är löst — och den berör direkt
+  det villkorade i Malins beslut ovan (ADR 0019 fråga 2), så den ska stängas
+  eller omprövas, inte lämnas obeskriven.
+
+### Avbrott mitt i kaskaden → kör om tills det är tomt
+
+`applyDeletionPlan` committar i klumpar om ≤450 operationer. Varje klump är
+atomär; serien av klumpar är det inte. Ett nätverksfel mitt i raderar alltså en
+del av kontot och lämnar resten.
+
+Läget löses av att användaren försöker igen: kaskaden bygger sin plan från
+Firestore på nytt vid varje försök (ingen sparad plan, ingen återupptagningsmarkör
+— se ADR 0016), raderingar mot redan raderade dokument är no-ops, och
+användarnamnsreservationen hittas numera oavsett vad som redan är borta. Appen
+säger det också — meddelandet skiljer sedan BIN-876 på "ingenting raderades" och
+"en del kan redan vara borta", och båda erbjuder ett omförsök.
+
+**Kvarstående lucka: det delvis kaskaderade läget har INGET fönster och ingen
+sopning.** Sopningen ovan letar efter Auth-konton *utan* `users/{uid}`. Avbryts
+kaskaden innan profil-dokumentet raderats finns det kvar, sopningen rör kontot
+inte, och den parning av dokumenterat fönster + sopning som ADR 0019 vilar på
+existerar alltså inte för det läget. Enda vägen ut är att användaren själv
+försöker igen. Supporten känner igen läget via `docs/RUNBOOK.md` §5d (läge b).
+Det är en känd, oavslutad punkt — inte något den här texten påstår är löst.
+
+**Kvarstående lucka, inte täckt av omförsöket:** avbryts kaskaden under
+medlemsutträdesfasen kan användarens uid ligga kvar i `memberUids` på andra
+användares grupper och i `editors` på delade listor. Ett omförsök städar det
+(uppdateringarna byggs om från Firestore), men den som aldrig återvänder lämnar
+dem kvar — `reclaimOrphanFollows` täcker bara följare och vänner. Ingen sopning
+täcker den här luckan i dag.
+
 ## Tekniska implikationer
 
 `AuthContext.deleteAccount` implementerar redan hård radering via

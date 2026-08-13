@@ -7409,3 +7409,166 @@ was not updated to exclude it — same latent-landmine shape as `notes`/`addedAt
 optional pass-through for a future widened caller. And `docs/data-export-format.md`'s watchlist
 field table lists `providers`/`providersCheckedAt` but not the new sibling field — the raw
 `toExportDocs` dump includes it regardless, so this is a doc-completeness gap only.
+
+### 2026-08-13 — a shell-level limbo branch unmounts the component that reports the outcome (BIN-816/875/876)
+
+`AuthContext.deleteAccount` sets `markDeletionStarted(id)` + `setDeletionInProgress(true)` at
+`AuthContext.tsx:1100-1101`, immediately after the freshness preflight and BEFORE
+`collectUserDataSnapshots`. That is correct per ADR 0019 condition 2 for the MARKER. What was not
+reasoned about is that the same flag is also the render signal: `AppShell.tsx:41`
+(`if (mounted && uid && deletionInProgress) return <DeletionLimbo/>`) does not render `{children}`,
+so the settings page unmounts the moment the flag flips — while `deleteAccount()` is still running.
+
+Consequences, all reachable:
+- `DeleteAccountSection`'s catch block still executes (closure survives the unmount) and calls
+  `toast(msg, { label: 'Försök igen', onClick: () => setConfirming(true) })`. `ToastProvider` is
+  ABOVE `AppShell` in `Providers.tsx`, so the toast renders over the limbo screen — but the
+  `onClick` sets state on an unmounted component (React 18: silent no-op). ADR 0020 condition 6
+  requires both messages to carry a working retry; only `DeleteAccountSection.test.tsx` (which
+  mocks `useAuth` and never renders `AppShell`) can see one.
+- `DeletionLimbo.tsx:67` says "Vi hann ta bort din data, men själva kontot finns kvar". In the
+  accepted first-chunk-failure case (`.claude/rules/accepted-deviations.md`, 2026-08-13: "A cascade
+  that fails on its FIRST chunk parks a user with intact data") NOTHING was deleted, so the screen
+  states the opposite of the truth — and that deviation's own justification is "the settings page's
+  own message for that case still truthfully says nothing was deleted", a page that is no longer
+  rendered. `DeletionLimbo.test.tsx` asserts the screen must claim neither "allt är raderat" nor
+  "ingenting är raderat"; the shipped copy claims the first.
+- During a NORMAL successful deletion the same screen shows for the whole cascade.
+
+Second half of the same finding: `AppShell.tsx:31-35` claims "a surface that is never rendered
+cannot write, which is a guarantee that gating individual write paths cannot give". False —
+`Providers.tsx:66-68` mounts `WatchlistProvider`/`NotInterestedProvider`/`ToastProvider` ABOVE
+`AppShell`, and `WatchlistContext.tsx:497-537` (eager notes migration → `batch.set` on
+`users/{uid}/watchlistNotes/*` + `batch.update` on `users/{uid}/watchlist/*`) and `:552-590`
+(addedAt repair) fire on any landing snapshot. In the first-chunk-failure state the library is
+intact, so a marked session does write owner-scoped documents — against Malin's 2026-08-13 answer
+to ADR 0020 question 3. `nextAirReadRepair` is safe only because its caller (`useCalendar`) is a
+child of `AppShell`.
+
+### 2026-08-13 — the chokepoint guard regex misses the repo's dominant write idiom (BIN-816)
+
+`src/lib/firebase/userDocWrite.chokepoint.test.ts` pairs two patterns:
+`PROFILE_DOC_REF = /doc\(\s*\w+\s*,\s*['"](users|publicProfiles)['"]\s*,\s*[^,)]*\)/` and
+`PROFILE_DOC_WRITE = /(setDoc|updateDoc|batch\.set|batch\.update|tx\.set|tx\.update)\(\s*\n?\s*doc\(…/`,
+and line 89 `continue`s when REF matches but WRITE does not ("reads, not writes"). Verified in node:
+
+| idiom | REF | WRITE |
+|---|---|---|
+| `await setDoc(doc(db,'users',uid), …)` | true | true |
+| `const ref = doc(db,'users',uid); await setDoc(ref, …)` | true | **false** |
+| `const r = doc(db,'publicProfiles',uid); await updateDoc(r, …)` | true | **false** |
+| `kit.setDoc(kit.doc(kit.db,'users',uid), …)` | **false** | false |
+
+The two-step form is what `WatchlistContext`, `useEpisodeProgress`, `useFollow` and
+`ensureUserProfile` itself (`AuthContext.tsx:312` + `tx.set(ref, …)` at `:373`) already use, so the
+tenth writer ships green in the ordinary house style. Fix: whitelist over the REFERENCE (any hit
+outside `BATCH_WRITERS`/`READ_ONLY_FILES` is an offender), not a detector of one write form.
+
+Exemption-list honesty, checked separately: `BATCH_WRITERS`' second test is
+`expect(source).toContain('assertProfileWritable(')` — file-level, so `AuthContext.tsx` passes with
+its single `resumeProvider` call even though the file has a second profile write
+(`ensureUserProfile`'s `tx.set`, guarded by a different mechanism); a future file guarding one of
+two batch writes passes too. `READ_ONLY_FILES`' only entry (`accountDeletion.ts`) never matches
+`PROFILE_DOC_WRITE` at all — the exemption is inert rather than load-bearing, which the comment
+does not say. The `files.length > 200` floor (BIN-838's lesson) IS present and correct.
+
+### 2026-08-13 — the username fallback branch is the one path that can queue a foreign doc (BIN-875)
+
+`collectUsernameReservationRefs` (`accountDeletion.ts:249-264`) queries
+`where('uid','==',id)` — the query result IS the ownership check, matching
+`firestore.rules:502 allow delete: if isSignedIn() && resource.data.uid == request.auth.uid`, so a
+reclaimed handle is simply absent. Emulator-proven (`src/test/rules/account-deletion.test.ts`, new
+`describe`, 251/251 green on an isolated emulator). The `catch` branch is not covered by ADR 0020
+condition 2 ("re-check ownership before including the reservation, and SKIP on mismatch — never
+throw"): it queues `profileSnap.username ?? fallbackUsername` with no ownership check. Rules deny a
+delete both for a foreign doc AND for a NON-EXISTENT one (`resource` is null → `resource.data.uid`
+errors), and the ref sits in the same atomic chunk as `users/{uid}` by design (condition 3) — so a
+transient `getDocs` failure on a retry-after-partial can refuse the whole chunk, deleting nothing
+while the toast says "Ingenting har raderats". The in-code claim "it cannot be worse than what
+shipped before" is stale now that the reaper releases orphans: returning `[]` is strictly safer.
+
+Coverage gap in the same area: `applyDeletionPlan`'s `committedChunks` discrimination (first-chunk
+failure untagged vs later failure tagged `CASCADE_PARTIAL`) has NO test anywhere —
+`AuthContext.test.tsx` only pins the `deleteUser` tagging, `DeleteAccountSection.test.tsx` feeds a
+hand-built tag string, and the emulator test never crosses `DELETION_CHUNK = 450`. The staged
+plan's own acceptance line ("An interruption between two chunks renders the 'may be partial'
+message") is therefore unmet.
+
+### 2026-08-13 — a remediation round re-opens the ownership gate it was fixing (BIN-816/875/876 r2)
+
+Round 1 blocked on `npm test` red: five new `src/lib/**` files with no owner, because
+`docs/org/gen-ownership-map.test.mjs` fails whenever a directory the map lists file-by-file
+gains an unowned sibling. The fix named all five under #5 Legal / GDPR Counsel and
+regenerated `docs/org/ownership-map.json` (`patternCount` 156 → 161). Correct — and it also
+created a SIXTH file, `src/lib/firebase/accountDeletion.applyPlan.test.ts` (the producer-side
+test for `CASCADE_PARTIAL`, itself a round-1 finding), which nobody named. So at r2:
+
+    node docs/org/gen-ownership-map.mjs --check   → exit 1, "1 NEW unowned sibling"
+    npm test                                      → 2 failed | 3107 passed (247 files)
+
+Identical failure, identical file set minus one. The lesson is not "check the ownership map"
+(already a principle) but that the CHECK has to be re-run against the fix round's own new
+files: a round that adds tests to close a coverage finding is exactly the round most likely
+to trip a per-file ownership map. `git diff --cached --name-status | grep '^A'` is the
+one-command tell — every added path under a file-by-file directory needs a role or a
+`--update-gaps` entry. Its sibling `accountDeletion.ts` is already in
+`docs/org/ownership-gaps.json:170`, so either remedy is defensible here; what is not
+defensible is a red suite.
+
+Everything else in the round verified clean: root typecheck, `functions/ npx tsc --noEmit`,
+eslint on all twelve touched/new source files, and `npm run test:rules` 251/251 against an
+isolated emulator (port 8185 via a scratchpad `firebase.json`, because a sibling session held
+8080 — do not kill it). The rewritten chokepoint guard was re-derived by running its
+`PROFILE_DOC_REF` regex over `src/` in node: 497 files, 5 referencing, and the two idioms that
+defeated round 1 (`const ref = doc(db,'users',uid)` then `setDoc(ref,…)`, and
+`kit.doc(kit.db,…)`) are both CAUGHT. Residual misses are `doc(db, \`users/${uid}\`)` and a
+variable collection name — neither exists anywhere in `src/`, verified by grep, so the guard
+is honest; only its header's "six files" count is off by one against its own five-entry
+exemption list.
+
+### 2026-08-13 — the justification for a removed affordance outlives it, and the plan keeps the pre-reversal contract (BIN-816/875/876 r4)
+
+Round 4 re-verified the whole staged set after other reviewers' round-3 blockers moved
+`orphans.ts`, `retentionCleanup/index.ts` and `AuthContext.test.tsx`. All gates green:
+`npm run typecheck`, `cd functions && npx tsc --noEmit`, `npx vitest run` (247 files /
+3126 tests), `npm run test:rules` (3 files / 251 tests, run on an isolated emulator at port
+8123 via a scratchpad `--config` because a sibling held 8080/4400), `eslint src functions`
+(0 errors), `gen-ownership-map.mjs --check`, `check-workflow-map.mjs`. No blocking findings.
+
+Two non-code findings, both the same shape one level apart:
+
+1. `src/components/settings/DeleteAccountSection.tsx:61-64`. The comment block that
+   justified attaching a retry action — "En toast utan åtgärd självdör efter 2,5 s; med
+   åtgärd lever den 6 s … meddelandet är dubbelt så långt som det utan åtgärd — 2,5 s
+   räcker inte för att läsa det" and "De här grenarna är appens ENDA besked om att
+   biblioteket redan är borta medan kontot finns kvar" — survived verbatim into a diff
+   that deliberately REMOVES the action from exactly those two branches (recent-login and
+   partial, both post-marker, both unmounted by `AppShell`'s limbo swap). The paragraph
+   below it explains why the button had to go, but never retires the two claims the button
+   existed to satisfy. Result: the longest two messages now self-dismiss in 2,5 s beside a
+   comment saying that is not enough, and "appens ENDA besked" is false because
+   `DeletionLimbo`'s standfirst narrates the same state persistently. Nothing is broken for
+   the user — the limbo screen carries the information — but the file now reads as an
+   argument against its own code, which is what makes the next editor "restore" the button
+   onto an unmounted component.
+
+2. `tasks/todo.md:65-66` and item 7 (line ~159). ADR 0020 condition 6 carries its own
+   dated supersession note ("Superseded in part by question 3's answer, at build time"),
+   so the ADR is honest. The PLAN is not: it still lists "two honest messages, both with a
+   retry action" and "Support's two strings verbatim", and the shipped strings match
+   neither (the partial branch names "Slutför raderingen", not "Försök igen"). The plan is
+   the binding spec a later reader diffs against, so a reversal recorded only in the ADR
+   leaves the spec asserting the contract the build knowingly broke.
+
+Third, minor, in the same family: `docs/RUNBOOK.md:213-215` is a sentence splice — "Behöver
+inget handpåläggande — bekräfta bara datumet mot docs/data-retention-policy.md" belongs to
+case (c) but now trails the test-account warning, where the advice is the opposite (a
+console-created test account DOES need action: sign in within seven days). And the bullet at
+:216 says the limbo screen appears in states (b) and (c), which misses the case
+`.claude/rules/accepted-deviations.md` (2026-08-13) says will happen: a first-chunk failure
+leaves console-state (a) — everything intact — with the session marked and the limbo screen
+up. Support reading the table would have no entry for the user in front of them.
+
+Housekeeping: `binge-code-reviewer.knowledge.md` is at ~61k chars against a stated 30k
+budget. The addition above was folded into an existing bullet rather than appended, but the
+file needs a consolidation pass rather than another payment-by-cut.

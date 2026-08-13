@@ -150,6 +150,14 @@ Owns data-protection compliance under Swedish/EU law.
 
 - GDPR Art. 20 export + Art. 17 erasure cascade.
   → `src/lib/firebase/dataExport.ts`, `src/contexts/AuthContext.tsx`, `src/lib/firebase/userData.ts`
+- **Aborted-deletion state** (BIN-816, ADR 0019/0020) — the device-local marker that
+  stops a half-deleted profile being recreated with a fresh consent record, and the
+  single chokepoint every `users/{uid}` / `publicProfiles/{uid}` write passes through.
+  A change here decides whether an Art. 17 request can silently un-happen.
+  → `src/lib/deletionMarker.ts`, `src/lib/deletionMarker.test.ts`,
+  `src/lib/firebase/userDocWrite.ts`, `src/lib/firebase/userDocWrite.test.ts`,
+  `src/lib/firebase/userDocWrite.chokepoint.test.ts`,
+  `src/lib/firebase/accountDeletion.applyPlan.test.ts`
 - Terms / Privacy / Community-Guidelines pages (versioned), terms-acceptance
   capture at signup, 13-year age gate.
   → `src/app/{villkor,integritet,community-guidelines}/page.tsx`
@@ -437,10 +445,11 @@ findings here too.
   mirrors; the community-rating `FieldValue.increment` aggregate with transaction +
   `lastEventId` idempotency (BIN-148).
   → `functions/src/communityRatings/index.ts`, `src/hooks/usePublicProfile.ts`
-- **Retention/TTL cleanup** — `retentionCleanup` (daily; five sweeps: sessions,
-  notifications, joinAttempts, release-dedup markers, and push tokens for accounts
-  Auth no longer honours) and `reclaimOrphanFollows` (weekly orphan sweep,
-  `GRACE_MS` race window).
+- **Retention/TTL cleanup** — `retentionCleanup` (daily; seven sweeps: sessions,
+  notifications, joinAttempts, release-dedup markers, push tokens for accounts Auth no
+  longer honours, and — since BIN-816/875 — Firebase Auth accounts orphaned by an
+  aborted deletion plus the username reservations they leave behind) and
+  `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window).
   → `functions/src/{retentionCleanup,reclaimOrphanFollows}/`
 - **Account-deletion cascade** — the 450-op chunked `writeBatch` over 25
   collections; inbound followers are deliberately left for the weekly orphan sweep.

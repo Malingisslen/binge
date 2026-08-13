@@ -1,5 +1,6 @@
 import { fsdb } from './db';
 import { getPublicProfileCard } from './publicProfile';
+import { assertProfileWritable } from './userDocWrite';
 
 const USERNAME_REGEX = /^[a-z0-9]([a-z0-9-]{1,18}[a-z0-9])?$/;
 
@@ -95,6 +96,12 @@ export async function lookupUserByHandle(handle: string): Promise<ResolvedUser |
 }
 
 export async function claimUsername(uid: string, username: string, oldUsername: string | null): Promise<void> {
+  // BIN-816: the second of the two writers that cannot use mergeUserDoc, because
+  // users/{uid} is updated inside the same atomic batch that moves the
+  // reservation. Reached without any user action via tryAutoClaimUsername, which
+  // is what made it a resurrection path: it would re-reserve the very handle the
+  // deletion cascade had just released.
+  assertProfileWritable(uid);
   const { db, doc, writeBatch, serverTimestamp } = await fsdb();
   const batch = writeBatch(db);
   if (oldUsername) {

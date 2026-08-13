@@ -165,17 +165,28 @@ export type UserLookupResult = Parameters<typeof revokedUidsFromLookup>[0];
  * `skippedBatches` is returned rather than merely logged so the run's own
  * summary can distinguish "nobody was revoked" from "Auth was down and we
  * checked nothing" — otherwise a total outage reads as a clean run.
+ *
+ * BIN-875 added `extract`. The batching, the skip-only-itself rule and the
+ * best-effort reporting are what is worth having in ONE tested place; which
+ * uids a response yields is not. The username sweep needs "absent from Auth"
+ * (`orphans.ts`'s `absentUidsFromLookup`), which is deliberately narrower than
+ * the default — a DISABLED account still exists and still owns its handle, so
+ * releasing it would hand a suspended person's identity to the next claimant.
+ * The name and the `revoked` field are kept as they were rather than churned
+ * across the BIN-848 caller and its tests; read them as "the uids this lookup
+ * selected".
  */
 export async function revokedUidsInBatches(
   uids: string[],
   lookup: (batch: string[]) => Promise<UserLookupResult>,
   onBatchError?: (err: unknown, size: number) => void,
+  extract: (result: UserLookupResult) => string[] = revokedUidsFromLookup,
 ): Promise<{ revoked: string[]; skippedBatches: number }> {
   const revoked: string[] = [];
   let skippedBatches = 0;
   for (const batch of chunkUids(uids)) {
     try {
-      revoked.push(...revokedUidsFromLookup(await lookup(batch)));
+      revoked.push(...extract(await lookup(batch)));
     } catch (err) {
       skippedBatches += 1;
       // The reporting callback is wrapped too: a logger that throws must not be

@@ -19449,3 +19449,306 @@ named behaviors verified live; no comment in the file describes a now-false sheb
 "check both copies, rank by `on:` trigger" technique and the "claimed root cause walked back, not
 reproduced, recorded as unexplained rather than a fixed mechanism" discipline into the existing BIN-
 850 bullet in the principles file (merged, not appended as a new bullet).
+
+## 2026-08-13 — BIN-816 + BIN-875 + BIN-876 account-deletion path (ADR 0019 c7, ADR 0020 c7/c8)
+
+**Diff reviewed** (29 staged paths, index == worktree at start AND at end, HEAD `af433aa` unmoved
+throughout; sibling session was editing the code/security reviewer knowledge files unstaged, nothing
+on my surface):
+NEW tests `src/lib/deletionMarker.test.ts`, `src/lib/firebase/userDocWrite.test.ts`,
+`src/lib/firebase/userDocWrite.chokepoint.test.ts`, `src/components/settings/DeletionLimbo.test.tsx`,
+`functions/src/retentionCleanup/orphans.test.ts`; REVISED
+`src/components/settings/DeleteAccountSection.test.tsx`, `src/contexts/AuthContext.test.tsx` (+225),
+`src/test/rules/account-deletion.test.ts` (one flipped assertion + a 3-test describe).
+Production: new `deletionMarker.ts`, `userDocWrite.ts` (the `users/{uid}` chokepoint), `DeletionLimbo.tsx`,
+`orphans.ts`, plus `AuthContext.tsx`, `accountDeletion.ts` (uid-query for the username reservation +
+`CASCADE_PARTIAL` tagging), `AppShell.tsx`, `publicProfile.ts`, `username.ts`, `retentionCleanup/*`.
+
+**Rig**: isolated worktree from `git write-tree` at scratchpad `wt-r1`, own `npm ci` (722 packages,
+39 s), `rm -rf node_modules/.vite/vitest` before every run, mutant grepped before AND after each run,
+`git checkout --` restore inside the rig only. Emulator runs via
+`firebase -c firebase.review.json emulators:exec --only firestore --project demo-binge-rules` on
+offset port 8093 with JDK 21 on PATH. Torn down with `node scripts/shared-guard.mjs worktree-cleanup`
+(shared `node_modules` verified 451 → 451, `.bin` complete).
+
+**Controls**: targeted 13 files / 203 tests green. Full suite 246 files / 3048 tests with 3 pre-existing
+environment failures (`scripts/check-public-env.test.mjs` + `scripts/check-workflow-map.test.mjs`
+RolldownError parse failure, `docs/org/gen-ownership-map.test.mjs` ×2 — all worktree-environment
+artifacts, identical in control and mutant runs). Rules suite `account-deletion.test.ts` 8/8.
+
+**Mutations run**
+- M1 `applyDeletionPlan`: `if (committedChunks === 0) throw err` → always rethrow untagged.
+  **SURVIVED the full suite** (identical 3 failed files / 2 failed tests as control). → BLOCKING #1.
+- M2 `revokedUidsInBatches`: ignore the new `extract` param, always `revokedUidsFromLookup`.
+  **SURVIVED** (47 files / 631 tests green). → non-blocking MEDIUM.
+- M3 `AppShell`: `if (false && mounted && uid && deletionInProgress)`. **SURVIVED the full suite.**
+- M14 `deleteAccount`: drop `setDeletionInProgress(true)`. **SURVIVED** (37 files / 460 green). → BLOCKING #2.
+- M4a chokepoint probe `src/lib/__probeInline.ts` (inline `setDoc(doc(db,'users',uid), …)`) → **RED**,
+  offender named. M4b probe `__probeVar.ts` (`const ref = doc(...); setDoc(ref, …)`) → **4/4 GREEN**.
+  M4c blank `PROFILE_DOC_WRITE` to a never-matching regex → **4/4 GREEN**. → BLOCKING #3.
+- M5 `ensureUserProfile`: disable `if (isDeletionStarted(uid)) return` → **4 RED**, exactly the four
+  BIN-816 tests the author claimed (no-write / no-claimUsername / no-projection / deletionInProgress).
+- M6a drop the `partialCascade` branch → 1 red; M6c generic message loses "Ingenting har raderats." →
+  2 red; M6d partial branch loses the retry action → 3 red; M6e2 invert `partialCascade` (swap partial
+  and generic) → 3 red; M6f swap preflight/recent-login branch order → 2 red. BIN-796 mutant-swap
+  protection INTACT and widened.
+- M7 `syncMyPublicProfile`: stamp the signature regardless of `written` → **SURVIVED** (282 green).
+- M8b `claimUsername`: `if (false) assertProfileWritable(uid)` (keeps the literal the source-scan reads)
+  → **SURVIVED** (182 green). M8 (removing the literal) → 1 red, the source-scan only.
+- M9 `mergePublicProfileDoc`: drop `if (isDeletionStarted(uid)) return false` → 1 red (userDocWrite.test).
+- M10 (emulator) force the legacy `profileSnap.username ?? fallback` resolution → **4/8 RED**, incl. the
+  flipped assertion. M11 drop `where('uid','==',id)` → **1/8 red-ALONE** ("rör INTE ett handtag…").
+  M12 `owned.docs.slice(0,1)` → **1/8 red-ALONE** ("frigör ALLA reservationer…").
+- M13 remove both `if (deletionInProgress) return;` effect early-outs → **SURVIVED** (460 green);
+  largely inert for the projection effect (`user` is null for a marked session) but the
+  visibility-repair one really would write `users/{uid}/watchlist/*` mid-cascade.
+
+**Verdict**: fail (3 blocking) — (1) `applyDeletionPlan`'s CASCADE_PARTIAL boundary untested while the
+same diff strengthened the generic message's promise; (2) nothing pins that a marked session is
+actually blocked (AppShell branch + in-session state flip both survive); (3) the chokepoint guard's
+discriminating regex is unpinned and the ref-variable write idiom escapes it, against a docstring that
+claims the opposite. Non-blocking: `extract` param unpinned; `claimUsername` gate provable only by a
+token that a dead call satisfies; `if (written)` signature gate and both effect early-outs unpinned;
+the catch-fallback in `collectUsernameReservationRefs` reachable only by mutant; two comment
+miscounts ("These two" over a 3-test describe; the retry-loop's "annars kan nästa gren läggas till
+utan" over a hand-enumerated list); `files.length > 200` floor against a real 497.
+The three reviewed test-file revisions are honest: no assertion was weakened, the removed
+`toBeUndefined()` was replaced by a strictly-strict two-argument pin, and the rules-test flip passes
+all four reversal checks.
+
+## 2026-08-13 — BIN-816 + BIN-875 + BIN-876 RE-REVIEW after remediation (round 2)
+
+**Diff reviewed**: 43 staged paths (r1 saw 29), HEAD `af433aa` unmoved start→end. Index == worktree
+for every reviewed path at BOTH checks; the only movers were three `.claude/agents/binge-{code,security}-reviewer.knowledge*.md`
+files a sibling session was editing (`MM`), all outside my surface. Reviewed-surface shas pinned:
+`accountDeletion.applyPlan.test.ts` 4e2a615, `accountDeletion.ts` 5230c11, `AppShell.test.tsx` 95730ed,
+`AppShell.tsx` cef6f27, `AuthContext.test.tsx` 5cff4fe, `AuthContext.tsx` e2f9f62,
+`userDocWrite.chokepoint.test.ts` b189ad6, `userDocWrite.test.ts` 8a77d52, `userDocWrite.ts` 3db2412,
+`username.test.ts` 5ab4516, `username.ts` 24cb9b0, `logic.test.ts` b0f65c5, `logic.ts` e8621ac,
+`orphans.test.ts` 68633de, `orphans.ts` 99f1330, `DeleteAccountSection.test.tsx` be646f2,
+`DeleteAccountSection.tsx` 9af13d4, `DeletionLimbo.test.tsx` 695d9bc, `deletionMarker.test.ts` efd75e7,
+`WatchlistContext.tsx` 0c16f99, `publicProfile.ts` bfc90f3, `account-deletion.test.ts` 7c1ea01 (unchanged
+from r1, so r1's emulator evidence carries).
+
+**Rigs**: two isolated worktrees from `git write-tree` (`wt-r2`, `wt-r2b`), each with its OWN
+`npm ci` (722 packages, 39 s / 35 s), `rm -rf node_modules/.vite/vitest` before every run, mutant
+grepped before AND after each run, restore via `git checkout --` inside the rig only. Both torn down
+with `node scripts/shared-guard.mjs worktree-cleanup` — shared `node_modules` 451 → 451, `.bin` complete,
+`git worktree list` back to `C:/binge` alone.
+
+**Controls**: 9 reviewed test files 123/123. Full suite 247 files / 3069 tests — 2 failed (both in
+`docs/org/gen-ownership-map.test.mjs`, see B1) plus 2 rig-only RolldownError collection failures
+(`scripts/check-public-env.test.mjs`, `scripts/check-workflow-map.test.mjs`) which PASS in the main
+checkout, so they are rig artifacts and the ownership failure is not.
+
+**Mutations run (all with pre/post grep of the mutant marker)**
+- M1 `if (committedChunks === 0) throw err;` → always rethrow untagged: **3 of 6 RED** in
+  `accountDeletion.applyPlan.test.ts` (the two tagged cases + the `cause` case). Author's claim exact.
+- M1b `if (false) throw err` (always tag): **1 of 6 RED** — the untagged-first-chunk case. Both sides pinned.
+- M1c `DELETION_CHUNK = 450 → 600`: **SURVIVED 6/6** (fixtures derive from the constant). → LOW.
+- M3 `if (false && mounted && uid && deletionInProgress)`: **2 of 6 RED** in `AppShell.test.tsx`.
+- M3b `if (mounted && uid)` (limbo for everyone): **1 of 6 RED-ALONE**, the control test. The AppShell
+  tests cannot pass on a component that renders limbo for everyone.
+- M14 `setDeletionInProgress(true)` beside `markDeletionStarted`: **1 of 64 RED-ALONE** — exactly
+  "a SUCCESSFUL deletion never flips the render flag on the way through". The hold → observe → release
+  shape is what makes it bite; the recorder is cleared in `beforeEach` AND again in-test.
+- M14b drop `setDeletionInProgress(true)` from the failure `catch`: **1 of 64 RED-ALONE** (the twin).
+- M4a probe `src/lib/__probeVar.ts` (`const ref = kit.doc(kit.db,'users',uid)`): **offender NAMED**, red.
+- M4b probe `__probeCall.ts` (`doc(kit.db,'users',currentUid())`): **offender NAMED**, red (the char
+  class excludes only `,` and `)`, so the nested parens ride through).
+- M4c blank `PROFILE_DOC_REF` to a never-matching regex: **1 of 4 RED** ("varje post … triggar mönstret").
+- M4d narrow `[\w.]+` back to `\w+`: **1 of 4 RED**, naming `userDocWrite.ts`. Regression pinned.
+- M4e probe `__probeColl.ts` (`const users = collection(db,'users'); doc(users, uid)`): **SURVIVED 4/4**
+  → the docstring's "so much as names the document" absolute is false. Non-blocking MEDIUM.
+- M8b `if (false) assertProfileWritable(uid)` in `claimUsername`: **1 of 16 RED-ALONE**. r1 gap closed.
+- M2 ignore the `extract` param: **1 of 39 RED-ALONE**. M2b swap the DEFAULT extractor: **1 of 39 RED-ALONE**.
+- M15 `if (false && isDeletionStarted(uid)) return;` at BOTH new `WatchlistContext` sites:
+  **SURVIVED 94/94**. → BLOCKING B2.
+- M7 stamp the publicProfile signature regardless of `written`: **SURVIVED 24/24** (r1 finding, still open).
+- M16 restore the retry action on every branch (ADR 0020 c6 as literally written): **3 of 8 RED**,
+  incl. the both-directions table. M16b remove it everywhere: **5 of 8 RED**. The reversal passes all
+  four checks — equally strict, file grew +2 `it`, red against the old behaviour re-applied, reason dead.
+- `node docs/org/gen-ownership-map.mjs --check` in the MAIN checkout: **exit 1**, "1 NEW unowned
+  sibling(s): src/lib/firebase/accountDeletion.applyPlan.test.ts".
+
+**Verdict**: fail (2 blocking).
+- **B1** — `npm test` is RED on the staged tree: the new `accountDeletion.applyPlan.test.ts` has no
+  owner, so `gen-ownership-map.test.mjs` fails 2 tests. Remedy: name it under §5 Legal / GDPR Counsel in
+  `docs/role-responsibilities.md` (beside `userDocWrite.test.ts`) and regenerate the map.
+- **B2** — `WatchlistContext.tsx`'s two new `isDeletionStarted(uid)` guards have zero tests, and they
+  are the half of "a marked session is blocked from writing" that `AppShell` structurally cannot cover.
+
+Non-blocking: chokepoint `collection()+doc()` escape + the docstring absolute; `ORPHAN_AUTH_MAX_PER_RUN`
+enforcement unpinned in the admin entrypoint while every sibling predicate was extracted;
+`DELETION_CHUNK` vs the 500-op limit; the AppShell "takes precedence over the guest-landing branch"
+test is not an ordering oracle (the two branches are mutually exclusive on `uid`, so the reorder is a
+behavioural no-op — the comment's "ordering is what decides" is wrong); `if (written)` signature gate and
+the two `if (deletionInProgress) return;` effect early-outs still unpinned; the retry-table comment's
+"en femte gren kan inte hamna på fel sida obemärkt" over a hand-enumerated list; ADR 0020 c6 ("both with
+a retry action", "Tryck på Försök igen") not updated for Malin's answer 3, so the durable record
+contradicts the shipped, correctly-tested behaviour.
+
+All three r1 blockers verified CLOSED by mutation, and three of the r1 non-blockers with them
+(`extract`, `claimUsername`, the `> 200` → `> 450` floor). No assertion was weakened anywhere in the
+diff: the `DeleteAccountSection` message/action changes are a reversal that passes all four checks and
+is red in BOTH directions; the rules-test flip carries r1's emulator evidence on an unchanged blob.
+
+## 2026-08-13 — BIN-816 + BIN-875 + BIN-876 RE-REVIEW after remediation (round 3)
+
+**Diff reviewed**: 44 staged paths (r1 29, r2 43), HEAD `af433aa` unmoved start→end. Index ==
+worktree for EVERY reviewed path at both checks; the only movers were
+`.claude/agents/binge-security-reviewer.knowledge{,.archive}.md` (`MM`, a sibling session), outside
+my surface. Movers since r2, by blob: `accountDeletion.applyPlan.test.ts` 4e2a615→2f27193,
+`accountDeletion.ts` 5230c11→348bf86, `AppShell.test.tsx` 95730ed→4275e7c, `AppShell.tsx`
+cef6f27→2de1a03 (import path only), `AuthContext.tsx` e2f9f62→c92e2a5,
+`userDocWrite.chokepoint.test.ts` b189ad6→4af8f50, `orphans.ts` 99f1330→4681139, `orphans.test.ts`
+68633de→b32d005, `DeleteAccountSection.test.tsx` be646f2→803f383, plus NEWLY staged
+`WatchlistContext.test.tsx` d81e237, `src/lib/authErrors.ts` 2d13b32, `functions/.../index.ts`
+824baec, `DeletionLimbo.{tsx,test.tsx}` moved to `components/layout/` (test blob 695d9bc UNCHANGED),
+`docs/org/adr/0020-*.md` 70ff453. Unchanged and therefore carrying prior evidence:
+`AuthContext.test.tsx` 5cff4fe, `userDocWrite.{ts,test.ts}`, `username.{ts,test.ts}`,
+`publicProfile.ts` bfc90f3, `logic.{ts,test.ts}`, `DeleteAccountSection.tsx` 9af13d4,
+`WatchlistContext.tsx` 0c16f99, `account-deletion.test.ts` 7c1ea01 (r1 emulator evidence stands).
+
+**Rig**: isolated worktree `wt-r3` from `git write-tree`, own `npm ci` (722 packages, 36 s),
+`rm -rf node_modules/.vite/vitest` before every run, mutant grepped BEFORE and AFTER each run in the
+same command, restore via `git checkout --` inside the rig only. Torn down with
+`node scripts/shared-guard.mjs worktree-cleanup` — shared `node_modules` 451 → 451, `.bin` complete,
+`git worktree list` back to `C:/binge` alone.
+
+**Controls**: 5 reviewed test files 134/134. Full suite in the rig 247 files, **3073 passed / 4
+skipped**, with only the 2 known rig-only RolldownError collection failures
+(`scripts/check-public-env.test.mjs`, `scripts/check-workflow-map.test.mjs` — shebang parse, they
+pass in `C:/binge`). `docs/org/gen-ownership-map.test.mjs` now PASSES.
+
+**Mutations run**
+- W1 both `WatchlistContext` guards → `if (false && …)`: **2 of 97 RED** (exactly the two new tests).
+  W1a first guard alone: **1/97 red-ALONE**. W1b second guard alone: **1/97 red-ALONE**.
+  W1c notes-migration guard → `if (true) return;`: **3/97 red**, incl. the new control — so the
+  control genuinely proves the migration runs otherwise, not vacuously green. → r2 **B2 CLOSED**.
+- C1 `DELETION_CHUNK 450 → 600`: **1 of 7 RED-ALONE**. → r2 LOW closed.
+- O1 absolute `>` → `>=`: 1/20 red-alone. O2 proportional `>` → `>=`: 1/20 red-alone. O3 drop the
+  proportional half: 1/20 red-alone. O4 drop `checkedAccounts > 0`: 1/20 red-alone (only the
+  `(0, -1)` fixture discriminates it; `(0,0)` is decoration). → r2 ceiling finding CLOSED, and the
+  extraction out of the admin entrypoint is real (`index.ts:442` calls it).
+- S1 `AppShell` limbo branch gains `!loading`: **1 of 6 RED-ALONE** — the replacement test is a real
+  oracle where the deleted "takes precedence" one was not.
+- K1 delete the NEW `collection(...)` alternation from `PROFILE_DOC_REF`: **4/4 GREEN** → the
+  widening is self-unpinned. K2 probe `src/lib/__probeColl.ts` (`const users = collection(db,'users');
+  setDoc(doc(users, uid), …)`): **RED, offender named** → the r2 escape really is closed.
+- T1 `tagError` never tags: **5 RED** across applyPlan + AuthContext (extraction is safe).
+  T2 idempotence branch dead (`if (false)`, double-tags): **86/86 GREEN** → the helper's own
+  "Idempotent" claim is unpinned. LOW (cosmetic; `classifyDeletionFailure` uses `includes`).
+- **MUT_D** `setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid))` → `(deleting)`:
+  **SURVIVED** `AuthContext.test.tsx` + `DeletionLimbo` + `DeleteAccountSection` (79 green) and
+  `AuthGuard.test.tsx` (17 green) — the only two files that mount the real `AuthProvider`.
+- MUT_V visibility-repair `if (false && deletionInProgress) return;`: **161/161 GREEN** (re-derived on
+  the new bytes); `runVisibilityCascade` writes `users/{uid}/watchlist/*`, which no chokepoint and no
+  marker guard covers, so that early-out is NOT belt-and-braces.
+- Candidate fixture for MUT_D, written and run in the rig: a `profileGate` promise inside the existing
+  `vi.mock('@/lib/firebase/db')` factory + one `it` (render → auth callback → marker + `storage`
+  event → assert true → release the profile read → assert STILL true). **Green on clean bytes 65/65,
+  red-ALONE 1/65 under MUT_D.** The naive version (dispatch inside the same `act()` as the auth
+  callback) fails on CLEAN code — the listener effect has not committed yet.
+- Main checkout: `node docs/org/gen-ownership-map.mjs --check` **exit 0**, and
+  `npx vitest run docs/org/gen-ownership-map.test.mjs` **11/11**. → r2 **B1 CLOSED**.
+
+**Verdict**: fail (1 blocking).
+- **B3** — `AuthContext.tsx`'s marker re-read (the integration review's own round-2 blocker) ships
+  with zero coverage; reverting it survives every file that can see it. Fixture handed over above.
+
+Non-blocking: the chokepoint's new alternation is unpinned (K1); `tagError`'s idempotence claim is
+unpinned (T2) and `authErrors.ts` still has no test file of its own; the visibility-repair early-out
+is the ONLY guard on a systemic watchlist write for a marked session and is unpinned (MUT_V), so the
+"belt-and-braces" rationale holds for the projection effect only; `publicProfile.ts`'s `if (written)`
+gate still unpinned (unchanged blob, r2 evidence). No assertion was weakened: the AppShell test was
+REPLACED by a stricter, genuinely discriminating case and its comment now says why the old one proved
+nothing; the DeleteAccountSection comment was narrowed to what the hand-written list actually
+guarantees; the applyPlan file grew by one boundary test. ADR 0020 condition 6 now records the
+retry-action reversal, closing that r2 documentation finding.
+
+## 2026-08-13 — BIN-816 + BIN-875 + BIN-876 RE-REVIEW after remediation (round 4)
+
+**Diff reviewed**: 44 staged paths, HEAD `af433aa` unmoved start→end. Index == worktree for EVERY
+reviewed path at both checks. Movers vs. my OWN r3 file list (the correct baseline on a re-review):
+`AuthContext.test.tsx` 5cff4fe→108435e, `orphans.ts` 4681139→081d0fa, `orphans.test.ts`
+b32d005→32a3834, `userDocWrite.chokepoint.test.ts` 4af8f50→6a77cb8, `DeletionLimbo.test.tsx`
+695d9bc→6483b1a, `functions/src/retentionCleanup/index.ts` 824baec→365eb3f (NEW production wiring: the
+username sweep now runs through `exceedsOrphanAuthCeiling` too, and the candidacy loop delegates to
+`isOrphanCandidate`), `tasks/todo.md`. Everything else carries its r3 verdict on an unchanged blob —
+including `AuthContext.tsx` c92e2a5 (r3's blocker was a TEST gap, so the production bytes did not
+move) and `account-deletion.test.ts` 7c1ea01. At the final check three files had moved in the
+worktree — `binge-code-reviewer.knowledge{,.archive}.md`, `binge-security-reviewer.knowledge.md`
+(`MM`) — all sibling reviewers' own files, outside my surface.
+
+**Rig**: isolated worktree from `git write-tree`, own `npm ci` (722 packages, 1 min),
+`rm -rf node_modules/.vite/vitest` before every run, mutant grepped BEFORE and AFTER each run in the
+same command, restore via `git checkout --` inside the rig only. Torn down with
+`node scripts/shared-guard.mjs worktree-cleanup` (expected `Filename too long`, already unregistered)
++ `rm -rf`; shared `node_modules` 448 → 448, `.bin/vitest` present, `worktree-cleanup --audit` clean.
+
+**Controls**: the 4 moved test files 104/104. Full suite in the rig **3082 passed / 4 skipped**, 245
+of 247 files, only the 2 known rig-only RolldownError collection failures (`scripts/check-*.test.mjs`
+shebang parse) — re-run in `C:/binge`: 3 files / 55 tests pass, and `node docs/org/gen-ownership-map.mjs
+--check` exits 0.
+
+**Mutations run (all in the rig, before/after grep in the same command)**
+- **M1** `setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid))` → `(deleting)`:
+  **2 of 66 RED** (author reported 1) — the new "a storage event DURING the profile load is not
+  overwritten when it resolves" AND the visibility test's own precondition assertion. → **r3 blocker
+  B3 CLOSED.**
+- **M2** visibility-repair `if (deletionInProgress) return;` → `if (false && …)`: **1/66 RED-ALONE**,
+  failing on `expect(getDocsMock).not.toHaveBeenCalled()` — i.e. the two precondition assertions
+  (`deletionInProgress === true`, `user !== null`) still PASSED under the mutant, so they are met by
+  the fixture, not asserted into existence. → **r3 MUT_V gap CLOSED.**
+- **P1** projection effect `if (deletionInProgress) return;` → `if (false && …)`: **66/66 GREEN**.
+  Reachability: a marked session has `user === null`, so the effect returns at `!user` first; the
+  interleaving test is the only fixture where profile + flag co-exist and it asserts nothing about
+  `syncMyPublicProfile`. Probe: an inserted `expect(publicProfile.syncMyPublicProfile).toHaveBeenCalled()`
+  after an UNMARKED login passes 67/67, so the mock is wired and the negative is not vacuous in the
+  "never called at all" sense. LOW — `mergePublicProfileDoc` refuses the write again and that IS
+  tested (`userDocWrite.test.ts`, "den publika projektionen VÄGRAR tyst").
+- **R1** `setDeletionInProgress(true)` re-added beside `markDeletionStarted`: 1/66 red-alone.
+  **R2** failure-branch `setDeletionInProgress(true)` deleted: 1/66 red-alone. **R3**
+  `ensureUserProfile`'s resurrection guard → `if (false && …)`: 3/66 red. All prior-round mutants
+  still discriminate against the NEW harness bytes (the `profileGate` mock edit changed nothing for
+  them; with the gate null the `getDoc` stub is behaviourally identical).
+- **D1** `DeletionLimbo`'s success-path `setBusy(false)` deleted: **1/7 RED-ALONE**. → r3 non-blocking
+  item closed.
+- **K1** delete the `collection(…)` alternation from `PROFILE_DOC_REF`: **1/5 RED-ALONE** (was 4/4
+  green at r3). **K2** delete the `doc(…)` alternation: 2/5 red. → r3 K1 finding CLOSED, one probe per
+  alternation term.
+- **Orphans, the ceiling**: OA whole predicate → `return false`: **3/26 RED** (so no, the ceiling
+  tests cannot pass on an always-false predicate). OC proportional `>`→`>=`: 1/26 red-alone. OD
+  absolute `>`→`>=`: 1/26 red-alone. OE `Math.max` floor removed: 1/26 red-alone. OK
+  `FRACTION 0.25 → 0.9`: 1/26 red-alone. **OB** delete `if (checkedAccounts <= 0) return false;`:
+  **26/26 GREEN** — r3's O4 red-alone no longer holds, because the floor makes `0 > max(5, −0.25)`
+  false either way. Equivalent mutant at both call sites (`candidates` is derived from the accounts
+  counted; the catch paths return `{ refs: [], checked: -1 }`), so unreachable-by-construction, but
+  the test named for it can no longer fail.
+- **Orphans, the floor's magnitude**: **OF** `MIN_CEILING 5 → 4`: 26/26 green. **OG** `→ 6`: 26/26
+  green. **OL** `→ 29`: **26/26 GREEN**. **OJ** `→ 49`: 1/26 red (the hardcoded `f(30,100)` fixture).
+  Cause: the two small-base cases are `f(MIN_CEILING, 3)` and `f(MIN_CEILING + 1, 6)`, which move with
+  the constant, and this round DELETED the only constant-independent small-base pair
+  (`f(3,8) === true` / `f(2,8) === false`, correctly false under the new floor). At 29, a run where
+  all 20 of 20 checked accounts read as orphaned proceeds (`20 > max(29,5)` false) and deletes them —
+  the exact "a check succeeded and was wrong" case the constant's own docstring names.
+  `expect(exceedsOrphanAuthCeiling(8, 8)).toBe(true)` is true at 5, false at 29.
+- **Orphans, `isOrphanCandidate`**: **OH** disabled-skip deleted: **1/26 RED-ALONE** ("hoppar över ett
+  AVSTÄNGT konto") — so yes, the disabled case proves something the age case does not, and its
+  fixture's positive control ("nominerar ett gammalt, aktivt konto") sits in the same describe. **OI**
+  age check → `return true`: 2/26 red.
+
+**Verdict**: pass (0 blocking).
+
+Non-blocking, in order of usefulness: (1) `ORPHAN_AUTH_MIN_CEILING`'s magnitude is unpinned anywhere
+below 30 — one constant-independent fixture closes it; (2) the projection effect's `deletionInProgress`
+early-out is unpinned (P1), one assertion in the existing interleaving test closes it, LOW because the
+chokepoint refuses the write again; (3) the zero-denominator carve-out's test is now decorative (OB);
+(4) no positive assertion anywhere in the tree pins that `AuthContext` calls `syncMyPublicProfile` at
+all for a healthy session — the existing "an UNMARKED session still creates the profile" control is
+the place for it; (5) `tagError` idempotence still unpinned (r3 T2, unchanged blob), agreed cosmetic.
+No assertion was weakened: the one deleted `orphans.test.ts` case (`f(3,8) === true`) had to go — the
+floor deliberately reverses it — and the rules-test flip `toBe(true)` → `toBe(false)` on the stranded
+reservation is BIN-875's contract change, visibly implemented by the uid-query and explained in the
+test's own comment.

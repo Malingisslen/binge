@@ -188,6 +188,83 @@ Tvärtom — `deleteAccount`-cascaden är designad för att vara irreversibel
 - Är `isPublic` satt till true men användaren själv ser inget? Regel-
   konflikt — testa logga in som dem (eller be dem refresh:a)
 
+### 5d. Fastnad halvradering — vilket av tre lägen är det?
+
+ADR 0019 villkor 9 + ADR 0020 villkor 11. Raderingen tömmer Firestore först och
+tar Auth-kontot sist, så ett avbrott lämnar tre möjliga tillstånd som ser lika ut
+för användaren ("jag tryckte radera och något gick fel"). Skilj dem åt i Firebase
+Console, i den här ordningen:
+
+| Läge | Auth-konto | `users/{uid}` | Underkollektioner | Vad som gäller |
+|---|---|---|---|---|
+| **(a) Orört** | finns | finns | fulla | Ingenting raderades. Be dem försöka igen. |
+| **(b) Delvis kaskaderat** | finns | **finns** | vissa tomma | Kaskaden hann en bit. Omförsöket städar resten. |
+| **(c) Helt kaskaderat, föräldralöst** | finns | **saknas** | tomma | Datan är borta, identiteten kvar. |
+
+- **(b)** är det läge BIN-876 handlar om och det ADR 0019 villkor 9 inte nämnde:
+  profil-dokumentet finns kvar, så sopningen i `retentionCleanup` rör det INTE
+  (den letar efter konton *utan* profil). Bara användarens eget omförsök löser
+  det. Har de stängt fliken och aldrig kommit tillbaka blir det liggande.
+- **(c)** städas automatiskt: `retentionCleanup` raderar Auth-konton utan
+  `users/{uid}` som är äldre än 7 dygn, och frigör deras användarnamn i **samma
+  körning** (sopningarna kör sekventiellt just därför). Behöver inget
+  handpåläggande — bekräfta bara datumet mot `docs/data-retention-policy.md`.
+- **Notera att sopningens urval är BREDARE än avbrutna raderingar:** varje
+  Auth-konto utan profil-dokument som är äldre än en vecka räknas, inklusive ett
+  konto skapat för hand i Firebase Console och aldrig inloggat. Skapar du ett
+  support- eller testkonto den vägen — logga in med det inom sju dygn, annars
+  försvinner det utan förklaring.
+- **Limbo-skärmen kan visas även i läge (a).** Faller kaskaden på sin allra
+  första klump är ingenting raderat, men markören ligger nere och användaren ser
+  ändå spärrskärmen. Konsolen visar då ett helt orört konto. Det är avsiktligt
+  (`.claude/rules/accepted-deviations.md`, 2026-08-13) — vägen ut är samma knapp. Behöver inget handpåläggande — bekräfta bara datumet mot
+  `docs/data-retention-policy.md`.
+- Användaren ser i lägena (b) och (c) en spärrskärm i appen med "Slutför
+  raderingen". Den är enhetslokal (`localStorage`, nyckel
+  `binge:deletionStarted:<uid>`), så på en annan enhet ser de en helt vanlig app
+  fram till att sopningen tar kontot.
+- Loggraden att leta efter: `retentionCleanup done` →
+  `orphanAuthAccounts` / `deletedOrphanAuthAccounts`. **Läs den mot
+  `checkedAuthAccounts` och `orphanAuthSkippedProfileBatches`** — `orphanAuthAccounts: 0`
+  betyder "inga hittades" bara när `checkedAuthAccounts` är **>0** och
+  `orphanAuthSkippedProfileBatches` är **0**. `-1` i någondera betyder att
+  sopningen aldrig kördes.
+- Står `deletedOrphanAuthAccounts: 0` medan `orphanAuthAccounts` är >0: antingen
+  saknas IAM-behörigheten `firebaseauth.users.delete` (se
+  `docs/analysis/EXTERNAL_ACTIONS.md`), eller så slog blast-radius-taket till —
+  då finns raden `orphan auth sweep exceeded its ceiling` i loggen och INGENTING
+  raderades. Taket är avsiktligt: höj det inte utan att först kontrollera varför
+  kandidaterna blev så många. Två orsaker är rimliga och den andra är fientlig:
+  en trasig fråga (allt läses som föräldralöst), eller att någon medvetet skapat
+  en hög profillösa konton för att kila fast sopningen — ett sådant konto kostar
+  en enda registrering mot den publika webbnyckeln. Radera dem för hand i
+  Console, så går nästa körning igenom. Samma rad finns för användarnamnen
+  (`orphan username sweep exceeded its ceiling`).
+- **Saknas raden `retentionCleanup done` helt** men `retentionCleanup: scheduled
+  sweeps done` finns: körningen dog i de två sista sopningarna (de kör sist inom
+  300 s-budgeten). De fem första gick igenom — det är just därför den raden
+  skrivs separat. Ingen larmar på detta idag (BIN-468 är öppen).
+
+### 5e. "Mitt gamla användarnamn är upptaget av ingen"
+
+Ett handtag kan ha blivit kvar på ett konto som inte finns (BIN-875, fixat
+2026-08-13 — men reservationer skapade före dess kan ligga kvar).
+
+**Felsök:**
+
+1. Firestore → `usernames/{handtaget}` → läs fältet `uid`.
+2. Firestore → finns `users/{uid}`? Firebase Console → Authentication → finns
+   kontot?
+3. **Saknas BÅDA** är det en föräldralös reservation. Radera dokumentet
+   `usernames/{handtaget}` i Console — handtaget blir omedelbart claim:bart.
+4. **Finns någotdera** — rör den inte. Antingen är kontot avstängt (och behåller
+   sitt handtag med flit) eller så är det mitt i en radering som användarens eget
+   omförsök löser.
+
+Steg 3 sköts numera automatiskt av `retentionCleanup` (loggrad
+`orphanUsernames` / `deletedOrphanUsernames`, samma läsregel som ovan). Gör det
+för hand bara om någon väntar och sopningen inte hunnit köra.
+
 ---
 
 ## 6. "Bygget failar i CI"

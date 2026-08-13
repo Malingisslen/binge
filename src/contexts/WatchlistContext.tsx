@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { isDeletionStarted } from '@/lib/deletionMarker';
 import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt, shouldStampVisibility, rewatchFields } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
@@ -501,6 +502,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // rows until B's snapshot lands; without this guard the migration would write
     // A's private notes under users/B/watchlistNotes (a cross-account PII leak).
     if (itemsUidRef.current !== uid) return;
+    // BIN-816: a deletion started on this device is running (or stranded), and
+    // these system repairs write users/{uid}/watchlist* with no user action at
+    // all. `WatchlistProvider` sits ABOVE `AppShell`, so it stays mounted even
+    // once the shell has handed over to the limbo screen — "a surface that is
+    // never rendered cannot write" is true of pages, not of providers. Read
+    // fresh from the marker rather than through context: this is the tab-B case,
+    // where React state may not have caught up yet (ADR 0020 q3).
+    if (isDeletionStarted(uid)) return;
     const legacy = items
       .filter(i => i.notes != null
         && notesByTmdbId[mediaTypeDocId(i.mediaType, i.tmdbId)] === undefined
@@ -554,6 +563,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // Same cross-account guard as the notes migration: on a same-session A→B
     // switch `items` still holds A's rows until B's snapshot lands.
     if (itemsUidRef.current !== uid) return;
+    // BIN-816: a deletion started on this device is running (or stranded), and
+    // these system repairs write users/{uid}/watchlist* with no user action at
+    // all. `WatchlistProvider` sits ABOVE `AppShell`, so it stays mounted even
+    // once the shell has handed over to the limbo screen — "a surface that is
+    // never rendered cannot write" is true of pages, not of providers. Read
+    // fresh from the marker rather than through context: this is the tab-B case,
+    // where React state may not have caught up yet (ADR 0020 q3).
+    if (isDeletionStarted(uid)) return;
     const missing = items
       .filter(i => i.addedAtIsFallback
         && !repairedAddedAtRef.current.has(mediaTypeDocId(i.mediaType, i.tmdbId)))

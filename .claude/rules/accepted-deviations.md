@@ -97,3 +97,41 @@ and mutating clears sparing fresh sibling groups. So do not file "add tests befo
 is Malin's Firebase Console action, traffic-gated to ~Nov, and **a sprint may never do it**.
 This entry supersedes the 2026-07-20 one (kept verbatim in `.claude/accepted-deviations.archive.md`);
 the in-code stop-sign comment was removed, so this file is its only home. — 2026-07-24
+
+### [Data] The aborted-deletion marker has no natural retirement — and that is the choice
+`src/lib/deletionMarker.ts` writes `binge:deletionStarted:<uid>` to `localStorage` and
+clears it in exactly one place: after `deleteUser()` resolves. There is deliberately no
+"cancel". BIN-748 (`src/lib/tabSession.ts`, `0b078db`) rejected a `localStorage` flag for a
+structurally identical problem precisely because a flag with no retirement can never be
+safely cleared, and the Codebase Archaeologist flagged this as a repeat. It is a conscious
+departure, not an unwitting one. **Why:** the state it describes is genuinely terminal —
+the cascade has already run, so an "undo" would restore an account that no longer holds
+the data anyone wants back — and the server sweep in `retentionCleanup` finishes the
+erasure even for a device that never returns. ADR 0019 conflict 1 + condition 8. Do not
+file "this flag is never retired", and do not move the marker to Firestore for cross-device
+reach: a document under `users/{uid}` recreates exactly what is being erased (#5 Legal,
+ADR 0019). — 2026-08-13
+
+### [UX] A cascade that fails on its FIRST chunk parks a user with intact data
+The marker goes down immediately before the cascade (ADR 0019 condition 2), so a failure on
+the very first commit leaves a marked session whose data was never touched: the limbo
+screen appears and profile writes are refused until the user retries. **Why:** there is no
+safe later moment. Between the first commit and the last, a tab that dies must ALREADY be
+marked or the next load resurrects the profile with a fresh consent record — the whole
+defect BIN-816 was filed about. The escape is one button away on the limbo screen, and the
+settings page's own message for that case still truthfully says nothing was deleted. Do not
+file "a transient failure locks the user out"; it is the accepted cost, and moving the
+marker later reopens the resurrection window. — 2026-08-13
+
+### [Security/UX] A half-deleted session is blocked from writing, not merely warned
+`AppShell` replaces the entire app with `DeletionLimbo` for a marked session, so a user
+whose connection merely dropped mid-deletion cannot save anything until they retry or sign
+out. **Why:** Malin's call 2026-08-13 (ADR 0020, question 3) against the panel's finding
+that `isOwner(uid)` in `firestore.rules` never requires `users/{uid}` to exist — so a
+half-deleted session could keep writing new owner-scoped documents, and the server sweep
+(which looks for accounts *without* a profile) can never see them. A screen that only
+narrates the state lets every failed retry GROW the orphaned data. Gating individual write
+paths was rejected for the same reason per-call-site profile guards were: it leaves the
+next one. Do not file "the limbo screen is too aggressive" or "block writes at the write
+site instead". `deleteAccount()` and its retry are never gated — that part is ADR 0019
+condition 3 and is separately tested. — 2026-08-13

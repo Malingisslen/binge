@@ -1,5 +1,6 @@
 import { fsdb } from './db';
 import { toDate } from './utils';
+import { mergePublicProfileDoc } from './userDocWrite';
 
 // BIN-505: public profile PROJECTION. users/{uid} is owner-locked because it
 // carries sensitive fields (email, hemkommun, providerCosts, providerCampaigns,
@@ -163,7 +164,6 @@ export async function syncMyPublicProfile(uid: string, src: PublicCardSource): P
     }
   } catch { /* private mode — fall through and write */ }
   try {
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
     // photoURL: the users/{uid} doc has NO length bound on it, but the projection
     // rule caps it at 500. Omit an over-long URL (→ null) rather than let the whole
     // atomic write fail the rule and get swallowed — which would leave the user
@@ -175,22 +175,27 @@ export async function syncMyPublicProfile(uid: string, src: PublicCardSource): P
     // itself has no length rule on displayName at signup, so this is reachable.
     const displayName = (src.displayName ?? '').slice(0, 80);
     const bio = (src.bio ?? '').slice(0, 160);
-    await setDoc(
-      doc(db, 'publicProfiles', uid),
-      {
-        displayName,
-        username: src.username ?? null,
-        photoURL,
-        bio,
-        isPublic: src.isPublic ?? false,
-        // createdAt is preserved as-is when present (member-since); a serverTimestamp
-        // is only stamped on first backfill via merge if the field is absent upstream.
-        ...(src.createdAt ? { createdAt: src.createdAt } : {}),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-    try { window.localStorage.setItem(sigKey, sig); } catch { /* private mode */ }
+    // BIN-816 AC2: through the chokepoint, which refuses the write while a
+    // deletion is in progress. The cascade erases publicProfiles/{uid}; without
+    // this, the next render of the owner's own session rebuilt it from React
+    // state — a second, login-free door into the same resurrection.
+    const written = await mergePublicProfileDoc(uid, kit => ({
+      displayName,
+      username: src.username ?? null,
+      photoURL,
+      bio,
+      isPublic: src.isPublic ?? false,
+      // createdAt is preserved as-is when present (member-since); a serverTimestamp
+      // is only stamped on first backfill via merge if the field is absent upstream.
+      ...(src.createdAt ? { createdAt: src.createdAt } : {}),
+      updatedAt: kit.serverTimestamp(),
+    }));
+    // Only stamp the signature when something was actually written. Storing it
+    // after a refused write would make the NEXT sync — after the deletion is
+    // finished or abandoned — believe the projection is already current.
+    if (written) {
+      try { window.localStorage.setItem(sigKey, sig); } catch { /* private mode */ }
+    }
   } catch {
     // best-effort; the profile edit itself already persisted to users/{uid}.
   }

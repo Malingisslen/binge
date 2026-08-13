@@ -7390,3 +7390,250 @@ No blocking findings this round. No new failure class — this is a correct, nar
 already-verified guard, not a new pattern requiring a knowledge.md edit.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+---
+
+### 2026-08-13 — BIN-816 + BIN-875 + BIN-876: the aborted-deletion bundle (reaper, username release, partial-cascade signal)
+
+**Scope reviewed (staged, clean tree, 29 files).** `functions/src/retentionCleanup/{index.ts,orphans.ts,orphans.test.ts,logic.ts}`, `src/lib/firebase/{accountDeletion.ts,userDocWrite.ts,userDocWrite.test.ts,userDocWrite.chokepoint.test.ts,username.ts,publicProfile.ts}`, `src/lib/{deletionMarker.ts,deletionMarker.test.ts,authErrors.ts}`, `src/contexts/AuthContext.{tsx,test.tsx}`, `src/components/{layout/AppShell.tsx,onboarding/OnboardingFlow.tsx,settings/DeletionLimbo*.tsx,settings/DeleteAccountSection*.tsx}`, `src/test/rules/account-deletion.test.ts`, ADR 0019 + 0020, `docs/{RUNBOOK.md,data-retention-policy.md}`, `.claude/rules/accepted-deviations.md`. `firestore.rules` and `firestore.indexes.json` are UNTOUCHED — the uid-query rides `allow read: if true` on `/usernames/{username}` and the automatic single-field index, so no manual rules deploy is owed. `functions/**` IS touched, so `deploy.yml`'s drift guard will fail the push-triggered job: functions deploy manually, hosting via `workflow_dispatch`.
+
+**Destructive-path trace (the part I pressed hardest).** Both new sweeps fail safe on every *error* path I could construct:
+
+- `collectOrphanedAuthAccounts` → `listUsers` (throws → whole scan caught, `checkedAccounts: -1`, nothing deleted) → age filter via `isReapableOrphanAge` (null/NaN → false) → `confirmedMissingProfiles`, where a thrown `getAll` batch contributes NOTHING and increments `skippedBatches`.
+- `getAll` ORDER: verified against the installed SDK (`functions/node_modules/@google-cloud/firestore/build/src/document-reader.js`, `_get`: "BatchGetDocuments doesn't preserve document order. We use the request order to sort") — so `snaps.forEach((snap,i) => batch[i])` is safe, and a not-received doc THROWS rather than shifting the index. Inputs are deduped, so the `outstandingDocuments` Set cannot shorten the result.
+- `collectOrphanedUsernames` requires profile-absent AND auth-absent, and reads auth absence only from `notFound` via `absentUidsFromLookup` (disabled != absent — a suspended person keeps their handle).
+- API caps correct: `getUsers` <=100 (`GET_USERS_BATCH`), `deleteUsers` <=1000, `listUsers` 1000/page, `getAll` 300. No empty-batch `getAll` is reachable (`chunkUids([])` yields no chunks).
+- 7-day window: keyed on `metadata.creationTime`, so it is a floor protecting NEW signups only; an aborted deletion of an existing account is reaped on the NEXT daily run. Defensible under Art. 12(3), and the window is named in `docs/data-retention-policy.md` as ADR 0019 question 2 required.
+- `revokedUidsInBatches`'s new `extract` parameter defaults to `revokedUidsFromLookup`; the BIN-848 caller (`collectRevokedPushTokens`) still passes 3 args → behaviour unchanged.
+
+**Client username release.** `collectUsernameReservationRefs` queries `where('uid','==',id)` with `id = auth.currentUser.uid` (never client-supplied). The query result IS the ownership check, and `usernames` has `allow create` + `allow delete` but NO `allow update`, so a reservation's `uid` can only change by delete-then-create BY ITS OWNER — a competing claimant cannot flip it under the deleting user. The emulator test "ror INTE ett handtag som nagon annan hunnit ta over" pins that a reclaimed handle is simply absent from the plan rather than a thrown, chunk-aborting delete (ADR 0020 condition 2, ADR 0019 condition 3).
+
+**Findings issued (0 blocking).**
+
+1. *Medium* — `src/components/layout/AppShell.tsx:41`: the render-level write block reads a React flag (`deletionInProgress`) set at profile-load/deletion time, so a SECOND tab already open on the same origin never flips. `WatchlistProvider`/`NotInterestedProvider` sit ABOVE the swapped shell and stay mounted (their notes/addedAt migration effects write off snapshots with no user action). `isOwner(uid)` never requires `users/{uid}`, so writes from that tab land after the profile is gone and no sweep keyed on "account without a profile" can see them; once `deleteAuthAccounts` removes the identity those docs are unreachable by export, cascade and sweep alike. NOT the accepted deviation (which forbids "the screen is too aggressive" and "gate at the write site") — this is a reach gap in the same screen-level block, and the marker IS present in that tab, merely unread. Fix: derive from `isDeletionStarted(uid)` in `AppShell` (or a `storage` listener in AuthContext), and belt-and-braces `recursiveDelete(users/{uid})` in the auth sweep before `deleteUsers` — provably safe, since absence is already confirmed.
+2. *Medium* — `functions/src/retentionCleanup/index.ts:420` `deleteAuthAccounts`: no blast-radius ceiling. The fail-safe reasoning covers ERRORS, not a successful-but-wrong read (renamed collection, wrong database id, inverted predicate), where every candidate reads legitimately absent and every account older than 7d is deleted in one irreversible run. Repo precedent: `tmdbTosSweep` merely WRITES and is gated behind `mutateEnabled`. Asked for `ORPHAN_AUTH_MAX_PER_RUN` (log + delete nothing when exceeded). Considered blocking; landed on Medium because no implemented path reaches it and the fix is additive hardening.
+3. *Medium* — `docs/analysis/EXTERNAL_ACTIONS.md` (not in the diff) + `index.ts:203-206`: the comment "this sweep is the only caller of an Auth user-management API in this codebase" is now false, and the verified IAM claim is scoped to `firebaseauth.users.get` under `roles/editor`. The diff adds `listUsers` and — a new privilege class — `deleteUsers` (`firebaseauth.users.delete`). Missing role => inert sweep, green deploy, and ADR 0019's "documented delay, not a breach" reading silently false while the policy doc asserts it.
+4. *Low* — `functions/src/retentionCleanup/logic.ts:183`: the `extract` default is unpinned. Every `revokedUidsInBatches` test uses `disabled:false`, under which both extractors agree, so swapping the default to `absentUidsFromLookup` stays green and ends BIN-848's disabled-account coverage.
+5. *Low* — `src/lib/firebase/accountDeletion.ts:259-263`: the `catch` fallback builds `doc(db,'usernames', named)` with no ownership re-check, so a denied delete would abort the atomic chunk carrying `users/{uid}` + `publicProfiles/{uid}` — the shape ADR 0020 c2 forbids. Near-unreachable (`getDocs` falls back to CACHE rather than rejecting; both named sources are fresh) and strictly better than what shipped, so a note, not a defect.
+6. *Low, non-security* — `setDeletionInProgress(true)` fires before the cascade, so a NORMAL deletion shows the limbo screen ("Vi hann ta bort din data") for the cascade's whole duration, with a button that starts a second concurrent cascade. `DeleteAccountSection`'s new toast retry is dead in that state (section unmounted; `setConfirming` is a no-op) — the limbo button is the working path.
+7. *Nit* — `docs/RUNBOOK.md` 5d says the handle is freed "dagen darpa"; `index.ts:499-503` deliberately orders the two sweeps so it happens in the SAME run. Same wording in `orphans.test.ts:114`.
+
+**Chokepoint guard weakness (folded into principles).** `userDocWrite.chokepoint.test.ts:75-78` claims to fail the build on any new `users/{uid}`/`publicProfiles/{uid}` writer. Two escapes: `PROFILE_DOC_REF`'s `doc\(\s*\w+\s*,` cannot match `kit.doc(kit.db,'users',uid)` — the exact idiom `userDocWrite.ts` itself uses, i.e. the likeliest copy-paste template — and requiring BOTH regexes lets a hoisted `const ref = doc(...); setDoc(ref, ...)` through. Grepped `src/` at HEAD: no current bypasser, so it is a future-regression gap, not a live hole. Suggested: relax `\w+` to `[\w.]+` and drop the two-regex conjunction, leaning on the existing `READ_ONLY_FILES` list.
+
+**Not re-raised (accepted-deviations, checked):** the marker's lack of retirement; first-chunk failure parking a user with intact data; the limbo screen blocking writes at all; Tillsammans anon-vote forgery; the missing session-expiry gate; blocking-as-hygiene; create-only reports; the fail-open `effectiveVisibility` read.
+
+**PoC status:** DERIVED, not live. No rules change to exercise, and the destructive logic is Admin-SDK-only (no emulator harness for `listUsers`/`deleteUsers`). The `getAll` ordering claim — the one place an index mix-up would delete a LIVE account — was settled by reading the installed SDK source rather than by argument.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-13 — BIN-816 + BIN-875 + BIN-876 RE-review after remediation (aborted-deletion, round 2)
+
+Same staged diff as the morning pass, after four of my five findings were acted on. Worktree == index verified (`git status --porcelain` all `M `/`A `, `git diff` empty), so `Read` served the staged bytes. Read: `orphans.ts`, `orphans.test.ts`, `retentionCleanup/index.ts`, `logic.ts` + its diff, `deletionMarker.ts`, `userDocWrite.ts`, `authErrors.ts`, `accountDeletion.ts`, `username.ts`, `AuthContext.tsx` (both halves), `WatchlistContext.tsx` (diff + effect inventory), `AppShell.tsx`, `DeletionLimbo.tsx`, `DeleteAccountSection.tsx`, `publicProfile.ts` diff, `userDocWrite.chokepoint.test.ts`, `account-deletion.test.ts` diff, `Providers.tsx`, `NotInterestedContext.tsx`, `useFcmToken.ts`, ADR 0019, ADR 0020, accepted-deviations, RUNBOOK + retention-policy + EXTERNAL_ACTIONS diffs, the `firestore.rules` usernames block, `firestore.indexes.json` fieldOverrides.
+
+**Verification of the four fixes.**
+
+1. *Tab-B write reach.* Closed. `AuthContext` 623-631 registers a `storage` listener per uid (a `null` key = `clear()` and re-reads), pinned by two tests (`AuthContext.test.tsx:1637` and `:1656` for a foreign-uid key). `WatchlistContext` 505/572 early-out on a FRESH `isDeletionStarted(uid)`. I enumerated the entire stack above `AppShell` (`Providers.tsx`): Theme (no writes), Auth (publicProfile sync — guarded twice, by the `deletionInProgress` early-out AND `mergePublicProfileDoc`; visibility repair — guarded; household fan-out — unreachable without a profile-field change, which now needs `mergeUserDoc`), Watchlist (2 auto-writes now guarded; the other three effects are listeners), NotInterested (user-action only), Toast. `AppShell`'s own hooks (`useFcmForeground`, `useTitleLinkPrefetch`) write nothing. `AppShell` is mounted in the ROOT layout, so no route escapes the swap.
+2. *Ceiling.* `ORPHAN_AUTH_MAX_PER_RUN = 50` is checked in `deleteAuthAccounts` against the TOTAL, before any `chunkUids(uids, 1000)` batch — not bypassable by batching, and the username sweep cannot compensate (those accounts still answer in `getUsers`, so `absentUidsFromLookup` excludes them).
+3. *IAM attestation.* Corrected in `index.ts:190-193` and in EXTERNAL_ACTIONS' new per-sweep table, with `firebaseauth.users.delete` marked NOT verified and an `orphanAuthAccounts > 0` implies `deletedOrphanAuthAccounts > 0` acceptance bar.
+4. *Offline fallback.* `fallbackUsername` removed from `collectDeletionRefs` entirely; the catch returns `[]`; the emulator test's assertion inverted honestly ("orphaned without the fallback" to "released by the uid-query alone") plus three new cases (profile deleted first, handle reclaimed by OTHER, two reservations on one uid).
+5. *Chokepoint test.* Rewritten as a whitelist over the REFERENCE with `[\w.]+`, an exemptions-still-match test, an `assertProfileWritable` requirement per batch-writer, and a >450 fileset floor.
+
+**Pressed questions, answered.** (a) *Can a sweep delete something live?* The auth sweep needs age > 7d AND a SUCCEEDED `getAll` reporting no `users/{uid}`; every sign-in path creates that doc, so the only orphans are aborted deletions, Console-created accounts and signups whose profile write failed (seconds, not days). The username sweep needs profile-absent AND `notFound` from Auth, and asks Auth only about profile-absent uids. (b) *Can a client steer which reservation dies?* No: `where('uid','==',auth.currentUser.uid)`, `firestore.rules:502` re-checks `resource.data.uid`, `usernames` has no `allow update`, and `allow create` binds `uid` to the caller — a planted doc can only carry the attacker's own uid. (c) *Forgeable marker?* `localStorage`, same-origin; a forged marker only strands that device (no auto-`deleteUser`; the limbo button needs a click) and cannot make the server delete anything, because the victim's profile document still exists. (d) *Art. 17 both directions:* a failed username query leaves one reservation for the daily sweep; ordering puts `users/{uid}` after reviews, so "profile gone" implies the content is gone before any handle is released (no @handle-inheritance window).
+
+**Findings issued (0 blocking).**
+
+1. *Medium* — the ceiling has no BEHAVIOUR test. It lives in `index.ts` (imports `firebase-admin`, untestable under the root toolchain); `orphans.test.ts` pins only `10 < ORPHAN_AUTH_MAX_PER_RUN < 1000`. Changing `>` to `>=`, or deleting the whole `if`, stays green. Contradicts `orphans.ts`'s own header ("Pure predicates only ... so the part that decides what gets deleted is testable"). Fix: move the decision into `orphans.ts` (`authUidsToDelete(uids)` returning `{ uids, refusedOverCeiling }`) and pin it.
+2. *Medium* — `WatchlistContext`'s two `isDeletionStarted(uid)` early-outs are untested; nothing in `WatchlistContext.test.tsx` mentions the marker. Both mutants (drop one, drop both) pass. This is the guard I asked for in round 1 and it is one refactor from silently gone.
+3. *Low* — `collectOrphanedAuthAccounts` does not skip `disabled: true` accounts, while its sibling `absentUidsFromLookup` deliberately protects them ("a suspended account still owns its handle"). If a moderation flow ever removes the profile doc of a disabled account, the sweep deletes the identity 7 days later — lifting the ban and freeing the email. `docs/moderation.md` "Stäng ett konto" says Disable OR delete the auth user (not the profile doc), so it is not today's flow. Fix: skip disabled candidates, or state in `orphans.ts` why the asymmetry is deliberate.
+4. *Low* — no ceiling on the username release sweep. Weaker than the auth case (needs two INDEPENDENT successful-but-wrong reads, and the auth-side one is itself capped at 50), but a released handle is irreversible and symmetry costs one constant.
+5. *Low* — `docs/data-retention-policy.md`'s cross-device sentence ("...kan profilen fortfarande återskapas fram till att sopningen ovan tar kontot") overstates the bound: once a marker-less device recreates `users/{uid}`, the account is permanently invisible to the orphan sweep. The GAP is a decided deviation (ADR 0019 conflict 1) — the sentence claiming the sweep bounds it is not. Reword to "until the profile is recreated on a device with no marker; after that only a fresh deletion finishes it".
+6. *Low* — the chokepoint regex is segment-form only; a template-literal path escapes it. Grepped `src/`: no such idiom exists anywhere in the tree, so it is a future-regression nit, not a hole.
+7. *Operational* — the FIRST scheduled run after deploy deletes irreversibly. ADR 0020's follow-ups already ask for a one-time production query for orphaned `usernames`; pair it with a count of auth accounts lacking `users/{uid}` BEFORE `firebase deploy --only functions:retentionCleanup`. Also noted: `docs/RUNBOOK.md` 5d was corrected since round 1 and now says "i **samma** körning", matching `index.ts`'s sequential ordering.
+
+**Deploy.** `functions/**` changed, so a manual `firebase deploy --only functions:retentionCleanup` is required; `deploy.yml` ships hosting only. NO `firestore.rules` and NO `firestore.indexes.json` change is needed or present — the uid-query rides `allow read: if true` (list included) and the default single-field index (verified: no `fieldOverrides` entry for `usernames`).
+
+**Not re-raised (accepted-deviations + ADR 0019/0020, all three new entries read):** the marker's lack of retirement; a first-chunk failure parking a user with intact data; the limbo screen blocking writes; the partially-cascaded state having no server sweep (named as an open point in the policy doc by this same commit); Tillsammans anon-vote forgery; the missing session-expiry gate; blocking-as-hygiene; create-only reports; the fail-open `effectiveVisibility` read.
+
+**PoC status:** DERIVED. No rules change to exercise; the destructive logic is Admin-SDK-only. The client-side claims WERE exercised — `account-deletion.test.ts` drives the real cascade against the emulator, including the reclaimed-handle case.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-13 — BIN-816 + BIN-875 + BIN-876, security review ROUND 3 (staged, re-review after two remediations)
+
+**Scope.** Same staged diff, third pass. `git status --porcelain` clean apart from the 44 staged paths;
+staged blob == worktree verified by md5 for all nine files I reason about (`orphans.ts`, `index.ts`,
+`AuthContext.tsx`, `authErrors.ts`, `DeletionLimbo.tsx`, `accountDeletion.ts`, `deletionMarker.ts`,
+`userDocWrite.ts`, `WatchlistContext.tsx`). ADR 0019, ADR 0020 and all three new `accepted-deviations.md`
+entries re-read at HEAD. `firestore.rules` and `firestore.indexes.json` are NOT in the diff — re-verified
+that `usernames` still carries `allow read: if true` (covers `list`), `allow delete: if resource.data.uid ==
+request.auth.uid`, no `allow update`, and no `fieldOverrides` entry, so the uid-query needs neither.
+
+**Round-2 findings, closed.** (2) `WatchlistContext` now has a marked test AND a control on both effects.
+(3) the auth sweep skips `disabled: true` with the symmetry comment. (5) the retention-policy sentence is
+rewritten and now names the marker-less-return gap as an OPEN point against ADR 0019 Q2's conditional
+instead of claiming the sweep bounds it. (6) the chokepoint regex gained the bare-`collection()` alternation,
+an every-exemption-still-matches self-check and a 450-file floor; I re-grepped `src/` for the
+template-literal idiom its docstring admits it misses — genuinely absent. (4) not added, and my round-2
+justification for accepting it was partly WRONG: I wrote "the auth side is capped", but the two sweeps are
+independent, so the auth ceiling tripping does not stop a username release. It stays Low only because a
+release still requires Auth's own per-uid `notFound`.
+
+**BLOCKING — the ceiling I asked for latches, and disables the sweep at Binge's actual scale.**
+`functions/src/retentionCleanup/orphans.ts:90-94`. `exceedsOrphanAuthCeiling` refuses the whole run when
+`candidates > checkedAccounts * 0.25`. Three properties compose badly:
+ - the candidate set is MONOTONE — an orphan stops being one only by being deleted (or by a marker-less
+   return that resurrects the profile), so a tripped run leaves the same candidates for tomorrow;
+ - the denominator grows only with new signups, so recovery needs the user base to reach 4x the orphan count;
+ - the file's own comment states the user base is under 50. Arithmetic: N<=3 refuses even ONE orphan
+   (1 > 0.75); N=6 refuses two (2 > 1.5); N=8 refuses three.
+Consequence, and it is squarely the thing this ticket exists to prevent: the Firebase Auth account (email +
+uid) of someone who asked to be erased survives indefinitely, AND — because `orphanedReservations` requires
+`authMissing` — their handle is never released either, so both halves go dead together. The only signal is
+one `logger.error` per day; there is no alert. `docs/data-retention-policy.md` states "Fönster: 7 dygn ...
+raderar dagligen" as fact, and ADR 0019 Q2's "delay, not breach" answer is explicitly conditional on the
+sweep holding that window. A first-run backlog (Console-created accounts never signed into, abandoned
+signups) is a plausible way to trip it on day one — that one case IS caught, by the post-deploy acceptance
+bar EXTERNAL_ACTIONS now carries; later accumulation is not caught by anything.
+Rejected fixes: raising the fraction (same latch, further out); dropping the proportional half (restores the
+"50 can never fire under 50 users" hole the integration review found). Fix: `candidates > max(FLOOR,
+checked * FRACTION)` under the absolute cap, FLOOR ~5, and pin the decisive small case (1-of-3 passes, 6-of-8
+refuses) rather than the constant's range. Equally acceptable: Malin accepts the wedge as a dated deviation
+with a stated periodic log check — but it must be a decision, not a silent property.
+
+**Medium — the round-2 hand-off fix is unpinned. MUTATION-PROVEN, not inferred.**
+`src/contexts/AuthContext.tsx:536`. Snapshotted to scratchpad, replaced
+`setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid))` with
+`setDeletionInProgress(deleting)`, asserted the mutant by grep in the same command as the run:
+`npx vitest run src/contexts/AuthContext.test.tsx --no-cache` -> **64 passed (64)**. Restored from the
+snapshot; md5 `a5a69957b8039701112dd789f87f3d63` before and after, `grep -c MUTANT` = 0, `git status`
+staged-only. The file carries sixteen BIN-816-named tests and none of them drive the ordering the clause
+exists for (storage event lands WHILE the profile load is in flight; the late `.then` writes a stale
+`false`). Test shape that would pin it: hold `ensureUserProfile`'s promise, dispatch the storage event,
+release, assert the flag is still true.
+The fix itself is CORRECT — traced: `setUid` commits before the effect subscribes, the effect subscribes
+before the network `.then` can resolve, so the pre-subscribe window is covered by the re-read and the
+post-subscribe window by the listener; the `.catch` branch does not touch the flag, so no path writes a
+stale `false`. No new race found.
+
+**Low — the username release has no ceiling** (see the round-2 correction above). If the FLOOR fix lands,
+reuse the same predicate for `orphanUsernames.refs`.
+**Low — `index.ts:323`'s `disabled === true` skip and the `deleteAuthAccounts(uids, checkedAccounts)` arg
+wiring are both in the `firebase-admin` file and therefore unpinned by construction.** Moving per-candidate
+candidacy into `orphans.ts` (`isOrphanCandidate(user, nowMs)`) puts them under the harness the ceiling now
+uses — the same edit as the blocking finding.
+**Low — the sweep's population is wider than "aborted deletions".** Any auth account with no `users/{uid}`
+older than 7 days qualifies, including one Malin creates in the Console and does not sign into that week.
+`docs/RUNBOOK.md` 5d frames the sweep purely as half-deletion cleanup; one sentence there would stop a
+support account vanishing unexplained.
+
+**Pressed questions, answered.** (a) *delete something live?* No new path: the auth sweep still needs
+age>7d + non-disabled + a SUCCEEDED `getAll` reporting no profile; the username sweep still needs both
+confirmations, asks Auth only about profile-absent uids, and `absentUidsFromLookup`'s default-vs-supplied
+extractor is now pinned by the one fixture that tells them apart (`logic.test.ts`). (b) *ceiling gamed or
+inert?* Inert — see the blocking finding. Gaming it upward is bounded by the absolute 50; gaming it DOWN
+(wedging the sweep with cheap orphan signups) is the same latch from the attacker's side, and the floor fix
+does not remove that (it needs both >FLOOR and >25%), which is the honest residual. (c) *marker forgeable or
+clearable?* Same-origin `localStorage`; forging one strands that device (the limbo button still needs a
+human click, and no server action follows), clearing one is the decided cross-device gap. (d) *Art. 17 both
+directions?* Nothing new destroys data: the reservation is queued only from the uid-equality query, the
+emulator suite now proves a reclaimed handle is left alone AND the cascade still completes, and
+`snaps.profileSnap.ref` keeps the profile delete inside `dataExport.coverage.test.ts`'s three-way guard.
+No new user-owned subcollection, so `collectUserDataSnapshots` needs no change.
+
+**Deploy.** No `firestore.rules` / `firestore.indexes.json` change. `functions/**` changed, so `deploy.yml`'s
+drift guard FAILS the hosting job on this push: deploy `firebase deploy --only functions:retentionCleanup`
+manually, then ship hosting via the workflow_dispatch button. Both halves must land — the sweep is the server
+half, and the limbo screen + chokepoint (hosting) is what stops a marked session writing in the meantime.
+
+**Not re-raised (accepted-deviations + ADR 0019/0020):** the marker's lack of retirement; a first-chunk
+failure parking a user with intact data; the limbo screen blocking writes; the partially-cascaded state
+having no sweep; Tillsammans anon-vote forgery; the session-expiry gate; blocking-as-hygiene; create-only
+reports; the fail-open `effectiveVisibility` read.
+
+**PoC status:** the client-side claim was exercised by MUTATION (above, real run). The sweep logic is
+Admin-SDK-only with no rules surface, so the ceiling arithmetic is DERIVED from the source and stated as
+arithmetic, not as a live run.
+
+**REVIEW-VERDICT: fail (1 blocking)**
+
+
+### 2026-08-13 — BIN-816 + BIN-875 + BIN-876, security review ROUND 4 (ceiling floor verified, no new blocker)
+
+**Scope.** Same staged diff (44 paths), fourth pass, clean tree. Staged blob == worktree verified by md5 for
+every file I reason about; `functions/src/retentionCleanup/logic.ts` differs from `git show :` by CRLF ONLY
+(content md5 identical after `tr -d '\r'`, `git diff` empty). The brief named five changed files; mtime-sorting
+`git diff --cached --name-only` showed EIGHT had moved since round 3 — also `src/test/rules/account-deletion.test.ts`,
+`src/components/layout/DeletionLimbo.test.tsx` and `src/lib/firebase/userDocWrite.chokepoint.test.ts`. Read all
+three; the chokepoint guard was STRENGTHENED (a new per-alternation unit case: the `collection()` half was
+self-pinned and could have been dropped green), not weakened. ADR 0019, ADR 0020 and `accepted-deviations.md`
+re-read. `firestore.rules` / `firestore.indexes.json` still untouched.
+
+**Round-3 blocker CLOSED — verified by mutation, not by reading.** `orphans.ts:118-122` is now
+`candidates > max(ORPHAN_AUTH_MIN_CEILING=5, checked*0.25)` under the absolute 50, and `checkedAccounts <= 0`
+disables the proportional half instead of tripping it. Direction check both ways: (1,3),(2,6),(5,3),(20,100),(0,0),(0,-1)
+pass; (6,6),(30,100),(51,big) refuse. Three mutants, each run `--no-cache` with the mutated line grepped in the
+same command, each restored from a scratchpad snapshot and re-verified by md5 (`f4bcc6b4…`):
+ - drop `Math.max(FLOOR, …)` → "LÅSER SIG INTE på ett litet underlag" fails (1 of 26). Killed.
+ - `>` → `>=` → "men golvet är ett golv" fails. Killed.
+ - drop `user.disabled === true` in `isOrphanCandidate` → the disabled test fails. Killed.
+Round-3 finding 2 (the unpinned marker re-read at `AuthContext.tsx:536`) also mutation-verified: reverting to
+`setDeletionInProgress(deleting)` reddens **2 of 66**, not the 1 the author claimed — the extra kill is "the
+visibility repair does not stamp watchlist docs for a marked session". Safe direction, but the count was a claim
+until run. Restored, md5 `a5a69957…`, `grep -c MUTANT` 0, tree staged-only. Findings 3/4/5 all landed: the same
+predicate now caps the username release (`index.ts:564-576`, refusal releases NOTHING), candidacy moved into
+`isOrphanCandidate` with four tests, and RUNBOOK §5d warns that a Console-created account never signed into
+within 7 days is reaped too. `revokedUidsInBatches`' `extract` param: mutated to ignore the argument →
+"uses the supplied extract" fails (1 of 39). Killed. `npx tsc --noEmit` in `functions/` is clean, so no
+type error can make the deploy — and therefore the sweep — silently absent.
+
+**Pressed questions.** (a) *Delete something live?* No new path. Auth sweep: age>7d AND not disabled AND a
+SUCCEEDED `getAll` reporting no `users/{uid}`; `checkedAccounts` counts every listed account (a conservative,
+permissive denominator). Username sweep: profile-absent AND Auth's own `notFound`, asked only about
+profile-absent uids. No anonymous-auth population exists in this app (ADR 0015 rejected it), which is what keeps
+"auth account without a profile" a small set. (b) *Permanently inert?* Three ways, all now bounded or
+documented: the ceiling (below), a missing `firebaseauth.users.delete` role (EXTERNAL_ACTIONS' new per-sweep
+table + acceptance bar), and the 300s budget — the two irreversible sweeps run LAST and sequentially, so a
+timeout inside them prints no `retentionCleanup done` line at all; the interim "scheduled sweeps done" line at
+`index.ts:524` is what makes that diagnosable. (c) *Ceiling gameable?* Upward, bounded by the absolute 50.
+Downward (wedging), yes and it is the honest residual: a profile-less Auth account costs one Identity-Toolkit
+`signUp` against the public web API key, and 6 of them wedge a sub-25-account project. The floor bounds the
+latch, it does not remove it — above the floor the candidate set is still monotone. RUNBOOK §5d ("kontrollera
+varför kandidaterna blev så många") and §5e (manual handle release) are the operator path, so it is a loud,
+clearable refusal rather than a silent hole. (d) *Reopened anything?* No: the storage listener, the
+`WatchlistContext` early-outs, `snaps.profileSnap.ref` (keeps the profile delete inside
+`dataExport.coverage.test.ts`'s three-way guard), the no-fallback username query and the chokepoint are all
+intact; no new user-owned subcollection, so `collectUserDataSnapshots` needs no change. `docs/org/route.mjs`
+still routes both sweep files to role 27, so the map widening in this diff loses no coverage.
+
+**Findings issued (0 blocking).**
+
+1. *Low* — `docs/data-retention-policy.md:207` states "Fönster: 7 dygn … raderar dagligen" as fact and never
+   mentions that the sweep can refuse to delete anything. RUNBOOK §5d and EXTERNAL_ACTIONS both name the
+   ceiling; the policy — the document ADR 0019 Q2's "delay, not breach" reading is explicitly conditioned on —
+   does not. One sentence: the sweep declines when the candidate set is implausible, and then §5d applies.
+2. *Low* — residual latch above the floor, now on BOTH sweeps. >5 candidates AND >25% refuses forever (the
+   candidate set shrinks only by deletion/release). Reachable by a genuine broken query (intended) or by the
+   cheap `signUp` wedge in (c). Mitigated by the RUNBOOK's operator path; worth one line there naming the
+   flood as the second explanation beside "broken query".
+3. *Low* — the ceiling WIRING is still untestable by construction. The predicate is pinned, but
+   `deleteAuthAccounts`'s call and the `orphanUsernamesRefused ? 0 : deleteInBatches(...)` ternary live in the
+   `firebase-admin` file: deleting either leaves the whole suite green. Cheap close: have `orphans.ts` return
+   the filtered SET (`authUidsToDelete`/`reservationsToRelease`) so the handler has no decision left to lose.
+4. *Low/operational* — no alert exists for "the orphan sweeps did not run" (BIN-468 still open). The only
+   signal is the ABSENCE of the `retentionCleanup done` line. One RUNBOOK line would make that readable.
+5. *Nit* — the author's own mutation claim ("reddens exactly that test, 1 of 66") was 2 of 66.
+
+**Deploy.** Unchanged from round 3 and now written down in EXTERNAL_ACTIONS: `firebase deploy --only
+functions:retentionCleanup` by hand FIRST, then hosting via workflow_dispatch; `deploy.yml`'s drift guard fails
+the push-triggered job by design and a red workflow beside a green tree is not "shipped". No rules/index deploy.
+
+**Not re-raised (accepted-deviations + ADR 0019/0020):** the marker's lack of retirement; a first-chunk failure
+parking a user with intact data; the limbo screen blocking writes; the partially-cascaded state having no
+sweep; Tillsammans anon-vote forgery; the session-expiry gate; blocking-as-hygiene; create-only reports; the
+fail-open `effectiveVisibility` read.
+
+**PoC status:** the two client/server predicates were exercised by REAL mutation runs (above). The sweep's
+runtime behaviour is Admin-SDK-only with no rules surface, so the wedge arithmetic and the timeout path are
+DERIVED from source and stated as such.
+
+**REVIEW-VERDICT: pass (0 blocking)**

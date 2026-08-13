@@ -31,7 +31,9 @@ import type { ProviderCampaign } from '@/lib/advisor/campaignPricing';
 import { daysBetween, todayIso } from '@/lib/utils';
 import { clearNextPath } from '@/lib/nextPath';
 import { markTabSession } from '@/lib/tabSession';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
+import { markDeletionStarted, clearDeletionStarted, isDeletionStarted, deletionMarkerKey } from '@/lib/deletionMarker';
+import { mergeUserDoc, assertProfileWritable } from '@/lib/firebase/userDocWrite';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, markHandedOff, markCascadePartial } from '@/lib/authErrors';
 import { useOptimisticMirrorField } from '@/hooks/useOptimisticMirrorField';
 import type { ItemVisibility, UserProfile } from '@/types';
 
@@ -82,6 +84,13 @@ interface AuthState {
    * användaren; nästa app-load kör om stämplingen tills flaggan rensas.
    */
   visibilitySyncPending: boolean;
+  /**
+   * BIN-816: this device started deleting THIS account and never finished, so
+   * `user` is null by design rather than by failure. `AppShell` renders the
+   * limbo screen instead of the app — which is what makes the state *blocked*
+   * rather than merely explained (Malin's call 2026-08-13, ADR 0020).
+   */
+  deletionInProgress: boolean;
   markNotificationsSeen: () => Promise<void>;
   updateNotificationSettings: (patch: Partial<UserProfile['notificationSettings']>) => Promise<void>;
   /** @deprecated — använd updateDefaultVisibility. Kvar för UI som inte migrerats. */
@@ -118,6 +127,7 @@ const AuthContext = createContext<AuthState>({
   updateBio: async () => {},
   updateDefaultVisibility: async () => {},
   visibilitySyncPending: false,
+  deletionInProgress: false,
   markNotificationsSeen: async () => {},
   updateNotificationSettings: async () => {},
   updateIsPublic: async () => {},
@@ -265,16 +275,39 @@ async function cascadeVisibilityToItems(
 // vid nästa inloggning (ensureUserProfile) och driver både varningen i Settings
 // och omförsöket. Rensas med deleteField så docen inte samlar false-skräp.
 async function writeVisibilitySyncPending(uid: string, pending: boolean): Promise<void> {
-  const { db, doc, setDoc, serverTimestamp, deleteField } = await fsdb();
-  await setDoc(doc(db, 'users', uid), {
-    visibilitySyncPending: pending ? true : deleteField(),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await mergeUserDoc(uid, kit => ({
+    visibilitySyncPending: pending ? true : kit.deleteField(),
+  }));
 }
 
-async function ensureUserProfile(
-  firebaseUser: User,
-): Promise<{ profile: UserProfile; visibilitySyncPending: boolean }> {
+/**
+ * BIN-816 — a profile load for an account whose deletion is still unfinished.
+ *
+ * `profile: null` is not "the read failed": it means the document is
+ * deliberately absent and must stay that way. The provider surfaces it as
+ * `deletionInProgress`, which `AppShell` renders as the limbo screen.
+ */
+interface ProfileLoad {
+  profile: UserProfile | null;
+  visibilitySyncPending: boolean;
+  deletionInProgress: boolean;
+}
+
+async function ensureUserProfile(firebaseUser: User): Promise<ProfileLoad> {
+  // BIN-816 AC1/AC3 — the resurrection itself. This function's whole job is to
+  // create `users/{uid}` when it is missing, and after an aborted deletion
+  // "missing" is the intended end state, not a gap to fill. Creating it here
+  // wrote a fresh `termsAcceptedAt`/`ageConfirmedAt` for someone who had just
+  // asked to leave — a consent record the app manufactured — and then
+  // `tryAutoClaimUsername` re-reserved the handle the cascade had released.
+  //
+  // Returning before the transaction is what stops both, and it must come
+  // before the read too: an aborted deletion leaves nothing to read, so the
+  // create branch is precisely where such a session lands.
+  if (isDeletionStarted(firebaseUser.uid)) {
+    return { profile: null, visibilitySyncPending: false, deletionInProgress: true };
+  }
+
   const { db, doc, getDoc, runTransaction, serverTimestamp } = await fsdb();
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
@@ -284,6 +317,7 @@ async function ensureUserProfile(
     return {
       profile: await buildExistingProfile(data, firebaseUser),
       visibilitySyncPending: data.visibilitySyncPending === true,
+      deletionInProgress: false,
     };
   }
 
@@ -350,6 +384,7 @@ async function ensureUserProfile(
     return {
       profile: await buildExistingProfile(racedData, firebaseUser),
       visibilitySyncPending: racedData.visibilitySyncPending === true,
+      deletionInProgress: false,
     };
   }
 
@@ -358,7 +393,7 @@ async function ensureUserProfile(
   const claimed = await tryAutoClaimUsername(firebaseUser);
   if (claimed) profile.username = claimed;
 
-  return { profile, visibilitySyncPending: false };
+  return { profile, visibilitySyncPending: false, deletionInProgress: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -373,6 +408,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // updateDefaultVisibility behöver LÄSA nuvarande värde utan att bindas om.
   const [visibilitySyncPending, setVisibilitySyncPending] = useState(false);
   const visibilitySyncPendingRef = useRef(false);
+  // BIN-816 — this device started deleting THIS account and never finished.
+  // Mirrors the localStorage marker into render state; the marker itself stays
+  // the source of truth and is re-read at every guarded write (never cached).
+  const [deletionInProgress, setDeletionInProgress] = useState(false);
   // Vilket uid vi redan gjort ett reparations-försök för i den här sessionen.
   // Ett försök per app-load — annars skulle en cascade som failar konstant
   // loopa mot Firestore (och kosta reads) hela sessionen.
@@ -476,11 +515,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try { window.localStorage.setItem('binge:wasLoggedIn', '1'); } catch { /* private mode */ }
 
           void ensureUserProfile(firebaseUser)
-            .then(({ profile, visibilitySyncPending: pending }) => {
+            .then(({ profile, visibilitySyncPending: pending, deletionInProgress: deleting }) => {
               // Account-switch-skydd: skriv bara om samma användare
               // fortfarande är inloggad när profilen landar.
               if (auth.currentUser?.uid !== firebaseUser.uid) return;
               setUser(profile);
+              // BIN-816: en påbörjad radering är inte ett laddningsfel — appen
+              // ska visa limbo-skärmen, inte sitt vanliga skal.
+              //
+              // Markören läses OM här, inte bara vidare från `deleting`.
+              // `ensureUserProfile` samplade den för hundratals millisekunder
+              // sedan, och startar en annan flik en radering under tiden hinner
+              // storage-lyssnaren nedan sätta flaggan till true — som det här
+              // svaret sedan skrev tillbaka till false, permanent, eftersom
+              // inget nytt storage-event kommer förrän markören ändras igen.
+              // Fliken blev då fullt skrivbar mitt i en pågående radering
+              // (integrationsgranskningen 2026-08-13). Filen egen regel är att
+              // markören läses färskt vid varje grindat ställe; det här var det
+              // enda stället som cachade den.
+              setDeletionInProgress(deleting || isDeletionStarted(firebaseUser.uid));
               // BIN-587: en tidigare misslyckad synlighets-stämpling plockas
               // upp här och driver både varningen och omförsöks-effekten.
               visibilitySyncPendingRef.current = pending;
@@ -518,6 +571,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUid(null);
           setEmailVerified(false);
           setProfileLoading(false);
+          // BIN-816: the limbo screen belongs to a SIGNED-IN marked session. A
+          // signed-out visitor gets the normal app — the marker is uid-scoped and
+          // still there for whoever signs back into that account. Not clearing it
+          // here would leave the limbo screen up for the next, unrelated account
+          // on a shared device.
+          setDeletionInProgress(false);
           visibilitySyncPendingRef.current = false;
           setVisibilitySyncPending(false);
           // BIN-617: the auto-repair is latched to one attempt per uid per app
@@ -558,6 +617,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     markTabSession(pathname);
   }, [uid, pathname]);
 
+  // BIN-816 — a tab that was ALREADY open when the deletion started.
+  //
+  // `deletionInProgress` is otherwise only decided at profile load, and a tab
+  // that is already rendering the app never runs that again. So the deletion
+  // could start in tab A while tab B kept the full shell — and everything
+  // mounted ABOVE `AppShell` (`WatchlistProvider` above all) kept writing
+  // owner-scoped documents, which `isOwner(uid)` permits with no profile
+  // document in existence. Those writes then survive both the cascade and the
+  // server sweep, which is personal data outliving an Art. 17 request rather
+  // than merely an untidy screen (security review, 2026-08-13).
+  //
+  // `storage` fires in every OTHER tab on the origin, which is exactly the set
+  // that needs telling. A `null` key means the whole store was cleared, so
+  // re-read then too rather than assuming it was someone else's key.
+  useEffect(() => {
+    if (!uid) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== deletionMarkerKey(uid)) return;
+      setDeletionInProgress(isDeletionStarted(uid));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [uid]);
+
   // BIN-23: Firebase fire:ar inte onAuthStateChanged vid silent token-refresh,
   // så emailVerified fastnar på false tills man loggar ut/in. Vanligaste flödet
   // är att man klickar verifierings-länken i en ANNAN flik och återvänder hit —
@@ -585,6 +668,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // visibility is gated live by the rule — so a missed sync never leaks.
   useEffect(() => {
     if (!uid || !user) return;
+    // BIN-816 AC2: the cascade deletes publicProfiles/{uid}, and this effect is
+    // the second resurrection path — it would rebuild the projection from React
+    // state on the very next render. syncMyPublicProfile refuses the write on
+    // its own too (userDocWrite.mergePublicProfileDoc); this is the cheap
+    // early-out that also skips the signature read.
+    if (deletionInProgress) return;
     void syncMyPublicProfile(uid, {
       displayName: user.displayName,
       username: user.username,
@@ -593,7 +682,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isPublic: user.isPublic,
       createdAt: user.createdAt,
     });
-  }, [uid, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [uid, deletionInProgress, user?.displayName, user?.username, user?.photoURL, user?.bio, user?.isPublic, user?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // BIN-587: reparera en cascade som failade. Profilen kan säga 'private'
   // medan items fortfarande bär effectiveVisibility:'public' — och läs-regeln
@@ -604,6 +693,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pendingVisibilityTarget = user?.defaultVisibility;
   useEffect(() => {
     if (!uid || !pendingVisibilityTarget || !visibilitySyncPending) return;
+    // BIN-816: the repair stamps users/{uid}/watchlist/* for an account whose
+    // deletion is running. Those documents are queued for erasure, not for a
+    // visibility fix — and a marked session must not write at all (Malin's call
+    // 2026-08-13, ADR 0020). The flag it would clear lives on a profile document
+    // that is already gone.
+    if (deletionInProgress) return;
     if (visibilityRetriedFor.current === uid) return;
     // Ett explicit val är redan på väg ner. Det bär ett färskare värde än vårt
     // och stämplar samma docs — låt det äga både skrivningen och flaggan.
@@ -615,7 +710,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void runVisibilityCascade(uid, pendingVisibilityTarget, epoch)
       .then(outcome => outcome === 'applied' ? markVisibilitySyncPending(uid, false) : undefined)
       .catch(err => console.error('[visibilitySyncPending retry]', err));
-  }, [uid, pendingVisibilityTarget, visibilitySyncPending, markVisibilitySyncPending, runVisibilityCascade]);
+  }, [uid, deletionInProgress, pendingVisibilityTarget, visibilitySyncPending, markVisibilitySyncPending, runVisibilityCascade]);
 
   const signIn = useCallback(async () => {
     const provider = new GoogleAuthProvider();
@@ -632,8 +727,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Create the user doc ourselves (instead of relying on onAuthStateChanged
     // + ensureUserProfile) so we can atomically include terms-acceptance
     // metadata. onAuthStateChanged will subsequently load the complete doc.
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', cred.user.uid), {
+    // BIN-816: through the chokepoint like every other users/{uid} write. A
+    // brand-new uid can never carry a deletion marker, so the gate is a no-op
+    // here — it is uniformity that keeps the chokepoint test meaningful.
+    await mergeUserDoc(cred.user.uid, kit => ({
       displayName: name,
       email: cred.user.email ?? email,
       photoURL: cred.user.photoURL,
@@ -657,12 +754,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       calibrationGenres: null,
       hemkommun: null,
       notificationSettings: { newEpisodes: true, availableOnMyServices: true, pushEnabled: false, episodeReleases: true, priceDrops: false, rotationReminders: false, weeklyDigest: false },
-      termsAcceptedAt: serverTimestamp(),
+      termsAcceptedAt: kit.serverTimestamp(),
       termsVersion,
-      ageConfirmedAt: serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+      ageConfirmedAt: kit.serverTimestamp(), // BIN-348: the register form gates on the 13+ checkbox; record it.
+      createdAt: kit.serverTimestamp(),
+    }));
     // Skicka verifieringsmail. Felar vi här blockerar vi inte registreringen
     // — användaren kan resend:a från settings. Loggas bara så vi kan
     // upptäcka om maildelivery går ner brett.
@@ -739,8 +835,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUserField = useCallback(async <K extends keyof UserProfile>(field: K, value: UserProfile[K]) => {
     if (!uid) return;
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', uid), { [field]: value, updatedAt: serverTimestamp() }, { merge: true });
+    await mergeUserDoc(uid, { [field]: value });
     setUser(prev => prev ? { ...prev, [field]: value } : null);
   }, [uid]);
 
@@ -846,12 +941,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       delete nextTiers[providerId];
     }
 
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', uid), {
-      providerTiers: nextTiers,
-      providerCosts: nextCosts,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    await mergeUserDoc(uid, { providerTiers: nextTiers, providerCosts: nextCosts });
     setUser(prev => prev ? { ...prev, providerTiers: nextTiers, providerCosts: nextCosts } : null);
   }, [uid, user]);
   const pauseProvider = useCallback((providerId: number, resumeAt: string | null = null) => {
@@ -893,6 +983,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // svep. Om något steg failar rullas båda tillbaka, så vi får inga
     // orfaner — antingen är pausen kvar OCH historiken oskriven, eller så
     // är pausen borta OCH historiken sparad.
+    //
+    // BIN-816: en av två skrivare som INTE kan gå via mergeUserDoc, eftersom
+    // users/{uid} här ingår i en större atomisk batch. Grinden anropas direkt
+    // i stället — samma implementation, en annan ingång (userDocWrite.ts).
+    assertProfileWritable(uid);
     const { db, doc, collection, writeBatch, serverTimestamp } = await fsdb();
     const batch = writeBatch(db);
     const historyRef = doc(collection(db, 'users', uid, 'pauseHistory'));
@@ -926,12 +1021,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Stega 1: uppdatera profil-fältet (+ legacy isPublic-mirror för bakåt-
       // kompatibilitet i rules under migrationsperioden).
       const isPublicMirror = visibility === 'public';
-      const { db, doc, setDoc, serverTimestamp } = await fsdb();
-      await setDoc(doc(db, 'users', uid), {
-        defaultVisibility: visibility,
-        isPublic: isPublicMirror,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      await mergeUserDoc(uid, { defaultVisibility: visibility, isPublic: isPublicMirror });
       setUser(prev => prev ? { ...prev, defaultVisibility: visibility, isPublic: isPublicMirror } : null);
 
       // Stega 2: cascade till alla watchlist-items utan explicit per-item-
@@ -972,11 +1062,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const markNotificationsSeen = useCallback(async () => {
     if (!uid) return;
     const now = new Date();
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', uid), {
-      lastNotificationsSeenAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    await mergeUserDoc(uid, kit => ({ lastNotificationsSeenAt: kit.serverTimestamp() }));
     setUser(prev => prev ? { ...prev, lastNotificationsSeenAt: now } : null);
   }, [uid]);
 
@@ -988,11 +1074,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!uid || !user) return;
     const merged = { ...user.notificationSettings, ...patch };
-    const { db, doc, setDoc, serverTimestamp } = await fsdb();
-    await setDoc(doc(db, 'users', uid), {
-      notificationSettings: merged,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    await mergeUserDoc(uid, { notificationSettings: merged });
     setUser(prev => prev ? { ...prev, notificationSettings: merged } : null);
   }, [uid, user]);
   const updateHideNonLatinTitles = useCallback((hide: boolean) => updateUserField('hideNonLatinTitles', hide), [updateUserField]);
@@ -1005,6 +1087,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await claimUsername(uid, username, user.username);
     setUser(prev => prev ? { ...prev, username } : null);
   }, [uid, user]);
+
+  /**
+   * The irreversible half, extracted so `deleteAccount` can wrap exactly the
+   * region that runs AFTER the marker goes down — no more and no less. Anything
+   * thrown from in here means the account survived an attempt that had already
+   * started, which is the definition of limbo.
+   */
+  const runDeletionCascade = useCallback(async (currentUser: User, id: string) => {
+    // Delad läsning med buildUserExport — om nya user-owned collections
+    // läggs till ska de uppdateras i collectUserDataSnapshots.
+    const snaps = await collectUserDataSnapshots(id);
+    const kit = await fsdb();
+
+    // Cascade-plan + commit are extracted (BIN-347) into pure, db-injectable
+    // helpers so the Art. 17 erasure path can be run end-to-end against the
+    // Firestore emulator (src/test/rules/account-deletion.test.ts). Behaviour is
+    // identical to the former inline version. BIN-875: the username reservation
+    // is resolved by QUERYING usernames on uid inside collectDeletionRefs — the
+    // profile doc and this React-state value are only the offline fallback, and
+    // both of them die in the same accident (see collectUsernameReservationRefs).
+    const plan = await collectDeletionRefs(kit, id, snaps);
+    await applyDeletionPlan(kit, plan);
+
+    // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen: failar
+    // deleteUser finns kontot kvar och då ska cachen också vara kvar —
+    // användaren försöker igen mot en fräsch instans. Efter freshness-porten
+    // ovan är det som återstår här nät-fel, och då är omförsöket den enda
+    // återställningen.
+    //
+    // BIN-875 korrigerar vad som stod här förut: kaskaden beskrevs som idempotent
+    // ("kör om mot redan tom data"), och det var sant för allt UTOM
+    // användarnamnsreservationen — den löstes upp ur profil-docen som första
+    // försöket redan hade raderat, så ett omförsök tappade den tyst och handtaget
+    // blev upptaget för alltid. Med uid-frågan i collectDeletionRefs stämmer
+    // påståendet: raderingar mot redan raderade dokument är no-ops, uppdateringarna
+    // riktar sig mot ANDRA användares dokument som kaskaden aldrig rör, och
+    // reservationen hittas oavsett vad som redan är borta.
+    try {
+      await deleteUser(currentUser);
+    } catch (err) {
+      // BIN-876: everything above this line succeeded, so by the time we get here
+      // the person's data IS gone and only the identity remains. Firebase's own
+      // `requires-recent-login` already has a branch that says so; every OTHER
+      // failure here (a network drop, most of all) used to fall through to the
+      // generic message — the one that says nothing was deleted. Tagging it is
+      // what stops that message being a lie about the biggest possible case.
+      const detail = err instanceof Error ? err.message : String(err);
+      if (detail.includes(REQUIRES_RECENT_LOGIN)) throw err;
+      throw markCascadePartial(err);
+    }
+  }, []);
 
   const deleteAccount = useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -1038,27 +1171,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
     }
 
-    // Delad läsning med buildUserExport — om nya user-owned collections
-    // läggs till ska de uppdateras i collectUserDataSnapshots.
-    const snaps = await collectUserDataSnapshots(id);
-    const kit = await fsdb();
+    // BIN-816 / ADR 0019 condition 2 — the marker goes down HERE: after the
+    // freshness gate has let us through, before the first read of the cascade,
+    // and never on the button press. Set it at click time and a user whose
+    // session was merely too old would be locked out of a fully intact account,
+    // which is exactly what STALE_SESSION_PREFLIGHT exists to prevent.
+    //
+    // Note it is set before anything is deleted, on purpose. Between the first
+    // commit and the last there is no safe moment to start: a tab that dies at
+    // the wrong instant must already be marked, or the next load resurrects the
+    // profile. The cost — a cascade that fails on its very first chunk parks a
+    // user with all their data intact until they retry — is recorded in
+    // .claude/rules/accepted-deviations.md rather than papered over.
+    //
+    // What is deliberately NOT done here is flipping `deletionInProgress`. The
+    // marker and the render flag answer different questions, and conflating them
+    // shipped a bug the integration, code and security reviews all found
+    // independently: `AppShell` swaps the whole app for the limbo screen on that
+    // flag, so setting it here replaced the settings page with "vi hann ta bort
+    // din data" while the cascade was still READING — on the happy path, for
+    // every user, for the tens of seconds a heavy account's plan build takes.
+    // The marker protects the profile (it is what `ensureUserProfile` and the
+    // write chokepoint read); the flag hands the session over, and it is only
+    // honest to do that once the attempt has ENDED without success.
+    markDeletionStarted(id, Date.now());
+    try {
+      await runDeletionCascade(currentUser, id);
+    } catch (err) {
+      // The attempt is over and the account is still here. NOW the session is in
+      // limbo: the marker stands, so profile writes are refused, and the shell
+      // hands over to the screen that can finish the job.
+      setDeletionInProgress(true);
+      throw markHandedOff(err);
+    }
 
-    // Cascade-plan + commit are extracted (BIN-347) into pure, db-injectable
-    // helpers so the Art. 17 erasure path can be run end-to-end against the
-    // Firestore emulator (src/test/rules/account-deletion.test.ts). Behaviour is
-    // identical to the former inline version. BIN-22: username resolves
-    // AUKTORITATIVT from the profile-doc inside collectDeletionRefs (React-state
-    // `user?.username` is only the fallback when the profile hasn't loaded).
-    const plan = await collectDeletionRefs(kit, id, snaps, user?.username);
-    await applyDeletionPlan(kit, plan);
-
-    // Finally remove the Firebase Auth user. Görs FÖRE cache-rensningen: failar
-    // deleteUser finns kontot kvar och då ska cachen också vara kvar —
-    // användaren försöker igen mot en fräsch instans. Efter freshness-porten
-    // ovan är det som återstår här nät-fel, och då är omförsöket den enda
-    // återställningen: kaskaden är idempotent (kör om mot redan tom data) och
-    // fönstret är sekunder, inte de ~5 minuter porten stängde.
-    await deleteUser(currentUser);
+    // Point of no return passed — the account is gone, so there is nothing left
+    // to resurrect and the marker has done its job. This is the ONLY place it is
+    // cleared: there is deliberately no "I changed my mind" path, because by the
+    // time the marker exists the cascade has already run.
+    clearDeletionStarted(id);
+    setDeletionInProgress(false);
 
     // GDPR: utan rensning ligger den raderade användarens watchlist m.m.
     // kvar i IndexedDB på enheten. Fel sväljs i helpern.
@@ -1078,7 +1230,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // clearAllInviteTokens' own comment for the owner-cost that decided it.
     clearAllInviteTokens();
     clearLocalPushTokenId(id);
-  }, [user?.username]);
+  }, [runDeletionCascade]);
+
 
   const value = useMemo(
     () => ({
@@ -1086,7 +1239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     }),
     [
@@ -1094,7 +1247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn, signInEmail, register, resendEmailVerification, signOut,
       updateProviders, updateDefaultView, updateProviderCosts, updateHomeMunicipality, updateRotationSchedule, setProviderCost, setProviderRenewalDay, updateProviderTier, setProviderCampaign,
       pauseProvider, resumeProvider,
-      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
+      updateUsername, updateBio, updateDefaultVisibility, visibilitySyncPending, deletionInProgress, updateIsPublic, markNotificationsSeen, updateNotificationSettings, updateHideNonLatinTitles, updateHiddenCountries,
       setCalibrationGenres, deleteAccount,
     ]
   );

@@ -1,215 +1,211 @@
-# Plan 2026-08-12 — Selection: 10 tickets, 6 batches
+# Plan 2026-08-13 — aborted account deletion (BIN-816 + BIN-875 + BIN-876)
 
-Full backlog review (49 open tickets across Backlog/Todo/In Progress). Comments checked on
-every candidate before selection (step 4 of sprint-execute). Most of the backlog is
-already-decided-elsewhere (parked on a review session, routed to a dedicated non-sprint
-pass, or an explicit "not now") — see the close-out report for the full accounting. This
-file only carries what's actually selected to build.
+**One change, three tickets.** Malin's call 2026-08-13 (ADR 0020): they ship together or
+not at all. Stakeholder panels are DONE — do not convene another:
 
-BIN-856 (streamingHealth, In Progress) is NOT in this plan — its code is committed and
-deployed; the only remaining item is a `run`-kind acceptance criterion (proof of an HTTP 200
-in the live log after the 2026-08-12T19:29Z scheduled run). Nothing to select or build.
+- **ADR 0019** (Accepted 2026-08-11) — 9 binding conditions, BIN-816.
+- **ADR 0020** (Accepted 2026-08-13) — 12 binding conditions, BIN-875 + BIN-876, plus her
+  three answers: one change · the reaper also releases usernames · a marked session is
+  **blocked from writing**, not merely told.
 
-## Batch A — infra-governance (agent: direct or generalist)
-Area: `.claude/shared-plugin.json`, `docs/org/route.mjs`, `docs/org/ownership-map.json`,
-`docs/org/gen-ownership-map.mjs`, `CLAUDE.md`, `docs/org/world-watch/DESIGN.md`,
-`docs/role-responsibilities.md`. Disjoint from every other batch.
-
-- [ ] **BIN-851** [Tier A, build] High — the file that decides which reviewers block a
-  commit (`.claude/shared-plugin.json`) is itself reviewed by no one (`tier: skip,
-  reasonCode: no-code-paths`). Router: skip. requiresPlanMode: false.
-  - Add `^\.claude/shared-plugin\.json$` to a blocking gate (binge-integration-reviewer).
-  - Give the file an owner in `docs/org/ownership-map.json` so the router stops answering
-    `skip`.
-  - Widening only — no existing gate narrowed.
-- [ ] **BIN-864** [Tier A, build] Low — `scripts/check-public-env.mjs` (the push-VAPID-key
-  guard) matches no gate pattern either. Router: skip. requiresPlanMode: false.
-  - Add `check-public-env` to `reviewGates[3].patterns`' existing alternation (stay narrow,
-    per Malin's 2026-08-08 call).
-  - Check `docs/org/route.mjs`'s `TOOLING_CODE_FILES` for the same gap in the same commit.
-- [ ] **BIN-834** [Tier A, build] Medium — the router permanently instructs a fix nobody
-  will do (owner gap for `route.mjs`/gate scripts). Router: medium, #25 (decided directly by
-  Malin — no critique needed, she wrote the exact wording). requiresPlanMode: false.
-  - Write down that the permanent #14 reserve IS the decision (DESIGN.md), not a TODO.
-  - `CLAUDE.md`'s router-output description names `unownedCode`.
-  - `route.mjs`'s header comment names the right field (`unownedCode`, not `unmappedCode`).
-- [ ] **BIN-803** [Tier A, build] Medium — the ownership map was hand-edited despite
-  "auto-generated, don't edit"; next regen silently drops the fix. Router: skip.
-  requiresPlanMode: false.
-  - Additions (patternCount, `src/lib/watchlist/**`) live in `gen-ownership-map.mjs` and
-    survive a regeneration.
-  - Generator fails when an owned folder gets an unowned sibling (BIN-788 pt.2, never built).
-  - A worktree regeneration produces the same pattern set as the main checkout
-    (`.tmdb-cache/` divergence must not cause drift).
-
-## Batch B — test-infra (agent: direct)
-Area: `vitest.config.ts`, `scripts/check-public-env.test.mjs`, `scripts/check-workflow-map.test.mjs`, `scripts/scripts-self-tests-present.test.mjs` (new), `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`. Also touches `.claude/shared-plugin.json` and `docs/org/route.mjs` as follow-through — both are Batch A's declared area, and Batch A is already committed at HEAD, so there is no conflict.
-
-- [ ] **BIN-850** [Tier A, build-review — signoff #7 QA/Test] High — `npm test` never runs
-  anything under `scripts/`, including the test for yesterday's push-VAPID guard. Router:
-  medium, #7. requiresPlanMode: **true** (single + priority ≤2) — expand this block before
-  building, don't halt.
-  - ~~Malin's 2026-08-11 decision: rewrite the test files to the project's engine
-    (vitest), don't touch CI.~~ **SUPERSEDED 2026-08-12**, watched session: asked whether
-    to leave it (CI already runs the guards) or fix it, she answered "fixa det ändå" to a
-    description of moving the tests so they run **both locally and at publish, from one
-    place**. #8 DevOps's blind critique then made deleting the CI step in the SAME commit
-    a binding condition — leaving it would run the same tests twice, two ways, and its own
-    comment says it is designed to start failing once this lands.
-  - `vitest.config.ts` `include` gains `scripts/**/*.{test,spec}.mjs` additively.
-  - BOTH `scripts/check-public-env.test.mjs` and `scripts/check-workflow-map.test.mjs`
-    converted `node:test`→vitest — a one-line import change each; every assertion is
-    byte-identical, verified against HEAD by the test reviewer.
-  - The `Script self-tests` step is deleted from ci.yml AND deploy.yml, and its `MIN=2`
-    floor replaced by `scripts/scripts-self-tests-present.test.mjs` (vitest only fails when
-    its WHOLE include set matches nothing, so a shrink of these two would hide in the
-    aggregate).
-  - ~~Out of scope: `check-workflow-map.test.mjs` throws an unexplained `SyntaxError`
-    under vitest.~~ **Did not reproduce.** The one-line import change was enough. A
-    separate parse failure DID appear mid-build and was blamed on the files' `#!` shebang;
-    the integration reviewer could not reproduce that either, and restoring the shebang in
-    the real repo passes 20/20 — so the shebang removal was reverted and both guards are
-    byte-identical to HEAD. Cause of the original error: still unknown, and no longer
-    load-bearing.
-
-## Batch C — streaming-functions (agent: direct)
-Area: `functions/src/streamingOffers/motn.ts`, `functions/src/leavingRollup/motnChanges.ts`,
-new `functions/src/util/redactVendorBody.ts`. Disjoint.
-
-- [ ] **BIN-857** [Tier A, build-review — signoff #13 Data/Integrations] Low — the same
-  masking-before-truncation logic is duplicated in two MOTN clients, untested. Router:
-  medium, #13. requiresPlanMode: false. Not urgent, pure maintenance.
-  - `functions/src/util/redactVendorBody.ts` exports one shared function both clients
-    import.
-  - Test pins: a key at position 0 in a body >300 chars is masked BEFORE truncation, never
-    after.
-  - Existing MOTN tests in both call sites stay green.
-
-## Batch D — auth-deletion-guard (agent: direct, Tier C — plan expansion required)
-Area: `src/contexts/AuthContext.tsx`, `src/components/onboarding/OnboardingFlow.tsx`,
-`src/components/settings/DeleteAccountSection.tsx` (or wherever it lives — verify path),
-`src/lib/firebase/accountDeletion.ts`, new `functions/src/retentionCleanup/` reaper,
-`docs/data-retention-policy.md`, `.claude/rules/accepted-deviations.md`, `docs/RUNBOOK.md`.
-Disjoint from every other batch.
-
-- [ ] **BIN-816 + BIN-813** [Tier C, build-review — signoff: UX copy + scope growth] High —
-  an aborted account deletion recreates `users/{uid}` with a fresh consent timestamp, and a
-  second delete attempt can falsely claim "nothing was deleted." Router: **top** (full
-  panel — AuthContext.tsx, userData.ts). requiresPlanMode: **true**.
-  - **Panel already ran** 2026-08-11 in a watched session (5 roles + archaeologist,
-    approve-with-conditions, zero blocks). Both escalated questions answered by Malin the
-    same session. Full record: `docs/org/adr/0019-aborted-deletion-marker-scope.md` — read
-    before building, all 9 conditions are binding.
-  - Every write path that can recreate `users/{uid}` (8 identified, incl.
-    `OnboardingFlow.tsx`) goes through one shared chokepoint, not per-call-site patches.
-  - Marker set only after `STALE_SESSION_PREFLIGHT` passes, immediately before the cascade;
-    `deleteAccount()` and its retry are never gated on the marker; the second-attempt
-    "nothing was deleted" message only shows when no write was attempted this session.
-  - A server-side reaper (`retentionCleanup` family) deletes Firebase Auth accounts with no
-    matching `users/{uid}`, on a stated schedule, independent of the client marker — and
-    never deletes on an inconclusive (loading/unreadable) read.
-  - `docs/data-retention-policy.md` names the sweep window (this is what makes "delay, not
-    breach" honest per Malin's Art. 12(3) ruling); `.claude/rules/accepted-deviations.md`
-    records the marker's no-natural-retirement property as a conscious BIN-748 departure.
-  - Manual `firebase deploy --only functions` for the reaper is a required follow-up step,
-    not assumed done by push.
-
-## Batch E — watchlist-daterule (agent: direct, serial — not inside a parallel batch)
-Area: `src/hooks/useServiceValue.ts`, `src/components/pages/DiaryPageClient.tsx`,
-`src/components/pages/UserProfilePageClient.tsx`, `src/app/stats/page.tsx`,
-`src/components/pages/WatchlistPage.tsx`, `src/lib/taste/stats.ts`, `src/lib/diary.ts`, new
-`src/lib/seenDate.ts`. Disjoint from every other batch.
-
-- [ ] **BIN-689** [Tier A, build-review — signoff #28 Recommendations/Scoring-Integrity]
-  Medium — BIN-598 part 2: "watchedAt counts only when status is seen" is hand-copied in 7
-  files. Router: medium, #28. requiresPlanMode: false.
-  - Malin's 2026-08-06 decision: **build it, as its own isolated pass, not bundled with
-    other work in the same files.**
-  - One shared helper (`seenDate()` or equivalent) replaces all 7 hand-copied call sites.
-  - A mutation-style test kills "remove the seen-gate."
-  - Do this as a single serial change — not split across a parallel batch (this is what
-    sank the third review round last time).
-
-## Batch F — crash-boundaries (agent: direct)
-Area: `docs/workflow-map-universe.json`, `scripts/check-workflow-map.mjs`, ten
-`src/app/{feed,films,grupper,my,search,series,[...path]}/error.tsx`. Disjoint.
-
-- [ ] **BIN-808** [Tier A, build-review — signoff #15] Medium — BIN-789 part 2 was never
-  built: no mechanical detection of crash boundaries, and 10 error.tsx wrappers are missing
-  from `boundaries` coverage. Router: medium, #15. requiresPlanMode: false.
-  - Malin's 2026-08-08 decision: **build.**
-  - The 10 error.tsx wrappers appear in `boundaries` (or are explicitly, justifiably
-    excluded).
-  - A file importing `captureError`/`trackEvent` without being a route or function export
-    is caught mechanically, matching `check-workflow-map.mjs`'s existing approach.
-
-## Needs you (Tier D / needs-approval / parked)
-
-See the close-out report (StructuredOutput) for the full list — `alreadyDecided`,
-`needsApproval`, and `parked` buckets. Highlights: BIN-624 (rules change, needs a planned
-panel pass, not a sprint), BIN-766 (needs #27's own review session before rebuild — prior
-attempt failed data-safety), BIN-754/BIN-790/BIN-781 (fix lives in the shared
-`C:/claude-plugins` engine, not this repo), BIN-815 (deploy-hang retry work — her own note
-asks for a scheduling decision, unanswered).
-
-## Deviation log
-
-(none yet — filled in during execution)
+Read both before touching code. Every acceptance criterion below traces to a numbered
+condition; nothing here is invented at build time.
 
 ---
 
-# Archive — Plan 2026-08-12 — BIN-856: MOTN svarar 400 på varje anrop
+## The defect, in one paragraph
 
-## Problemet (bevisat, inte antaget)
+`deleteAccount()` runs a Firestore cascade and *then* `deleteUser()`. Anything that kills
+the second half — a stale token, a network drop — leaves an auth account alive with its
+Firestore data gone. On the next page load `ensureUserProfile` finds no `users/{uid}`,
+**recreates it**, and stamps `termsAcceptedAt`/`ageConfirmedAt` with today's date: the app
+manufactures a consent record for someone who just asked to leave. Seven other
+`merge:true` writers can resurrect the same document without a login at all. Separately,
+the username reservation is resolved from the profile doc that the first attempt already
+deleted, so a retry silently drops it and the handle is held forever.
 
-`functions/src/streamingOffers/motn.ts` byggde varje förfrågan som
-`/shows/{mediaType}/{tmdbId}?country=se&output_language=sv`. Leverantören avvisar det sista
-värdet:
+## Shape of the fix
+
+A uid-scoped, device-local marker set immediately before the cascade. While it is set:
+nothing may write `users/{uid}` or `publicProfiles/{uid}`, the app renders a persistent
+limbo screen instead of the normal shell (that is what makes "blocked" real rather than
+narrated), and the only actions offered are *finish the deletion* and *sign out*. A daily
+server sweep finishes what the device cannot: orphaned auth accounts and orphaned username
+reservations, independent of whether the user ever returns.
+
+---
+
+## Files
+
+**New**
+- `src/lib/deletionMarker.ts` — pure localStorage marker (no Firebase import, per the
+  test-extraction convention). ADR 0019 c6.
+- `src/lib/deletionMarker.test.ts`
+- `src/components/layout/DeletionLimbo.tsx` — the persistent screen. ADR 0019 c4.
+  (In `layout/`, not `settings/`: it replaces the whole shell and its only consumer
+  is `AppShell`.)
+- `src/components/layout/DeletionLimbo.test.tsx`
+- `src/lib/firebase/userDocWrite.ts` — the single chokepoint every `users/{uid}` merge
+  write passes through. ADR 0019 c1.
+- `src/lib/firebase/userDocWrite.test.ts`
+- `src/lib/firebase/userDocWrite.chokepoint.test.ts` — the guard test (below).
+- `functions/src/retentionCleanup/orphans.ts` + `orphans.test.ts` — pure predicates for the
+  two new sweeps.
+
+**Changed**
+- `src/lib/authErrors.ts` — add `CASCADE_PARTIAL`. BIN-876.
+- `src/lib/firebase/accountDeletion.ts` — username by uid-query; ownership re-check that
+  SKIPS; phase-tagged failure. ADR 0020 c1–c3, c5, c9.
+- `src/contexts/AuthContext.tsx` — marker set/clear; every profile writer routed through
+  the chokepoint; `ensureUserProfile` refuses to resurrect; limbo state exposed.
+- `src/components/onboarding/OnboardingFlow.tsx` — the eighth writer, through the chokepoint.
+- `src/lib/firebase/username.ts` — `claimUsername`'s `users/{uid}` update through the
+  chokepoint.
+- `src/components/layout/AppShell.tsx` — render limbo instead of children when marked.
+- `src/components/settings/DeleteAccountSection.tsx` — four honest messages; the retry
+  action rides only on the branches that fire BEFORE the marker (ADR 0020 c6, as
+  superseded in part by question 3's answer — see the note in the ADR).
+- `src/components/settings/DeleteAccountSection.test.tsx` — revise the pinned assertion
+  honestly, never loosen it. ADR 0020 c7.
+- `functions/src/retentionCleanup/index.ts` — the two new sweeps. ADR 0019 c5b, ADR 0020 (Malin #2).
+- `docs/data-retention-policy.md`, `docs/RUNBOOK.md`, `.claude/rules/accepted-deviations.md`.
+
+---
+
+## Screen sketch — DeletionLimbo (ADR 0019 c4)
+
+Replaces the whole shell. No topbar, no subnav — there is nothing else to do here.
 
 ```
-HTTP 400
-{"message":"parameter \"output_language\" has an invalid value: sv"}
+┌────────────────────────────────────────────────┐
+│  binge                                         │
+│                                                │
+│  Din radering är påbörjad men inte klar        │  ← page-h1
+│                                                │
+│  En del av din data kan redan vara borttagen,  │
+│  men själva kontot finns kvar. Tills            │
+│  raderingen är klar kan du inte spara något    │
+│  nytt här.                                     │
+│                                                │
+│  [ Slutför raderingen ]  [ Logga ut ]          │
+│                                                │
+│  Går det inte? Logga ut, logga in igen och     │
+│  försök på nytt — sessionen måste vara färsk.  │
+└────────────────────────────────────────────────┘
 ```
 
-Nio anrop per dygn, varje dygn sedan minst 2026-07-11, noll lyckade. Samma nio tv-id:n varje
-dag — urvalet rör sig aldrig eftersom `checkedAt` bara skrivs efter ett lyckat svar.
+Tokens only, through `PageHeader` — nothing invented, per
+`.claude/rules/design-system.md`. Not a new route, so no preview gate; reachable with a
+null profile, which is the load-bearing part.
 
-Verifierat live mot den skarpa nyckeln 2026-08-11: samma URL **utan** parametern ger HTTP 200
-för **alla nio** id:n som legat och failat. Alltså inte en utgången nyckel och inte ett ändrat
-gränssnitt — ett felformat anrop.
+The wording says "kan redan vara borttagen", not "vi hann ta bort": this screen is also
+what a user sees when the cascade failed on its very FIRST chunk, where nothing was
+deleted at all. Claiming otherwise would be the mirror image of the lie BIN-876 was filed
+about (`.claude/rules/accepted-deviations.md`, 2026-08-13).
 
-Ingenting nedströms läste någonsin lokaliserad text: `parse.ts` konsumerar bara
-`streamingOptions.se` (service-id, type, link, price, expiresOn).
+---
 
-## Router
+## Work items
 
-`node docs/org/route.mjs functions/src/streamingOffers/motn.ts …` → `tier: "medium"`,
-`panel: [13]`, inga high-stakes. En blind kritik från #13 Data / Integrations Engineer kördes
-före bygget. Utfall: **approve-with-conditions**, två bindande villkor (se nedan).
+### 1 · The marker — `src/lib/deletionMarker.ts` (ADR 0019 c2, c6)
+`binge:deletionStarted:<uid>` → `{ startedAt }`. Read **fresh** on every call, never
+cached in a ref (BIN-592). Storage that throws answers "not marked" for the read — a
+browser with no localStorage could not have stored one either, and a false *true* would
+lock a user out of an account nothing ever tried to delete.
+Exported key helper so the cascade's own localStorage sweep can exclude it (c6).
 
-## Acceptanskriterier
+### 2 · The chokepoint — `src/lib/firebase/userDocWrite.ts` (ADR 0019 c1)
+`mergeUserDoc(uid, data)` — the only sanctioned way to `setDoc(users/{uid}, …, {merge:true})`.
+Throws `DELETION_IN_PROGRESS` when marked. `assertProfileWritable(uid)` is the same check
+exposed for the two call sites that must build their own batch (`resumeProvider`,
+`claimUsername`).
+**Guard test:** scan `AuthContext.tsx`, `OnboardingFlow.tsx`, `username.ts`,
+`publicProfile.ts` for `doc(db, 'users'`/`'publicProfiles'` write forms and fail if any
+occurrence is not inside the chokepoint module. This is what stops the ninth writer from
+reopening the hole — the panel's actual objection to per-call-site patching.
 
-### Del 1 — MOTN-anropet (commit `d3505f8`, deployad 2026-08-11T22:55Z)
+### 3 · Refuse the resurrection — `ensureUserProfile` (BIN-816 AC1, AC2, AC3)
+Marked uid → return `{ profile: null, deletionInProgress: true }`. No `runTransaction`
+create, no `tryAutoClaimUsername`, and the `syncMyPublicProfile` effect is skipped so
+`publicProfiles/{uid}` is not rebuilt either.
 
-- [x] `npx tsc --noEmit -p functions/tsconfig.json` exit 0
-- [x] Hela vitest-sviten grön, och `motnRequest.test.ts` syns i en ofiltrerad körning
-- [x] Mutationstestat: en mutant som återinför en uppräknad 4xx-lista dödas
-- [x] Alla tre grindgranskarna pass (säkerhet, test, integration) — fyra rundor
-- [x] **`firebase deploy --only functions:streamingOffersRefresh,functions:leavingRollup`**
-- [ ] **Bevis: ett HTTP 200 från MOTN i den skarpa loggen för binge-nu** — Väntar på den
-      schemalagda körningen 2026-08-12T19:29Z. ENDA kvarvarande punkten i del 1.
+### 4 · Set the marker at the right instant (ADR 0019 c2, c3)
+In `deleteAccount()`, **after** the freshness preflight throws-or-passes and immediately
+before `collectUserDataSnapshots`. `STALE_SESSION_PREFLIGHT` must remain a true no-op.
+`deleteAccount()` itself and its retry are **never** gated on the marker (c3) — the marker
+gates *profile writes*, and `deleteAccount` writes none. Cleared only after `deleteUser()`
+resolves. There is deliberately no "cancel" — recorded as a conscious deviation (c8).
 
-### Del 2 — hälsomätaren (Malins B-svar 2026-08-12, commit `3e74e5f`)
+### 5 · Finish it on return (ADR 0019 c5)
+`DeletionLimbo` calls `deleteAccount()` again. The cascade is idempotent by design and,
+after item 6, actually is. A stale session surfaces the preflight message and the sign-in
+route; a fresh one completes.
 
-- [x] Kapacitetsberäkningen bit-för-bit orörd; `status` = `worstStatus(kapacitet, flöde)`
-- [x] Mutationstestat: alla fem mutanter dödas var för sig
-- [x] Kvotslut driver INTE flödesräknaren; ett 404 räknas som levererat
-- [x] Två skilda larm — ett trasigt flöde kan aldrig avfyra "överväg betalplan"
-- [x] Deploy av del 2 (committed + deployed samma dygn som del 1 per project memory)
+### 6 · The username survives the retry — BIN-875 (ADR 0020 c1–c3, c8)
+`collectDeletionRefs` resolves the reservation by **querying `usernames` where `uid == id`**
+— not the marker, not the profile doc, not React state. No rules change and no
+`firestore.indexes.json` entry: `allow read: if true` covers `list`, and the default
+single-field index serves the equality. Keep the delete adjacent to `users/{uid}` in the
+same chunk (c3 — do NOT move it earlier). Include only reservations the query itself
+returned, so a handle already reclaimed by someone else is skipped rather than throwing
+and aborting the chunk (c2).
+The profile-doc and React-state sources are REMOVED, not demoted: neither carries
+ownership proof, so queuing a name from them could throw inside the atomic chunk and gate
+the retry (ADR 0020 c2). A failed query queues nothing; the daily sweep covers it.
 
-## Medvetet utelämnat
+### 7 · Say what actually happened — BIN-876 (ADR 0020 c5, c6)
+`applyDeletionPlan` tracks whether any chunk committed and, on failure, rethrows tagged
+`CASCADE_PARTIAL`. **In-memory for that call only** — no persisted cursor, no resumable
+plan (ADR 0016, and this cascade's own "ask Firestore fresh every attempt" principle).
+`DeleteAccountSection` grows a third branch with Support's two strings, adjusted to name
+the limbo screen's "Slutför raderingen" — because answer 3 means this component is
+unmounted by the time those branches fire, so its own retry button would be a no-op. The
+nothing-touched branch, which fires before the marker, gains the action it lacks today.
 
-- **Extrahera `redactVendorBody()`** — filad som **BIN-857**, nu selected i denna sprint
-  (Batch C).
-- **`motnChanges.ts` får ingen egen `rejected`-gren** — strukturellt onödigt, se original-
-  resonemang i git-historiken.
+### 8 · The server finishes what the device cannot (ADR 0019 c5b, Malin #2)
+Two sweeps in `retentionCleanup`:
+- **Orphaned auth accounts** — `listUsers()` paginated, `users/{uid}` checked via
+  `getAll()`, deleted only when the account is **older than 7 days** and the read
+  *succeeded* and returned absent. A failed read means "could not check", never "nothing
+  there". 7 days is far beyond any transient profile-creation failure and well inside Art.
+  12(3)'s one month.
+- **Orphaned username reservations** — a `usernames/*` doc whose `uid` resolves to neither
+  a live auth user nor a `users/{uid}` document. Same could-not-check guard.
+Needs a manual `firebase deploy --only functions` — `deploy.yml` ships hosting only.
+
+### 9 · Write it down (ADR 0019 c8–c9, ADR 0020 c10–c12)
+- `docs/data-retention-policy.md` — the cross-device/private-window/cleared-storage gap;
+  the orphaned-auth-account window; the orphaned-username window beside the existing
+  "Användarnamn → Hård radering + release" section, which today states a guarantee this
+  code path could break; the interrupted-mid-cascade state with retry as its resolution;
+  and the `memberUids`/`editors` orphan-reference gap on other users' documents.
+- `docs/RUNBOOK.md` — three-way console signature (untouched / partially cascaded / fully
+  cascaded orphan) and the manual remedy for a squatted `usernames/{name}`.
+- `.claude/rules/accepted-deviations.md` — the marker has no natural retirement (a
+  conscious departure from BIN-748's lesson), and a first-chunk failure therefore parks a
+  user with intact data in limbo until they retry.
+- Rewrite the two comments that now describe behaviour the code does not have:
+  `AuthContext.tsx` ~1059 (idempotency) and `accountDeletion.ts` 213–215 (per-chunk
+  atomicity read as a whole-cascade guarantee). Same commit (ADR 0020 c9).
+
+---
+
+## Acceptance
+
+- `users/{uid}` does not exist **at all** after a simulated re-login with the marker set —
+  not merely that consent fields are unchanged (ADR 0019 c7). Every merge writer covered.
+  `tryAutoClaimUsername` proven not to fire. `publicProfiles/{uid}` not rebuilt.
+- A second deletion attempt after `users/{uid}` is already gone still releases the
+  username, proven against partially-deleted data (ADR 0020 c8) — and the test drives the
+  real path rather than hand-slicing the plan, or says plainly that it proves a backstop.
+- An interruption between two chunks renders the "may be partial" message, not the
+  "nothing happened" one and not silence (ADR 0020 c7).
+- `deleteAccount()` and its retry are never blocked by the marker.
+- `npm run typecheck`, `npm run lint`, `npm test` green; `npm run test:rules` green (needs
+  Java/JBR on PATH).
+
+## Not in scope
+
+- Malin's one-time production check for already-orphaned `usernames/*` (Legal + DPO asked
+  for it independently) — her Firebase Console, not a build task.
+- BIN-813, which waits on this landing.

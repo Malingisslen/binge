@@ -58,10 +58,10 @@ function meKit() {
 }
 
 /** Run the real extracted deletion cascade as the authenticated owner. */
-async function runDeletion(fallbackUsername?: string | null) {
+async function runDeletion() {
   const kit = meKit();
   const snaps = await collectUserDataSnapshots(ME, kit);
-  const plan = await collectDeletionRefs(kit, ME, snaps, fallbackUsername);
+  const plan = await collectDeletionRefs(kit, ME, snaps);
   await applyDeletionPlan(kit, plan);
 }
 
@@ -321,12 +321,12 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     //
     // Avbrottspunkten är vald med flit och inte "på mitten": profil-doc:et ligger
     // NÄST sist i refs och username-reservationen sist, så det här är det enda
-    // avbrott där omförsöket inte längre kan läsa sitt eget username. Ett snitt
-    // mitt i listan lämnar profilen kvar och gör fallback-argumentet nedan
-    // verkningslöst (integrationsgranskningen 2026-08-05).
+    // avbrott där omförsöket inte längre kan läsa sitt eget username ur profilen.
+    // Ett snitt mitt i listan lämnar profilen kvar och gör hela poängen
+    // verkningslös (integrationsgranskningen 2026-08-05).
     const kit = meKit();
     const snaps = await collectUserDataSnapshots(ME, kit);
-    const plan = await collectDeletionRefs(kit, ME, snaps, MY_NAME);
+    const plan = await collectDeletionRefs(kit, ME, snaps);
     await applyDeletionPlan(kit, {
       refs: plan.refs.slice(0, plan.refs.length - 1),
       memberLeaveUpdates: [],
@@ -336,18 +336,25 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(await exists(['users', ME]), 'and got as far as the profile doc').toBe(false);
     expect(await exists(['usernames', MY_NAME]), 'but not the reservation after it').toBe(true);
 
-    // Utan fallback är reservationen strandsatt: planen hämtar username ur
-    // profil-doc:et, och det finns inte längre. Det är inte en hypotetisk gren —
-    // det är det enda som gör fjärde argumentet till collectDeletionRefs
-    // nödvändigt, och utan det här steget skulle testet passera med argumentet
-    // helt bortplockat.
+    // BIN-875 vänder det här påståendet, och vändningen ÄR biljetten.
+    //
+    // Fram till 2026-08-13 stod här att reservationen blir strandsatt: planen
+    // läste sitt username ur profil-doc:et, som första försöket redan raderat,
+    // med React-state (`user?.username`) som enda fallback — och den är null
+    // efter en omladdning. Den vanligaste vägen tillbaka (stäng fliken, kom
+    // tillbaka senare, försök igen) tappade alltså handtaget för alltid.
+    //
+    // `collectUsernameReservationRefs` frågar numera `usernames` på uid, och
+    // fallback-argumentet är BORTA ur signaturen. Omförsöket har därför ingen
+    // annan källa kvar att lyckas via — det är acceptanskriterium 1 på BIN-875,
+    // och det avgörande fallet: tvinga bort båda de gamla källorna och se om
+    // reservationen ändå försvinner.
     await runDeletion();
-    expect(await exists(['usernames', MY_NAME]), 'orphaned without the fallback').toBe(true);
+    expect(await exists(['usernames', MY_NAME]), 'released by the uid-query alone').toBe(false);
 
-    // Omförsöket som produktionen gör: `MY_NAME` är samma fallback som
-    // deleteAccount skickar från React-state (`user?.username`), vilket överlever
-    // ett kastat anrop.
-    await runDeletion(MY_NAME);
+    // Ett andra omförsök ska landa i samma sluttillstånd — inte kasta på en
+    // reservation som redan är borta.
+    await runDeletion();
 
     for (const sub of KNOWN_USER_SUBCOLLECTIONS) {
       const remaining = await count(['users', ME, sub]);
@@ -371,5 +378,62 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     });
     expect(otherListEditors, 'uid stripped from co-edited list on the retry').toEqual([OTHER]);
     expect(memberUids, 'uid removed from member-group memberUids on the retry').toEqual([OTHER]);
+  });
+
+  // BIN-875 / ADR 0020 condition 8. The test above reaches the stranded state by
+  // slicing the last ref off the real plan, and says so — it proves the retry
+  // CONVERGES, not that a chunk boundary is what strands it. These three isolate
+  // the property itself: what the plan does when the old sources are gone or
+  // wrong, with no interruption staged at all.
+  describe('BIN-875 — reservationen hittas oavsett vad som redan är borta', () => {
+    it('hittar reservationen när profil-doc:et är borta och React-state är null', async () => {
+      await seedFullAccount();
+      // Exakt det tillstånd ett avbrutet första försök lämnar: identiteten lever,
+      // profilen är borta, reservationen kvar. Skrivet direkt i stället för via
+      // ett avbrott, så testet inte hänger på VAR en klumpgräns råkar hamna.
+      await seed(async db => { await fsMod.deleteDoc(fsMod.doc(db, 'users', ME)); });
+      expect(await exists(['usernames', MY_NAME]), 'reservationen finns före').toBe(true);
+
+      await runDeletion();
+
+      expect(await exists(['usernames', MY_NAME]), 'frigjord via uid-frågan').toBe(false);
+    });
+
+    it('rör INTE ett handtag som någon annan hunnit ta över', async () => {
+      await seedFullAccount();
+      // Kapplöpningen ADR 0020 villkor 2 handlar om: profilen namnger ett handtag
+      // som sedan blivit någon annans. `firestore.rules` tillåter bara den ägaren
+      // att radera det, och klumpar är atomära — så en kö:ad radering hade kastat
+      // och rivit hela klumpen med sig, dvs spärrat omförsöket (mot ADR 0019
+      // villkor 3). Uid-frågan returnerar den aldrig, så den blir helt enkelt inte
+      // med.
+      await seed(async db => {
+        await fsMod.setDoc(fsMod.doc(db, 'usernames', MY_NAME), { uid: OTHER });
+      });
+
+      // Fallbacken pekar fortfarande på MY_NAME — det är den vägen som förr
+      // hade kö:at någon annans dokument.
+      await runDeletion();
+
+      expect(await exists(['usernames', MY_NAME]), 'någon annans reservation orörd').toBe(true);
+      // Och resten av kaskaden ska ha gått i mål ändå, inte fallit på den.
+      expect(await exists(['users', ME]), 'profil-doc:et raderat trots det').toBe(false);
+      expect(await count(['users', ME, 'watchlist']), 'watchlist tömd trots det').toBe(0);
+    });
+
+    it('frigör ALLA reservationer kontot håller, inte bara den profilen namnger', async () => {
+      await seedFullAccount();
+      // En avbruten claimUsername kan lämna två reservationer på samma uid (den
+      // nya skapas och den gamla raderas i samma batch, men en tidigare avbruten
+      // radering kan ha lämnat en efter sig). Profilen kan bara namnge en av dem.
+      await seed(async db => {
+        await fsMod.setDoc(fsMod.doc(db, 'usernames', 'gammalt-handtag'), { uid: ME });
+      });
+
+      await runDeletion();
+
+      expect(await exists(['usernames', MY_NAME]), 'namngivna handtaget frigjort').toBe(false);
+      expect(await exists(['usernames', 'gammalt-handtag']), 'och det profilen inte kände till').toBe(false);
+    });
   });
 });

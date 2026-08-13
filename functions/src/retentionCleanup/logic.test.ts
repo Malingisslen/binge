@@ -273,4 +273,32 @@ describe('revokedUidsInBatches (BIN-848)', () => {
     expect(calls).toBe(0);
     expect(out).toEqual({ revoked: [], skippedBatches: 0 });
   });
+
+  // BIN-875 added the optional `extract`. Every fixture above uses live or
+  // not-found accounts, under which the two extractors agree — so swapping the
+  // DEFAULT to the narrower one left this whole suite green and would silently
+  // have ended BIN-848's disabled-account coverage (test review, 2026-08-13).
+  it('defaults to revokedUidsFromLookup — a DISABLED account is still revoked', async () => {
+    const { revoked } = await revokedUidsInBatches(['sus'],
+      async () => ({ users: [{ uid: 'sus', disabled: true }], notFound: [] }));
+
+    // This is the default's whole job, and the only assertion in the file that
+    // can tell the two extractors apart.
+    expect(revoked).toEqual(['sus']);
+  });
+
+  it('uses the supplied extract instead of the default when one is given', async () => {
+    // The username sweep passes `absentUidsFromLookup`, which deliberately does
+    // NOT treat `disabled` as absent: a suspended account still exists and still
+    // owns its handle. Without this, the parameter could be ignored entirely and
+    // nothing here would notice.
+    const { revoked } = await revokedUidsInBatches(
+      ['sus'],
+      async () => ({ users: [{ uid: 'sus', disabled: true }], notFound: [] }),
+      undefined,
+      (result) => result.notFound.map((n) => (n as { uid: string }).uid),
+    );
+
+    expect(revoked).toEqual([]);
+  });
 });

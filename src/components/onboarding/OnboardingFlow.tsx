@@ -8,7 +8,7 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { useSearch } from '@/hooks/useTMDB';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SWEDISH_PROVIDERS } from '@/lib/tmdb/providers';
-import { fsdb } from '@/lib/firebase/db';
+import { mergeUserDoc } from '@/lib/firebase/userDocWrite';
 import { trackEvent } from '@/lib/analytics';
 import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
@@ -94,12 +94,11 @@ export function OnboardingFlow() {
     setSaving(true);
     setSaveFailed(false);
     try {
-      const { db, doc, setDoc, serverTimestamp } = await fsdb();
-      await setDoc(
-        doc(db, 'users', uid),
-        { onboardingCompletedAt: serverTimestamp() },
-        { merge: true },
-      );
+      // BIN-816: the eighth users/{uid} merge writer the panel counted, and the
+      // one outside AuthContext. Its `!user` guard never helped — React state is
+      // not cleared by an aborted cascade — so it goes through the chokepoint
+      // like the rest.
+      await mergeUserDoc(uid, kit => ({ onboardingCompletedAt: kit.serverTimestamp() }));
       trackEvent('onboarding_completed', { step_reached: step });
       // BIN-669: sign-in remembered where they were (the poster badge on a
       // prerendered title page is the funnel), then routed them here instead.

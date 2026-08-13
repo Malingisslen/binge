@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 156,
+  "patternCount": 162,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -62,8 +62,14 @@
         "src/app/integritet/page.tsx",
         "src/app/villkor/page.tsx",
         "src/contexts/AuthContext.tsx",
+        "src/lib/deletionMarker.test.ts",
+        "src/lib/deletionMarker.ts",
+        "src/lib/firebase/accountDeletion.applyPlan.test.ts",
         "src/lib/firebase/dataExport.ts",
         "src/lib/firebase/userData.ts",
+        "src/lib/firebase/userDocWrite.chokepoint.test.ts",
+        "src/lib/firebase/userDocWrite.test.ts",
+        "src/lib/firebase/userDocWrite.ts",
         "src/lib/sentry.ts",
         "src/lib/tmdb/attribution.ts"
       ]

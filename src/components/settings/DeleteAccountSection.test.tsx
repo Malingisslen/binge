@@ -1,26 +1,38 @@
 // src/components/settings/DeleteAccountSection.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { DeleteAccountSection } from './DeleteAccountSection';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
+import { CASCADE_PARTIAL, DELETION_HANDED_OFF, REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 
 // BIN-777, and the Customer Support critique that gated it (2026-08-06).
 // Wording of the recent-login branch revised by BIN-796 (Malin's call, 2026-08-07).
+// Fourth branch and the retry-everywhere rule added by BIN-876 (ADR 0020, c6).
 //
-// Deleting an account has three failure messages. Two of them are about the same
-// Firebase error code and mean opposite things: our own preflight throws BEFORE
-// the cascade, so there "Ingenting har raderats." is true; Firebase's own
-// requires-recent-login can only surface AFTER it, where that promise would be a
-// lie about someone's data.
+// Hand-off rule and the two renamed buttons: BIN-816 (integration review,
+// 2026-08-13) — a failure after the deletion marker goes down unmounts this
+// component, so the branches that can only happen then must not offer a button
+// they no longer own, and must name the limbo screen's button instead.
 //
-// Until BIN-796 the second branch handled that by saying nothing at all about
-// what had happened. It shared its whole opening sentence with the first, so a
-// mutant swapping the two branches kept the prefix and survived any substring
-// assertion. The branches now say visibly different things — the second one
-// states that deletion HAS started — but the full-string assertions below stay,
-// because the risk they guard is unchanged: the failure mode is a message that
-// makes a claim about the person's data that the code cannot back up. Presence
-// and absence of the promise clause are pinned separately for the same reason.
+// Deleting an account has four failure messages, and the whole point of the file
+// is that they make DIFFERENT claims about the person's data:
+//   preflight        — nothing was touched, and says so.
+//   recent-login     — the cascade ran; the account survives. Says started, not
+//                      finished, and never that anything was deleted.
+//   partial cascade  — some chunks committed and then it fell over, OR the
+//                      cascade finished and only `deleteUser` failed. Says data
+//                      may already be gone.
+//   generic          — reached only from paths that run BEFORE the first write
+//                      (the token read, the snapshot reads, the plan build, and
+//                      a first-chunk failure, which `applyDeletionPlan` leaves
+//                      untagged precisely because nothing committed).
+//
+// The full-string assertions are kept, not loosened, from the BIN-796 revision.
+// The risk they guard is unchanged: a mutant that swaps two branches keeps any
+// shared prefix and survives a substring check, and the failure mode is a
+// message making a claim about someone's data that the code cannot back up.
+// BIN-876 widened the surface — the generic branch now carries the promise
+// clause too — so the branch-swap risk went UP, not down, and each message is
+// pinned whole with its distinguishing clause asserted separately.
 
 const auth = vi.hoisted(() => ({
   deleteAccount: vi.fn<() => Promise<void>>(async () => {}),
@@ -30,21 +42,31 @@ const toast = vi.hoisted(() => ({ show: vi.fn() }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => toast }));
 
-// The REAL shape AuthContext throws for our own preflight (AuthContext.tsx:991):
-// it carries BOTH codes on purpose — `auth/requires-recent-login` is what every
-// existing reader and Firebase itself recognise, and the preflight code is the
-// only thing separating "nothing was touched" from the same error thrown after
-// the cascade. A fixture carrying only the preflight code would be reachable from
-// EITHER branch order, so the swap mutant this file exists to kill survives it.
-// (Caught by the integration review, 2026-08-06 — the first fixture did exactly
-// that and passed 5/5 against a swapped component.)
+// The REAL shape AuthContext throws for our own preflight: it carries BOTH codes
+// on purpose — `auth/requires-recent-login` is what every existing reader and
+// Firebase itself recognise, and the preflight code is the only thing separating
+// "nothing was touched" from the same error thrown after the cascade. A fixture
+// carrying only the preflight code would be reachable from EITHER branch order,
+// so the swap mutant this file exists to kill survives it. (Caught by the
+// integration review, 2026-08-06 — the first fixture did exactly that and passed
+// 5/5 against a swapped component.)
 const PREFLIGHT_ERROR = `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): sessionen är för gammal för att radera kontot`;
+// Likewise real. Two tags, and both matter: `applyDeletionPlan` prefixes
+// `CASCADE_PARTIAL`, and `deleteAccount` then wraps everything thrown after the
+// marker went down in `DELETION_HANDED_OFF` — which is what tells this component
+// that `AppShell` has already swapped it out for the limbo screen.
+const PARTIAL_ERROR = `${DELETION_HANDED_OFF}: ${CASCADE_PARTIAL}: FirebaseError: Failed to get document because the client is offline.`;
+const RECENT_LOGIN_ERROR = `${DELETION_HANDED_OFF}: Firebase: Error (${REQUIRES_RECENT_LOGIN}).`;
 
 const PROMISE_CLAUSE = 'Ingenting har raderats.';
 const PREFLIGHT_MSG = 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.';
 const RECENT_LOGIN_MSG =
-  'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Ta bort mitt konto en gång till för att slutföra den.';
-const GENERIC_MSG = 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
+  'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Slutför raderingen för att avsluta den.';
+const PARTIAL_MSG =
+  'Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data kan redan vara borttagen. Tryck på Slutför raderingen — resten går igenom utan att skada det som redan tagits bort.';
+const GENERIC_MSG = 'Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och försök igen.';
+
+const RETRY_ACTION = { label: 'Försök igen', onClick: expect.any(Function) };
 
 async function attemptDelete() {
   render(<DeleteAccountSection />);
@@ -66,29 +88,31 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
 
     await attemptDelete();
 
-    expect(toast.show).toHaveBeenCalledWith(PREFLIGHT_MSG);
-    // No action here — this branch's promise is true and needs no retry affordance.
-    expect(toast.show.mock.calls[0][1]).toBeUndefined();
+    expect(toast.show).toHaveBeenCalledWith(PREFLIGHT_MSG, RETRY_ACTION);
     // Löftesklausulen är hela skillnaden mot grannmeddelandet — pinna den
     // separat, så att en mutant som byter plats på grenarna inte kan överleva
     // på den gemensamma inledningen.
     expect(toast.show.mock.calls[0][0]).toContain(PROMISE_CLAUSE);
+    // Och den här grenen är den ENDA som får be om en ny inloggning innan
+    // kaskaden ens kört — den delar den frasen bara med recent-login-grenen,
+    // som i sin tur aldrig bär löftesklausulen (nästa test).
+    expect(toast.show.mock.calls[0][0]).toContain('logga in igen');
   });
 
   it('Firebases requires-recent-login: säger INTE att ingenting raderats — kaskaden kan redan ha kört', async () => {
-    auth.deleteAccount.mockRejectedValue(new Error(`Firebase: Error (${REQUIRES_RECENT_LOGIN}).`));
+    auth.deleteAccount.mockRejectedValue(new Error(RECENT_LOGIN_ERROR));
 
     await attemptDelete();
 
-    // The action argument is not decoration: a toast without one self-dismisses
-    // after 2500ms, with one after 6000ms (ToastContext). This message is more
-    // than twice as long as the branch that ships no action, and it is the app's
-    // only notice that the library is already gone while the account remains —
-    // dropping the action makes it unreadable, not just less convenient.
-    expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG, {
-      label: 'Försök igen',
-      onClick: expect.any(Function),
-    });
+    // No action here, and that is the fix rather than a regression: this failure
+    // happens after the marker is down, so `AppShell` has already replaced this
+    // component with the limbo screen. A retry button would call `setConfirming`
+    // on something unmounted — a promise the UI cannot keep (integration review,
+    // 2026-08-13). The limbo screen's own "Slutför raderingen" is the button,
+    // and the text below names it.
+    expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG);
+    expect(toast.show.mock.calls[0][1]).toBeUndefined();
+    expect(toast.show.mock.calls[0][0]).toContain('Slutför raderingen');
     expect(toast.show.mock.calls[0][0]).not.toContain(PROMISE_CLAUSE);
     // BIN-796: silence read as "nothing happened". The message must say deletion
     // started, and must not claim it finished either — both halves, or the honest
@@ -97,9 +121,32 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     expect(toast.show.mock.calls[0][0]).not.toContain('raderat');
     // There is no auto-resume — logging in only refreshes the token the preflight
     // reads. A message that stops at "logga in igen" strands the user on an empty
-    // but still-existing account, so the retry action is part of the promise and
-    // is pinned here (#19 Customer Support critique, 2026-08-07).
-    expect(toast.show.mock.calls[0][0]).toContain('Ta bort mitt konto');
+    // but still-existing account, so naming the action that finishes the job is
+    // part of the promise (#19 Customer Support critique, 2026-08-07). The name
+    // changed on 2026-08-13: the button is now the limbo screen's "Slutför
+    // raderingen", pinned above, because this component is no longer on screen.
+    expect(toast.show.mock.calls[0][0]).not.toContain('Ta bort mitt konto');
+  });
+
+  it('avbrott mitt i kaskaden: säger att data KAN vara borta — aldrig att ingenting hände', async () => {
+    auth.deleteAccount.mockRejectedValue(new Error(PARTIAL_ERROR));
+
+    await attemptDelete();
+
+    expect(toast.show).toHaveBeenCalledWith(PARTIAL_MSG);
+    // Kärnan i BIN-876: det här felet bär samma nätverksord som det generiska
+    // ("anslutningsfel"), så det är LÖFTESKLAUSULENS FRÅNVARO som skiljer dem.
+    // En mutant som tappar CASCADE_PARTIAL-grenen landar i den generiska och
+    // börjar lova att ingenting raderats — vilket är precis lögnen biljetten
+    // filades om.
+    expect(toast.show.mock.calls[0][0]).not.toContain(PROMISE_CLAUSE);
+    expect(toast.show.mock.calls[0][0]).toContain('kan redan vara borttagen');
+    // Och den får inte be om en ny inloggning: det är inte det som är fel här,
+    // och grenen ovanför är den som äger den instruktionen.
+    expect(toast.show.mock.calls[0][0]).not.toContain('logga in igen');
+    // Ingen knapp — limbo-skärmen har tagit över. Texten pekar på DESS knapp.
+    expect(toast.show.mock.calls[0][1]).toBeUndefined();
+    expect(toast.show.mock.calls[0][0]).toContain('Slutför raderingen');
   });
 
   it('okänt fel: den generiska texten, och den låtsas aldrig vara ett inloggningsfel', async () => {
@@ -107,10 +154,16 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
 
     await attemptDelete();
 
-    expect(toast.show).toHaveBeenCalledWith(GENERIC_MSG);
+    expect(toast.show).toHaveBeenCalledWith(GENERIC_MSG, RETRY_ACTION);
     // Skyddar mot att en framtida felkod tyst hamnar i den lugnande hinken:
     // den generiska grenen får aldrig be någon logga in igen.
     expect(toast.show.mock.calls[0][0]).not.toContain('logga in igen');
+    // BIN-876: den här grenen FÅR lova att ingenting raderats, men bara för att
+    // varje väg hit ligger före första skrivningen — förkontrollen, läsningarna,
+    // planbygget, och ett fel på FÖRSTA klumpen (som applyDeletionPlan lämnar
+    // otaggat just därför). Går den lovande meningen förlorad har någon flyttat
+    // en gren som faktiskt kan ha skrivit hit.
+    expect(toast.show.mock.calls[0][0]).toContain(PROMISE_CLAUSE);
   });
 
   it('ett fel som inte är ett Error-objekt hamnar också i den generiska grenen', async () => {
@@ -118,7 +171,47 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
 
     await attemptDelete();
 
-    expect(toast.show).toHaveBeenCalledWith(GENERIC_MSG);
+    expect(toast.show).toHaveBeenCalledWith(GENERIC_MSG, RETRY_ACTION);
+  });
+
+  it('knappen följer med precis när komponenten finns kvar att trycka i', async () => {
+    // #19 Customer Support, 2026-08-13: den generiska grenen hade ingen åtgärd
+    // alls, så den som tappade nätet fick 2,5 sekunder och ingenting att trycka
+    // på. Integrationsgranskningen samma dag visade baksidan: efter att markören
+    // lagts ned är komponenten avmonterad och knappen en no-op.
+    //
+    // Regeln är därför INTE "alla grenar får en knapp" utan "knappen finns exakt
+    // när den fungerar" — dvs när felet saknar hand-over-taggen. Prövas i BÅDA
+    // riktningarna över de fyra grenar som finns; listan är handskriven, så en
+    // femte gren måste läggas till här också (inget tvingar det).
+    const cases: [Error, boolean][] = [
+      [new Error(PREFLIGHT_ERROR), true],
+      [new Error('auth/network-request-failed'), true],
+      [new Error(RECENT_LOGIN_ERROR), false],
+      [new Error(PARTIAL_ERROR), false],
+      [new Error(`${DELETION_HANDED_OFF}: auth/network-request-failed`), false],
+    ];
+    for (const [err, expectAction] of cases) {
+      cleanup();
+      toast.show.mockClear();
+      auth.deleteAccount.mockRejectedValue(err);
+      await attemptDelete();
+      if (expectAction) expect(toast.show.mock.calls[0][1], err.message).toEqual(RETRY_ACTION);
+      else expect(toast.show.mock.calls[0][1], err.message).toBeUndefined();
+    }
+  });
+
+  it('omförsöksknappen öppnar bekräftelsesteget igen', async () => {
+    auth.deleteAccount.mockRejectedValue(new Error('auth/network-request-failed'));
+
+    await attemptDelete();
+
+    // Utan det här är etiketten "Försök igen" en tom gest: den ska faktiskt
+    // föra tillbaka användaren till knappen som slutför raderingen.
+    expect(screen.queryByText('Ja, ta bort permanent')).toBeNull();
+    const action = toast.show.mock.calls[0][1] as { onClick: () => void };
+    await act(async () => { action.onClick(); });
+    expect(screen.getByText('Ja, ta bort permanent')).toBeTruthy();
   });
 
   it('knappen går att använda igen efter ett fel — ett misslyckat försök får inte se ut som ett hängt försök', async () => {

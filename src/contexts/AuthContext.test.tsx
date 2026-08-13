@@ -75,6 +75,7 @@ vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 // payload-assertions utan en oanvänd-param-lintvarning.
 const setDoc = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const profileDocData: { current: Record<string, unknown> | null } = { current: null };
+const profileGate: { current: Promise<void> | null } = { current: null };
 
 // BIN-535: default runTransaction stub re-reads the SAME profileDocData
 // mirror the plain getDoc above uses — so the normal (non-racing) create path
@@ -119,10 +120,17 @@ vi.mock('@/lib/firebase/db', () => ({
   fsdb: async () => ({
     db: {},
     doc: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
-    getDoc: async () => ({
-      exists: () => profileDocData.current !== null,
-      data: () => profileDocData.current ?? {},
-    }),
+    getDoc: async () => {
+      // BIN-816: a hold point for the profile read, so a test can drive the
+      // interleaving the marker re-read exists for — a storage event landing
+      // WHILE ensureUserProfile is in flight, then the stale sample resolving
+      // on top of it. Null by default, so every other test is unaffected.
+      if (profileGate.current) await profileGate.current;
+      return {
+        exists: () => profileDocData.current !== null,
+        data: () => profileDocData.current ?? {},
+      };
+    },
     setDoc,
     runTransaction,
     collection: (_db: unknown, ...path: string[]) => ({ _path: path.join('/') }),
@@ -231,9 +239,15 @@ import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors
 // --- Harness -----------------------------------------------------------------
 
 let ctx: ReturnType<typeof useAuth> | null = null;
+// BIN-816: every RENDER's value of the limbo flag, in order. `ctx` is written in
+// an effect, so it lags a render behind — and the bug this guards against (the
+// limbo screen appearing during a normal deletion) is precisely a render that
+// happens and then goes away again. Reading `ctx` mid-cascade cannot see it.
+const deletionFlagRenders: boolean[] = [];
 
 function Harness() {
   const value = useAuth();
+  deletionFlagRenders.push(value.deletionInProgress);
   useEffect(() => { ctx = value; }, [value]);
   return <div>ready</div>;
 }
@@ -289,6 +303,11 @@ beforeEach(() => {
   deletion.collectDeletionRefs.mockClear();
   deletion.applyDeletionPlan.mockClear();
   publicProfile.clearPublicProfileSignature.mockClear();
+  // BIN-816: the projection-sync effect is the second resurrection path, so a
+  // test now asserts it was NOT reached. Its sibling above was cleared and this
+  // one was not — calls leaked across the whole file, which makes any
+  // not-called assertion on it vacuous.
+  publicProfile.syncMyPublicProfile.mockClear();
   pushCleanup.disablePushForUser.mockClear();
   pushCleanup.disablePushForUser.mockImplementation(async () => {});
   pushCleanup.clearLocalPushTokenId.mockClear();
@@ -297,8 +316,10 @@ beforeEach(() => {
   inviteCache.clearAllInviteTokens.mockClear();
   authTime.current = new Date().toUTCString(); // fresh session unless a test ages it
   authCallback = null;
+  deletionFlagRenders.length = 0;
   authObj.currentUser = null;
   profileDocData.current = null;
+  profileGate.current = null;
   ctx = null;
   router.push.mockClear();
   nav.pathname = '/';
@@ -1342,5 +1363,424 @@ describe('AuthContext — deleteAccount checks session freshness before erasing'
 
     expect(deletion.applyDeletionPlan).not.toHaveBeenCalled();
     expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+});
+
+// BIN-816 / ADR 0019 conditions 1-5, and Malin's answers of 2026-08-13 (ADR 0020).
+//
+// The defect: `deleteAccount` erases Firestore and removes the auth user last,
+// so anything that kills the second half leaves an account whose data is gone
+// and whose identity is not. On the next load `ensureUserProfile` found no
+// `users/{uid}`, recreated it, and stamped `termsAcceptedAt`/`ageConfirmedAt`
+// with today - a consent record the app manufactured for someone who had just
+// asked to leave. Seven other merge writers could do the same with no login at
+// all.
+//
+// Condition 7 sets the test bar and it is deliberately harsher than the ticket's
+// own wording: assert the document does not exist AT ALL, not merely that the
+// consent fields are unchanged. A guard that wrote everything except two
+// timestamps would pass the weaker assertion and still resurrect the profile.
+describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () => {
+  function minutesAgo(m: number) {
+    return new Date(Date.now() - m * 60 * 1000).toUTCString();
+  }
+
+  /** Mark the account as mid-deletion the way deleteAccount does. */
+  function markAborted(uid = 'u1') {
+    window.localStorage.setItem(`binge:deletionStarted:${uid}`, JSON.stringify({ startedAt: 1 }));
+  }
+
+  async function signedInProvider() {
+    renderAuth();
+    await login({ username: 'malin' });
+  }
+
+  it('a marked session writes NO users/{uid} document at all', async () => {
+    markAborted();
+    renderAuth();
+    // profileDocData null = the document is gone, which is exactly what an
+    // aborted cascade leaves behind. This is the create branch — the one that
+    // resurrects.
+    await login(null);
+
+    expect(userDocWrites()).toHaveLength(0);
+    // The transaction is where the create happens; not reaching it at all is a
+    // stronger statement than "it wrote nothing interesting".
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('a marked session does not re-reserve the username the cascade released', async () => {
+    markAborted();
+    renderAuth();
+    await login(null);
+
+    // tryAutoClaimUsername runs on doc-creation AND as a backfill on an existing
+    // doc with no username. Both are behind the same early return.
+    expect(claimUsername).not.toHaveBeenCalled();
+  });
+
+  it('a marked session does not rebuild the public projection either', async () => {
+    // BIN-816 AC2: the cascade deletes publicProfiles/{uid}, and this effect
+    // would write it straight back from React state — a second door into the
+    // same resurrection, with no login involved.
+    markAborted();
+    renderAuth();
+    await login(null);
+
+    expect(publicProfile.syncMyPublicProfile).not.toHaveBeenCalled();
+  });
+
+  it('an UNMARKED session still creates the profile — the guard is not just "off"', async () => {
+    // The control. Without it every assertion above passes on a provider that
+    // never creates a profile for anyone, which would be a far worse bug.
+    renderAuth();
+    await login(null);
+
+    expect(runTransaction).toHaveBeenCalled();
+    expect(claimUsername).toHaveBeenCalled();
+    // And the projection sync DOES run for a healthy session — otherwise the
+    // "a marked session does not rebuild the public projection either" test
+    // above passes on a provider that never syncs anyone (test review).
+    expect(publicProfile.syncMyPublicProfile).toHaveBeenCalled();
+  });
+
+  it('the provider reports deletionInProgress so the shell can replace itself', async () => {
+    markAborted();
+    renderAuth();
+    await login(null);
+
+    // This is what AppShell renders the limbo screen on — and the limbo screen
+    // is where "blocked from writing" is actually enforced (Malin, 2026-08-13).
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(ctx!.user).toBeNull();
+  });
+
+  it('the visibility repair does not stamp watchlist docs for a marked session', async () => {
+    // NOT belt-and-braces, which is what I had assumed: `runVisibilityCascade`
+    // writes `users/{uid}/watchlist/*`, and neither the profile chokepoint (which
+    // gates users/{uid} and publicProfiles/{uid} only) nor WatchlistContext's own
+    // marker guards (a different provider) cover it. This flag is the only thing
+    // between a marked session and a systemic watchlist write — test review,
+    // 2026-08-13, who re-derived it on the shipped bytes.
+    //
+    // Reaching the guard at all takes the interleaving above, and that is not
+    // incidental: a marker present BEFORE the load makes `ensureUserProfile`
+    // return a null profile, so the effect exits on `!pendingVisibilityTarget`
+    // long before this line. A profile AND a raised flag can only co-occur when
+    // the marker arrived after the read was already in flight (or when an
+    // attempt in this tab failed). My first version of this test missed that and
+    // passed against the mutant.
+    let releaseProfile!: () => void;
+    profileGate.current = new Promise<void>(resolve => { releaseProfile = () => resolve(); });
+    profileDocData.current = { username: 'malin', defaultVisibility: 'private', visibilitySyncPending: true };
+    authObj.currentUser = fakeUser;
+    renderAuth();
+    await act(async () => {});
+    await act(async () => { authCallback!(fakeUser); });
+
+    markAborted();
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'binge:deletionStarted:u1' }));
+    });
+    getDocsMock.mockClear();
+    batchSets.length = 0;
+
+    await act(async () => { releaseProfile(); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(ctx!.deletionInProgress, 'förutsättningen: flaggan är uppe').toBe(true);
+    expect(ctx!.user, 'och profilen finns — annars nås inte grenen').not.toBeNull();
+    // The repair reads the whole watchlist collection before it writes. Not
+    // reaching the read at all is the stronger statement.
+    expect(getDocsMock).not.toHaveBeenCalled();
+    expect(batchSets).toHaveLength(0);
+  });
+
+  it('every profile writer refuses while the deletion is unfinished', async () => {
+    // ADR 0019 condition 1. The ticket named two writers; the panel counted
+    // eight. Driving them as ONE list is the point: a ninth added later has to
+    // be added here too, and the chokepoint guard test fails if it is not routed
+    // through the same gate.
+    await signedInProvider();
+    markAborted();
+    setDoc.mockClear();
+
+    const writers: [string, () => Promise<unknown>][] = [
+      ['updateBio (updateUserField)', () => ctx!.updateBio('ny bio')],
+      ['updateDefaultView (updateUserField)', () => ctx!.updateDefaultView('grid')],
+      ['markNotificationsSeen', () => ctx!.markNotificationsSeen()],
+      ['updateNotificationSettings', () => ctx!.updateNotificationSettings({ priceDrops: true })],
+      ['updateDefaultVisibility', () => ctx!.updateDefaultVisibility('public')],
+      ['updateProviderTier', () => ctx!.updateProviderTier(8, null)],
+    ];
+
+    for (const [name, run] of writers) {
+      await act(async () => {
+        await expect(run(), `${name} maste vagra`).rejects.toThrow('binge/deletion-in-progress');
+      });
+    }
+
+    expect(userDocWrites(), 'ingen av dem fick skriva').toHaveLength(0);
+  });
+
+  it('resumeProvider — the batch writer — refuses too, and writes nothing', async () => {
+    // It cannot use mergeUserDoc (users/{uid} rides in a larger atomic batch), so
+    // it calls the same gate directly. That direct call is the thing most likely
+    // to be dropped by a future refactor, hence its own test.
+    renderAuth();
+    await login({ username: 'malin', providerPauses: { 8: { pausedAt: '2026-01-01', resumeAt: null } } });
+    markAborted();
+    batchSets.length = 0;
+    batchCommit.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.resumeProvider(8)).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    // Not merely "it threw": the pauseHistory row must not exist either, or the
+    // account grows new data on its way out.
+    expect(batchCommit).not.toHaveBeenCalled();
+    expect(batchSets).toHaveLength(0);
+  });
+
+  it('deleteAccount itself is NEVER gated by the marker (ADR 0019 c3)', async () => {
+    // The retry is the only recovery path there is. A marker that blocked it
+    // would trap exactly the person it exists to protect — which is why this is
+    // a binding condition rather than an implementation detail.
+    await signedInProvider();
+    markAborted();
+    authTime.current = minutesAgo(1);
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(deletion.applyDeletionPlan).toHaveBeenCalled();
+    expect(deleteUserMock).toHaveBeenCalled();
+  });
+
+  it('deleteAccount sets the marker before erasing and clears it once the account is gone', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    const seenAtCascade: boolean[] = [];
+    deletion.collectUserDataSnapshots.mockImplementationOnce(async () => {
+      // Condition 2: down BEFORE the first read of the cascade, so a tab that
+      // dies mid-run is already marked.
+      seenAtCascade.push(window.localStorage.getItem('binge:deletionStarted:u1') !== null);
+      return {};
+    });
+
+    await act(async () => { await ctx!.deleteAccount(); });
+
+    expect(seenAtCascade).toEqual([true]);
+    // And cleared once deleteUser resolved — there is nothing left to resurrect.
+    expect(window.localStorage.getItem('binge:deletionStarted:u1')).toBeNull();
+  });
+
+  it('a stale session leaves NO marker — the preflight stays a true no-op', async () => {
+    // Condition 2's other half. Marking on the button press would lock a user
+    // out of a fully intact account for the crime of waiting too long, which is
+    // the case STALE_SESSION_PREFLIGHT exists to keep harmless.
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(STALE_SESSION_PREFLIGHT);
+    });
+
+    expect(window.localStorage.getItem('binge:deletionStarted:u1')).toBeNull();
+  });
+
+  it('the marker SURVIVES a cascade that fails — that is the whole point', async () => {
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.applyDeletionPlan.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('network');
+    });
+
+    expect(window.localStorage.getItem('binge:deletionStarted:u1')).not.toBeNull();
+  });
+
+  it('a SUCCESSFUL deletion never flips the render flag on the way through', async () => {
+    // The bug all three reviews found on 2026-08-13. `deletionInProgress` was set
+    // next to the marker, before the first read — so `AppShell` swapped the
+    // settings page for "vi hann ta bort din data" on the HAPPY path, for every
+    // user, for as long as the cascade took (tens of seconds on a heavy account),
+    // with a button that started a second concurrent deletion.
+    //
+    // The marker still goes down first — that part protects the profile. Only the
+    // hand-over waits for the attempt to end without success.
+    //
+    // Driven as hold → observe → release, not as one `await act()`. Inside a
+    // single act() React batches the whole run into one commit, so an
+    // intermediate `true` never reaches a render and the mutant survives — which
+    // it did, twice, before this shape (a state that appears and then goes away
+    // cannot be caught by looking only at the end).
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    let releaseSnaps!: () => void;
+    deletion.collectUserDataSnapshots.mockImplementationOnce(
+      () => new Promise(resolve => { releaseSnaps = () => resolve({}); }),
+    );
+    deletionFlagRenders.length = 0;
+
+    let pending!: Promise<void>;
+    // Runs deleteAccount up to its first suspension and lets React commit.
+    await act(async () => { pending = ctx!.deleteAccount(); });
+
+    expect(deletionFlagRenders, 'limbo-skärmen får inte renderas medan kaskaden kör')
+      .not.toContain(true);
+    // The marker IS down by now — the two are deliberately not the same thing.
+    expect(window.localStorage.getItem('binge:deletionStarted:u1')).not.toBeNull();
+
+    await act(async () => { releaseSnaps(); await pending; });
+
+    expect(deletionFlagRenders, 'och inte heller efteråt').not.toContain(true);
+    expect(ctx!.deletionInProgress).toBe(false);
+  });
+
+  it('a FAILED deletion hands the session over to the limbo screen', async () => {
+    // The other half: without this, a mid-cascade failure would leave the user on
+    // a settings page whose profile writes now all throw, and nothing would tell
+    // them why until they reloaded.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.applyDeletionPlan.mockRejectedValueOnce(new Error('network'));
+
+    deletionFlagRenders.length = 0;
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('network');
+    });
+
+    expect(ctx!.deletionInProgress).toBe(true);
+    // And it reached a render — the flag is what AppShell reads, so a value that
+    // never renders blocks nothing.
+    expect(deletionFlagRenders).toContain(true);
+  });
+
+  it('a failure after the marker carries the hand-off tag', async () => {
+    // It is what tells DeleteAccountSection that it has been unmounted, so it
+    // must not offer a retry button it can no longer honour.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deletion.applyDeletionPlan.mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('binge/deletion-handed-off');
+    });
+  });
+
+  it('the stale-session preflight does NOT carry the hand-off tag', async () => {
+    // It throws before the marker, so the settings page is still mounted and its
+    // retry button still works. Tagging it would take that button away for the
+    // one case where nothing is wrong with the account at all.
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    let thrown = '';
+    await act(async () => {
+      await ctx!.deleteAccount().catch((e: unknown) => { thrown = e instanceof Error ? e.message : ''; });
+    });
+
+    expect(thrown).toContain(STALE_SESSION_PREFLIGHT);
+    expect(thrown).not.toContain('binge/deletion-handed-off');
+    expect(ctx!.deletionInProgress).toBe(false);
+  });
+
+  it('another tab starting a deletion reaches this one through storage', async () => {
+    // A tab already rendering the app never re-runs ensureUserProfile, so without
+    // this listener it kept the full shell — and WatchlistProvider, which mounts
+    // ABOVE AppShell, kept writing owner-scoped documents that outlive both the
+    // cascade and the server sweep (security review, 2026-08-13).
+    await signedInProvider();
+    expect(ctx!.deletionInProgress).toBe(false);
+
+    markAborted();
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'binge:deletionStarted:u1' }));
+    });
+
+    expect(ctx!.deletionInProgress).toBe(true);
+  });
+
+  it('a storage event DURING the profile load is not overwritten when it resolves', async () => {
+    // The race the marker re-read exists for. `ensureUserProfile` samples the
+    // marker on its first line; the answer is applied hundreds of ms later. A
+    // deletion started in another tab in between set the flag true, and the
+    // stale sample then wrote false back over it — permanently, because no
+    // further storage event arrives until the marker changes again. That tab
+    // kept the whole app and stayed writable during an active deletion
+    // (integration + security review, 2026-08-13).
+    //
+    // The interleaving is the whole test: dispatching inside the same act() as
+    // the auth callback fails on CLEAN code, because the listener effect has not
+    // committed yet.
+    let releaseProfile!: () => void;
+    profileGate.current = new Promise<void>(resolve => { releaseProfile = () => resolve(); });
+    profileDocData.current = { username: 'malin' };
+    authObj.currentUser = fakeUser;
+    renderAuth();
+    await act(async () => {});
+    await act(async () => { authCallback!(fakeUser); });
+
+    // Another tab starts a deletion while our profile read is still in flight.
+    markAborted();
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'binge:deletionStarted:u1' }));
+    });
+    expect(ctx!.deletionInProgress, 'lyssnaren tog').toBe(true);
+
+    // The stale sample lands. It must not undo that.
+    await act(async () => { releaseProfile(); await Promise.resolve(); });
+
+    expect(ctx!.deletionInProgress, 'och skrevs inte över').toBe(true);
+    // This is the ONLY fixture where a profile and a raised flag co-exist, so it
+    // is the only place the projection early-out is reachable. (The write is
+    // refused a second time inside mergePublicProfileDoc, which is separately
+    // tested — this pins the cheap early-out that also skips the signature read.)
+    expect(publicProfile.syncMyPublicProfile).not.toHaveBeenCalled();
+  });
+
+  it('a marker for a DIFFERENT account in another tab is ignored', async () => {
+    await signedInProvider();
+
+    markAborted('someone_else');
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'binge:deletionStarted:someone_else' }));
+    });
+
+    expect(ctx!.deletionInProgress).toBe(false);
+  });
+
+  it('a deleteUser network failure is tagged CASCADE_PARTIAL, not left generic (BIN-876)', async () => {
+    // Everything before this line succeeded, so the data IS gone and only the
+    // identity remains. Untagged, this fell into the settings page's generic
+    // branch — the one that says nothing was deleted. That is the biggest
+    // possible version of the lie BIN-876 was filed about.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deleteUserMock.mockRejectedValueOnce(new Error('auth/network-request-failed'));
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow('binge/cascade-partial');
+    });
+  });
+
+  it('but Firebase own requires-recent-login keeps its own identity', async () => {
+    // That error already has a branch saying "started, not finished". Re-tagging
+    // it would collapse two messages that deliberately differ, and the settings
+    // page checks the recent-login branch BEFORE the partial one.
+    await signedInProvider();
+    authTime.current = minutesAgo(1);
+    deleteUserMock.mockRejectedValueOnce(new Error(`Firebase: Error (${REQUIRES_RECENT_LOGIN}).`));
+
+    let thrown = '';
+    await act(async () => {
+      await ctx!.deleteAccount().catch((e: unknown) => { thrown = e instanceof Error ? e.message : ''; });
+    });
+
+    expect(thrown).toContain(REQUIRES_RECENT_LOGIN);
+    expect(thrown).not.toContain('binge/cascade-partial');
   });
 });

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
+import { classifyDeletionFailure, deletionWasHandedOff } from '@/lib/authErrors';
 import { useToast } from '@/contexts/ToastContext';
 import { SettingsSection } from './SettingsSection';
 
@@ -34,26 +34,48 @@ export function DeleteAccountSection() {
       // kör raderingen igen. Utan den meningen gör någon precis vad det står och
       // blir kvar med ett tomt men existerande konto, i tron att det är klart
       // (#19 Customer Support-kritiken, 2026-08-07).
+      //
+      // BIN-876 la till ett tredje fall. Klumparna i `applyDeletionPlan` är
+      // atomära var för sig men inte tillsammans, så ett nätverksfel mitt i
+      // kaskaden raderar en del av kontot och lämnar resten. Det syntes förut
+      // bara som den generiska grenen längst ned — "kontrollera anslutningen och
+      // försök igen" — en mening som antyder att ingenting hände. Det gjorde det.
+      // `CASCADE_PARTIAL` är kaskadens egen märkning av det läget; Firebases
+      // felkoder kan inte skilja ut det, för ett vanligt nätverksfel bär ingen.
+      //
+      // Klassificeringen bor i authErrors: limbo-skärmen grenar på exakt samma
+      // koder i exakt samma ordning, och ordningen är bärande (förkontrollen bär
+      // MED FLIT även `requires-recent-login`). Två kopior av den regeln driver
+      // isär den dagen en fjärde kod dyker upp.
       const message = err instanceof Error ? err.message : '';
-      const startedNotFinished = !message.includes(STALE_SESSION_PREFLIGHT)
-        && message.includes(REQUIRES_RECENT_LOGIN);
-      const msg = message.includes(STALE_SESSION_PREFLIGHT)
+      const kind = classifyDeletionFailure(message);
+      const msg = kind === 'preflight'
         ? 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.'
-        : startedNotFinished
-          ? 'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Ta bort mitt konto en gång till för att slutföra den.'
-          : 'Kunde inte ta bort kontot. Kontrollera anslutningen och försök igen.';
+        : kind === 'recent-login'
+          ? 'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Slutför raderingen för att avsluta den.'
+          : kind === 'partial'
+            ? 'Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data kan redan vara borttagen. Tryck på Slutför raderingen — resten går igenom utan att skada det som redan tagits bort.'
+            : 'Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och försök igen.';
       setDeleting(false);
       setConfirming(false);
       // En toast utan åtgärd självdör efter 2,5 s; med åtgärd lever den 6 s
-      // (ToastContext). Den här grenen är appens ENDA besked om att biblioteket
-      // redan är borta medan kontot finns kvar, och meddelandet är dubbelt så
-      // långt som det utan åtgärd — 2,5 s räcker inte för att läsa det. Åtgärden
-      // ger både lästiden och en knapp att trycka på, i stället för en instruktion
-      // som hinner försvinna (integrationsgranskningen, 2026-08-07).
-      if (startedNotFinished) {
-        toast(msg, { label: 'Försök igen', onClick: () => setConfirming(true) });
-      } else {
+      // (ToastContext). Knappen följer med precis när DEN HÄR komponenten
+      // fortfarande finns kvar att trycka i — dvs när felet saknar
+      // hand-over-taggen.
+      //
+      // BIN-796:s skäl för att alltid bifoga en åtgärd gäller inte längre, och
+      // det är värt att säga rakt ut så ingen "återställer" knappen: den vilade
+      // på att den här toasten var appens ENDA besked om att biblioteket är
+      // borta medan kontot finns kvar. Sedan BIN-816 är det inte sant. Efter att
+      // markören lagts ned byter `AppShell` ut hela appen mot limbo-skärmen, som
+      // berättar samma sak kvarstående i stället för i 2,5 sekunder — och
+      // `setConfirming(true)` vore en no-op på en avmonterad komponent, ett
+      // löfte om en knapp som inte finns (integrationsgranskningen 2026-08-13).
+      // Texterna ovan pekar därför på limbo-skärmens "Slutför raderingen".
+      if (deletionWasHandedOff(message)) {
         toast(msg);
+      } else {
+        toast(msg, { label: 'Försök igen', onClick: () => setConfirming(true) });
       }
     }
   };

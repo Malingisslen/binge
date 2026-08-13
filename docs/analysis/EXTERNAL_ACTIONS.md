@@ -39,13 +39,43 @@ firebase functions:log --only episodeReleaseNotify   # expect the "episodeNotify
 firebase functions:log --only retentionCleanup       # see the IAM check below
 ```
 
-**retentionCleanup needs an IAM role no other function needs.** Its fifth sweep (BIN-848)
-is the only place in `functions/` that calls an Auth *user-management* API — `getUsers()`,
-to find push tokens belonging to accounts deleted or suspended in the Console. Everything
-else only does `verifyIdToken`, which is offline against public keys and needs no
-permission. Without `firebaseauth.users.get` on the runtime service account, every batch
-throws, nothing is deleted, and **the deploy stays green** — the permission is only
-exercised at runtime.
+**retentionCleanup needs IAM roles no other function needs.** It is the only place in
+`functions/` that calls Auth *user-management* APIs. Everything else only does
+`verifyIdToken`, which is offline against public keys and needs no permission. Without the
+permissions below on the runtime service account, the calls throw, nothing is deleted, and
+**the deploy stays green** — they are only exercised at runtime.
+
+| Sweep | API | Permission | Verified |
+|---|---|---|---|
+| Revoked push tokens (BIN-848) | `getUsers()` | `firebaseauth.users.get` | 2026-08-10, present via `roles/editor` |
+| Orphaned auth accounts (BIN-816) | `listUsers()`, `deleteUsers()` | `firebaseauth.users.get` + **`firebaseauth.users.delete`** | **NOT verified — check on first run** |
+
+`firebaseauth.users.delete` is a WRITE permission and the 2026-08-10 check covered only the
+read. `roles/editor` is expected to include it, but "expected" is what the BIN-849 lesson
+warns about: a guard that never ran looks identical to a guard that found nothing wrong.
+
+**This batch needs BOTH halves deployed, in this order.** `functions/**` changed, so
+`deploy.yml`'s drift guard fails the push-triggered hosting job **by design** — a red
+workflow next to a green tree reads as "shipped" and is not:
+
+1. `firebase deploy --only functions:retentionCleanup` — the server half (both sweeps).
+2. Re-run `deploy.yml` via **workflow_dispatch** — the client half (the limbo screen, the
+   write chokepoint, the username uid-query). Until this lands, a marked session is not
+   blocked from writing and an aborted deletion still resurrects the profile.
+
+No rules or index deploy is needed: `usernames` already carries `allow read: if true`
+(covering `list`) and `firestore.indexes.json` has no `fieldOverrides` for it.
+
+**Acceptance for the orphan-auth sweep**, on a `retentionCleanup done` line:
+`orphanAuthAccounts > 0` must be matched by `deletedOrphanAuthAccounts > 0`. If the first
+is non-zero and the second is zero, either the permission is missing (look for
+`deleteUsers batch failed` with `auth/insufficient-permission`) or the blast-radius ceiling
+fired (`orphan auth sweep exceeded its ceiling`, which deletes nothing on purpose).
+`checkedAuthAccounts: -1` or `orphanAuthSkippedProfileBatches: -1` means the scan never
+ran, so the zero above says nothing at all. This matters beyond tidiness:
+`docs/data-retention-policy.md` states, as fact, that an aborted deletion is a *documented
+delay* rather than an Art. 17 breach — and that statement is only true while this sweep
+actually deletes.
 
 Accept the sweep as live only on a `retentionCleanup done` line carrying BOTH
 `skippedAuthBatches: 0` AND `checkedUids > 0`. Either alone is insufficient: the scan
