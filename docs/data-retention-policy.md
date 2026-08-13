@@ -243,7 +243,9 @@ Firestore på nytt vid varje försök (ingen sparad plan, ingen återupptagnings
 — se ADR 0016), raderingar mot redan raderade dokument är no-ops, och
 användarnamnsreservationen hittas numera oavsett vad som redan är borta. Appen
 säger det också — meddelandet skiljer sedan BIN-876 på "ingenting raderades" och
-"en del kan redan vara borta", och båda erbjuder ett omförsök.
+"en del kan redan vara borta", och båda pekar på ett omförsök: det första med en
+"Försök igen"-knapp i inställningarna, det andra på limbo-skärmens "Slutför
+raderingen" (inställningssidan är redan utbytt när det felet uppstår).
 
 **Kvarstående lucka: det delvis kaskaderade läget har INGET fönster och ingen
 sopning.** Sopningen ovan letar efter Auth-konton *utan* `users/{uid}`. Avbryts

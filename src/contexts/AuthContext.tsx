@@ -1104,9 +1104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // helpers so the Art. 17 erasure path can be run end-to-end against the
     // Firestore emulator (src/test/rules/account-deletion.test.ts). Behaviour is
     // identical to the former inline version. BIN-875: the username reservation
-    // is resolved by QUERYING usernames on uid inside collectDeletionRefs — the
-    // profile doc and this React-state value are only the offline fallback, and
-    // both of them die in the same accident (see collectUsernameReservationRefs).
+    // is resolved by QUERYING `usernames` on uid inside collectDeletionRefs.
+    // There is deliberately NO fallback — the profile doc and the old React-state
+    // argument both die in the same interrupted attempt, which is exactly when a
+    // retry needs the reservation, and queuing an unverified name would throw
+    // inside the atomic chunk that also carries users/{uid} (see
+    // collectUsernameReservationRefs).
     const plan = await collectDeletionRefs(kit, id, snaps);
     await applyDeletionPlan(kit, plan);
 

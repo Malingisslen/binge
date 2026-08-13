@@ -217,9 +217,10 @@ Console, i den här ordningen:
 - **Limbo-skärmen kan visas även i läge (a).** Faller kaskaden på sin allra
   första klump är ingenting raderat, men markören ligger nere och användaren ser
   ändå spärrskärmen. Konsolen visar då ett helt orört konto. Det är avsiktligt
-  (`.claude/rules/accepted-deviations.md`, 2026-08-13) — vägen ut är samma knapp. Behöver inget handpåläggande — bekräfta bara datumet mot
-  `docs/data-retention-policy.md`.
-- Användaren ser i lägena (b) och (c) en spärrskärm i appen med "Slutför
+  (`.claude/rules/accepted-deviations.md`, 2026-08-13) — vägen ut är samma knapp.
+  Här finns inget datum att bekräfta: kontot har kvar sitt profil-dokument, så
+  ingen sopning är inplanerad för det.
+- Användaren ser i alla tre lägena en spärrskärm i appen med "Slutför
   raderingen". Den är enhetslokal (`localStorage`, nyckel
   `binge:deletionStarted:<uid>`), så på en annan enhet ser de en helt vanlig app
   fram till att sopningen tar kontot.
