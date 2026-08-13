@@ -40,6 +40,19 @@ describe('DeletionLimbo', () => {
     expect(body).not.toContain('Ingenting har raderats');
   });
 
+  it('lovar inte automatisk uppstädning utan villkor', () => {
+    // Sopningen letar efter konton UTAN profil-dokument, så den rör aldrig ett
+    // konto vars kaskad föll på första klumpen — och det är just det läget som
+    // också visar den här skärmen, med all data i behåll. Ett obetingat "vi
+    // städar bort det" sa till den som minst sannolikt sopas att hen kan gå
+    // därifrån. Samma feltyp som BIN-876, inne i skärmen som skulle laga den.
+    render(<DeletionLimbo />);
+
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('Har vi redan hunnit ta bort din profil');
+    expect(body).toContain('annars är det den här knappen');
+  });
+
   it('slutför raderingen — inte bara tystar återskapandet', async () => {
     render(<DeletionLimbo />);
 

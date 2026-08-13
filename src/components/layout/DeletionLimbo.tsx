@@ -78,9 +78,22 @@ export function DeletionLimbo() {
           standfirst="En del av din data kan redan vara borttagen, men själva kontot finns kvar. Tills raderingen är klar kan du inte spara något nytt här."
         />
 
+        {/*
+          The automatic-cleanup promise is CONDITIONAL, and saying so is the whole
+          point. `retentionCleanup`'s sweep keys on the ABSENCE of `users/{uid}`,
+          so it never fires while the profile document is still there — which is
+          exactly the state a cascade that failed on its first chunk leaves, with
+          all the data intact (`.claude/rules/accepted-deviations.md`, 2026-08-13),
+          and the commonest transient failure there is. An unconditional "we will
+          clean it up" told the person least likely to be swept that they could
+          walk away. That is the BIN-876 defect class reproduced inside the screen
+          added to fix it (whole-diff integration review, 2026-08-13).
+        */}
         <p className="text-sm text-ink-2 mt-6">
           Det här är inte ett fel du behöver felsöka — det räcker att slutföra
-          raderingen. Går den inte igenom kommer vi att städa bort kontot automatiskt.
+          raderingen. Har vi redan hunnit ta bort din profil städas kontot bort
+          automatiskt inom sju dygn; annars är det den här knappen som avslutar
+          raderingen.
         </p>
 
         {error && (
