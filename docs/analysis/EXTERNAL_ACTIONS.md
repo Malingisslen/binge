@@ -48,11 +48,37 @@ permissions below on the runtime service account, the calls throw, nothing is de
 | Sweep | API | Permission | Verified |
 |---|---|---|---|
 | Revoked push tokens (BIN-848) | `getUsers()` | `firebaseauth.users.get` | 2026-08-10, present via `roles/editor` |
-| Orphaned auth accounts (BIN-816) | `listUsers()`, `deleteUsers()` | `firebaseauth.users.get` + **`firebaseauth.users.delete`** | **NOT verified — check on first run** |
+| Orphaned auth accounts (BIN-816) | `listUsers()`, `deleteUsers()` | `firebaseauth.users.get` + `firebaseauth.users.delete` | 2026-08-13, present via `roles/editor` |
 
-`firebaseauth.users.delete` is a WRITE permission and the 2026-08-10 check covered only the
-read. `roles/editor` is expected to include it, but "expected" is what the BIN-849 lesson
-warns about: a guard that never ran looks identical to a guard that found nothing wrong.
+**Check the permission, not the outcome.** The first version of this said "check the first
+run's log line: `orphanAuthAccounts > 0` must be matched by `deletedOrphanAuthAccounts > 0`".
+That is unfalsifiable here and would have sat unverified indefinitely: Binge has three auth
+accounts, all three have profiles, so the sweep finds nothing and logs `orphanAuthAccounts:
+0` every night forever. A zero that means "nothing to do" is indistinguishable from a zero
+that means "the permission is missing" — the BIN-849 shape, one level up. An acceptance
+criterion that depends on the guarded event happening cannot be met when the guarded event
+is rare, which is exactly when you most want the guard to work.
+
+The static check has no such dependency and is three commands:
+
+```bash
+# 1. which service account does the function run as?
+gcloud functions describe retentionCleanup --region=europe-west1 --gen2   --project=binge-nu --format="value(serviceConfig.serviceAccountEmail)"
+# → 879931819959-compute@developer.gserviceaccount.com
+
+# 2. which roles does it hold?
+gcloud projects get-iam-policy binge-nu --flatten="bindings[].members"   --filter="bindings.members:879931819959-compute@developer.gserviceaccount.com"   --format="value(bindings.role)"
+# → roles/editor, roles/eventarc.eventReceiver, roles/run.invoker
+
+# 3. does that role carry the permission?
+gcloud iam roles describe roles/editor --format="value(includedPermissions)"   | tr ';' '
+' | grep firebaseauth.users.delete
+# → firebaseauth.users.delete
+```
+
+Run 2026-08-13: **all three pass.** Re-run them if the function is ever moved to a
+dedicated, least-privileged service account — that is exactly when this breaks, and the log
+line will not tell you.
 
 **This batch needs BOTH halves deployed, in this order.** `functions/**` changed, so
 `deploy.yml`'s drift guard fails the push-triggered hosting job **by design** — a red
@@ -66,13 +92,13 @@ workflow next to a green tree reads as "shipped" and is not:
 No rules or index deploy is needed: `usernames` already carries `allow read: if true`
 (covering `list`) and `firestore.indexes.json` has no `fieldOverrides` for it.
 
-**Acceptance for the orphan-auth sweep**, on a `retentionCleanup done` line:
-`orphanAuthAccounts > 0` must be matched by `deletedOrphanAuthAccounts > 0`. If the first
-is non-zero and the second is zero, either the permission is missing (look for
-`deleteUsers batch failed` with `auth/insufficient-permission`) or the blast-radius ceiling
-fired (`orphan auth sweep exceeded its ceiling`, which deletes nothing on purpose).
+**Runtime reading of the orphan-auth sweep** (diagnosis, not acceptance — the permission is
+verified statically above). On a `retentionCleanup done` line: if `orphanAuthAccounts > 0`
+is ever matched by `deletedOrphanAuthAccounts: 0`, either the permission was revoked (look
+for `deleteUsers batch failed` with `auth/insufficient-permission`) or the blast-radius
+ceiling fired (`orphan auth sweep exceeded its ceiling`, which deletes nothing on purpose).
 `checkedAuthAccounts: -1` or `orphanAuthSkippedProfileBatches: -1` means the scan never
-ran, so the zero above says nothing at all. This matters beyond tidiness:
+ran, so the zero says nothing at all. This matters beyond tidiness:
 `docs/data-retention-policy.md` states, as fact, that an aborted deletion is a *documented
 delay* rather than an Art. 17 breach — and that statement is only true while this sweep
 actually deletes.
