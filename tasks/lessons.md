@@ -231,3 +231,55 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
 - **Trigger:** The 2026-08-12 sprint reported committed/held/failed = none for BIN-851 and BIN-803, and wrote a comment onto BOTH tickets saying "den parallella arbetaren för den här biljetten kördes aldrig… Ingenting försöktes, ingenting byggdes". False against the tree: five files sat STAGED in the main checkout — `.claude/shared-plugin.json` (+2 gate patterns), `docs/role-responsibilities.md`, `docs/org/ownership-map.json`, `docs/org/gen-ownership-map.mjs` (+190 lines) and a new `docs/org/ownership-gaps.json` (299-entry baseline) — plus a unique patch artifact `batch-0-20260812-163920.patch`. Both tickets were finished work, described by their own tickets as never begun.
 - **Rule:** At close-out, derive every per-ticket disposition from the TREE (`git log base..HEAD`, `git status --porcelain`, hashed patch files), never from a worker's self-report — and when the two disagree, the tree wins and the worker's comment gets corrected in the same pass. A "nothing was attempted" claim while `git status --porcelain` is non-empty is a contradiction the close-out must fail on, not transcribe. BIN-707/708/713 filed the forward direction (work claimed done that never landed); this is the reverse and it is worse, because the next sprint re-picks the ticket and any clean-tree step deletes the only copy.
 - **Example:** BAD — the run reports "none built", writes it onto both tickets, and leaves five staged files and a patch unaccounted for. GOOD — run `git status --porcelain` yourself, name the artifact (`batch-0-<date>-<time>.patch`) in the ticket comment, and record "built, uncommitted, recoverable from <path>" — a different instruction than "not attempted".
+
+## 2026-08-13 — [Workflow] Ett ADR med `Status: Accepted` slår kommentarstråden
+
+**Trigger:** en biljett som refererar ett ADR och vars kommentarstråd säger "väntar på beslut".
+
+**Rule:** läs ADR:ens `Status` FÖRE tråden. `Accepted` betyder att handbromsen är lyft, oavsett
+vad någon kommentar säger. Skriv aldrig "väntar på granskning" i en biljett utan att ha
+kollat om ett ADR redan svarat.
+
+**Example:** BIN-816 stod stilla i fem dagar. `docs/org/adr/0019-*.md` hade
+`Status: Accepted (Malin, 2026-08-11)`, men tråden hade kvar en äldre kommentar som ställde
+två frågor. Sprintarna 08-11, 08-12 och 08-13 läste tråden, såg "väntar på Malin", och lade
+tillbaka biljetten orörd — den 08-13 skrev sprinten till och med en NY kommentar om att den
+väntade på en panel som redan gått. En kommentar från 08-12 sa uttryckligen att frågorna var
+besvarade; ingen läste den heller. En tråd är append-only och osorterad efter sanning: den
+äldsta handbromsen ligger kvar bredvid svaret. Ett ADR har ett `Status`-fält just för att
+vara den enda platsen som kan svara "är det här avgjort?".
+
+## 2026-08-13 — [Testing] Ett tillstånd som uppstår och försvinner syns inte i slutläget
+
+**Trigger:** ett test som ska bevisa att en flagga ALDRIG sattes under ett förlopp.
+
+**Rule:** driv det som hold → observera → släpp, med en styrbar promise. Läs inte context-
+värdet mitt i förloppet (det uppdateras i en effekt och ligger en render efter), och slå inte
+in hela körningen i ett enda `act()` — React batchar då allt till en commit och mellanläget
+når aldrig en render.
+
+**Example:** BIN-816:s "limbo-skärmen får inte visas under en normal radering" tog tre försök.
+En per-render-inspelare plus ett `await act()` fångade INTE muteringen; först när
+`collectUserDataSnapshots` hölls i en styrbar promise, med `act()` runt varje halva, blev
+testet röd-ensamt. Samma runda: en spärr jag antagit vara överflödig (`if (deletionInProgress)
+return` före synlighetsreparationen) visade sig vara det enda som skyddar
+`users/{uid}/watchlist/*` — och mitt FÖRSTA test av den nådde aldrig grenen, eftersom en
+markör satt före inloggning gör profilen null och effekten återvänder tidigare. Ett test som
+inte når koden det testar är grönt av fel skäl.
+
+## 2026-08-13 — [Design] En spärrhake som räknar i andel låser sig när underlaget är litet
+
+**Trigger:** ett skydd på formen "vägra om mer än X % av det kontrollerade ser fel ut".
+
+**Rule:** lägg ett absolut GOLV under andelen (`n > max(FLOOR, checked * FRACTION)`), och
+pröva det avgörande lilla fallet med bokstavliga tal på båda sidor. Ett tak som bara är
+absolut kan aldrig lösa ut när populationen är mindre än taket; ett som bara är proportionellt
+låser sig när populationen är liten.
+
+**Example:** BIN-816:s sopning fick först ett tak på 50 konton per körning — vilket aldrig kan
+lösa ut när hela användarbasen är under 50. Ersatt med 25 % av de kontrollerade, som i stället
+LÅSTE SIG: kandidatmängden är monoton (en föräldralös slutar vara det bara genom att raderas),
+nämnaren växer bara med nya registreringar, så 1 av 3 konton vägrades permanent. Två avbrutna
+raderingar i ett sexkontosprojekt hade kilat fast sopningen för gott — exakt det utfall den
+finns för att förhindra. Golvet på 5 löser båda. Testgranskaren visade dessutom att golvets
+STORLEK var opinnad upp till 29, eftersom alla kvarvarande testfall rörde sig med konstanten.
