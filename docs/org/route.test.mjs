@@ -15,8 +15,8 @@
 // contract should fail here, which is the point.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { route, isCodePath } from './route.mjs';
 
@@ -27,20 +27,22 @@ import { route, isCodePath } from './route.mjs';
 // `exclude` would disarm the gate while a patterns-only helper stayed green, which is the
 // exact silent disarming these tests exist to prevent. Reads the live config, not a
 // fixture: the point is to catch the config drifting away from the router.
-function integrationGateMatches(file) {
+function gateMatches(agent, file) {
   const cfg = JSON.parse(
     readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude', 'shared-plugin.json'),
       'utf8',
     ),
   );
-  const gate = cfg.reviewGates.find((g) => g.agent === 'binge-integration-reviewer');
+  const gate = cfg.reviewGates.find((g) => g.agent === agent);
   const exact = new Set(gate.exact || []);
   return (
     (exact.has(file) || (gate.patterns || []).some((p) => new RegExp(p).test(file))) &&
     !(gate.exclude || []).some((p) => new RegExp(p).test(file))
   );
 }
+
+const integrationGateMatches = (file) => gateMatches('binge-integration-reviewer', file);
 
 describe('folder-ownership inheritance (BIN-788)', () => {
   it('seats the directory owner for an unlisted sibling file', () => {
@@ -171,12 +173,19 @@ const GATE_SCRIPTS = [
 
 describe('the router and the gate scripts cannot clear themselves (BIN-805)', () => {
   it.each(GATE_SCRIPTS)('%s routes medium, not skip', (path) => {
-    // Assert the property this block is named for and nothing more. These files are
-    // unowned TODAY, so they seat #14 — but the router's own failure text tells you to
-    // fix that by naming them in docs/role-responsibilities.md, and pinning
-    // `unmapped-code`/`[14]` here would make following that advice fail `npm test`,
-    // which gates deploy.yml. Improving ownership must never break the deploy; the same
-    // trap is refused for the gap baseline in gen-ownership-map.test.mjs.
+    // Assert the property this block is named for and nothing more — the eight no longer
+    // answer alike. Measured at these bytes: the four under docs/org/ are `owned`/[25] —
+    // BIN-834 + BIN-869 NAMED three of them in §25 and the fourth
+    // (gen-ownership-map.test.mjs) inherits, which is exactly why the two named tests
+    // below can assert `inherited === []` and that fourth file could not. The four under
+    // scripts/ are `unmapped-code`/[14].
+    // Pinning either specific answer HERE would defeat the point: the router's own
+    // failure text tells you to fix an unowned path by naming it in
+    // docs/role-responsibilities.md, and a `[14]` pin would make following that advice
+    // fail `npm test`, which gates deploy.yml. Improving ownership must never break the
+    // deploy; the same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
+    // Both specific answers ARE pinned, each in its own named test below, so flipping one
+    // reddens exactly one assertion instead of eight.
     expect(isCodePath(path)).toBe(true);
 
     const r = route([path]);
@@ -186,22 +195,56 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     expect(r.panel).not.toContain(21); // and it is never the Technical Writer alone
   });
 
-  it('seats the unmapped-code fallback while these files have no named owner', () => {
+  it('seats the unmapped-code fallback while a gate script has no named owner', () => {
     // The specifics, isolated to ONE case so that naming an owner later flips exactly
-    // this test — a signal to update it — instead of eight scattered ones.
-    const r = route(['docs/org/route.mjs']);
+    // this test — a signal to update it — instead of eight scattered ones. That is what
+    // happened: BIN-834 gave docs/org/route.mjs a real owner, so the example moved to a
+    // script that is still unowned. The fallback itself is still the thing being pinned.
+    const r = route(['scripts/check-workflow-map.mjs']);
 
     expect(r.reasonCode).toBe('unmapped-code');
     expect(r.panel).toEqual([14]);
-    expect(r.unownedCode).toEqual(['docs/org/route.mjs']);
+    expect(r.unownedCode).toEqual(['scripts/check-workflow-map.mjs']);
+  });
+
+  it('route.mjs has a real owner now, not the fallback seat (BIN-834)', () => {
+    // The router used to answer `unmapped-code` about ITSELF and print "add the path to
+    // docs/role-responsibilities.md and regenerate the map" — permanently, for every
+    // future change to it, because nobody was assigned to follow that instruction.
+    // #25 owns it now (it decides who reviews everything else), so the advice is spent.
+    const r = route(['docs/org/route.mjs']);
+
+    expect(r.reasonCode).toBe('owned');
+    expect(r.panel).toEqual([25]);
+    expect(r.unownedCode).toEqual([]);
+    // And it is the EXPLICIT §25 entry, not a neighbour's. Dropping just this path from
+    // the dossier while keeping `gen-ownership-map.mjs` re-seats #25 by directory
+    // inheritance from `docs/org/`, which every assertion above survives.
+    expect(r.roles.find((role) => role.num === 25).inherited).toEqual([]);
+  });
+
+  it('gen-ownership-map.mjs got the same owner in the same change (BIN-869)', () => {
+    // BIN-834's other half. The it.each above passes identically at #14 and #25, so
+    // without this the second file's ownership is pinned nowhere.
+    const r = route(['docs/org/gen-ownership-map.mjs']);
+
+    expect(r.reasonCode).toBe('owned');
+    expect(r.panel).toEqual([25]);
+    expect(r.roles.find((role) => role.num === 25).inherited).toEqual([]);
   });
 
   it('keeps the Technical Writer from being the sole reviewer of that code', () => {
-    // docs/ is #21's, so route.mjs IS matched by a role — the pre-BIN-805 tier
-    // logic answered `doc-only` on that alone. #21 may still be listed, never seated.
+    // docs/ is #21's, so route.mjs IS matched by that role — the pre-BIN-805 tier logic
+    // answered `doc-only` on that alone. #21 may still be LISTED, never seated. The
+    // property survives ownership: what changed is that a second role is now listed
+    // beside it, not that #21 became seatable.
     const r = route(['docs/org/route.mjs']);
 
-    expect(r.roles.map((role) => role.num)).toEqual([21]);
+    // `toEqual`, not `toContain`: the loose form lets a co-owner that never wins the seat
+    // join silently. Verified — adding this path to a HIGHER-numbered role leaves panel
+    // [25] and every other assertion green, while a lower-numbered one is caught by the
+    // panel pin above. The exact pair is the only thing that sees both.
+    expect(r.roles.map((role) => role.num)).toEqual([21, 25]);
     expect(r.panel).not.toContain(21);
     expect(r.dropped.join(' ')).toContain('21 Technical Writer');
   });
@@ -286,6 +329,69 @@ describe('the file that decides who reviews everything else (BIN-851)', () => {
     // sprint close-out, and gating routine bookkeeping on a review was the rejected
     // alternative (Malin's narrow-over-broad call, same as BIN-830).
     expect(integrationGateMatches('.claude/rules/lessons-digest.md')).toBe(false);
+  });
+});
+
+// BIN-869, 2026-08-13. Editing what a reviewer is TOLD to look for disarms a gate exactly
+// as effectively as deleting its pattern, and until this batch the four instruction files
+// and the three hooks routed `skip` and matched no gate at all. Both halves shipped with
+// zero assertions the first time round; the test review mutated them and got 40/40 green
+// in both directions, which is why this block exists.
+// DERIVED from the directories, not hand-written. A hand-written list is green the day
+// someone adds a fifth reviewer or a fourth hook, which is the exact silent-widening-gap
+// this whole block exists to close (test review, 2026-08-13: nothing read `.claude/hooks/`,
+// so a renamed hook stayed green while reaching no gate).
+const CLAUDE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude');
+const REVIEWER_INSTRUCTIONS = readdirSync(join(CLAUDE_DIR, 'agents'))
+  .filter((f) => /^binge-.*-reviewer\.md$/.test(f))
+  .map((f) => `.claude/agents/${f}`);
+const HOOKS = readdirSync(join(CLAUDE_DIR, 'hooks'))
+  .filter((f) => f.endsWith('.mjs'))
+  .map((f) => `.claude/hooks/${f}`);
+const GATE_FILES = [...REVIEWER_INSTRUCTIONS, ...HOOKS];
+
+describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)", () => {
+  it.each(GATE_FILES)('%s is named in the BLOCKING gate list', (file) => {
+    expect(integrationGateMatches(file), `${file} reaches no blocking reviewer`).toBe(true);
+  });
+
+  it.each(GATE_FILES)('%s has an owning role, not the fallback seat', (file) => {
+    const r = route([file]);
+
+    expect(r.tier).toBe('medium');
+    expect(r.panel).toEqual([25]);
+  });
+
+  it('EXCLUDES the knowledge files the reviewers write to themselves', () => {
+    // The deliberate carve-out, exact mirror of the lessons-digest.md negative above:
+    // these are appended on every ledger run, so gating them would put routine
+    // bookkeeping behind a review (Malin's narrow-over-broad call). The mechanism is the
+    // `\.md` SUFFIX in the pattern, not the `$` anchor — verified by mutation: dropping
+    // the `$` still excludes them (their names continue past `-reviewer`), while
+    // dropping `\.md` lets them straight in.
+    expect(integrationGateMatches('.claude/agents/binge-test-reviewer.knowledge.md')).toBe(false);
+    expect(integrationGateMatches('.claude/agents/binge-code-reviewer.knowledge.archive.md')).toBe(false);
+  });
+
+  it('the derived list has not silently shrunk to nothing', () => {
+    // The floor is the whole defence for the `it.each` cases above: `it.each([])`
+    // registers ZERO tests and reports no error, so an empty list would make every
+    // assertion in this block vanish silently (verified — 46 tests become 32).
+    expect(GATE_FILES.length).toBeGreaterThanOrEqual(7);
+    expect(new Set(GATE_FILES).size).toBe(GATE_FILES.length);
+    expect(REVIEWER_INSTRUCTIONS.length).toBeGreaterThanOrEqual(4);
+    expect(HOOKS.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the integration reviewer's OWN instructions get a second, independent reader", () => {
+    // The one gated file whose only reviewer would otherwise be an agent spawned from
+    // the very instructions being weakened — `_note4`'s "the gate could disarm itself
+    // unwitnessed", one file further in. It is listed in the SECURITY gate too, and
+    // without this assertion that line is deletable with the whole suite green.
+    expect(gateMatches('binge-security-reviewer', '.claude/agents/binge-integration-reviewer.md')).toBe(true);
+    // And the other three are deliberately NOT duplicated there — they already have an
+    // independent reader, so doubling their review cost buys nothing.
+    expect(gateMatches('binge-security-reviewer', '.claude/agents/binge-code-reviewer.md')).toBe(false);
   });
 });
 

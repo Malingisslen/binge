@@ -39,9 +39,17 @@ cost. Large changes get a written plan + approval before any Edit/Write. Small, 
 single-file fixes ship without ceremony.
 
 **Cast the stakeholders BEFORE writing the plan**, for any large change or sensitive domain:
-1. `node docs/org/route.mjs <paths>` → `{ tier, panel, roles, highStakes, reason }`,
-   `tier` ∈ `skip` / `medium` / `top`. Deterministic, no agents. Don't hand-roll a second
-   risk judgment — this is the same router `/linear` and `/stakeholder-review` use.
+1. `node docs/org/route.mjs <paths>` → `{ tier, reasonCode, panel, roles, highStakes,
+   reason, unmappedCode, unownedCode }`, `tier` ∈ `skip` / `medium` / `top`.
+   Deterministic, no agents. Don't hand-roll a second risk judgment — this is the same
+   router `/linear` and `/stakeholder-review` use.
+   **Branch on `reasonCode`, not on the prose in `reason`** (BIN-804). `skip` is always
+   harmless (`doc-only` / `no-code-paths`). Code nobody owns routes **`medium`** with
+   `reasonCode: 'unmapped-code'`, seated on the #14 fallback and listed in `unownedCode` —
+   that is BIN-788's fix, so do not write a consumer that tests for `skip` + `unmapped-code`
+   (no such state exists, and the branch would read as satisfied forever). And
+   `unownedCode` can be non-empty even when `reasonCode` is `'owned'`, when only SOME of
+   the paths have an owner: read the array, not only the code.
 2. `medium` → one blind critique from the owning role; `top` → the full panel concurrently,
    each grounded in its dossier section (`docs/role-responsibilities.md §N` +
    `docs/org/world-watch/ROLE_WORLD_MODEL.md`) and blind to the others. Critiques run on

@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 162,
+  "patternCount": 172,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -282,11 +282,21 @@
       "title": "Engineering Manager / Release Manager",
       "slug": "engineering-manager-release-manager",
       "patterns": [
+        ".claude/agents/binge-code-reviewer.md",
+        ".claude/agents/binge-integration-reviewer.md",
+        ".claude/agents/binge-security-reviewer.md",
+        ".claude/agents/binge-test-reviewer.md",
+        ".claude/hooks/dossier-freshness.mjs",
+        ".claude/hooks/map-freshness.mjs",
+        ".claude/hooks/preview-gate.mjs",
         ".claude/rules/accepted-deviations.md",
         ".claude/shared-plugin.json",
         ".github/dependabot.yml",
         ".github/workflows/deploy.yml",
-        "CLAUDE.md"
+        "CLAUDE.md",
+        "docs/org/gen-ownership-map.mjs",
+        "docs/org/route.mjs",
+        "docs/org/route.test.mjs"
       ]
     },
     "26": {

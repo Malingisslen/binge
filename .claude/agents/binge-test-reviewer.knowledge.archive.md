@@ -19752,3 +19752,175 @@ No assertion was weakened: the one deleted `orphans.test.ts` case (`f(3,8) === t
 floor deliberately reverses it — and the rules-test flip `toBe(true)` → `toBe(false)` on the stranded
 reservation is BIN-875's contract change, visibly implemented by the uid-query and explained in the
 test's own comment.
+
+## 2026-08-13 — Batch A (BIN-869 + BIN-834 + BIN-804 part A): route.test.mjs revised, not extended
+
+**Diff reviewed** (8 staged paths, index == worktree at start AND end):
+`.claude/shared-plugin.json` 82ef5a01, `CLAUDE.md` a41a5dd9, `docs/org/metrics/events.jsonl`
+ea97c6c8, `docs/org/ownership-map.json` 220120bf, `docs/org/route.mjs` 4d02c9bf,
+`docs/org/route.test.mjs` 7d01c686, `docs/role-responsibilities.md` 7d158b35,
+`tasks/todo.md` fd82e0a1. HEAD 5ea6c3f at start and end; `git status --porcelain` showed the
+same eight `M ` entries both times.
+
+**Control**: `npx vitest run` → 247 files / 3131 passed / 4 skipped (the brief's numbers
+confirmed; it omitted the 4 skipped). `docs/org/route.test.mjs` alone 29 passed;
+`route.test.mjs + gen-ownership-map.test.mjs` 40 passed.
+`node docs/org/gen-ownership-map.mjs --check` exit 0 (299 gaps, all baselined),
+`node scripts/check-workflow-map.mjs` exit 0, `node docs/org/route.mjs --selftest` **exit 1**.
+
+**Mutations run** (each restored from a scratchpad snapshot and re-hashed):
+1. Delete both new `reviewGates.patterns` entries (the BIN-869 blocking half) → **40/40 GREEN,
+   SURVIVES**. Blocking finding 1.
+2. Delete the 7 new §25 map entries only (doc left intact) → 1 failed / 39 passed
+   (`gen-ownership-map.test.mjs > regenerates the committed ownership-map.json identically`).
+   Consistency is pinned, content is not.
+3. Delete the BIN-869 §25 bullet AND regenerate the map → **40/40 GREEN, SURVIVES**. The
+   whole advising half of BIN-869 can be reverted invisibly. Blocking finding 1.
+4. Delete the BIN-834 §25 bullet, map NOT regenerated → 1 failed (gen-ownership-map drift).
+   Then regenerate → `route.mjs has a real owner now (BIN-834)` red-**ALONE** 1/29. Both
+   directions of attack #3 are covered.
+5a. Add `docs/org/route.mjs` to role **27** (higher num) → roles [21,25,27], panel [25] →
+   **29/29 GREEN, SURVIVES**. This is the concrete cost of `toEqual([21])` → `toContain(21)`.
+5b. Same for role **11** (lower num) → panel [11] → red-ALONE 1/29 (`panel).toEqual([25])`).
+6. Remove `docs/` from role 21 → the loosened Technical-Writer test still reddens, 2/29
+   (with `docs/workflow-map.html → skip`). The named property survived the loosening.
+7. `const unownedCode = clean.filter(...)` → `unmappedCode.slice()` (the
+   Technical-Writer-does-not-count rule, BIN-805's core) → **29/29 GREEN, SURVIVES**. At HEAD
+   this was the mutant the moved test caught. Unreachable-by-construction today (every code
+   path under `docs/` inherits #25 from `docs/org/`), so filed LOW + stale comment at
+   route.mjs:246-250.
+8. Drop only `docs/org/route.mjs` from #25, keep the `gen-ownership-map.mjs` sibling →
+   **29/29 GREEN, SURVIVES** — directory inheritance re-seats #25 (`inherited:
+   ['docs/org/route.mjs']`). The new test cannot tell explicit ownership from inherited.
+
+**Facts established by inspection**: no role owns anything under `scripts/` (zero `scripts/`
+patterns in the 171-pattern map), so §25's new sentence "`scripts/check-*.mjs` stays with its
+own owners" is false — they keep the #14 fallback. Gate-regex probe: the four `*-reviewer.md`
+and three hooks match; `.knowledge.md` / `.knowledge.archive.md` correctly do not (the `$`
+anchor holds) — none of which any test asserts.
+
+**Verdict: fail (2 blocking)** — (1) BIN-869's entire widening, both halves, ships with zero
+coverage against the file's own BIN-851/864/873 precedent; (2) `route.mjs`'s `--selftest`
+golden block still pins `route.mjs`/`route.test.mjs` as `unmapped-code`/#14 and now exits 1.
+Non-blocking: the `toContain(21)` residual (mutation 5a), the branch swap in the moved
+fallback example + its stale production comment (mutation 7), the inherited-vs-explicit gap
+(mutation 8), and the false `scripts/check-*.mjs` ownership sentence. **No assertion was
+weakened dishonestly**: the fallback example moved to a genuinely unowned path, the new
+`owned`/[25] test discriminates, and the Technical-Writer property is still red-alone-able.
+
+## 2026-08-13 — Batch A re-review (BIN-869 + BIN-834 + BIN-804 part A): both blockers closed
+
+**Diff re-reviewed** (10 staged paths; index == worktree for all ten at start AND end):
+`.claude/agents/binge-test-reviewer.knowledge.archive.md` d9765f0b,
+`.claude/agents/binge-test-reviewer.knowledge.md` 1aecd309, `.claude/shared-plugin.json` 639a0029,
+`CLAUDE.md` a6971dc9, `docs/org/metrics/README.md` 493d4538, `docs/org/ownership-map.json` 524a2c61,
+`docs/org/route.mjs` da64d9a5, `docs/org/route.test.mjs` 66204ce2,
+`docs/role-responsibilities.md` 6b021fa0, `tasks/todo.md` fd82e0a1. HEAD 5ea6c3f both times;
+`docs/org/metrics/events.jsonl` is unstaged (` M`) — it was staged in round 1 and has since been
+committed by a sibling (5ea6c3f) and re-modified.
+
+**Path-list audit against my OWN r1 entry** (8 → 10 paths): the two knowledge files are r1's own
+fold-back; `docs/org/metrics/README.md` is new and in nobody's brief (BIN-804's `ran: false` contract
+— documentation only, its consumer `/org-retro` is not in this repo, no test owed). The r1 → now blob
+diffs also show ONE new production behaviour nobody's brief named: a new **security**-gate pattern
+`^\.claude/agents/binge-integration-reviewer\.md$` (`_note2`, independence fix).
+
+**Rig**: `.review-rig/` inside the checkout holding `git show :`-copies of route.mjs, route.test.mjs,
+ownership-map.json and shared-plugin.json only — the test resolves `../../.claude/shared-plugin.json`
+and route.mjs resolves its map relative to itself, so the copies are what run; own `cacheDir` in
+scratch, cleared before EVERY run; no tracked file was ever mutated. Torn down; `node_modules` 448
+entries and `.bin/vitest` present after.
+
+**Control**: rig 46/46. Real checkout `npx vitest run docs/org/route.test.mjs
+docs/org/gen-ownership-map.test.mjs` → 57 passed (46 + 11), consistent with the brief's 3148.
+`node docs/org/route.mjs --selftest` → **exit 0** (blocker 2 closed; the two BIN-805 cases now pin
+`mustSeat: 25, reasonCode: 'owned'`, `check-workflow-map.mjs` still pins `14`/`unmapped-code`).
+`node docs/org/gen-ownership-map.mjs --check` → exit 0 (299 gaps, all baselined).
+
+**Mutations (all in the rig, restored from `git show :` between runs)**
+1. Drop both new `reviewGates.patterns` entries (valid JSON) → **7 red**, exactly the
+   `%s is named in the BLOCKING gate list` cases. Blocker 1 half A closed.
+2. Drop the 7 new §25 map entries → **7 red**, exactly the `%s has an owning role` cases
+   (all seven fall to `tier: 'skip'` — `.claude/**` is not `isCodePath`, so there is no #14
+   fallback and no directory inheritance for them). Blocker 1 half B closed.
+3. Drop ONLY `docs/org/route.mjs` from §25 → red-**ALONE** 1/46 on
+   `expected [ 'docs/org/route.mjs' ] to deeply equal []` — the `inherited` discriminator does the
+   work; `reasonCode`/`panel`/`unownedCode` above it all survive via inheritance, as its comment says.
+4. Same for `docs/org/gen-ownership-map.mjs` → red-ALONE 1/46, same assertion. Finding 4 closed.
+5. Add `docs/org/route.mjs` to role **27** (higher num) → red-ALONE 1/46,
+   `expected [ 21, 25, 27 ] to deeply equal [ 21, 25 ]`. Finding 1 closed.
+6. `GATE_FILES = []` → **only** the floor test reddens (`expected 0 to be greater than or equal to
+   7`); the two `it.each` blocks silently register zero tests, 46 → 32. The floor is load-bearing.
+7. One entry wrong-cased (`Preview-Gate.mjs`) → 2 red (both halves).
+8. `integrationGateMatches` → `return true` → 3 red, incl. the block's own EXCLUDES negative.
+9. Drop the trailing `$` from the reviewer pattern → **46/46 GREEN, SURVIVES**; the knowledge files
+   still do not match. Strip `\.md` instead → EXCLUDES red-ALONE 1/46. The comment's "the `$` anchor
+   … is what pins it" is false; the `\.md` suffix is.
+10. Delete the new **security**-gate pattern → **46/46 GREEN, SURVIVES** (helper is hard-wired to the
+    integration gate).
+11. Drop `docs/org/route.test.mjs` from §25 → 46/46 green and the router still answers
+    `owned`/[25] with `inherited: ['docs/org/route.test.mjs']` — its ownership comes from an
+    incidental backticked prose mention, not the `→` line, and inheritance backstops it.
+
+**Verdict: pass (0 blocking).** Non-blocking: the untested security-gate pattern (10), the false
+`$`-anchor comment (9), the "covers every hook in the repo" title that reads nothing from disk (the
+rig had no `.claude/hooks/` dir at all), `route.test.mjs`'s prose-derived ownership missing from the
+`→` line (11), BIN-880's existence unverifiable from here (no Linear access, and the identical
+"filed as its own ticket" claim in `_note5` was false and is corrected in this same diff), and
+`docs/org/metrics/README.md`'s new paragraph inserted BETWEEN two rows of a markdown table. No
+assertion was weakened: every r1 finding was closed by ADDING a discriminator, and the loosened
+`toContain(21)` was tightened back to `toEqual([21, 25])`.
+
+## 2026-08-14 — Batch A round 3: the dispatcher's "comments only" framing was false, verified anyway
+
+**Trigger**: asked to re-review `docs/org/route.test.mjs` because it moved again since the
+round-2 `pass (0 blocking)` verdict (pinned at sha `66204ce2`). The dispatch message
+characterized the delta as two comment edits and stated "no assertions added or removed" —
+that claim is FALSE at the actual bytes and is itself the thing to verify, not inherit (this
+file's own standing rule). `diff -u` between the round-2-pinned blob and the current staged
+blob (`bf1cea38…`) shows real logic changes: `integrationGateMatches(file)` became a thin
+wrapper over a new `gateMatches(agent, file)`; `GATE_FILES` changed from a hand-written array
+to `readdirSync`-derived from `.claude/agents/` + `.claude/hooks/`; a new test
+("the integration reviewer's OWN instructions get a second, independent reader") was added;
+the floor test gained two more assertions (`REVIEWER_INSTRUCTIONS.length`, `HOOKS.length`).
+These are exactly the two non-blocking residuals (9)/(10) and the "reads nothing from disk"
+gap that round 2's own archive entry (above) flagged — round 3 is their fix, not commentary.
+
+**Diff reviewed**: all 12 staged paths (`git status --porcelain`), index == worktree for all
+twelve confirmed via `git hash-object` vs `git rev-parse :<f>` before and after. HEAD unmoved
+throughout.
+
+**Claims checked against the it.each header comment** (the two the dispatcher DID call out
+correctly): "the four under docs/org/ are owned/[25], the four under scripts/ are
+unmapped-code/[14]" — confirmed by reading `ownership-map.json` (§25's `patterns` list the
+three files explicitly, `gen-ownership-map.test.mjs` is absent) and by grep (`scripts/check-*`
+appears nowhere in the 172-pattern map). "Both specific answers ARE pinned in their own named
+tests below" — confirmed: `seats the unmapped-code fallback…` pins `scripts/check-workflow-map.mjs`
+→ `unmapped-code`/[14]; `route.mjs has a real owner…` and `gen-ownership-map.mjs got the same
+owner…` pin two of the four docs/org files → `owned`/[25].
+
+**Mutation-verified, not just read**: (1) removed all three explicit §25 entries
+(`route.mjs`, `route.test.mjs`, `gen-ownership-map.mjs`) from `ownership-map.json` (python,
+scratchpad-backed, restored + rehashed after) → the 8-case `it.each` stayed **8/8 GREEN**
+(confirms it truly cannot tell 14 from 25 — none of its four assertions reference the panel
+number or reasonCode value), while exactly 3 named tests reddened (the two BIN-834/869 pins
+plus the Technical-Writer `[21,25]` pin, which loses its `25`). (2) removed the new
+`^\.claude/agents/binge-integration-reviewer\.md$` security-gate pattern → the new
+independent-reader test reddened ALONE (1/47), closing round-2 finding (10) for real — at
+round 2 the equivalent mutation survived 46/46 because `integrationGateMatches` was hard-wired
+to one agent. (3) dropped a throwaway `.claude/hooks/_zz-probe-hook.mjs` into the real
+directory (untracked, cleaned up after) → two `it.each` cases reddened by name
+(`_zz-probe-hook.mjs is named…` / `…has an owning role…`), closing round-2's "reads nothing
+from disk" gap — at round 2 a new/renamed hook was invisible because `GATE_FILES` was a
+hand-written array of exactly the three known hooks.
+
+**Also confirmed live**: `node docs/org/route.mjs --selftest` exit 0; `docs/org/route.test.mjs`
+47/47; `node docs/org/gen-ownership-map.mjs --check` exit 0 (299 gaps, all baselined).
+
+**Verdict: pass (0 blocking).** Non-blocking, informational only: the dispatch message's own
+"comments only, no assertions added or removed" framing does not hold at these bytes — flagged
+so the record is accurate, not because it changes the outcome (the actual changes strictly
+ADD coverage, closing two findings this same review chain raised at round 2; nothing was
+weakened, skipped, or loosened). Folded into the principles file in place at the two spots
+that predicted this exact fix (the `readdirSync` residual and the `gateMatches` parameterisation
+residual), rather than opened as a new bullet.

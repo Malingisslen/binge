@@ -409,6 +409,34 @@ Owns the process.
   NOT flag. Removing a pattern from either quietly disarms a gate, so the file that
   decides who reviews everything else needs an owner of its own (BIN-851).
   → `.claude/shared-plugin.json`, `.claude/rules/accepted-deviations.md`
+- **The reviewers' own instruction files and the hooks that stamp their state**
+  (BIN-869). Editing what a reviewer is told to look for disarms a gate exactly as
+  effectively as deleting its pattern, and until now both routed `skip` and matched
+  no gate. The four `*-reviewer.md` files are in; their `*.knowledge*.md` siblings
+  are deliberately NOT — the reviewers append to those on every ledger run, and
+  gating them would put routine bookkeeping behind a review (the same call Malin
+  made for `lessons-digest.md` in BIN-851).
+  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/dossier-freshness.mjs`, `.claude/hooks/map-freshness.mjs`, `.claude/hooks/preview-gate.mjs`
+- **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
+  decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
+  it decides from. Both are code by BIN-805's own ruling, and both routed as
+  unowned — so the router permanently printed "add the path and regenerate the map"
+  about itself, an instruction nobody was assigned to follow. Owned here rather than
+  left to the permanent #14 fallback, because the fallback is a seat of last resort
+  for code nobody claimed, not an answer for the two files that decide who reviews
+  everything else. The check scripts under scripts/ stay deliberately UNOWNED — still the #14
+  fallback seat, and `docs/org/route.test.mjs` depends on that being true. (Written
+  without backticks on purpose: the generator harvests every backtick-quoted tracked
+  path in a section, so naming one here would silently seat #25 on it and flip those
+  pins red.)
+  Owning these ten paths buys a REVIEWER, not a re-audit: `dossier-freshness.mjs`
+  returns early for everything under the .claude and docs/org trees (de-backticked on
+  purpose — a backticked DIRECTORY prefix is harvested too, and would have seated #25
+  on both whole trees; measured, it added exactly those two patterns), so editing any of
+  them will never flag this section stale (integration review, 2026-08-13 — verified at
+  `.claude/hooks/dossier-freshness.mjs`'s two `startsWith` guards). That is deliberate:
+  the hook must not self-trigger on the docs that define the system.
+  → `docs/org/route.mjs`, `docs/org/route.test.mjs`, `docs/org/gen-ownership-map.mjs`
 
 ## 26. Information Architect
 

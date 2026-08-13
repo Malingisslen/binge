@@ -78,3 +78,8 @@ scripts/recaps/*
 # engångs-scratchskript (underscore-prefix) — verktyg för en session, aldrig committade
 functions/scripts/_*.mjs
 
+
+# Reviewer scratch rigs — isolated vitest copies an agent builds to mutate safely.
+# Untracked AND ignored: a `git add -A` would otherwise stage a whole rig into the repo
+# (integration review, 2026-08-13).
+.review-rig/

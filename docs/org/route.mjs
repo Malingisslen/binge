@@ -38,9 +38,13 @@
 //   2. "No owning role" and "deliberately trivial" returned the SAME answer (`skip`), so
 //      an unmapped path read as a cleared one. An unmapped CODE path is now `medium`
 //      (reasonCode `unmapped-code`, fallback seat #14 Software Architect) and is listed
-//      in `unmappedCode`; only genuinely non-code paths (docs, plans, scratch) still
-//      route `skip` (reasonCode `doc-only` / `no-code-paths`). Read `reasonCode`, not the
-//      prose in `reason`, when a tool needs to tell those apart.
+//      in `unownedCode` — a code path with no owning role — while `unmappedCode` carries
+//      code paths that matched no role at all. (BIN-834: this comment named the wrong
+//      field. Run against the shipped router for `docs/org/route.mjs` before it got an
+//      owner, `unmappedCode` was `[]` and the path sat in `unownedCode`.) Only genuinely
+//      non-code paths (docs, plans, scratch) still route `skip` (reasonCode `doc-only` /
+//      `no-code-paths`). Read `reasonCode`, not the prose in `reason`, when a tool needs
+//      to tell those apart.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -241,9 +245,11 @@ export function route(paths) {
 
   // Code with NO code-owning role: either nothing matched it at all (`unmappedCode`), or
   // the only role that matched is the Technical Writer — who is never the sole reviewer of
-  // a code change. That second case is the one `docs/org/route.mjs` itself lands in, since
-  // #21 owns all of `docs/` (BIN-805). Both get the same answer: seat the architect and
-  // name the path so the map gets fixed.
+  // a code change. `docs/org/route.mjs` used to land in that second case, since #21 owns
+  // all of `docs/` (BIN-805); BIN-834 gave it #25, so the live example of the
+  // writer-only branch is now any NEW code file under `docs/` that #25's patterns and
+  // directory inheritance do not reach. Both cases get the same answer: seat the
+  // architect and name the path so the map gets fixed.
   const pathsOwnedByCodeRole = new Set(codeOwners.flatMap((o) => o.matched));
   const unownedCode = clean.filter((path) => isCodePath(path) && !pathsOwnedByCodeRole.has(path));
   if (highStakes.length > 0) {
@@ -371,24 +377,41 @@ function selftest() {
     // ── BIN-805 ──────────────────────────────────────────────────────────────────────
     // The router and the gate scripts review everything else, so they can no longer
     // clear themselves as doc-only.
-    { paths: ['docs/org/route.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
-    { paths: ['docs/org/route.test.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
+    // BIN-834 gave the router and the map generator a real owner (#25) — they decide who
+    // reviews everything else, and until then the router permanently printed "add the path
+    // and regenerate the map" about ITSELF, an instruction nobody was assigned to follow.
+    // These two pins moved with that change; `check-workflow-map.mjs` is still unowned and
+    // still pins the fallback, so both branches stay covered.
+    { paths: ['docs/org/route.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
+    { paths: ['docs/org/route.test.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
     { paths: ['scripts/check-workflow-map.mjs'], tier: 'medium', mustSeat: 14, reasonCode: 'unmapped-code' },
 
     // ── BIN-864 / BIN-873 ────────────────────────────────────────────────────────────
-    // Same class, two more files. Only `tier` is pinned here, deliberately: these are
-    // unowned today and therefore seat #14, but naming an owner in
-    // docs/role-responsibilities.md is an INTENDED improvement, and a golden case that
-    // pins `unmapped-code` would report that improvement as a failure. What must never
-    // change is that they stop being `skip`.
+    // Same class, two more files — and as of BIN-869 they no longer answer the same way,
+    // so they are pinned differently on purpose.
     //
-    // The three BIN-805 cases above still pin `unmapped-code`, and that inconsistency is
-    // tolerated on purpose: `--selftest` is invoked by NOTHING — not package.json, not
-    // ci.yml, not deploy.yml, not a hook. So a stale pin here false-alarms a human running it
-    // by hand; it cannot fail a deploy. The equivalent assertions that DO gate are in
-    // route.test.mjs, and those are written to survive an ownership improvement. Wiring
-    // this block into a gate, or deleting it in favour of route.test.mjs, is its own job.
-    { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium' },
+    // `gen-ownership-map.mjs` got a REAL owner in this commit (#25, alongside route.mjs
+    // and route.test.mjs — it computes the map this router reads), so its case is now
+    // pinned as specifically as the BIN-805 ones above. Leaving it at bare `tier` would
+    // have been the looser pin outliving the reason for looseness: docs/org/route.test.mjs
+    // already asserts `owned` / `[25]` for this exact path, and a golden case that stayed
+    // vague while the gating test was specific is how one file ends up with two answers.
+    //
+    // `check-public-env.mjs` is still unowned, so ITS case keeps only `tier`. That is the
+    // original BIN-864/873 reasoning and it still applies to this one file: naming an
+    // owner in docs/role-responsibilities.md is an INTENDED improvement, and a case that
+    // pinned `unmapped-code` would report that improvement as a failure. What must never
+    // change is that it stops being `skip`. Measured at these bytes: all four files under
+    // docs/org/ are `owned` / [25]; all four under scripts/ are `unmapped-code` / [14] —
+    // the deliberate #14-fallback seat §25 says the check scripts keep.
+    //
+    // `--selftest` is invoked by NOTHING — not package.json, not ci.yml, not deploy.yml,
+    // not a hook — so a stale pin here cannot fail a deploy. That is a reason to keep it
+    // honest by hand, not a licence to ship it red: the Usage line advertises "exit
+    // non-zero on fail", and a documented command that is knowingly broken teaches the
+    // next reader to ignore it. Wiring this block into a gate, or folding it into
+    // route.test.mjs, is its own job (BIN-880).
+    { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
     { paths: ['scripts/check-public-env.mjs'], tier: 'medium' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.
     { paths: ['firestore.rules', 'src/lib/no-such-dir/brandNew.ts'], tier: 'top', mustSeat: 4 },

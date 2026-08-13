@@ -1,211 +1,140 @@
-# Plan 2026-08-13 — aborted account deletion (BIN-816 + BIN-875 + BIN-876)
+# Plan 2026-08-13c — the six critiqued tickets
 
-**One change, three tickets.** Malin's call 2026-08-13 (ADR 0020): they ship together or
-not at all. Stakeholder panels are DONE — do not convene another:
+Malin's instruction: build all six. The blind single-role critiques ran today and all
+six came back **approve-with-conditions**, 25 binding conditions between them. Those
+critiques ARE the stakeholder step — do not convene another. Each ticket's conditions
+are on its Linear comment; the ones that shape the batching are repeated here.
 
-- **ADR 0019** (Accepted 2026-08-11) — 9 binding conditions, BIN-816.
-- **ADR 0020** (Accepted 2026-08-13) — 12 binding conditions, BIN-875 + BIN-876, plus her
-  three answers: one change · the reaper also releases usernames · a marked session is
-  **blocked from writing**, not merely told.
+**Objection recorded, then overridden:** BIN-655's own ticket says "do not do this
+inside a feature commit — it wants its own plan and its own review round", and #27
+attached six conditions including a parity-test matrix. Built anyway, as the last
+batch, with its own commit and its own review round.
 
-Read both before touching code. Every acceptance criterion below traces to a numbered
-condition; nothing here is invented at build time.
-
----
-
-## The defect, in one paragraph
-
-`deleteAccount()` runs a Firestore cascade and *then* `deleteUser()`. Anything that kills
-the second half — a stale token, a network drop — leaves an auth account alive with its
-Firestore data gone. On the next page load `ensureUserProfile` finds no `users/{uid}`,
-**recreates it**, and stamps `termsAcceptedAt`/`ageConfirmedAt` with today's date: the app
-manufactures a consent record for someone who just asked to leave. Seven other
-`merge:true` writers can resurrect the same document without a login at all. Separately,
-the username reservation is resolved from the profile doc that the first attempt already
-deleted, so a retry silently drops it and the handle is held forever.
-
-## Shape of the fix
-
-A uid-scoped, device-local marker set immediately before the cascade. While it is set:
-nothing may write `users/{uid}` or `publicProfiles/{uid}`, the app renders a persistent
-limbo screen instead of the normal shell (that is what makes "blocked" real rather than
-narrated), and the only actions offered are *finish the deletion* and *sign out*. A daily
-server sweep finishes what the device cannot: orphaned auth accounts and orphaned username
-reservations, independent of whether the user ever returns.
+**Superseded a concurrent selection.** A different sprint selection wrote itself into
+this file at 21:38 local and stopped after Phase 1; no process was running when I
+checked. Its copy is preserved in the session scratchpad. One claim of its own is
+checked and WRONG and must not be repeated: it said BIN-809/811's work is recoverable
+from stash `2d4d2abc…` and should not be rebuilt. That stash is BIN-583's, its files
+all exist on main, and `git diff 2d4d2abc HEAD` shows main is AHEAD of it (extracted
+helpers, added cap tests). Recovering would be a regression. Build fresh.
 
 ---
 
-## Files
+## Batching — driven by collisions, not by size
 
-**New**
-- `src/lib/deletionMarker.ts` — pure localStorage marker (no Firebase import, per the
-  test-extraction convention). ADR 0019 c6.
-- `src/lib/deletionMarker.test.ts`
-- `src/components/layout/DeletionLimbo.tsx` — the persistent screen. ADR 0019 c4.
-  (In `layout/`, not `settings/`: it replaces the whole shell and its only consumer
-  is `AppShell`.)
-- `src/components/layout/DeletionLimbo.test.tsx`
-- `src/lib/firebase/userDocWrite.ts` — the single chokepoint every `users/{uid}` merge
-  write passes through. ADR 0019 c1.
-- `src/lib/firebase/userDocWrite.test.ts`
-- `src/lib/firebase/userDocWrite.chokepoint.test.ts` — the guard test (below).
-- `functions/src/retentionCleanup/orphans.ts` + `orphans.test.ts` — pure predicates for the
-  two new sweeps.
+| Batch | Tickets | Why together |
+|---|---|---|
+| **A** | BIN-869 + BIN-834 + BIN-804 (part A) | All three edit `docs/role-responsibilities.md` §25, `CLAUDE.md`'s router-contract line, and/or regenerate `ownership-map.json`. #25 was explicit: two independent regens clobber each other. ONE regen, after all dossier edits are in the tree. |
+| **B** | BIN-808 | Own surface (`workflow-map-universe.json` + `check-workflow-map.mjs`). No overlap. |
+| **C** | BIN-811 + BIN-809 | Same row, same files. Malin and #28 both said same pass. |
+| **D** | BIN-655 | The single write path for every watchlist document. Own commit, own review round. |
 
-**Changed**
-- `src/lib/authErrors.ts` — add `CASCADE_PARTIAL`. BIN-876.
-- `src/lib/firebase/accountDeletion.ts` — username by uid-query; ownership re-check that
-  SKIPS; phase-tagged failure. ADR 0020 c1–c3, c5, c9.
-- `src/contexts/AuthContext.tsx` — marker set/clear; every profile writer routed through
-  the chokepoint; `ensureUserProfile` refuses to resurrect; limbo state exposed.
-- `src/components/onboarding/OnboardingFlow.tsx` — the eighth writer, through the chokepoint.
-- `src/lib/firebase/username.ts` — `claimUsername`'s `users/{uid}` update through the
-  chokepoint.
-- `src/components/layout/AppShell.tsx` — render limbo instead of children when marked.
-- `src/components/settings/DeleteAccountSection.tsx` — four honest messages; the retry
-  action rides only on the branches that fire BEFORE the marker (ADR 0020 c6, as
-  superseded in part by question 3's answer — see the note in the ADR).
-- `src/components/settings/DeleteAccountSection.test.tsx` — revise the pinned assertion
-  honestly, never loosen it. ADR 0020 c7.
-- `functions/src/retentionCleanup/index.ts` — the two new sweeps. ADR 0019 c5b, ADR 0020 (Malin #2).
-- `docs/data-retention-policy.md`, `docs/RUNBOOK.md`, `.claude/rules/accepted-deviations.md`.
+Follow-ups to file, not build:
+- The mechanical ownership↔gate symmetry check (#25, BIN-869 condition 4 — this is
+  the fourth reactive widening and `_note5` already named the trigger).
+- BIN-804 part B in the claude-plugins tracker: make `/stakeholder-review` and the
+  sprint selector branch on `reasonCode`. **Must not be built from this repo**
+  (Malin's standing rule, 2026-08-06).
 
 ---
 
-## Screen sketch — DeletionLimbo (ADR 0019 c4)
+## Batch A — the org/gate surface
 
-Replaces the whole shell. No topbar, no subnav — there is nothing else to do here.
+### What ships
+1. **§25 gains the paths that decide who reviews everything else**, with the reason:
+   `.claude/agents/binge-{code,security,integration,test}-reviewer.md` (the four
+   instruction files ONLY), `.claude/hooks/{dossier-freshness,map-freshness,preview-gate}.mjs`,
+   `docs/org/route.mjs`, `docs/org/gen-ownership-map.mjs`.
+2. **`reviewGates` gains matching narrow patterns** for the reviewer instruction
+   files and the three hooks. Narrow alternations, not globs — Malin's 2026-08-08
+   call, alternative (a), unchanged.
+3. **`CLAUDE.md` line 42's router contract** names `reasonCode` (BIN-804 A) and
+   `unownedCode` (BIN-834). One line, both tickets.
+4. **`route.mjs`'s header comment** names `unownedCode`, not `unmappedCode`.
+   Verified against the shipped router: for `docs/org/route.mjs`, `unmappedCode` is
+   `[]` and the path sits in `unownedCode`.
+5. **`ownership-map.json` regenerated once**, after 1.
 
-```
-┌────────────────────────────────────────────────┐
-│  binge                                         │
-│                                                │
-│  Din radering är påbörjad men inte klar        │  ← page-h1
-│                                                │
-│  En del av din data kan redan vara borttagen,  │
-│  men själva kontot finns kvar. Tills            │
-│  raderingen är klar kan du inte spara något    │
-│  nytt här.                                     │
-│                                                │
-│  [ Slutför raderingen ]  [ Logga ut ]          │
-│                                                │
-│  Går det inte? Logga ut, logga in igen och     │
-│  försök på nytt — sessionen måste vara färsk.  │
-└────────────────────────────────────────────────┘
-```
+### Conditions this batch is bound by
+- **The knowledge files stay out.** `*.knowledge.md` / `*.knowledge.archive.md` are
+  appended by the reviewers themselves on every ledger run; gating them puts routine
+  bookkeeping behind a review — the same call Malin made for `lessons-digest.md`.
+- **Both lists move in one commit**, and the blocking one is proven with a
+  staged-diff probe, not asserted.
+- **Widening only.** No existing pattern narrows.
+- **BIN-869's evidence is partly stale and gets corrected on the ticket**:
+  `gen-ownership-map.mjs` already matches the gate since `7051a98`; only its §25
+  ownership entry is missing.
+- **Write down why `route.mjs` gets an owner** rather than keeping the permanent
+  #14 fallback, so `docs/org/` does not end up with two unexplained policies.
 
-Tokens only, through `PageHeader` — nothing invented, per
-`.claude/rules/design-system.md`. Not a new route, so no preview gate; reachable with a
-null profile, which is the load-bearing part.
+## Batch B — BIN-808, crash-boundary coverage
 
-The wording says "kan redan vara borttagen", not "vi hann ta bort": this screen is also
-what a user sees when the cascade failed on its very FIRST chunk, where nothing was
-deleted at all. Claiming otherwise would be the mirror image of the lie BIN-876 was filed
-about (`.claude/rules/accepted-deviations.md`, 2026-08-13).
+- `boundaries` gains the **ten** `error.tsx` files. Recounted with
+  `find src/app -name error.tsx` — the ticket's "ten" was right; my own pre-check
+  said seven and missed `src/app/error.tsx`, `movie/[id]`, `tv/[id]`.
+- **Criterion 2's heuristic is replaced, not implemented.** "Imports `captureError`,
+  is not a route or a function export" is a false negative for all ten (they import
+  the shared `SegmentError`, which does) and a false positive for
+  `src/lib/queryClient.ts`. Replaced with filename-glob enumeration of
+  `src/app/**/{error,global-error}.tsx` diffed against `boundaries` — the same
+  enumerate-and-cross-check the linter already does for routes and functions.
+- The universe file's own "boundaries = HAND-CURATED, not enumerable" comment is
+  wrong for this subset and is corrected in the same change.
+- An explicit exemption list, one line of reason each, for legitimate non-route
+  `captureError` call sites.
 
----
+## Batch C — BIN-811 + BIN-809, labelled companion anchors
 
-## Work items
+Malin chose **(c)** on 2026-08-08: anchor on both followed and finished series, but
+each suggestion says which. The labelling is the whole reason (c) beat (b).
 
-### 1 · The marker — `src/lib/deletionMarker.ts` (ADR 0019 c2, c6)
-`binge:deletionStarted:<uid>` → `{ startedAt }`. Read **fresh** on every call, never
-cached in a ref (BIN-592). Storage that throws answers "not marked" for the read — a
-browser with no localStorage could not have stored one either, and a false *true* would
-lock a user out of an account nothing ever tried to delete.
-Exported key helper so the cascade's own localStorage sweep can exclude it (c6).
+- **The ticket describes the change wrongly and gets corrected.** The candidate pool
+  does not widen: TV never leaves `mina` except to `avbruten`, so a finished show
+  (`librarySubState === 'avslutad'`) already anchors the row today.
+  `ANCHOR_TV_STATUSES` itself does not change.
+- `CompanionAnchor` gains `reason: 'following' | 'finished'`, computed per anchor
+  from `librarySubState(item)` — persisted fields only, no new reads.
+- **The reason must reach rendered copy.** Today `cascadePrioritizer.ts` joins ALL
+  anchor titles into one hardcoded "Eftersom du följer {A, B och C}" string. A
+  `reason` field with no consumer is option (b) with extra steps.
+- The stale `sedd` comment in `companionSeeds.ts` is replaced with the real
+  mechanism (`sedd` is film-only; this is `mina` + derived sub-state).
+- **Do not touch `COMPANION_SCORE`.** Flat scoring for this row is an argued #28
+  condition from 2026-08-06; per-anchor weighting is a separate, undecided call.
+- Alphabetical-by-title sort contract preserved.
+- BIN-809: the row's dedup test (a film must not appear in two rows) lands here.
+- Known limitation, written down: `librarySubState` is persisted-fields-only and
+  lazy-backfilled, so a finished show whose fields were never backfilled keeps the
+  "du följer" label. Safe direction — never mislabels an airing show as done.
 
-### 2 · The chokepoint — `src/lib/firebase/userDocWrite.ts` (ADR 0019 c1)
-`mergeUserDoc(uid, data)` — the only sanctioned way to `setDoc(users/{uid}, …, {merge:true})`.
-Throws `DELETION_IN_PROGRESS` when marked. `assertProfileWritable(uid)` is the same check
-exposed for the two call sites that must build their own batch (`resumeProvider`,
-`claimUsername`).
-**Guard test:** scan `AuthContext.tsx`, `OnboardingFlow.tsx`, `username.ts`,
-`publicProfile.ts` for `doc(db, 'users'`/`'publicProfiles'` write forms and fail if any
-occurrence is not inside the chokepoint module. This is what stops the ninth writer from
-reopening the hole — the panel's actual objection to per-call-site patching.
+## Batch D — BIN-655, split `addItem`
 
-### 3 · Refuse the resurrection — `ensureUserProfile` (BIN-816 AC1, AC2, AC3)
-Marked uid → return `{ profile: null, deletionInProgress: true }`. No `runTransaction`
-create, no `tryAutoClaimUsername`, and the `syncMyPublicProfile` effect is skipped so
-`publicProfiles/{uid}` is not rebuilt either.
+`upsertTitle(payload)` for bulk/sync callers; a human-intent mutator for mark-seen.
 
-### 4 · Set the marker at the right instant (ADR 0019 c2, c3)
-In `deleteAccount()`, **after** the freshness preflight throws-or-passes and immediately
-before `collectUserDataSnapshots`. `STALE_SESSION_PREFLIGHT` must remain a true no-op.
-`deleteAccount()` itself and its retry are **never** gated on the marker (c3) — the marker
-gates *profile writes*, and `deleteAccount` writes none. Cleared only after `deleteUser()`
-resolves. There is deliberately no "cancel" — recorded as a conscious deviation (c8).
-
-### 5 · Finish it on return (ADR 0019 c5)
-`DeletionLimbo` calls `deleteAccount()` again. The cascade is idempotent by design and,
-after item 6, actually is. A stale session surfaces the preflight message and the sign-in
-route; a fresh one completes.
-
-### 6 · The username survives the retry — BIN-875 (ADR 0020 c1–c3, c8)
-`collectDeletionRefs` resolves the reservation by **querying `usernames` where `uid == id`**
-— not the marker, not the profile doc, not React state. No rules change and no
-`firestore.indexes.json` entry: `allow read: if true` covers `list`, and the default
-single-field index serves the equality. Keep the delete adjacent to `users/{uid}` in the
-same chunk (c3 — do NOT move it earlier). Include only reservations the query itself
-returned, so a handle already reclaimed by someone else is skipped rather than throwing
-and aborting the chunk (c2).
-The profile-doc and React-state sources are REMOVED, not demoted: neither carries
-ownership proof, so queuing a name from them could throw inside the atomic chunk and gate
-the retry (ADR 0020 c2). A failed query queues nothing; the daily sweep covers it.
-
-### 7 · Say what actually happened — BIN-876 (ADR 0020 c5, c6)
-`applyDeletionPlan` tracks whether any chunk committed and, on failure, rethrows tagged
-`CASCADE_PARTIAL`. **In-memory for that call only** — no persisted cursor, no resumable
-plan (ADR 0016, and this cascade's own "ask Firestore fresh every attempt" principle).
-`DeleteAccountSection` grows a third branch with Support's two strings, adjusted to name
-the limbo screen's "Slutför raderingen" — because answer 3 means this component is
-unmounted by the time those branches fire, so its own retry button would be a no-op. The
-nothing-touched branch, which fires before the marker, gains the action it lacks today.
-
-### 8 · The server finishes what the device cannot (ADR 0019 c5b, Malin #2)
-Two sweeps in `retentionCleanup`:
-- **Orphaned auth accounts** — `listUsers()` paginated, `users/{uid}` checked via
-  `getAll()`, deleted only when the account is **older than 7 days** and the read
-  *succeeded* and returned absent. A failed read means "could not check", never "nothing
-  there". 7 days is far beyond any transient profile-creation failure and well inside Art.
-  12(3)'s one month.
-- **Orphaned username reservations** — a `usernames/*` doc whose `uid` resolves to neither
-  a live auth user nor a `users/{uid}` document. Same could-not-check guard.
-Needs a manual `firebase deploy --only functions` — `deploy.yml` ships hosting only.
-
-### 9 · Write it down (ADR 0019 c8–c9, ADR 0020 c10–c12)
-- `docs/data-retention-policy.md` — the cross-device/private-window/cleared-storage gap;
-  the orphaned-auth-account window; the orphaned-username window beside the existing
-  "Användarnamn → Hård radering + release" section, which today states a guarantee this
-  code path could break; the interrupted-mid-cascade state with retry as its resolution;
-  and the `memberUids`/`editors` orphan-reference gap on other users' documents.
-- `docs/RUNBOOK.md` — three-way console signature (untouched / partially cascaded / fully
-  cascaded orphan) and the manual remedy for a squatted `usernames/{name}`.
-- `.claude/rules/accepted-deviations.md` — the marker has no natural retirement (a
-  conscious departure from BIN-748's lesson), and a first-chunk failure therefore parks a
-  user with intact data in limbo until they retry.
-- Rewrite the two comments that now describe behaviour the code does not have:
-  `AuthContext.tsx` ~1059 (idempotency) and `accountDeletion.ts` 213–215 (per-chunk
-  atomicity read as a whole-cascade guarantee). Same commit (ADR 0020 c9).
+- **ONE shared payload builder** for all six stamp conditions plus the BIN-505
+  notes-strip and the BIN-595 visibility guard — parameterised on intent, never
+  copied. The six guards share one evaluation of `currentForRating` /
+  `firstSnapshotSettledRef` / `listenerFailedRef` today, and the code states that
+  `rewatchCount` and the `watchedAt` re-date must always agree.
+- **A parity test**: for a fixed matrix (new-add / re-mark / rating-changed / cold
+  load / dead listener / `countsAsViewing`), both new entry points produce the same
+  merge payload as today's `addItem` for the equivalent call.
+- **A rules-emulator test** that both entry points still satisfy the 22-field
+  `hasOnly` allowlist. A differently-shaped payload is a silent `permission-denied`
+  in production with no compile-time signal.
+- A test pinning the `rewatchCount`/`watchedAt` coherence in the human mutator —
+  now the only path allowed to overwrite a user-authored `watchedAt`.
+- **All bulk callers move in the same commit** (CSV import, onboarding,
+  Collection/Companion "add all"). No interim state.
+- BIN-643 rides along only far enough to point its three callers at the right entry
+  point. BIN-640 stays separate — it is a read-repair, a different concern.
 
 ---
 
-## Acceptance
+## Acceptance (all batches)
 
-- `users/{uid}` does not exist **at all** after a simulated re-login with the marker set —
-  not merely that consent fields are unchanged (ADR 0019 c7). Every merge writer covered.
-  `tryAutoClaimUsername` proven not to fire. `publicProfiles/{uid}` not rebuilt.
-- A second deletion attempt after `users/{uid}` is already gone still releases the
-  username, proven against partially-deleted data (ADR 0020 c8) — and the test drives the
-  real path rather than hand-slicing the plan, or says plainly that it proves a backstop.
-- An interruption between two chunks renders the "may be partial" message, not the
-  "nothing happened" one and not silence (ADR 0020 c7).
-- `deleteAccount()` and its retry are never blocked by the marker.
-- `npm run typecheck`, `npm run lint`, `npm test` green; `npm run test:rules` green (needs
-  Java/JBR on PATH).
-
-## Not in scope
-
-- Malin's one-time production check for already-orphaned `usernames/*` (Legal + DPO asked
-  for it independently) — her Firebase Console, not a build task.
-- BIN-813, which waits on this landing.
+`npm run typecheck`, `npm run lint` (0 errors in `src/` + `functions/`), `npm test`,
+`npm run test:rules`, `node docs/org/gen-ownership-map.mjs --check`,
+`node scripts/check-workflow-map.mjs` — all green. Each batch its own commit, each
+through the repo's own review gates.
