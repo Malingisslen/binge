@@ -106,7 +106,12 @@ const CODE_ROOTS = ['src/', 'functions/', 'extension/', 'shared/'];
 // from the production build for three months with CI and deploy green (BIN-849). Both
 // routed `skip` until now. Keep this set and `reviewGates` in `.claude/shared-plugin.json`
 // IDENTICAL: one advises, the other blocks, and widening one has never widened the other.
-const TOOLING_CODE_FILES = new Set([
+// BIN-874 (2026-08-14) stopped that being a promise a human has to remember: this set is
+// EXPORTED so `docs/org/route.test.mjs` can compare it against the blocking gate's real
+// patterns — and against a third, independent signal (the `.test.mjs` siblings inside
+// vitest's own `include` globs) — instead of against a hand-copied list. All four
+// widenings before that were reactive, found by a reviewer after the hole already existed.
+export const TOOLING_CODE_FILES = new Set([
   'docs/org/route.mjs',
   'docs/org/route.test.mjs',
   'docs/org/gen-ownership-map.mjs',

@@ -15,10 +15,18 @@
 // contract should fail here, which is the point.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, globSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { route, isCodePath } from './route.mjs';
+import { route, isCodePath, TOOLING_CODE_FILES } from './route.mjs';
+// The REAL config object, imported the way vitest itself loads it — never scraped as text.
+// A routine reformat of vitest.config.ts would make a regex-scraped copy silently green,
+// which is the "a shrink reads as a pass" failure this whole family exists to stop
+// (BIN-838/823/850, and #25's binding condition 2 on BIN-874).
+import vitestConfig from '../../vitest.config.ts';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const posix = (p) => p.replace(/\\/g, '/');
 
 // Would the repo's BLOCKING commit gate demand binge-integration-reviewer for this path?
 // Mirrors the real hook's decision rather than just its pattern list:
@@ -154,22 +162,14 @@ describe('high-stakes paths outrank everything', () => {
 // check-public-env.mjs is the guard that exists because a public env var went missing
 // from the production build for three months with CI and deploy green (BIN-849).
 //
-// DO NOT shrink this array to make a test pass. It is the ONLY place the blocking side
-// is checked: no sibling test names any of these files against the commit gate, so a
-// dropped path silently loses its blocking-side coverage — the same self-clearing move
-// the array was hoisted to prevent. That shrink WAS measured green, before the floor at
-// the end of this block existed; the floor is what makes it loud now. A file leaves this
-// list only when it also leaves BOTH real lists.
-const GATE_SCRIPTS = [
-  'docs/org/route.mjs',
-  'docs/org/route.test.mjs',
-  'scripts/check-workflow-map.mjs',
-  'scripts/check-workflow-map.test.mjs',
-  'docs/org/gen-ownership-map.mjs',
-  'docs/org/gen-ownership-map.test.mjs',
-  'scripts/check-public-env.mjs',
-  'scripts/check-public-env.test.mjs',
-];
+// BIN-874 (2026-08-14): this used to be a hand-written copy of those eight paths — a
+// THIRD list to keep in step by memory, which is what the ticket was filed about
+// (2026-08-12 comment: "tre listor som ska hållas i takt för hand"). It is now DERIVED
+// from the router's real `TOOLING_CODE_FILES`, so the cases below read the advising list
+// itself and check it against the blocking one. Nothing here can be quietly shrunk any
+// more: a path dropped from the real set drops out of every case AND breaks the floor at
+// the end of this block.
+const GATE_SCRIPTS = [...TOOLING_CODE_FILES];
 
 describe('the router and the gate scripts cannot clear themselves (BIN-805)', () => {
   it.each(GATE_SCRIPTS)('%s routes medium, not skip', (path) => {
@@ -186,8 +186,13 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // deploy; the same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
     // Both specific answers ARE pinned, each in its own named test below, so flipping one
     // reddens exactly one assertion instead of eight.
-    expect(isCodePath(path)).toBe(true);
-
+    //
+    // BIN-874 dropped an `expect(isCodePath(path)).toBe(true)` that stood here: once the
+    // list is DERIVED from TOOLING_CODE_FILES, isCodePath is true by construction for
+    // every entry, and a tautology in a drift-detecting suite reads as coverage while
+    // proving nothing. The non-vacuous halves are the blocking-side case further down
+    // (every entry of the advising list must reach a blocking reviewer) and the BIN-874
+    // symmetry block, which walks the two lists against each other over the real tree.
     const r = route([path]);
 
     expect(r.tier).toBe('medium');
@@ -268,6 +273,9 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // The comment above GATE_SCRIPTS warns a human; this stops CI going green on the
     // regression it warns about. Before this test existed, dropping an entry left the
     // suite fully green at 37/37 — with it, the shrink reddens this line by name.
+    // Since BIN-874 the list is derived, so this floor now guards the REAL set in
+    // route.mjs: deleting `scripts/check-public-env.mjs` from TOOLING_CODE_FILES makes
+    // every case above vanish silently, and this line is what refuses that.
     // Same shape as BIN-838's script-self-test floor (405a2fc) — "the floor is not
     // decoration".
     //
@@ -392,6 +400,133 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
     // And the other three are deliberately NOT duplicated there — they already have an
     // independent reader, so doubling their review cost buys nothing.
     expect(gateMatches('binge-security-reviewer', '.claude/agents/binge-code-reviewer.md')).toBe(false);
+  });
+});
+
+// ── BIN-874, 2026-08-14 ────────────────────────────────────────────────────────────────
+// Four widenings of the review lists (BIN-830, BIN-851, BIN-864/873, BIN-869) and every
+// one of them REACTIVE: a human or a reviewer happened to ask "does this .mjs decide
+// something about review?". That is discovery debt, not maintenance debt — the fix is not
+// a fifth patch to the regex (Malin decided narrow-over-broad twice, 2026-08-08
+// alternative (a), and that is explicitly out of scope) but a check that finds the fifth
+// gap before an incident does.
+//
+// Two halves, and neither compares a real list against a hand-written copy of itself:
+//
+//   1. SYMMETRY — over every .mjs the tree actually contains under docs/ and scripts/,
+//      the advising side (`isCodePath`, i.e. route.mjs's TOOLING_CODE_FILES) and the
+//      blocking side (`reviewGates` in .claude/shared-plugin.json) must give the SAME
+//      answer. Widening one without the other is exactly BIN-830's lesson, and it is now
+//      a red test rather than a note in a comment.
+//   2. DISCOVERY — a third, independent signal: any file with a `.test.mjs` sibling
+//      inside vitest's own `include` globs is a file somebody thought worth testing
+//      outside src/, i.e. a candidate decider. Those must be in BOTH lists, or carry a
+//      named exception with a reason.
+//
+// #25's condition 4, answered explicitly: this check needs NO new entry in either list,
+// because it is not a new file. It lives in docs/org/route.test.mjs, which is already in
+// TOOLING_CODE_FILES and already matched by the blocking gate — so weakening the check
+// itself cannot slip past a reviewer, the hole BIN-869 closed one file over.
+// `fs.globSync` needs Node >= 22 (still flagged experimental there, hence the one-line
+// warning in the run output); ci.yml, deploy.yml and preview.yml all pin node-version 22.
+const TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_ROOT }).map(posix);
+
+// Files that a `.test.mjs` sibling nominates as candidates but that are deliberately NOT
+// review machinery. A LIST WITH A REASON EACH, never a silence — and the rot test below
+// fails the moment an entry stops being needed.
+const NOT_REVIEW_MACHINERY = {
+  'functions/scripts/recap-upload.helpers.mjs':
+    'Recap content pipeline (BIN-185), not review machinery: it decides nothing about who reviews what. The router already calls it code — functions/ is a CODE_ROOT — and seats the #14 fallback, so it is not unreviewed on the advising side. Closing the gap to the blocking gate for every unowned functions/ path is the ownership-vs-gate sweep in BIN-880, not this narrow tooling list.',
+  'functions/scripts/recap-upload.helpers.test.mjs':
+    'Same subject as the line above, and additionally reached by binge-test-reviewer through the repo-wide `\\.test\\.mjs$` pattern, so it is not a zero-reviewer path.',
+  'scripts/scripts-self-tests-present.test.mjs':
+    'The floor asserting every script under scripts/ carries a self-test (BIN-850). It has no non-test sibling to gate, and binge-test-reviewer already reaches it via the repo-wide `\\.test\\.mjs$` pattern — so it is NOT a zero-reviewer hole (BIN-874 comment, 2026-08-12). Putting it into the two narrow lists is a widening only Malin decides (2026-08-08, alternative (a)); this check names it instead of staying quiet about it.',
+};
+
+// The candidate set, derived — test file plus the sibling it tests, when that exists.
+const MJS_TEST_FILES = globSync(vitestConfig.test.include, {
+  cwd: REPO_ROOT,
+  exclude: vitestConfig.test.exclude,
+})
+  .map(posix)
+  .filter((p) => /\.(test|spec)\.mjs$/.test(p))
+  .sort();
+const REVIEW_CANDIDATES = [
+  ...new Set(
+    MJS_TEST_FILES.flatMap((testFile) => {
+      const subject = testFile.replace(/\.(test|spec)\.mjs$/, '.mjs');
+      return existsSync(join(REPO_ROOT, subject)) ? [testFile, subject] : [testFile];
+    }),
+  ),
+].sort();
+
+describe('the advising list and the blocking gate cannot drift apart (BIN-874)', () => {
+  it.each(TOOLING_MJS)('%s gets the same answer from both lists', (path) => {
+    // The biconditional is the point: `isCodePath` false + gate true means a commit is
+    // blocked for a review the router never asks for, and true + false is the BIN-830
+    // hole (route.mjs was code to the router and matched no gate for three days).
+    expect(
+      isCodePath(path),
+      `${path}: the router calls it ${isCodePath(path) ? 'code' : 'not code'} but the blocking gate ${integrationGateMatches(path) ? 'demands' : 'demands no'} a review — widen or narrow BOTH (docs/org/route.mjs TOOLING_CODE_FILES and .claude/shared-plugin.json reviewGates), in one commit`,
+    ).toBe(integrationGateMatches(path));
+  });
+
+  it.each(REVIEW_CANDIDATES.filter((p) => !(p in NOT_REVIEW_MACHINERY)))(
+    '%s is named in BOTH review lists',
+    (path) => {
+      // A new gate script arriving with its test — the actual future this ticket exists
+      // for — fails here by name until both lists carry it.
+      expect(
+        TOOLING_CODE_FILES.has(path),
+        `${path} has a test in vitest's include globs but is missing from TOOLING_CODE_FILES in docs/org/route.mjs`,
+      ).toBe(true);
+      expect(
+        integrationGateMatches(path),
+        `${path} has a test in vitest's include globs but reaches no blocking reviewer`,
+      ).toBe(true);
+    },
+  );
+
+  it('every exception carries a reason, and rots loudly instead of quietly', () => {
+    for (const [path, reason] of Object.entries(NOT_REVIEW_MACHINERY)) {
+      expect(reason.length, `${path}: an exception needs a reason, not a placeholder`).toBeGreaterThan(80);
+      expect(
+        REVIEW_CANDIDATES,
+        `${path} is exempted but is no longer a candidate (deleted, or renamed out of the vitest globs) — delete the entry`,
+      ).toContain(path);
+      expect(
+        TOOLING_CODE_FILES.has(path) && integrationGateMatches(path),
+        `${path} is now in both lists — its exception is spent, delete the entry`,
+      ).toBe(false);
+    }
+  });
+
+  it('the derived inputs have not silently emptied', () => {
+    // `it.each([])` registers ZERO tests and reports no error, so an include array that
+    // stopped matching — a moved directory, a renamed glob, a config import that started
+    // resolving to something else — would delete both blocks above in total silence.
+    // Floors at the measured values, per BIN-838: the floor is not decoration.
+    expect(vitestConfig.test.include.length).toBeGreaterThanOrEqual(5);
+    expect(MJS_TEST_FILES.length).toBeGreaterThanOrEqual(6);
+    expect(REVIEW_CANDIDATES.length).toBeGreaterThanOrEqual(11);
+    // TOOLING_MJS is the exception: its floor is NOT the measured value. The measurement
+    // is ~780 and 774 of those are one-off scripts/recaps/*.mjs, so a count pinned near it
+    // would break on every new recap without ever guarding the thing that matters. The
+    // floor stays low and the SHAPE is pinned instead — one file per glob entry, below.
+    expect(TOOLING_MJS.length).toBeGreaterThanOrEqual(19);
+    // One pin per glob entry, because a count cannot see a HALF disappear. Dropping
+    // 'docs/**/*.mjs' leaves 774 scripts/ files — over any plausible floor — while
+    // silently removing route.mjs, route.test.mjs, gen-ownership-map.mjs and its test
+    // from the symmetry check: precisely the four paths BIN-830 was filed about. That
+    // shrink-reads-as-a-pass class (BIN-838/823/850) is what this whole block exists to
+    // stop, so it must not be reproducible inside the guard itself.
+    expect(TOOLING_MJS).toContain('docs/org/route.mjs');
+    // …and the narrow list stays narrow: ordinary helper scripts must never be dragged in
+    // by this check (Malin, 2026-08-08, alternative (a) — criterion 4 on the ticket).
+    expect(TOOLING_MJS).toContain('scripts/serve-spa.mjs');
+    expect(TOOLING_MJS).toContain('scripts/gen-app-icons.mjs');
+    expect(route(['scripts/serve-spa.mjs']).tier).toBe('skip');
+    expect(route(['scripts/gen-app-icons.mjs']).tier).toBe('skip');
   });
 });
 
