@@ -7,7 +7,12 @@
 // toolchain's `npm ci` (same reason leavingRollup/config.ts exists as a
 // sibling of motnChanges.ts).
 
-export const MOTN_HOST = 'streaming-availability.p.rapidapi.com';
+// BIN-857: the host itself now lives in ../util/motnVendor.ts, because
+// leavingRollup/motnChanges.ts had its own copy of the same string. Imported,
+// not re-exported: a re-export would leave two import paths for one constant,
+// which is the drift seed this ticket exists to pull out. Everyone who needs
+// the host takes it from ../util/motnVendor directly.
+import { MOTN_HOST } from '../util/motnVendor';
 
 /**
  * SE availability lookup for one title.

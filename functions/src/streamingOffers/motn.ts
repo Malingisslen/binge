@@ -1,7 +1,8 @@
 // functions/src/streamingOffers/motn.ts
 import { logger } from 'firebase-functions/v2';
 import { parseStreamingOptions } from './parse';
-import { offersUrl, classifyStatus, MOTN_HOST } from './motnRequest';
+import { offersUrl, classifyStatus } from './motnRequest';
+import { MOTN_HOST, redactVendorBody } from '../util/motnVendor';
 import type { Offer } from './types';
 
 // BIN-320: discriminated 429 signal. The run loop must tell "rate-limited —
@@ -60,11 +61,11 @@ export async function fetchOffers(
       // than trusting the vendor not to echo it. The 400 body demonstrably
       // doesn't — but this same branch now also carries 401/403, and a
       // RapidAPI-hosted auth error is exactly the kind of prose that quotes
-      // the credential it rejected. Redact BEFORE truncating: an echoed key
-      // would sit at the start of a short message, where the slice can't
-      // save us. Truncated because a 5xx can return a whole HTML page.
+      // the credential it rejected. BIN-857 moved the mask-then-truncate rule
+      // into ../util/motnVendor.ts: motnChanges.ts had a verbatim second copy,
+      // and the ORDER is what makes it correct, which nothing was pinning.
       const body = await res.text().catch(() => '');
-      const detail = { body: body.replaceAll(key, '[redacted]').slice(0, 300) };
+      const detail = { body: redactVendorBody(body, key) };
       if (disposition === 'rejected') {
         logger.error(`streamingOffers: MOTN rejected our request (${res.status}) on ${mediaType}/${tmdbId} — stopping run`, detail);
         return REQUEST_REJECTED;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { offersUrl, classifyStatus, MOTN_HOST } from './motnRequest';
+import { offersUrl, classifyStatus } from './motnRequest';
+import { MOTN_HOST } from '../util/motnVendor';
 
 /**
  * BIN-856 regression guard. The whole streamingOffers feed was dead for a month

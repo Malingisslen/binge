@@ -14,8 +14,11 @@
 import { logger } from 'firebase-functions/v2';
 import type { ChangeItem, ShowRef } from './logic';
 import { MAX_PAGES } from './config';
+// BIN-857: the host and the mask-then-truncate rule were duplicated verbatim
+// between this client and streamingOffers/motn.ts — same vendor, same key, same
+// account. Both now come from one admin-free module.
+import { MOTN_HOST, redactVendorBody } from '../util/motnVendor';
 
-const HOST = 'streaming-availability.p.rapidapi.com';
 // BIN-543: 18, not 20 — sized so a worst-case run (every run maxes this out)
 // still survives the full ~31-day cycle under the new 96h cadence, see the
 // arithmetic proof on LEAVING_HARD_CYCLE_CAP in index.ts (18 × 8 runs = 144 ≤
@@ -94,12 +97,12 @@ export async function fetchExpiringChanges(
       to: String(toSec),
     });
     if (cursor) params.set('cursor', cursor);
-    const url = `https://${HOST}/changes?${params.toString()}`;
+    const url = `https://${MOTN_HOST}/changes?${params.toString()}`;
 
     let res: Response;
     try {
       res = await fetch(url, {
-        headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': HOST },
+        headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': MOTN_HOST },
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
@@ -119,11 +122,11 @@ export async function fetchExpiringChanges(
       // ordinary flakiness for a month. Same vendor, same key, same blind
       // spot — so the same fix belongs on both halves of the account.
       // Redact the key before logging: an auth error is exactly the kind of
-      // prose that quotes the credential it rejected, and redacting before
-      // truncating matters because an echoed key sits at the START of a short
-      // message. Truncated because a 5xx can return a whole HTML page.
+      // prose that quotes the credential it rejected. BIN-857 moved that rule
+      // into ../util/motnVendor.ts — it was written out twice, and the ORDER
+      // (mask, THEN truncate) is what makes it correct, which nothing pinned.
       const body = await res.text().catch(() => '');
-      const detail = { body: body.replaceAll(key, '[redacted]').slice(0, 300) };
+      const detail = { body: redactVendorBody(body, key) };
       // Integration review: a 4xx here is OUR defect (bad parameter, bad key),
       // not vendor flakiness, and its consequence is the BIN-856 shape exactly
       // — `complete` stays false, so the public "vad försvinner" rollup is
