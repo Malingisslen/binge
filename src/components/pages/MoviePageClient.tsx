@@ -66,7 +66,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const { data: movie, isLoading } = useMovie(Number.isFinite(movieId) ? movieId : null, initialData);
   const { offers } = useStreamingOffers(movie?.id, 'movie');
   const cineasterna = useCineasternaCatalog();
-  const { getItem, addItem, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, updateRating, updateNotes, updateWatchedAt, setRuntime, refreshTmdbFields, updateTags, items, loading: watchlistLoading, libraryKnown } = useWatchlist();
   const { user, uid, loading: authLoading } = useAuth();
   // BIN-731: a signed-out tap on the countdown strip's "Bevaka släpp" goes to
   // /login and comes back — the same answer StatusButton/QuickAddButton give
@@ -126,7 +126,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     // advisor's answer and the availability answer can never come from different fetches.
     const subscriptionProviderIds = seSubscriptionProviderIdsForRefresh(movie);
     void refreshTmdbFields('movie', movie.id, {
-      // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
+      // Match what upsertTitle/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(movie.title, movie.original_title) || undefined,
       posterPath: movie.poster_path,
@@ -241,7 +241,7 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
   const subscriptionProviderIdsForMovie = Array.from(new Set(subscription.map(p => canonicalProviderId(p.provider_id))));
 
   const handleBevaka = () => {
-    void addItem(buildWatchlistAddPayload({
+    void upsertTitle(buildWatchlistAddPayload({
       tmdbId: movie.id,
       mediaType: 'movie',
       status: 'vill_se',

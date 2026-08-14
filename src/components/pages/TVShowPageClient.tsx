@@ -129,7 +129,7 @@ export default function TVShowPageClient({ id, initialData }: { id: string; init
     // advisor's answer and the availability answer can never come from different fetches.
     const subscriptionProviderIds = seSubscriptionProviderIdsForRefresh(show);
     void refreshTmdbFields('tv', show.id, {
-      // Match what addItem/StatusButton denormalize (preferOriginalTitle) so the
+      // Match what the add path/StatusButton denormalize (preferOriginalTitle) so the
       // refresh never overwrites a correct original title with the localized one.
       title: preferOriginalTitle(show.name, show.original_name) || undefined,
       posterPath: show.poster_path,

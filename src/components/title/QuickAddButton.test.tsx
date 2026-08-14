@@ -30,7 +30,7 @@ const auth = vi.hoisted(() => ({
 }));
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
-  addItem: vi.fn(),
+  upsertTitle: vi.fn(),
   removeItem: vi.fn(),
   // BIN-596: the readiness pair. `loading` is deliberately NOT here — it cannot
   // tell a landed snapshot from a dead listener, which is the whole point.
@@ -139,7 +139,7 @@ describe('QuickAddButton — signed-out taps reach the consent notice (BIN-645)'
     await act(async () => { fireEvent.click(screen.getByTitle('Följer')); });
     await act(async () => { fireEvent.click(screen.getByText('Följ')); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
   });
 });
@@ -173,7 +173,7 @@ describe('QuickAddButton — the write also waits for the watchlist snapshot (BI
     await act(async () => { fireEvent.click(trigger); });
 
     expect(screen.queryByText('Följ')).not.toBeInTheDocument();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
   });
@@ -195,7 +195,7 @@ describe('QuickAddButton — the write also waits for the watchlist snapshot (BI
 
     // Unchanged: no write, and the menu does not open (every option in it is
     // gated, so opening it would only offer taps that do nothing).
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
     expect(screen.queryByText('Vill se')).not.toBeInTheDocument();
     // Changed: it says why, through the one channel a touch device can show.
@@ -234,7 +234,7 @@ describe('QuickAddButton — the write also waits for the watchlist snapshot (BI
     await act(async () => { fireEvent.click(screen.getByTitle('Följer')); });
     await act(async () => { fireEvent.click(screen.getByText('Följ')); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(toast).toHaveBeenCalledTimes(1);
   });
 });
@@ -262,18 +262,18 @@ describe('QuickAddButton — forwards both provider fields to the write (BIN-814
     watchlist.getItem.mockReturnValue(null);
   });
 
-  it('carries the subscription subset into addItem', async () => {
+  it('carries the subscription subset into upsertTitle', async () => {
     render(withProviders());
     await act(async () => { fireEvent.click(screen.getByTitle(/Följer|Lägg till/)); });
     await act(async () => { fireEvent.click(screen.getByText('Följ')); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    const payload = watchlist.addItem.mock.calls[0][0] as Record<string, unknown>;
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    const payload = watchlist.upsertTitle.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.providers).toEqual([VIAPLAY, 8]);
     expect(payload.subscriptionProviders).toEqual([8]);
   });
 
-  // The sedd path goes through markSeen instead of addItem, and its twin
+  // The sedd path goes through markSeen instead of upsertTitle, and its twin
   // StatusButton pins both. Pinning only one of the two here would leave the pair
   // asymmetrically covered for no reason.
   it('carries the subscription subset into markSeen on the sedd path', async () => {

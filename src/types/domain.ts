@@ -86,12 +86,12 @@ export interface WatchlistItem {
   // a title has no tags. Consumers read item.tags; writes go via updateTags.
   tags?: string[];
   // BIN-349: when the user set/changed the rating (serverTimestamp), written by
-  // updateRating/addItem. The "din senaste 5★" rec anchor + taste-recency read
+  // updateRating + the add path. The "din senaste 5★" rec anchor + taste-recency read
   // this instead of updatedAt (which ANY edit bumps). Optional/lazy: old items
   // have none → consumers fall back to updatedAt. Cleared to null when rating unset.
   ratedAt?: Date | null;
   // BIN-402/BIN-468: freshness stamp for the STATIC TMDB group only
-  // (title/posterPath/genreIds/tmdbStatus/runtime). Written by addItem + the
+  // (title/posterPath/genreIds/tmdbStatus/runtime). Written by the add path + the
   // title-page lazy-refresh (refreshTmdbFields) — NOT by nextAirReadRepair, which
   // owns its own group's stamp (nextAirUpdatedAt); providers has its own
   // (providersCheckedAt). Absent/older-than-5mo → the monthly tmdbFieldsSweep

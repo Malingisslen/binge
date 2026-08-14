@@ -16,7 +16,7 @@ import type { MediaType, WatchlistItem } from '@/types';
 
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
-  addItem: vi.fn(),
+  upsertTitle: vi.fn(),
   removeItem: vi.fn(),
   // BIN-596: the two readiness facts `loading` cannot express. Seeded to the
   // settled state so the BIN-641 cases below exercise a normal, usable button;
@@ -176,7 +176,7 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     await act(async () => { fireEvent.click(trigger()); });
 
     expect(screen.queryByText('Vill se')).not.toBeInTheDocument(); // menu stayed shut
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalled();
   });
@@ -199,7 +199,7 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     await act(async () => { fireEvent.click(trigger()); });
 
     // What must NOT change: the tap still writes nothing and opens nothing.
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
     expect(screen.queryByText('Vill se')).not.toBeInTheDocument();
     // What DID change: it says why, in a way a touch device can show.
@@ -222,7 +222,7 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
 
     await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
 
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalledWith('The Matrix — Vill se');
   });
 
@@ -233,7 +233,7 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
 
     expect(trigger()).toBeDisabled();
     expect(trigger()).toHaveAttribute('title', 'Laddar…');
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(toast).not.toHaveBeenCalled();
   });
 
@@ -259,7 +259,7 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     // Google-hosted auth handler. `?from=` is not on the return allowlist.
     expect(window.sessionStorage.getItem('binge:nextAfterLogin')).toBe('/movie/603/');
     // And still no write, no menu, no success toast.
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(markSeen).not.toHaveBeenCalled();
     expect(screen.queryByText('Vill se')).not.toBeInTheDocument();
     expect(toast).not.toHaveBeenCalled();
@@ -306,13 +306,13 @@ describe('StatusButton — the write waits for auth AND the watchlist snapshot (
     await act(async () => { fireEvent.click(trigger()); });
     await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(toast).toHaveBeenCalledWith('The Matrix — Vill se');
   });
 
   it('holds the seen-mark path too — markSeen fires its own toast', async () => {
-    // 'Sedd' does not go through addItem, it goes through useMarkSeen, which
-    // toasts (or nudges a rating) on its own. Gating only the addItem branch
+    // 'Sedd' does not go through upsertTitle, it goes through useMarkSeen, which
+    // toasts (or nudges a rating) on its own. Gating only the upsertTitle branch
     // would leave the confirmation intact on the path that matters most for a
     // missing watch date.
     watchlist.getItem.mockReturnValue(seenFilm);
@@ -355,13 +355,13 @@ describe('StatusButton — forwards both provider fields to the write (BIN-814)'
     auth.loading = false;
   });
 
-  it('carries the subscription subset into addItem on an ordinary status pick', async () => {
+  it('carries the subscription subset into upsertTitle on an ordinary status pick', async () => {
     render(withProviders());
     fireEvent.click(screen.getByRole('button', { name: /Lägg till|Vill se|Status/ }));
     await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    const payload = watchlist.addItem.mock.calls[0][0] as Record<string, unknown>;
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    const payload = watchlist.upsertTitle.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.providers).toEqual([VIAPLAY, 8]);
     expect(payload.subscriptionProviders).toEqual([8]);
   });

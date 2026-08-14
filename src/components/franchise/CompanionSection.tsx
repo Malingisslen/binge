@@ -110,7 +110,7 @@ function ChipRow({ items, style }: { items: CompanionTitle[]; style?: CSSPropert
 function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const films = companions.filter((c) => c.mediaType === 'movie');
   const series = companions.filter((c) => c.mediaType === 'tv');
-  const { getItem, addItem, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, libraryKnown } = useWatchlist();
   const { user, uid, loading: authLoading } = useAuth();
   // BIN-731: "Lägg i vill se" answers a signed-out tap the way every other add
   // affordance does — /login, then back to this page (BIN-714/645). Keyed on
@@ -164,7 +164,7 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
     if (addingId != null || !libraryKnown || getItem('movie', film.id)) return;
     setAddingId(film.id);
     try {
-      await addItem(buildWatchlistAddPayload({
+      await upsertTitle(buildWatchlistAddPayload({
         tmdbId: film.id,
         mediaType: 'movie',
         status: 'vill_se',

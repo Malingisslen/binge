@@ -37,20 +37,27 @@ export interface MarkSeenInput {
  * Efter skrivet: om titeln saknar betyg, nudga ett betyg via stjärn-toasten;
  * annars vanlig bekräftelse-toast.
  *
- * BIN-641: `opts` forwards the caller's INTENT to addItem — it is not decided
+ * BIN-641/BIN-655: `opts` selects WHICH write this hook calls — it is not decided
  * here, because this one hook serves two gestures that look identical at this
  * level. "Sedd" (the status choice) must not count a rewatch; "Sedd igen" must.
  * Passing nothing means no count, so a new call site is safe by omission. The
- * full reasoning lives on `WatchlistState.addItem`.
+ * full reasoning lives on `WriteIntent` in src/lib/watchlistWrites.ts.
  */
 export function useMarkSeen() {
-  const { getItem, addItem, updateRating } = useWatchlist();
+  const { getItem, upsertTitle, logViewing, updateRating } = useWatchlist();
   const { show, showRating } = useToast();
   const queryClient = useQueryClient();
 
   return useCallback(async (input: MarkSeenInput, opts?: { countsAsViewing?: boolean }) => {
     const { tmdbId, mediaType, title, posterPath, releaseYear } = input;
     const current = getItem(mediaType, tmdbId);
+    // BIN-655: the flag no longer travels INTO the write — it chooses which write.
+    // Both entry points are reached from human actions (this hook is the mark-seen
+    // path), but only "Sedd igen" is a user saying a NEW viewing happened; a plain
+    // "Sedd" on an already-'sedd' title is a re-mark and must count nothing. That is
+    // the distinction the old boolean carried one layer deeper, where a new caller
+    // could forget it.
+    const write = opts?.countsAsViewing ? logViewing : upsertTitle;
 
     const promptRating = () => {
       // BIN-641: a counted rewatch says so. It is the app's only permanent,
@@ -66,7 +73,10 @@ export function useMarkSeen() {
       // closure while the write reads the live ref, so a remote status change in
       // between can still make this claim a rewatch the write did not count. The
       // reverse (silent but counted) cannot happen — the entry only renders while
-      // render state says 'sedd'. Closing the gap properly is BIN-655.
+      // render state says 'sedd'. BIN-655 did NOT close this: it made intent a
+      // function choice rather than a flag, which is a different problem. The toast
+      // still reads the render closure while the write reads the live ref, so the
+      // race survives. Tracked in BIN-895.
       //
       // `writtenStatus` is the status the PAYLOAD carries, not a literal 'sedd':
       // the TV branch writes 'mina', and passing 'sedd' here would let a TV call
@@ -95,7 +105,7 @@ export function useMarkSeen() {
           staleTime: TMDB_STALE.TV_DETAIL,
         });
         const last = tvShow.last_episode_to_air;
-        await addItem(buildWatchlistAddPayload({
+        await write(buildWatchlistAddPayload({
           tmdbId, mediaType, status: 'mina', title, posterPath, releaseYear, current,
           // `?? undefined` is load-bearing: a null here must mean "we don't know,
           // keep what's stored", NOT "clear it". The helper writes an explicit null
@@ -111,7 +121,7 @@ export function useMarkSeen() {
           subscriptionProviders: input.subscriptionProviders,
           genreIds: input.genreIds,
           tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
-        }), opts);
+        }));
       } catch {
         show('Kunde inte hämta serieinfo, försök igen');
         return;
@@ -120,7 +130,7 @@ export function useMarkSeen() {
       return;
     }
 
-    await addItem(buildWatchlistAddPayload({
+    await write(buildWatchlistAddPayload({
       tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear, current,
       // See the TV branch: null means "unknown, preserve", not "clear".
       totalSeasons: input.totalSeasons ?? undefined,
@@ -129,7 +139,7 @@ export function useMarkSeen() {
       subscriptionProviders: input.subscriptionProviders,
       genreIds: input.genreIds,
       tmdbStatus: input.tmdbStatus ?? undefined,
-    }), opts);
+    }));
     promptRating();
-  }, [getItem, addItem, updateRating, show, showRating, queryClient]);
+  }, [getItem, upsertTitle, logViewing, updateRating, show, showRating, queryClient]);
 }

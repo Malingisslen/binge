@@ -23,7 +23,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
-const addItem = vi.hoisted(() => vi.fn());
+const upsertTitle = vi.hoisted(() => vi.fn());
 const getItem = vi.hoisted(() => vi.fn(() => undefined as unknown));
 const watchlist = vi.hoisted(() => ({
   snapshotSettled: false,
@@ -35,7 +35,7 @@ const watchlist = vi.hoisted(() => ({
     return this.snapshotSettled && !this.listenerFailed;
   },
   getItem,
-  addItem,
+  upsertTitle,
 }));
 // ONE router object, never a per-call factory — a fresh mock per call would make
 // every navigation assertion below vacuous (lessons-digest).
@@ -69,7 +69,7 @@ import CompanionSection from './CompanionSection';
 const addButton = () => screen.getByRole('button', { name: /Lägg i vill se/ }) as HTMLButtonElement;
 
 beforeEach(() => {
-  addItem.mockReset();
+  upsertTitle.mockReset();
   getItem.mockReset();
   getItem.mockReturnValue(undefined);
   router.push.mockReset();
@@ -90,7 +90,7 @@ describe('CompanionSection — who may fire "Lägg i vill se" (BIN-730/596/731)'
 
     // The add is async inside the handler; let the microtask queue drain.
     await Promise.resolve();
-    expect(addItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(upsertTitle).toHaveBeenCalledWith(expect.objectContaining({
       tmdbId: FILM.id, mediaType: 'movie', status: 'vill_se',
     }));
   });
@@ -113,7 +113,7 @@ describe('CompanionSection — who may fire "Lägg i vill se" (BIN-730/596/731)'
     fireEvent.click(button);
 
     await Promise.resolve();
-    expect(addItem).not.toHaveBeenCalled();
+    expect(upsertTitle).not.toHaveBeenCalled();
     // /login is not the answer to a broken library — they ARE signed in.
     expect(router.push).not.toHaveBeenCalled();
   });
@@ -134,7 +134,7 @@ describe('CompanionSection — who may fire "Lägg i vill se" (BIN-730/596/731)'
     expect(router.push).toHaveBeenCalledWith('/login/');
     // A signed-out add would be refused by the rules anyway; the point is that
     // nothing pretends otherwise.
-    expect(addItem).not.toHaveBeenCalled();
+    expect(upsertTitle).not.toHaveBeenCalled();
   });
 
   it('does not treat an unresolved auth state as signed out', () => {

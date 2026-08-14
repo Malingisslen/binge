@@ -20238,3 +20238,212 @@ Checked `.claude/rules/accepted-deviations.md` before filing — nothing in this
 any listed deviation (no rules/session-expiry/visibility/deletion-marker surface touched).
 
 **Verdict: pass (0 blocking).**
+
+
+## 2026-08-14 — BIN-655, addItem split into upsertTitle/logViewing over one buildAddWrite
+
+Batch D, `tasks/todo.md`'s own plan text: "the single write path for every watchlist
+document." Diff: `src/lib/watchlistWrites.ts` (+185, new `buildAddWrite`/`AddWriteContext`/
+`WriteIntent`), new `src/lib/watchlistWrites.addWrite.test.ts` (442 lines, 50 tests),
+`src/contexts/WatchlistContext.tsx` (`addItem` + `opts.countsAsViewing` → `upsertTitle` +
+`logViewing`, both calling a private `writeTitle`), `src/hooks/useMarkSeen.ts` (picks the
+function instead of forwarding a flag), `StatusButton.tsx` ("Sedd igen" visibility now asks
+`rewatchFields` instead of a third inline copy of the predicate), seven mechanical
+`upsertTitle` call-site renames (import/page, OnboardingFlow, CollectionSection,
+CompanionSection, MoviePageClient, QuickRateModal, QuickAddButton) each with their test file,
+`src/test/rules/firestore-rules.test.ts` (+100, a new `describe` driving the REAL
+`buildAddWrite` against the REAL rules), `vitest.rules.config.ts` (+`resolve: { tsconfigPaths:
+true }`, mirroring the root config, so the emulator suite can import `@/lib/watchlistWrites`).
+
+**Read every file in the diff with Read** (not just `git diff`), including the full new test
+file, the full rewritten `watchlistWrites.ts`, `WatchlistContext.tsx`, `useMarkSeen.ts`/test,
+`StatusButton.tsx`/test, `firestore-rules.test.ts`'s new block, `vitest.rules.config.ts`, and
+`tasks/todo.md`. First command: `git rev-parse :<f>` vs `git hash-object <f>` over all 32
+staged paths — all matched (index == worktree) both at the start and again immediately before
+this verdict; only an unrelated sibling-session mover
+(`.claude/agents/binge-security-reviewer.knowledge.archive.md`, not in this diff) and an
+untracked `tasks/previews/` scratch dir were present, neither touching the reviewed batch.
+
+**Mutations run against the real file, restored via `cp` from a scratchpad backup + re-hashed
+to the staged sha after each (never `git checkout --` blind):**
+- Intent gate removed (`const rewatch = intent === 'viewing' ? … : {}` → unconditional) — 2
+  red (`'sedd re-mark' — the BULK path counts nothing, ever`, matching claim exactly).
+- Re-date gated on raw `intent === 'viewing'` instead of the computed `countedRewatch`
+  outcome — 5 red (three parity-matrix rows plus the cold-load coherence case), matching claim.
+- `addedAt` guard's `listenerFailed` term dropped (`current || listenerFailed` →
+  `current`) — 2 red, matching claim.
+- `?? 0` → `?? 1` on the rewatch-count default — 1 red (`increments from the STORED count,
+  and from 0 when it is missing`), matching claim.
+Did not independently re-derive the two claims I did not have time for (`ratedAt` on any
+rating → 2 red; dropping `rewatchCount` from the rules allowlist → 2 red in the emulator
+suite; re-adding an options arg to the context type → 1 red) — every mutation actually run
+matched the dispatch message's claimed count exactly, so these are reported as consistent
+with a verified pattern, not independently re-verified. Say so rather than silently crediting
+them.
+
+**Attack 1 (is the parity matrix a real golden table or self-derived from the new code?):**
+real. The `it.each` blocks call the actual `buildAddWrite(row.item, 'bulk'|'viewing', row.ctx)`
+and compare to the row's literal `bulk`/`viewing` arrays — verified by all four live mutations
+above landing on the expected rows, not a snapshot re-serialization.
+
+**Attack 2 (is "EXACTLY ONE row distinguishes the two paths" meaningful or self-fulfilling,
+given the author wrote both columns?):** Meaningful, and NOT self-fulfilling — verified live by
+the two-part mutation this review's own principles-file addition documents: widened `buildAddWrite`
+so a SECOND row's `viewing` column would also re-date (an unrelated tracked-but-non-sedd re-mark
+gated on `current.status !== item.status` instead of the counted outcome), then edited that row's
+OWN table entry in the test file to match the new (wrong) behaviour — simulating an author who
+dutifully "keeps the golden table in sync." Result: 49/50 green (every per-row `it.each` passes,
+since the table now matches the mutant), and the `EXACTLY ONE row` property test is the ONLY
+failure (`differing` lists two names, not one). This is real, non-redundant protective value: it
+catches the exact failure mode a naive per-row equality suite cannot — code and table drifting
+together. Restored both `watchlistWrites.ts` and `watchlistWrites.addWrite.test.ts` from
+scratchpad backups afterward; `git hash-object` confirmed both back at the staged sha (one
+leftover mutant line briefly survived a first restore attempt taken from an ALREADY-mutated
+copy — caught by re-diffing against the INDEX with `git diff`, fixed with `git checkout --`
+since the index held the correct staged blob).
+
+**Attack 3 (does the `\baddItem\s*\(` "nothing calls addItem" guard have a hole given the exclusion
+comment about prose mentions?):** `grep -rn '\baddItem\s*\('` over `src/` independently confirms
+zero live call sites remain (only the guard test's own non-matching comments and unrelated
+`addItemToList` occurrences, correctly excluded since `\s*\(` requires the parenthesis
+immediately/whitespace-adjacent). One genuine but narrow residual, LOW: the regex would miss an
+optional-chaining call written as `ctx.addItem?.(x)` (the `?.` sits between the name and the
+paren, defeating `\s*\(`). No such call exists today and the shape is unusual for this
+codebase's style; noted as informational, not filed as blocking.
+
+**Attack 4 (are the rewritten `useMarkSeen.test.tsx`/`WatchlistContext.test.tsx`/`StatusButton.test.tsx`
+assertions on `opts`/flag forwarding as strong as before, or weaker now that they assert on WHICH
+function fired?):** Strictly STRONGER. Every rewritten case now asserts BOTH that the correct entry
+point was called AND `expect(watchlist.<sibling>).not.toHaveBeenCalled()` on the other one — the old
+boolean-argument assertions (`optsOf(0)).toEqual({countsAsViewing:true})`) only ever inspected the
+call that happened to occur, never proved the OTHER path was untouched. `WatchlistContext.test.tsx`'s
+"never writes the intent flag" test was rewritten into "the two entry points differ ONLY by the
+counter and the re-date," which is a strictly stronger claim (diffs the actual key sets of a
+`logViewing` write against an `upsertTitle` write on the same fixture, not just an absence check).
+
+**Attack 5 (StatusButton's `canRewatch = 'rewatchCount' in rewatchFields(mediaType==='tv'?'mina':'sedd',
+current?.status, current?.rewatchCount)` replacing the inline `current?.status==='sedd' &&
+mediaType==='movie'` — genuinely equivalent?):** Derived algebraically (`rewatchFields`'s
+`isRewatch = status==='sedd' && currentStatus==='sedd'`, so for movie the new predicate reduces to
+exactly `current?.status==='sedd'`, and for TV it is always false since the passed status is 'mina')
+and confirmed test-covered: `StatusButton.test.tsx`'s "is absent for a series" case deliberately seeds
+`status:'sedd'` on a `mediaType:'tv'` fixture specifically so BOTH terms of the old inline condition
+are pinned simultaneously (a `'mina'` seed would only pin the status term). Genuine, tested refactor.
+
+**Other checks:** every consumer file (7 production + 7 test files) is a mechanical
+`addItem`→`upsertTitle` rename with no assertion weakened; `tasks/todo.md`'s "five stale comments…
+fixed here" list item 2 ("KNOWN COST bullet calls sedd→sedd 'the common one'") does not correspond to
+any literal text change in the diff — the phrase "the common one" does not appear in
+`watchlistWrites.ts` at HEAD or in the staged diff — reported as a LOW plan-doc accuracy nit, not a
+test-quality gap (item 3 on the same list is explicitly self-corrected in-code as "checked, and on
+this bullet it is not [stale]," which is honest). `.claude/rules/accepted-deviations.md` checked —
+nothing in this diff matches a listed deviation (no `firestore.rules` edit, no session-expiry/
+visibility/deletion-marker surface touched). Unit suite re-run clean (50/50 new file, 174/174 across
+the four highest-risk touched test files). Emulator suite (`npm run test:rules`) not independently
+re-run — `firebase.json` pins port 8080, this environment has it held by a stray process (as the
+dispatch message states), and no scratch-config override was attempted; the new
+`firestore-rules.test.ts` block was static-reviewed instead (real builder, real rules, CREATE +
+merge-UPDATE on both intents, a positive "guard the guard" assertion before the merge-update
+succeeds-check, and a negative control proving the allowlist actually rejects an extra key) and
+matches the file's own established idioms elsewhere.
+
+**Verdict: pass (0 blocking).**
+
+## 2026-08-14 — BIN-655 round 2: the 3 fixes from round 1's LOW findings, verified
+
+Second pass on the same staged Batch D diff. Round 1 passed 0 blocking with two LOW findings
+(both applied) plus one from the security reviewer (also applied). Task: attack whether the
+security reviewer's fix is actually sufficient, whether the round-1 self-exclusion note is a
+hole, and whether the same "indexOf(-1) reads as a wide slice" shape recurs anywhere else in
+the diff.
+
+**Finding 1 fix — `useMarkSeen.ts`/context no longer offer `addItem`, re-verified.** The guard
+in `src/lib/watchlistWrites.addWrite.test.ts` ("nothing calls a watchlist addItem any more")
+widened to `/\baddItem\s*\??\.?\s*\(/` to cover optional chaining, and excludes its own file by
+exact name. Mutation, live: added `if (false) { await addItem?.(input); }` right after
+`const write = opts?.countsAsViewing ? logViewing : upsertTitle;` in `useMarkSeen.ts` (hashed
+before: `51eaf6163aa71bc569e67b9b68038c63c736793e`). `npx vitest run
+src/lib/watchlistWrites.addWrite.test.ts` → red-ALONE 1/50, naming
+`C:\binge\src\hooks\useMarkSeen.ts` as the sole offender. Reverted; `git hash-object` confirmed
+byte-identical to the pre-mutation hash.
+
+Traced the self-exclusion claim ("the pattern above is written out here as a literal and
+therefore matches its own source") with a small Node script running the regex over the file
+and printing every match with context: the ONE self-match is `` `ctx.addItem?.(x)` `` — a code
+EXAMPLE inside a comment two lines above the guard — not the regex literal itself (the regex
+source `\baddItem\s*\??\.?\s*\(` contains escape backslashes at the positions the pattern
+expects real whitespace/`?`/`.`/`(`, so it does not match itself). The comment's claimed
+mechanism is wrong; the practical effect (a whole-file exemption) is the same either way.
+Reported LOW, not blocking: the exemption is file-SCOPED, not comment-scoped, so a real
+`addItem(...)` call added anywhere else in that same test file (e.g. a future regression
+fixture reintroducing the old call shape for comparison) would go undetected — narrower and
+lower-stakes than a blanket `.test.tsx?` filter (which this guard correctly avoids, per its own
+comment), but still a real, if unlikely, blind spot worth naming rather than silently
+inheriting the "harmless" verdict.
+
+**Finding 3 fix — the `indexOf`/`slice` boundary pair, mutation-verified sufficient in BOTH
+directions.** The fixed shape (`src/lib/watchlistWrites.addWrite.test.ts`, "and the context no
+longer OFFERS one"): `const from = ctxSrc.indexOf('interface WatchlistState'); const to =
+ctxSrc.indexOf('const WatchlistContext = createContext'); expect(from).toBeGreaterThan(-1);
+expect(to).toBeGreaterThan(from);` before `ctxSrc.slice(from, to)`. Read `WatchlistContext.tsx`
+to confirm both literals appear verbatim (`interface WatchlistState {` at the interface
+declaration, `const WatchlistContext = createContext<WatchlistState>({` at the context
+constant) — they do. Mutated live, one bound at a time, hashing before
+(`11620d0f6de221001d88af54c5a0449bfe2fffac`) and restoring+re-hashing after each:
+- Opening bound: `interface WatchlistState` → `interface WatchlistCtxShape` (a real rename,
+  not a prefix-extension — first tried `WatchlistStateRenamed`, which is a SUFFIX extension of
+  `WatchlistState` and therefore still matched via `indexOf`'s substring semantics, 50/50
+  green; the properly non-prefix rename is what discriminates). Red-ALONE 1/50 at `expect(from)
+  .toBeGreaterThan(-1)` ("expected -1 to be greater than -1").
+- Closing bound: `const WatchlistContext = createContext` → `const WatchlistCtxObject =
+  createContext`. Red-ALONE 1/50 at `expect(to).toBeGreaterThan(from)` ("expected -1 to be
+  greater than 5095").
+- Clean control both times: 50/50.
+File hash confirmed restored to the pre-mutation value after each edit. So the fix genuinely
+closes the gap the security reviewer found (a typo'd/renamed bound reddens the test instead of
+silently widening the slice) in both directions, not just the one the security reviewer's
+example happened to name. Two residuals, both correctly non-blocking and named in the folded
+knowledge bullet: a PREFIX-preserving rename of the opening bound still matches (the general
+`toContain`-style residual, not specific to this fix), and the general bug class (`indexOf`
+returning `-1`, consumed by `.slice`/arithmetic without an explicit not-found check) is worth a
+standing grep whenever a source-scan test pairs `indexOf`/`lastIndexOf` with `.slice(`/
+`.substring(`.
+
+**Same-shape sweep across the rest of the diff:** grepped every staged file for `indexOf(` —
+only two other hits in files actually in the diff, both in `watchlistWrites.addWrite.test.ts`
+itself (the pair just covered); the `firestore-rules.test.ts` additions use the real
+`buildAddWrite` against the real emulator with no string-scan boundary logic at all. Other
+`indexOf(` hits in the tree (`WatchlistPage.tsx`, `mediaTypeDocId.ts`, `nextPath.ts`,
+`semaphore.ts`) are pre-existing, unstaged, array/string operations unrelated to this diff — not
+in scope.
+
+**Finding 2 (todo.md nit), reverified against HEAD, not just re-read:** `tasks/todo.md`'s two
+struck-through items checked against the live source. Item 2 ("KNOWN COST bullet calls
+`sedd→sedd` 'the common one'") — read `watchlistWrites.ts`'s `buildStatusUpdate` KNOWN COST
+comment at HEAD: it reads "No updateStatus caller can INTEND it," no "common one" text exists
+anywhere in the file. Confirmed already-fixed, correctly marked. Item 3 (WatchedDateEditor
+staleness) — the sentence lives inside the `vill_se/avbruten → sedd` bullet of the same
+comment, and the comment itself already states why "Sedd igen" cannot reach that transition
+("that entry only renders on a title already 'sedd', so it cannot reach a vill_se/avbruten
+title"). Confirmed not stale, correctly marked.
+
+**Other checks:** re-ran the full staged-file sha loop (`git rev-parse :<f>` vs `git
+hash-object <f>`) before and after all mutation work — zero movers, `git status --porcelain`
+and `git log --oneline -1` unchanged throughout (HEAD `3c0004a`). Spot-checked every remaining
+staged component/test file (`CompanionSection`, `CollectionSection`, `QuickAddButton`,
+`OnboardingFlow`, `MoviePageClient`, `TVShowPageClient`, `StatusButton`, `QuickRateModal`,
+`domain.ts`, `providerTally.ts`, `addedAt.ts`, `buildAddPayload.ts`, `nextAirReadRepair.ts`,
+`tmdbFieldsRefresh.ts`, `vitest.rules.config.ts`, `ownership-gaps.json`) — every hunk is either
+a mechanical `addItem`→`upsertTitle`/`logViewing` rename (no assertion touched) or a
+`StatusButton.tsx` production change (`canRewatch` now asks the shared `rewatchFields` helper
+instead of re-deriving the predicate in JSX) that is itself covered by the parity matrix and
+`StatusButton.test.tsx`'s existing rewatch-menu-entry cases. `grep -RnE "\.skip\(|\.only\(|xit\("`
+over the full staged diff: zero hits. Full suite independently re-run:
+250 files / 3234 passed / 4 skipped, matching the dispatch message's numbers exactly (not
+inherited). `.claude/rules/accepted-deviations.md` re-read; nothing in this diff or its fixes
+matches a listed deviation.
+
+**Verdict: pass (0 blocking). All three round-1 findings verified fixed and sufficient by live
+mutation; two LOW residuals reported (whole-file self-exclusion scope, prefix-preserving-rename
+residual on the indexOf/slice bound) — informational, not blocking, and folded into the
+knowledge file's existing source-scanning-guard bullet rather than filed as new gaps.**

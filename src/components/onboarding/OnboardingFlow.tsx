@@ -305,7 +305,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   // This deliberately REVERSES the earlier note here, which argued the step is
   // safe ungated because a brand-new account has no library to protect. That was
   // true of the overwrite risk and wrong about the rest: on a DEAD listener a
-  // title marked "Sedd" here lands with no `watchedAt` (addItem's own guards
+  // title marked "Sedd" here lands with no `watchedAt` (upsertTitle's own guards
   // suppress the stamp when it cannot tell a new add from a re-mark), and unlike
   // a missing `addedAt` that half never self-heals. It also is not always a new
   // account — this flow is reachable for anyone whose `onboardingCompletedAt` is
@@ -316,7 +316,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   // stays live throughout so a dead listener can never trap someone inside
   // onboarding. BIN-700/643/729 are one answer at three sites — see
   // `src/lib/watchlist/libraryHoldCopy.ts`.
-  const { items, addItem, libraryKnown, listenerFailed, retryListener } = useWatchlist();
+  const { items, upsertTitle, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const [addFailed, setAddFailed] = useState(false);
 
   const canContinue = items.length > 0;
@@ -335,7 +335,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
       : (intent === 'plan' ? 'vill_se' : 'sedd');
     setAddFailed(false);
     try {
-      await addItem(buildWatchlistAddPayload({
+      await upsertTitle(buildWatchlistAddPayload({
         tmdbId: result.id,
         mediaType: result.media_type,
         status,

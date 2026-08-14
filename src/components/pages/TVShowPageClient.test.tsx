@@ -216,7 +216,7 @@ describe('TVShowPageClient — what the lazy refresh actually sends (BIN-468)', 
     expect(payload.providers).toEqual([8, 489, 2]);
   });
 
-  it('denormalizes the ORIGINAL name, matching what addItem/StatusButton write', () => {
+  it('denormalizes the ORIGINAL name, matching what upsertTitle/StatusButton write', () => {
     const payload = lastRefreshPayload({ name: 'Maktkamp i Westeros', original_name: 'Game of Thrones' });
 
     expect(payload.title).toBe('Game of Thrones');

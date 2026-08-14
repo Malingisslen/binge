@@ -47,7 +47,7 @@ function ImportContent() {
   // BIN-729: `libraryKnown` (snapshotSettled && !listenerFailed), never
   // `loading` — which goes false in BOTH terminal states. On a dead listener
   // `getItem` answers null for EVERY title, so every row below reads as a
-  // non-duplicate and `addItem` hard-writes `status` over titles the user
+  // non-duplicate and `upsertTitle` hard-writes `status` over titles the user
   // already has, row after row. `status` is the one field no payload shape can
   // protect (see MoviePageClient's handleBevaka comment), so this gate is the
   // only defence — the same argument, and the same one-line fix, as
@@ -56,7 +56,7 @@ function ImportContent() {
   // `listenerFailed` is read on its own too, because the two halves of "not
   // known" call for different UI: the first snapshot lands on its own in under a
   // second, while a failed listener never does and needs a way out.
-  const { getItem, addItem, libraryKnown, listenerFailed, retryListener } = useWatchlist();
+  const { getItem, upsertTitle, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const { show: toast } = useToast();
 
   const [stage, setStage] = useState<Stage>('idle');
@@ -142,7 +142,7 @@ function ImportContent() {
       // BIN-150: per-titel try/catch — en misslyckad skrivning (offline/regel)
       // får inte avbryta resten eller sväljas tyst. Räkna + visa misslyckade.
       try {
-        await addItem(buildWatchlistAddPayload({
+        await upsertTitle(buildWatchlistAddPayload({
           tmdbId: a.match.tmdbId,
           mediaType: a.match.mediaType,
           status: a.status,
@@ -164,7 +164,7 @@ function ImportContent() {
     }
     setStage('done');
     toast(failed > 0 ? `Importerade ${n} titlar · ${failed} misslyckades` : `Importerade ${n} titlar`);
-  }, [importable, addItem, toast, libraryKnown]);
+  }, [importable, upsertTitle, toast, libraryKnown]);
 
   const matchedCount = analyzed.filter(a => a.match).length;
   const dupeCount = analyzed.filter(a => a.match && a.duplicate).length;

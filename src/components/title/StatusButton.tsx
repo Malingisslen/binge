@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { statusLabel, statusMenuLabel, statusOptionsFor } from '@/lib/watchStatus';
 import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 
@@ -40,13 +41,27 @@ export default function StatusButton({
   tmdbStatus,
 }: StatusButtonProps) {
   const { uid, loading: authLoading } = useAuth();
-  const { getItem, addItem, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
   const markSeen = useMarkSeen();
   const goToLogin = useSignedOutRedirect();
   const { show: toast } = useToast();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = getItem(mediaType, tmdbId);
+  // BIN-655: ask the helper the write asks, instead of re-deriving the rule in JSX.
+  // The old inline `current?.status === 'sedd' && mediaType === 'movie'` was a THIRD
+  // copy of a predicate that already has one home — and the film-only half was only
+  // ever true by coincidence of the same fact rewatchFields encodes ('sedd' is the
+  // terminal FILM status, so a TV write lands as 'mina' and can never be a rewatch).
+  // Reading the render closure rather than the live ref is unchanged and still
+  // deliberate: the worst case is a menu entry that shows and writes nothing, which
+  // is the grading the reviewer gave it. `'mina'` is passed for TV precisely so this
+  // predicate answers false there, exactly as the write would.
+  const canRewatch = 'rewatchCount' in rewatchFields(
+    mediaType === 'tv' ? 'mina' : 'sedd',
+    current?.status,
+    current?.rewatchCount,
+  );
   // BIN-596 — hold every write until BOTH questions have real answers.
   //
   //  1. Auth, keyed on `uid` (the auth verdict), never on the Firestore profile:
@@ -108,7 +123,9 @@ export default function StatusButton({
       }, { countsAsViewing });
       return;
     }
-    await addItem(buildWatchlistAddPayload({
+    // BIN-655: the BULK entry point. This branch is every status EXCEPT 'sedd'
+    // (which returned above via markSeen), so it can never be a viewing.
+    await upsertTitle(buildWatchlistAddPayload({
       tmdbId, mediaType, status, title, posterPath, releaseYear,
       current, providers, subscriptionProviders, genreIds, tmdbStatus,
       // Explicit null (not omitted): this surface owns the season count from
@@ -197,7 +214,7 @@ export default function StatusButton({
               its plain 'Sedd' behaves identically there, and BIN-645 is mid-flight
               in that file. Do not close the gap by copying this without saying so.
               Malin, 2026-07-31. */}
-          {current?.status === 'sedd' && mediaType === 'movie' && (
+          {canRewatch && (
             <button
               onClick={() => handleSelect('sedd', true)}
               className="block w-full text-left px-3 py-[5px] text-xs font-[inherit] border-none cursor-pointer hover:bg-bg-2 text-ink bg-transparent"

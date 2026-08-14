@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildAddWrite } from '@/lib/watchlistWrites';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -57,6 +58,108 @@ function validEpisodeProgress() {
 function validNotInterested() {
   return { tmdbId: 603, mediaType: 'movie', addedAt: serverTimestamp() };
 }
+
+// BIN-655 — both add entry points produce a payload firestore.rules accepts.
+//
+// This is condition 2 of #27 Database Administrator's critique, and it is the one
+// nothing else can cover: `isValidWatchlistItem` uses a `hasOnly` allowlist, and a
+// merge-write is evaluated against the WHOLE post-merge document. So a payload that
+// grew one key the allowlist does not know fails the entire write with
+// permission-denied — silently, in production, with no compile-time signal. That has
+// already happened once, with `notes`.
+//
+// It runs the REAL builder against the REAL rules, rather than asserting on a
+// hand-written doc shape: a hand-written shape can only ever prove that the shape
+// somebody typed is legal, which is exactly the check that missed `notes`.
+describe('BIN-655 — buildAddWrite payloads satisfy the hasOnly allowlist', () => {
+  const OWNER_ITEM = 'movie_603';
+
+  // The stamp fields the builder emits are Firestore sentinels in production. Here we
+  // give it real values so the emulator can store them; the KEY SET is what the
+  // allowlist judges, and that is identical either way.
+  const clock = () => serverTimestamp();
+
+  function payload(over: Record<string, unknown> = {}) {
+    return {
+      tmdbId: 603,
+      mediaType: 'movie' as const,
+      status: 'sedd' as const,
+      title: 'The Matrix',
+      posterPath: null,
+      releaseYear: 1999,
+      providers: [8],
+      subscriptionProviders: [8],
+      genreIds: [28, 878],
+      rating: 5,
+      ...over,
+    };
+  }
+
+  function writeCtx(over: Record<string, unknown> = {}) {
+    return {
+      current: undefined,
+      snapshotSettled: true,
+      listenerFailed: false,
+      visibilityFields: { effectiveVisibility: 'private' as const, isPublic: false },
+      serverTimestamp: clock,
+      ...over,
+    };
+  }
+
+  // Every optional STAMP present — not the widest possible payload: totalSeasons,
+  // lastWatchedSeason/Episode and tmdbStatus are absent from the fixture, and while
+  // BIN-894's tags-in-Carryable gap is open that distinction matters. A
+  // narrower one cannot fail a hasOnly allowlist that the widest one passes, so this
+  // is the case worth spending an emulator round-trip on.
+  for (const intent of ['bulk', 'viewing'] as const) {
+    it(`CREATE: a ${intent} write of a brand-new title is accepted`, async () => {
+      const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', OWNER_ITEM);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await assertSucceeds(setDoc(ref, buildAddWrite(payload() as any, intent, writeCtx() as any), { merge: true }));
+    });
+  }
+
+  it('MERGE-UPDATE: a counted rewatch on top of a stored doc is accepted', async () => {
+    // The path that writes the MOST fields onto an EXISTING doc — and the only one
+    // that writes `rewatchCount` and overwrites `watchedAt`. A merge is judged against
+    // the whole post-merge document, so this is where a stray key surfaces.
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', OWNER_ITEM);
+    await assertSucceeds(setDoc(ref, validWatchlist()));
+    const stored = {
+      tmdbId: 603, mediaType: 'movie' as const, status: 'sedd' as const, rating: 5,
+      rewatchCount: 2, watchedAt: new Date('2019-04-02'), visibility: null,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = buildAddWrite(payload() as any, 'viewing', writeCtx({ current: stored }) as any);
+    // Guard the guard: if the rewatch did not actually happen, this test would be
+    // asserting the SAME payload as the create case above and prove nothing.
+    expect(body).toHaveProperty('rewatchCount');
+    expect(body).toHaveProperty('watchedAt');
+    await assertSucceeds(setDoc(ref, body, { merge: true }));
+  });
+
+  it('MERGE-UPDATE: a bulk re-mark on top of a stored doc is accepted', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', OWNER_ITEM);
+    await assertSucceeds(setDoc(ref, validWatchlist()));
+    const stored = {
+      tmdbId: 603, mediaType: 'movie' as const, status: 'sedd' as const, rating: 5,
+      rewatchCount: 2, watchedAt: new Date('2019-04-02'), visibility: null,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = buildAddWrite(payload() as any, 'bulk', writeCtx({ current: stored }) as any);
+    expect(body).not.toHaveProperty('rewatchCount');
+    await assertSucceeds(setDoc(ref, body, { merge: true }));
+  });
+
+  it('and the allowlist really is what accepts them — one extra key is refused', async () => {
+    // The control. Without it, all four tests above would pass just as well against a
+    // rule that accepted anything, and this whole block would be measuring nothing.
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', OWNER_ITEM);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = buildAddWrite(payload() as any, 'viewing', writeCtx() as any);
+    await assertFails(setDoc(ref, { ...body, countsAsViewing: true }, { merge: true }));
+  });
+});
 
 describe('users/{uid}/watchlist/{id} field whitelist', () => {
   it('allows a valid watchlist write', async () => {

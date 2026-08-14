@@ -19,7 +19,7 @@ const watchlist = vi.hoisted(() => ({
   // Typed so the payload assertion below can index the call — an untyped vi.fn()
   // gives `calls: [][]`, which makes `calls[0][0]` a type error rather than a
   // check of what was actually written.
-  addItem: vi.fn<(payload: { tmdbId: number; status: string }) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: { tmdbId: number; status: string }) => Promise<void>>(async () => {}),
   // Mirrors the provider's own derivation. A literal would let a test claim a
   // state production cannot reach and make every assertion below vacuous.
   snapshotSettled: true,
@@ -80,7 +80,7 @@ describe('CollectionSection — the bulk add is gated on a KNOWN library (BIN-59
     await act(async () => {});
 
     expect(screen.queryByText(BULK)).not.toBeInTheDocument();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 
   it('does NOT offer it when the listener has DIED — the state `loading` could not name', async () => {
@@ -92,7 +92,7 @@ describe('CollectionSection — the bulk add is gated on a KNOWN library (BIN-59
     await act(async () => {});
 
     expect(screen.queryByText(BULK)).not.toBeInTheDocument();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 
   it('never counts a film the user has already SEEN as unseen', async () => {
@@ -102,8 +102,8 @@ describe('CollectionSection — the bulk add is gated on a KNOWN library (BIN-59
     await act(async () => { fireEvent.click(await screen.findByText(BULK)); });
 
     // Only the genuinely-unseen film is written; the 'sedd' one is untouched.
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({ tmdbId: 604, status: 'vill_se' });
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle.mock.calls[0][0]).toMatchObject({ tmdbId: 604, status: 'vill_se' });
   });
 
   it('a SIGNED-OUT visitor still gets the read-only section — no listener ever runs for them', async () => {

@@ -1,7 +1,7 @@
 import type { MediaType, WatchStatus, WatchlistItem } from '@/types';
 
 /** Not acceptable from a caller. Most are filled by the context; two are here
- *  because `addItem` refuses to write them at all:
+ *  because the add path refuses to write them at all:
  *   - `notes` — notes live in the owner-only `watchlistNotes` subcollection
  *     (BIN-505), so accepting one would be a lie.
  *   - `addedAtIsFallback` (BIN-640) — derived at READ time from whether the doc
@@ -20,7 +20,8 @@ type AlwaysWritten = 'tmdbId' | 'mediaType' | 'status' | 'title' | 'posterPath' 
 type Carryable = Exclude<keyof WatchlistItem, ServerOwned | AlwaysWritten>;
 
 /**
- * The exact shape `WatchlistContext.addItem` accepts.
+ * The exact shape `WatchlistContext`'s two add entry points accept — `upsertTitle`
+ * (bulk) and `logViewing` (a human logging a watch). Same payload, both doors.
  *
  * NOTE — `providers` and `genreIds` may now be **absent**, not merely empty, on a
  * watchlist doc: a re-mark that doesn't know them omits the key so the stored value
@@ -58,9 +59,9 @@ export interface BuildWatchlistAddPayloadInput {
 }
 
 /**
- * One place that builds the `addItem` payload.
+ * One place that builds the add payload.
  *
- * **Read the merge contract before changing this.** `addItem` writes with
+ * **Read the merge contract before changing this.** The add path writes with
  * `setDoc(…, { merge: true })`, so for any given key:
  *
  * * key ABSENT from the payload → Firestore keeps whatever is stored.

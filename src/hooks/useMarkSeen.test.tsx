@@ -16,7 +16,8 @@ import type { MediaType, WatchlistItem } from '@/types';
 
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
-  addItem: vi.fn<(payload: Record<string, unknown>, opts?: { countsAsViewing?: boolean }) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
+  logViewing: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
   updateRating: vi.fn(async () => {}),
 }));
 const toast = vi.hoisted(() => ({ show: vi.fn(), showRating: vi.fn() }));
@@ -37,7 +38,11 @@ import { useMarkSeen } from './useMarkSeen';
 const film = { tmdbId: 603, mediaType: 'movie' as const, title: 'The Matrix', posterPath: null, releaseYear: 1999 };
 const series = { tmdbId: 1399, mediaType: 'tv' as const, title: 'Game of Thrones', posterPath: null, releaseYear: 2011 };
 
-const optsOf = (call: number) => watchlist.addItem.mock.calls[call][1];
+// BIN-655: intent is no longer an argument to inspect — it is WHICH function the hook
+// called. These read whichever one fired, so the payload assertions below stay about the
+// payload and the intent assertions stay about the choice.
+const writes = () => [...watchlist.upsertTitle.mock.calls, ...watchlist.logViewing.mock.calls];
+const payloadOf = (call: number) => writes()[call][0];
 
 describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
   beforeEach(() => {
@@ -49,9 +54,12 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(film, { countsAsViewing: true }); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(optsOf(0)).toEqual({ countsAsViewing: true });
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({ status: 'sedd' });
+    // The whole of BIN-655 in one assertion: a deliberate re-viewing reaches the
+    // counting entry point, and the bulk one is not touched. A boolean a caller can
+    // forget has become a function a caller has to name.
+    expect(watchlist.logViewing).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
+    expect(payloadOf(0)).toMatchObject({ status: 'sedd' });
   });
 
   // BIN-641: the counted rewatch is the only permanent, un-editable write in
@@ -101,8 +109,11 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(film); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(optsOf(0)?.countsAsViewing ?? false).toBe(false);
+    // The inverse, and the one that matters most: an ordinary "Sedd" must never
+    // reach the counting path. This is BIN-599's class of bug made unreachable —
+    // the caller cannot arrive there by omission.
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(watchlist.logViewing).not.toHaveBeenCalled();
   });
 
   // A series lands as 'mina', so no rewatch can follow either way — but the
@@ -111,9 +122,9 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(series, { countsAsViewing: true }); });
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(optsOf(0)).toEqual({ countsAsViewing: true });
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({ status: 'mina' });
+    expect(watchlist.logViewing).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
+    expect(payloadOf(0)).toMatchObject({ status: 'mina' });
   });
 
   it('writes nothing at all when the series lookup fails', async () => {
@@ -121,7 +132,8 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(series); });
 
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
+    expect(watchlist.logViewing).not.toHaveBeenCalled();
     expect(toast.show).toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
   });
 });
@@ -145,7 +157,7 @@ describe('useMarkSeen — the two provider fields reach the write together (BIN-
       await result.current({ ...film, providers: [VIAPLAY], subscriptionProviders: [] });
     });
 
-    const payload = watchlist.addItem.mock.calls[0][0];
+    const payload = payloadOf(0);
     expect(payload.providers).toEqual([VIAPLAY]);
     // The empty array is the whole point: rent-only on Viaplay. It has to be
     // WRITTEN, not dropped, or the row stays null and falls back to the broad list.
@@ -158,7 +170,7 @@ describe('useMarkSeen — the two provider fields reach the write together (BIN-
       await result.current({ ...series, providers: [VIAPLAY], subscriptionProviders: [VIAPLAY] });
     });
 
-    const payload = watchlist.addItem.mock.calls[0][0];
+    const payload = payloadOf(0);
     expect(payload.providers).toEqual([VIAPLAY]);
     expect(payload.subscriptionProviders).toEqual([VIAPLAY]);
   });
@@ -167,7 +179,7 @@ describe('useMarkSeen — the two provider fields reach the write together (BIN-
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(film); });
 
-    const payload = watchlist.addItem.mock.calls[0][0];
+    const payload = payloadOf(0);
     expect('providers' in payload).toBe(false);
     expect('subscriptionProviders' in payload).toBe(false);
   });

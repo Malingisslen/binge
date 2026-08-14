@@ -38,7 +38,7 @@ export default function CollectionSection({
   currentMovieId: number;
 }) {
   const { data: collection } = useCollection(collectionId);
-  const { getItem, addItem, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, libraryKnown } = useWatchlist();
   const { user, uid, loading: authLoading } = useAuth();
   // BIN-596 — two different questions, and conflating them cost the signed-out
   // visitor a whole section.
@@ -94,7 +94,7 @@ export default function CollectionSection({
   );
   // Osedda som inte ens ligger i biblioteket — kandidater för "lägg till alla".
   // Gate på getItem (inte bara status): en film som redan ligger som vill_se/
-  // avbruten ska inte röras (addItem är en set-doc och skulle nollställa addedAt).
+  // avbruten ska inte röras (upsertTitle är en set-doc och skulle nollställa addedAt).
   const unseenNotInLibrary = useMemo(
     () => (mounted ? unseen.filter(p => !getItem('movie', p.id)) : []),
     [mounted, unseen, getItem],
@@ -134,7 +134,7 @@ export default function CollectionSection({
       // cappa ändå så en patologiskt stor samling inte avfyrar hundratals
       // sekventiella Firestore-skrivningar.
       for (const p of unseenNotInLibrary.slice(0, ADD_UNSEEN_CAP)) {
-        await addItem(buildWatchlistAddPayload({
+        await upsertTitle(buildWatchlistAddPayload({
           tmdbId: p.id,
           mediaType: 'movie',
           status: 'vill_se',

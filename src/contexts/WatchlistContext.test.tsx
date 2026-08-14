@@ -165,7 +165,8 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // fixture in this file to supply the field — which silently un-tests addItem's
 // stamping decision, the one place that decides whether providersCheckedAt is
 // written at all.
-let addItemRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }, opts?: { countsAsViewing?: boolean }) => Promise<void>) | null = null;
+let upsertTitleRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<void>) | null = null;
+let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<void>) | null = null;
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
 let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
@@ -190,7 +191,8 @@ function Harness() {
     retryListenerRef = wl.retryListener;
     updateWatchedAtRef = wl.updateWatchedAt;
     updateTmdbStatusRef = wl.updateTmdbStatus;
-    addItemRef = wl.addItem;
+    upsertTitleRef = wl.upsertTitle;
+    logViewingRef = wl.logViewing;
     updateStatusRef = wl.updateStatus;
     updateProgressRef = wl.updateProgress;
     setRuntimeRef = wl.setRuntime;
@@ -260,7 +262,7 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
 
     // Användaren lägger till sin första titel FÖRE snapshoten.
     await act(async () => {
-      await addItemRef!(newTitle(101));
+      await upsertTitleRef!(newTitle(101));
     });
     // Beslutet skjuts upp — inget fyras vid add-tid under kall laddning.
     expect(firstTitleAddedCount()).toBe(0);
@@ -289,7 +291,7 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
 
     // Lägger till ännu en titel.
     await act(async () => {
-      await addItemRef!(newTitle(4));
+      await upsertTitleRef!(newTitle(4));
     });
     // title_added_watchlist fyras men ALDRIG first_title_added (BIN-38).
     expect(firstTitleAddedCount()).toBe(0);
@@ -305,7 +307,7 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
     // Add sker FÖRE snapshoten (kall laddning) — kan inte skiljas från ny
     // användare vid add-tid, så beslutet skjuts upp.
     await act(async () => {
-      await addItemRef!(newTitle(5));
+      await upsertTitleRef!(newTitle(5));
     });
     expect(firstTitleAddedCount()).toBe(0);
 
@@ -350,14 +352,14 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
 
     // Add efter settle → fyrar direkt.
     await act(async () => {
-      await addItemRef!(newTitle(10, 'movie'));
+      await upsertTitleRef!(newTitle(10, 'movie'));
     });
     expect(firstTitleAddedCount()).toBe(1);
     expect(trackEvent).toHaveBeenCalledWith('first_title_added', { mediaType: 'movie' });
 
     // En andra add ska INTE re-fyra.
     await act(async () => {
-      await addItemRef!(newTitle(11));
+      await upsertTitleRef!(newTitle(11));
     });
     expect(firstTitleAddedCount()).toBe(1);
   });
@@ -374,10 +376,10 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
     // Två adds UNDER kall laddning, FÖRE snapshoten landar — first add film,
     // sen tv (driver att payloaden = första addens mediaType, inte sista).
     await act(async () => {
-      await addItemRef!(newTitle(201, 'movie'));
+      await upsertTitleRef!(newTitle(201, 'movie'));
     });
     await act(async () => {
-      await addItemRef!(newTitle(202, 'tv'));
+      await upsertTitleRef!(newTitle(202, 'tv'));
     });
     // Beslutet är fortfarande uppskjutet — inget fyrat vid add-tid.
     expect(firstTitleAddedCount()).toBe(0);
@@ -403,10 +405,10 @@ describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () =
 
     // Två adds FÖRE snapshoten.
     await act(async () => {
-      await addItemRef!(newTitle(301));
+      await upsertTitleRef!(newTitle(301));
     });
     await act(async () => {
-      await addItemRef!(newTitle(302));
+      await upsertTitleRef!(newTitle(302));
     });
     expect(firstTitleAddedCount()).toBe(0);
 
@@ -443,7 +445,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   it('stamps providersCheckedAt on a genuine new add carrying BOTH provider fields', async () => {
     await mountSeeded([]);
     await act(async () => {
-      await addItemRef!({ ...newTitle(900, 'movie'), providers: [76, 8], subscriptionProviders: [8] });
+      await upsertTitleRef!({ ...newTitle(900, 'movie'), providers: [76, 8], subscriptionProviders: [8] });
     });
     const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
     expect(payload.providers).toEqual([76, 8]);
@@ -454,7 +456,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   it('does NOT stamp when the add carries only the broad list — the repair must stay open', async () => {
     await mountSeeded([]);
     await act(async () => {
-      await addItemRef!({ ...newTitle(901, 'movie'), providers: [76, 8] });
+      await upsertTitleRef!({ ...newTitle(901, 'movie'), providers: [76, 8] });
     });
     const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
     expect(payload.providers).toEqual([76, 8]);
@@ -466,7 +468,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   it('stamps when the subset is supplied and genuinely EMPTY (rent-only is an answer)', async () => {
     await mountSeeded([]);
     await act(async () => {
-      await addItemRef!({ ...newTitle(902, 'movie'), providers: [76], subscriptionProviders: [] });
+      await upsertTitleRef!({ ...newTitle(902, 'movie'), providers: [76], subscriptionProviders: [] });
     });
     const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
     expect(payload.subscriptionProviders).toEqual([]);
@@ -567,14 +569,14 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   // preserve anything on its own — `addItem` is what writes — so these assertions
   // have to live here. Both stamps were previously UNCONDITIONAL; mutation-proven
   // that reverting either leaves every other test in this file green.
-  it('addItem does NOT rewrite addedAt when re-marking a title already in the library', async () => {
+  it('the add path does NOT rewrite addedAt when re-marking a title already in the library', async () => {
     // addedAt drives Bibliotek's "Tillagd" sort, backlogResurface's oldest-first
     // ranking, taste/stats' 30-day counter and the GDPR export's "added" value.
     // Re-stamping it on a status change silently re-dated a years-old title.
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
     await act(async () => {
-      await addItemRef!({ ...newTitle(9), status: 'avbruten' });
+      await upsertTitleRef!({ ...newTitle(9), status: 'avbruten' });
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_9');
@@ -587,14 +589,14 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect('tmdbFieldsRefreshedAt' in payload).toBe(false);
   });
 
-  it('addItem DOES stamp addedAt + tmdbFieldsRefreshedAt on a genuine new add', async () => {
+  it('the add path DOES stamp addedAt + tmdbFieldsRefreshedAt on a genuine new add', async () => {
     // The other half of the guard: omitting these on a real first add would leave a
     // doc that sorts nowhere (toDate(undefined) re-dates it on every read) and that
     // the ToS sweep would treat as stale.
     await mountSeeded([]);
 
     await act(async () => {
-      await addItemRef!(newTitle(77));
+      await upsertTitleRef!(newTitle(77));
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_77');
@@ -625,7 +627,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(snapshotCallback).not.toBeNull();
 
     await act(async () => {
-      await addItemRef!(newTitle(101));
+      await upsertTitleRef!(newTitle(101));
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_101');
@@ -643,7 +645,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   // status a title already has must not — that gesture is ambiguous, and
   // rewatchCount is editable nowhere. addItem is also the BULK path, so the
   // decision cannot live in the transition alone: the caller states intent.
-  describe('BIN-641: rewatch counting on the addItem path', () => {
+  describe('BIN-641: rewatch counting on the add path', () => {
     const seenFilm = (rewatchCount = 0) =>
       seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount });
     const markSeen = () => ({ ...newTitle(42, 'movie'), status: 'sedd' as const });
@@ -655,8 +657,11 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     };
 
     it('counts a rewatch when the caller says a human logged a re-viewing', async () => {
+      // BIN-655: the intent is the ENTRY POINT now. This is `logViewing`, the only
+      // write that may count — and `upsertTitle` right below is the same payload
+      // through the other door, counting nothing.
       await mountSeeded([seenFilm(2)]);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
       expect(lastPayload('users/u1/watchlist/movie_42').rewatchCount).toBe(3);
     });
 
@@ -665,19 +670,19 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
       // which Malin ruled must not count — AND every bulk caller. Counting on the
       // transition alone would count both.
       await mountSeeded([seenFilm(2)]);
-      await act(async () => { await addItemRef!(markSeen()); });
+      await act(async () => { await upsertTitleRef!(markSeen()); });
       expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
     });
 
     it('counts nothing on a FIRST viewing, however the caller asks', async () => {
       await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'vill_se' })]);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
       expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
     });
 
     it('counts nothing for a series — only film has a terminal sedd', async () => {
       await mountSeeded([seedDoc({ tmdbId: 7, status: 'mina' })]);
-      await act(async () => { await addItemRef!(newTitle(7), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(newTitle(7)); });
       expect('rewatchCount' in lastPayload('users/u1/watchlist/tv_7')).toBe(false);
     });
 
@@ -688,7 +693,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     it('neither counts nor re-dates a tracked film that is not sedd', async () => {
       const STORED = new Date('2019-04-02T00:00:00Z');
       await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'vill_se', watchedAt: STORED })]);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
 
       const payload = lastPayload('users/u1/watchlist/movie_42');
       expect('rewatchCount' in payload).toBe(false);
@@ -699,7 +704,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
       // itemsRef is empty, so a re-mark is indistinguishable from a new add. The
       // count is not user-fixable, so an unsettled snapshot guesses nothing.
       render(<WatchlistProvider><Harness /></WatchlistProvider>);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
       expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
       // …and stamps no date either. Intent must not short-circuit the BIN-593
       // tri-state: re-dating OVERWRITES user-authored data, so an unknown
@@ -714,7 +719,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     it('re-dates the film to now, replacing the stored date', async () => {
       const STORED = new Date('2019-04-02T00:00:00Z');
       await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount: 1, watchedAt: STORED })]);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
 
       const payload = lastPayload('users/u1/watchlist/movie_42');
       expect(payload.watchedAt).toBe('ts');
@@ -725,31 +730,34 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     it('leaves the stored date alone without that intent', async () => {
       const STORED = new Date('2019-04-02T00:00:00Z');
       await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
-      await act(async () => { await addItemRef!(markSeen()); });
+      await act(async () => { await upsertTitleRef!(markSeen()); });
 
       expect('watchedAt' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
     });
 
-    // #14 Software Architect's binding acceptance criterion. `countsAsViewing`
-    // is a second PARAMETER, never a payload field, because WatchlistAddPayload
-    // is contractually the exact key set written to Firestore and
-    // isValidWatchlistItem uses a hasOnly allowlist — a stray key either lands
-    // as junk or fails the whole merge-write with permission-denied. That
-    // already happened once, with `notes`. So: prove the flag never reaches the
-    // document, by diffing the two key sets.
-    it('never writes the intent flag itself to Firestore', async () => {
+    // #14 Software Architect's binding acceptance criterion, and BIN-655 made it
+    // structural: intent is no longer a parameter that COULD leak into the payload —
+    // it is which function you called, and neither takes a second argument. The
+    // assertion is kept and sharpened, because it is now the parity check between
+    // the two entry points: same title, same payload, different door.
+    //
+    // Why it matters at all: WatchlistAddPayload is contractually the exact key set
+    // written to Firestore, and isValidWatchlistItem uses a hasOnly allowlist — a
+    // stray key either lands as junk or fails the whole merge-write with
+    // permission-denied. That already happened once, with `notes`.
+    it('the two entry points differ ONLY by the counter and the re-date', async () => {
       await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'sedd', rewatchCount: 2, watchedAt: new Date('2019-04-02T00:00:00Z') })]);
-      await act(async () => { await addItemRef!(markSeen(), { countsAsViewing: true }); });
+      await act(async () => { await logViewingRef!(markSeen()); });
       const withIntent = Object.keys(lastPayload('users/u1/watchlist/movie_42'));
 
       setDoc.mockClear();
-      await act(async () => { await addItemRef!(markSeen()); });
+      await act(async () => { await upsertTitleRef!(markSeen()); });
       const without = Object.keys(lastPayload('users/u1/watchlist/movie_42'));
 
       expect(withIntent).not.toContain('countsAsViewing');
-      // The only differences the flag may make to the DOCUMENT are the counter
-      // and the re-date. Everything else must be the same key set — and the flag
-      // itself must never appear, which is the half that protects the hasOnly rule.
+      // The only differences the INTENT may make to the DOCUMENT are the counter and
+      // the re-date. Everything else must be the same key set — and no intent field
+      // may appear, which is the half that protects the hasOnly rule.
       expect(withIntent.filter(k => k !== 'rewatchCount' && k !== 'watchedAt').sort()).toEqual(without.sort());
     });
   });
@@ -760,12 +768,12 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
   // StatusButton / QuickAddButton), and it used to write serverTimestamp() on
   // every 'sedd' and an explicit null on every other status.
 
-  it('BIN-593: addItem does NOT rewrite watchedAt when the film already has one (re-mark)', async () => {
+  it('BIN-593: the add path does NOT rewrite watchedAt when the film already has one (re-mark)', async () => {
     const STORED = new Date('2019-04-02T00:00:00Z');
     await mountSeeded([seedDoc({ tmdbId: 31, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
 
     await act(async () => {
-      await addItemRef!(newTitle(31, 'movie')); // status 'sedd' — a rewatch re-mark
+      await upsertTitleRef!(newTitle(31, 'movie')); // status 'sedd' — a rewatch re-mark
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_31');
@@ -774,13 +782,13 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
   });
 
-  it('BIN-593: addItem DOES stamp the first watchedAt (new add, and a seen-mark of a title that has none)', async () => {
+  it('BIN-593: the add path DOES stamp the first watchedAt (new add, and a seen-mark of a title that has none)', async () => {
     // Both halves of "stamp only when we know there is none".
     await mountSeeded([seedDoc({ tmdbId: 32, mediaType: 'movie', status: 'vill_se' })]);
 
     await act(async () => {
-      await addItemRef!(newTitle(32, 'movie')); // vill_se → sedd, no stored date
-      await addItemRef!(newTitle(33, 'movie')); // genuinely new, status 'sedd'
+      await upsertTitleRef!(newTitle(32, 'movie')); // vill_se → sedd, no stored date
+      await upsertTitleRef!(newTitle(33, 'movie')); // genuinely new, status 'sedd'
     });
 
     for (const id of [32, 33]) {
@@ -790,14 +798,14 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     }
   });
 
-  it('BIN-593: addItem never writes a null watchedAt when the status is not sedd', async () => {
+  it('BIN-593: the add path never writes a null watchedAt when the status is not sedd', async () => {
     // The other data-loss half: the old code wrote `watchedAt: null` on every
     // non-sedd status, erasing the date the moment a film left 'sedd'.
     const STORED = new Date('2019-04-02T00:00:00Z');
     await mountSeeded([seedDoc({ tmdbId: 34, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]);
 
     await act(async () => {
-      await addItemRef!({ ...newTitle(34, 'movie'), status: 'avbruten' });
+      await upsertTitleRef!({ ...newTitle(34, 'movie'), status: 'avbruten' });
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_34');
@@ -863,7 +871,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     // BEFORE the snapshot and invoking it after reproduces exactly that pairing.
     const STORED = new Date('2019-04-02T00:00:00Z');
     await mountSeeded([]); // settled, empty → this closure sees items === []
-    const staleAddItem = addItemRef!;
+    const staleAddItem = upsertTitleRef!;
 
     await act(async () => {
       snapshotCallback!(snap([seedDoc({ tmdbId: 41, mediaType: 'movie', status: 'sedd', watchedAt: STORED })]));
@@ -894,7 +902,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await act(async () => {
       await removeItemRef!('movie', 51);
       // Deliberately NO new snapshot in between — that is the window.
-      await addItemRef!(newTitle(51, 'movie')); // status 'sedd'
+      await upsertTitleRef!(newTitle(51, 'movie')); // status 'sedd'
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_51');
@@ -921,7 +929,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     })]);
 
     await act(async () => {
-      await addItemRef!(newTitle(61, 'movie')); // status 'sedd' — an ordinary re-mark
+      await upsertTitleRef!(newTitle(61, 'movie')); // status 'sedd' — an ordinary re-mark
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_61');
@@ -940,7 +948,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([seedDoc({ tmdbId: 62, mediaType: 'movie', status: 'vill_se' })]);
 
     await act(async () => {
-      await addItemRef!(newTitle(62, 'movie'));
+      await upsertTitleRef!(newTitle(62, 'movie'));
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_62');
@@ -969,7 +977,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     await mountSeeded([]); // settled, and empty — nothing for the lookup to find
 
     await act(async () => {
-      await addItemRef!(newTitle(64, 'movie'));
+      await upsertTitleRef!(newTitle(64, 'movie'));
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_64');
@@ -979,7 +987,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(payload.isPublic).toBe(true);
   });
 
-  it('BIN-593: COLD LOAD — addItem stays silent about watchedAt', async () => {
+  it('BIN-593: COLD LOAD — the add path stays silent about watchedAt', async () => {
     render(
       <WatchlistProvider>
         <Harness />
@@ -988,7 +996,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(screen.getByText('ready')).toBeTruthy();
 
     await act(async () => {
-      await addItemRef!(newTitle(38, 'movie')); // status 'sedd'
+      await upsertTitleRef!(newTitle(38, 'movie')); // status 'sedd'
     });
 
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/movie_38');
@@ -996,14 +1004,14 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect('watchedAt' in (call![1] as Record<string, unknown>)).toBe(false);
   });
 
-  it('BIN-505: addItem never writes a non-null inline note to the watchlist doc', async () => {
+  it('BIN-505: the add path never writes a non-null inline note to the watchlist doc', async () => {
     // addItem is also the re-mark path (QuickAddButton/StatusButton/useMarkSeen
     // pass current?.notes to preserve it). notes now lives in watchlistNotes and
     // the watchlist-doc rules reject a non-null inline note — so the write must
     // NOT carry `notes`, else re-marking a noted title is permission-denied.
     await mountSeeded([]);
     await act(async () => {
-      await addItemRef!({ ...newTitle(77), notes: 'en privat anteckning' });
+      await upsertTitleRef!({ ...newTitle(77), notes: 'en privat anteckning' });
     });
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_77');
     expect(call).toBeDefined();
@@ -1064,29 +1072,29 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(payload.ratedAt).toBeNull();
   });
 
-  it('addItem stamps ratedAt on a new/changed rating, NOT on a same-rating re-mark (BIN-349)', async () => {
+  it('the add path stamps ratedAt on a new/changed rating, NOT on a same-rating re-mark (BIN-349)', async () => {
     // Seed an already-rated in-library title (id 60, rating 5).
     await mountSeeded([seedDoc({ tmdbId: 60, mediaType: 'movie', status: 'sedd', rating: 5 })]);
 
     // Re-mark it via the addItem merge-write path (useMarkSeen/StatusButton/
     // QuickAddButton) carrying the UNCHANGED rating → ratedAt must NOT be written
     // (a blind stamp here re-bumped recency — the exact bug this fix closes).
-    await act(async () => { await addItemRef!({ ...newTitle(60, 'movie'), rating: 5 }); });
+    await act(async () => { await upsertTitleRef!({ ...newTitle(60, 'movie'), rating: 5 }); });
     let payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect('ratedAt' in payload).toBe(false);
 
     // A brand-new pre-rated title (CSV import) → stamped.
-    await act(async () => { await addItemRef!({ ...newTitle(61, 'movie'), rating: 5 }); });
+    await act(async () => { await upsertTitleRef!({ ...newTitle(61, 'movie'), rating: 5 }); });
     payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect(payload.ratedAt).toBe('ts');
 
     // A re-mark that genuinely CHANGES the rating (5 → 4) → stamped.
-    await act(async () => { await addItemRef!({ ...newTitle(60, 'movie'), rating: 4 }); });
+    await act(async () => { await upsertTitleRef!({ ...newTitle(60, 'movie'), rating: 4 }); });
     payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect(payload.ratedAt).toBe('ts');
 
     // A brand-new unrated title → no ratedAt key at all.
-    await act(async () => { await addItemRef!({ ...newTitle(62, 'movie'), rating: null }); });
+    await act(async () => { await upsertTitleRef!({ ...newTitle(62, 'movie'), rating: null }); });
     payload = setDoc.mock.calls.at(-1)![1] as Record<string, unknown>;
     expect('ratedAt' in payload).toBe(false);
   });
@@ -1440,7 +1448,7 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
 
     // The user re-marks a title that has been in their library for years. The
     // library is invisible to us, so this looks exactly like a new add.
-    await act(async () => { await addItemRef!(newTitle(42)); });
+    await act(async () => { await upsertTitleRef!(newTitle(42)); });
 
     expect(setDoc).toHaveBeenCalledTimes(1);
     const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
@@ -1451,7 +1459,7 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
     mount();
     // No error, no snapshot yet: the genuine-new-add path must keep working, or
     // every title added before the first snapshot lands with no date at all.
-    await act(async () => { await addItemRef!(newTitle(42)); });
+    await act(async () => { await upsertTitleRef!(newTitle(42)); });
 
     const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
     expect(payload.addedAt).toBe('ts');
@@ -1463,7 +1471,7 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
     await act(async () => { snapshotCallback!(snap([])); });
     setDoc.mockClear();
 
-    await act(async () => { await addItemRef!(newTitle(42)); });
+    await act(async () => { await upsertTitleRef!(newTitle(42)); });
 
     const payload = setDoc.mock.calls[0][1] as Record<string, unknown>;
     expect(payload.addedAt).toBe('ts');
@@ -1825,14 +1833,14 @@ describe('WatchlistContext — retryListener re-subscribes the dead listener (BI
     await mount();
     // Brand-new user: an empty library settles, then they add their first title.
     await act(async () => { snapshotCallback!(snap([])); });
-    await act(async () => { await addItemRef!(newTitle(101)); });
+    await act(async () => { await upsertTitleRef!(newTitle(101)); });
     expect(firstTitleAddedCount()).toBe(1);
 
     await act(async () => { retryListenerRef!(); });
     // The fresh listener lands EMPTY — the optimistic write has not round-tripped
     // yet, which is exactly the frame that makes this mutant reachable.
     await act(async () => { snapshotCallback!(snap([])); });
-    await act(async () => { await addItemRef!(newTitle(102)); });
+    await act(async () => { await upsertTitleRef!(newTitle(102)); });
 
     // A retry that reset `everNonEmptyRef` (account-scoped state, not the
     // listener's) would read this session as a brand-new user all over again and
@@ -1845,7 +1853,7 @@ describe('WatchlistContext — retryListener re-subscribes the dead listener (BI
     // The other direction of the same rule. The user's very first add happens
     // during a cold load, so the decision is deferred (BIN-56/110) — and then the
     // listener dies before any snapshot lands.
-    await act(async () => { await addItemRef!(newTitle(201, 'movie')); });
+    await act(async () => { await upsertTitleRef!(newTitle(201, 'movie')); });
     await act(async () => { snapshotErrorCallback!(); });
     expect(firstTitleAddedCount()).toBe(0);
 
@@ -1893,7 +1901,7 @@ describe('WatchlistContext — retryListener re-subscribes the dead listener (BI
     // `itemsUidRef` matches — belt and braces, so this asserts the outcome both
     // mechanisms exist for rather than reaching into either one.
     setDoc.mockClear();
-    await act(async () => { await addItemRef!(newTitle(1)); });
+    await act(async () => { await upsertTitleRef!(newTitle(1)); });
     const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
     expect(ref._path).toBe('users/u2/watchlist/tv_1');
     expect(payload.addedAt).toBe('ts');
@@ -1908,7 +1916,7 @@ describe('WatchlistContext — retryListener re-subscribes the dead listener (BI
     // u1 is a returning user with a library, so their session can never fire the
     // first-title event.
     await act(async () => { snapshotCallback!(snap([doc(1), doc(2)])); });
-    await act(async () => { await addItemRef!(newTitle(3)); });
+    await act(async () => { await upsertTitleRef!(newTitle(3)); });
     expect(firstTitleAddedCount()).toBe(0);
 
     await switchToU2(view);
@@ -1916,7 +1924,7 @@ describe('WatchlistContext — retryListener re-subscribes the dead listener (BI
     // deferred cold-load path — the event can only fire from `everNonEmptyRef`
     // having been reset for the new account.
     await act(async () => { snapshotCallback!(snap([])); });
-    await act(async () => { await addItemRef!(newTitle(301)); });
+    await act(async () => { await upsertTitleRef!(newTitle(301)); });
 
     expect(firstTitleAddedCount()).toBe(1);
   });
@@ -2184,7 +2192,7 @@ describe('WatchlistContext — title-page backfill reactivity is NOT migrated aw
     const refreshBefore = refreshTmdbFieldsRef!;
     const watchedAtBefore = updateWatchedAtRef!;
     const tmdbStatusBefore = updateTmdbStatusRef!;
-    const addItemBefore = addItemRef!;
+    const addItemBefore = upsertTitleRef!;
 
     await act(async () => {
       snapshotCallback!(snap([seedDoc({ tmdbId: 80, runtime: null })]));
@@ -2200,7 +2208,7 @@ describe('WatchlistContext — title-page backfill reactivity is NOT migrated aw
     // two assertions above.
     expect(updateWatchedAtRef).toBe(watchedAtBefore);
     expect(updateTmdbStatusRef).toBe(tmdbStatusBefore);
-    expect(addItemRef).toBe(addItemBefore);
+    expect(upsertTitleRef).toBe(addItemBefore);
   });
 
   it('backfills a title that only ENTERS the library while its page is open', async () => {

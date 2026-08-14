@@ -68,7 +68,7 @@ export interface NextAirUpdate {
 // TMDB-blocket (title/posterPath/providers/…). Att stämpla hela blocket här vore
 // oärligt: en kalender-aktiv men aldrig-titelsides-visande användare skulle hålla
 // title/providers "färska" i evighet utan att de faktiskt hämtats om → skulle
-// underminera ToS-sweepen (§1.C). Bara full-block-skrivarna (addItem +
+// underminera ToS-sweepen (§1.C). Bara full-block-skrivarna (upsertTitle/logViewing +
 // titelsidans refreshTmdbFields) stämplar. Sweepen rensar nextAir* när blocket är
 // stale; nästa kalender-render reparerar dem igen (nextAirUpdatedAt är deras egen
 // färskhet). Stämpeln förblir ärlig.

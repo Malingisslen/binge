@@ -66,7 +66,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
   // stored provider data and no carry-forward of the rating. `libraryKnown`
   // (from the context, never re-derived here) is the gate; `listenerFailed` is
   // read separately because only that half needs a way out.
-  const { addItem, getItem, updateRating, updateStatus, libraryKnown, listenerFailed, retryListener } = useWatchlist();
+  const { upsertTitle, getItem, updateRating, updateStatus, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const [rated, setRated] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery({
@@ -95,7 +95,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
     // BIN-599 fixed the rewatch-inflation here with no test to hold it down.
     const plan = planQuickRateWrite(existing);
     if (plan === 'add-as-seen') {
-      await addItem(buildItemFromTmdb(t, 'sedd', rating, existing));
+      await upsertTitle(buildItemFromTmdb(t, 'sedd', rating, existing));
     } else {
       if (rating !== null) await updateRating('movie', t.id, rating);
       // 'rating-only' means the film is ALREADY 'sedd' — writing the status

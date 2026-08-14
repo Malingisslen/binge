@@ -426,7 +426,7 @@ vid rensning** så att gruppens egen reparationsväg repopulerar den — aldrig 
 
 | Grupp | Fält | Stämpel | Reparationsväg |
 |---|---|---|---|
-| static | `title`, `posterPath`, `genreIds`, `tmdbStatus`, `runtime` | `tmdbFieldsRefreshedAt` | `addItem` + titelsidans `refreshTmdbFields` |
+| static | `title`, `posterPath`, `genreIds`, `tmdbStatus`, `runtime` | `tmdbFieldsRefreshedAt` | `upsertTitle`/`logViewing` + titelsidans `refreshTmdbFields` |
 | providers | `providers` | `providersCheckedAt` | advisor/backfill; titelsidan som *fallback* (bara när `providersCheckedAt` inte är färskare än 60 d, så en färskare advisor-koll aldrig klobbras) |
 | nextair | `nextAirDate`, `nextAirCode`, `nextAirProvider`, `digitalReleaseDate` | `nextAirUpdatedAt` | kalender-`nextAirReadRepair` (om-stämplar även vid oförändrat värde när stämpeln > 90 d, så en stabil `digitalReleaseDate` inte fryser → onödig rensa-rep, BIN-468 A3) |
 

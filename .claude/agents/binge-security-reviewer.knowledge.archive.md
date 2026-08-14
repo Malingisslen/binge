@@ -7637,3 +7637,152 @@ runtime behaviour is Admin-SDK-only with no rules surface, so the wedge arithmet
 DERIVED from source and stated as such.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-14 — BIN-655, `addItem` split into `upsertTitle`/`logViewing` over one `buildAddWrite` builder
+
+Batch D. Router: `medium`, `owned`, panel [27] DBA (blind critique already ran 2026-08-13, six conditions).
+`firestore.rules` NOT touched — verified with `git diff --cached -- firestore.rules firestore.indexes.json`
+(empty) and `git diff --cached --stat` (32 files, neither rules file listed).
+
+**hasOnly allowlist (condition 1 of #27).** Enumerated `isValidWatchlistItem`'s hasOnly list by hand (32 keys:
+tmdbId/mediaType/status/rating/notes/title/posterPath/releaseYear/totalSeasons/lastWatchedSeason/
+lastWatchedEpisode/dropped/rewatchCount/providers/providersCheckedAt/visibility/genreIds/tmdbStatus/
+effectiveVisibility/isPublic/addedAt/updatedAt/watchedAt/runtime/nextAirDate/nextAirCode/nextAirProvider/
+nextAirUpdatedAt/digitalReleaseDate/ratedAt/tmdbFieldsRefreshedAt/subscriptionProviders), then enumerated every
+key `buildAddWrite` can emit across all branches: the `WatchlistAddPayload` carry-set (AlwaysWritten + Carryable
+from `buildAddPayload.ts`) plus `dropped`, `effectiveVisibility`/`isPublic`, `addedAt`, `rewatchCount`,
+`updatedAt`, `watchedAt`, `tmdbFieldsRefreshedAt`, `providersCheckedAt`, `ratedAt`. Every emitted key is in the
+allowlist on both intents; `visibility` (the per-item override) and `intent`/`countsAsViewing` never appear.
+The new `firestore-rules.test.ts` block additionally runs the REAL builder against the REAL rules (create +
+merge-update, both intents) with a "one extra key is refused" control — the right shape per this file's own
+"hasOnly bounds the key set only" principle, since a hand-typed fixture can only prove the shape someone typed
+is legal (exactly what missed `notes` before).
+
+**BIN-505 notes strip.** Moved into `buildAddWrite` as `const { notes: _stripped, ...itemFields } = item as
+…`, unconditional (runs before the branch on `intent`), and `itemFields` (not `item`) is the first thing spread
+into the return object — so nothing later in the object literal can reintroduce `notes`. WatchlistContext.test's
+existing pin (`{ ...newTitle(77), notes: '…' }` via the renamed `upsertTitleRef`) and a new
+`watchlistWrites.addWrite.test.ts` case both exercise it on both intents.
+
+**BIN-595 visibility guard.** `shouldStampVisibility(current)` is called unconditionally in `buildAddWrite` —
+not gated on `intent` — so both `upsertTitle` and `logViewing` reach it identically. The per-item `visibility`
+override is never written by this path (only `effectiveVisibility`/`isPublic` from the injected
+`visibilityFields`); confirmed by reading the return object literal, no `visibility:` key anywhere in it.
+
+**Rules-suite import widening (condition 4/BIN-655 plan).** `vitest.rules.config.ts` gained
+`resolve: { tsconfigPaths: true }` — the identical option already used in the main `vitest.config.ts` (same
+key, no new plugin/dependency). Traced the import chain the new test pulls in:
+`@/lib/watchlistWrites` → `@/lib/watchlist/buildAddPayload` (type-only) + `@/lib/watchlist/tmdbFieldsRefresh`
+(value import, pure date-math, no `process.env`/`NEXT_PUBLIC_*`, no Firebase import). Grepped both files for
+`process.env`/`NEXT_PUBLIC` — none. No secret, no client SDK config, no env reaches the rules suite.
+
+**BIN-601/640 addedAt-under-dead-listener gate.** `ctx.listenerFailed` is part of the single `AddWriteContext`
+object passed unchanged regardless of `intent` (`writeTitle(item, intent)` builds one `ctx` and only `intent`
+varies) — so the `current || listenerFailed` addedAt suppression is identical on both entry points. Matrix test
+row "dead listener — addedAt is withheld too" pins it for both `bulk` and `viewing`.
+
+**Caller sweep.** `grep -rn '\baddItem('` across `src/` → zero hits; a source-scanning test in
+`watchlistWrites.addWrite.test.ts` also asserts this at every future commit (`nothing calls a watchlist addItem
+any more`) and that `WatchlistState` no longer offers a one-parameter-flag member. All non-mark-seen callers
+(`settings/import`, `OnboardingFlow`, `CollectionSection`, `CompanionSection`, `MoviePageClient` Bevaka,
+`QuickRateModal`, `QuickAddButton`) moved to `upsertTitle`; both `useMarkSeen` branches and `StatusButton`'s
+"Sedd igen" moved to a `write = opts?.countsAsViewing ? logViewing : upsertTitle` dispatch — preserves BIN-641's
+existing semantics exactly, just re-expressed as a function choice instead of a payload-adjacent flag.
+
+**Non-blocking, not filed:** the plan doc's own "22-field hasOnly allowlist" comment is stale (actual count is
+32) — cosmetic, in an uncommitted planning doc, no code impact. Separately, the new source-scanning test's
+`ctxSrc.slice(ctxSrc.indexOf('interface WatchlistState'), ctxSrc.indexOf('const WatchlistCtx'))` looks for a
+substring (`WatchlistCtx`) that doesn't exist in the file (the variable is `WatchlistContext`), so `indexOf`
+returns -1 and the slice runs to near-EOF rather than stopping at the interface — broader than the comment
+claims, but not weaker (the assertions inside still hold over the true interface text, which is a subset of the
+slice). Test-reviewer territory, not a security hole; noted here so a future security re-review doesn't have to
+re-derive it.
+
+PoC status: this is a pure-refactor review (author's own claim: `buildAddWrite('bulk', ctx)` ≡ old `addItem()`,
+`buildAddWrite('viewing', ctx)` ≡ old `addItem(…, {countsAsViewing:true})`), verified by reading both the old
+(pre-image via `git diff`) and new code side by side plus the shipped parity-matrix/hasOnly-emulator tests
+rather than an independent PoC — no new rule, no new trust boundary, no new collection. DERIVED, not re-run.
+
+Not re-raised (accepted-deviations): Tillsammans anon-vote forgery, the session-expiry gate, blocking-as-
+hygiene, create-only reports, the fail-open `effectiveVisibility` read.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-14 — BIN-655 Batch D, round 2 (both round-1 nits re-verified at bytes)
+
+Re-reviewed the staged Batch D diff after both round-1 nits were applied. Re-read every
+staged file this round covers (`watchlistWrites.ts`, `buildAddPayload.ts`, `domain.ts`,
+`WatchlistContext.tsx`, `firestore-rules.test.ts`, `watchlistWrites.addWrite.test.ts`,
+`accepted-deviations.md`, `data-model.md`).
+
+**Nit 1 (22→32 field count) — confirmed fixed.** `tasks/todo.md`'s Batch D section now reads
+"(32 keys, counted; the ticket said 22, which was stale)". Independently recounted
+`isValidWatchlistItem`'s `hasOnly([...])` array in `firestore.rules` — 32 entries. Matches.
+
+**Nit 2 (slice-bound `WatchlistCtx` typo) — confirmed fixed, and fixed correctly, not just
+silenced.** `watchlistWrites.addWrite.test.ts`'s "and the context no longer OFFERS one" test
+now reads:
+```
+const from = ctxSrc.indexOf('interface WatchlistState');
+const to = ctxSrc.indexOf('const WatchlistContext = createContext');
+expect(from).toBeGreaterThan(-1);
+expect(to).toBeGreaterThan(from);
+```
+with a comment naming the exact round-1 defect ("the closing bound said `const WatchlistCtx`,
+which matches nothing"). Both bounds asserted found before the slice is taken, so a future
+rename of either symbol reddens this test instead of silently widening the slice — the
+correct fix for the class, not just a corrected string literal.
+
+**Test-reviewer's third nit (addItem-call guard) — confirmed applied.** The offender regex
+is now `\baddItem\s*\??\.?\s*\(` (covers optional chaining) and the scan excludes its own
+file (`!f.endsWith('watchlistWrites.addWrite.test.ts')`) with a comment explaining why: the
+pattern is written out as a literal in this file's own comments and would otherwise match
+itself.
+
+**This round's own two lens checks:**
+
+1. **`buildAddWrite` emits only allowlisted keys, every branch, both intents.** Read
+   `firestore.rules`' `isValidWatchlistItem` `hasOnly` list (32 keys) against every key
+   `buildAddWrite` can emit (`itemFields` via `WatchlistAddPayload`'s `AlwaysWritten |
+   Carryable`, `dropped`, `effectiveVisibility`/`isPublic`, `addedAt`, `rewatchCount`,
+   `updatedAt`, `watchedAt`, `tmdbFieldsRefreshedAt`, `providersCheckedAt`, `ratedAt`) —
+   every one is a member. Backed by a NEW live rules-emulator block in
+   `firestore-rules.test.ts` (`describe('BIN-655 — buildAddWrite payloads satisfy the
+   hasOnly allowlist')`) that runs the REAL `buildAddWrite` against the REAL deployed-shape
+   rules for CREATE (both intents) and MERGE-UPDATE (rewatch-counted + bulk re-mark), plus a
+   control (`assertFails` on one extra key) proving the allowlist is actually what's gating
+   the `assertSucceeds` cases and not a permissive stand-in. This is exactly the "write a
+   live PoC, don't trust a rules-trace" principle, done by the diff's own author before I
+   asked — nothing to add to the knowledge file, the existing bullet already covers it.
+   Confirmed by reading source (not just running tests): `writeTitle` builds `ref` from
+   `uid` (own `useAuth` uid), never from `item`, so ownership is unchanged from pre-refactor.
+
+   **Non-blocking, not filed:** `buildAddPayload.ts`'s `Carryable` type (`Exclude<keyof
+   WatchlistItem, ServerOwned | AlwaysWritten>`) includes `tags`, which is NOT in
+   `firestore.rules`' `hasOnly` list — structurally the exact `notes`-shaped gap the file's
+   own doc comment warns about, one field over. Not exploitable today (the canonical
+   `buildWatchlistAddPayload` never populates `tags`; no caller in this diff does either) and
+   fails SAFE (`permission-denied`, not a data leak) if it ever were. Pre-existing — this
+   diff only renamed comments in `buildAddPayload.ts` (`git diff` confirmed zero logic
+   change to `ServerOwned`/`Carryable`), so it is out of scope for THIS review, not newly
+   introduced. Worth a follow-up ticket if Malin wants `tags` excluded from `Carryable` the
+   same way `notes` is, but not a blocker.
+
+2. **BIN-505 notes strip — unconditional, and before the spread.** `const { notes:
+   _strippedNotes, ...itemFields } = item as ...` runs unconditionally (not inside any `if`/
+   ternary) as the first statement before the `return`, and `...itemFields` is the FIRST key
+   in the returned object literal — no later spread reintroduces `notes` (verified: none of
+   `visibilityFields`, `rewatch`, or the stamp fragments carry a `notes` key). Cross-checked
+   against `firestore.rules` lines 259–272: `notes` stays IN the `hasOnly` allowlist
+   (required — a legacy doc's stored `notes` survives into the post-merge doc that `hasOnly`
+   judges) but is value-bound to absent/null on create and absent/null/unchanged on update,
+   matching the code comment's claim exactly.
+
+No new trust boundary, no new public-read surface, no rules file touched (this diff only
+adds a TEST reading `firestore.rules`, confirmed via `git diff --cached --name-only` — rules
+themselves are unchanged so no manual-deploy note is needed). Not re-raised (accepted-
+deviations): Tillsammans anon-vote forgery, session-expiry gate, blocking-as-hygiene,
+create-only reports, fail-open `effectiveVisibility` read, aborted-deletion marker,
+limbo-screen write block.
+
+**REVIEW-VERDICT: pass (0 blocking)**

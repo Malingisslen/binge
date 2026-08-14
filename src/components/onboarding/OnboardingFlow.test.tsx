@@ -22,7 +22,7 @@ const auth = vi.hoisted(() => ({
 }));
 const watchlist = vi.hoisted(() => ({
   items: [] as WatchlistItem[],
-  addItem: vi.fn<(payload: { tmdbId: number; mediaType: string }) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: { tmdbId: number; mediaType: string }) => Promise<void>>(async () => {}),
   // A GETTER, mirroring the provider's own derivation — a hardcoded
   // `libraryKnown` would let these tests assert a state production can't reach.
   snapshotSettled: true,
@@ -80,7 +80,7 @@ beforeEach(() => {
   auth.user = { uid: 'u1', myProviders: [] };
   auth.updateProviders.mockResolvedValue(undefined);
   watchlist.items = [];
-  watchlist.addItem.mockResolvedValue(undefined);
+  watchlist.upsertTitle.mockResolvedValue(undefined);
   watchlist.snapshotSettled = true;
   watchlist.listenerFailed = false;
   search.data = null;
@@ -104,8 +104,8 @@ describe('BIN-664 — the duplicate check is (tmdbId, mediaType), not tmdbId', (
     const follow = screen.getByRole('button', { name: 'Följ' });
 
     await act(async () => { fireEvent.click(follow); });
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({ tmdbId: 1399, mediaType: 'tv' });
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle.mock.calls[0][0]).toMatchObject({ tmdbId: 1399, mediaType: 'tv' });
   });
 
   it('still marks a genuine duplicate as Tillagd — same id AND same type', async () => {
@@ -140,7 +140,7 @@ describe('BIN-659 — a failed write is visible and retry-able', () => {
 
   it('says so when adding the first title fails, and the row retries', async () => {
     search.data = { results: [gotSeries] };
-    watchlist.addItem.mockRejectedValueOnce(new Error('offline'));
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error('offline'));
     render(<OnboardingFlow />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
@@ -149,7 +149,7 @@ describe('BIN-659 — a failed write is visible and retry-able', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte lägga till titeln/);
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Följ' })); });
-    expect(watchlist.addItem).toHaveBeenCalledTimes(2);
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -202,7 +202,7 @@ describe('BIN-659 — a failed write is visible and retry-able', () => {
 // BIN-643. This step used to be deliberately ungated, on the argument that a
 // brand-new account has no library to overwrite. The overwrite is not the only
 // loss: on a dead listener a title marked "Sedd" here lands with NO watchedAt
-// (addItem suppresses the stamp when it cannot tell a new add from a re-mark),
+// (upsertTitle suppresses the stamp when it cannot tell a new add from a re-mark),
 // and that half never self-heals. The flow is also reachable for any account
 // whose onboardingCompletedAt is unset, library and all.
 describe('BIN-643 — the first add waits for the library, and never traps anyone', () => {
@@ -229,7 +229,7 @@ describe('BIN-643 — the first add waits for the library, and never traps anyon
     const follow = screen.getByRole('button', { name: 'Följ' });
     expect(follow).toBeDisabled();
     await act(async () => { fireEvent.click(follow); });
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(screen.getByText(/Läser in ditt bibliotek/)).toBeInTheDocument();
   });
 
@@ -239,7 +239,7 @@ describe('BIN-643 — the first add waits for the library, and never traps anyon
 
     expect(screen.getByRole('button', { name: 'Följ' })).toBeDisabled();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Följ' })); });
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Försök igen' })); });
@@ -262,7 +262,7 @@ describe('BIN-643 — the first add waits for the library, and never traps anyon
     const follow = screen.getByRole('button', { name: 'Följ' });
     expect(follow).not.toBeDisabled();
     await act(async () => { fireEvent.click(follow); });
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

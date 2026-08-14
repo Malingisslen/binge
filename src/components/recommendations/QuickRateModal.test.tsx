@@ -15,7 +15,8 @@ import type { WatchlistItem } from '@/types';
 // status'` to `plan !== 'add-as-seen'` — a plausible tidy-up, since the
 // surrounding else already excludes the add case — leaves the helper's own tests
 // green while restoring BIN-599's bug: a second status write on an already-'sedd'
-// film is read as a rewatch by buildStatusUpdate's isRewatch, and rewatchCount
+// film is read as a rewatch by `rewatchFields` (it was called isRewatch until
+// BIN-641 turned the boolean into the field fragment), and rewatchCount
 // inflates once per pass through the modal. It is editable nowhere, so the
 // library row reads "x2" for a film watched once, permanently.
 //
@@ -23,7 +24,7 @@ import type { WatchlistItem } from '@/types';
 
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: string, tmdbId: number) => WatchlistItem | null>(() => null),
-  addItem: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
   updateRating: vi.fn<(mediaType: string, tmdbId: number, rating: number | null) => Promise<void>>(async () => {}),
   updateStatus: vi.fn<(mediaType: string, tmdbId: number, status: string) => Promise<void>>(async () => {}),
   // Mirrors the provider's own derivation rather than hardcoding libraryKnown —
@@ -76,9 +77,9 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     await rate('Sett 4★');
 
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
-    // The whole point: no second 'sedd' write, so isRewatch never fires.
+    // The whole point: no second 'sedd' write, so `rewatchFields` never fires.
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 
   it('still promotes a tracked-but-unseen film to sedd', async () => {
@@ -88,15 +89,15 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
 
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 5);
     expect(watchlist.updateStatus).toHaveBeenCalledWith('movie', 603, 'sedd');
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 
   it('adds an untracked film as seen, in one write', async () => {
     await openModal();
     await rate('Sett 3★');
 
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle.mock.calls[0][0]).toMatchObject({
       tmdbId: 603, mediaType: 'movie', status: 'sedd', rating: 3,
     });
     // The add carries the rating, so no separate rating/status write follows.
@@ -111,7 +112,7 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
 
     expect(watchlist.updateRating).not.toHaveBeenCalled();
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 });
 
@@ -138,7 +139,7 @@ describe('BIN-643 — no write while the library is unknown', () => {
 
     expect(screen.getByText('Sett 5★')).toBeDisabled();
     await rate('Sett 5★');
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(watchlist.updateRating).not.toHaveBeenCalled();
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
     // Said out loud, so the disabled buttons are not just dead controls.
@@ -154,7 +155,7 @@ describe('BIN-643 — no write while the library is unknown', () => {
 
     expect(screen.getByText('Sett 4★')).toBeDisabled();
     await rate('Sett 4★');
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(watchlist.updateRating).not.toHaveBeenCalled();
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);

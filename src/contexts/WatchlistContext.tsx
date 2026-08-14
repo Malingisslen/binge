@@ -4,14 +4,14 @@ import { createContext, useContext, useMemo, useRef, useState, useCallback, useE
 import { fsdb, lazySubscribe } from '@/lib/firebase/db';
 import { toDate } from '@/lib/firebase/utils';
 import { resolveAddedAt, addedAtIsRepairable } from '@/lib/watchlist/addedAt';
-import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, shouldStampProvidersAtAdd, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
+import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, type TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
 import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { isDeletionStarted } from '@/lib/deletionMarker';
-import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, canAutoStampWatchedAt, shouldStampVisibility, rewatchFields } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, type WriteIntent } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -98,7 +98,7 @@ interface WatchlistState {
    * `loading` flips to false in BOTH terminal states: a landed snapshot AND a
    * dead listener. A writer that reads the second as "loaded, library empty"
    * treats every re-mark as a genuine new add — exactly the state BIN-601 stops
-   * `addItem` from stamping `addedAt` into, and the one that would let a
+   * the add path from stamping `addedAt` into, and the one that would let a
    * cold-load "Sedd" land without a `watchedAt`. So the add surfaces
    * (StatusButton / QuickAddButton) hold their action on these two instead:
    *
@@ -151,43 +151,47 @@ interface WatchlistState {
    */
   retryListener: () => void;
   /**
-   * BIN-641 — THE canonical explanation of `countsAsViewing`; everywhere else
-   * points here.
+   * BIN-655 — the BULK/sync add. THE canonical explanation of the split lives here;
+   * `WriteIntent` in src/lib/watchlistWrites.ts carries the payload-level half.
    *
-   * It says a HUMAN deliberately logged a re-viewing, which is what turns a
-   * sedd → sedd write into a counted rewatch. Only the "Sedd igen" action passes
-   * it. Re-picking the status a title already has does NOT — that gesture is
-   * ambiguous (the current status renders highlighted in the menu, so tapping it
-   * is as likely to mean "confirm/dismiss" as "again"), and `rewatchCount` is
-   * editable nowhere, so a wrong count is permanent. Malin, 2026-07-31.
+   * Every caller that is REPLAYING data rather than reporting a fresh human act:
+   * the CSV importer, onboarding, the Collection and Companion "add all" surfaces,
+   * "Bevaka släpp", the quick-rate pass, and every non-'sedd' quick add. A
+   * sedd → sedd write through this door is a RESTORE and counts nothing.
    *
-   * Two reasons it is a SECOND PARAMETER and never a payload field:
-   *  - `WatchlistAddPayload` is contractually the exact key set written to
-   *    Firestore, and firestore.rules' isValidWatchlistItem uses a `hasOnly`
-   *    allowlist — a stray key either lands as junk or fails the whole
-   *    merge-write with permission-denied. That already bit us once, with
-   *    `notes`.
-   *  - It is intent, not data. Nothing about it belongs in the document.
+   * Until BIN-655 this and `logViewing` were one function taking a
+   * `countsAsViewing` boolean, and that shape cost twice — BIN-599 (the quick-rate
+   * modal reached the counting path and inflated a permanent, un-editable counter
+   * once per pass) and BIN-641 (the flag itself, added because the write path
+   * structurally cannot see whether a human just watched something). Both were the
+   * same missing distinction, patched at the call site. Now the distinction IS the
+   * call site: a caller cannot arrive at the counting path by omission.
    *
-   * Defaults to FALSE by omission, because addItem is also the BULK path — the
-   * CSV importer, onboarding, and the "add all" collection surfaces — and a bulk
-   * replay must never count. Stated as a PROPERTY rather than an example on
-   * purpose: two earlier versions of this comment each named a specific caller as
-   * the reachable case, and both were wrong (the CSV importer filters titles
-   * already in the library; onboarding swaps its button for a "Tillagd" chip).
-   * The rule does not depend on any of them being reachable — a caller that does
-   * not state intent must not count, whether or not it can currently produce the
-   * transition.
-   *
-   * The transition IS reachable today, from re-picking the plain 'Sedd' entry in
-   * StatusButton's menu (and QuickAddButton's identical one) — which is exactly
-   * the gesture Malin ruled must not count, and which StatusButton.test pins.
-   *
-   * The real fix for this whole shape is BIN-655: addItem is two functions
-   * wearing one name, and "did a human do this" should be answered by which one
-   * you called.
+   * The transition the boolean guarded is reachable today — re-picking the plain
+   * 'Sedd' entry in StatusButton's menu (and QuickAddButton's identical one), which
+   * is exactly the gesture Malin ruled must not count, 2026-07-31. It reaches
+   * `upsertTitle` via useMarkSeen and counts nothing, and StatusButton.test pins it.
    */
-  addItem: (item: WatchlistAddPayload, opts?: { countsAsViewing?: boolean }) => Promise<void>;
+  upsertTitle: (item: WatchlistAddPayload) => Promise<void>;
+  /**
+   * BIN-655 — the HUMAN add: the user just told us they watched this.
+   *
+   * The ONLY path that may count a rewatch, and therefore the only one that may
+   * overwrite a user-authored `watchedAt`. The two always travel together: a count
+   * without a fresh date is the half-feature Malin rejected (BIN-641), so the
+   * re-date gates on the counted OUTCOME rather than on the intent — intent on a
+   * tracked title that is NOT 'sedd' would otherwise stomp the stored date while
+   * counting nothing.
+   *
+   * `rewatchCount` is editable nowhere, so a wrong count is permanent. Only the
+   * "Sedd igen" action reaches this. Both entry points take the SAME payload and
+   * take no second argument, so intent can never leak into the document —
+   * `WatchlistAddPayload` is contractually the exact key set written to Firestore
+   * and firestore.rules' isValidWatchlistItem uses a `hasOnly` allowlist, where a
+   * stray key either lands as junk or fails the whole merge-write with
+   * permission-denied. That already bit us once, with `notes`.
+   */
+  logViewing: (item: WatchlistAddPayload) => Promise<void>;
   // BIN-560 Phase 4: every per-title mutator takes mediaType so it can (a) address
   // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
   // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
@@ -219,7 +223,8 @@ const WatchlistContext = createContext<WatchlistState>({
   listenerFailed: false,
   libraryKnown: false,
   retryListener: () => {},
-  addItem: async () => {},
+  upsertTitle: async () => {},
+  logViewing: async () => {},
   updateStatus: async () => {},
   updateWatchedAt: async () => {},
   updateRating: async () => {},
@@ -649,208 +654,92 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     return { effectiveVisibility: eff, isPublic: eff === 'public' };
   }, [user?.defaultVisibility]);
 
-  const addItem = useCallback(async (item: WatchlistAddPayload, opts?: { countsAsViewing?: boolean }) => {
+  // BIN-655 -- ONE write, two names. `writeTitle` is private: the exported entry points
+  // differ ONLY in the intent they pass, and that intent is the whole point. A caller
+  // says what it is by choosing a function, not by remembering a boolean.
+  //
+  // The payload itself is built by `buildAddWrite` in src/lib/watchlistWrites.ts, beside
+  // the six guards it shares with `buildStatusUpdate`. Keeping it out of this file is not
+  // tidiness: it is what makes the parity matrix testable without a Firebase env.
+  const writeTitle = useCallback(async (item: WatchlistAddPayload, intent: WriteIntent) => {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
-    // BIN-349: addItem is ALSO a merge-write re-mark path (useMarkSeen /
-    // StatusButton / QuickAddButton re-mark an in-library title, passing
-    // rating: current?.rating). So compare against the current rating and stamp
-    // ratedAt only on a genuinely new/changed rating — a blind stamp would
-    // re-bump recency on every re-mark, the exact drift this fix removes.
-    // BIN-593: read the LIVE ref, not the render-closure `items` — see itemsRef's
-    // declaration. This runs after `await fsdb()`, so the closure value can be a
-    // whole snapshot out of date while firstSnapshotSettledRef has already flipped.
+    // BIN-593: read the LIVE ref, not the render-closure `items` -- see itemsRef's
+    // declaration. This runs after `await fsdb()`, so the closure value can be a whole
+    // snapshot out of date while firstSnapshotSettledRef has already flipped.
     // BIN-598: through the shared `findItem`, so the file teaches one answer.
-    const currentForRating = findItem(item.mediaType, item.tmdbId);
-    // BIN-641 — the rewatch count, computed ONCE so the re-date below can gate on
-    // the OUTCOME rather than re-deriving the conditions. The two must agree: a
-    // write that re-dates without counting (or the reverse) is incoherent, and
-    // the raw flag alone would permit it — intent on a tracked title that is NOT
-    // 'sedd' would stomp the stored date while counting nothing.
-    //
-    // Reads `currentForRating`, the LIVE ref the status guards below also use. A
-    // cold load leaves it undefined, so an unsettled snapshot counts nothing and
-    // (via the gate below) re-dates nothing either. Neither is user-fixable.
-    const rewatch = opts?.countsAsViewing
-      ? rewatchFields(item.status, currentForRating?.status, currentForRating?.rewatchCount)
-      : {};
+    const current = findItem(item.mediaType, item.tmdbId);
+
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
-    //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
-    //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
-    //  - Snapshoten har INTE settlat (kall laddning) → vi kan inte skilja ny
-    //    från återvändande användare. Spara en pending-kandidat och låt första
-    //    snapshoten avgöra. Fyra aldrig vid add-tid i detta läge.
+    //  - Snapshoten har redan settlat -> vi vet sakert om biblioteket ar tomt.
+    //    Fyra direkt om inget snapshot annu sett en titel (genuin forsta add).
+    //  - Snapshoten har INTE settlat (kall laddning) -> vi kan inte skilja ny fran
+    //    atervandande anvandare. Spara en pending-kandidat och lat forsta snapshoten
+    //    avgora. Fyra aldrig vid add-tid i detta lage.
     let fireFirstNow = false;
     if (firstSnapshotSettledRef.current) {
       if (!everNonEmptyRef.current) fireFirstNow = true;
       everNonEmptyRef.current = true;
     } else {
-      // Kall laddning: räkna varje add (BIN-110) så snapshoten kan subtrahera
-      // sessionens egna skrivningar. Behåll bara den FÖRSTA addens mediaType
-      // för event-payloaden (en användare har bara EN första titel).
+      // Kall laddning: rakna varje add (BIN-110) sa snapshoten kan subtrahera
+      // sessionens egna skrivningar. Behall bara den FORSTA addens mediaType for
+      // event-payloaden (en anvandare har bara EN forsta titel).
       pendingAddCountRef.current += 1;
       if (pendingFirstMediaTypeRef.current == null) {
         pendingFirstMediaTypeRef.current = item.mediaType;
       }
     }
-    // Denormaliserad effectiveVisibility (+ legacy isPublic-mirror) så läsregeln
-    // slipper joina mot parent-user-doc. Nya items ärver default; per-item-override
-    // sätts via updateVisibility. BIN-595: detta gäller INTE längre "varje item" —
-    // ett item med egen override lämnas orört. Se shouldStampVisibility nedan.
-    // BIN-505: notes lives ONLY in the owner-only watchlistNotes subcollection, and
-    // the watchlist-doc rules REJECT a non-null inline `notes` — so a re-mark of a
-    // NOTED title would be permission-denied if one rode along.
-    //
-    // Belt AND braces, deliberately. `WatchlistAddPayload` no longer accepts `notes`
-    // at all, which stops every type-checked caller; this runtime strip stays for the
-    // ones types can't reach (a cast, plain JS, a future refactor that widens the
-    // signature). BIN-505 made this a privacy invariant, not a convention, and
-    // WatchlistContext.test.tsx pins it by passing an off-type note on purpose.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { notes: _strippedNotes, ...itemFields } = item as WatchlistAddPayload & { notes?: unknown };
-    await setDoc(ref, {
-      ...itemFields,
-      dropped: false,
-      // BIN-595: only (re-)assert the two DENORMALISED visibility fields
-      // (effectiveVisibility + the legacy isPublic mirror — never the per-item
-      // `visibility` override itself, which updateVisibility alone writes) when the title
-      // has no per-item override — see shouldStampVisibility. addItem is ALSO the
-      // re-mark path (StatusButton/QuickAddButton/useMarkSeen), so writing the
-      // profile default unconditionally WOULD republish a title the user had
-      // deliberately hidden, on nothing more than a status change. Conditional, not
-      // past tense: no released version ever shipped a UI for the per-title
-      // override, so the state this protects has never existed in real data. The
-      // guard is here for when it does.
-      ...(shouldStampVisibility(currentForRating) ? effectiveVisibilityNow() : {}),
-      // Write addedAt only when this is NOT a re-mark. addItem is a merge-write, so
-      // an omitted key preserves the stored value — and re-stamping it on every
-      // status change rewrote the original add date, which Bibliotek's "Tillagd"
-      // sort, backlogResurface's oldest-first ranking, taste/stats' 30-day counter
-      // and the GDPR export all read as the truth.
-      //
-      // Deliberately NOT gated on firstSnapshotSettledRef — unlike
-      // shouldStampProvidersAtAdd below, which is. The two conditions differ
-      // because the cost of guessing wrong is asymmetric per field: during an
-      // ordinary cold load we must still stamp, or a genuinely new doc lands with
-      // no date at all. Do not "unify" these guards.
-      //
-      // BIN-601: but a DEAD listener is not a cold load. There, `currentForRating`
-      // is undefined for every title in the library, so stamping would rewrite the
-      // real add date of a title that may be years old — unrecoverable. So we say
-      // nothing, and BIN-640's two-part answer keeps that silence from costing
-      // anything: a doc with no stored addedAt reads as its own updatedAt rather
-      // than as "now" (src/lib/watchlist/addedAt.ts), and the repair effect below
-      // writes the date for real once the listener comes back.
-      ...(currentForRating || listenerFailedRef.current ? {} : { addedAt: serverTimestamp() }),
-      // BIN-641 — the rewatch count. `opts.countsAsViewing` is the caller saying
-      // a human deliberately logged a re-viewing; `rewatchFields` owns the rest
-      // of the rule and is shared with buildStatusUpdate. See the option's doc on
-      // the addItem signature above for why intent cannot be inferred here.
-      //
-      // Cold-load behaviour: see the `const rewatch` note above.
-      ...rewatch,
-      updatedAt: serverTimestamp(),
-      // BIN-593: `watchedAt` is user-authored — Malin, 2026-07-25: "har man
-      // manuellt justerat 'sett' ska det bara ändras om man själv manuellt ändrar
-      // igen". This used to write `serverTimestamp()` on every 'sedd' re-mark
-      // (stomping a date backdated via WatchedDateEditor) and an explicit `null`
-      // on every other status (erasing the date outright the moment a film left
-      // 'sedd'). Now: stamp only the FIRST date on a title provably without one,
-      // and otherwise omit the key so the merge preserves it.
-      //
-      // STRICT gate, like tmdbFieldsRefreshedAt below and NOT like addedAt above —
-      // the cost of guessing wrong inverts per field. A missing watchedAt is
-      // user-fixable (the date picker); a stomped one is gone. So during a cold
-      // load, when `itemsRef` is still empty and a re-mark is indistinguishable
-      // from a new add, we say nothing. Do not "unify" this with the addedAt guard.
-      // Shares `canAutoStampWatchedAt`/`resolveCurrentWatchedAt` with
-      // buildStatusUpdate, so the "may we stamp?" rule can't drift between the two
-      // write paths. That predicate is ALL they share, deliberately spelled out:
-      //  - buildStatusUpdate also stamps on an explicit `watchedAtOverride`;
-      //    addItem has no such parameter and no equivalent branch. (That override
-      //    is currently reachable only from updateStatus's optional 4th argument,
-      //    which NO production caller passes — the real date picker goes through
-      //    updateWatchedAt. It is the BIN-91 signature, kept, not the live path.)
-      // The rewatch asymmetry that used to be listed here is GONE, but not the way an
-      // earlier version of this comment claimed. addItem ALWAYS received sedd → sedd
-      // writes — re-picking the plain 'Sedd' entry in the status menu produces one —
-      // it simply never counted them. What was dead is the rule in buildStatusUpdate:
-      // no updateStatus caller can reach that transition at all. BIN-641 introduces
-      // the first surface that counts, and only on explicit intent.
-      // The watchedAtOverride asymmetry above is pre-existing and still stands.
-      //
-      // BIN-641 adds the ONE case that overwrites a stored date: a deliberate
-      // "Sedd igen". Malin, 2026-07-31 — that action is the user manually saying
-      // "I watched this, now", which is precisely the carve-out BIN-593 leaves
-      // open ("bara om man själv manuellt ändrar igen"). Without it the rewatch
-      // is invisible: the count says x2 while Dagbok, Statistik's monthly
-      // activity and Streamingrådgivarens films-this-month lens all keep
-      // crediting the ORIGINAL viewing, so a service she actually used tonight
-      // reads as unused. The cost is real and accepted — a title stores one
-      // date, so the earlier one is replaced.
-      // Gated on the COUNTED OUTCOME, not the raw flag: the re-date and the
-      // count must always agree, and this is the one branch that OVERWRITES
-      // user-authored data. A cold load counts nothing, so it re-dates nothing.
-      // Unreachable from the UI today (the "Sedd igen" entry needs a landed
-      // snapshot to render at all), which is exactly why it needs saying.
-      ...(item.status === 'sedd'
-        && (('rewatchCount' in rewatch)
-          || canAutoStampWatchedAt(resolveCurrentWatchedAt(currentForRating, firstSnapshotSettledRef.current)))
-        ? { watchedAt: serverTimestamp() }
-        : {}),
-      // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness on a genuine NEW
-      // add — that write really does denormalize the TMDB-derived block fresh from
-      // TMDB, and without the stamp the ToS sweep (which treats an absent stamp as
-      // stale) would clear a just-added title's fields.
-      //
-      // But NOT on a re-mark: those carry `current`'s cached values forward, so
-      // stamping there re-certified data that may be years old as freshly verified —
-      // making the static field-group permanently un-sweepable on exactly the titles
-      // users touch most, and defeating the 6-month TMDB ToS clearing the sweep
-      // exists to enforce.
-      //
-      // STRICTER gate than addedAt above — deliberately the OPPOSITE trade-off, and
-      // the same one shouldStampProvidersAtAdd makes below. The safe error inverts
-      // per field: a doc with no addedAt sorts nowhere and never recovers, so when
-      // in doubt we stamp it; an ABSENT freshness stamp just reads as stale and the
-      // title-page repair refills it, whereas a FALSE-fresh one suppresses that
-      // repair for 90 days. So when the snapshot hasn't settled and we cannot tell a
-      // new add from a re-mark, we say nothing.
-      ...(firstSnapshotSettledRef.current && !currentForRating
-        ? { tmdbFieldsRefreshedAt: serverTimestamp() }
-        : {}),
-      // BIN-468: stamp the providers group ONLY on a genuine new add carrying real
-      // providers. addItem is also the useMarkSeen re-mark path (cached/[] providers);
-      // stamping there would falsely re-certify stale providers AND suppress
-      // taste/backfill's 60-day re-fetch. "Genuine new add" requires the snapshot to
-      // have SETTLED — during a cold load `items` is [] so an in-library re-mark would
-      // otherwise misread as new. When unsettled we can't tell → don't stamp; backfill
-      // / the title-page fallback owns it.
-      // `?? undefined`: the payload type allows null, and null here means "not
-      // supplied" for stamping purposes exactly like undefined — only a real array
-      // (including an empty one) certifies the group.
-      ...(shouldStampProvidersAtAdd(firstSnapshotSettledRef.current && !currentForRating, item.providers, item.subscriptionProviders ?? undefined)
-        ? { providersCheckedAt: serverTimestamp() }
-        : {}),
-      // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this
-      // call — covers pre-rated CSV imports (current undefined) while NOT bumping
-      // recency when a re-mark carries the unchanged current rating. Omit the key
-      // otherwise so the merge preserves any existing ratedAt.
-      ...(item.rating != null && item.rating !== (currentForRating?.rating ?? null)
-        ? { ratedAt: serverTimestamp() }
-        : {}),
-    }, { merge: true });
+
+    await setDoc(ref, buildAddWrite(item, intent, {
+      current,
+      snapshotSettled: firstSnapshotSettledRef.current,
+      listenerFailed: listenerFailedRef.current,
+      visibilityFields: effectiveVisibilityNow(),
+      serverTimestamp,
+    }), { merge: true });
     trackEvent('title_added_watchlist', { mediaType: item.mediaType, status: item.status });
     if (fireFirstNow) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
-    // BIN-593: `items` is deliberately NOT a dep — the lookup reads itemsRef, so
-    // this callback no longer needs to be recreated on every snapshot.
+    // BIN-593: `items` is deliberately NOT a dep -- the lookup reads itemsRef, so this
+    // callback no longer needs to be recreated on every snapshot.
     // BIN-595: depend on effectiveVisibilityNow (which is itself memoised on
-    // user?.defaultVisibility), matching every sibling mutator, rather than
-    // repeating its input here.
+    // user?.defaultVisibility), matching every sibling mutator.
   }, [uid, effectiveVisibilityNow, findItem]);
+
+  /**
+   * BIN-655 -- the BULK/sync write. CSV import, onboarding, Collection/Companion
+   * "add all", Bevaka, the quick-rate pass, and every non-`sedd` quick add.
+   *
+   * Idempotent by intent: a `sedd` -> `sedd` write here is a RESTORE, never a viewing.
+   * That is BIN-599 made structural -- the quick-rate modal used to reach the counting
+   * path and inflate a permanent, un-editable counter once per pass.
+   */
+  const upsertTitle = useCallback(
+    (item: WatchlistAddPayload) => writeTitle(item, 'bulk'),
+    [writeTitle],
+  );
+
+  /**
+   * BIN-655 -- the HUMAN write: the user just told us they watched this.
+   *
+   * The only path that may count a rewatch, and therefore the only one that may
+   * overwrite a user-authored `watchedAt`. Both always travel together (BIN-641):
+   * a count without a fresh date is the half-feature Malin rejected.
+   *
+   * Reached ONLY from useMarkSeen, and only when the caller passes
+   * `countsAsViewing` -- today that is StatusButton's "Sedd igen" alone. A plain
+   * "Sedd" is also a mark-seen gesture, and it goes to `upsertTitle` and counts
+   * nothing (Malin, 2026-07-31: re-picking the status a title already has is
+   * ambiguous). An earlier version of this comment said "every mark-seen surface",
+   * which is the opposite of the rule, and disagreed with the caller inventory this
+   * batch's own guard test asserts. StatusButton never imports this directly.
+   */
+  const logViewing = useCallback(
+    (item: WatchlistAddPayload) => writeTitle(item, 'viewing'),
+    [writeTitle],
+  );
 
   const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
     if (!uid) return;
@@ -873,7 +762,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     if (!uid) return;
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
-    // BIN-593: live ref, not the render closure — same reason as addItem above.
+    // BIN-593: live ref, not the render closure — same reason as writeTitle above.
     const currentItem = findItem(mediaType, tmdbId);
     const visFields = shouldStampVisibility(currentItem) ? effectiveVisibilityNow() : {};
     await setDoc(ref, buildStatusUpdate(status, {
@@ -887,7 +776,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       currentWatchedAt: resolveCurrentWatchedAt(currentItem, firstSnapshotSettledRef.current),
     }), { merge: true });
     trackEvent('status_changed', { mediaType, status });
-    // BIN-593: reads itemsRef, so `items` is no longer a dependency (see addItem).
+    // BIN-593: reads itemsRef, so `items` is no longer a dependency (see writeTitle).
   }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-154: redigera enbart sett-datumet. Får INTE gå via updateStatus(...,'sedd')
@@ -1149,8 +1038,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const libraryKnown = snapshotSettled && !listenerFailed;
 
   const value = useMemo(() => ({
-    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
-  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, addItem, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
+    items: itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem,
+  }), [itemsWithTags, loading, snapshotSettled, listenerFailed, libraryKnown, retryListener, upsertTitle, logViewing, updateStatus, updateWatchedAt, updateRating, updateNotes, updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields, updateTags, updateVisibility, removeItem, getByStatus, getItem]);
 
   return (
     <WatchlistContext.Provider value={value}>

@@ -33,7 +33,7 @@ vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
 const setRuntime = vi.hoisted(() => vi.fn());
 const refreshTmdbFields = vi.hoisted(() => vi.fn());
-const addItem = vi.hoisted(() => vi.fn());
+const upsertTitle = vi.hoisted(() => vi.fn());
 const watchlist = vi.hoisted(() => ({
   loading: true,
   // BIN-730: the two primitives `libraryKnown` is derived from in
@@ -50,7 +50,7 @@ const watchlist = vi.hoisted(() => ({
   },
   items: [] as unknown[],
   getItem: () => undefined,
-  addItem,
+  upsertTitle,
   updateRating: vi.fn(),
   updateNotes: vi.fn(),
   updateWatchedAt: vi.fn(),
@@ -168,7 +168,7 @@ function signedInWithSettledLibrary() {
 beforeEach(() => {
   setRuntime.mockReset();
   refreshTmdbFields.mockReset();
-  addItem.mockReset();
+  upsertTitle.mockReset();
   router.push.mockReset();
   watchlist.loading = true;
   watchlist.snapshotSettled = false;
@@ -259,7 +259,7 @@ describe('MoviePageClient — what the lazy refresh actually sends (BIN-468)', (
     expect(payload.providers).toEqual([8, 489, 2]);
   });
 
-  it('denormalizes the ORIGINAL title, matching what addItem/StatusButton write', () => {
+  it('denormalizes the ORIGINAL title, matching what upsertTitle/StatusButton write', () => {
     // Otherwise a title-page view rewrites a correctly-stored English title with
     // TMDB's Swedish one on every visit, and the library flips between the two.
     const payload = lastRefreshPayload({ title: 'Matrix', original_title: 'The Matrix' });
@@ -294,7 +294,7 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
 
     fireEvent.click(bevaka()!);
 
-    expect(addItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(upsertTitle).toHaveBeenCalledWith(expect.objectContaining({
       tmdbId: 603, mediaType: 'movie', status: 'vill_se',
     }));
   });
@@ -309,7 +309,7 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     render(<MoviePageClient id="603" />);
 
     expect(bevaka()).toBeNull();
-    expect(addItem).not.toHaveBeenCalled();
+    expect(upsertTitle).not.toHaveBeenCalled();
     // /login is not the answer to a broken library — they ARE signed in.
     expect(router.push).not.toHaveBeenCalled();
   });
@@ -337,7 +337,7 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     // …and the tap has a destination rather than being a dead click or a lie.
     fireEvent.click(bevaka()!);
     expect(router.push).toHaveBeenCalledWith('/login/');
-    expect(addItem).not.toHaveBeenCalled();
+    expect(upsertTitle).not.toHaveBeenCalled();
   });
 
   it('waits for the auth verdict before treating anyone as signed out', () => {

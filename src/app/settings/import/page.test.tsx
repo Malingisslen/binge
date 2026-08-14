@@ -21,7 +21,7 @@ import type { WatchlistItem } from '@/types';
 
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: string, tmdbId: number) => WatchlistItem | null>(() => null),
-  addItem: vi.fn<(payload: { tmdbId: number; status: string }) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: { tmdbId: number; status: string }) => Promise<void>>(async () => {}),
   // Derived exactly as the provider derives it — a hardcoded literal would let
   // this file assert a state production cannot produce.
   snapshotSettled: true,
@@ -97,8 +97,8 @@ describe('BIN-729 — the CSV import waits for a known library', () => {
 
     const importBtn = await screen.findByRole('button', { name: /Importera 1 titlar/ });
     await act(async () => { fireEvent.click(importBtn); });
-    expect(watchlist.addItem).toHaveBeenCalledTimes(1);
-    expect(watchlist.addItem.mock.calls[0][0]).toMatchObject({ tmdbId: 603, status: 'sedd' });
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(watchlist.upsertTitle.mock.calls[0][0]).toMatchObject({ tmdbId: 603, status: 'sedd' });
   });
 
   it('skips a title already in the library — the dedup the gate protects', async () => {
@@ -119,7 +119,7 @@ describe('BIN-729 — the CSV import waits for a known library', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: ANALYZE })); });
     // Nothing was matched, so nothing can be imported — and nothing was written.
     expect(searchMulti).not.toHaveBeenCalled();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
     expect(screen.getByText(/Läser in ditt bibliotek/)).toBeInTheDocument();
   });
 
@@ -132,7 +132,7 @@ describe('BIN-729 — the CSV import waits for a known library', () => {
     expect(screen.getByRole('button', { name: ANALYZE })).toBeDisabled();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: ANALYZE })); });
     expect(searchMulti).not.toHaveBeenCalled();
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
 
     expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Försök igen' })); });
@@ -155,6 +155,6 @@ describe('BIN-729 — the CSV import waits for a known library', () => {
     expect(screen.getByRole('button', { name: /Importera 1 titlar/ })).toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent(/Vi når inte ditt bibliotek/);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Importera 1 titlar/ })); });
-    expect(watchlist.addItem).not.toHaveBeenCalled();
+    expect(watchlist.upsertTitle).not.toHaveBeenCalled();
   });
 });

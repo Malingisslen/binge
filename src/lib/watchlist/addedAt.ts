@@ -2,7 +2,7 @@
  * Reading `addedAt` off a watchlist doc that may not have one (BIN-601/BIN-640).
  *
  * A watchlist doc can legitimately exist WITHOUT `addedAt`: when the realtime
- * listener has died, `addItem` deliberately stops stamping it, because the
+ * listener has died, the add path deliberately stops stamping it, because the
  * alternative — stamping on every status change while we cannot see the library —
  * silently rewrites the real add date of a title that may be years old, and that
  * is unrecoverable (BIN-601).
@@ -12,7 +12,7 @@
  * as **added right now** — on every load, forever. That pinned the row to the top
  * of Bibliotek's "Tillagd" sort and parked it permanently inside the 30-day
  * "Tillagda" counter on the owner's PUBLIC profile, and nothing ever repaired it
- * because `addItem` is the only writer of the field and only stamps when the title
+ * because the add path is the only writer of the field and only stamps when the title
  * is absent (BIN-640).
  *
  * So: resolve a missing `addedAt` to the doc's own `updatedAt` instead. Same lazy-
@@ -69,7 +69,7 @@ export function resolveAddedAt(data: TimestampFields): Date {
  * (Same read-back fact `refreshedThisSession` and the visibility guards in
  * WatchlistContext are built on.) Do not delete it as dead weight.
  *
- * That pending echo is the ONLY production shape this term excludes. `addItem` is
+ * That pending echo is the ONLY production shape this term excludes. The add path is
  * the sole creator of a watchlist doc, and it stamps `updatedAt` unconditionally —
  * but NOT `addedAt`, which its dead-listener branch deliberately withholds. That
  * asymmetry is not a gap in this reasoning, it IS the bug being repaired: a real

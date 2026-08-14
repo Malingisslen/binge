@@ -66,7 +66,7 @@ describe('withProviderDataCount (BIN-845)', () => {
     ])).toBe(0);
   });
 
-  it('still counts a row that has no subscription answer yet (the addItem case)', () => {
+  it('still counts a row that has no subscription answer yet (the add-path case)', () => {
     // What the old providersCheckedAt clause was really for: addItem writes providers
     // without stamping, and stamp-only counting reported "0 av N" while bars rendered.
     // The null-fallback in subscriptionProviderIds covers it without the disjunct.

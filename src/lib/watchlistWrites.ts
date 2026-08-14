@@ -1,4 +1,6 @@
-import type { WatchStatus, ItemVisibility } from '@/types';
+import type { WatchStatus, ItemVisibility, WatchlistItem } from '@/types';
+import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
+import { shouldStampProvidersAtAdd } from '@/lib/watchlist/tmdbFieldsRefresh';
 
 // BIN-164 — pure tag normalization for the owner-only watchlistTags store.
 // Firebase-free so it can be unit-tested; the rules cap array size server-side
@@ -98,8 +100,8 @@ export function resolveCurrentWatchedAt(
 
 /**
  * BIN-593 — the single definition of "may we stamp a watch date automatically?".
- * Shared by `buildStatusUpdate` and `WatchlistContext.addItem` so the rule can't
- * drift between the two write paths.
+ * Shared by `buildStatusUpdate` and `buildAddWrite` so the rule can't drift between
+ * the two write paths.
  */
 export function canAutoStampWatchedAt(currentWatchedAt: Date | null | undefined): boolean {
   return currentWatchedAt === null;
@@ -112,7 +114,7 @@ export function canAutoStampWatchedAt(currentWatchedAt: Date | null | undefined)
  * Two, never three. The per-item `visibility` override itself is NOT written here
  * and must never be: it is in buildAddPayload's ServerOwned set precisely so no add
  * path can touch it, and `updateVisibility` is its only writer. Writing it from
- * addItem would destroy the exact user-authored field this guard exists to protect.
+ * the add path would destroy the exact user-authored field this guard protects.
  * (An earlier draft of this doc called the three a "trio", which invited exactly
  * that mistake — hence the emphasis.)
  *
@@ -154,21 +156,29 @@ export function shouldStampVisibility(
  * Film-only by construction: 'sedd' is the terminal FILM status, so a TV write
  * (which lands as 'mina') can never be a rewatch — see watchStatus.ts.
  *
- * Knowing the transition is NOT sufficient on the addItem side. That path is
- * also the BULK path (CSV import, onboarding, "add all" surfaces), where a
- * sedd → sedd write is a restore rather than a viewing. The caller states
- * intent; this only answers the half it can see. Do not re-justify that with a
- * named caller — two attempts to do so cited callers that dedupe.
+ * Knowing the transition is NOT sufficient on the add side. That path is also the
+ * BULK path (CSV import, onboarding, "add all" surfaces), where a sedd → sedd
+ * write is a restore rather than a viewing. The caller states intent; this only
+ * answers the half it can see. Do not re-justify that with a named caller — two
+ * attempts to do so cited callers that dedupe.
+ *
+ * BIN-655: the caller now states it by CHOOSING `upsertTitle` or `logViewing`, and
+ * `buildAddWrite` calls this only on the second. Nothing else changed here.
  *
  * NOTE for whoever adds the next caller: `planQuickRateWrite` also encodes
  * 'sedd' + 'sedd' and must NOT be rewired onto this. Expressing the quick-rate
  * rule via a helper named "rewatch" would imply that surface counts one, which
  * is exactly the BIN-599 bug.
  *
- * AND: wherever this counts, the caller must ALSO re-date. addItem does
- * (BIN-641); buildStatusUpdate does not, only because its branch is
- * unreachable. Whoever makes it reachable adds the intent gate and the re-date
- * together — a count without a fresh date is the half-feature Malin rejected.
+ * AND: wherever this counts, the caller must ALSO re-date. `buildAddWrite` does
+ * (BIN-641, gated on the counted OUTCOME so the two cannot disagree);
+ * buildStatusUpdate does not, only because its branch is NOT INTENDABLE — no
+ * caller can mean to reach it, though a render-state-vs-live-ref race still can.
+ * (It said "unreachable" until BIN-655; the branch's own comment ~70 lines below
+ * already said the weaker thing, and that weaker claim is the stated reason the
+ * branch may count without re-dating. One branch, one answer.) Whoever makes it
+ * intendable adds the intent gate and the re-date together — a count without a
+ * fresh date is the half-feature Malin rejected.
  */
 export function rewatchFields(
   status: WatchStatus,
@@ -238,7 +248,7 @@ export function buildStatusUpdate(
   //    lists only vill_se films, WatchlistPage bulk writes vill_se/avbruten). All
   //   four decide from RENDER state while ctx.currentStatus comes from the live
   //   ref, so an await in between can still deliver it. The
-  //    live rewatch surface is addItem's "Sedd igen" (BIN-641), which counts AND
+  //    live rewatch surface is `logViewing`'s "Sedd igen" (BIN-641), which counts AND
   //    re-dates to now — Malin, 2026-07-31, the manual-act carve-out. So the frozen
   //    date this used to describe is not what a user meets today.
   //  - vill_se/avbruten -> sedd (took it off the shelf to watch again). STILL
@@ -246,7 +256,11 @@ export function buildStatusUpdate(
   //    (stampWatchedAt below). Before BIN-593 this wrote watchedAt: now. Dagbok,
   //    Statistik's monthly activity and Streamingrådgivarens films-this-month lens
   //    all keep crediting the OLD month, so a service she actually used this month
-  //    can read as unused. WatchedDateEditor is the way to fix it by hand.
+  //    can read as unused. WatchedDateEditor is the way to fix it by hand — and for
+  //    THIS bullet it is still the only way, which is why the wording stays. BIN-641's
+  //    "Sedd igen" also re-dates, but that entry only renders on a title already
+  //    'sedd', so it cannot reach a vill_se/avbruten title. (BIN-655 checked this:
+  //    the ticket listed the sentence as stale, and on this bullet it is not.)
   // BIN-593: `watchedAt` belongs to the user. Two ways it may be written here:
   // an explicit override (the "markera sedd + välj datum" flow — a manual act),
   // or the very first automatic stamp on a title that provably has no date yet.
@@ -275,5 +289,188 @@ export function buildStatusUpdate(
     // legacy doc would snap back to 'avbruten' on the next snapshot — making
     // abandoned titles impossible to revive from the UI.
     ...(status !== 'avbruten' ? { dropped: false } : {}),
+  };
+}
+
+// -- BIN-655 -- the ONE payload builder behind both watchlist write entry points -----
+//
+// `addItem` used to infer five things from a single call and take a FLAG for the sixth,
+// because "did a human just say they watched this?" is the one thing a write path
+// structurally cannot see. That asymmetry was patched twice at the call site (BIN-599's
+// planQuickRateWrite, BIN-641's opts.countsAsViewing) before it was fixed here.
+//
+// The answer is now WHICH FUNCTION YOU CALLED -- WatchlistContext exposes `upsertTitle`
+// (bulk/sync) and `logViewing` (a human logging a watch) -- but there is deliberately
+// only ONE builder underneath. Two independent builders would be exactly the risk #27
+// named when it approved the split: replacing one skewed function with two that drift.
+
+/**
+ * Which of the two entry points is writing.
+ *
+ * `'bulk'`    - CSV import, onboarding, "add all", Bevaka, the quick-rate pass, and
+ *               every non-`sedd` quick add. A `sedd` -> `sedd` write here is a RESTORE,
+ *               not a viewing (BIN-599: counting it inflated a permanent, un-editable
+ *               counter once per pass through the quick-rate modal).
+ * `'viewing'` - the user just said they watched it. May count a rewatch, and when it
+ *               counts, re-dates.
+ */
+export type WriteIntent = 'bulk' | 'viewing';
+
+/** Everything the builder needs that it cannot see for itself. Resolved ONCE by the
+ *  caller and shared by every guard below -- the six gates disagreeing about what
+ *  `current` is would be the drift this consolidation exists to prevent. */
+export interface AddWriteContext {
+  /** The LIVE stored row (read from the ref, never a render closure -- BIN-593), or
+   *  `undefined` for a title we have no row for. */
+  current: WatchlistItem | undefined;
+  /** Has the first watchlist snapshot landed? `false` = cold load: a re-mark is
+   *  indistinguishable from a new add, so the STRICT gates say nothing. */
+  snapshotSettled: boolean;
+  /** BIN-601 -- a DEAD listener is not a cold load. There `current` is undefined for
+   *  every title, so stamping `addedAt` would rewrite the real add date of a title that
+   *  may be years old. Unrecoverable, so we say nothing and BIN-640's read-repair keeps
+   *  that silence from costing anything. */
+  listenerFailed: boolean;
+  /** The profile default, already resolved. Written only when `shouldStampVisibility`
+   *  says so -- see BIN-595. */
+  visibilityFields: { effectiveVisibility: ItemVisibility; isPublic: boolean };
+  /** Injected, so this module stays Firebase-free and testable without an env. Called
+   *  once per stamped field; the tests pass a sentinel and assert on identity. */
+  serverTimestamp: () => unknown;
+}
+
+/**
+ * Build the merge-write payload for one watchlist add / re-mark.
+ *
+ * INTENT GATES EXACTLY TWO THINGS, and this list is the contract:
+ *   1. whether `rewatchFields` applies at all;
+ *   2. the OVERWRITE half of the `sedd` watchedAt branch.
+ *
+ * Everything else is identical on both paths -- including stamping a title's FIRST
+ * watch date, which a bulk import of a never-before-seen film must still do. So
+ * `buildAddWrite(item, 'bulk', ctx)` is byte-identical to the pre-BIN-655
+ * `addItem` called with no options, and `buildAddWrite(item, 'viewing', ctx)` to the
+ * same call with `countsAsViewing: true`. The parity matrix in
+ * watchlistWrites.addWrite.test.ts is what holds that true. (Not watchlistWrites.test.ts,
+ * which is the helpers suite and contains no matrix — integration review, 2026-08-14.)
+ */
+export function buildAddWrite(
+  item: WatchlistAddPayload,
+  intent: WriteIntent,
+  ctx: AddWriteContext,
+): Record<string, unknown> {
+  const { current, snapshotSettled, listenerFailed, visibilityFields, serverTimestamp } = ctx;
+
+  // BIN-641 -- computed ONCE so the re-date below can gate on the OUTCOME rather than
+  // re-deriving the conditions. The two must agree: a write that re-dates without
+  // counting (or the reverse) is incoherent, and the raw intent alone would permit it --
+  // intent on a tracked title that is NOT 'sedd' would stomp the stored date while
+  // counting nothing. A cold load leaves `current` undefined, so it counts nothing and
+  // therefore re-dates nothing either. Neither is user-fixable.
+  const rewatch = intent === 'viewing'
+    ? rewatchFields(item.status, current?.status, current?.rewatchCount)
+    : {};
+  const countedRewatch = 'rewatchCount' in rewatch;
+
+  // BIN-505: notes live ONLY in the owner-only watchlistNotes subcollection, and the
+  // watchlist-doc rules REJECT a non-null inline `notes` -- so a re-mark of a NOTED title
+  // would be permission-denied if one rode along. Belt AND braces, deliberately:
+  // `WatchlistAddPayload` no longer accepts `notes` at all, which stops every type-checked
+  // caller; this runtime strip stays for the ones types cannot reach (a cast, plain JS, a
+  // future refactor that widens the signature). A privacy invariant, not a convention.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { notes: _strippedNotes, ...itemFields } = item as WatchlistAddPayload & { notes?: unknown };
+
+  return {
+    ...itemFields,
+    dropped: false,
+    // BIN-595: only (re-)assert the two DENORMALISED visibility fields
+    // (effectiveVisibility + the legacy isPublic mirror -- never the per-item
+    // `visibility` override itself, which updateVisibility alone writes) when the title
+    // has no per-item override. BOTH entry points are also re-mark paths, so writing the
+    // profile default unconditionally WOULD republish a title the user had deliberately
+    // hidden, on nothing more than a status change. Conditional, not past tense: no
+    // released version ever shipped a UI for the per-title override, so the state this
+    // protects has never existed in real data. The guard is here for when it does.
+    ...(shouldStampVisibility(current) ? visibilityFields : {}),
+    // Write addedAt only when this is NOT a re-mark. This is a merge-write, so an omitted
+    // key preserves the stored value -- and re-stamping it on every status change rewrote
+    // the original add date, which Bibliotek's "Tillagd" sort, backlogResurface's
+    // oldest-first ranking, taste/stats' 30-day counter and the GDPR export all read as
+    // the truth.
+    //
+    // Deliberately NOT gated on `snapshotSettled`, unlike the three STRICT gates below.
+    // The cost of guessing wrong is asymmetric per field: during an ordinary cold load we
+    // must still stamp, or a genuinely new doc lands with no date at all. Do not "unify"
+    // these guards. `listenerFailed` is the one case that suppresses it -- see that
+    // field's doc on AddWriteContext.
+    ...(current || listenerFailed ? {} : { addedAt: serverTimestamp() }),
+    ...rewatch,
+    updatedAt: serverTimestamp(),
+    // BIN-593 -- `watchedAt` is user-authored. Malin, 2026-07-25: "har man manuellt
+    // justerat 'sett' ska det bara andras om man sjalv manuellt andrar igen." Two ways it
+    // is written here, and only one of them touches an existing date:
+    //
+    //  - the FIRST automatic stamp on a title provably without one
+    //    (`canAutoStampWatchedAt`). BOTH intents, deliberately: a bulk import of a film
+    //    the user has never seen still deserves its first date.
+    //  - a COUNTED rewatch, which is the human saying "I watched this, now" -- precisely
+    //    the carve-out BIN-593 leaves open ("bara om man sjalv manuellt andrar igen").
+    //    `'viewing'` only, by construction, since `rewatch` is empty on the bulk path.
+    //    Without it the rewatch is invisible: the count says x2 while Dagbok, Statistik's
+    //    monthly activity and Streamingradgivarens films-this-month lens all keep
+    //    crediting the ORIGINAL viewing. The cost is real and accepted -- a title stores
+    //    one date, so the earlier one is replaced.
+    //
+    // STRICT about the rest: during a cold load, when `current` is undefined and a
+    // re-mark is indistinguishable from a new add, we say nothing. A missing watchedAt is
+    // user-fixable (the date picker); a stomped one is gone. Do not unify this with the
+    // addedAt guard above -- the safe error inverts per field.
+    //
+    // Shares `canAutoStampWatchedAt`/`resolveCurrentWatchedAt` with buildStatusUpdate so
+    // the "may we stamp?" rule cannot drift between the two write paths. That predicate is
+    // ALL they share: buildStatusUpdate also stamps on an explicit `watchedAtOverride`,
+    // and this path has no such parameter and no equivalent branch.
+    ...(item.status === 'sedd'
+      && (countedRewatch || canAutoStampWatchedAt(resolveCurrentWatchedAt(current, snapshotSettled)))
+      ? { watchedAt: serverTimestamp() }
+      : {}),
+    // BIN-402/BIN-453: stamp the doc-level TMDB-fields freshness on a genuine NEW add --
+    // that write really does denormalize the TMDB-derived block fresh from TMDB, and
+    // without the stamp the ToS sweep (which treats an absent stamp as stale) would clear
+    // a just-added title's fields. But NOT on a re-mark: those carry `current`'s cached
+    // values forward, so stamping there re-certified data that may be years old as freshly
+    // verified -- making the static field-group permanently un-sweepable on exactly the
+    // titles users touch most, and defeating the 6-month TMDB ToS clearing the sweep
+    // exists to enforce.
+    //
+    // STRICTER gate than addedAt above -- deliberately the OPPOSITE trade-off, and the
+    // same one shouldStampProvidersAtAdd makes below. An ABSENT freshness stamp just reads
+    // as stale and the title-page repair refills it, whereas a FALSE-fresh one suppresses
+    // that repair for 90 days. So when the snapshot has not settled and we cannot tell a
+    // new add from a re-mark, we say nothing.
+    ...(snapshotSettled && !current ? { tmdbFieldsRefreshedAt: serverTimestamp() } : {}),
+    // BIN-468: stamp the providers group ONLY on a genuine new add carrying real
+    // providers. BOTH entry points are also re-mark paths (cached/[] providers); stamping
+    // there would falsely re-certify stale providers AND suppress taste/backfill's 60-day
+    // re-fetch. "Genuine new add" requires the snapshot to have SETTLED -- during a cold
+    // load `items` is [] so an in-library re-mark would otherwise misread as new.
+    // `?? undefined`: the payload type allows null, and null here means "not supplied" for
+    // stamping purposes exactly like undefined -- only a real array (including an empty
+    // one) certifies the group.
+    ...(shouldStampProvidersAtAdd(
+      snapshotSettled && !current,
+      item.providers,
+      item.subscriptionProviders ?? undefined,
+    )
+      ? { providersCheckedAt: serverTimestamp() }
+      : {}),
+    // BIN-349: stamp ratedAt ONLY on a genuinely new/changed rating in this call --
+    // covers pre-rated CSV imports (current undefined) while NOT bumping recency when a
+    // re-mark carries the unchanged current rating. Omit the key otherwise so the merge
+    // preserves any existing ratedAt.
+    ...(item.rating != null && item.rating !== (current?.rating ?? null)
+      ? { ratedAt: serverTimestamp() }
+      : {}),
   };
 }

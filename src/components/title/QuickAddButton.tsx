@@ -36,7 +36,7 @@ export default function QuickAddButton({
   // would read as "signed out" forever for that user — handing them a login
   // round trip on every tap.
   const signedOut = !authLoading && uid == null;
-  const { getItem, addItem, removeItem, listenerFailed, libraryKnown } = useWatchlist();
+  const { getItem, upsertTitle, removeItem, listenerFailed, libraryKnown } = useWatchlist();
   // BIN-596: the OTHER half of the gate. `loading` from useWatchlist() cannot be
   // used here — it goes false both when the first snapshot lands and when the
   // listener dies, and a dead listener is not an empty library: writing then
@@ -73,7 +73,7 @@ export default function QuickAddButton({
       await markSeen({ tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds });
       return;
     }
-    await addItem(buildWatchlistAddPayload({
+    await upsertTitle(buildWatchlistAddPayload({
       tmdbId, mediaType, status, title, posterPath, releaseYear,
       current, providers, subscriptionProviders, genreIds,
     }));

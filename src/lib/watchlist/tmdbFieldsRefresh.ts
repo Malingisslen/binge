@@ -53,7 +53,7 @@ export function needsProvidersRefresh(stamp: Date | null | undefined, now: numbe
 }
 
 /**
- * Whether addItem should stamp providersCheckedAt. addItem is overloaded: a genuine
+ * Whether an add should stamp providersCheckedAt. The add path serves two masters: a genuine
  * first add from a title page carries fresh providers, but it is ALSO the useMarkSeen
  * re-mark path, where providers are the OLD cached array (or [] from the feed). Stamping
  * then would (a) falsely re-certify stale providers to the ToS sweep and (b) suppress

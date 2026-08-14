@@ -36,7 +36,7 @@ export function providerTally(items: readonly TallyRow[]): Record<number, number
  * stamp — the disjunct would count it while it draws no bar, which is the overcount
  * the caption was narrowed to prevent.
  *
- * The case the stamp clause originally covered (addItem writes providers without
+ * The case the stamp clause originally covered (the add path writes providers without
  * stamping, so stamp-only counting reported "0 av N" while bars rendered) is already
  * handled: `subscriptionProviderIds` falls back to `providers` for a row that has no
  * subscription answer yet.
