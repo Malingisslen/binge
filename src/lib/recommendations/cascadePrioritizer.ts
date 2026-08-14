@@ -1,4 +1,4 @@
-import type { CascadeInput, RowSpec, Seed, RowId } from '@/types';
+import type { CascadeInput, RowSpec, Seed, RowId, CompanionAnchor } from '@/types';
 import { rowKey } from '@/types';
 
 const B_KINDS = new Set<RowId['kind']>(['similar', 'person', 'latest-fav', 'upcoming']);
@@ -28,6 +28,36 @@ const COMPANION_SCORE = 35;
 function joinSv(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? '';
   return `${names.slice(0, -1).join(', ')} och ${names[names.length - 1]}`;
+}
+
+/**
+ * The companion row's standfirst, split by WHY each show anchors it (BIN-811).
+ *
+ * This is the whole of Malin's option (c). Option (b) was "anchor on finished
+ * shows too" — which the data model already did — and (c) added "but say which".
+ * If the reason does not change what the user reads, the field has no consumer
+ * and (c) collapses back into (b).
+ *
+ * WHERE it renders, because an earlier version of this comment got it wrong and
+ * shipped the sentence somewhere the user never looks: `RowSpec.description` is
+ * read by RecommendationsExpanded's standfirst (behind "visa fler →") AND, since
+ * BIN-811, by RecRow's `whyForRow` for THIS row kind — the line in the row header
+ * on /recommendations. Both, deliberately: the expanded view is one click too far
+ * to be the only home for the thing the option was chosen for.
+ *
+ * Deliberately one sentence rather than a per-card badge: the row renders TMDB
+ * film cards that carry no per-anchor slot, and inventing one is a UI decision
+ * nobody has made. Grouping the sentence is what today's surface can carry
+ * truthfully — and it wraps under the title rather than crowding the header,
+ * because `.rec-cat .head` is flex-wrap.
+ */
+export function describeCompanionAnchors(anchors: readonly CompanionAnchor[]): string {
+  const following = anchors.filter(a => a.reason === 'following').map(a => a.showTitle);
+  const finished = anchors.filter(a => a.reason === 'finished').map(a => a.showTitle);
+  if (following.length === 0 && finished.length === 0) return '';
+  if (finished.length === 0) return `Eftersom du följer ${joinSv(following)}.`;
+  if (following.length === 0) return `Eftersom du har sett klart ${joinSv(finished)}.`;
+  return `Eftersom du följer ${joinSv(following)}, och har sett klart ${joinSv(finished)}.`;
 }
 
 function jtbdOf(kind: RowId['kind']): RowSpec['jtbd'] {
@@ -155,7 +185,7 @@ export function prioritizeRows(input: CascadeInput): RowSpec[] {
       id: { kind: 'companion' },
       rowKey: rowKey({ kind: 'companion' }),
       label: 'Fortsätter som film',
-      description: `Eftersom du följer ${joinSv(input.companionAnchors.map(a => a.showTitle))}.`,
+      description: describeCompanionAnchors(input.companionAnchors),
       score: COMPANION_SCORE,
       jtbd: jtbdOf('companion'),
       meta: { companions: [...input.companionAnchors] },

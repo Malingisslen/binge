@@ -7,15 +7,46 @@
 
 import { companionFilmsFor, type CompanionTitle } from '@/lib/franchise/companions';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
-import type { WatchlistItem, WatchStatus, CompanionAnchor } from '@/types';
+import { librarySubState } from '@/lib/libraryView';
+import type { WatchlistItem, WatchStatus, CompanionAnchor, CompanionAnchorReason } from '@/types';
 
 /**
- * Only "mina" (following) TV titles anchor the row — the ticket's wording
- * ("eftersom du följer X") is present tense, and it keeps the first version
- * narrow. Widening this to 'sedd' (a finished show still has a follow-up film)
- * is a deliberate, separate product call.
+ * Which TV statuses anchor the row. `mina` only — and that is NOT the narrow
+ * choice an earlier comment here claimed it was.
+ *
+ * The old note said widening to `sedd` would let finished shows anchor. That was
+ * wrong about the data model: `sedd` is the FILM status. A series never moves out
+ * of `mina` when the user finishes it — it only leaves for `avbruten` (dropped).
+ * "Has the user finished this show" is a derived SUB-state of `mina`
+ * (`librarySubState(item) === 'avslutad'`), not a status of its own.
+ *
+ * So finished shows have anchored this row since day one. BIN-811 does not widen
+ * the pool; it stops calling them shows the user "follows". Do not "fix" this by
+ * adding a status here.
  */
 const ANCHOR_TV_STATUSES: ReadonlyArray<WatchStatus> = ['mina'];
+
+/**
+ * Persisted-fields-only, by design: no TMDB call, no live signals, nothing this
+ * row would otherwise have had to fetch. `librarySubState`'s two optional live
+ * arguments are deliberately NOT passed — the Streaming advisor owns those and
+ * the cascade must not depend on whether it has loaded.
+ *
+ * Consequence, written down rather than discovered later: a finished show whose
+ * `tmdbStatus`/`totalSeasons` were never lazy-backfilled answers `'following'`.
+ * One-directional and safe — the row can under-claim ("du följer" on a show that
+ * ended), never over-claim ("har sett klart" on a show still airing).
+ *
+ * That under-claim is VISIBLE ACROSS SURFACES, not just internal: WatchlistPage
+ * passes the advisor's live signals to the same function, so /my/series can file
+ * a never-backfilled show under "Avslutade" while this row still says "du följer"
+ * about it. Accepted: the alternative is making a recommendation row's copy
+ * depend on whether an unrelated surface has finished loading, which would make
+ * the same page read differently between two renders.
+ */
+function anchorReason(show: WatchlistItem): CompanionAnchorReason {
+  return librarySubState(show) === 'avslutad' ? 'finished' : 'following';
+}
 
 /**
  * Hard bound on the row's TMDB fan-out: one lite movie fetch per film. The
@@ -35,7 +66,10 @@ export const COMPANION_FILM_CAP = 12;
  * hook's `dedupeAndExclude` removes those, and an emptied row renders nothing.
  *
  * Anchors come back sorted by show title so the row is deterministic regardless
- * of the order Firestore handed the watchlist over.
+ * of the order Firestore handed the watchlist over. The sort is by TITLE only —
+ * `reason` deliberately does not group or reorder them, because the film budget
+ * below is spent in sort order and reordering would silently change WHICH films
+ * a user with more anchors than budget is offered.
  */
 export function selectCompanionAnchors(items: readonly WatchlistItem[]): CompanionAnchor[] {
   const inLibrary = new Set(items.map(i => mediaTypeDocId(i.mediaType, i.tmdbId)));
@@ -62,7 +96,12 @@ export function selectCompanionAnchors(items: readonly WatchlistItem[]): Compani
     }
     if (films.length === 0) continue;
     budget -= films.length;
-    anchors.push({ showTmdbId: show.tmdbId, showTitle: show.title, films });
+    anchors.push({
+      showTmdbId: show.tmdbId,
+      showTitle: show.title,
+      reason: anchorReason(show),
+      films,
+    });
   }
 
   return anchors;

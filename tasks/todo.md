@@ -84,29 +84,86 @@ Follow-ups to file, not build:
 - An explicit exemption list, one line of reason each, for legitimate non-route
   `captureError` call sites.
 
-## Batch C — BIN-811 + BIN-809, labelled companion anchors
+## Batch C — BIN-811 + BIN-809, labelled companion anchors  *(refreshed 2026-08-14, in build)*
 
 Malin chose **(c)** on 2026-08-08: anchor on both followed and finished series, but
 each suggestion says which. The labelling is the whole reason (c) beat (b).
+Router at these files: `medium`, `owned`, panel **[28]** — the same role whose blind
+critique ran today, so the stakeholder step is satisfied and no new panel is due.
 
-- **The ticket describes the change wrongly and gets corrected.** The candidate pool
-  does not widen: TV never leaves `mina` except to `avbruten`, so a finished show
-  (`librarySubState === 'avslutad'`) already anchors the row today.
-  `ANCHOR_TV_STATUSES` itself does not change.
-- `CompanionAnchor` gains `reason: 'following' | 'finished'`, computed per anchor
-  from `librarySubState(item)` — persisted fields only, no new reads.
-- **The reason must reach rendered copy.** Today `cascadePrioritizer.ts` joins ALL
-  anchor titles into one hardcoded "Eftersom du följer {A, B och C}" string. A
-  `reason` field with no consumer is option (b) with extra steps.
-- The stale `sedd` comment in `companionSeeds.ts` is replaced with the real
-  mechanism (`sedd` is film-only; this is `mina` + derived sub-state).
-- **Do not touch `COMPANION_SCORE`.** Flat scoring for this row is an argued #28
-  condition from 2026-08-06; per-anchor weighting is a separate, undecided call.
-- Alphabetical-by-title sort contract preserved.
-- BIN-809: the row's dedup test (a film must not appear in two rows) lands here.
-- Known limitation, written down: `librarySubState` is persisted-fields-only and
-  lazy-backfilled, so a finished show whose fields were never backfilled keeps the
-  "du följer" label. Safe direction — never mislabels an airing show as done.
+### Decisions taken during the build
+
+1. **The pool does not widen, and the old comment saying it could was wrong about the
+   data model.** `sedd` is the FILM status; a series never leaves `mina` except to
+   `avbruten`. "Finished" is a derived SUB-state of `mina`
+   (`librarySubState(item) === 'avslutad'`). Finished shows have anchored this row
+   since day one. `ANCHOR_TV_STATUSES` is unchanged.
+2. **`CompanionAnchor` gains `reason: 'following' | 'finished'`**, computed per anchor
+   from persisted fields only — `librarySubState`'s two live-signal arguments are
+   deliberately NOT passed, so the row never depends on whether the Streaming advisor
+   has loaded.
+3. **The reason reaches rendered copy** via a new exported
+   `describeCompanionAnchors()`: "Eftersom du följer A och B, och har sett klart C."
+   The row's rendered rationale lives in TWO places and `description` now feeds
+   BOTH: `RecRow`'s header `why`-line on /recommendations, and
+   `RecommendationsExpanded`'s standfirst behind "visa fler →". Without the first,
+   the field has no consumer where the user actually is and (c) collapses into (b)
+   — see the corrected assumption (a) below.
+   **Deliberately a grouped sentence, not a per-card badge** — the row renders TMDB
+   film cards with no per-anchor slot, and inventing one is an undecided UI call.
+   **The register break is Malin's decision, 2026-08-14.** Both reviewers flagged
+   that this is the one `.why` line written as a sentence where its eight siblings
+   are lowercase `·`-separated fragments. She was shown all three renderings side
+   by side (`tasks/previews/companion-why-line-directions.html`, disposable) and
+   chose the full sentence: naming the shows is the point of (c), and the fragment
+   variant is (b) again. Do not harmonise this line with its siblings.
+4. **`COMPANION_SCORE` untouched** (argued #28 condition, 2026-08-06). Sort stays
+   by title only: the film budget is spent in sort order, so grouping by reason
+   would silently change WHICH films an over-budget user is offered.
+5. **BIN-809** — the cross-row dedup is wired inline in `RecommendationsHub.tsx` and
+   consumed in `useRowCompanion.ts`, neither tested. Extracted to
+   `RecommendationsHub.helpers.ts` (`excludedIdsForOtherRows`, `exclusionsForRow`)
+   per the repo's test-extraction convention, and tested there — a pure-helper test
+   is reachable where a hub render is not.
+
+### Known limitation, written down rather than discovered later
+
+`librarySubState` is persisted-fields-only and lazy-backfilled, so a finished show
+whose `tmdbStatus`/`totalSeasons` were never written back reads as `'following'`.
+One-directional and safe: the row can under-claim, never call an airing show done.
+
+### Files
+
+`src/types/recommendations.ts`, `src/lib/recommendations/companionSeeds.ts`,
+`src/lib/recommendations/cascadePrioritizer.ts`,
+`src/components/recommendations/RecommendationsHub.helpers.ts` (new),
+`src/components/recommendations/RecommendationsHub.tsx`,
+`src/components/recommendations/RecRow.tsx`,
+`src/components/recommendations/RecRow.helpers.ts` (new — `whyForRow` extracted so it
+is testable without RecRow's Firebase-transitive imports), plus FOUR test files.
+
+### Open questions
+
+**No architecture-changing unknowns** — but one of the three assumptions below was
+simply WRONG, and is left here corrected rather than quietly rewritten.
+
+**(a) ~~The row's only rendered copy is `RowSpec.description`~~ — FALSE.** The check
+actually run asked whether there is a per-anchor SLOT, which is a different question.
+`description` renders in `RecommendationsExpanded`'s standfirst only; the row on
+/recommendations renders `RecRow`'s `whyForRow`, which hardcoded "kurerad koppling ·
+serien fortsätter som film" for this row kind. So the first version of this batch put
+the whole label somewhere the user reaches only by clicking "visa fler →" — option (b)
+wearing option (c)'s clothes. Caught by the integration and test reviewers
+independently; fixed by making `whyForRow`'s companion case read `spec.description`,
+pinned by `RecRow.why.test.ts`.
+
+(b) `prioritizeRows` emits at most one companion row per pass — checked, it is a
+single `push` behind one `if`. (c) `librarySubState` is importable from the seeds
+module without pulling Firebase into the test environment — checked,
+`src/lib/libraryView.ts` is a pure helper.
+The one genuine product question — per-card badges instead of a grouped sentence —
+is NOT taken here: it needs a UI decision Malin has not been asked for, and is
+recorded above as the deliberate scope line.
 
 ## Batch D — BIN-655, split `addItem`
 

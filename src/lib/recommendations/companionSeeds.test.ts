@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { selectCompanionAnchors, companionFilmKeys, COMPANION_FILM_CAP } from './companionSeeds';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { librarySubState } from '@/lib/libraryView';
 import type { WatchlistItem } from '@/types';
 
 // Real curated ids (src/lib/franchise/companions.ts):
@@ -142,5 +143,90 @@ describe('companionFilmKeys', () => {
 
   it('is empty when there are no anchors', () => {
     expect(companionFilmKeys([]).size).toBe(0);
+  });
+});
+
+
+describe('selectCompanionAnchors — WHY each show anchors the row (BIN-811)', () => {
+  // The distinction Malin's option (c) is made of. It is NOT a widening: a series
+  // never leaves `mina` when you finish it, so these shows already anchored the row
+  // — they were just described as ones the user "follows".
+  const ENDED = { tmdbStatus: 'Ended', totalSeasons: 5 };
+
+  it("says 'following' for a show still being watched", () => {
+    const anchors = selectCompanionAnchors([
+      breakingBad({ tmdbStatus: 'Returning Series', totalSeasons: 5, lastWatchedSeason: 2 }),
+    ]);
+    expect(anchors[0].reason).toBe('following');
+  });
+
+  it("says 'finished' for a show the user has watched to the end", () => {
+    const anchors = selectCompanionAnchors([
+      breakingBad({ ...ENDED, lastWatchedSeason: 5, lastWatchedEpisode: 16 }),
+    ]);
+    expect(anchors[0].reason).toBe('finished');
+  });
+
+  it("says 'following' when the user is BEHIND on an ended show", () => {
+    // 'ligger_efter', not 'avslutad' — the show is over but the user is not done
+    // with it, and "du har sett klart" would be a lie about their own progress.
+    const anchors = selectCompanionAnchors([
+      breakingBad({ ...ENDED, lastWatchedSeason: 2 }),
+    ]);
+    expect(anchors[0].reason).toBe('following');
+  });
+
+  it("says 'following' for an ENDED show that was never started", () => {
+    // 'ej_paborjad'. The film is still a legitimate suggestion; calling it
+    // "sett klart" would be the over-claim this field exists to avoid.
+    const anchors = selectCompanionAnchors([breakingBad(ENDED)]);
+    expect(anchors[0].reason).toBe('following');
+  });
+
+  it('under-claims rather than over-claims when the backfill never ran', () => {
+    // The known limitation, pinned so a future change cannot quietly invert it:
+    // a finished show whose tmdbStatus/totalSeasons were never lazy-backfilled has
+    // no way to be recognised, and answers 'following'. Safe direction — the row
+    // can never call an airing show done.
+    const anchors = selectCompanionAnchors([
+      breakingBad({ tmdbStatus: null, totalSeasons: null, lastWatchedSeason: 5 }),
+    ]);
+    expect(anchors[0].reason).toBe('following');
+  });
+
+  it('labels each anchor on its own, and does not reorder them', () => {
+    // Both halves matter. Per-anchor because one label for the whole row is what
+    // (b) would have been; the sort because the film budget is spent in sort order,
+    // so grouping by reason would change WHICH films an over-budget user is offered.
+    const anchors = selectCompanionAnchors([
+      breakingBad({ ...ENDED, lastWatchedSeason: 5 }),
+      mkItem({ tmdbId: 1437, title: 'Firefly', lastWatchedSeason: 1 }),
+      mkItem({ tmdbId: 4087, title: 'Arkiv X', lastWatchedSeason: 3 }),
+    ]);
+
+    expect(anchors.map(a => [a.showTitle, a.reason])).toEqual([
+      ['Arkiv X', 'following'],
+      ['Breaking Bad', 'finished'],
+      ['Firefly', 'following'],
+    ]);
+  });
+
+  it('answers from the item ALONE — no advisor state can change the label', () => {
+    // librarySubState takes two optional live arguments the Streaming advisor
+    // supplies (`knownBehind`, `knownEndedCaughtUp`), and passing them would make
+    // the row's copy depend on whether an unrelated surface had loaded.
+    //
+    // Calling the selector twice would only prove determinism, which any pure
+    // function has — a tautology (test review, 2026-08-14). What is actually
+    // testable is the DIFFERENCE: `knownEndedCaughtUp` is exactly the signal that
+    // turns a show with no persisted status into 'avslutad'. So take the one item
+    // the advisor WOULD label finished, and assert this row does not.
+    const advisorWouldSayFinished = breakingBad({
+      tmdbStatus: null,
+      totalSeasons: null,
+      lastWatchedSeason: 5,
+    });
+    expect(librarySubState(advisorWouldSayFinished, false, true)).toBe('avslutad');
+    expect(selectCompanionAnchors([advisorWouldSayFinished])[0].reason).toBe('following');
   });
 });

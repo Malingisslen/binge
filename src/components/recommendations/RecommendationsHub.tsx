@@ -23,7 +23,7 @@ import QuickRateModal from './QuickRateModal';
 import { RowExhaustionContext, type ReportExhaustion } from './rowExhaustionContext';
 import { demoteExhaustedRows } from '@/lib/recommendations/rowComposition';
 import { rowMatchesMediaFilter } from '@/lib/recommendations/rowMediaFilter';
-import { companionFilmKeys } from '@/lib/recommendations/companionSeeds';
+import { excludedIdsForOtherRows, exclusionsForRow } from './RecommendationsHub.helpers';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { DEFAULT_FILTERS } from '@/types';
 import type { FilterState, RowSpec, MediaTypeFilter } from '@/types';
@@ -69,15 +69,12 @@ export default function RecommendationsHub() {
   // similar/latest-fav/upcoming, and dedupeAndExclude only dedupes WITHIN a row.
   // So the companion row keeps the film — it's the row that explains why it's
   // there — and every OTHER row treats it as excluded for this pass.
-  const excludedIdsOtherRows = useMemo(() => {
-    const companionKeys = companionFilmKeys(
-      cascade.rows.flatMap(r => (r.id.kind === 'companion' ? r.meta?.companions ?? [] : [])),
-    );
-    if (companionKeys.size === 0) return excludedIds;
-    const s = new Set(excludedIds);
-    for (const k of companionKeys) s.add(k);
-    return s;
-  }, [cascade.rows, excludedIds]);
+  // BIN-809: the rule itself lives in RecommendationsHub.helpers.ts so it can be
+  // tested; only the memo wiring is here.
+  const excludedIdsOtherRows = useMemo(
+    () => excludedIdsForOtherRows(excludedIds, cascade.rows),
+    [cascade.rows, excludedIds],
+  );
 
   // Rows report "tapped out" (pool fully rotated, or emptied by exclusions);
   // we sink those down the cascade so a fresher row rises into view.
@@ -223,9 +220,10 @@ function RowDispatch(props: DispatchProps) {
   const { spec } = props;
   // The companion row owns its films this pass; every other row gets them as an
   // exclusion so a title can't appear twice on the page (BIN-583).
-  const p: DispatchProps = spec.id.kind === 'companion'
-    ? props
-    : { ...props, excludedIds: props.excludedIdsOtherRows };
+  const p: DispatchProps = {
+    ...props,
+    excludedIds: exclusionsForRow(spec.id.kind, props.excludedIds, props.excludedIdsOtherRows),
+  };
   switch (spec.id.kind) {
     case 'trending':    return <TrendingRow {...p} />;
     case 'latest-fav':  return <LatestFavRow {...p} />;

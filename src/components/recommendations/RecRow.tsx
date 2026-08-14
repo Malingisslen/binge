@@ -9,7 +9,8 @@ import { rotatePool, isPoolExhausted } from '@/lib/recommendations/rowCompositio
 import { RowExhaustionContext } from './rowExhaustionContext';
 import RecCard from './RecCard';
 import { LoadingView } from '@/components/ui/LoadingView';
-import type { RowResult, RowSpec } from '@/types';
+import type { RowResult } from '@/types';
+import { whyForRow } from './RecRow.helpers';
 
 const ROW_VISIBLE = 6;
 const ROTATION_KEY_PREFIX = 'binge:rec-rotation:';
@@ -21,41 +22,19 @@ function readSeed(rowKey: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Direction H labelled-cascade row: numbered header (01–07), title, a
-// one-line rationale in mono next to it, a "visa fler →" exit, and a 6-grid
-// of duotone rec cards. No horizontal scroll — the row is contained.
+// Direction H labelled-cascade row: numbered header (01–07), title, a short
+// rationale next to it, a "visa fler →" exit, and a 6-grid of duotone rec
+// cards. No horizontal scroll — the row is contained.
+//
+// The rationale is USUALLY one lowercase fragment, but the companion row
+// deliberately carries a wrapping full sentence — Malin's call, 2026-08-14; the
+// reason is in whyForRow's companion case in ./RecRow.helpers.ts. (The old
+// wording said "in mono"; --mono has been an alias for --sans repo-wide since
+// the mono face was dropped, so that was already stale.)
 
 interface Props {
   result: RowResult;
   index: number; // 0-based; rendered as "01", "02", …
-}
-
-// Per-row rationale derived from the spec's id.kind. The mockup shows
-// things like "vikt: 4,0 ★ · noir + svensk-dansk · liknande tonalitet" —
-// we don't have all of that info, so we give a faithful but short line.
-function whyForRow(spec: RowSpec): string {
-  switch (spec.id.kind) {
-    case 'trending':
-      return 'populärt i Sverige · uppdaterat veckovis';
-    case 'latest-fav':
-      return 'byggd på din senaste 5★-favorit';
-    case 'similar':
-      return spec.meta?.seed ? 'utgår från en av dina favoriter' : 'baserat på dina betyg';
-    case 'person':
-      return spec.meta?.person?.knownFor === 'director'
-        ? 'samma regissör'
-        : 'samma medverkande';
-    case 'genre-canon':
-      return 'kanon i din mest tittade genre';
-    case 'thematic':
-      return 'röd tråd i dina favoriter';
-    case 'upcoming':
-      return 'kommande på dina tjänster';
-    case 'free-public':
-      return 'gratis via public service · 0 kr';
-    case 'companion':
-      return 'kurerad koppling · serien fortsätter som film';
-  }
 }
 
 export default function RecRow({ result, index }: Props) {

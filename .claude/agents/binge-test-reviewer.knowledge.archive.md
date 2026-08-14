@@ -20180,3 +20180,61 @@ fixes from the dispatch (threshold pair, domain split, covers-collapse tally re-
 verified live and correct. Full suite 31/31, `node scripts/check-workflow-map.mjs` OK 73/73,
 `git status --porcelain` showed only the five originally-staged files at every checkpoint,
 worktree==index for all three touched files at the end.
+
+## 2026-08-14 — BIN-811/809 confirmation pass: two comment-only corrections, both verified at the bytes
+
+Confirmation pass on staged Batch C (`tasks/todo.md` §"Batch C — BIN-811 + BIN-809") after a
+prior PASS verdict, following two comment-only corrections a sibling session landed:
+
+1. `tasks/todo.md` — `/rekommendationer` (a route that does not exist) corrected to
+   `/recommendations` in both occurrences.
+2. `RecRow.tsx`'s file header comment — no longer claims the rationale slot is "one-line …
+   in mono"; rewritten to say the companion row deliberately carries a wrapping full
+   sentence, points at `whyForRow`'s companion case in `RecRow.helpers.ts`, and explicitly
+   notes the old "in mono" wording was already stale (`--mono` has aliased `--sans`
+   repo-wide since the mono face was dropped).
+
+**Diff reviewed:** 12 staged files (`src/types/recommendations.ts`,
+`src/lib/recommendations/{companionSeeds,cascadePrioritizer}.{ts,test.ts}`,
+`src/components/recommendations/{RecRow.tsx,RecRow.helpers.ts,RecRow.why.test.ts,
+RecommendationsHub.tsx,RecommendationsHub.helpers.ts,RecommendationsHub.helpers.test.ts}`,
+`tasks/todo.md`). All 12 opened with `Read`. `git rev-parse :<f>` vs `git hash-object <f>`
+matched for all 12 both at the start of the pass and again immediately before the verdict
+(no mid-review mover). `git status --porcelain` showed no other pending changes besides an
+untracked `tasks/previews/` (disposable design-preview HTML per `.claude/rules/html-previews.md`,
+named in the plan as "disposable").
+
+**Verification, not inheritance:** ran the four touched suites directly rather than trusting
+the handed-down "249 files / 3184 passed" claim —
+`npx vitest run src/components/recommendations/RecRow.why.test.ts
+src/components/recommendations/RecommendationsHub.helpers.test.ts
+src/lib/recommendations/companionSeeds.test.ts src/lib/recommendations/cascadePrioritizer.test.ts`
+→ 4 files, 55 tests, all passed. No file was mutated during this pass (Read + one Bash test
+run only), so no restore was needed.
+
+**Content check:** both corrections match the described bytes exactly — grepped `tasks/todo.md`
+for `rekommendationer`/`recommendations`, only the correct `/recommendations` path and the
+Swedish word "Rekommendationer" (page crumb/heading) remain. Read `RecRow.tsx` lines 25-33 and
+confirmed the new comment text verbatim.
+
+**One LOW, non-blocking finding** (folded into the principles file in the same pass): the
+"in mono" stale-terminology fix landed only in `RecRow.tsx`. The co-staged, newly-added
+`RecRow.why.test.ts` (same commit) still uses the identical stale term in its own explanatory
+comment — "every other row's why-line is a short, mono-styled fragment" (line 37) — unfixed.
+Not a weakened assertion (comment only, test logic unaffected), so non-blocking; reported so
+the next pass can clean it up rather than re-discover it. General lesson: a stale-terminology
+correction confined to the file the reviewer's block message names doesn't cover a sibling
+file in the SAME diff that echoes the same term — grep the term across every staged path,
+not just the corrected file.
+
+No test assertion in the reviewed diff was weakened, deleted, skipped, or rewritten to match
+buggy output — every test file read matches production behavior at these bytes (verified live
+via the four-suite run above, plus a full read of `companionSeeds.test.ts`,
+`cascadePrioritizer.test.ts`, and `RecommendationsHub.helpers.test.ts`, all of which pin real
+inputs → real outputs, including the exact boundary-honest `COMPANION_FILM_CAP` cap test
+noted as CLOSED in the principles file's Boundary & threshold completeness section).
+
+Checked `.claude/rules/accepted-deviations.md` before filing — nothing in this diff matches
+any listed deviation (no rules/session-expiry/visibility/deletion-marker surface touched).
+
+**Verdict: pass (0 blocking).**

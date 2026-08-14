@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { prioritizeRows } from './cascadePrioritizer';
-import type { CascadeInput, CompanionAnchor } from '@/types';
+import { prioritizeRows, describeCompanionAnchors } from './cascadePrioritizer';
+import type { CascadeInput, CompanionAnchor, CompanionAnchorReason } from '@/types';
 
 function emptyInput(): CascadeInput {
   return {
@@ -16,10 +16,15 @@ function emptyInput(): CascadeInput {
   };
 }
 
-function anchor(showTitle: string, filmId: number): CompanionAnchor {
+function anchor(
+  showTitle: string,
+  filmId: number,
+  reason: CompanionAnchorReason = 'following',
+): CompanionAnchor {
   return {
     showTmdbId: filmId + 1,
     showTitle,
+    reason,
     films: [{ mediaType: 'movie', id: filmId, label: `${showTitle}: filmen` }],
   };
 }
@@ -232,5 +237,56 @@ describe('prioritizeRows', () => {
     };
     const row = prioritizeRows(inp).find(r => r.id.kind === 'latest-fav');
     expect(row?.label).toBe('Liknar Off Campus — din senaste 5★');
+  });
+});
+
+
+describe('describeCompanionAnchors — the row says WHICH (BIN-811)', () => {
+  // If the reason does not change what the user reads, `CompanionAnchor.reason`
+  // has no consumer and Malin's option (c) is option (b) with extra steps. These
+  // are the four shapes that copy can take. Where it renders is pinned separately
+  // in RecRow.whyForRow's own test — `description` reaches the screen in TWO
+  // places and an earlier version of this comment claimed one.
+
+  it('all followed — the sentence the row has always had', () => {
+    expect(describeCompanionAnchors([anchor('Breaking Bad', 1), anchor('Firefly', 2)]))
+      .toBe('Eftersom du följer Breaking Bad och Firefly.');
+  });
+
+  it('all finished — a different verb, not the same sentence', () => {
+    expect(
+      describeCompanionAnchors([
+        anchor('Breaking Bad', 1, 'finished'),
+        anchor('Firefly', 2, 'finished'),
+      ]),
+    ).toBe('Eftersom du har sett klart Breaking Bad och Firefly.');
+  });
+
+  it('mixed — both groups named, neither absorbed into the other', () => {
+    // The case that decides whether the field reached the copy at all: a row that
+    // printed one verb for a mixed set would be telling the user something false
+    // about one of the two shows.
+    expect(
+      describeCompanionAnchors([
+        anchor('Arkiv X', 1),
+        anchor('Breaking Bad', 2, 'finished'),
+        anchor('Firefly', 3),
+      ]),
+    ).toBe('Eftersom du följer Arkiv X och Firefly, och har sett klart Breaking Bad.');
+  });
+
+  it('no anchors — empty, because the row is not emitted at all in that case', () => {
+    expect(describeCompanionAnchors([])).toBe('');
+  });
+
+  it('the emitted row USES it — not just the exported function', () => {
+    // Without this the whole thing is dead code: prioritizeRows could keep the old
+    // hardcoded "du följer" string and every test above would still pass.
+    const rows = prioritizeRows({
+      ...emptyInput(),
+      companionAnchors: [anchor('Breaking Bad', 1, 'finished')],
+    });
+    const row = rows.find(r => r.id.kind === 'companion');
+    expect(row?.description).toBe('Eftersom du har sett klart Breaking Bad.');
   });
 });

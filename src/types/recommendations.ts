@@ -101,13 +101,32 @@ export interface DominantGenre {
 }
 
 /**
+ * WHY this show anchors the row, and therefore what the row's standfirst may say
+ * about it (BIN-811, Malin's option (c), 2026-08-08).
+ *
+ * Not a widening: a TV title never leaves `mina` except to `avbruten`, so a show
+ * the user has finished ALREADY anchors the row today — it was just described as
+ * one the user "follows". The whole change is telling the two apart.
+ *
+ * `'finished'` is derived from `librarySubState`, which reads PERSISTED fields
+ * only and is lazy-backfilled, so a finished show whose tmdbStatus/totalSeasons
+ * were never written back reads as `'following'`. That direction is the safe one:
+ * it never calls an airing show done.
+ */
+export type CompanionAnchorReason = 'following' | 'finished';
+
+/**
  * BIN-583 — a followed show plus the curated follow-up film(s) the user does not
  * have in their library. Built by `selectCompanionAnchors`; `films` is never
  * empty, so the presence of an anchor is exactly "this row has something to show".
+ *
+ * BIN-811: `reason` says WHICH of the two ways this show qualifies — see
+ * CompanionAnchorReason directly above.
  */
 export interface CompanionAnchor {
   showTmdbId: number;
   showTitle: string;
+  reason: CompanionAnchorReason;
   films: CompanionTitle[];
 }
 
