@@ -96,6 +96,27 @@ export function DeletionLimbo() {
           raderingen.
         </p>
 
+        {/*
+          BIN-877 (#19 Kundsupport, BIN-813:s panel) — den enda vägen till en
+          människa. Den är TILLAGD, inte inskriven i något av det ovanstående:
+          rubriken, ingressen och stycket om sopningen är juridiskt godkänd text
+          och står ordagrant kvar (biljettens acceptans + BIN-813 villkor 4).
+
+          Skälet den behövs just här: en användare vars radering fastnat står på
+          en skärm som har bytt ut hela appen, har ingen annan sida att gå till,
+          och kan hamna i lägen knappen inte löser — kaskaden faller på en grupp
+          som hunnit raderas av sin ägare, eller en session som aldrig blir
+          färsk nog. Utan en adress är enda utvägen att ge upp med kontot kvar.
+          Adressen är inget nytt löfte: integritetspolicyn §1 pekar redan ut
+          hej@binge.nu för raderingsbegäran, och art. 12 lägger ansvaret att
+          svara på oss.
+        */}
+        <p className="text-sm text-ink-2 mt-3">
+          Kommer du inte vidare? Mejla{' '}
+          <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>
+          {' '}så hjälper vi dig att slutföra raderingen.
+        </p>
+
         {error && (
           <p role="alert" className="mt-4 rounded bg-danger-soft px-3 py-2 text-sm text-danger-ink">
             {error}

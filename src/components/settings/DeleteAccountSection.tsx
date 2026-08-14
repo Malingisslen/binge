@@ -85,6 +85,23 @@ export function DeleteAccountSection() {
       <p className="text-xs text-ink-3 mb-2">
         All data raderas permanent — bibliotek, betyg, avsnittsprogress och inställningar.
       </p>
+      {/*
+        BIN-877 — kontaktvägen ligger i sektionen, inte i felmeddelandena.
+
+        Biljetten ber om den "helst även" i meddelandena; de fyra texterna är
+        låsta och juridiskt godkända (BIN-813 villkor 4) och pinnade ordagrant i
+        DeleteAccountSection.test.tsx, så att skriva in adressen i dem är att
+        skriva om dem — precis det acceptansen förbjuder. Den här raden syns
+        dessutom SAMTIDIGT som varje toast: felgrenen sätter `confirming` till
+        false, så sektionen står kvar i sitt utgångsläge bakom notisen, och till
+        skillnad från notisen självdör den inte efter 2,5 sekunder (WCAG 2.2.1,
+        #2 Tillgänglighet i BIN-813:s första panel).
+      */}
+      <p className="text-xs text-ink-3 mb-2">
+        Fastnar raderingen? Mejla{' '}
+        <a href="mailto:hej@binge.nu" className="text-acc-deep">hej@binge.nu</a>
+        {' '}så hjälper vi dig.
+      </p>
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}

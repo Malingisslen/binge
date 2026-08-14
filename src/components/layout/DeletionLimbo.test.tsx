@@ -53,6 +53,19 @@ describe('DeletionLimbo', () => {
     expect(body).toContain('annars är det den här knappen');
   });
 
+  it('erbjuder en väg till en människa — utan att röra den låsta texten (BIN-877)', () => {
+    render(<DeletionLimbo />);
+
+    const mail = screen.getByText('hej@binge.nu') as HTMLAnchorElement;
+    expect(mail.getAttribute('href')).toBe('mailto:hej@binge.nu');
+    // Tillagd, inte inskriven: den juridiskt godkända ingressen står ordagrant
+    // kvar. Utan det här påståendet kan en "förbättring" av kontaktraden äta
+    // upp meningen som är hela skärmens poäng.
+    expect(document.body.textContent).toContain(
+      'En del av din data kan redan vara borttagen, men själva kontot finns kvar.',
+    );
+  });
+
   it('slutför raderingen — inte bara tystar återskapandet', async () => {
     render(<DeletionLimbo />);
 
