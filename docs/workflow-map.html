@@ -988,14 +988,14 @@
         {
           "from": "web-app",
           "to": "watchlist-context",
-          "payload": "BIN-596/643 readiness gate → addItem(title, status:'vill_se'). Every add control (StatusButton, QuickAddButton, QuickRateModal, onboarding’s first title) waits for `libraryKnown` before it writes. Ungated, `getItem` answers \"not tracked\" for the whole library while the snapshot is still in flight or has failed, and the write then hard-overwrites `status` on a title the user had already seen — a silent demotion of real data. Non-writing controls stay live so a dead listener never traps anyone inside a flow.",
+          "payload": "BIN-596/643 readiness gate → upsertTitle(title, status:'vill_se'). Every add control (StatusButton, QuickAddButton, QuickRateModal, onboarding’s first title) waits for `libraryKnown` before it writes. Ungated, `getItem` answers \"not tracked\" for the whole library while the snapshot is still in flight or has failed, and the write then hard-overwrites `status` on a title the user had already seen — a silent demotion of real data. Non-writing controls stay live so a dead listener never traps anyone inside a flow.",
           "transport": "React context",
           "verified": true
         },
         {
           "from": "watchlist-context",
           "to": "firestore",
-          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join. BIN-595: every mutator (addItem included) re-stamps those two DENORMALISED fields only when shouldStampVisibility() says the title carries NO per-item `visibility` override — re-marking a title you had made private no longer silently republishes it. The override field itself is written by updateVisibility alone.",
+          "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join. BIN-595: every mutator (both add entry points included) re-stamps those two DENORMALISED fields only when shouldStampVisibility() says the title carries NO per-item `visibility` override — re-marking a title you had made private no longer silently republishes it. The override field itself is written by updateVisibility alone.",
           "transport": "Firestore write (merge)",
           "verified": true
         },
@@ -1063,7 +1063,7 @@
         {
           "from": "web-app",
           "to": "firestore",
-          "payload": "BIN-641 — a sedd→sedd write only counts as a rewatch when the CALLER says a human deliberately logged one (`addItem(payload, { countsAsViewing: true })`), which today is the film-page 'Sedd igen' action alone. Tapping the already-highlighted 'Sedd' in the status menu is as likely to mean confirm/dismiss as again, and rewatchCount has no undo or edit UI, so it must not count — the same rule BIN-599 set for quick-rate. A counted rewatch also re-stamps watchedAt to now: BIN-593 made that field user-authored, so it is NOT auto-stamped over a date the user set, EXCEPT on an explicit re-viewing, where the old date is the one thing that is certainly wrong. The intent flag itself never reaches Firestore — a key-set test pins that.",
+          "payload": "BIN-641/655 — a sedd→sedd write only counts as a rewatch when the CALLER says a human deliberately logged one. Since BIN-655 the caller says so by choosing WHICH FUNCTION to call — `logViewing(payload)` counts, `upsertTitle(payload)` never does — rather than by passing a boolean a new caller could forget. Today only the film-page 'Sedd igen' action reaches `logViewing`, and it does so via useMarkSeen. Tapping the already-highlighted 'Sedd' in the status menu is as likely to mean confirm/dismiss as again, and rewatchCount has no undo or edit UI, so it must not count — the same rule BIN-599 set for quick-rate. A counted rewatch also re-stamps watchedAt to now: BIN-593 made that field user-authored, so it is NOT auto-stamped over a date the user set, EXCEPT on an explicit re-viewing, where the old date is the one thing that is certainly wrong. Neither entry point takes a second argument, so no intent value can reach Firestore at all — a key-set test and a signature test both pin that.",
           "transport": "Firestore write (merge)",
           "verified": true
         },
@@ -1081,7 +1081,7 @@
     {
       "id": "flow-import",
       "label": "Import & seed a library",
-      "description": "Three entry points feed the same watchlist write path. CSV import (Letterboxd/IMDb) is dry-run-safe: nothing is written until the user confirms the TMDB-matched preview. BIN-729: the dry run is gated too, not just the write — an analysis run against an unread library marks every row as NEW, and the user’s confirmation of that list is what the page treats as consent, so an ungated preview launders a bad diff into an approved one. Onboarding's first-title step and /kalibrera's genre calibration write immediately (small, low-risk actions), but all three converge on WatchlistContext.addItem / users/{uid} writes.",
+      "description": "Three entry points feed the same watchlist write path. CSV import (Letterboxd/IMDb) is dry-run-safe: nothing is written until the user confirms the TMDB-matched preview. BIN-729: the dry run is gated too, not just the write — an analysis run against an unread library marks every row as NEW, and the user’s confirmation of that list is what the page treats as consent, so an ungated preview launders a bad diff into an approved one. Onboarding's first-title step and /kalibrera's genre calibration write immediately (small, low-risk actions), but all three converge on WatchlistContext.upsertTitle / users/{uid} writes — the BULK entry point, so a re-imported title already 'sedd' is restored rather than counted as a re-viewing.",
       "covers": [
         "/settings/import",
         "/onboarding",
@@ -1113,14 +1113,14 @@
         {
           "from": "import-page",
           "to": "watchlist-context",
-          "payload": "user confirms preview → runImport(), also held until `libraryKnown` → loops importable rows → addItem({tmdbId, mediaType, status, title, rating, ...}) per-title try/catch",
+          "payload": "user confirms preview → runImport(), also held until `libraryKnown` → loops importable rows → upsertTitle({tmdbId, mediaType, status, title, rating, ...}) per-title try/catch",
           "transport": "React context",
           "verified": true
         },
         {
           "from": "onboarding-flow",
           "to": "watchlist-context",
-          "payload": "Step 3 \"Lägg till din första titel\", gated on `libraryKnown` like every other add surface (BIN-643 — the earlier comment arguing this step was safe ungated is reversed in place: a \"Sedd\" landing without `watchedAt` never self-heals, and the flow is reachable for accounts that already have a library). → search result picked → addItem({tmdbId, mediaType, status: 'mina'|'vill_se'|'sedd', ...})",
+          "payload": "Step 3 \"Lägg till din första titel\", gated on `libraryKnown` like every other add surface (BIN-643 — the earlier comment arguing this step was safe ungated is reversed in place: a \"Sedd\" landing without `watchedAt` never self-heals, and the flow is reachable for accounts that already have a library). → search result picked → upsertTitle({tmdbId, mediaType, status: 'mina'|'vill_se'|'sedd', ...})",
           "transport": "React context",
           "verified": true
         },
