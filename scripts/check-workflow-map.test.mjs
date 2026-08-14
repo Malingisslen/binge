@@ -10,7 +10,7 @@
 // grown), so a future change that neuters the guard is itself caught.
 
 // Also covers check 3 (COVERAGE cross-check, BIN-789) — the universe → covers[]
-// rule that forces every function, route and hand-curated `boundaries` entry to be
+// rule that forces every function, route and `boundaries` entry to be
 // claimed by a flow. That rule shipped untested and worked partly by accident: the
 // reader happened to flatMap every array-valued key, and matching was plain substring
 // containment, so a renamed key would have dropped the rule silently and '/feed' could
@@ -30,6 +30,11 @@ import {
   coversEntry,
   universeEntries,
   extractDataJson,
+  enumerateCrashBoundaries,
+  checkBoundaryEnumeration,
+  BOUNDARY_EXEMPTIONS,
+  MIN_CRASH_BOUNDARIES,
+  MIN_EXEMPTION_REASON,
 } from './check-workflow-map.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -266,4 +271,235 @@ test('buildBaseline produces a keyed content map + a regeneration comment', () =
   const problems = [];
   checkContentRatchet([healthyFlow('flow-a'), healthyFlow('flow-b')], baseline, problems);
   assert.deepEqual(problems, []);
+});
+
+
+// ── Check 6 — crash-boundary enumeration (BIN-808) ──────────────────────────────────
+//
+// The universe used to call `boundaries` wholly hand-curated, so a new src/app/**/error.tsx
+// reached no flow and no linter until somebody remembered. Half of that list is walkable,
+// and these tests pin BOTH directions: a boundary the universe forgot must fail, and a
+// working list must not fail for any other reason.
+
+test('enumeration — the real tree yields every crash boundary, and only those', () => {
+  const found = enumerateCrashBoundaries();
+  // Every hit is a boundary FILENAME under src/app — never a page, layout or component.
+  for (const f of found) {
+    assert.match(f, /^src\/app\/(.*\/)?(error|global-error)\.tsx$/, f);
+  }
+  // The root and one deep dynamic segment, so a walk that stops at depth 1 (or never
+  // descends into a [bracket] directory) cannot pass.
+  assert.ok(found.includes('src/app/error.tsx'), 'root boundary missing');
+  assert.ok(found.includes('src/app/global-error.tsx'), 'global boundary missing');
+  assert.ok(found.includes('src/app/movie/[id]/error.tsx'), 'dynamic-segment boundary missing');
+  // Deliberately the SAME constant the linter enforces. A separate literal here would be
+  // a second answer to one question: deleting two boundary routes would redden the tests
+  // while the linter stayed green and said nothing (integration review, 2026-08-14).
+  assert.ok(found.length >= MIN_CRASH_BOUNDARIES, `only ${found.length} boundaries walked`);
+  // Sorted and de-duplicated: the check compares against a Set, so a duplicate would be
+  // invisible there and only show up as a confusing double problem message.
+  assert.deepEqual(found, [...new Set(found)].sort());
+});
+
+test('enumeration — a boundary the universe forgot is a problem, naming the file', () => {
+  const found = ['src/app/error.tsx', 'src/app/brandnew/error.tsx'];
+  const problems = [];
+  checkBoundaryEnumeration({ boundaries: ['src/app/error.tsx'] }, problems, {
+    boundaries: found,
+    exemptions: {},
+    floor: 0,
+  });
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('src/app/brandnew/error.tsx'), problems[0]);
+  // The remedy must name BOTH edits — adding it to the universe alone leaves check 3
+  // failing next, and a message that mentions only one of them sends the reader back twice.
+  assert.ok(problems[0].includes('boundaries[]'), problems[0]);
+  assert.ok(problems[0].includes('covers[]'), problems[0]);
+});
+
+test('enumeration — an exemption silences that file and nothing else', () => {
+  const found = ['src/app/error.tsx', 'src/app/quiet/error.tsx', 'src/app/loud/error.tsx'];
+  const problems = [];
+  checkBoundaryEnumeration({ boundaries: ['src/app/error.tsx'] }, problems, {
+    boundaries: found,
+    exemptions: { 'src/app/quiet/error.tsx': 'deliberately silent, see the exemption note' },
+    floor: 0,
+  });
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('src/app/loud/error.tsx'), problems[0]);
+});
+
+test('enumeration — an exemption that no longer matches a real file FAILS instead of rotting', () => {
+  // The whole point of the map-with-reasons: permission granted once must not outlive the
+  // file it was granted for. A plain array could only ever go quiet here.
+  const problems = [];
+  checkBoundaryEnumeration({ boundaries: ['src/app/error.tsx'] }, problems, {
+    boundaries: ['src/app/error.tsx'],
+    exemptions: { 'src/app/deleted/error.tsx': 'was exempt once' },
+    floor: 0,
+  });
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('src/app/deleted/error.tsx'), problems[0]);
+  assert.ok(/delete the exemption/i.test(problems[0]), problems[0]);
+});
+
+test('enumeration — an empty walk FAILS on the floor instead of passing vacuously', () => {
+  // Without this, `src/app` renamed (or a swallowed readdir error) makes every assertion
+  // in the check trivially true — the silent-pass that check 6 exists to remove.
+  const problems = [];
+  checkBoundaryEnumeration({ boundaries: [] }, problems, { boundaries: [], exemptions: {} });
+  assert.equal(problems.length, 1);
+  assert.ok(/floor/.test(problems[0]), problems[0]);
+  assert.ok(/only 0 file/.test(problems[0]), problems[0]);
+});
+
+test('enumeration — the COMMITTED universe already lists every walked boundary', () => {
+  // Guards the real data, the same way the coverage test above does: this is what would
+  // have caught BIN-808's ten missing files, and what catches the eleventh.
+  const universe = JSON.parse(readFileSync(join(ROOT, 'docs/workflow-map-universe.json'), 'utf8'));
+  const problems = [];
+  const count = checkBoundaryEnumeration(universe, problems);
+  assert.deepEqual(problems, [], `universe lost a crash boundary: ${problems.join(' | ')}`);
+  assert.ok(count >= MIN_CRASH_BOUNDARIES, `walk found only ${count}`);
+  // Empty today, and the test says so out loud: an exemption added later without a
+  // reason string is the thing this shape exists to prevent.
+  for (const [path, reason] of Object.entries(BOUNDARY_EXEMPTIONS)) {
+    assert.equal(typeof reason, 'string', `${path} has no reason`);
+    assert.ok(
+      reason.length >= MIN_EXEMPTION_REASON,
+      `${path}'s reason is not a reason: ${reason}`,
+    );
+  }
+});
+
+
+test('enumeration — check 6 is actually WIRED INTO main(), not just exported', () => {
+  // The other tests all call checkBoundaryEnumeration directly, so deleting its one call
+  // site in main() leaves every one of them green while CI stops running the check —
+  // "the guard exists" and "the guard runs" are different claims (BIN-776's shape: a
+  // precondition that lives in the wrong place fires too late, or never). Source-level
+  // because main() reads the real, passing repo and cannot be made to fail from a test.
+  const src = readFileSync(join(ROOT, 'scripts/check-workflow-map.mjs'), 'utf8');
+  const body = src.slice(src.indexOf('export function main('));
+  assert.ok(
+    /checkBoundaryEnumeration\(\s*universe\s*,\s*problems\s*\)/.test(body),
+    'the call to checkBoundaryEnumeration(universe, problems) is gone from main() — check 6 is dead code',
+  );
+  // Known blind spot, measured (test review, 2026-08-14): this catches DELETION or
+  // rewording of the call, not deletion of its EXECUTION. `if (false) checkBoundary…(…)`
+  // and a `// MUTANT: ` prefix on the original line both stay green with NO test failing
+  // (a total is not written here on purpose — this file's count moves every round). No cheap
+  // execution-based alternative exists — main() reads the real, passing repo and cannot
+  // be driven to a failure from here. Written down rather than papered over.
+});
+
+
+test('enumeration — a boundary the universe still lists but the tree no longer has FAILS', () => {
+  // The reverse direction, and nothing else covers it: check 3 stays green because the
+  // flow still claims the deleted file, and check 1 never sees it (only global-error.tsx
+  // and SegmentError.tsx exist as nodes[].path entries). Without this the universe and the
+  // map document a file that is gone, indefinitely.
+  const problems = [];
+  checkBoundaryEnumeration(
+    { boundaries: ['src/app/error.tsx', 'src/app/deleted/error.tsx'] },
+    problems,
+    { boundaries: ['src/app/error.tsx'], exemptions: {}, floor: 0 },
+  );
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('src/app/deleted/error.tsx'), problems[0]);
+  assert.ok(problems[0].includes('no longer exists'), problems[0]);
+});
+
+test('enumeration — the hand-curated half is NOT swept up by the reverse check', () => {
+  // THREE shapes, one per way of failing the walk's two-term predicate, because a fixture
+  // that fails BOTH terms isolates neither (test review, 2026-08-14: SegmentError.tsx is
+  // both wrongly-named AND outside src/app, so with it alone the domain mutant was
+  // invisible at 31/31, and the filename term had no fixture at all — deleting that whole
+  // line stayed green):
+  //   - SegmentError.tsx      — fails both (the real hand-curated entry)
+  //   - legacy/error.tsx      — right filename, WRONG domain
+  //   - src/app/page.tsx      — right domain, WRONG filename
+  // Keying on the filename alone demanded legacy/error.tsx be deleted with a message that
+  // is false, because the walk never looked there. The predicate must match the walk.
+  const problems = [];
+  checkBoundaryEnumeration(
+    {
+      boundaries: [
+        'src/app/error.tsx',
+        'src/components/layout/SegmentError.tsx',
+        'src/components/legacy/error.tsx',
+        'src/app/page.tsx',
+      ],
+    },
+    problems,
+    { boundaries: ['src/app/error.tsx'], exemptions: {}, floor: 0 },
+  );
+  assert.deepEqual(problems, []);
+});
+
+test('enumeration — an exemption without a real reason FAILS, map shape alone is not proof', () => {
+  // hasOwnProperty silences a path whose value is '' or null just as well as a real
+  // reason does, so the argument has to be checked by the LINTER, not only by this file.
+  for (const bad of ['', '   ', 'why', null, undefined, 42]) {
+    const problems = [];
+    checkBoundaryEnumeration({ boundaries: [] }, problems, {
+      boundaries: ['src/app/quiet/error.tsx'],
+      exemptions: { 'src/app/quiet/error.tsx': bad },
+      floor: 0,
+    });
+    assert.equal(problems.length, 1, `value ${JSON.stringify(bad)} was accepted`);
+    assert.ok(/no usable reason/.test(problems[0]), problems[0]);
+  }
+  // …and a real one is accepted, so the assertion above is not just "everything fails".
+  const ok = [];
+  checkBoundaryEnumeration({ boundaries: [] }, ok, {
+    boundaries: ['src/app/quiet/error.tsx'],
+    exemptions: { 'src/app/quiet/error.tsx': 'deliberately silent, see ADR 00XX' },
+    floor: 0,
+  });
+  assert.deepEqual(ok, []);
+
+  // The BOUNDARY case, exactly at the threshold. Without it `<` -> `<=` survives green
+  // (test review, 2026-08-14) and a reason of exactly the minimum length is wrongly
+  // rejected — the off-by-one no fixture on either side of the gap can see.
+  const atFloor = [];
+  checkBoundaryEnumeration({ boundaries: [] }, atFloor, {
+    boundaries: ['src/app/quiet/error.tsx'],
+    exemptions: { 'src/app/quiet/error.tsx': 'x'.repeat(MIN_EXEMPTION_REASON) },
+    floor: 0,
+  });
+  assert.deepEqual(atFloor, [], 'a reason of exactly MIN_EXEMPTION_REASON chars must be accepted');
+  // …and one char short must not be.
+  const belowFloor = [];
+  checkBoundaryEnumeration({ boundaries: [] }, belowFloor, {
+    boundaries: ['src/app/quiet/error.tsx'],
+    exemptions: { 'src/app/quiet/error.tsx': 'x'.repeat(MIN_EXEMPTION_REASON - 1) },
+    floor: 0,
+  });
+  assert.equal(belowFloor.length, 1);
+});
+
+test('coverage — no single covers[] token stands in for more than one boundary', () => {
+  // The load-bearing half of BIN-808's choice, and it was pinned nowhere. `coversEntry`
+  // accepts a whole-segment TAIL, so ONE claim of 'error.tsx' tail-matches ten of the
+  // eleven boundaries. Collapsing the ten explicit tokens into that one would keep
+  // coverage 73/73 green today while making check 3 vacuous for every boundary added
+  // afterwards — the committed-data test asserts covered === universeSize, which the
+  // collapse satisfies. Assert per-file claiming instead of per-file coverage.
+  const universe = JSON.parse(readFileSync(join(ROOT, 'docs/workflow-map-universe.json'), 'utf8'));
+  const data = extractDataJson(readFileSync(join(ROOT, 'docs/workflow-map.html'), 'utf8'));
+  const claims = new Set();
+  for (const action of data.actions || []) for (const c of action.covers || []) claims.add(c);
+  for (const claim of claims) {
+    const hits = universe.boundaries.filter((b) => coversEntry(claim, b));
+    assert.ok(
+      hits.length <= 1,
+      `covers[] token '${claim}' stands in for ${hits.length} boundaries (${hits.join(', ')}) — claim each one explicitly, or check 3 goes vacuous for the next boundary added`,
+    );
+  }
+  // And every boundary is claimed by SOMETHING, so the loop above cannot pass by there
+  // being no claims at all.
+  for (const b of universe.boundaries) {
+    assert.ok([...claims].some((c) => coversEntry(c, b)), `boundary '${b}' is claimed by no flow`);
+  }
 });

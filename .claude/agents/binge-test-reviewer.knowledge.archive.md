@@ -19924,3 +19924,259 @@ ADD coverage, closing two findings this same review chain raised at round 2; not
 weakened, skipped, or loosened). Folded into the principles file in place at the two spots
 that predicted this exact fix (the `readdirSync` residual and the `gateMatches` parameterisation
 residual), rather than opened as a new bullet.
+
+## 2026-08-14 — BIN-808 crash-boundary enumeration (check 6)
+
+**Diff reviewed** (staged, Batch B): `docs/workflow-map-universe.json` (comment rewritten to
+document `boundaries` as two halves — mechanical error/global-error.tsx walk + hand-curated
+transmitting-but-not-a-boundary files; 10 new crash-boundary paths added), `scripts/check-workflow-map.mjs`
+(new check 6: `APP_DIR`, `BOUNDARY_FILENAME`, `MIN_CRASH_BOUNDARIES=8`, `BOUNDARY_EXEMPTIONS={}`,
+`enumerateCrashBoundaries()`, `checkBoundaryEnumeration(universe, problems, opts)`, wired into
+`main()` after check 3), `scripts/check-workflow-map.test.mjs` (+7 tests for check 6).
+
+**Baseline**: `npx vitest run scripts/check-workflow-map.test.mjs` → 27/27 green.
+`node scripts/check-workflow-map.mjs` → OK, coverage 73/73 (was 63/63 pre-diff).
+
+**Mutations run, each with `git hash-object`/`git rev-parse :<f>` pre- and post-restore
+verification (all matched, worktree==index throughout):**
+
+1. Drop `"src/app/feed/error.tsx",` from `docs/workflow-map-universe.json` (python line-splice,
+   verified removed via `grep -c`) → 26/27, exactly `enumeration — the COMMITTED universe already
+   lists every walked boundary` fails, naming `src/app/feed/error.tsx` in `boundaries[]` and
+   `covers[]`. Matches the ticket's claimed result. Restored via `git checkout --` (file was
+   already staged, so this restores to the STAGED/reviewed bytes, not pre-diff HEAD — confirmed
+   `git diff --cached` unchanged and `git diff` empty afterward).
+
+2. Rename `const APP_DIR = 'src/app'` → `'src/app-nonexistent-mutant'` → 25/27, both
+   `enumeration — the real tree yields every crash boundary...` (found.length >= 10 fails) and
+   `enumeration — the COMMITTED universe already lists every walked boundary` (floor message
+   "crash-boundary walk found only 0 file(s) under src/app-nonexistent-mutant (floor 8)") fail.
+   Matches the ticket's claimed floor-message-fires result.
+
+3. Replace `main()`'s `checkBoundaryEnumeration(universe, problems);` with a call site whose text
+   no longer contains that substring, two variants:
+   a. `// MUTANT: checkBoundaryEnumeration(universe, problems);` (comment PREFIXED onto the
+      original call text) → 27/27 GREEN, no failure. The regex
+      `/checkBoundaryEnumeration\(\s*universe\s*,\s*problems\s*\)/.test(body)` matches the
+      commented-out text just as well as live code — it is a pure substring/regex scan over
+      `main()`'s source text, blind to whether the matched text is inside a comment.
+   b. `// boundary enumeration check removed` (the call text genuinely absent) → 26/27, exactly
+      `enumeration — check 6 is actually WIRED INTO main(), not just exported` fails. Matches the
+      ticket's claimed "26/27, the source-level wiring test" result — but ONLY because this
+      specific rewording happens to delete the matching substring, not because the test proves
+      execution.
+   c. Sharper version, same substring-blindness: `if (false) checkBoundaryEnumeration(universe, problems);`
+      → 27/27 GREEN. A realistic dead-code/feature-flag mutation (the call's literal text
+      untouched, execution removed) is completely invisible to this test. This is the
+      decisive counter-example to "the wiring test would catch check 6 being disabled" — it
+      catches deletion/rewording of the call TEXT, not deletion of its EXECUTION.
+
+4. Delete the exemption-rot loop (`for (const file of Object.keys(exemptions)) { if
+   (!foundSet.has(file)) problems.push(...) }`) from `checkBoundaryEnumeration` → 26/27, exactly
+   `enumeration — an exemption that no longer matches a real file FAILS instead of rotting`
+   fails. Confirms the rot guard is genuinely live, not decoration — `BOUNDARY_EXEMPTIONS` is
+   empty today so the guard has no real-data exercise, but the synthetic fixture in the test
+   drives it directly and mutation-kills it.
+
+**Verdict on the ticket's 5 questions:**
+1. `opts.floor` injectability: not a production hole today — grepped the whole repo,
+   `checkBoundaryEnumeration` has exactly two callers (`main()`, no opts; the test file, which
+   uses `floor:0`/omitted opts appropriately). The committed-universe test (line ~356) calls it
+   with NO opts, so the real default (8) is what's proven against real data. Informational only:
+   if this exported function ever gains a second production caller, `floor` should not be
+   attacker/caller-controlled.
+2. Floor 8 vs 11 real files: reasonable — it's a floor-against-broken-walk (empty/renamed
+   `src/app`), not a ratchet against list size, and 3 files of headroom tolerates an ordinary
+   single-route deletion. A refactor deleting 4+ segments in one diff could trip it, but that's
+   the intended fail-loud behavior for an unusual change, not a design flaw.
+3. Exemption tests are NOT theatre — mutation 4 above proves the rot guard is live. The map
+   being empty today is correctly asserted as an honest state (the loop over
+   `Object.entries(BOUNDARY_EXEMPTIONS)` in the "COMMITTED universe" test is vacuously true today
+   but forward-guards any future entry's reason string).
+4. The wiring test is source-level and that's an accepted, named tradeoff in its own comment —
+   but its actual guarantee is narrower than the comment states. See mutation 3c: it does not
+   prove check 6 RUNS, only that the call's literal text exists somewhere in `main()`'s body.
+   Filed as a new knowledge-file lesson (folded into the "Vacuous / non-discriminating oracles"
+   section) rather than a blocking finding on this diff — no cheaper execution-based proof exists
+   here without refactoring `main()`, and the realistic regression this ticket is guarding
+   against (accidentally deleting the call while editing) IS caught.
+5. No test found to pass for a wrong/vacuous reason beyond the above. Full suite re-run clean
+   27/27 after all four mutations restored; `node scripts/check-workflow-map.mjs` OK 73/73;
+   `git status --porcelain` showed only the three intended staged files, worktree==index for all
+   three at every checkpoint.
+
+**Verdict: PASS, 0 blocking.** One LOW/informational finding (3c above), filed as a knowledge-file
+lesson, not a blocker — the test's own docstring's claim is slightly stronger than what the
+regex actually proves, but the check itself does its intended job (catch an accidentally-deleted
+or reworded call site) and no cheaper alternative exists without a larger refactor.
+
+## 2026-08-14 — BIN-808 crash-boundary enumeration, round 2
+
+**Diff reviewed** (staged, Batch B, re-review): same three files as round 1
+(`docs/workflow-map-universe.json`, `scripts/check-workflow-map.mjs`,
+`scripts/check-workflow-map.test.mjs`), now carrying the round-1 remediation described in the
+dispatch: (1) the wiring test's assertion message + a new comment name the measured blind spot
+verbatim instead of implying execution is proven; (2) `MIN_CRASH_BOUNDARIES` exported and used by
+both the real-tree test and the committed-data test instead of a duplicated literal `10`/`11`;
+(3) the exemption-reason check moved from test-only into `checkBoundaryEnumeration` itself
+(`typeof reason !== 'string' || reason.trim().length < MIN_EXEMPTION_REASON`); (4) a new reverse
+test asserting a boundary-shaped universe entry with no matching file on disk fails, plus a
+companion asserting the hand-curated non-boundary-filename entry (`SegmentError.tsx`) is NOT swept
+into that check; (5) a new "no single `covers[]` token stands in for more than one boundary" test
+plus a companion "every boundary is claimed by something".
+
+**Baseline**: `npx vitest run scripts/check-workflow-map.test.mjs` → 31/31 green (was 27/27 pre-diff,
++4 net: 5 new tests, 1 pre-existing renamed/folded — matches the dispatch's "31 total"). `node
+scripts/check-workflow-map.mjs` → OK, coverage 73/73. Snapshots of all three touched files taken to
+scratchpad before mutating; every mutation verified restored via `md5sum` match both before and
+after.
+
+**Mutations run (all pre/post `git status --porcelain` clean, snapshot md5 restored):**
+
+1. Delete the reverse-rot loop (`for (const file of listed) { if (!BOUNDARY_FILENAME.test(...))
+   continue; if (!foundSet.has(file)) problems.push(...) }`) from `checkBoundaryEnumeration` →
+   30/31, exactly the new "a boundary the universe still lists but the tree no longer has FAILS"
+   test fails. Matches the dispatch's claimed result exactly.
+
+2. Stub the exemption-reason check to `if (false) { ... }` → 30/31, exactly "an exemption without a
+   real reason FAILS, map shape alone is not proof" fails (red-alone on the FIRST fixture value,
+   `''`). Matches the dispatch's claimed result exactly.
+
+3. Collapse the ten explicit segment `covers[]` tokens in `docs/workflow-map.html`'s
+   `flow-crash-telemetry` action into a single `"error.tsx"` token (keeping `global-error.tsx`,
+   `SegmentError.tsx`, `error_boundary_triggered` untouched) → **30/31, only the new per-token
+   uniqueness test fails; `node scripts/check-workflow-map.mjs` stays `OK — coverage 73/73`.** This
+   does NOT match the dispatch's claimed "29/31 (the new per-token test plus the committed-data
+   test), and the linter itself goes red." Root cause, checked directly: `coversEntry('error.tsx',
+   'src/app/movie/[id]/error.tsx')` (and all nine siblings) is a genuine whole-segment TAIL match —
+   the collapsed claim still "covers" every individual boundary entry under `checkCoverage`'s own
+   rules, so neither the committed-data coverage test nor the linter's check 3 has anything to
+   object to. This is exactly what the new test's OWN comment predicts ("Collapsing the ten
+   explicit tokens into that one would keep coverage 73/73 green today") — so the code and the new
+   test are BOTH correct; only the dispatch message's tally is wrong. Folded into the knowledge
+   file's "verify, never inherit, claims" bullet rather than filed as a defect against the diff.
+
+4. Naive-rewrite probe (mine, not in the dispatch): replace the reason check with `if (!reason) {
+   ... }` (a plausible simpler rewrite) → 30/31, red-alone on the SECOND fixture value (`'   '`,
+   whitespace-only, which is truthy) — confirms the whitespace-only fixture is load-bearing against
+   exactly this class of naive rewrite, and that `42` (also truthy) is separately load-bearing
+   against the same rewrite for the `typeof` half (not directly re-tested here since `'   '` already
+   reddens first, but reasoned through: `(42).length` is `undefined`, `undefined < 10` is `false`,
+   so a `!reason || reason.length < N` rewrite would silently accept `42`, which is exactly the
+   scenario `42` in the fixture list exists to catch, distinct from `null`/`undefined`).
+
+5. Boundary-threshold probe (mine): `reason.trim().length < MIN_EXEMPTION_REASON` → `<=` (off-by-one
+   at the threshold) → **31/31 GREEN, no failure.** Real gap: no fixture sits AT length 10 (every
+   string case in the new test — `''`, `'   '`, `'why'` — is far below it). A 10-character reason
+   would be wrongly rejected under the `<=` mutant and nothing in the suite would notice. LOW
+   (`MIN_EXEMPTION_REASON` is a self-chosen internal constant with no production caller passing a
+   value near it today — `BOUNDARY_EXEMPTIONS` is empty), filed as a knowledge-file lesson under
+   "Boundary & threshold completeness" rather than a blocking finding, matching this file's
+   established bar for `MIN_*`/`*_CAP` constants that ship one-sided.
+
+**Answers to the four attack questions in the dispatch:**
+- *Does the per-token test accept a trivially different wrong shape?* No live bypass found — the
+  loop is over every unique claim in the Set, so no combination of duplicate/overlapping claims
+  escapes it once any single claim covers >1 boundary; the companion "every boundary claimed by
+  something" catches the 0-hit failure mode the first loop structurally cannot.
+- *Is the `['', '   ', 'why', null, undefined, 42]` loop six spellings of one branch, or
+  meaningfully discriminating?* Two real branches (`typeof !== 'string'` catches the 3 non-strings;
+  `.trim().length < 10` catches the 3 strings), and `42` specifically catches a `!reason`-shaped
+  naive rewrite that `null`/`undefined` alone would not (verified, mutation 4) — but see mutation 5:
+  none of the three string values is near the threshold, so the LENGTH branch's own boundary is
+  unpinned even though the branch itself is proven to exist.
+- *Does the reverse-rot fixture actually reach the new loop, not an earlier one?* Confirmed by
+  mutation 1 and by hand-tracing the fixture through every prior loop in the function (empty exempt
+  map, `found` already lists everything else) — no earlier loop produces a problem for this fixture,
+  so the single reported problem can only come from the reverse loop.
+- *Is anything passing for the wrong reason now that `MIN_CRASH_BOUNDARIES` is shared?* No — the two
+  consumers (`enumerateCrashBoundaries` real-tree test, committed-data test) import the same
+  exported constant, so there is exactly one answer to "how many boundaries are expected," closing
+  the round-1-flagged two-answers-to-one-property gap; verified this is genuinely the same binding,
+  not two constants with the same value, by grepping for a second literal `8` — none found.
+
+**Verdict: PASS, 0 blocking.** Two LOW findings, both folded into the knowledge file rather than
+blocking this diff: (a) the dispatch's self-reported mutation tally for the covers-collapse case
+(29/31 + linter red) does not match live re-verification (30/31, linter green) — the code and test
+are correct, only the reported numbers were wrong, and are corrected here; (b)
+`MIN_EXEMPTION_REASON`'s own exact boundary (10 chars) is unpinned, one line
+(`'x'.repeat(10)` accepted) would close it. Full suite re-confirmed 31/31 after all five mutations
+restored; `node scripts/check-workflow-map.mjs` OK 73/73; `git status --porcelain` showed only the
+five originally-staged files at every checkpoint, worktree==index throughout.
+
+## 2026-08-14 — BIN-808 crash-boundary enumeration, round 3
+
+**Diff reviewed** (staged, Batch B, third pass): same three files
+(`docs/workflow-map-universe.json`, `scripts/check-workflow-map.mjs`,
+`scripts/check-workflow-map.test.mjs`), now carrying (1) my own round-2 fixes — the "at floor"
+(`'x'.repeat(MIN_EXEMPTION_REASON)`) / "below floor" (`MIN_EXEMPTION_REASON - 1`) boundary pair,
+`MIN_EXEMPTION_REASON` exported — and (2) six fixes from the integration reviewer applied in the
+same round: the reverse-rot predicate now requires `file.startsWith(APP_DIR + '/')` in addition to
+the boundary filename (was filename-only, which falsely demanded deletion of a hand-curated
+`error.tsx` living outside `src/app`); a new "hand-curated half is NOT swept up" test with two
+named fixtures (`SegmentError.tsx`, `src/components/legacy/error.tsx`); the wiring test's own
+comment now states its measured blind spot ("catches deletion/rewording of the call TEXT, not
+deletion of its EXECUTION … a total is not written here on purpose") instead of the earlier,
+stronger-than-true claim; check 3's header restored a clause + a new NOTE explaining check 6's
+`universe.boundaries` key is deliberately hard-keyed where check 3 is key-agnostic; the
+explicit-claim rule (no `covers[]` token may tail-match >1 boundary) is now stated in the
+universe's own `comment` field, not only inside a test.
+
+**Baseline**: `npx vitest run scripts/check-workflow-map.test.mjs` → 31/31 green (unchanged count
+from round 2 — this round is fixes, not new tests). `node scripts/check-workflow-map.mjs` → OK,
+coverage 73/73. `git hash-object`/`git rev-parse :<f>` pinned for all three files before touching
+anything; worktree==index throughout, re-confirmed after every mutation+restore.
+
+**Verified claims (all confirmed live, matching the dispatch exactly):**
+
+1. `MIN_EXEMPTION_REASON` boundary pair: `<` → `<=` on `reason.trim().length < MIN_EXEMPTION_REASON`
+   is red-ALONE, 30/31, exactly the "atFloor must be accepted / belowFloor must not" test —
+   confirmed by direct mutation (edit → run → grep pre/post → restore → re-verify sha
+   `daf1186d…` unchanged).
+2. Covers-collapse tally: re-ran the round-2-documented mutation (collapse the ten explicit
+   `covers[]` tokens in `workflow-map.html` into one `'error.tsx'` token) — irrelevant to this
+   round's diff (`workflow-map.html` is untracked/unstaged, confirmed via `git status --porcelain`
+   and `git log -1` unchanged sha `83efc0f…`), so the round-2 finding (dispatch's "29/31 + linter
+   red" was wrong; live is 30/31, linter stays green) still stands unregressed — nothing in this
+   round touches `coversEntry` or the universe's `boundaries[]` list, only its `comment` string.
+3. Domain-split reverse-rot predicate: deleting `if (!file.startsWith(\`${APP_DIR}/\`)) continue;`
+   is red-ALONE, 30/31 — exactly the "hand-curated half is NOT swept up" test, naming
+   `src/components/legacy/error.tsx` (not `SegmentError.tsx`) in the failure message. Matches the
+   dispatch's claim.
+
+**New finding, not in the dispatch (mine, this round) — LOW:**
+
+4. The "two shapes" fixture in the hand-curated-half test is over-determined: `SegmentError.tsx`
+   is excluded by BOTH terms of the AND (it fails `BOUNDARY_FILENAME.test` — not named
+   `error.tsx`/`global-error.tsx` — AND it fails the domain check — it lives under
+   `src/components/layout`, not `src/app`), so it contributes nothing to isolating either term.
+   Proved two ways, both live-mutated with restore+hash-verify between:
+   - Removed the domain-check line, then edited the test fixture (scratch edit, restored via
+     `git checkout --` after) to drop `legacy/error.tsx` and keep only `SegmentError.tsx` →
+     **31/31 GREEN** — the domain-check deletion is invisible without the `legacy/error.tsx`
+     fixture; `SegmentError.tsx` alone does not catch it (with both fixtures present it is
+     30/31, confirming `legacy/error.tsx` alone is sufficient and necessary).
+   - Restored the domain check, then deleted `BOUNDARY_FILENAME.test(...)` entirely (leaving only
+     the domain check) and ran the FULL, unmodified fixture (both `SegmentError.tsx` and
+     `legacy/error.tsx` present) → **31/31 GREEN** — the filename-check term has no fixture at all,
+     because both existing "hand-curated" examples are outside `src/app` and are excluded by the
+     domain check regardless of filename. A fixture that would catch this (`src/app/page.tsx` —
+     inside the domain, not boundary-shaped) does not exist anywhere in the file.
+   LOW, not blocking: reaching this path needs a hand-added non-boundary-shaped path under
+   `src/app` in `universe.boundaries[]`, which today no other check (forward walk, check 1, check 3)
+   gates either way — an equally-untested pre-existing state, not a regression this diff
+   introduces. Folded into the knowledge file's dual-guard bullet (the "two shapes, one per
+   AND-term" addition) rather than filed as a blocker, matching this file's established bar for a
+   composite-guard term with zero fixture (BIN-849's `supported`, BIN-645's DEL char-class term).
+
+**Regression check**: nothing from round 1/round 2's verified behavior moved — `workflow-map.html`
+untouched, `boundaries[]`'s 12 entries unchanged (only the universe's `comment` string grew),
+`MIN_CRASH_BOUNDARIES`/floor-message mutations not re-run this round since nothing touching them
+changed, but the full suite passing 31/31 at current bytes is consistent with no regression there.
+
+**Verdict: PASS, 0 blocking.** One LOW finding (4 above, over-determined fixture / untested
+filename-check term), folded into the knowledge file rather than blocking. All three claimed
+fixes from the dispatch (threshold pair, domain split, covers-collapse tally re-confirmation)
+verified live and correct. Full suite 31/31, `node scripts/check-workflow-map.mjs` OK 73/73,
+`git status --porcelain` showed only the five originally-staged files at every checkpoint,
+worktree==index for all three touched files at the end.

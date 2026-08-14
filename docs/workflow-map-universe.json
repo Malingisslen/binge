@@ -1,5 +1,5 @@
 {
-  "comment": "Coverage universe for docs/workflow-map.html — mechanically enumerated 2026-07-02. scripts/check-workflow-map.mjs asserts every entry below is claimed by at least one flow's covers[]. Regenerate: functions = exports in functions/src/index.ts; routes = page.tsx dirs under src/app. boundaries = HAND-CURATED, not enumerable: client files that transmit data off-device while belonging to no route and no function — an app-router crash boundary renders instead of the route tree, so the routes rule structurally misses it. Add one whenever a new such file starts sending events.",
+  "comment": "Coverage universe for docs/workflow-map.html. scripts/check-workflow-map.mjs asserts every entry below is claimed by at least one flow's covers[]. Regenerate: functions = exports in functions/src/index.ts; routes = page.tsx dirs under src/app. boundaries = TWO halves, and only one is hand-curated. (a) MECHANICAL: every src/app/**/{error,global-error}.tsx is enumerated by the linter's own walk (check 6, BIN-808) and MUST appear here — a new crash boundary fails CI until it does, exemptions carry a written reason. An app-router crash boundary renders INSTEAD of the route tree, so the routes rule structurally misses it. (b) HAND-CURATED: everything else in the list — client files that transmit data off-device while belonging to no route, no function, and not a crash-boundary file UNDER src/app (the linter's exclusion is domain AND filename, so a file named error.tsx living outside src/app is legitimately hand-curated too) -- e.g. the shared SegmentError component. Add one whenever a new such file starts sending events; nothing enumerates those. CLAIMING RULE: a flow's covers[] token may be a whole-segment TAIL of an entry, so one 'error.tsx' token would stand in for ten of these — claim each boundary path EXPLICITLY. A collapsed claim keeps the coverage count green today while making check 3 vacuous for every boundary added afterwards; scripts/check-workflow-map.test.mjs pins it, the linter does not.",
   "functions": [
     "onFriendRequestCreate",
     "onSessionPickCreate",
@@ -66,7 +66,17 @@
     "/[...path]"
   ],
   "boundaries": [
+    "src/app/[...path]/error.tsx",
+    "src/app/error.tsx",
+    "src/app/feed/error.tsx",
+    "src/app/films/error.tsx",
     "src/app/global-error.tsx",
+    "src/app/grupper/error.tsx",
+    "src/app/movie/[id]/error.tsx",
+    "src/app/my/error.tsx",
+    "src/app/search/error.tsx",
+    "src/app/series/error.tsx",
+    "src/app/tv/[id]/error.tsx",
     "src/components/layout/SegmentError.tsx"
   ]
 }
