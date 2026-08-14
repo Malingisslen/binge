@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 172,
+  "patternCount": 182,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -14,6 +14,7 @@
         "src/components/layout/PageHeader.tsx",
         "src/components/layout/SegmentError.tsx",
         "src/components/ui/",
+        "src/components/ui/DuotoneFilters.tsx",
         "src/components/ui/DuotonePoster.tsx",
         "src/lib/design/consistency.test.ts",
         "tailwind.config.ts"
@@ -110,6 +111,12 @@
       "slug": "product-manager",
       "patterns": [
         "docs/org/adr/0013-tillsammans-social-design.md",
+        "src/components/tv/EpisodeRow.test.tsx",
+        "src/components/tv/EpisodeRow.tsx",
+        "src/components/tv/SeasonEpisodePanel.tsx",
+        "src/components/tv/SeasonList.test.tsx",
+        "src/components/tv/SeasonList.tsx",
+        "src/components/tv/SeasonRow.tsx",
         "src/lib/analytics.ts",
         "src/lib/watchStatus.ts",
         "src/types/advisor.ts",
@@ -211,6 +218,8 @@
       "slug": "community-manager",
       "patterns": [
         "src/app/feed/page.tsx",
+        "src/components/tv/EpisodeReactions.test.tsx",
+        "src/components/tv/EpisodeReactions.tsx",
         "src/hooks/useFollow.ts",
         "src/hooks/useReviewSocial.ts",
         "src/hooks/useTasteVector.ts",
@@ -307,6 +316,7 @@
         "src/components/layout/MobileTabBar.tsx",
         "src/components/layout/Subnav.tsx",
         "src/components/pages/DynamicRouter.tsx",
+        "src/components/tv/RelatedSeriesStrip.tsx",
         "src/lib/libraryView.ts"
       ]
     },

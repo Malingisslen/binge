@@ -219,6 +219,12 @@ Owns feature design and roadmap.
   availability); the subscription/rotation advisor; "Tillsammans" sessions;
   calendar; onboarding; the library-card free-streaming wedge.
   → `src/types/{domain,advisor}.ts`, `src/lib/watchStatus.ts`, `docs/org/adr/0013-tillsammans-social-design.md`
+- The season/episode progress surface — the expandable season list, the curated
+  season-0 specials section, the per-episode row with its watched checkbox and
+  "Markera hit" bulk action, and the group spoiler mask that blanks a row for a
+  viewer who is ahead of the group's slowest member. This is where the TV status
+  model above becomes something a user touches.
+  → `src/components/tv/SeasonList.tsx`, `src/components/tv/SeasonList.test.tsx`, `src/components/tv/SeasonRow.tsx`, `src/components/tv/SeasonEpisodePanel.tsx`, `src/components/tv/EpisodeRow.tsx`, `src/components/tv/EpisodeRow.test.tsx`
 - Sprint planning + analytics event taxonomy.
   → `src/lib/analytics.ts`
 
@@ -330,6 +336,12 @@ Owns every Swedish word.
   reviews/comments/likes; three-tier visibility; **taste-match** compatibility
   scoring.
   → `src/lib/firebase/friends.ts`, `src/hooks/{useFollow,useReviewSocial,useTasteVector}.ts`, `src/app/feed/page.tsx`, `src/lib/taste/`
+- Per-episode reaction threads (BIN-95) — UGC keyed per episode, double
+  spoiler-gated: the thread stays shut until the viewer has marked that episode
+  watched, and inside it a reaction its author flagged as a spoiler is blurred
+  until clicked. Owned here rather than with the episode row it renders inside,
+  because what is at stake is the social layer, not the progress model.
+  → `src/components/tv/EpisodeReactions.tsx`, `src/components/tv/EpisodeReactions.test.tsx`
 
 ## 19. Customer Support / Success
 
@@ -448,6 +460,10 @@ Owns wayfinding.
   search/discovery filter hierarchy; genre cross-media mapping; noindex-by-default
   on private pages.
   → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`
+- The "Samma serie" strip — crawlable links between the separate TMDB entries of one
+  split franchise (Doctor Who's eras). Deliberately navigation, not a merge, so it is
+  wayfinding rather than part of the season/episode progress surface (#9).
+  → `src/components/tv/RelatedSeriesStrip.tsx`
 
 ---
 
@@ -595,6 +611,14 @@ Three pairs share a surface but split by **intent** — worth keeping distinct:
 - **Brand sits above design.** The _Creative Director_ (#16) owns brand, naming,
   and positioning; the _Product Designer_ (#1) owns the component-level design
   system that expresses it.
+- **The TV episode directory splits three ways — on purpose** (BIN-878). Everything
+  under `src/components/tv/` renders inside the same season list, but the reviewer it
+  needs depends on what changed: the progress surface and its group spoiler mask are
+  the _Product Manager_'s (#9), the per-episode reaction thread is the _Community
+  Manager_'s (#18) because it is UGC with its own spoiler gate, and the franchise
+  strip is the _Information Architect_'s (#26) because it is a link, not a feature.
+  Do not collapse these into one directory-wide owner: a single collection-owner is
+  how a social-layer change reaches a reviewer who does not think about spoilers.
 
 Other natural adjacencies: Controller (#3) ↔ Vendor Manager (#23) ↔ Monetization
 (#24) all touch the 25 SEK/mån cap from different angles (cut cost / manage
