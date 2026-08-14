@@ -92,7 +92,7 @@ experience.
   tabular numbers; the deliberate "tool not marketing page" feel.
 - **Posters & duotone** — 8 genre-mapped SVG duotone filters, hover-to-reveal,
   CLS-safe explicit `width`/`height`, no `next/image`.
-  → `src/components/ui/DuotonePoster.tsx`, `src/components/layout/DuotoneFilters.tsx`
+  → `src/components/ui/DuotonePoster.tsx`, `src/components/ui/DuotoneFilters.tsx`
 - **Responsive layout & app chrome** — sticky topbar, horizontal subnav,
   mobile tab bar, breakpoint collapses, safe-area insets.
   → `src/components/layout/`
