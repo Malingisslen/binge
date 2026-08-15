@@ -71,6 +71,14 @@ export function markDeletionStarted(uid: string, startedAt: number): void {
 /**
  * Is a deletion of `uid` started but unfinished?
  *
+ * Two kinds of caller, and only one of them is a guard. The write sites read it
+ * to REFUSE (see above). `deleteAccount`'s freshness preflight reads it to pick
+ * which error it throws (BIN-813, Malin's decision (a) 2026-08-13): with the
+ * marker down, `STALE_SESSION_PREFLIGHT`'s promise that nothing was touched is
+ * false. It may never change WHETHER that gate throws — ADR 0019 condition 3
+ * keeps `deleteAccount` and its retry ungated, and BIN-748's gate has to keep
+ * turning away an old session with everything intact.
+ *
  * Read fresh from storage on every call, deliberately — never memoised into a
  * ref. BIN-592's stale account-keyed ref is the bug that pattern produces, and
  * here a stale `false` is a resurrected profile.

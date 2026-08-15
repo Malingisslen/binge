@@ -1166,11 +1166,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Negerad jämförelse, inte `>=`: ett oparsbart authTime ger NaN, och NaN ska
     // leda till re-auth — inte till att kaskaden rullar vidare på en tyst false.
     if (!(sessionAgeMs < RECENT_LOGIN_MAX_AGE_MS)) {
-      // Bär BÅDA koderna: `requires-recent-login` är vad varje befintlig läsare
-      // (och Firebase självt) känner igen, och preflight-koden är det som skiljer
-      // "ingenting är rört" från samma fel kastat efter kaskaden — se lib/authErrors.
+      // BIN-813 / Malins beslut (a) 2026-08-13 — markören avgör VILKET fel som
+      // kastas, aldrig OM det kastas.
+      //
+      // Läsningen ligger med flit inne i den gren som redan har fallit, efter
+      // ålderskontrollen: en markör som slapp igenom en gammal session hade
+      // rivit BIN-748:s port och börjat radera på en token Firebase ändå vägrar
+      // (panelens villkor 1).
+      //
+      // Vad koden betyder: `STALE_SESSION_PREFLIGHT` säger "ingenting är rört",
+      // och det är den koden som ger inställningssidan rätt att lova "Ingenting
+      // har raderats". Är markören nere har kaskaden redan startat minst en gång,
+      // och då är löftet falskt — så koden som bär löftet får inte följa med. Att
+      // `DeletionLimbo` säger rätt sak i dag är en tursam dubblering, inte en
+      // garanti: nästa anropare som läggs till ärver annars lögnen i stället för
+      // sanningen (arkeologens fynd i BIN-813:s panel).
+      //
+      // Ingen ny formulering (villkor 4): utan preflight-koden landar felet i
+      // `classifyDeletionFailure`s befintliga `recent-login`-gren, en av de fyra
+      // låsta, juridiskt godkända texterna. `REQUIRES_RECENT_LOGIN` bärs i båda
+      // fallen — det är vad varje befintlig läsare (och Firebase självt) känner
+      // igen; se lib/authErrors.
       throw new Error(
-        `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): sessionen är för gammal för att radera kontot`,
+        isDeletionStarted(id)
+          ? `${REQUIRES_RECENT_LOGIN}: sessionen är för gammal för att slutföra raderingen`
+          : `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): sessionen är för gammal för att radera kontot`,
       );
     }
 

@@ -234,7 +234,7 @@ vi.mock('next/navigation', () => ({
 
 import AuthGuard from '@/components/AuthGuard';
 import { AuthProvider, useAuth } from './AuthContext';
-import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
+import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure } from '@/lib/authErrors';
 
 // --- Harness -----------------------------------------------------------------
 
@@ -1587,6 +1587,74 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
     });
 
     expect(window.localStorage.getItem('binge:deletionStarted:u1')).toBeNull();
+  });
+
+  // BIN-813 — Malins beslut (a), 2026-08-13. Förkontrollen läser markören.
+  //
+  // Den falska meningen: försök 1 hinner in i kaskaden och faller. Användaren
+  // trycker igen utan att logga om. Token är fortfarande för gammal, förkontrollen
+  // slår till — och bar tidigare `STALE_SESSION_PREFLIGHT`, koden vars ENDA
+  // innebörd är "ingenting är rört" och som ger inställningssidan rätt att skriva
+  // "Ingenting har raderats." till någon vars bibliotek redan är borta.
+  it('en förkontroll MED markören nere lovar inte längre att ingenting raderats (BIN-813)', async () => {
+    await signedInProvider();
+    markAborted();
+    authTime.current = minutesAgo(30);
+
+    let thrown = '';
+    await act(async () => {
+      await ctx!.deleteAccount().catch((e: unknown) => { thrown = e instanceof Error ? e.message : ''; });
+    });
+
+    expect(thrown).toContain(REQUIRES_RECENT_LOGIN);
+    expect(thrown).not.toContain(STALE_SESSION_PREFLIGHT);
+    // Det är klassificeringen, inte strängen, som båda skärmarna grenar på —
+    // `recent-login` är den låsta texten "Raderingen har påbörjats men inte
+    // slutförts…", `preflight` är löftet som inte längre stämmer (villkor 4:
+    // ingen femte formulering, bara en annan av de fyra befintliga).
+    expect(classifyDeletionFailure(thrown)).toBe('recent-login');
+  });
+
+  it('men markören förkortar ALDRIG spärren — den kastar fortfarande, och rör ingenting (BIN-813 villkor 1)', async () => {
+    // Panelens bindande villkor 1, som eget påstående: ålderskontrollen körs
+    // villkorslöst före varje läsning och skrivning även vid ett nytt försök i
+    // samma session. Ett "vi minns ett tidigare försök" som hoppade över porten
+    // river BIN-748:s skydd och börjar radera på en token Firebase ändå vägrar.
+    await signedInProvider();
+    markAborted();
+    authTime.current = minutesAgo(30);
+    deletion.collectUserDataSnapshots.mockClear();
+    deletion.applyDeletionPlan.mockClear();
+    deleteUserMock.mockClear();
+
+    await act(async () => {
+      await expect(ctx!.deleteAccount()).rejects.toThrow(REQUIRES_RECENT_LOGIN);
+    });
+
+    expect(deletion.collectUserDataSnapshots).not.toHaveBeenCalled();
+    expect(deletion.applyDeletionPlan).not.toHaveBeenCalled();
+    expect(deleteUserMock).not.toHaveBeenCalled();
+    // Och kontrollen är fortfarande ålderskontrollen: en FÄRSK session med samma
+    // markör går hela vägen (samma påstående som ADR 0019 villkor 3-testet ovan,
+    // här som kontrollprov mot en mutant som låter markören avgöra allt).
+    authTime.current = minutesAgo(1);
+    await act(async () => { await ctx!.deleteAccount(); });
+    expect(deletion.applyDeletionPlan).toHaveBeenCalled();
+  });
+
+  it('en UNMARKERAD gammal session får kvar sitt sanna löfte (BIN-813, kontrollprov)', async () => {
+    // Utan den här passerar testet ovan mot en implementation som tappade
+    // preflight-koden för alla — och då hade BIN-748:s "ingenting har raderats"
+    // försvunnit för den som faktiskt inte fått något raderat.
+    await signedInProvider();
+    authTime.current = minutesAgo(30);
+
+    let thrown = '';
+    await act(async () => {
+      await ctx!.deleteAccount().catch((e: unknown) => { thrown = e instanceof Error ? e.message : ''; });
+    });
+
+    expect(classifyDeletionFailure(thrown)).toBe('preflight');
   });
 
   it('the marker SURVIVES a cascade that fails — that is the whole point', async () => {
