@@ -222,15 +222,44 @@ och då håller inte fördröjningsläsningen.
   eller rensad webbplatsdata har den inte. Det är det medvetet valda priset för
   att INTE lägga markören i Firestore — ett dokument under `users/{uid}` hade
   återskapat precis det som ska raderas (#5 Juridik, ADR 0019).
-- **Och sopningen fångar INTE den som återkommer utan markör.** Öppnas appen på
-  en markörlös enhet återskapar `ensureUserProfile` `users/{uid}` — och därmed
-  ser sopningen ovan kontot som friskt och rör det aldrig. Sjudagarsfönstret
-  gäller alltså den som aldrig återvänder någonstans; för den som återvänder på
-  en annan enhet finns ingen bortre gräns förrän hen startar en ny radering.
-  Upptäckt av integrations- och säkerhetsgranskningen 2026-08-13. Det är en
-  öppen punkt, inte något den här texten påstår är löst — och den berör direkt
-  det villkorade i Malins beslut ovan (ADR 0019 fråga 2), så den ska stängas
-  eller omprövas, inte lämnas obeskriven.
+- **Och sopningen fångar INTE den som återkommer utan markör.** Tre saker som
+  den tidigare formuleringen tonade ned, och som avgör hur detta ska läsas:
+  - **Det räcker att sidan LADDAS.** Ingen aktiv handling krävs. En redan
+    inloggad enhet som renderar vilken inloggad sida som helst anropar
+    `ensureUserProfile`, som återskapar `users/{uid}`. Att kalla det "den som
+    återvänder och använder appen" är fel — det är en sidladdning.
+  - **Kontot lämnar sopningens urval PERMANENT, det fördröjs inte.**
+    Kandidatvillkoret är "Auth-konto finns OCH `users/{uid}` bekräftat saknas".
+    I samma stund profilen finns igen matchar kontot aldrig mer, oavsett hur
+    lång tid som går. Det kommer tillbaka bara om användaren startar en NY
+    radering.
+  - **Det upphäver förutsättningen för fördröjningsläsningen ovan.** ADR 0019
+    fråga 2 accepterar en fördröjning uttryckligen på villkor att fönstret är
+    verkligt och sopat. För ett konto som hamnar här finns inget fönster.
+
+  **Accepterat 2026-08-15 (Malins beslut, ADR 0022, BIN-879).** Luckan accepteras
+  som den är. Skälen: bara kontoinnehavaren själv kan utlösa den (ingen
+  tredje part vinner något och ingen ytterligare personuppgift exponeras), den
+  substantiella datan i 25 samlingar är redan raderad av kaskaden innan detta
+  läge alls kan uppstå, och full självbetjäning återstår — en ny radering
+  startar om hela kedjan. Markören stannar i `localStorage`; ADR 0019:s förbud
+  mot ett varaktigt dokument under `users/{uid}` gäller uttryckligen även den
+  här frågan, så den är inte ett öppet uppslag för nästa som läser.
+
+  **#6 Dataskyddsombudet var av annan mening** och ville laga i stället för att
+  acceptera; skiljaktigheten och dess skäl står i ADR 0022 och är inte
+  bortförhandlad. Omprövas om ett faktiskt supportärende visar ett konto i det
+  här läget — då behandlas det som en försenad Art. 17-begäran som ska slutföras
+  manuellt, inte som normaldrift. Igenkänning: `docs/RUNBOOK.md` §5f.
+
+- **INTE accepterat: den omstämplade samtyckesposten.** När `ensureUserProfile`
+  återskapar profilen ovan sätter den `termsAcceptedAt` och `ageConfirmedAt` till
+  i dag, utan att något samtyckessteg visats. Det är inte en fördröjd radering —
+  det är en påhittad efterlevnadspost, och båda rollerna pekade oberoende ut den
+  som det som faktiskt har juridisk skärpa. Den bryts ut till en egen biljett med
+  egen panel eftersom rättningen ligger i inloggningskoden. Att bara ändra
+  spärren i `userDocWrite.ts` löser det INTE: den läser markören, som per
+  definition saknas på den andra enheten.
 
 ### Avbrott mitt i kaskaden → kör om tills det är tomt
 

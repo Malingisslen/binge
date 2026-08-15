@@ -17,8 +17,11 @@
  * With one carve-out this file must not overstate: a user who returns on a device
  * WITHOUT the deletion marker gets `users/{uid}` recreated, and from then on both
  * sweeps read the account as healthy and never touch it. The 7-day window
- * therefore bounds the user who returns nowhere. That gap is recorded as an open
- * point in `docs/data-retention-policy.md` — not as something these sweeps close.
+ * therefore bounds the user who returns nowhere. That gap is recorded as an
+ * ACCEPTED gap (Malin 2026-08-15, ADR 0022, with #6 DPO dissenting on the record)
+ * in `docs/data-retention-policy.md` — not as something these sweeps close. It
+ * said "an open point" until BIN-879 decided it; the second clause was and stays
+ * true, and is the part that matters here.
  *
  * Pure predicates only — no firebase-admin import — so the part that decides
  * what gets deleted is testable under the root vitest toolchain, like

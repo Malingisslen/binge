@@ -15,10 +15,26 @@
  * **device-local on purpose** (ADR 0019, conflict 1): the alternative — a field
  * on `users/{uid}` — recreates the very document that is supposed to be gone,
  * and #5 Legal was explicit that it must not move there for cross-device
- * convenience. The cross-device / private-window / cleared-storage gap that
- * leaves is closed by the server sweep instead, not by widening this
- * (`functions/src/retentionCleanup`, ADR 0019 condition 5b), and is written down
- * in `docs/data-retention-policy.md`.
+ * convenience.
+ *
+ * What the server sweep does and does NOT close (corrected 2026-08-15, BIN-879 —
+ * this comment used to say the gap "is closed by the server sweep instead", full
+ * stop, which contradicted `docs/data-retention-policy.md` in this same repo and
+ * would have been believed over it): `functions/src/retentionCleanup` reaps an
+ * Auth account with no profile after 7 days, so it closes the case where the user
+ * never returns ANYWHERE. It does not close the cross-device case. A marker-less
+ * device merely LOADING an authenticated page recreates `users/{uid}`, and the
+ * sweep's candidate test is "Auth account exists AND profile confirmed absent" —
+ * so such an account leaves the candidate set permanently, not for a while.
+ *
+ * That gap is ACCEPTED, not open (Malin's decision 2026-08-15, ADR 0022): only
+ * the account holder can trigger it, the 25 collections are already erased by the
+ * time it is reachable, and starting a new deletion restarts the chain. #6 DPO
+ * dissented and wanted it fixed; the dissent is preserved in ADR 0022 rather than
+ * argued away. What was NOT accepted is the re-stamped consent record described
+ * above — that is filed separately, and note that a change to the guarded write
+ * sites in `userDocWrite.ts` cannot fix it: those read THIS marker, which is by
+ * definition absent on the second device.
  *
  * No natural retirement. BIN-748 rejected a `localStorage` flag for a
  * structurally identical problem for exactly that reason, and this file is the
@@ -60,12 +76,13 @@ export function deletionMarkerKey(uid: string): string {
  * keep harmless.
  *
  * Best-effort: a browser that refuses storage (private mode, disabled cookies)
- * simply keeps today's behaviour. That is the same gap the server sweep covers.
+ * simply keeps today's behaviour. The server sweep covers that gap ONLY for a
+ * device that never returns anywhere — see the header, and ADR 0022.
  */
 export function markDeletionStarted(uid: string, startedAt: number): void {
   try {
     window.localStorage.setItem(deletionMarkerKey(uid), JSON.stringify({ startedAt }));
-  } catch { /* private mode — the server sweep is the backstop */ }
+  } catch { /* private mode — the sweep is the backstop, but only if they never return anywhere (ADR 0022) */ }
 }
 
 /**
@@ -86,8 +103,16 @@ export function markDeletionStarted(uid: string, startedAt: number): void {
  * A storage that THROWS answers `false`, and the asymmetry is the opposite of
  * `tabSession`'s: a false `true` would lock someone out of an account nothing
  * ever tried to delete, while a false `false` costs only what the code already
- * does today and is caught by the server sweep. A browser whose `localStorage`
- * throws could not have stored a marker in the first place.
+ * does today. A browser whose `localStorage` throws could not have stored a
+ * marker in the first place.
+ *
+ * Do NOT restore the clause that used to end that sentence — "and is caught by
+ * the server sweep". A false `false` lets a guarded write through,
+ * `ensureUserProfile` recreates `users/{uid}`, and the account then leaves the
+ * sweep's candidate set permanently (it looks for accounts WITHOUT a profile).
+ * The sweep is the backstop for a device that never returns, not for this.
+ * Corrected 2026-08-15, BIN-879 / ADR 0022 — it was the load-bearing half of the
+ * fail-open argument above, and it was false.
  */
 export function isDeletionStarted(uid: string): boolean {
   try {

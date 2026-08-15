@@ -79,7 +79,15 @@ describe('deletionMarker', () => {
   it('en storage som kastar svarar "inte markerad" — aldrig tvärtom', () => {
     // Asymmetrin är hela poängen och den är MOTSATT tabSession:s. Ett falskt
     // true låser ute någon vars konto ingen försökt radera; ett falskt false
-    // kostar bara dagens beteende, och serversopningen fångar det.
+    // kostar bara dagens beteende.
+    //
+    // Här stod "och serversopningen fångar det". Det var falskt och är struket
+    // 2026-08-15 (BIN-879 / ADR 0022) — samma rättelse som i modulens egen
+    // header. Ett falskt false släpper igenom en spärrad skrivning,
+    // `ensureUserProfile` återskapar `users/{uid}`, och kontot lämnar då
+    // sopningens urval PERMANENT, eftersom sopningen letar efter konton utan
+    // profil. Sopningen är backstop för den som aldrig återvänder någonstans,
+    // inte för det här. Återinför inte meningen.
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError: private mode');
     });

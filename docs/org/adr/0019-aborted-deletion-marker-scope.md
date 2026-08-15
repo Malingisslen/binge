@@ -2,6 +2,14 @@
 
 - **Date:** 2026-08-11
 - **Status:** Accepted (Malin, 2026-08-11)
+- **Extended by:** [0022](0022-cross-device-deletion-gap-accepted.md) (2026-08-15) —
+  question 2 below rules the surviving auth account a documented, swept DELAY rather than
+  a breach, and conditions that ruling on the window being real. 0022 records that the
+  precondition does **not** hold for the cross-device case: a marker-less device merely
+  loading an authenticated page recreates the profile, and the account then leaves the
+  sweep's candidate set permanently. That consequence was accepted on its own terms
+  (Malin, 2026-08-15) with #6 DPO dissenting on the record. Read 0022 before relying on
+  question 2's reasoning for anything outside the never-returns case.
 - **Trigger:** BIN-816 — an aborted account deletion recreates `users/{uid}` with a fresh
   `termsAcceptedAt`/`ageConfirmedAt`. Fileset routed `tier: top` (high-stakes hits on
   `src/contexts/AuthContext.tsx`, `src/lib/firebase/userData.ts`).

@@ -135,3 +135,25 @@ paths was rejected for the same reason per-call-site profile guards were: it lea
 next one. Do not file "the limbo screen is too aggressive" or "block writes at the write
 site instead". `deleteAccount()` and its retry are never gated — that part is ADR 0019
 condition 3 and is separately tested. — 2026-08-13
+
+### [Data/Legal] The cross-device aborted-deletion gap is accepted — the consent re-stamp is NOT
+A user who aborts a deletion on one device and merely LOADS an authenticated page on
+another has no marker there: `ensureUserProfile` recreates `users/{uid}`, and
+`retentionCleanup`'s orphan-auth sweep candidates on "Auth account exists AND profile
+confirmed absent" — so that account leaves the candidate set PERMANENTLY, not for a while.
+**Why:** Malin's call 2026-08-15 against two blind critiques (ADR 0022). Only the account
+holder on their own credentials can trigger it, no third party gains anything, the 25
+collections are already erased by the time the state is reachable, and deleting again
+restarts the chain. **#6 DPO dissented** — it reads the accept as falsifying the very
+precondition ADR 0019 question 2 rests on (a delay that is real and swept) — and the
+dissent is preserved verbatim in ADR 0022 rather than argued away. Do not re-file "the
+marker doesn't reach other devices", and do not propose moving it to Firestore: ADR 0019's
+ban is reaffirmed as covering this ticket explicitly. **Not covered by this accept, and
+still open work:** `ensureUserProfile` stamping fresh `termsAcceptedAt`/`ageConfirmedAt`
+with no consent step shown — that is a manufactured compliance record, both roles named it
+independently as the part with real legal teeth, and it is filed separately. A fix confined
+to `userDocWrite.ts` is a NO-OP for it (those sites read the marker, which is by definition
+absent on the second device). Re-open trigger: a real support case showing an account in
+this state — treat it as an overdue Art. 17 request completed by hand, not as normal
+operation (`docs/RUNBOOK.md` §5f). This EXTENDS the 2026-08-13 "no natural retirement"
+entry above (same root cause, different consequence); it does not supersede it. — 2026-08-15

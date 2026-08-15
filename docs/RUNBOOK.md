@@ -205,6 +205,14 @@ Console, i den här ordningen:
   profil-dokumentet finns kvar, så sopningen i `retentionCleanup` rör det INTE
   (den letar efter konton *utan* profil). Bara användarens eget omförsök löser
   det. Har de stängt fliken och aldrig kommit tillbaka blir det liggande.
+  - **Läge (b) och §5f ser IDENTISKA ut i Console** — Auth finns, `users/{uid}`
+    finns, underkollektioner tomma. Skiljetecknet är samtyckesdatumet: bär
+    profilen `termsAcceptedAt`/`ageConfirmedAt` med ett datum EFTER
+    raderingsförsöket är det INTE (b), utan en återskapad profil från en annan
+    enhet — **gå till §5f**. Det spelar roll: (b) stängs som normaldrift, medan
+    §5f är en försenad Art. 17-begäran som ska loggas. Accepten i ADR 0022 vilar
+    på att sådana fall faktiskt syns, och den enda vägen dit är att någon här
+    märker skillnaden.
 - **(c)** städas automatiskt: `retentionCleanup` raderar Auth-konton utan
   `users/{uid}` som är äldre än 7 dygn, och frigör deras användarnamn i **samma
   körning** (sopningarna kör sekventiellt just därför). Behöver inget
@@ -223,7 +231,9 @@ Console, i den här ordningen:
 - Användaren ser i alla tre lägena en spärrskärm i appen med "Slutför
   raderingen". Den är enhetslokal (`localStorage`, nyckel
   `binge:deletionStarted:<uid>`), så på en annan enhet ser de en helt vanlig app
-  fram till att sopningen tar kontot.
+  tills de startar en ny radering. Sopningen når inte kontot i det läget — den
+  andra enhetens sidladdning återskapar profilen och kontot lämnar sopningens
+  urval permanent (ADR 0022, §5f).
 - Loggraden att leta efter: `retentionCleanup done` →
   `orphanAuthAccounts` / `deletedOrphanAuthAccounts`. **Läs den mot
   `checkedAuthAccounts` och `orphanAuthSkippedProfileBatches`** — `orphanAuthAccounts: 0`
@@ -265,6 +275,80 @@ Ett handtag kan ha blivit kvar på ett konto som inte finns (BIN-875, fixat
 Steg 3 sköts numera automatiskt av `retentionCleanup` (loggrad
 `orphanUsernames` / `deletedOrphanUsernames`, samma läsregel som ovan). Gör det
 för hand bara om någon väntar och sopningen inte hunnit köra.
+
+### 5f. "Jag raderade mitt konto men kan fortfarande logga in"
+
+Det här är ett känt och accepterat läge (ADR 0022, BIN-879), men **en levande
+förekomst är inte normaldrift** — den ska behandlas som en försenad Art.
+17-begäran och slutföras för hand.
+
+Vad som hänt: användaren startade en radering, kaskaden avbröts efter att
+Firestore-datan raderats men innan Auth-kontot togs bort, och hen laddade sedan
+en inloggad sida på en **annan enhet**. Markören som håller tillbaka
+återskapandet ligger i `localStorage` och finns bara på enheten raderingen
+startades på (ADR 0019). Den andra enhetens sidladdning återskapade
+`users/{uid}` — och därmed slutade `retentionCleanup`s sopning matcha kontot,
+permanent, eftersom den letar efter Auth-konton som saknar profil.
+
+**Känn igen det:**
+
+1. Användaren beskriver en radering som verkade misslyckas eller avbrytas.
+2. Firebase Console → Authentication → kontot finns.
+3. Firestore → `users/{uid}` finns, och är **tunn** — biblioteket, betygen och
+   listorna är borta. Det är kaskadens spår. Men det är bara ett stödjande
+   tecken: har hen börjat använda appen igen på den andra enheten är profilen
+   återuppbyggd, och att data har kommit tillbaka motbevisar ingenting.
+4. **Detta är det avgörande testet.** `termsAcceptedAt` / `ageConfirmedAt` bär
+   ett datum som ligger EFTER raderingsförsöket. Det är den omstämplade
+   samtyckesposten (se nedan), och den kan bara uppstå på den här vägen —
+   stämpeln skrivs enbart när dokumentet SKAPAS, så ett konto som aldrig fick
+   sin profil raderad kan inte bära den. Väger steg 3 och steg 4 mot varandra
+   vinner steg 4.
+
+**Gör så här:**
+
+1. Fråga användaren vad hen vill: slutföra raderingen eller behålla kontot.
+2. Vill hen radera — be hen göra det i appen igen. Kaskaden bygger sin plan från
+   Firestore på nytt och raderingar mot redan raderade dokument är no-ops, så ett
+   nytt försök är säkert och slutför resten.
+3. Kommer hen inte vidare (t.ex. sessionen blir aldrig färsk nog) — radera **tre
+   saker** i Console, inte en:
+   - `users/{uid}` i Firestore
+   - `publicProfiles/{uid}` i Firestore — **en egen toppnivåsamling**, inte en
+     underkollektion till `users`. Att radera `users/{uid}` rör den inte. Den är
+     dessutom redan tillbaka när ärendet når dig: effekten som speglar profilen
+     dit spärras bara av markören, som saknas på den här enheten.
+   - Auth-kontot
+
+   **Bekräfta Consoles "radera även underkollektioner"-fråga** när du raderar
+   `users/{uid}` — samma steg som i `docs/moderation.md`. Under tiden profilen
+   var återskapad kan underkollektioner ha hunnit skapas igen (watchlist-poster
+   om hen använde appen, en ny `fcmTokens`-post om hen slog på push).
+
+   Utan den bockade rutan blir watchlist-poster och övriga underkollektioner
+   kvar för alltid utan förälder. **`fcmTokens` är undantaget** — BIN-848:s svep
+   hittar dem via collection-group på sökvägen, inte via föräldradokumentet, och
+   raderar dem inom ett dygn när Auth-kontot är borta (se
+   `docs/data-retention-policy.md`, §"Push-tokens för konton Auth inte längre
+   erkänner"). Pushen tystnar dessutom omedelbart: `push.ts` läser profilen
+   innan den rör tokens.
+
+   Alla tre behövs, av två olika skäl. Sopningen som frigör användarnamnet kräver
+   att BÅDE profilen och Auth-kontot saknas (`orphanedReservations`:
+   `profileMissing && authMissing`), och i det här läget finns den tunna profilen
+   kvar — se igenkänningssteg 3 ovan. Och `publicProfiles` städas av ingenting
+   alls: molnfunktionerna nämner den inte på ett enda ställe, det finns ingen
+   Auth-`onDelete`-trigger, och ingen sopning rör en profil vars konto är borta.
+   Missar du något av de tre blir det kvar för alltid. Med alla tre borta släpper
+   sopningen handtaget inom ett dygn (§5e).
+4. **Logga fallet.** Enmånadsfönstret i Art. 12(3) räknas från den FÖRSTA
+   begäran, inte från supportärendet, så det är sannolikt redan passerat när
+   detta syns.
+
+Punkt 4 i igenkänningen — den omstämplade samtyckesposten — är den del av det
+här som **inte** är accepterad och som har en egen biljett. Rapportera den
+vidare om du ser den i skarpt läge; det är en efterlevnadspost appen hittat på åt
+någon som just bett att få lämna.
 
 ---
 
