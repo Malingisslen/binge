@@ -2141,7 +2141,7 @@
     {
       "id": "flow-rating-community",
       "label": "Community rating aggregate",
-      "description": "A user's star rating write to their own watchlist doc triggers communityRatingMaintain, which idempotently (event-id guarded) increments a per-title {count,sum} aggregate; title pages read that single doc and show the \"Binge-snitt\" badge once a minimum sample is reached.",
+      "description": "A user's star rating write to their own watchlist doc triggers communityRatingMaintain, which idempotently (event-id guarded) maintains a per-title {count,sum} aggregate in one transaction; since BIN-727 the decision lives behind an injected port (communityRatings/runAggregate.ts, importing no firebase-admin) and src/test/rules/community-ratings-orchestrator.test.ts drives it against a live emulator with a FORCED write/write race — that race is the only thing proving the port's runTransaction is a real transaction and not a buffered shim; title pages read that single doc and show the \"Binge-snitt\" badge once a minimum sample is reached.",
       "covers": [
         "communityRatingMaintain",
         "CommunityRating"
@@ -2164,7 +2164,7 @@
         {
           "from": "cf-communityRatingMaintain",
           "to": "firestore",
-          "payload": "transaction on titleRatingsAggregate/{mediaType}_{tmdbId} — skips if lastEventId already processed (BIN-148 redelivery guard), else FieldValue.increment(count, sum) by the delta",
+          "payload": "transaction on titleRatingsAggregate/{mediaType}_{tmdbId} — ONE transaction reads the doc, skips if lastEventId already processed (BIN-148 redelivery guard), else rewrites {count,sum} as plain numbers computed from that same read. BIN-727 (2026-08-16) removed FieldValue.increment: the read has to happen anyway for lastEventId, so the transaction's optimistic concurrency already gives what the sentinel gave. Removing that read, or adding a second writer outside this transaction, would break it",
           "transport": "Firestore transaction",
           "verified": true
         },
