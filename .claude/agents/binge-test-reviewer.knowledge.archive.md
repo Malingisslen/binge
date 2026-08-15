@@ -21127,3 +21127,187 @@ reproduced against the staged bytes rather than trusted from the coordinator's r
 new findings.
 
 REVIEW-VERDICT: pass (0 blocking)
+
+## 2026-08-16 — BIN-727 condition 4, communityRatings orchestrator (third port instance)
+
+**Diff reviewed** (`git diff --cached --stat`): `functions/src/communityRatings/index.ts`
+(shrunk to the Admin-SDK port + trigger wrapper), new
+`functions/src/communityRatings/runAggregate.ts` (the admin-free orchestrator: doc-id
+derivation, no-op guard, transactional dedup+increment), new (17-test)
+`src/test/rules/community-ratings-orchestrator.test.ts` (drives it against a real Firestore
+emulator, including a forced write/write race), plus `functions/src/index.ts` comment
+updates, `docs/org/ownership-map.json` + `docs/role-responsibilities.md` (new files' owner:
+#27 Database Administrator), and `tasks/todo.md` (the plan, showing #27's five binding
+conditions from a blind critique — condition 4 is the ticket's own verbatim requirement,
+conditions 1–3 and 5 are #27's additions).
+
+**Setup**: port 8080 held by an unrelated orphaned process (PID 42004, left untouched).
+Built an isolated scratch Firebase config (`firestore.rules` = permissive, `emulators.firestore.port: 8091`,
+distinct project id `binge-ratings-orchestrator-test`), ran via
+`firebase -c <scratch>/firebase.json emulators:exec --only firestore --project <id>
+"npx cross-env FIRESTORE_EMULATOR_HOST=127.0.0.1:8091 npx vitest run --config vitest.rules.config.ts src/test/rules/community-ratings-orchestrator.test.ts"`.
+`cross-env` needed because `emulators:exec` shells out via `cmd.exe` on Windows regardless
+of the calling shell, so an inline `VAR=val cmd` POSIX assignment silently fails
+("'FIRESTORE_EMULATOR_HOST' is not recognized"). Snapshotted both source files to scratch
+before mutating; every mutation cycle: `grep -n MUTANT` before the run (proves it landed),
+run, `grep -n MUTANT` after (proves nothing reverted it mid-run), restore from scratch
+backup, `git hash-object` vs `git rev-parse :<path>` (worktree == index, both unchanged from
+the original staged sha) before the next mutation. Baseline: 17/17 green.
+
+**Mutations run, and the count each actually produced** (all via direct edit + a fresh
+emulator run per mutation, never inherited):
+1. Dedup check moved OUTSIDE the incrementing transaction (a separate `runTransaction` call
+   just for the `tx.get`/lastEventId check, then a second, unguarded `runTransaction` for
+   the increment+write) → **1/17 red-alone**, exactly "SAMTIDIG omleverans räknas en gång"
+   (both racing deliveries land as `applied`, count doubles to 2/sum 8). This is the ticket's
+   own condition, verbatim, and it is discharged.
+2. The TEST's own port (`makeIo`) swapped for a buffered non-transactional shim — plain
+   `getDoc` for the read, writes collected and committed via plain `setDoc` after the
+   callback returns → **2/17 red-alone**, both concurrency tests ("SAMTIDIG omleverans" now
+   returns `['applied','applied']` instead of `['applied','duplicate']`; "TVÅ OLIKA
+   händelser" undercounts to count:1/sum:5 because the second writer clobbers instead of
+   compounding). Confirms condition 2 (#27): the `callbackStarts > 2` assertion really is
+   what distinguishes a genuine OCC retry from a lucky non-overlap or a non-transactional
+   fake — a buffered shim gets exactly the wrong `kinds`/count AND could never have produced
+   `callbackStarts > 2` even if the count had come out right by luck, so the mechanism
+   assertion isn't decorative.
+3. Aggregate doc id derived from the BODY instead of the PATH — first attempt
+   (`bodyId ?? watchlistDocId` fallback) only changed 1/17 because almost no fixture sets
+   `bodyTmdbId`; the LITERAL reading of the vote-stuffing mutation (`docIdRaw = bodyId
+   present ? String(bodyId) : ''`, no path fallback at all) is what the handed-down 12/15
+   claim actually describes, and re-derived it gives **15/17 red-alone** — at least as
+   strong as claimed, not exaggerated. Lesson folded into the principles file: a "neutered
+   guard" or "swapped source" mutation needs its OUTPUT checked against the file's actual
+   fixture VALUES before trusting a low or high kill count; a fallback-shaped mutant can be
+   accidentally inert on fixtures that never populate the fallback's trigger field.
+4. `event.after?.mediaType ?? event.before?.mediaType` precedence flipped to
+   `before ?? after` → **1/17 red-alone**, exactly "legacy: när de två sidorna är oense
+   vinner EFTER, inte FÖRE" (the dedicated contrast fixture; the sibling "raderat dokument"
+   test is unaffected because `after` is genuinely absent there, not just deprioritized).
+   Matches the reported "1/16" (the file had 16 tests before the two dedicated fixtures for
+   this exact gap were added, one of which is the delete case that correctly doesn't fire).
+5. `lastEventId` never written on `tx.set` → **3/17 red-alone**: "ett nytt betyg skapar
+   dokumentet" (missing the field entirely), "sekventiell omleverans hoppas över" (no longer
+   dedups, applies twice), "SAMTIDIG omleverans" (same). Exact match to the claim.
+6. No-op guard (`if (isNoOp(delta)) return`) moved from before the transaction to inside the
+   callback → **1/17 red-alone**, "en watchlist-skrivning som inte rör betyget öppnar INGEN
+   transaktion" (`spy.transactions` goes from 0 to 1). Exact match.
+7. `numberOr0`'s guard fully removed (`(v ?? 0) as number`, no typeof/isFinite check) →
+   **1/17 red-alone**, "skräp i räknarna nollställs" (string `'nej'` concatenates instead of
+   coercing to 0). A weaker first attempt (`Number(v) || 0`) reproduced the SAME output as
+   the original guard for both of the file's junk fixtures (`'nej'`→NaN→0 either way,
+   `null`→0 either way) and is recorded above as the "verify the mutant's output differs on
+   real fixtures" lesson.
+8. The two-party barrier (`makeBarrier`) removed from both concurrency tests, so the two
+   `Promise.all`'d deliveries race with no forced interleaving → **17/17 green, 5 consecutive
+   runs**, matching the file header's own disclosure ("Removing it leaves all 15 tests
+   green… kept because 'often enough' is a flake waiting to happen"). The disclosure is
+   accurate in substance; the literal count is stale (the file had 15 tests when that
+   sentence was written, 17 now after the two BIN-560/precedence-flip fixtures were added —
+   informational, not blocking, since neither addition is barrier-dependent).
+
+**The three "NOT PROVEN HERE" claims, verified individually**:
+- `event.params.tmdbId` really is the watchlist doc's own path segment: confirmed by reading
+  `index.ts`'s trigger registration (`onDocumentWritten('users/{uid}/watchlist/{tmdbId}',
+  ...)`, `watchlistDocId: event.params.tmdbId`) — genuinely unexercisable by this emulator
+  harness, which only ever constructs `RatingEvent` objects directly.
+- Production writes with `merge: true`: confirmed in `index.ts`'s `adminIo.set` (`{ merge:
+  true }`); the test file's own port also merges, but pins only the TEST's harness, not
+  `index.ts`'s.
+- The barrier is not required, only deterministic: confirmed by mutation 8 above (5/5 green
+  with it removed).
+
+**A fourth gap, not on the file's own list, found on request**: whether `index.ts`'s
+`adminIo.runTransaction` (`(fn) => { const db = getFirestore(); return
+db.runTransaction(async (tx) => fn({...})); }`) is itself a genuine thin pass-through and
+not a buffered shim is asserted only by code comment and manual reading — the CONTENTION
+TEST that is supposed to guard exactly this property only ever exercises the TEST's own
+client-SDK port (`makeIo`), never `index.ts`'s Admin-SDK one, because `index.ts` imports
+`firebase-admin` and can't run under this harness. This is the same structural class as the
+two disclosed gaps (tmdbId binding, `merge:true`) — a property of the untestable admin-wired
+caller, not of the tested orchestrator — but it is the single most important one given it's
+precisely the vulnerability class (`runAggregate.ts`'s own header: "an implementation could
+satisfy `runTransaction<T>(fn): Promise<T>` with a buffered non-transactional shim") the
+whole suite exists to guard against. Graded LOW/informational, matching this codebase's
+established precedent for admin-wired entry points (retentionCleanup/index.ts,
+availableNotify/index.ts carry the identical unprovable residual) — by code inspection
+`db.runTransaction` genuinely is the real SDK call with no buffering, so there is no live
+defect, only an unclosable gap in what the automated suite itself can verify. Named in the
+review as the fourth item the file's own "NOT PROVEN HERE" list should have included.
+
+**Supporting checks**: `firestore.rules` (`match /titleRatingsAggregate/{titleId} { allow
+read; allow write: if false; }`, line 708) and `src/test/rules/firestore-rules.test.ts`
+(lines 2076–2085) confirmed the `read:true / write:false` claim the test header leans on for
+"no other writer can join the transaction." `tasks/todo.md`'s staged plan rewrite matches
+what was actually built (five conditions from #27's blind critique, condition 5 — the
+swallowed-transaction-failure path — resolved in writing via the `runAggregate.ts` docstring
+rather than changed code, with the `retry: true` question correctly deferred to a separate
+ticket rather than decided in a test-authoring diff).
+
+**Verdict**: all eight handed-down mutation counts re-derived and matched or exceeded the
+claim; both structural DBA conditions (dedup-in-transaction, OCC-retry-proof-via-callback-
+count) are genuinely discharged, not gestured at; the disclosed "NOT PROVEN HERE" list is
+accurate but incomplete by one item (documented above, LOW); one stale count in a header
+comment (15 vs 17 tests, informational). No blocking findings.
+
+REVIEW-VERDICT: pass (0 blocking)
+
+## 2026-08-16 — BIN-727 condition 4, re-review after header-only fix
+
+Coordinator message: acted on both prior notes, re-review the current staged test file,
+do NOT re-run the mutation matrix (no production code changed; avoiding a repeat of the
+2026-08-14 concurrent-mutation collision — two other reviewers reading the same tree).
+
+**Diff since the prior pass, verified by blob diff, not by trusting the claim**:
+`git cat-file -p 0a26a7c867ca94882d624026313e7fc6333b2e56` (the sha I reviewed and pinned
+last time) vs the current staged blob `2425b575a61bd78776c23b53b1834b2a5e2f6eac` — a plain
+`diff -u` on the two extracted blobs shows exactly two hunks, both inside the file-header
+docstring, nothing else in the file's 511 lines moved:
+1. "Removing it leaves all 15 tests green" → "…all 17 tests green… (confirmed over five
+   repeated runs)" — the stale count from my prior finding, now fixed and citing my own
+   repeated-run evidence by name.
+2. A new fourth "NOT PROVEN HERE" bullet: that `index.ts`'s `adminIo.runTransaction` is a
+   genuine pass-through and not a buffered shim, explicitly ranked "sharpest gap of the
+   four… named last only because it is structural," naming `index.ts`'s own header as
+   carrying the requirement and stating "the two sibling ports shipped this week leave the
+   identical residual."
+
+Read the full current file (`src/test/rules/community-ratings-orchestrator.test.ts`,
+511 lines) to confirm the mechanical proof requirement, not just the diff hunk. Also
+grepped both sibling orchestrators' `index.ts` (`functions/src/retentionCleanup/index.ts`,
+`functions/src/availableNotify/index.ts`) for the same shape — both import `firebase-admin`,
+both define an `adminIo: <Io>` port object inline, both have a sibling emulator test file
+that builds its OWN client-SDK port (`makeIo`) rather than exercising the admin one — so
+"the two sibling ports leave the identical residual" is a true, checked claim, not padding.
+
+**No mutations run this pass** (per the coordinator's instruction and because no production
+file's staged sha moved — `functions/src/communityRatings/runAggregate.ts` and `index.ts`
+re-hashed identical to what I mutation-verified last time). `git status --porcelain` at the
+end shows zero unexpected changes; the only files this session touched are the two
+test-reviewer knowledge files.
+
+**The CI-flake question** (does `expect(spy.callbackStarts).toBeGreaterThan(2)` risk a FALSE
+PASS — the test staying green over genuinely buggy, non-atomic code — on a slower/more
+contended CI runner than this machine): **no.** The two-party barrier removes the wall-clock
+race entirely — both callback invocations are held at `afterRead` until BOTH have arrived,
+via a resolved/pending `Promise`, not via a timing window, so both are GUARANTEED to have
+read the document before either writes, on any runner speed. Given that guaranteed
+read-before-write ordering, Firestore's transaction contract guarantees at least one retry
+when both attempt to commit against the same document — this is a correctness property of
+the SDK, not a timing coincidence, so it does not get weaker as the runner gets slower.
+Symmetrically, a buffered non-transactional shim (the mutation this assertion exists to
+catch) has no retry mechanism in it at all, so it produces exactly `callbackStarts === 2`
+deterministically regardless of speed — there is no contention level at which a shim
+accidentally starts retrying. The residual CI risk, if any, runs the OPPOSITE direction from
+what was asked: a false FAILURE (flake) if the Firestore emulator's own retry machinery ever
+misbehaves under heavy load, which is a reliability concern, not a false-confidence one, and
+I have no evidence of it (5/5 clean local repeats, not tested under artificial CI-like load).
+Said so plainly rather than either reassuring past my evidence or hedging without a reason.
+
+**Verdict**: both requested fixes are accurate and correctly scoped — the stale count is
+fixed and cites real evidence; the fourth disclosure is honest, correctly self-ranked as the
+sharpest of the four (not the least, despite being named last), and its "two sibling ports…
+identical residual" claim is independently verified true. The disclosure list is complete: no
+fifth gap found on this pass. No blocking findings.
+
+REVIEW-VERDICT: pass (0 blocking)

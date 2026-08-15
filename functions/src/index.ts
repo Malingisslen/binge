@@ -175,9 +175,12 @@ export { availableNotify } from './availableNotify';
 
 // ── Community ratings (BIN-104) ──────────────────────────────────────────────
 // communityRatingMaintain: onWrite-trigger på watchlist → underhåller per-titel-
-// aggregat titleRatingsAggregate/{mediaType}_{tmdbId} {count,sum} via atomisk
-// FieldValue.increment (no-op om betyget inte ändrats). Admin-skrivet; läses
-// publikt för "Binge-snitt" på titelsidor.
+// aggregat titleRatingsAggregate/{mediaType}_{tmdbId} {count,sum} i EN transaktion
+// som läser dokumentet för `lastEventId` (BIN-148:s dubblettspärr) och skriver om
+// {count,sum} som vanliga tal — inte FieldValue.increment, som togs bort i BIN-727
+// eftersom transaktionens läsning redan ger samma garanti; se runAggregate.ts för
+// vad som skulle göra det osäkert igen. No-op om betyget inte ändrats, innan någon
+// transaktion öppnas. Admin-skrivet; läses publikt för "Binge-snitt" på titelsidor.
 export { communityRatingMaintain } from './communityRatings';
 
 // ── Orphan-follow-sweep (BIN-21 storage-backstop) ────────────────────────────
@@ -187,11 +190,15 @@ export { communityRatingMaintain } from './communityRatings';
 export { reclaimOrphanFollows } from './reclaimOrphanFollows';
 
 // ── Retention cleanup (BIN-65) ───────────────────────────────────────────────
-// retentionCleanup: daglig scan, FEM svep → utgångna Tillsammans-sessioner (past
+// retentionCleanup: daglig scan, SJU svep → utgångna Tillsammans-sessioner (past
 // expiresAt, recursiveDelete inkl. participants/swipes), notiser >90 dagar,
-// joinAttempts >1h, släppmarkörer >30d, och push-tokens vars Auth-konto är
-// raderat eller spärrat (BIN-848 — Console-bypassens enda städväg).
+// joinAttempts >1h, släppmarkörer >30d, push-tokens vars Auth-konto är raderat
+// eller spärrat (BIN-848 — Console-bypassens enda städväg), och sedan BIN-816/875
+// två svep till som kör EFTER de fem och i ordning: Auth-konton äldre än 7 dagar
+// utan users/{uid} (en avbruten radering), och användarnamnen de lämnade efter sig.
+// Stod "FEM" här till 2026-08-16, två svep efter att de sjunde tillkom.
 // Trösklar från docs/data-retention-policy.md. Bounded/paginerad (BIN-50-mönster).
+// Orkestreringen ligger bakom en injicerad port sedan BIN-727 (runCleanup.ts).
 export { retentionCleanup } from './retentionCleanup';
 
 // ── Report submit (BIN-49) ───────────────────────────────────────────────────

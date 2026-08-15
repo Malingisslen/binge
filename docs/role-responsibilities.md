@@ -499,9 +499,19 @@ findings here too.
   read-time; docs are rewritten only on user edit, never in bulk.
   → `src/lib/watchStatus.migration.ts`, `src/contexts/WatchlistContext.tsx`
 - **Denormalization & dual-write discipline** — `effectiveVisibility`/`isPublic`
-  mirrors; the community-rating `FieldValue.increment` aggregate with transaction +
-  `lastEventId` idempotency (BIN-148).
-  → `functions/src/communityRatings/index.ts`, `src/hooks/usePublicProfile.ts`
+  mirrors; the community-rating per-title aggregate with transaction +
+  `lastEventId` idempotency (BIN-148). Since BIN-727 (2026-08-15) that aggregate no
+  longer uses `FieldValue.increment`: the transaction already reads the document to
+  check `lastEventId`, so its optimistic concurrency covers what the sentinel used
+  to, and the counts are now plain arithmetic on the value the transaction itself
+  read. The orchestration sits behind an injected port (`runAggregate.ts`, importing
+  no firebase-admin) whose `runTransaction` must stay a thin pass-through — a
+  buffered shim would satisfy its type and silently drop the atomicity — so the
+  emulator spec that forces a real write/write race belongs to this role too.
+  → `functions/src/communityRatings/index.ts`,
+  `functions/src/communityRatings/runAggregate.ts`,
+  `src/test/rules/community-ratings-orchestrator.test.ts`,
+  `src/hooks/usePublicProfile.ts`
 - **Retention/TTL cleanup** — `retentionCleanup` (daily; seven sweeps: sessions,
   notifications, joinAttempts, release-dedup markers, push tokens for accounts Auth no
   longer honours, and — since BIN-816/875 — Firebase Auth accounts orphaned by an

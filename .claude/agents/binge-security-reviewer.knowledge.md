@@ -1,20 +1,20 @@
 # binge-security-reviewer — knowledge (principles)
 
-**Edited IN PLACE.** Fold each lesson into the bullet it belongs to; merge duplicates, supersede
+**Edited IN PLACE.** Fold each lesson into the bullet it belongs; merge duplicates, supersede
 contradictions, never append at the bottom. A bullet earns its place only by changing what a review does.
-Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by compressing old ones.
+Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons by compressing old ones.
 
 ## Seed checklist
 - **Public-read:** `reviews/**`,`lists`(isPublic),`usernames`,`sessions/**`,`reports`(create-only, never
   client-read). NEW public-read collection must be intentional+minimal.
-- **Ownership:** every per-user read/write enforces `request.auth.uid` (`blocked`=hygiene, not boundary). Secret
-  in `NEXT_PUBLIC_` is a finding.
+- **Ownership:** every per-user read/write enforces `request.auth.uid` (`blocked`=hygiene, not boundary).
+  `NEXT_PUBLIC_` secret = finding.
 
 ## How to prove a finding
 - **Rules-trace = hypothesis — write a live PoC.** Throwaway `src/test/rules/_poc-*.test.ts` on the real
   `initializeTestEnvironment`/`withSecurityRulesDisabled` harness, `npm run test:rules`, delete before
   finishing; prove closure inverted. Port taken → `FIRESTORE_EMULATOR_HOST=localhost:8080 npx vitest run
-  --config vitest.rules.config.ts`. Blocked → DERIVED.
+  --config vitest.rules.config.ts`. Blocked = DERIVED.
 - **Mutation-proof any fix whose test could pass for an unrelated reason:** neutralize ONLY the new clause,
   re-run — exactly the target test must fail; restore byte-identical (verify by hash). A `<= 1` range check
   once masked a broken ratchet (BIN-540). Tooling-blocked → restore anyway, label DERIVED. **A stale
@@ -37,9 +37,9 @@ Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by c
   pinned by its own unit case (r4 — the `collection()` half was otherwise droppable green), and a fileset
   floor just under the real count (BIN-838). Residual: segment-form misses a template-literal path.
 - **`hasOnly` bounds the KEY SET only** — never presence, never values. A merge-written field needs the entry
-  AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with NO
-  value bind is fine to leave unbound if a SIBLING already-shipped field of identical shape/consumption
-  (rendered only through an id→lookup table, never interpolated) is unbound too (BIN-814).
+  AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with no
+  value bind is fine unbound if a SIBLING shipped field of identical shape (rendered only through an
+  id→lookup table, never interpolated) is unbound too (BIN-814).
 - **A "does an unrelated write survive on an already-contaminated doc" ratchet test must seed via
   `withSecurityRulesDisabled`** when mutation-testing the deployed rule — a live seed is rejected by the same
   `hasOnly` before the target line runs, so the scenario goes unexercised (VALUE ratchets like
@@ -67,7 +67,7 @@ Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by c
 - **A reaper's "undateable = kept forever" restraint is safe only if the CREATE rule makes the date
   mandatory.** `hasOnly(['token','createdAt'])` requires neither key — `setDoc({token})` skips the reaper
   forever; fix with `createdAt is timestamp && createdAt == request.time` (BIN-476→480). Same shape for an
-  AGE-gated reaper reading Auth `metadata.creationTime`: an unparseable value must return "leave alone".
+  AGE-gated reaper on Auth `metadata.creationTime`: unparseable must return "leave alone".
 - Exact-self-leave: `size()==resource.data.memberUids.size()-1` + `hasAll` + `!(request.auth.uid in
   request.resource.data.memberUids)` proves the caller removed only themself.
 - Admin report-update rules pin `reporterUid`/`target*`/`reason`/`createdAt` by equality to `resource.data.*`.
@@ -94,9 +94,9 @@ Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by c
   top-level uid-keyed collection is wired manually. A doc-id that merely STARTS with uid is swept by
   NEITHER — restructure or add a queryable `uid`.
 - **A THIRD shape escapes the subcollection-vs-admin-doc binary: a uid-keyed leaf under a NON-user parent** —
-  `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask
-  "does ANY doc identify a specific user, directly or by doc-id?" If yes: a `uid` FIELD + CG sweep, or — if
-  retained — Art. 17(3) comment + policy entry + reaper.
+  `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask "does
+  ANY doc identify a specific user, directly or by doc-id?" If yes: `uid` FIELD + CG sweep, or if retained,
+  Art. 17(3) comment + policy entry + reaper.
 - A new TOP-LEVEL GDPR-cascaded doc needs its own seeded live-emulator assertion in `account-deletion.test.ts`
   — the `KNOWN_USER_SUBCOLLECTIONS` loop misses it, and a mocked test proves wiring, not live erasure. The
   three-way set-equality guard (rules paths == const == helper `collection()` reads == `keyof
@@ -105,8 +105,8 @@ Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by c
   is invisible to it.
 - CG export queries need (a) a `uid` FIELD per doc — doc-id alone is unqueryable — and (b) an owner-scoped
   recursive-wildcard read rule (`match /{path=**}/likes/{id}`); nested per-doc rules don't cover CG.
-  **Collector change needed?** New subcollection → yes; new field on a covered doc, or new doc-ID scheme in a
-  covered subcollection → no; tab-local ephemeral state isn't a collection.
+  **Collector change needed?** New subcollection → yes; new field/doc-ID scheme on a covered subcollection →
+  no; tab-local ephemeral state isn't a collection.
 - A TTL reaper as sole erasure path needs a SYMBOLIC test (`MARKER_MAX_AGE_MS > functionalWindowMs`), not a
   hardcoded number. Plaintext join tokens get two layers: client cascade + Admin-SDK CG reaper (Art.17
   backstop for abandoned joins/Console-deleted accounts).
@@ -221,53 +221,54 @@ Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by c
 ## Cost, budgets, rate limits, fan-out
 - Sealing a client-writable counter behind a callable closes FORGERY/write-SHAPE, NOT COST or DOC-COUNT.
   Against "X matches the sealed pattern used by Y/Z/W", verify each sibling's SPECIFIC bound; separate ACTUAL
-  enforcement from design-intent justification (vendor spend is bounded by `reserveMotnSlot`'s transaction,
-  not cadence). Never refund a reservation the vendor already counted.
+  enforcement from design-intent (vendor spend is bounded by `reserveMotnSlot`'s transaction, not cadence).
+  Never refund a reservation the vendor already counted.
 - **"Claim in a transaction, work outside, release on failure" has a hard-timeout hole.** GCP force-kills a
   timed-out function with no `finally`, so a kill between claim and release sticks the flag for the cycle —
   bound the window under the platform timeout, or give the claim a LEASE timestamp. Transactions retry the
   callback, so `.add()` duplicates; use idempotent `.doc(id).set()`.
 - **Don't GUESS which status a malformed path-param id draws.** BIN-856 assumed 400; live probes showed
-  `movie/{NaN,'',abc,-1,0}` all 404 (bad RESOURCE, not bad REQUEST) → `[]`, the SUCCESS path, never reaching
-  the reject-governor. Real harm is a quieter **quota LEAK**: no `checkedAt` → immortal tier-0 item, re-picked
-  every run. Fix is identical either way (filter before the id enters the work set) — verify live.
+  `movie/{NaN,'',abc,-1,0}` all 404 (bad RESOURCE) → `[]`, the SUCCESS path, never reaching the reject-governor.
+  Real harm is a quieter **quota LEAK**: no `checkedAt` → immortal tier-0 item, re-picked every run. Fix is the
+  same either way (filter before the id enters the work set) — verify live.
 
 ## Admin-SDK sweeps and scheduled writers
 - **Admin SDK bypasses `firestore.rules` entirely — `hasOnly` offers ZERO protection against what a sweep
   writes.** The backstop is pure logic: a FRESH payload from a fixed allowlist, unit-tested for key-set
   equality + disjointness from `FORBIDDEN_FIELDS`. Whole-DB sweeps add a dry-run-by-default gate, cursor +
   budget, and an audit `lastRun` write every run.
+- **`FieldValue.increment` is redundant once a transaction already reads the target doc for another reason**
+  (a dedup `lastEventId` check) — OCC retries the WHOLE callback on conflict, so `read.value + delta` commits
+  against the freshest value like increment would; it earns its keep only on an unread doc or a write OUTSIDE
+  a transaction. Before dropping it: confirm no OTHER writer of the collection, add a `numberOr0`-style guard
+  matching increment's own non-numeric→SET-to-delta behavior (not `NaN`-poison forever), and check the merged
+  write payload is unchanged. Live-emulator-proved, mutation-caught: BIN-727 `communityRatings`.
 - **An IRREVERSIBLE whole-population sweep needs a CEILING, the ceiling needs a FLOOR, and the REFUSAL needs
   an operator path.** 'A failed check means could-not-check' (BIN-848/816) covers ERRORS only; a
-  SUCCESSFUL-but-wrong read (renamed collection, wrong db id, inverted predicate) makes every candidate read
-  legitimately absent and one run eats the population. Demand a `MAX_PER_RUN` that logs and deletes NOTHING
-  when exceeded, on any sweep whose unit of destruction cannot be restored (Auth accounts, global
-  reservations). A purely PROPORTIONAL bound (`> 0.25*checked`) LATCHES: candidates shrink only by being
-  deleted, so the backlog disables the sweep for good; under 50 users ONE orphan of three trips it (r3).
-  Require `> max(FLOOR, fraction*checked)` under the absolute cap and pin the decisive SMALL case, never the
-  constant's RANGE (`>`→`>=` must redden). **The floor BOUNDS the latch, it does not remove it** (r4): above
-  the floor the wedge is permanent and cheap to plant — a profile-less Auth account costs one `signUp`
-  against the public API key. Rate the REFUSAL as its own risk: a RUNBOOK recognise/clear-by-hand entry, and
-  a doc sentence carrying the LEGAL claim ('deleted daily within 7 days') — runbook-only leaves that claim
-  false the day it fires. **WHERE it lives:** the admin-free predicate module (`orphans.ts`/`logic.ts`) — in
-  the `firebase-admin` file nothing is testable, and extracting the PREDICATE still leaves the CALL unpinned
-  (delete the `if`, stay green) — ask for the filtered SET, not a boolean. Same ceiling on every sibling
-  irreversible sweep; check each refusal's
-  fail-safe DIRECTION. SYMMETRY too: `absentUidsFromLookup` refuses `disabled:true` as absent (a suspended
-  account still owns its handle) — `docs/moderation.md` says whether 'disabled' IS the ban record.
+  SUCCESSFUL-but-wrong read (renamed collection, wrong db id, inverted predicate) makes every candidate
+  legitimately absent and one run eats the population. Demand `MAX_PER_RUN` that deletes NOTHING when
+  exceeded, on any sweep whose unit of destruction can't be restored. A purely PROPORTIONAL bound
+  (`> 0.25*checked`) LATCHES — candidates shrink only by deletion, so the backlog disables the sweep for good
+  (under 50 users, ONE orphan of three trips it, r3); require `> max(FLOOR, fraction*checked)` and pin the
+  decisive SMALL case. **The floor BOUNDS the latch, it does not remove it** (r4) — above it the wedge is
+  permanent and cheap to plant (one `signUp` mints a profile-less Auth account). Rate the REFUSAL itself: a
+  RUNBOOK clear-by-hand entry, and any LEGAL doc claim ('deleted within 7 days') a runbook-only fix leaves
+  false. **WHERE it lives:** the admin-free predicate module — extracting the predicate still leaves the CALL
+  unpinned; ask for the filtered SET, not a boolean. Same ceiling on every sibling sweep; check each
+  refusal's fail-safe DIRECTION (`absentUidsFromLookup` refuses `disabled:true` as absent — a suspended
+  account still owns its handle).
 - **A new privileged API call inside an existing function invalidates the post-deploy attestation scoped to
-  the OLD permission.** BIN-848 verified only `firebaseauth.users.get` in `docs/analysis/EXTERNAL_ACTIONS.md`
-  and claimed its sweep was "the only caller of an Auth user-management API"; BIN-816 added `listUsers` +
-  `deleteUsers` (a DELETE permission). A missing runtime role makes the sweep inert with a green deploy —
-  grep the attestation, name the new permission, and add its log-line acceptance bar in the same commit.
+  the OLD permission.** BIN-848 verified only `firebaseauth.users.get`, claiming its sweep was "the only
+  caller of an Auth user-management API"; BIN-816 added `listUsers` + `deleteUsers` (a DELETE permission). A
+  missing runtime role makes the sweep inert with a green deploy — grep the attestation, name the new
+  permission, add its log-line acceptance bar in the same commit.
 - A shared `Set`/`Map` accumulator returned only at loop-end fails twice on a throw from unit K: K+1..M
-  skipped, 1..K-1's landed writes discarded. try/catch-continue per unit; the error-REPORTING callback needs
-  its OWN nested try/catch (BIN-848). **When three paths write the same ambiguous '0/success' summary for a
-  check meant to attest an effect occurred:** give the outer `.catch()` a sentinel a legit run can't produce
-  (`-1`, never `0`) and pair the summary with a second ATTEMPTED counter, required together.
+  skipped, 1..K-1's writes discarded. try/catch-continue per unit, error-REPORTING callback gets its OWN
+  nested try/catch (BIN-848). Three paths writing the same ambiguous '0/success' summary: give the outer
+  `.catch()` a sentinel a legit run can't produce (`-1`, never `0`), require a second ATTEMPTED counter too.
 - **collectionGroup matches by LEAF collection id regardless of parent path** — grep other writers/readers of
   that leaf name before trusting one (`collectionGroup('watchlist')` also matches `groups/{id}/watchlist/{id}`,
-  safe only because those docs lack `status`). Append each page BEFORE the `size < PAGE_SIZE` break; uid comes
+  safe only because those docs lack `status`). Append each page before the `size < PAGE_SIZE` break; uid comes
   from the doc PATH (`d.ref.parent.parent?.id`), never client content.
 - Bare-tmdbId keying collides movie and TV: grouping keys, state doc ids, FCM `tag`s, inbox ids and action
   URLs all need `mediaTypeDocId`. Fixing one collection's keying bug → grep every OTHER collection keyed on

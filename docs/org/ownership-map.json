@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 184,
+  "patternCount": 186,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -329,6 +329,7 @@
         "firestore.indexes.json",
         "firestore.rules",
         "functions/src/communityRatings/index.ts",
+        "functions/src/communityRatings/runAggregate.ts",
         "functions/src/reclaimOrphanFollows/",
         "functions/src/retentionCleanup/",
         "src/contexts/AuthContext.tsx",
@@ -338,6 +339,7 @@
         "src/lib/mediaTypeDocId.ts",
         "src/lib/watchStatus.migration.ts",
         "src/lib/watchlist/**",
+        "src/test/rules/community-ratings-orchestrator.test.ts",
         "src/test/rules/firestore-rules.test.ts",
         "src/test/rules/retention-cleanup-orchestrator.test.ts"
       ]

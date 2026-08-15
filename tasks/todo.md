@@ -1,170 +1,115 @@
-# Plan — BIN-879 (beslut + text) och BIN-727 steg 2 (orkestreringstest)
+# Plan — BIN-727 villkor 4: `communityRatings` bakom en port
 
-Datum: 2026-08-15. Sessionen är bevakad — Malin är närvarande och har svarat på
-den enda arkitekturavgörande frågan (se Öppna frågor).
+Datum: 2026-08-15. Bevakad session; Malin har sagt "ta det tredje jobbet och dra sen
+ut det i molnet". Planen täcker bygget; deployen är ett eget steg efteråt.
 
-## Rollkastning — körd FÖRE planen, som CLAUDE.md kräver
+## Rollkastning — körd FÖRE planen
 
-`node docs/org/route.mjs` på de faktiska filerna, inte ärvt från någon tidigare körning:
+`node docs/org/route.mjs functions/src/communityRatings/index.ts
+functions/src/communityRatings/runAggregate.ts
+src/test/rules/community-ratings-orchestrator.test.ts`
 
-| Ändring | tier | reasonCode | panel |
+| tier | reasonCode | panel | highStakes |
 | --- | --- | --- | --- |
-| BIN-879: `docs/data-retention-policy.md`, ny ADR | `medium` | `owned` | #6 DPO (+ #21 Technical Writer) |
-| BIN-727 steg 2: `functions/src/availableNotify/**`, ny emulator-spec | `medium` | `owned` | #13 Data/Integrations Engineer (+ #7 QA) |
+| `medium` | `owned` | #27 Databasansvarig | inga |
 
-Biljetten BIN-879 kräver dessutom uttryckligen #5 Juridik. Tre blinda kritiker
-kördes, var och en grundad i sin dossiersektion och blind för de andra.
+En blind kritik hämtad från #27, grundad i dossiersektion §27 + världsmodellen.
+**VERDICT: SUPPORT WITH CONDITIONS**, fem villkor. Alla fem är bindande
+acceptanskriterier nedan. Ingen av dem är avfärdad.
 
----
+## Vad biljetten kräver
 
-## BIN-879 — enhetsluckan efter en avbruten radering
+BIN-727:s omskopning 2026-08-06, villkor 4, ordagrant:
 
-### Vad frågan är
+> `communityRatings`: dedup-kontrollen får aldrig hamna utanför transaktionen som
+> räknar upp. Ett test ska tvinga fram en samtidig omkörning och visa att inget
+> dubbelräknas.
 
-Markören som stoppar en halvraderad session är enhetslokal (`localStorage`,
-ADR 0019). Den som avbryter på telefonen och laddar en sida på datorn har ingen
-markör där: `ensureUserProfile` återskapar `users/{uid}`, och serverns sopning —
-vars kandidatvillkor är "Auth-konto finns OCH profil bekräftat saknas" — slutar
-matcha kontot **permanent**. Policytexten kallade detta en öppen punkt.
+Fem av sex villkor är avklarade av steg 1 (`79d108d`) och steg 2 (`9fa182c`). Det
+här är det sista.
 
-Bindande begränsning från #5 Juridik, ADR 0019: markören får INTE flyttas till
-Firestore. Ett varaktigt dokument under `users/{uid}` återskapar precis det som
-ska raderas. Planen arbetar inom den, inte runt den.
+## Utgångsläget i koden
 
-### Rollernas svar — de var OENIGA, och det redovisas
+`functions/src/communityRatings/index.ts` (83 rader) är en `onDocumentWritten`-
+trigger på `users/{uid}/watchlist/{tmdbId}`. Dedup-kontrollen ligger **redan** inne
+i transaktionen — invarianten håller idag. Det som saknas är beviset.
 
-- **#5 Juridik: ACCEPTERA LUCKAN.** Bara kontoinnehavaren själv kan utlösa den,
-  ingen tredje part vinner något, och de 25 samlingarna är redan raderade när
-  läget alls kan uppstå. Vill ha en daterad accept i policyn i stället för en
-  öppen punkt.
-- **#6 Dataskyddsombudet: LAGA MED MEKANISM.** Menar att accepten upphäver just
-  den förutsättning ADR 0019 fråga 2 vilar på — att fördröjningen är verklig och
-  sopad — eftersom det här kontot aldrig sopas igen.
-- **Båda pekade oberoende ut SAMMA sak som det juridiskt vassa:** att
-  `ensureUserProfile` stämplar `termsAcceptedAt`/`ageConfirmedAt` med dagens
-  datum utan att ha visat något samtyckessteg. Det är ingen fördröjd radering
-  utan en påhittad efterlevnadspost.
+Två saker som ingen test rör alls idag (`logic.test.ts` testar bara `ratingDelta`
+och `isNoOp`):
 
-**Malins beslut 2026-08-15:** acceptera luckan, bryt ut samtyckesstämpeln till en
-egen biljett med egen panel. DPO:s skiljaktighet skrivs in, inte bort.
+1. **Röstförfalskningsinvarianten** (`index.ts:34–60`): aggregatets doc-id härleds
+   ur watchlist-dokumentets **sökväg**, aldrig ur dess kropp. Firestore garanterar
+   ett dokument per sökväg, alltså högst ett betyg per konto och titel. Läses
+   tmdbId ur kroppen kan en användare skapa N dokument som alla räknar upp samma
+   aggregat. #27 kallar den här **allvarligare** än samtidighetsfallet.
+2. **Legacy-grenen** för o-namngivna numeriska doc-id:n. Kommentaren kallar den
+   "defense-in-depth"; #27:s dom är att den ska **testas, inte raderas** — otestad
+   defense-in-depth är den kod ingen märker är trasig förrän dagen den behövs.
 
-### Acceptanskriterier (bindande, från kritikerna)
+## Verifierat före bygget
 
-1. `docs/data-retention-policy.md` slutar beskriva punkten som öppen och beskriver
-   det som beslutades. (Juridik C1)
-2. Texten säger uttryckligen tre saker DPO krävde: att det räcker med en
-   **sidladdning**, inte aktiv användning; att kontot lämnar sopningens urval
-   **permanent** och inte bara fördröjs; och att det upphäver förutsättningen i
-   ADR 0019 fråga 2. (DPO C1)
-3. Samtyckesstämpeln får en **egen namngiven rad**, inte inbakad i
-   enhetsstycket. (Juridik C3)
-4. Texten noterar att en fix som bara rör `userDocWrite.ts` är en no-op för det
-   här problemet — den spärren läser markören, som saknas på andra enheten.
-   (DPO C4)
-5. `src/lib/deletionMarker.ts`:s kommentar rättas: den påstår idag att sopningen
-   stänger enhetsluckan, vilket motsäger policytexten i samma repo. (Juridik C2)
-6. ADR 0022 skrivs, med DPO:s avvikande mening ordagrant bevarad.
-7. `.claude/rules/accepted-deviations.md` får en post — **utökar** den befintliga
-   2026-08-13-posten om markören, skapar ingen dubblett. (Juridik C1)
-8. `docs/RUNBOOK.md` får ett stycke för supportfallet "användaren säger att hen
-   raderade sitt konto men kan fortfarande logga in". (Juridiks §4)
-9. INGET fält, ingen underkollektion, inget syskondokument läggs under
-   `users/{uid}` för detta. ADR 0019:s förbud bekräftas gälla även BIN-879.
-   (Juridik C5)
-10. Ny biljett filas för samtyckesstämpeln, med DPO:s villkor 3 som kärna:
-    spärren ska sitta i `ensureUserProfile`, och en gammal Auth-`creationTime`
-    ska leda till ett riktigt återsamtyckessteg, aldrig en bakdaterad stämpel.
+- **Ingen annan skrivare** av `titleRatingsAggregate` finns i `functions/` eller
+  `scripts/`. Reglerna ger `read: true, write: false` — bara Admin-SDK:n skriver.
+  Det är förutsättningen för villkor 1 nedan.
+- **`retry` är opt-in** i firebase-functions v2 (`options.d.ts:190`, "Whether failed
+  executions should be delivered again") och sätts ingenstans i `functions/`. Alltså
+  ger ett kastat fel **ingen** omleverans idag. Det ändrar villkor 5:s fråga från
+  "kasta eller svälja" till "slå på `retry: true` eller inte" — se nedan.
 
-### Filer
+## Acceptanskriterier (bindande, från #27)
 
-`docs/data-retention-policy.md`, `docs/org/adr/0022-*.md`, `docs/org/adr/README.md`,
-`src/lib/deletionMarker.ts` (kommentar), `.claude/rules/accepted-deviations.md`,
-`docs/RUNBOOK.md`.
+1. **Inga ogenomskinliga värden korsar portgränsen.** `increment()` och
+   `serverTimestamp()` tas INTE in i porten. `count`/`sum` räknas som vanliga tal ur
+   transaktionens egen läsning; varje portimplementation stämplar `updatedAt` själv,
+   precis som `writeReleaseMarker`/`writeAvailableState` gör. Motivering skrivs i
+   portens doc-kommentar: läsningen finns redan för `lastEventId`, så transaktionens
+   OCC garanterar redan det som `FieldValue.increment` annars köpte — och vad som
+   skulle göra det osäkert (att läsningen tas bort, eller att en andra skrivare
+   utanför transaktionen tillkommer) namnges där.
+2. **Kapplöpningstestet, samma `event.id`:** slutligt `{count, sum}` = exakt EN
+   tillämpning av deltat, `lastEventId === event.id`, OCH
+   transaktionsåterkallelsen kördes **mer än två gånger totalt** över de två
+   leveranserna — annars bevisar testet bara att siffrorna råkade bli rätt, inte att
+   Firestores konfliktväg gjorde jobbet.
+3. **Kontrastfallet, två OLIKA `event.id`:** samma titel, samma ögonblick, **båda**
+   deltana ska landa. Utan det kan villkor 2 inte skilja äkta dedup från en
+   implementation som tappar skrivningar under all samtidighet — dataförlust som ser
+   ut som ett grönt test.
+4. **Icke-samtidig täckning:** sekventiell omleverans hoppas över; no-op-vakten ger
+   **noll** anrop till `runTransaction` (mätt på anropsräkning, inte på ett saknat
+   dokument); och doc-id-härledningen prövas för BÅDA grenarna — namngiven och
+   legacy-numerisk — inklusive att en förfalskad `mediaType`/`tmdbId` i kroppen inte
+   flyttar en annan titels aggregat.
+5. **Den svalda transaktionsfel-vägen avgörs skriftligt**, inte underförstått.
 
----
+## Villkor 5 — vad jag gör, och vad som går till Malin
 
-## BIN-727 steg 2 — `availableNotify` bakom en injicerad port
+Bygget ändrar **ingenting** i felhanteringen. Men #27:s premiss stämmer inte helt:
+plattformens omleverans "fires" inte idag oavsett, eftersom `retry` inte är påslaget.
+Så valet är inte "kasta eller svälja" utan "slå på `retry: true` eller inte", och det
+är en riktig kostnads- och beteendefråga på en trigger som fyrar på **varje**
+watchlist-skrivning.
 
-### Vad som ska byggas
+Konsekvensen av dagens beteende, exakt och utan försköning: ett svalt fel betyder att
+just det betyget **permanent** saknas i aggregatet. Det självläker inte — en senare
+ändring 4→5 ger `countDelta: 0`, så antalet ligger kvar en för lågt för alltid.
+Effekten är ett något felaktigt snitt på en titel, och felet syns som `logger.error`.
 
-Samma behandling som steg 1 gav `retentionCleanup` (79d108d): lyft ut
-orkestreringen ur `functions/src/availableNotify/index.ts` (437 rader) till en
-`runNotify.ts` som varken importerar `firebase-admin` eller
-`firebase-functions`, så `src/test/rules/available-notify-orchestrator.test.ts`
-kan driva den mot en riktig Firestore-emulator.
+Det skrivs i kodkommentaren med den siffran, och frågan om `retry: true` filas som
+egen biljett med egen panel. Den byggs inte här: att slå på omleverans för en trigger
+som fyrar på varje watchlist-skrivning är en kostnadsändring mot 25 kr/mån-taket, och
+den hör inte hemma i en testbarhetsbiljett. **Malin får frågan i klartext.**
 
-### #13:s fynd som ÄNDRAR omfattningen
+## Filer
 
-De två föregångarna (`tmdbTosSweep`, `retentionCleanup`) rör bara Firestore.
-`availableNotify` korsar dessutom **två externa gränser**: TMDB-hämtningar och
-en riktig FCM-sändning via `sendPushToUser`. Det finns ingen FCM-emulator. Porten
-måste därför svälja alla tre, annars går biljettens eget villkor — "en användare
-som tackat nej når aldrig `sendPushToUser`" — bara att antyda via sidoeffekter i
-stället för att bevisas med anropsräkning. Det här är en **tyngre lyft än
-föregångaren**, och planen säger det hellre än att uppskatta den som likadan.
-
-### Acceptanskriterier (bindande, från #13)
-
-1. `runNotify.ts` importerar varken `firebase-admin` eller `firebase-functions`.
-   Grep-kontrollerbart.
-2. Porten täcker Firestore-tillstånd, TMDB-hämtning OCH push-sändning. Inget test
-   får någonsin nå `getMessaging().sendEach()`.
-3. Fas 1 (release) måste vara **helt klar** innan fas 2 (tillgänglighet) läser
-   `releaseSkip`. Explicit sekvenspåstående, inte underförstått.
-4. `Promise.allSettled` per mottagare bevaras i båda faserna — `Promise.all`
-   låter en mottagares fel avbryta hela titelns utskick.
-5. `writeMarker()` körs efter `allSettled`, oavsett enskilda sändningsutfall.
-6. `releaseSkip`-kontrollen sker FÖRE `readUserData` — ett release-ägt par ska
-   aldrig ens konstruera en push.
-7. De yttre looparna förblir **sekventiella**. Ingen parallellisering av
-   TMDB-anrop; det vore en kvotändring inbakad i en testbiljett.
-8. Tillgänglighetsfasen: basrun (`last === null`) skickar 0 och skriver markören;
-   omkörning utan förändring skickar 0; ny kvalificerande leverantör skickar
-   exakt 1 och markören avanceras.
-9. Releasefasen: TTL-gränsen prövas med **bokstavliga tal** — exakt `ttlDays`
-   gammal cache måste hämta om; fönstret prövas vid `releaseDate`,
-   `releaseDate + graceDays` och `releaseDate + graceDays + 1` (får INTE fyra).
-10. Korsfas-dedup: ett `(uid,tmdbId)` i `releaseSkip` ger **noll anrop** till
-    push-porten i fas 2 — mätt på anropsloggen, inte på frånvaron av ett dokument.
-11. Opt-out: `pushEnabled: false` och `availableOnMyServices: false` ger var för
-    sig noll anrop till push-porten.
-12. Felisolering prövas på två nivåer: en titels TMDB-fel stoppar inte
-    syskontitlarna, OCH ett fel i hela releasefasen blockerar inte
-    tillgänglighetsfasen.
-13. `logic.ts` och `tmdb.ts`:s exporterade API är oförändrat — diffen ska visa att
-    `index.ts` delas, inte att doc-id:n ändras.
-
-### Vad #13 REFUSERAR
-
-- Att testvägen någonsin anropar riktig FCM.
-- Att parallellisera titel- eller fas-loopen "medan vi ändå är här".
-- Att shippa utan ett eget namngivet test för release/tillgänglighet-överlappet.
-  Det är den enskilt värsta felvägen — dubbel push till riktiga användare.
-
-### Filer
-
-`functions/src/availableNotify/index.ts` (blir port), ny
-`functions/src/availableNotify/runNotify.ts`, ny
-`src/test/rules/available-notify-orchestrator.test.ts`, samt
+`functions/src/communityRatings/index.ts` (blir port), ny
+`functions/src/communityRatings/runAggregate.ts`, ny
+`src/test/rules/community-ratings-orchestrator.test.ts`, samt
 `docs/role-responsibilities.md` + `docs/org/ownership-map.json` för den nya
-testfilens ägare (annars blir `main` röd — samma spärrhake som fällde steg 1).
-
----
+testfilens ägare — **utan backticks runt katalogen**, som steg 2 lärde oss.
 
 ## Öppna frågor
 
-**Inga arkitekturavgörande okända kvar.** Den enda fanns i BIN-879 — acceptera
-luckan eller bygga en mekanism — och den ställdes till Malin via AskUserQuestion
-2026-08-15 med rollernas oenighet framlagd. Svar: acceptera, fila samtycket
-separat.
-
-Antaganden som styr resten, uttryckligen:
-
-- BIN-727 steg 2 riktar sig mot `availableNotify` och inte en annan push-avsändare.
-  #13 tillfrågades uttryckligen och stod fast: den är rätt nästa mål eftersom den
-  har högst komplexitet och störst blast radius i familjen.
-- Ändringen är beteendebevarande. Varje avvikelse jag hittar under lyftet
-  namnges i commit-meddelandet i stället för att tystas in, precis som
-  `tokenOwnerUid`-deltat i steg 1.
-- Ingen funktionsdeploy sker automatiskt. `deploy.yml` shippar bara hosting;
-  `availableNotify` kör vidare på det gamla bygget tills Malin ber om en deploy.
+En, och den blockerar inte bygget: ska `retry: true` slås på för
+`communityRatingMaintain`? Ställs till Malin efter bygget, med kostnaden namngiven.
+Allt annat är avgjort av #27:s kritik.

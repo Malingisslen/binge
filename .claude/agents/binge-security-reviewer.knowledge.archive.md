@@ -7863,3 +7863,80 @@ sentence overstating the backstop" warning with the fact that BIN-879/ADR 0022 a
 trimmed several other bullets for the 30k character cap.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-16 — BIN-727 condition 4: communityRatings lifted behind AggregateIo, FieldValue.increment dropped — APPROVED
+
+Reviewed the staged diff: `functions/src/communityRatings/index.ts` (trigger + Admin-SDK port,
+83→shrunk to a thin `AggregateIo` implementation), new `functions/src/communityRatings/runAggregate.ts`
+(admin-free orchestrator: `aggregateDocId`, `runCommunityRatingAggregate`), new
+`src/test/rules/community-ratings-orchestrator.test.ts` (15 tests incl. a forced write/write race),
+plus the matching `docs/role-responsibilities.md`/`docs/org/ownership-map.json` ownership updates and
+`tasks/todo.md` plan rewrite. Same pattern as `retentionCleanup`/`runCleanup.ts` and
+`availableNotify`/`runNotify.ts` (steps 1–2 of the same ticket, already approved).
+
+**The one deliberate behaviour change, attacked directly:** `FieldValue.increment` is gone; `count`/
+`sum` are now `numberOr0(current) + delta` computed from the SAME `tx.get()` the transaction already
+does to check `lastEventId`.
+
+1. **OCC argument verified correct, and re-derived independently, not just re-read.** Firestore
+   transactions (both Admin and client SDK) retry the WHOLE callback on a conflicting read — this is
+   true regardless of whether the write uses `increment()` or plain arithmetic, because the sentinel's
+   only advantage is avoiding a READ before an out-of-transaction write; inside a transaction that
+   already reads the doc for `lastEventId`, increment buys nothing OCC doesn't already guarantee.
+   Ran the 15-test suite live against a real Firestore emulator (own temp `firebase.sec-review.json`
+   on port 8091, project `demo-binge-sec-review`, deleted after) — 15/15 green, including the forced-race
+   test asserting `callbackStarts > 2` (proves a genuine retry, not a lucky non-overlap or a buffered
+   non-transactional shim). Confirmed via grep that `functions/` and `scripts/` have exactly the two
+   writers of `titleRatingsAggregate` (`index.ts`'s port impl + the file being reviewed), matching the
+   claim in the header comment and `tasks/todo.md`'s "verified before the build" section; `firestore.rules`
+   is unchanged (`read: true, write: false`).
+2. **`numberOr0` behaviour-parity checked against Firestore's actual `increment()` semantics, not
+   assumed.** Firestore's documented behaviour: incrementing a NON-numeric or absent field SETS it to
+   the operand (does not error, does not NaN-propagate) — so old prod docs (always numeric, from prior
+   increment writes) are unaffected, and the new code's `numberOr0(v) = typeof v==='number' &&
+   Number.isFinite(v) ? v : 0` reproduces exactly that fallback for absent/null/non-numeric. The one
+   divergence — a doc holding a stored `NaN` — used to poison the aggregate forever under `increment`
+   and now self-heals to 0 under the new code; a behaviour IMPROVEMENT, not a regression, and not
+   security-relevant (no attacker path to plant `NaN`; `rating` is rules-bound 0–5). Mutation-proved the
+   guard is load-bearing: neutered `numberOr0` to `v as number`, re-ran the suite live — 8/15 red (the
+   two contamination/contention tests plus the "skräp i räknarna" test), confirming the guard is not
+   vacuous. Restored byte-identical (md5 `a5ae3c09bc34941827999141e5be3c1d` before and after).
+3. **Write-payload completeness confirmed.** Old code wrote `{count: increment, sum: increment,
+   lastEventId, updatedAt: serverTimestamp()}` merge:true. New split: `runAggregate.ts` returns
+   `{count, sum, lastEventId}`; `index.ts`'s `adminIo.set` spreads that and stamps `updatedAt:
+   FieldValue.serverTimestamp()` itself, still merge:true. Same three content fields + timestamp,
+   nothing dropped. No user-controlled input reaches the payload beyond what already did (rating,
+   rules-bound 0–5).
+4. **Vote-stuffing invariant (doc-id from PATH, never body) verified preserved verbatim.** `aggregateDocId`
+   in `runAggregate.ts` is a straight lift of the pre-diff logic in `index.ts` — `parseMediaTypeFromDocId`
+   on `event.watchlistDocId` (== `event.params.tmdbId`, the watchlist doc's own path segment) wins when
+   namespaced; the legacy bare-numeric branch takes the PREFIX from the body's `mediaType` but the id
+   digits still come from the path. `mediaTypeDocId.ts` and `logic.ts` (`ratingDelta`/`isNoOp`) are
+   BYTE-UNCHANGED in this diff (confirmed via `git diff --cached` scope + direct `Read`). The test suite
+   exercises the attack directly (`bodyTmdbId: 550` on a `movie_603` path write doesn't touch
+   `movie_550`'s aggregate) and passed live.
+5. **Swallowed-transaction-failure reasoning checked and correct, not new.** `retry` is genuinely
+   unset on `onDocumentWritten('users/{uid}/watchlist/{tmdbId}', handler)` — no options object is
+   passed, confirmed against `firebase-functions`' own `options.d.ts:190` doc comment ("Whether failed
+   executions should be delivered again") which defaults falsy. So a rethrow today changes only the log
+   line, exactly as documented in both the code comment and `tasks/todo.md`'s "villkor 5" writeup — and
+   this catch/log-without-rethrow behaviour is UNCHANGED from the pre-diff code, not a new deviation to
+   file. The `retry: true` cost question is correctly routed to Malin as a separate ticket rather than
+   decided in this one.
+
+No blocking findings. `.claude/rules/accepted-deviations.md` checked — nothing here overlaps the four
+listed Tillsammans/blocking/reports entries. `docs/role-responsibilities.md` +
+`docs/org/ownership-map.json` diffs matched the code change exactly (role #27 DBA gains the two new
+files); `tasks/todo.md` plan matched what was actually built, including the "villkor 5" open question
+to Malin.
+
+Knowledge file: added a new bullet under "Admin-SDK sweeps and scheduled writers" generalizing when
+`FieldValue.increment` is safe to drop inside an already-reading transaction, and what three things
+must be checked before doing so (no other writer; a `numberOr0`-style fallback matching increment's
+own non-numeric behaviour; unchanged write payload) — this is a genuinely new class, not a duplicate of
+any existing bullet. Trimmed several other bullets (mostly the irreversible-sweep-ceiling one and a
+few one-line tightenings) to stay under the 30k cap; no bullet lost a distinct sub-claim, only redundant
+words.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
