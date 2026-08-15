@@ -493,8 +493,13 @@ findings here too.
   notifications, joinAttempts, release-dedup markers, push tokens for accounts Auth no
   longer honours, and — since BIN-816/875 — Firebase Auth accounts orphaned by an
   aborted deletion plus the username reservations they leave behind) and
-  `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window).
-  → `functions/src/{retentionCleanup,reclaimOrphanFollows}/`
+  `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window). Since BIN-727
+  the sweep's orchestration lives behind an injected port (`runCleanup.ts`, importing
+  no firebase-admin) and is driven against a live Firestore emulator — so the
+  emulator spec belongs to this role too, not to the rules-owning role that owns the
+  other files in that directory.
+  → `functions/src/{retentionCleanup,reclaimOrphanFollows}/`,
+  `src/test/rules/retention-cleanup-orchestrator.test.ts`
 - **Account-deletion cascade** — the 450-op chunked `writeBatch` over 25
   collections; inbound followers are deliberately left for the weekly orphan sweep.
   → `src/contexts/AuthContext.tsx`, `src/lib/firebase/userData.ts`
