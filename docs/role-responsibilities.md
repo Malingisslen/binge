@@ -267,8 +267,21 @@ Owns external data pipelines.
 - TMDB client; provider canonicalization + affiliate-link infra; FCM push.
 - Scheduled collectors — episode/return/availability notifications, MOTN
   streaming-offer caching + price history, weekly Cineasterna sync,
-  community-rating aggregation, OMDb external ratings.
-  → `functions/src/{episodeNotify,returnNotify,availableNotify,streamingOffers,cineasterna,communityRatings,titleRatings}/`, `src/lib/tmdb/providers.ts`
+  community-rating aggregation, OMDb external ratings. Since BIN-727 step 2 the
+  daily watchlist push job's orchestration lives behind an injected port
+  (`availableNotify/runNotify.ts`, importing no firebase-admin) and is driven
+  against a live Firestore emulator with TMDB and FCM doubles — so that emulator
+  spec belongs to this role too, not to the rules-owning role that owns its
+  neighbours in the same directory. Same split as `retentionCleanup`'s (§27).
+  Name that directory in prose only, NEVER in backticks — and note this sentence
+  obeys its own rule, which is why it reads awkwardly. The generator under
+  docs/org collects every backtick-quoted path-like token in a role's section, not
+  just the ones after the arrow, so a bare backticked directory here would hand
+  this role the security-rules spec, the retention spec and every file added there
+  later — and would disarm the BIN-788 unowned-file ratchet for the whole
+  directory, silently. Caught by the integration reviewer 2026-08-15.
+  → `functions/src/{episodeNotify,returnNotify,availableNotify,streamingOffers,cineasterna,communityRatings,titleRatings}/`, `src/lib/tmdb/providers.ts`,
+  `src/test/rules/available-notify-orchestrator.test.ts`
 
 ## 14. Software Architect
 

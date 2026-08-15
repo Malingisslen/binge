@@ -7572,3 +7572,125 @@ up. Support reading the table would have no entry for the user in front of them.
 Housekeeping: `binge-code-reviewer.knowledge.md` is at ~61k chars against a stated 30k
 budget. The addition above was folded into an existing bullet rather than appended, but the
 file needs a consolidation pass rather than another payment-by-cut.
+
+### 2026-08-15 — a fresh RUNBOOK line needs the same code-check as a stale comment (BIN-879)
+BIN-879 was a decision-only ticket (ADR 0022 accepting the cross-device aborted-deletion
+gap + a comment correction in `src/lib/deletionMarker.ts`) plus a brand-new
+`docs/RUNBOOK.md` §5f support signature. All four factual claims the ticket asked me to
+hard-verify checked out against code: `ensureUserProfile` (AuthContext.tsx ~296-397) does
+stamp `termsAcceptedAt`/`ageConfirmedAt` inside its create-transaction on a marker-less
+device; `collectOrphanedAuthAccounts` (functions/src/retentionCleanup/runCleanup.ts +
+orphans.ts) candidates on age + `confirmedMissingProfiles`, i.e. "Auth exists AND profile
+confirmed absent", so a recreated profile exits the candidate set permanently; userDocWrite.ts's
+`assertProfileWritable`/`mergePublicProfileDoc` do read `isDeletionStarted` from
+deletionMarker.ts (device-local localStorage), so a fix there is a genuine no-op cross-device;
+and `onAuthStateChanged` fires `ensureUserProfile` on every mount of `AuthProvider`
+(src/components/Providers.tsx, wraps the root layout), so a bare page load on an already
+signed-in device is enough — no active use required. The deletionMarker.ts diff was
+comment-only (verified via `git diff --cached`), and 77/77 tests passed
+(`deletionMarker.test.ts` + `AuthContext.test.tsx`). The dissent in ADR 0022 was genuinely
+preserved (direct quotes from #6 DPO, explicit "not resolved" framing), and the
+`accepted-deviations.md` append was correctly framed as extending rather than superseding
+the 2026-08-13 entry (different consequence, same root cause, not a supersession).
+
+But the ticket's own new RUNBOOK §5f introduced a FIFTH claim nobody asked me to check by
+name, and it was wrong. Step 3 tells support: after a user is stuck, "radera Auth-kontot i
+Console. Sopningen släpper då handtaget inom ett dygn (§5e)." §5e's sweep is
+`collectOrphanedUsernames` → `orphanedReservations(reservations, profileMissing,
+authMissing)` in orphans.ts, which requires BOTH sets true for a given uid. In the exact
+scenario §5f describes, `users/{uid}` still exists — the section's own recognition step 3
+says "Firestore → users/{uid} finns, men är tunn" — so `profileMissing` is false and the
+predicate never fires. Grepping the whole `functions/src` tree for an Auth `onDelete`
+trigger or any sweep keyed on "profile exists but Auth doesn't" found nothing (confirmed:
+`docs/data-retention-policy.md`'s own "Console-bypass" section says outright "det finns
+ingen Auth-`onDelete`-trigger"). So following step 3 as written leaves a permanently
+orphaned thin profile (and any username `tryAutoClaimUsername` auto-claimed on the
+recreate) with no automated remedy — the opposite of what the runbook promises, in a
+section written specifically so support can resolve a live GDPR-adjacent case correctly.
+Filed as the review's one blocking finding; nothing here was caught by the ticket's own
+four named checks, all of which passed.
+
+Lesson generalized into the "Comment-vs-code corpus" principle: freshly-authored
+documentation prose (a brand-new RUNBOOK/ADR paragraph, not an inherited stale comment)
+gets exactly the same "check the claim against the predicate" treatment, and arguably
+needs it MORE — a runbook line is read and acted on live during an incident, so a
+plausible-sounding but false "this self-heals" sentence is worse than a stale comment
+nobody was about to trust in the next five minutes. The tell that caught it: the section's
+OWN recognition step (3) already stated the fact ("profile finns, men är tunn") that
+falsifies its OWN remedy step (3) three paragraphs later — the same self-contradiction
+shape as prior "a decision record authored ALONGSIDE the code it documents" entries, just
+inside a support runbook instead of an ADR.
+
+### 2026-08-15b — re-review of the BIN-879 fix found a SECOND stranded doc the fix didn't name
+Coordinator fixed the blocking finding from the first BIN-879 pass: `docs/RUNBOOK.md` §5f
+step 3 now names the real predicate (`orphans.ts:224`, `profileMissing.has(r.uid) &&
+authMissing.has(r.uid)`), points back at the recognition step that already shows the thin
+profile, says plainly that deleting only the Auth account strands the profile forever, and
+instructs deleting BOTH `users/{uid}` and the Auth account. I re-verified the fix rather than
+trusting the coordinator's paraphrase: re-read `orphans.ts` myself (matches), grepped
+`functions/src` for `onDelete`/`identity.user(`/`auth.user(` (zero hits — no Auth delete
+trigger exists), and grepped for any `users/{uid}` top-level doc delete anywhere in
+`functions/src` (zero — only subcollections/sibling collections are ever swept). Confirmed
+the fixed file's blob hash, diffed `git diff --cached --stat` before/after (235→241
+insertions, +6 net, all in RUNBOOK.md, matching the step-3 expansion exactly), and re-hashed
+the other five staged files against their earlier full reads to confirm literally nothing
+else moved.
+
+The coordinator explicitly asked "is there a consequence you haven't named" — the honest
+answer was yes. `publicProfiles/{uid}` is a SEPARATE top-level collection, not a
+`users/{uid}` subcollection (the repo's own `data-retention-policy.md` says this explicitly
+for the deletion cascade: "TOP-LEVEL, ej en user-subcollection ... raderas explicit ...
+inte via subcollection-guarden"). On the exact marker-less device §5f is about,
+`AuthContext.tsx`'s `syncMyPublicProfile` effect is gated ONLY on `deletionInProgress`
+(false here — the marker is absent, so `ensureUserProfile` returned `deletionInProgress:
+false`), not on the marker itself, and there is no local `binge:pubprofile-sig:{uid}` key
+on this NEW device (that signature is itself device-local, BIN-817), so the skip-if-
+unchanged branch in `publicProfile.ts`'s `syncMyPublicProfile` never fires and it writes.
+So by the time support opens the case, `publicProfiles/{uid}` already exists again,
+independently of `users/{uid}`. Deleting `users/{uid}` + the Auth account per the FIXED
+step 3 does nothing to it, and grepping `functions/src` for `publicProfiles` returns zero
+hits — no sweep will ever touch it either. Filed as a new blocking finding, not a re-raise:
+the original claim (about the username sweep) is now correct; this is a gap the fix itself
+didn't cover.
+
+Generalized into the "Comment-vs-code corpus" principle, folded onto the sentence just
+added for the first BIN-879 finding: fixing a manual-remedy runbook line to name the right
+predicate is not sufficient — grep every OTHER writer keyed on the same id for what else it
+independently creates on the same trigger (here: the same page load that recreates
+`users/{uid}` also recreates `publicProfiles/{uid}` through an unrelated effect gated on a
+different flag), and check whether the remedy's instruction list covers all of them, not
+just the one the original review caught.
+
+### 2026-08-15c — BIN-879 closed clean; the completeness sweep the coordinator asked for first
+Third RUNBOOK.md pass (blob `3cba16e`): step 3 is now an explicit 3-item list (`users/{uid}`,
+`publicProfiles/{uid}`, the Auth account) with two named reasons. Re-verified both absolutes
+independently rather than trusting the coordinator's paraphrase: the ripgrep `Grep` tool
+(respects `.gitignore`, so it actually searches `functions/src` instead of hanging in
+`functions/node_modules` the way a raw `grep -r functions/` did) returned zero hits for
+`publicProfiles` anywhere under `functions/`, and zero hits for `onDelete`/`auth.user(`/
+`identity.user(` anywhere under `functions/` — no Auth-delete trigger, no sweep mentions the
+projection at all. `git diff --cached --stat` moved 241→250 insertions, +9, all in
+RUNBOOK.md, 0 deletions anywhere — proves nothing else in the 556-line file moved (a diff
+with zero removals can't have altered or reordered any existing line). The other five staged
+files re-hashed identical to both prior passes.
+
+The coordinator then asked the right question a round early: is the list COMPLETE, i.e. does
+anything else write on a bare, action-free page load of the marker-less device before the
+username sweep and these three deletions? Enumerated every `useEffect` in `AuthContext.tsx`
+that could fire on mount for an authenticated `uid` (not gated behind an explicit user
+interaction): `markTabSession` (localStorage only, not Firestore), the `storage` listener
+(re-reads the LOCAL marker, doesn't write), the focus-triggered email-verified reload (Auth
+only, no Firestore write), the already-covered `syncMyPublicProfile` effect, the
+`visibilitySyncPending` retry (dead on a fresh profile — the field is unset, so its own guard
+`!visibilitySyncPending` no-ops before `deletionInProgress` is ever consulted), and the
+household-contribution sync (arms on first render without writing, and even if it fired later
+there is no group membership left — the cascade already stripped `memberUids` before it
+aborted). Checked push separately since this repo has bitten itself on exactly this class
+before (BIN-844/845/848): `enablePushForUser` is called from exactly one place,
+`NotificationsSection.tsx`'s checkbox handler — never from an effect — so FCM registration
+needs a deliberate Settings toggle, not a page load. Same for onboarding-form submission and
+any watchlist/group write: all require explicit interaction, which is ordinary use of a
+not-yet-fully-deleted account, not part of what this runbook section exists to cover.
+Conclusion returned to the coordinator: the three-item list plus the existing §5e username
+sweep is COMPLETE for the passive-recreate case; nothing else fires without a deliberate
+further action in the app.

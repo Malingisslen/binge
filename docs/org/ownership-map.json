@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 183,
+  "patternCount": 184,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -166,7 +166,8 @@
         "functions/src/returnNotify/",
         "functions/src/streamingOffers/",
         "functions/src/titleRatings/",
-        "src/lib/tmdb/providers.ts"
+        "src/lib/tmdb/providers.ts",
+        "src/test/rules/available-notify-orchestrator.test.ts"
       ]
     },
     "14": {

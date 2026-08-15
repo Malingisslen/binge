@@ -7786,3 +7786,80 @@ create-only reports, fail-open `effectiveVisibility` read, aborted-deletion mark
 limbo-screen write block.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-15 — BIN-879 cross-device deletion-gap ADR (documentation-only, ADR 0022)
+
+Scope: 7 staged files, comment-only diffs on `functions/src/retentionCleanup/orphans.ts` and
+`src/lib/deletionMarker.ts` (verified by full `Read` of both files — no predicate, ceiling or
+sentinel line moved, only JSDoc prose), plus `docs/RUNBOOK.md` §5f (new), `docs/data-retention-policy.md`,
+`docs/org/adr/0022-cross-device-deletion-gap-accepted.md` (new), `docs/org/adr/README.md`,
+`.claude/rules/accepted-deviations.md`. Root + `functions/` `tsc --noEmit` both clean.
+
+**Q1 — is the accept's premise sound?** ADR 0022 / Legal's reasoning says "only the account
+holder, on their own credentials, can trigger it." Checked for a different party: no
+password-change/session-revoke flow exists in this codebase at all (`grep updatePassword
+revokeRefreshTokens reauthenticate src` → zero hits), so there is no "session that outlives a
+password change" vector to exploit. The only way a party OTHER than the human account holder
+reaches the state is by already holding a live, unexpired, unrevoked session for that uid
+(shared/public device, or a device an attacker separately compromised) — and such a party
+already has full read/write access to the live account regardless of this bug; the marginal
+"gain" from this specific gap is denying the victim their completed erasure, which is exactly
+what #6 DPO's recorded dissent already covers from the harm side. Conclusion: not a NEW attack
+surface, and not blocking — but the ADR's phrasing is imprecise (it should read as SESSION
+possession, not human identity) and I folded that precision note into the knowledge file rather
+than filing it, since it doesn't change the accepted risk calculus.
+
+**Q2 — sweep guarantees described correctly?** Verified the new prose in `orphans.ts`,
+`deletionMarker.ts`, RUNBOOK §5f/§5d, and `data-retention-policy.md` against the UNCHANGED code:
+candidate test ("Auth exists AND profile confirmed absent"), the 7-day age window
+(`ORPHAN_AUTH_MIN_AGE_MS`, keyed on Auth `creationTime`, not time-since-profile-loss), and the
+two independent ceilings (`ORPHAN_AUTH_MAX_PER_RUN=50`, `ORPHAN_AUTH_MAX_FRACTION=0.25` with
+`ORPHAN_AUTH_MIN_CEILING=5` floor) — all accurately described, nothing overstated. "Permanent,
+not delayed" is literally true: `isOrphanCandidate`/the candidate query never re-includes a uid
+once `users/{uid}` exists again, short of a fresh deletion.
+
+**Q3 — the false-`false` marker-read correction.** Traced `isDeletionStarted`'s catch-path: a
+`localStorage` throw returns `false` (looks like "no deletion in progress") → a guarded write
+site (`userDocWrite.ts`'s chokepoint, and `syncMyPublicProfile`'s `mergePublicProfileDoc` per
+`src/lib/firebase/publicProfile.ts:178-181`) proceeds → `users/{uid}` (and, via the same
+chokepoint, `publicProfiles/{uid}`) gets recreated → the account permanently leaves the
+orphan-auth sweep's candidate set, exactly the cross-device mechanism. The removed claim ("caught
+by the server sweep") was false for the identical reason the cross-device gap is; the new comment
+is correct.
+
+**Q4 — RUNBOOK §5f's 3-item Console deletion (`users/{uid}`, `publicProfiles/{uid}`, Auth
+account) — safe, and does it leave a credential/grant behind?** Traced `sendPushToUser`
+(`functions/src/push.ts:52-56`): it checks `profileSnap.exists` and returns BEFORE ever reading
+`users/{uid}/fcmTokens`, so once step 1 of the 3 runs, any leftover `fcmTokens` doc is inert —
+no live push grant survives. `publicProfiles/{uid}` is correctly named as needed (confirmed: no
+Cloud Function, trigger, or sweep ever touches it — `grep publicProfiles functions/` = zero
+hits — matching the rules-file comment "wired explicitly into the GDPR export + erasure paths").
+BUT: deleting a Firestore doc via Console does not cascade its subcollections unless the operator
+confirms a recursive-delete prompt — this exact behavior is already documented, for a DIFFERENT
+manual-deletion runbook, in `docs/moderation.md:119-121` ("Firebase Console raderar automatiskt
+subcollections om användaren bekräftar"). RUNBOOK §5f never mentions this prompt. Net effect if
+missed: any subcollection created since the cross-device resurrection (a freshly re-registered
+`fcmTokens` doc from normal use on the second device, watchlist items, etc.) survives forever
+with no sweep able to find it (parent doc AND Auth account both gone). Not a live security
+exposure (Console-only, admin-side, and push specifically is independently inert per above) but
+a genuine Art. 17 completeness gap in the newly-written prose's implicit "these three are
+enough" claim. Rated non-blocking: filed as a one-line fix, folded into the knowledge file
+(GDPR export/delete completeness section) rather than as a ticket, since Malin's working
+agreement treats this class of gap as a doc fix, not a code change, and the ADR's own scope
+(BIN-879) was explicitly documentation-only.
+
+**Other checks:** `.claude/rules/accepted-deviations.md` diff is a pure append (verified against
+archive contract — no existing entry edited/removed); `docs/org/adr/README.md` index line
+matches ADR 0022's actual content; ADR 0022 itself correctly records the #6 DPO dissent verbatim
+rather than resolving it. `docs/data-retention-policy.md`'s claim "25 collections" is consistent
+with the 18-entry `KNOWN_USER_SUBCOLLECTIONS` array plus the CG-scoped + top-level collections
+(reviews/lists/usernames/publicProfiles/sessions) named elsewhere in the same doc — not verified
+to the exact integer but not contradicted by anything in the diff.
+
+Knowledge file: folded the Console-recursive-delete-prompt lesson and the
+session-possession-vs-identity premise-check into the existing BIN-816 cross-device bullet under
+"Cross-account and cross-session leak classes" (superseding its now-stale "no licence for a doc
+sentence overstating the backstop" warning with the fact that BIN-879/ADR 0022 acted on it);
+trimmed several other bullets for the 30k character cap.
+
+**REVIEW-VERDICT: pass (0 blocking)**

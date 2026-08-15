@@ -2,7 +2,7 @@
 
 **Edited IN PLACE.** Fold each lesson into the bullet it belongs to; merge duplicates, supersede
 contradictions, never append at the bottom. A bullet earns its place only by changing what a review does.
-Dated record → `…archive.md` (append-only). Cap 30k — a new lesson pays by compressing an old one.
+Dated record → `…archive.md` (append-only). Cap 30k — new lessons pay by compressing old ones.
 
 ## Seed checklist
 - **Public-read:** `reviews/**`,`lists`(isPublic),`usernames`,`sessions/**`,`reports`(create-only, never
@@ -94,9 +94,9 @@ Dated record → `…archive.md` (append-only). Cap 30k — a new lesson pays by
   top-level uid-keyed collection is wired manually. A doc-id that merely STARTS with uid is swept by
   NEITHER — restructure or add a queryable `uid`.
 - **A THIRD shape escapes the subcollection-vs-admin-doc binary: a uid-keyed leaf under a NON-user parent** —
-  `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask not
-  "is the PARENT user-owned" but **"does ANY doc identify a specific user, directly or by doc-id?"** If yes: a
-  `uid` FIELD + a CG sweep in the cascade, or — if retained — Art. 17(3) comment + policy entry + reaper.
+  `releaseNotifyState/{tmdbId}/notified/{uid}`, `reviews/{id}/likes/{uid}`, `usernames/{name}.uid`. Ask
+  "does ANY doc identify a specific user, directly or by doc-id?" If yes: a `uid` FIELD + CG sweep, or — if
+  retained — Art. 17(3) comment + policy entry + reaper.
 - A new TOP-LEVEL GDPR-cascaded doc needs its own seeded live-emulator assertion in `account-deletion.test.ts`
   — the `KNOWN_USER_SUBCOLLECTIONS` loop misses it, and a mocked test proves wiring, not live erasure. The
   three-way set-equality guard (rules paths == const == helper `collection()` reads == `keyof
@@ -146,9 +146,11 @@ Dated record → `…archive.md` (append-only). Cap 30k — a new lesson pays by
   snapshot — a `storage` listener fires only in the OTHER tabs (`null` key = `clear()`), and an in-flight
   profile load's late `.then` writes a stale `false` over it unless that `.then` re-reads too — and (b) the
   WHOLE provider stack above it, effect by effect. **The marker's cross-device gap is NOT bounded by the
-  server sweep, whatever the policy doc says:** a marker-less return recreates `users/{uid}` (fresh consent
-  record, handle re-claimed) and hides that account from the sweep for good. An accepted deviation for the
-  GAP is no licence for a doc sentence overstating the backstop.
+  server sweep, whatever the policy doc says** — a marker-less return recreates `users/{uid}` and hides that
+  account from the sweep for good; ADR 0022/BIN-879 accepted this gap and fixed the overstating sentence in
+  `orphans.ts`/`deletionMarker.ts`. A Console-only MANUAL erasure (RUNBOOK §5f) needs the same completeness
+  bar: deleting `users/{uid}` doesn't cascade subcollections unless the operator confirms the prompt
+  (`docs/moderation.md` has that line, §5f didn't).
 - **Per-uid listener state that resets only inside `if (!uid)` leaks across a truthy→truthy uid switch**
   (shared device, no sign-out): `notesByTmdbId` keeps A's map until B's first snapshot. Reset unconditionally
   at the effect's TOP — and guard a cross-account MIGRATION effect with a ref set INSIDE the same synchronous
@@ -210,9 +212,8 @@ Dated record → `…archive.md` (append-only). Cap 30k — a new lesson pays by
 - Secrets via `defineSecret` → `process.env.*`, in headers or a vendor-mandated query param (TMDB), never
   logged. **A failure log may carry the vendor's own error body only if the literal secret is stripped first**
   — `body.replaceAll(key, '[redacted]')` BEFORE truncating; `key` guarded non-empty or an empty-string
-  `replaceAll` is catastrophic. One status code's proof of a credential-free format is not proof for every
-  status the branch covers (BIN-856). Admin-SDK offline-script path segments need `Number.isInteger`
-  validation; in CI, user-controlled strings go via `env:`.
+  `replaceAll` is catastrophic. One status code's credential-free proof isn't proof for every status the
+  branch covers (BIN-856). Admin-SDK offline path segments need `Number.isInteger`; CI strings go via `env:`.
 - **Test a gitignore secret pattern with `git check-ignore`** against the RUNBOOK filename AND the tool's
   DEFAULT download name — `*-recaps-writer*.json` misses `recaps-writer.json`; GCP's `{project}-{hash}.json`
   matches no `*service-account*` glob.
@@ -246,12 +247,12 @@ Dated record → `…archive.md` (append-only). Cap 30k — a new lesson pays by
   Require `> max(FLOOR, fraction*checked)` under the absolute cap and pin the decisive SMALL case, never the
   constant's RANGE (`>`→`>=` must redden). **The floor BOUNDS the latch, it does not remove it** (r4): above
   the floor the wedge is permanent and cheap to plant — a profile-less Auth account costs one `signUp`
-  against the public API key. So rate the REFUSAL as its own risk: it needs a RUNBOOK entry on recognising
-  and CLEARING it by hand, and a sentence in the doc carrying the LEGAL claim ('deleted daily within 7
-  days') — runbook-only leaves that claim false the day it fires. **WHERE it lives:** the admin-free
-  predicate module (`orphans.ts`/`logic.ts`); in the `firebase-admin` file nothing is testable, and
-  extracting the PREDICATE still leaves the CALL unpinned (delete the `if`, stay green) — ask for the
-  filtered SET, not a boolean. Same ceiling on every sibling irreversible sweep; check each refusal's
+  against the public API key. Rate the REFUSAL as its own risk: a RUNBOOK recognise/clear-by-hand entry, and
+  a doc sentence carrying the LEGAL claim ('deleted daily within 7 days') — runbook-only leaves that claim
+  false the day it fires. **WHERE it lives:** the admin-free predicate module (`orphans.ts`/`logic.ts`) — in
+  the `firebase-admin` file nothing is testable, and extracting the PREDICATE still leaves the CALL unpinned
+  (delete the `if`, stay green) — ask for the filtered SET, not a boolean. Same ceiling on every sibling
+  irreversible sweep; check each refusal's
   fail-safe DIRECTION. SYMMETRY too: `absentUidsFromLookup` refuses `disabled:true` as absent (a suspended
   account still owns its handle) — `docs/moderation.md` says whether 'disabled' IS the ban record.
 - **A new privileged API call inside an existing function invalidates the post-deploy attestation scoped to

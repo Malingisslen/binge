@@ -1,297 +1,170 @@
-# Plan 2026-08-13c — the six critiqued tickets
+# Plan — BIN-879 (beslut + text) och BIN-727 steg 2 (orkestreringstest)
 
-Malin's instruction: build all six. The blind single-role critiques ran today and all
-six came back **approve-with-conditions**, 25 binding conditions between them. Those
-critiques ARE the stakeholder step — do not convene another. Each ticket's conditions
-are on its Linear comment; the ones that shape the batching are repeated here.
+Datum: 2026-08-15. Sessionen är bevakad — Malin är närvarande och har svarat på
+den enda arkitekturavgörande frågan (se Öppna frågor).
 
-**Objection recorded, then overridden:** BIN-655's own ticket says "do not do this
-inside a feature commit — it wants its own plan and its own review round", and #27
-attached six conditions including a parity-test matrix. Built anyway, as the last
-batch, with its own commit and its own review round.
+## Rollkastning — körd FÖRE planen, som CLAUDE.md kräver
 
-**Superseded a concurrent selection.** A different sprint selection wrote itself into
-this file at 21:38 local and stopped after Phase 1; no process was running when I
-checked. Its copy is preserved in the session scratchpad. One claim of its own is
-checked and WRONG and must not be repeated: it said BIN-809/811's work is recoverable
-from stash `2d4d2abc…` and should not be rebuilt. That stash is BIN-583's, its files
-all exist on main, and `git diff 2d4d2abc HEAD` shows main is AHEAD of it (extracted
-helpers, added cap tests). Recovering would be a regression. Build fresh.
+`node docs/org/route.mjs` på de faktiska filerna, inte ärvt från någon tidigare körning:
+
+| Ändring | tier | reasonCode | panel |
+| --- | --- | --- | --- |
+| BIN-879: `docs/data-retention-policy.md`, ny ADR | `medium` | `owned` | #6 DPO (+ #21 Technical Writer) |
+| BIN-727 steg 2: `functions/src/availableNotify/**`, ny emulator-spec | `medium` | `owned` | #13 Data/Integrations Engineer (+ #7 QA) |
+
+Biljetten BIN-879 kräver dessutom uttryckligen #5 Juridik. Tre blinda kritiker
+kördes, var och en grundad i sin dossiersektion och blind för de andra.
 
 ---
 
-## Batching — driven by collisions, not by size
+## BIN-879 — enhetsluckan efter en avbruten radering
 
-| Batch | Tickets | Why together |
-|---|---|---|
-| **A** | BIN-869 + BIN-834 + BIN-804 (part A) | All three edit `docs/role-responsibilities.md` §25, `CLAUDE.md`'s router-contract line, and/or regenerate `ownership-map.json`. #25 was explicit: two independent regens clobber each other. ONE regen, after all dossier edits are in the tree. |
-| **B** | BIN-808 | Own surface (`workflow-map-universe.json` + `check-workflow-map.mjs`). No overlap. |
-| **C** | BIN-811 + BIN-809 | Same row, same files. Malin and #28 both said same pass. |
-| **D** | BIN-655 | The single write path for every watchlist document. Own commit, own review round. |
+### Vad frågan är
 
-Follow-ups to file, not build:
-- The mechanical ownership↔gate symmetry check (#25, BIN-869 condition 4 — this is
-  the fourth reactive widening and `_note5` already named the trigger).
-- BIN-804 part B in the claude-plugins tracker: make `/stakeholder-review` and the
-  sprint selector branch on `reasonCode`. **Must not be built from this repo**
-  (Malin's standing rule, 2026-08-06).
+Markören som stoppar en halvraderad session är enhetslokal (`localStorage`,
+ADR 0019). Den som avbryter på telefonen och laddar en sida på datorn har ingen
+markör där: `ensureUserProfile` återskapar `users/{uid}`, och serverns sopning —
+vars kandidatvillkor är "Auth-konto finns OCH profil bekräftat saknas" — slutar
+matcha kontot **permanent**. Policytexten kallade detta en öppen punkt.
+
+Bindande begränsning från #5 Juridik, ADR 0019: markören får INTE flyttas till
+Firestore. Ett varaktigt dokument under `users/{uid}` återskapar precis det som
+ska raderas. Planen arbetar inom den, inte runt den.
+
+### Rollernas svar — de var OENIGA, och det redovisas
+
+- **#5 Juridik: ACCEPTERA LUCKAN.** Bara kontoinnehavaren själv kan utlösa den,
+  ingen tredje part vinner något, och de 25 samlingarna är redan raderade när
+  läget alls kan uppstå. Vill ha en daterad accept i policyn i stället för en
+  öppen punkt.
+- **#6 Dataskyddsombudet: LAGA MED MEKANISM.** Menar att accepten upphäver just
+  den förutsättning ADR 0019 fråga 2 vilar på — att fördröjningen är verklig och
+  sopad — eftersom det här kontot aldrig sopas igen.
+- **Båda pekade oberoende ut SAMMA sak som det juridiskt vassa:** att
+  `ensureUserProfile` stämplar `termsAcceptedAt`/`ageConfirmedAt` med dagens
+  datum utan att ha visat något samtyckessteg. Det är ingen fördröjd radering
+  utan en påhittad efterlevnadspost.
+
+**Malins beslut 2026-08-15:** acceptera luckan, bryt ut samtyckesstämpeln till en
+egen biljett med egen panel. DPO:s skiljaktighet skrivs in, inte bort.
+
+### Acceptanskriterier (bindande, från kritikerna)
+
+1. `docs/data-retention-policy.md` slutar beskriva punkten som öppen och beskriver
+   det som beslutades. (Juridik C1)
+2. Texten säger uttryckligen tre saker DPO krävde: att det räcker med en
+   **sidladdning**, inte aktiv användning; att kontot lämnar sopningens urval
+   **permanent** och inte bara fördröjs; och att det upphäver förutsättningen i
+   ADR 0019 fråga 2. (DPO C1)
+3. Samtyckesstämpeln får en **egen namngiven rad**, inte inbakad i
+   enhetsstycket. (Juridik C3)
+4. Texten noterar att en fix som bara rör `userDocWrite.ts` är en no-op för det
+   här problemet — den spärren läser markören, som saknas på andra enheten.
+   (DPO C4)
+5. `src/lib/deletionMarker.ts`:s kommentar rättas: den påstår idag att sopningen
+   stänger enhetsluckan, vilket motsäger policytexten i samma repo. (Juridik C2)
+6. ADR 0022 skrivs, med DPO:s avvikande mening ordagrant bevarad.
+7. `.claude/rules/accepted-deviations.md` får en post — **utökar** den befintliga
+   2026-08-13-posten om markören, skapar ingen dubblett. (Juridik C1)
+8. `docs/RUNBOOK.md` får ett stycke för supportfallet "användaren säger att hen
+   raderade sitt konto men kan fortfarande logga in". (Juridiks §4)
+9. INGET fält, ingen underkollektion, inget syskondokument läggs under
+   `users/{uid}` för detta. ADR 0019:s förbud bekräftas gälla även BIN-879.
+   (Juridik C5)
+10. Ny biljett filas för samtyckesstämpeln, med DPO:s villkor 3 som kärna:
+    spärren ska sitta i `ensureUserProfile`, och en gammal Auth-`creationTime`
+    ska leda till ett riktigt återsamtyckessteg, aldrig en bakdaterad stämpel.
+
+### Filer
+
+`docs/data-retention-policy.md`, `docs/org/adr/0022-*.md`, `docs/org/adr/README.md`,
+`src/lib/deletionMarker.ts` (kommentar), `.claude/rules/accepted-deviations.md`,
+`docs/RUNBOOK.md`.
 
 ---
 
-## Batch A — the org/gate surface
+## BIN-727 steg 2 — `availableNotify` bakom en injicerad port
 
-### What ships
-1. **§25 gains the paths that decide who reviews everything else**, with the reason:
-   `.claude/agents/binge-{code,security,integration,test}-reviewer.md` (the four
-   instruction files ONLY), `.claude/hooks/{dossier-freshness,map-freshness,preview-gate}.mjs`,
-   `docs/org/route.mjs`, `docs/org/gen-ownership-map.mjs`.
-2. **`reviewGates` gains matching narrow patterns** for the reviewer instruction
-   files and the three hooks. Narrow alternations, not globs — Malin's 2026-08-08
-   call, alternative (a), unchanged.
-3. **`CLAUDE.md` line 42's router contract** names `reasonCode` (BIN-804 A) and
-   `unownedCode` (BIN-834). One line, both tickets.
-4. **`route.mjs`'s header comment** names `unownedCode`, not `unmappedCode`.
-   Verified against the shipped router: for `docs/org/route.mjs`, `unmappedCode` is
-   `[]` and the path sits in `unownedCode`.
-5. **`ownership-map.json` regenerated once**, after 1.
+### Vad som ska byggas
 
-### Conditions this batch is bound by
-- **The knowledge files stay out.** `*.knowledge.md` / `*.knowledge.archive.md` are
-  appended by the reviewers themselves on every ledger run; gating them puts routine
-  bookkeeping behind a review — the same call Malin made for `lessons-digest.md`.
-- **Both lists move in one commit**, and the blocking one is proven with a
-  staged-diff probe, not asserted.
-- **Widening only.** No existing pattern narrows.
-- **BIN-869's evidence is partly stale and gets corrected on the ticket**:
-  `gen-ownership-map.mjs` already matches the gate since `7051a98`; only its §25
-  ownership entry is missing.
-- **Write down why `route.mjs` gets an owner** rather than keeping the permanent
-  #14 fallback, so `docs/org/` does not end up with two unexplained policies.
+Samma behandling som steg 1 gav `retentionCleanup` (79d108d): lyft ut
+orkestreringen ur `functions/src/availableNotify/index.ts` (437 rader) till en
+`runNotify.ts` som varken importerar `firebase-admin` eller
+`firebase-functions`, så `src/test/rules/available-notify-orchestrator.test.ts`
+kan driva den mot en riktig Firestore-emulator.
 
-## Batch B — BIN-808, crash-boundary coverage
+### #13:s fynd som ÄNDRAR omfattningen
 
-- `boundaries` gains the **ten** `error.tsx` files. Recounted with
-  `find src/app -name error.tsx` — the ticket's "ten" was right; my own pre-check
-  said seven and missed `src/app/error.tsx`, `movie/[id]`, `tv/[id]`.
-- **Criterion 2's heuristic is replaced, not implemented.** "Imports `captureError`,
-  is not a route or a function export" is a false negative for all ten (they import
-  the shared `SegmentError`, which does) and a false positive for
-  `src/lib/queryClient.ts`. Replaced with filename-glob enumeration of
-  `src/app/**/{error,global-error}.tsx` diffed against `boundaries` — the same
-  enumerate-and-cross-check the linter already does for routes and functions.
-- The universe file's own "boundaries = HAND-CURATED, not enumerable" comment is
-  wrong for this subset and is corrected in the same change.
-- An explicit exemption list, one line of reason each, for legitimate non-route
-  `captureError` call sites.
+De två föregångarna (`tmdbTosSweep`, `retentionCleanup`) rör bara Firestore.
+`availableNotify` korsar dessutom **två externa gränser**: TMDB-hämtningar och
+en riktig FCM-sändning via `sendPushToUser`. Det finns ingen FCM-emulator. Porten
+måste därför svälja alla tre, annars går biljettens eget villkor — "en användare
+som tackat nej når aldrig `sendPushToUser`" — bara att antyda via sidoeffekter i
+stället för att bevisas med anropsräkning. Det här är en **tyngre lyft än
+föregångaren**, och planen säger det hellre än att uppskatta den som likadan.
 
-## Batch C — BIN-811 + BIN-809, labelled companion anchors  *(refreshed 2026-08-14, in build)*
+### Acceptanskriterier (bindande, från #13)
 
-Malin chose **(c)** on 2026-08-08: anchor on both followed and finished series, but
-each suggestion says which. The labelling is the whole reason (c) beat (b).
-Router at these files: `medium`, `owned`, panel **[28]** — the same role whose blind
-critique ran today, so the stakeholder step is satisfied and no new panel is due.
+1. `runNotify.ts` importerar varken `firebase-admin` eller `firebase-functions`.
+   Grep-kontrollerbart.
+2. Porten täcker Firestore-tillstånd, TMDB-hämtning OCH push-sändning. Inget test
+   får någonsin nå `getMessaging().sendEach()`.
+3. Fas 1 (release) måste vara **helt klar** innan fas 2 (tillgänglighet) läser
+   `releaseSkip`. Explicit sekvenspåstående, inte underförstått.
+4. `Promise.allSettled` per mottagare bevaras i båda faserna — `Promise.all`
+   låter en mottagares fel avbryta hela titelns utskick.
+5. `writeMarker()` körs efter `allSettled`, oavsett enskilda sändningsutfall.
+6. `releaseSkip`-kontrollen sker FÖRE `readUserData` — ett release-ägt par ska
+   aldrig ens konstruera en push.
+7. De yttre looparna förblir **sekventiella**. Ingen parallellisering av
+   TMDB-anrop; det vore en kvotändring inbakad i en testbiljett.
+8. Tillgänglighetsfasen: basrun (`last === null`) skickar 0 och skriver markören;
+   omkörning utan förändring skickar 0; ny kvalificerande leverantör skickar
+   exakt 1 och markören avanceras.
+9. Releasefasen: TTL-gränsen prövas med **bokstavliga tal** — exakt `ttlDays`
+   gammal cache måste hämta om; fönstret prövas vid `releaseDate`,
+   `releaseDate + graceDays` och `releaseDate + graceDays + 1` (får INTE fyra).
+10. Korsfas-dedup: ett `(uid,tmdbId)` i `releaseSkip` ger **noll anrop** till
+    push-porten i fas 2 — mätt på anropsloggen, inte på frånvaron av ett dokument.
+11. Opt-out: `pushEnabled: false` och `availableOnMyServices: false` ger var för
+    sig noll anrop till push-porten.
+12. Felisolering prövas på två nivåer: en titels TMDB-fel stoppar inte
+    syskontitlarna, OCH ett fel i hela releasefasen blockerar inte
+    tillgänglighetsfasen.
+13. `logic.ts` och `tmdb.ts`:s exporterade API är oförändrat — diffen ska visa att
+    `index.ts` delas, inte att doc-id:n ändras.
 
-### Decisions taken during the build
+### Vad #13 REFUSERAR
 
-1. **The pool does not widen, and the old comment saying it could was wrong about the
-   data model.** `sedd` is the FILM status; a series never leaves `mina` except to
-   `avbruten`. "Finished" is a derived SUB-state of `mina`
-   (`librarySubState(item) === 'avslutad'`). Finished shows have anchored this row
-   since day one. `ANCHOR_TV_STATUSES` is unchanged.
-2. **`CompanionAnchor` gains `reason: 'following' | 'finished'`**, computed per anchor
-   from persisted fields only — `librarySubState`'s two live-signal arguments are
-   deliberately NOT passed, so the row never depends on whether the Streaming advisor
-   has loaded.
-3. **The reason reaches rendered copy** via a new exported
-   `describeCompanionAnchors()`: "Eftersom du följer A och B, och har sett klart C."
-   The row's rendered rationale lives in TWO places and `description` now feeds
-   BOTH: `RecRow`'s header `why`-line on /recommendations, and
-   `RecommendationsExpanded`'s standfirst behind "visa fler →". Without the first,
-   the field has no consumer where the user actually is and (c) collapses into (b)
-   — see the corrected assumption (a) below.
-   **Deliberately a grouped sentence, not a per-card badge** — the row renders TMDB
-   film cards with no per-anchor slot, and inventing one is an undecided UI call.
-   **The register break is Malin's decision, 2026-08-14.** Both reviewers flagged
-   that this is the one `.why` line written as a sentence where its eight siblings
-   are lowercase `·`-separated fragments. She was shown all three renderings side
-   by side (`tasks/previews/companion-why-line-directions.html`, disposable) and
-   chose the full sentence: naming the shows is the point of (c), and the fragment
-   variant is (b) again. Do not harmonise this line with its siblings.
-4. **`COMPANION_SCORE` untouched** (argued #28 condition, 2026-08-06). Sort stays
-   by title only: the film budget is spent in sort order, so grouping by reason
-   would silently change WHICH films an over-budget user is offered.
-5. **BIN-809** — the cross-row dedup is wired inline in `RecommendationsHub.tsx` and
-   consumed in `useRowCompanion.ts`, neither tested. Extracted to
-   `RecommendationsHub.helpers.ts` (`excludedIdsForOtherRows`, `exclusionsForRow`)
-   per the repo's test-extraction convention, and tested there — a pure-helper test
-   is reachable where a hub render is not.
+- Att testvägen någonsin anropar riktig FCM.
+- Att parallellisera titel- eller fas-loopen "medan vi ändå är här".
+- Att shippa utan ett eget namngivet test för release/tillgänglighet-överlappet.
+  Det är den enskilt värsta felvägen — dubbel push till riktiga användare.
 
-### Known limitation, written down rather than discovered later
+### Filer
 
-`librarySubState` is persisted-fields-only and lazy-backfilled, so a finished show
-whose `tmdbStatus`/`totalSeasons` were never written back reads as `'following'`.
-One-directional and safe: the row can under-claim, never call an airing show done.
+`functions/src/availableNotify/index.ts` (blir port), ny
+`functions/src/availableNotify/runNotify.ts`, ny
+`src/test/rules/available-notify-orchestrator.test.ts`, samt
+`docs/role-responsibilities.md` + `docs/org/ownership-map.json` för den nya
+testfilens ägare (annars blir `main` röd — samma spärrhake som fällde steg 1).
 
-### Files
+---
 
-`src/types/recommendations.ts`, `src/lib/recommendations/companionSeeds.ts`,
-`src/lib/recommendations/cascadePrioritizer.ts`,
-`src/components/recommendations/RecommendationsHub.helpers.ts` (new),
-`src/components/recommendations/RecommendationsHub.tsx`,
-`src/components/recommendations/RecRow.tsx`,
-`src/components/recommendations/RecRow.helpers.ts` (new — `whyForRow` extracted so it
-is testable without RecRow's Firebase-transitive imports), plus FOUR test files.
+## Öppna frågor
 
-### Open questions
+**Inga arkitekturavgörande okända kvar.** Den enda fanns i BIN-879 — acceptera
+luckan eller bygga en mekanism — och den ställdes till Malin via AskUserQuestion
+2026-08-15 med rollernas oenighet framlagd. Svar: acceptera, fila samtycket
+separat.
 
-**No architecture-changing unknowns** — but one of the three assumptions below was
-simply WRONG, and is left here corrected rather than quietly rewritten.
+Antaganden som styr resten, uttryckligen:
 
-**(a) ~~The row's only rendered copy is `RowSpec.description`~~ — FALSE.** The check
-actually run asked whether there is a per-anchor SLOT, which is a different question.
-`description` renders in `RecommendationsExpanded`'s standfirst only; the row on
-/recommendations renders `RecRow`'s `whyForRow`, which hardcoded "kurerad koppling ·
-serien fortsätter som film" for this row kind. So the first version of this batch put
-the whole label somewhere the user reaches only by clicking "visa fler →" — option (b)
-wearing option (c)'s clothes. Caught by the integration and test reviewers
-independently; fixed by making `whyForRow`'s companion case read `spec.description`,
-pinned by `RecRow.why.test.ts`.
-
-(b) `prioritizeRows` emits at most one companion row per pass — checked, it is a
-single `push` behind one `if`. (c) `librarySubState` is importable from the seeds
-module without pulling Firebase into the test environment — checked,
-`src/lib/libraryView.ts` is a pure helper.
-The one genuine product question — per-card badges instead of a grouped sentence —
-is NOT taken here: it needs a UI decision Malin has not been asked for, and is
-recorded above as the deliberate scope line.
-
-## Batch D — BIN-655, split `addItem`  *(written 2026-08-14, in build)*
-
-Router at the real change set: `medium`, `reasonCode: owned`, panel **[27]** Database
-Administrator — the same role whose blind critique ran on 2026-08-13 with six
-conditions. That critique IS the stakeholder step; no new panel is due.
-(`firestore.rules` is NOT edited — the rules test only reads it, so the `top`/high-stakes
-route that including it produces does not apply.)
-
-**The ticket's own objection, recorded and overridden:** BIN-655 says "do not do this
-inside a feature commit — it wants its own plan and its own review round". This IS its
-own plan, its own commit and its own review round. Malin instructed all six tickets be
-built; this is the last and heaviest.
-
-### The shape
-
-`addItem` infers five things from one call and takes a FLAG for the sixth, because
-"did a human just say they watched this?" is the one thing a write path structurally
-cannot see. That asymmetry has been patched twice at the call site (BIN-599's
-`planQuickRateWrite`, BIN-641's `opts.countsAsViewing`).
-
-Two entry points over ONE shared payload builder:
-
-- **`upsertTitle(payload)`** — bulk/sync. CSV import, onboarding, Collection and
-  Companion "add all", "Bevaka", the quick-rate pass, and every non-`sedd` quick add.
-  Never counts a viewing.
-- **`logViewing(payload)`** — the human mark-seen path. May count a rewatch, and when
-  it does, re-dates.
-
-"Did a human do this?" is then answered by WHICH FUNCTION YOU CALLED. `addItem` and its
-`opts.countsAsViewing` are removed from the context — a boolean a new caller can forget
-is exactly the defect.
-
-### What intent may change — and what it may NOT
-
-Intent gates **two** things and nothing else:
-1. whether `rewatchFields` applies at all;
-2. the `watchedAt` OVERWRITE half of the `sedd` branch (`'rewatchCount' in rewatch`).
-
-The other disjunct — stamping a title's FIRST watch date via `canAutoStampWatchedAt` —
-applies to both paths, exactly as today. So `buildAddWrite(item, 'bulk', ctx)` must be
-byte-identical to today's `addItem(item)`, and `buildAddWrite(item, 'viewing', ctx)`
-byte-identical to today's `addItem(item, { countsAsViewing: true })`. **This is a
-refactor with zero behaviour change**, and the parity matrix is what proves it.
-
-Every other guard moves UNCHANGED and shares one evaluation of `current` /
-`snapshotSettled` / `listenerFailed`, never a copy: `addedAt` (loose gate),
-`tmdbFieldsRefreshedAt` (strict), `providersCheckedAt` (strict + real providers),
-`ratedAt` (changed-rating only), `shouldStampVisibility` (BIN-595), and the BIN-505
-runtime `notes` strip. The code states that `rewatchCount` and the `watchedAt` re-date
-must always agree; the builder keeps them gated on the same computed outcome.
-
-### Where the builder lives
-
-`src/lib/watchlistWrites.ts`, beside the six helpers it already shares with
-`buildStatusUpdate`. It must stay Firebase-free (that file is imported by tests that
-have no Firebase env), so `serverTimestamp` is INJECTED as a function and the builder
-returns a plain object.
-
-### Tests (all six of #27's conditions)
-
-1. **Parity matrix** — new-add / re-mark / rating-changed / rating-unchanged / cold
-   load / dead listener × both intents, against LITERAL expected payloads captured from
-   the current behaviour. Not a snapshot: a golden table, so a mutation to any guard
-   names which cell moved.
-2. **Rules-emulator test** — both entry points' payloads satisfy the `hasOnly`
-   allowlist (32 keys, counted; the ticket said 22, which was stale), on create AND
-   on merge-update. A differently-shaped payload is a silent
-   `permission-denied` in production with no compile-time signal.
-3. **Coherence** — in the viewing path, a counted rewatch ALWAYS re-dates and a
-   re-date is never written without a count. The one branch that overwrites
-   user-authored data.
-4. **Bulk can never count** — `upsertTitle` on a `sedd → sedd` write writes no
-   `rewatchCount` and no `watchedAt`. This is BIN-599 in test form.
-5. **Cold load counts nothing on either path** — an unsettled snapshot re-dates
-   nothing and counts nothing.
-6. **Every caller moved** — a source-scanning guard that `addItem` has no callers left,
-   so a later caller cannot resurrect the flag path.
-
-### Callers, all in this commit
-
-`upsertTitle`: `settings/import/page.tsx`, `OnboardingFlow.tsx`, `CollectionSection.tsx`,
-`CompanionSection.tsx`, `MoviePageClient.tsx` (Bevaka), `QuickRateModal.tsx`,
-`QuickAddButton.tsx` (non-`sedd`).
-`logViewing`: `useMarkSeen.ts` ONLY, and only when its caller passes
-`countsAsViewing` — today that is StatusButton's "Sedd igen" alone. StatusButton does
-not import it; a plain "Sedd" is also a mark-seen gesture and goes to `upsertTitle`.
-(An earlier draft of this line said "and StatusButton.tsx", which reads as though the
-plain gesture counts — the exact thing Malin ruled out.)
-
-**BIN-643 rides along only far enough** to point its three callers (QuickRateModal,
-OnboardingFlow, settings/import) at `upsertTitle`. Gating them on the snapshot is
-BIN-643's own scope and is NOT taken here. **BIN-640 stays separate** — it is a
-read-repair, a different concern.
-
-### The five stale comments the ticket names, fixed here
-
-- `rewatchFields`' doc calls `buildStatusUpdate`'s `sedd → sedd` branch "unreachable";
-  that branch's own comment says only that no caller can INTEND it. → "not intendable".
-- ~~`buildStatusUpdate`'s KNOWN COST bullet calls `sedd → sedd` "the common one"~~ —
-  **checked and already fixed at HEAD.** No such text exists; the bullet now reads "No
-  updateStatus caller can INTEND it". Left listed rather than deleted, because a
-  reader comparing the ticket to the commit would otherwise think it was missed.
-- ~~"WatchedDateEditor is the way to re-date a re-viewing" is no longer the only way~~ —
-  **checked and NOT stale.** The sentence sits inside the `vill_se/avbruten → sedd`
-  bullet, and "Sedd igen" only renders on a title already `'sedd'`, so it cannot reach
-  one. A clause saying so is added instead, so the next reader does not re-file it.
-- `QuickRateModal.test.tsx` names `isRewatch`, a symbol that no longer exists.
-- `StatusButton.tsx` re-derives the rewatch predicate inline in JSX instead of asking
-  the helper. Taken as a NAMED predicate, not a third `'rewatchCount' in ...` in JSX.
-
-### Open questions
-
-**No architecture-changing unknowns.** Assumptions, checked against the tree first:
-(a) the payload builder can be pure — checked, every input is already resolved at the
-call site (`findItem`, the two refs, `effectiveVisibilityNow`) and `serverTimestamp` is
-the only Firebase touch; (b) `firestore.rules` needs no change — checked, no new field
-is written, so `hasOnly` is unaffected and the test only asserts that; (c) removing
-`addItem` from the context breaks no test that cannot move with it — to be verified by
-the typechecker, and any test fixture calling it moves in this commit.
-
-The genuine risk #27 named is real and is why condition 1 exists: replacing one skewed
-function with two that DRIFT. One builder, parameterised, never copied — and a matrix
-test that fails the moment the two paths disagree on a cell they should share.
-
-## Acceptance (all batches)
-
-`npm run typecheck`, `npm run lint` (0 errors in `src/` + `functions/`), `npm test`,
-`npm run test:rules`, `node docs/org/gen-ownership-map.mjs --check`,
-`node scripts/check-workflow-map.mjs` — all green. Each batch its own commit, each
-through the repo's own review gates.
+- BIN-727 steg 2 riktar sig mot `availableNotify` och inte en annan push-avsändare.
+  #13 tillfrågades uttryckligen och stod fast: den är rätt nästa mål eftersom den
+  har högst komplexitet och störst blast radius i familjen.
+- Ändringen är beteendebevarande. Varje avvikelse jag hittar under lyftet
+  namnges i commit-meddelandet i stället för att tystas in, precis som
+  `tokenOwnerUid`-deltat i steg 1.
+- Ingen funktionsdeploy sker automatiskt. `deploy.yml` shippar bara hosting;
+  `availableNotify` kör vidare på det gamla bygget tills Malin ber om en deploy.

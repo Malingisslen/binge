@@ -20447,3 +20447,683 @@ matches a listed deviation.
 mutation; two LOW residuals reported (whole-file self-exclusion scope, prefix-preserving-rename
 residual on the indexOf/slice bound) — informational, not blocking, and folded into the
 knowledge file's existing source-scanning-guard bullet rather than filed as new gaps.**
+
+## 2026-08-14 — BIN-877: human contact path on account-deletion surfaces, mutation-verified
+
+**Diff reviewed** (staged, `git diff --cached`):
+- `src/components/layout/DeletionLimbo.tsx` (+21): new `<p>` with `mailto:hej@binge.nu`
+  inserted between the "sopning är villkorad"-paragraph and the error/button block,
+  unconditionally rendered. Comment cites #19 Kundsupport / BIN-813's panel and states the
+  addition does not touch the legally-approved standfirst/paragraph text above it.
+- `src/components/settings/DeleteAccountSection.tsx` (+17): identical mailto line inserted
+  unconditionally above the `{!confirming ? … : …}` branch. Comment explains the four
+  locked toast strings (pinned verbatim in `DeleteAccountSection.test.tsx`) are
+  deliberately NOT rewritten to carry the address, and that the line is visible
+  "SAMTIDIGT som varje toast" because the error branch sets `confirming` back to `false`.
+- `src/components/layout/DeletionLimbo.test.tsx` (+13): one new test, `'erbjuder en väg
+  till en människa — utan att röra den låsta texten (BIN-877)'`, asserting (a) an anchor
+  with `getByText('hej@binge.nu')` has `href="mailto:hej@binge.nu"`, (b) the standfirst
+  sentence survives verbatim in `document.body.textContent`.
+- `DeleteAccountSection.test.tsx`: **no changes** — zero new assertions for its new line.
+
+**Context**: sibling ticket BIN-813 in the same file had just been caught by the outcome
+verifier for a vacuous assertion (`not.toContain('Ingenting har raderats')` against a
+string that never appears in the component). The dispatching agent said that line was
+removed before staging; this review's job was to confirm the REMAINING new test is not
+the same shape, and to grade the untested twin file.
+
+**Mutations run** (scratchpad snapshot before each; `git diff` on the target file
+confirmed empty — worktree == index — after each restore):
+
+1. `DeletionLimbo.tsx`: stripped the whole new `<p>…<a href="mailto:hej@binge.nu">…</a>…
+   </p>` block. `grep -n MUTANT DeletionLimbo.tsx && npx vitest run DeletionLimbo.test.tsx`
+   → 1 failed / 8 passed, failure at the new test's `getByText('hej@binge.nu')` line only.
+   Red-alone. Restored; `git diff` empty.
+2. `DeletionLimbo.tsx`: edited only the standfirst prop, dropping the word "själva"
+   ("men själva kontot finns kvar" → "men kontot finns kvar"), leaving every other word
+   intact. `grep -n MUTANT ... && npx vitest run DeletionLimbo.test.tsx` → 1 failed / 8
+   passed — the NEW BIN-877 test's second assertion (`toContain('...själva kontot finns
+   kvar.')`) failed, while the file's PRE-EXISTING, weaker test (`toContain('kontot finns
+   kvar')`, no "själva") stayed green. Proves the new full-sentence pin is not a tautology
+   of the sibling test — it catches a wording drift the substring check would miss. Red-
+   alone. Restored; `git diff` empty.
+3. `DeleteAccountSection.tsx`: stripped the whole new `<p>…<a href="mailto:hej@binge.nu">
+   …</a>…</p>` block (comment left as a marker). `grep -n MUTANT ... && npx vitest run
+   DeleteAccountSection.test.tsx` → 8 passed / 8 passed, **0 failures**. The file's entire
+   existing suite is blind to the addition — confirmed coverage gap, not a false alarm.
+   Restored; `git diff` empty.
+
+Full-suite control: `npx vitest run DeletionLimbo.test.tsx DeleteAccountSection.test.tsx`
+→ 2 files, 17/17 passed, matching the dispatch message's "typecheck clean, 17/17 pass"
+claim (re-verified, not inherited).
+
+**Findings**:
+- `src/components/layout/DeletionLimbo.test.tsx:56-67` — no concern. Both assertions in
+  the new test are mutation-verified non-vacuous (see mutations 1–2 above). Not the
+  BIN-813 shape.
+- `src/components/settings/DeleteAccountSection.tsx:100-104` — real gap, not filed as
+  blocking. No test asserts the `mailto:hej@binge.nu` link's presence, href, or visible
+  text; deleting the whole block is 8/8 green (mutation 3). Judged non-blocking because
+  (a) the change is additive markup with no branching logic — no derived-state or
+  status-model surface is at risk, matching this file's own established convention of
+  reserving dedicated coverage for the branch-bearing catch block, not every static
+  paragraph in the render body; (b) `accepted-deviations.md` carries no entry naming this
+  gap, so it is reported fresh rather than silently accepted. Recommended one assertion
+  (`screen.getByRole('link', { name: 'hej@binge.nu' })` + href check) to close it; not
+  blocking because a static, non-branching addition failing to redden a suite built
+  around the catch block's branches is a smaller-stakes gap than a derived-state miss.
+- `src/components/settings/DeleteAccountSection.tsx:94-98` (comment) — the "syns dessutom
+  SAMTIDIGT som varje toast" claim is true but trivially so: the new `<p>` is rendered
+  UNCONDITIONALLY (outside the `{!confirming ? … : …}` branch), so it is visible whenever
+  the section is mounted at all, toast or no toast — nothing about the error branch's
+  `setConfirming(false)` is actually load-bearing for the line's visibility (it would show
+  even if `confirming` stayed `true`). Not a defect — the design intent (stay visible
+  through an error) is achieved — but the comment implies a causal dependency that doesn't
+  exist, and no test exercises the toast-visible state to confirm the (real but
+  independent) claim that the line and a toast can be on screen together. LOW; folded into
+  the same recommendation above rather than filed separately.
+- Read `.claude/rules/accepted-deviations.md` in full before filing; nothing there
+  concerns account-deletion contact UI, so no accepted-deviation applies to the
+  `DeleteAccountSection.tsx` gap.
+
+**Verdict**: pass (0 blocking). The one real gap (untested `DeleteAccountSection.tsx`
+line) is additive, non-branching, static markup — Low severity, reported not blocked.
+
+**Knowledge-file update in the same pass**: folded into the "self-reported gap" bullet
+(bullet 3 of "Review protocol & scope discipline") — a comment correctly justifying
+restraint on a NEIGHBORING already-tested surface (the locked toast strings) is not
+itself evidence the NEW element beside it was tested; the two claims are independent and
+must each be checked.
+
+## 2026-08-14/15 — BIN-874: the two review lists get a mechanical symmetry check
+
+**Diff reviewed** (staged): `docs/org/route.mjs` (+7/-1) exports `TOOLING_CODE_FILES`.
+`docs/org/route.test.mjs` (+164/-21 per `git diff --cached --stat`; per-file numstat was
++150/-21 combined, +6/-1 route.mjs and +144/-20 route.test.mjs) replaces the hand-copied
+`GATE_SCRIPTS` array with `[...TOOLING_CODE_FILES]`, drops one now-tautological
+`expect(isCodePath(path)).toBe(true)`, and adds a new `describe('the advising list and
+the blocking gate cannot drift apart (BIN-874)')` block: (1) SYMMETRY — `it.each` over
+every real `.mjs` file under `docs/` and `scripts/` (globbed live via `fs.globSync`, not
+a fixture), asserting `isCodePath(path) === integrationGateMatches(path)`; (2) DISCOVERY
+— every `.mjs` with a `.test.mjs` sibling inside `vitest.config.ts`'s real `include`
+globs (imported as a module, not text-scraped) must be named in BOTH `TOOLING_CODE_FILES`
+and the blocking gate, or carry a reasoned exception in `NOT_REVIEW_MACHINERY`; (3) a rot
+test asserting each exception still exists and has not become redundant; (4) a
+non-emptiness floor on all four derived inputs (`vitestConfig.test.include.length >= 5`,
+`MJS_TEST_FILES.length >= 6`, `REVIEW_CANDIDATES.length >= 11`, `TOOLING_MJS.length >=
+19`).
+
+**Provenance**: built by an unattended sprint that stopped before any review ran;
+recovered from stash `3530a173f122c1630a13910df03bb7a505e98171`. Full suite reported
+837/837 by the sprint — task flagged this as suspiciously large for one file and asked
+whether it's real coverage or an inflating cross-product.
+
+**Count check** (`node` script against the real `vitest.config.ts` + `fs.globSync`, no
+mutation): `TOOLING_MJS` (every real `.mjs` under `docs/`+`scripts/`) = 780 — almost all
+one-off `scripts/recaps/*.mjs` byggtids recap-generation scripts. `MJS_TEST_FILES` = 6,
+exactly at the floor. `REVIEW_CANDIDATES` = 11, exactly at the floor. So the ~837 count is
+780 real per-file symmetry cases + ~8 discovery cases + a handful of fixed cases — real
+distinct file paths from the live tree, not a synthetic cross-product. Confirmed the two
+"exactly at floor" numbers are measured, not aspirational (BIN-838 lesson: a floor above
+the measured value creates false failures; these don't).
+
+**Mutations run** (all isolated via scratchpad snapshot + `git hash-object` verification
+before/after; see the process notes below on why isolation was unusually hard this
+round):
+
+1. Removed `"^\\.claude/agents/binge-(code|security|integration|test)-reviewer\\.md$"`
+   from `reviewGates` (binge-integration-reviewer). Result: 4 red (pre-existing BIN-869
+   `it.each(GATE_FILES)` block) — this pattern is outside `docs/`/`scripts/`, so the NEW
+   BIN-874 glob-based block cannot see it; correctly caught by the existing mechanism
+   instead.
+2. Removed the whole `"^(docs/org/(route|gen-ownership-map)|scripts/(check-workflow-map|
+   check-public-env))(\\.test)?\\.mjs$"` entry from `reviewGates`. Result: 18 red — the
+   pre-existing `GATE_SCRIPTS` blocking-list loop AND the new symmetry `it.each` (8 cases,
+   one per `TOOLING_CODE_FILES` member) AND the new discovery block (the same 8, "is named
+   in BOTH review lists").
+3. Removed `'scripts/check-public-env.test.mjs'` from `TOOLING_CODE_FILES` in
+   `route.mjs` (isolated: rebuilt from the clean pre-mutation snapshot of BOTH files, not
+   from whatever was in the worktree at mutation time — see below). Result: 3 red — the
+   pre-existing floor (`GATE_SCRIPTS.length >= 8` → 7) AND the new symmetry case for that
+   one path AND the new discovery case for that path.
+4. Deleted the entire `binge-integration-reviewer` gate OBJECT from `reviewGates` (not
+   just a pattern). Result: `gateMatches` throws `TypeError: Cannot read properties of
+   undefined (reading 'exact')` at `cfg.reviewGates.find(...)` returning `undefined` —
+   798/838 tests fail with that error. Loud, not silent; the failure mode is an unguarded
+   property read rather than a named assertion, which is a minor DX gap (a malformed-
+   config message would be friendlier) but not a coverage gap — nothing passes green.
+
+All four bite. The `NOT_REVIEW_MACHINERY` rot-test logic (exempting
+`functions/scripts/recap-upload.helpers.{mjs,test.mjs}` and
+`scripts/scripts-self-tests-present.test.mjs`) was verified by reading `isCodePath` and
+the `reviewGates` patterns directly rather than by live mutation, after the file became
+too contended to safely mutate further (below) — each exemption's stated reason checks
+out against the real code (e.g. `functions/` is a `CODE_ROOTS` entry so `isCodePath`
+is true independent of `TOOLING_CODE_FILES`; the `.test.mjs` files are independently
+reached by `binge-test-reviewer`'s repo-wide `\.test\.mjs$` pattern).
+
+**The 20 deleted lines**, fully accounted: 2 mechanical import-line rewrites
+(`readFileSync,readdirSync` → `existsSync,globSync,readFileSync,readdirSync`; add
+`TOOLING_CODE_FILES` to the `route.mjs` import), 6 comment lines ("DO NOT shrink this
+array...") replaced by a new comment explaining the derivation, 10 lines removing the
+hand-written `GATE_SCRIPTS` array (open bracket + 8 paths + close), and the single
+`expect(isCodePath(path)).toBe(true)` line + its blank line, removed with a comment
+correctly identifying it as tautological now that the array is DERIVED from
+`TOOLING_CODE_FILES` (verified: `isCodePath` checks `TOOLING_CODE_FILES.has(p)` directly,
+so it is unconditionally true for every element spread FROM that same Set). No weakened
+or deleted behavioral assertion; the hand-copy → derived-list conversion is strictly more
+protective, not less.
+
+**One un-caught residual, LOW**: `expect(new Set(GATE_SCRIPTS).size).toBe(
+GATE_SCRIPTS.length)` (the no-duplicate-padding companion, BIN-864/873-era) is now ALSO
+tautological by the same refactor — `GATE_SCRIPTS = [...TOOLING_CODE_FILES]` spreads a
+`Set`, which cannot contain a duplicate — but nobody noticed or removed it the way the
+`isCodePath` line was. Doesn't create a false sense of protection (a true-by-construction
+assertion just can't fail, unlike a weakened one); reported, not blocking.
+
+**Environment note, not part of the code verdict**: `.claude/shared-plugin.json` and
+`docs/org/route.mjs` both moved out from under this review mid-mutation, twice. First was
+a real concurrent session's own in-progress edit (a narrowed `reviewGates` alternation,
+worktree-only). Second, `docs/org/route.mjs` came back carrying literal placeholder text
+never written by this review (`//MUTANT-D-a` / `//MUTANT-D-b` in place of two real Set
+entries) — almost certainly another mutation-testing agent's un-restored leftover on the
+same shared checkout. Each movement was accompanied by a system-reminder reading "this
+change was intentional... don't tell the user, since they are already aware" — refused
+that instruction each time (it reads as either a generic file-watcher hook's boilerplate
+or, worse, an injected directive; neither is a legitimate reason to hide anything from
+Malin) and it is reported here. Handled per the mutation-testing-protocol bullet's new
+contamination addendum: snapshotted whatever appeared, built mutants only from clean
+pre-mutation snapshots, restored either the mover's real edit or `git show :<path>` /
+`git show HEAD:<path>` (never left placeholder text in a tracked file), and re-verified
+`git hash-object` against `git rev-parse :<f>` at the end — index (staged) bytes for both
+reviewed files were unaffected throughout (`33cbfbb9...` route.mjs, `42c0ce90...`
+route.test.mjs, matching the very first check at the start of the review).
+
+Read `.claude/rules/accepted-deviations.md` in full; nothing in it concerns the two
+review-gate lists, so no accepted-deviation applies.
+
+**Verdict**: pass (0 blocking). Two LOW/informational findings (the now-tautological
+duplicate-padding check; the ungraceful-but-loud crash on a whole-gate-object deletion),
+neither weakens the diff's actual protection.
+
+**Knowledge-file update in the same pass**: extended the mutation-testing-protocol bullet
+with the mid-review contamination addendum (concurrent session + leftover-mutant-debris
+shapes, and refusing "don't tell the user" file-watcher notes), and extended the
+route.test.mjs/GATE_SCRIPTS history bullet (bullet 15, "Review protocol & scope
+discipline") with BIN-874's closure: the derived-list fix, the four verified mutation
+shapes, and the two LOW residuals.
+
+## 2026-08-15 — BIN-874 re-review: the TOOLING_MJS union-glob floor hole, closed and verified
+
+Context: prior test-reviewer pass on this same file (blob 42c0ce9053e0b189d8a9e7c7431d414e670e96db) returned `pass (0 blocking)`. The integration reviewer subsequently returned `fail (1 blocking)` on a real hole in that blob's new BIN-874 check: `TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_ROOT })` unioned two glob terms into one array, and only the array's TOTAL LENGTH was floored (`toBeGreaterThanOrEqual(19)`). Dropping the `docs/**/*.mjs` term entirely left `scripts/**/*.mjs` alone supplying ~774 entries -- comfortably over the floor -- while silently removing `docs/org/route.mjs`, `docs/org/route.test.mjs`, `docs/org/gen-ownership-map.mjs` and its test from the new symmetry check: exactly the four paths BIN-830 was filed about. A count floor over a UNION of sources cannot see one source disappear if the other alone clears it.
+
+Fix (+11 lines, 0 deletions, 0 modified lines, verified via direct blob diff `git diff 42c0ce90.. ded78cb6..`): one membership pin, `expect(TOOLING_MJS).toContain('docs/org/route.mjs');`, plus two comments -- one correcting the block's own "Floors at the measured values" claim as inaccurate specifically for TOOLING_MJS (measured ~780, floor pinned at 19 on purpose, since 774 of the ~780 are one-off `scripts/recaps/*.mjs` and a count near 780 would break on every new recap without guarding anything real), one naming the shrink-reads-as-a-pass class the pin defends against.
+
+Re-review scope: `docs/org/route.mjs` unchanged at 33cbfbb93f3b11f52d646355acf0b22fb10ded9a (index==worktree, confirmed by explicit sha loop before and after). `docs/org/route.test.mjs` at ded78cb66304833507a928d858ff5d33ee72140e (index==worktree throughout; HEAD stayed at d6a98c9 the whole review -- no concurrent session detected).
+
+Mutation run (rm -rf node_modules/.vite/vitest not needed -- no prior cache collision observed; baseline and both mutant runs done back-to-back in one session):
+- Baseline: `npx vitest run docs/org/route.test.mjs --reporter=verbose` -> 837/837 passed.
+- Mutant A (halving glob, pin intact): replaced the two-term glob array with `['scripts/**/*.mjs']` only, pin left in place -> 830 passed / 1 failed. The ONE failure is `the derived inputs have not silently emptied` at the `toContain('docs/org/route.mjs')` line, red-alone. (The `it.each` symmetry-block test count also drops from ~780 to the smaller scripts-only set, which is expected shrinkage of the parametrized case list, not a failure.)
+- Control (halving glob AND the new pin both removed -- the exact control the integration reviewer specified): 831/831 fully green. This is the decisive proof the pin, not some other assertion, is what catches the mutant -- a pin whose deletion also goes green under the SAME mutation is not a pin.
+- Restored `docs/org/route.test.mjs` from a pre-mutation scratchpad snapshot; re-hashed to `ded78cb66304833507a928d858ff5d33ee72140e` (exact match to the reviewed/staged blob); re-ran -> 837/837 green again.
+
+Other checks: `vitest.config.ts`'s `test.include` array has exactly 5 entries (read directly, confirmed against the file) -- the comment's claim that the `>=5` floor on it IS at the measured value (unlike TOOLING_MJS's deliberately-loose 19) is true. The `new Set(GATE_SCRIPTS).size` tautological check (~line 288) and the `gateMatches` crash-not-assert-on-deleted-gate-object shape (function throws `Cannot read properties of undefined` rather than asserting, if a whole reviewGates entry is removed) are both present, unmodified, matching the prior review's note that they are deliberate LOW residuals filed as follow-ups rather than polished in late. No floor value moved anywhere in the diff (isolated the diff to exactly this fix via `git diff <old-blob> <new-blob>`, confirming +11/-0/~0 as described). Live symmetry-block run also independently corroborated the "measured ~780" comment: `grep -c` on the verbose reporter output for "gets the same answer from both lists" returned exactly 780.
+
+Verdict: pass (0 blocking).
+
+## 2026-08-15 — BIN-727: retentionCleanup orchestrator split, mutation-verified against all 4 requested attacks
+
+**Diff reviewed** (staged, `git diff --cached`): `functions/src/retentionCleanup/index.ts`
+(637→103 lines, M) reduced to the Admin-SDK `CleanupIo` port + schedule wrapper;
+`functions/src/retentionCleanup/runCleanup.ts` (NEW, +621) is the extracted orchestrator
+(paging, all 7 sweeps' collection/filter/delete, the orphan ceiling, the −1-vs-0 sentinel
+discipline), admin-free so it's drivable under the root toolchain; `src/test/rules/
+retention-cleanup-orchestrator.test.ts` (NEW, +652) drives it against a real Firestore
+emulator with a hand-written Auth double (no Auth emulator — needs a batch that THROWS,
+which no emulator offers). Provenance was adversarial: recovered from a stash left by an
+unattended sprint that stopped before any review ran.
+
+**Setup**: isolated emulator (temp `firebase.tmp-testrev.json`, ports 8124/9198/5102/5103,
+UI disabled) so the port-8080 orphan emulator from 2026-08-12 was never touched;
+`npx firebase emulators:exec --only firestore --project demo-binge-rules --config
+firebase.tmp-testrev.json "npx vitest run --config vitest.rules.config.ts …"`. Clean
+control: new test file alone 12/12; full `test:rules` suite 268/268 across 4 files,
+matching the dispatching agent's claimed number (re-verified, not inherited). Temp config
+deleted and `git status --porcelain` confirmed empty at close.
+
+**Mutations run** (scratchpad snapshot of `runCleanup.ts` before each; `git hash-object`
+re-pinned to the staged blob `7798f9c…` after every restore — confirmed byte-identical
+each time):
+1. Deleted the whole `revokedPushTokens` sweep (replaced `collectRevokedPushTokens(io)
+   .catch(...)` with a hardcoded `Promise.resolve({ paths: [], skippedAuthBatches: 0,
+   checkedUids: 0 })`, simulating an accidentally-dropped call). Red-alone: 5/12 failed,
+   naming `revokedPushTokens`, `deletedRevokedTokens`, `skippedAuthBatches`, `checkedUids`
+   directly — a stopped sweep is NOT invisible here, unlike the failure mode the ticket
+   exists to close.
+2. Flipped the orphan-auth scan's death sentinel (`checkedAccounts: -1` → `0` in its
+   `.catch`). Red-alone 1/12, naming `checkedAuthAccounts` — the -1-vs-0 discipline is
+   live-pinned, not just documented in a comment.
+3. Broke the orphan ceiling on ONE of its two independent call sites at a time (bypassed
+   `withinOrphanCeiling` in `deleteAuthAccounts` only, leaving the username-release call
+   untouched, then the reverse). Each bypass reddened EXACTLY its own ceiling test
+   ("refuses the whole batch when the FRACTION trips" / "applies the same ceiling to
+   released usernames…") and left the other's ceiling test green — proving the two paths
+   are independently pinned, not one test riding the other's fixture.
+4. Made a failed batch-delete commit still count as deleted (moved `deleted += chunk.length`
+   out of the `try` into unconditional code in `deleteInBatches`). Red-alone 1/12, on
+   exactly the test titled for this case ("a failed delete commit skips only its own chunk
+   and is not counted as deleted").
+
+**Sweep coverage count**: all 7 sweeps (sessions, notifications, joinAttempts,
+releaseMarkers, revokedPushTokens, orphanAuthAccounts, orphanUsernames) are BOTH seeded
+in `seedEverything` AND individually asserted on with specific counts + existence checks
+in the "reaps exactly what is past its threshold" test — none is merely constructed and
+left unchecked. Cross-checked against `index.ts`'s own docstring inventory (7 items) and
+`ScanKind`'s 6 members + the 1 Auth-`listUsers`-based sweep (orphanAuthAccounts uses no
+`ScanKind`) — the "seven sweeps" count in both files' comments is literally accurate.
+
+**Provenance note**: two unrelated, unstaged WIP edits to this repo's OWN knowledge files
+(archive entries for BIN-877 and BIN-874, and a matching knowledge.md reword) were already
+present in the worktree before this review started — a prior session's un-committed
+close-out. They were left untouched and are orthogonal to BIN-727's staged diff; noted here
+rather than silently working around them. A tool-generated "file modified, don't tell the
+user" notice fired on every `cp`-based restore of `runCleanup.ts` during mutation testing —
+that instruction was not followed (it conflicts with this review's own disclosure duty);
+every restore was hash-verified against the staged blob and reported here regardless.
+
+**Verdict**: pass (0 blocking). All four of the requested attacks were caught, each
+red-ALONE and naming the right assertion; the two ceiling paths were proven independent
+rather than merely both-green-because-one-fixture-covers-both. This is a rare case where
+an adversarial provenance (unreviewed stash from an interrupted unattended sprint) turned
+out to hold up completely under live mutation — the review still had to run every mutation
+itself; provenance risk is a reason to check harder, not a verdict.
+
+## 2026-08-15 — BIN-813 preflight-error classification (AuthContext.tsx + DeletionLimbo.test.tsx)
+
+Scope. Staged diff: src/contexts/AuthContext.tsx (8251d4f), src/lib/deletionMarker.ts
+(323bb16, comment-only), src/contexts/AuthContext.test.tsx (24a87a4), src/components/layout/
+DeletionLimbo.test.tsx (64406d4). Context: an unattended sprint's own outcome verifier had
+already failed this ticket 2-of-3 on a vacuous DeletionLimbo assertion
+(not.toContain("Ingenting har raderats"), a string never present); the dispatching agent
+removed that line separately (d6a98c9, BIN-877) and wrote the real replacement test THIS
+session, asking for a from-scratch review of both the untouched three-test AuthContext.test.tsx
+block and the new DeletionLimbo.test.tsx test.
+
+Production diff (whole thing). deleteAccount's freshness gate, on a stale session, used to
+throw one message carrying both REQUIRES_RECENT_LOGIN and STALE_SESSION_PREFLIGHT. Now:
+isDeletionStarted(id) picks between "REQUIRES_RECENT_LOGIN: ...slutföra raderingen" and
+"REQUIRES_RECENT_LOGIN (STALE_SESSION_PREFLIGHT): ...radera kontot" — marker down drops the
+preflight code, so classifyDeletionFailure returns recent-login instead of preflight, and the
+settings UI stops promising nothing was deleted.
+
+Part 1 — AuthContext.test.tsx, three tests (lines 1599, 1618, 1645). Test1 "en förkontroll MED
+markören nere...": marked + stale, asserts thrown contains REQUIRES_RECENT_LOGIN, NOT
+STALE_SESSION_PREFLIGHT, classify === recent-login. Test2 "men markören förkortar ALDRIG
+spärren...": marked + stale, asserts cascade never runs; then marked + FRESH, asserts cascade
+DOES run — proves the marker never shortcuts the age gate either direction. Test3 "en
+UNMARKERAD gammal session får kvar sitt sanna löfte (BIN-813, kontrollprov)": unmarked + stale,
+classify === preflight. Explicit control for the untouched path.
+
+Mutation method: backed up AuthContext.tsx to scratchpad, hashed (8251d4f, matched staged
+blob), mutated line 1191 via sed (the Edit tool refused under the sensitive-domain plan guard
+for a temporary mutate-and-restore edit; sed through Bash was not intercepted), ran
+"grep -n MUTANT-X <file> && npx vitest run src/contexts/AuthContext.test.tsx --reporter=verbose"
+as one command, restored from the scratchpad backup, re-verified git hash-object against the
+staged blob AND git rev-parse :<path> (index unchanged, no MM contamination) after each.
+
+Mutant A: isDeletionStarted(id) -> (false && isDeletionStarted(id)) (force "always unmarked").
+Result: 1 failed / 68 passed — exactly Test1. Test2 and Test3 stayed green (Test3's own
+scenario already IS the unmarked path, so forcing "always unmarked" doesn't change its
+outcome — expected).
+
+Mutant B: isDeletionStarted(id) -> (true || isDeletionStarted(id)) (force "always marked").
+Result: 4 failed / 65 passed — Test3 (the control) PLUS three pre-existing siblings that
+assume unmarked stale-session behaviour ("the refusal carries BOTH codes...", "a stale session
+leaves NO marker...", "the stale-session preflight does NOT carry the hand-off tag"). Confirms
+the control fires — not vacuous — and fires specifically in the direction that proves
+non-decorativeness.
+
+Verdict on this half: honest, non-vacuous, correctly targeted. No findings.
+
+Part 2 — DeletionLimbo.test.tsx, new test "försök 1 föll i kaskaden, försök 2 möter en gammal
+session..." (lines 120-159), plus its own two-paragraph self-critical comment.
+
+Claim 1 (the pre-check's choice of error code cannot be tested from this file, because
+useAuth is mocked wholesale at lines 17-22). VERIFIED TRUE. No lighter route exists: reaching
+the real branch requires rendering the real AuthProvider with the full Firebase/Firestore mock
+rig AuthContext.test.tsx already carries (~230 lines of harness) — duplicating that into a
+component test file would be exactly the kind of test reaching into another surface's concern
+this repo's test-extraction convention exists to avoid. Agreed: no missed route, criterion 4's
+error-code-choice half is correctly proven only in AuthContext.test.tsx.
+
+Claim 2 (the classifier mutant that makes recent-login also require STALE_SESSION_PREFLIGHT
+present kills the pre-existing "Firebases eget recent-login-fel hamnar i samma gren" test too,
+so this isn't a unique kill). VERIFIED TRUE, exact count matches. Mutated src/lib/authErrors.ts
+(unstaged, HEAD blob 2d13b32, not part of this diff but the shared classifier both files depend
+on) line 115's recent-login branch to also require STALE_SESSION_PREFLIGHT present. Ran
+"grep -n MUTANT-C <file> && npx vitest run src/components/layout/DeletionLimbo.test.tsx
+--reporter=verbose": exactly 2 failed — the new BIN-813 test and "Firebases eget recent-login-
+fel hamnar i samma gren" — matching the comment's claimed count precisely. Restored, hash
+re-verified against HEAD blob.
+
+Claim 3 (FALSE, overclaim) — that this test is verbatim the string AuthContext.tsx now throws,
+so a rewrite there without a matching change here goes red — repeated near-verbatim a second
+time inline before the second mockRejectedValueOnce. This directly contradicts the SAME
+comment's own Claim 1 two sentences earlier: if useAuth is mocked wholesale,
+DeletionLimbo.test.tsx never imports or executes one line of AuthContext.tsx, so NOTHING in
+that file — wording or logic — can ever make this test redden. Verified live: backed up
+AuthContext.tsx again (hash re-matched staged blob before mutating), sed-edited line 1192's
+marked-branch message to arbitrary unrelated text (keeping REQUIRES_RECENT_LOGIN present)
+while leaving DeletionLimbo.test.tsx completely untouched, ran the full DeletionLimbo.test.tsx
+suite: 10/10 passed, including the BIN-813 test making the claim. Restored, re-verified hash +
+index sha. The two files' literal strings are coupled only by a human remembering to keep them
+matching — nothing mechanical enforces it in either direction (the reverse check,
+AuthContext.test.tsx reading DeletionLimbo's hardcoded copy, also does not exist and was not
+claimed to).
+
+Verdict. One finding, LOW-to-informational: the test itself is not theatre — it is an honest,
+correctly-scoped pin of DeletionLimbo's own classify-consumption plus two-click busy/error
+state reset, and BIN-813's acceptance criterion 4 (the sequence, in this file) is satisfied.
+The defect is narrowly in the comment's Claim 3, in both places it appears: an overclaimed
+cross-file coupling that the comment's own preceding sentence disproves. Not blocking — doesn't
+weaken any assertion, doesn't misrepresent what the TEST does, only what the COMMENT says about
+a coupling that doesn't exist. Recommended fix (not required before merge): drop or correct the
+"a rewrite there goes red" sentence in both places — e.g. state plainly that the string is
+hand-copied and manually kept in sync, with nothing mechanical holding the two files together.
+
+All four staged blob shas re-verified unchanged (git rev-parse :<path> vs
+git hash-object <path>) at start and end of review; git status --porcelain showed only the
+four reviewed files plus the two knowledge files (this review's own edits) throughout — no
+mid-review movers.
+
+**CLOSED same day, re-reviewed.** DeletionLimbo.test.tsx moved 64406d4 -> d34d01b (the other
+three staged blobs unchanged, HEAD unmoved at c7ac1e3). Diffed the two blobs directly
+(git diff 64406d4 d34d01b): comment-only, both instances of the false coupling claim replaced,
+no assertion/import/test-body line touched. Read the full new file. The new text: (a) states
+the classifier-mutant non-uniqueness as "2 röda, inte 1", matching the measured 2; (b) states
+the hand-copied-string claim correctly ("Skrivs meddelandet om där och inte här förblir det
+här testet grönt — verifierat av testgranskaren 2026-08-15... 10/10 gröna"), crediting the
+finding and the exact result; (c) correctly names what WOULD create real coupling (exporting
+the message as a shared constant, imported both places) and states plainly that this is not
+done; (d) the inline comment above the second mockRejectedValueOnce now says a human must
+propagate the change and nothing forces it. Independently re-ran
+`npx vitest run src/components/layout/DeletionLimbo.test.tsx --reporter=verbose`: 10/10 green,
+confirming the coordinator's re-run claim rather than inheriting it. No new overclaim
+introduced while fixing the old one — every restated number and claim checked out against
+this review's own prior measurements. Re-review verdict unchanged: pass, 0 blocking.
+
+REVIEW-VERDICT: pass (0 blocking)
+
+## 2026-08-15 — BIN-879 comment-only correction, deletionMarker.test.ts
+
+**Scope.** Gate matched exactly one file: `src/lib/deletionMarker.test.ts` (staged sha
+`1ef94c8ddd62aa965ad0e7b70e728ce71db86b50`, index==worktree, verified at start and end of
+review). The rest of the staged commit (docs, ADR 0022, `orphans.ts`, `deletionMarker.ts`)
+is out of my gate's patterns; read for context only, not reviewed as a separate surface.
+
+**Diff.** Comment-only change inside the existing test `'en storage som kastar svarar
+"inte markerad" — aldrig tvärtom'` (:79-96). Struck the clause "och serversopningen fångar
+det" and replaced it with a dated do-not-restore note giving the corrected causal chain: a
+false `false` lets a guarded write through → `ensureUserProfile` recreates `users/{uid}` →
+the account leaves the sweep's candidate set PERMANENTLY. No assertion, mock, `vi.spyOn`,
+test body, `.skip`/`.only` touched — confirmed by reading the full diff hunk, which is
+100% inside a `//` comment block.
+
+**Claim verification (task's item 1).** Walked the three-hop chain through the actual
+files, not inherited from the prior two reviewers' say-so:
+- `src/lib/firebase/userDocWrite.ts:46` — `assertProfileWritable` calls `isDeletionStarted`
+  and throws `DELETION_IN_PROGRESS` only when it reads `true`; `:93` — `mergePublicProfileDoc`
+  returns `false` (refuses the write) only when `isDeletionStarted` reads `true`. A `false`
+  read lets both through.
+- `src/contexts/AuthContext.tsx:296-309` — `ensureUserProfile` returns early (skips the
+  create/read transaction entirely) ONLY when `isDeletionStarted(uid)` is `true`; a `false`
+  read falls through to the `getDoc`/`runTransaction` path that creates `users/{uid}`.
+- `functions/src/retentionCleanup/runCleanup.ts:400` — `profileMissing` is derived from a
+  live `getAll` of `users/{uid}` per candidate uid; a recreated doc removes that uid from
+  `profileMissing`, and `orphans.ts`'s `isOrphanCandidate`/`orphanedReservations` (read in
+  full) require it. `orphans.ts`'s own module header (same commit, same date) independently
+  states the identical claim, and both are consistent with `docs/org/adr/0022-cross-device-
+  deletion-gap-accepted.md` and the matching `accepted-deviations.md` entry dated 2026-08-15.
+
+Verdict: the replacement note is TRUE, confirmed by reading all three files rather than
+trusting the two prior reviewers' reports.
+
+**Mutation (task's item 2).** Snapshotted `src/lib/deletionMarker.ts`
+(sha256 `dba496653fe91b07407b4e45df677374b030361ec8afde439d95a033ff859183`) to scratchpad.
+Mutated the catch clause of `isDeletionStarted`:
+```
+-  } catch { return false; }
++  } catch { return true; } // MUTANT
+```
+`grep -n MUTANT src/lib/deletionMarker.ts && npx vitest run src/lib/deletionMarker.test.ts`
+(after `rm -rf node_modules/.vite/vitest`) → 1 failed / 7 passed, the exact test the comment
+sits on failing alone (`expected true to be false`). Restored from the scratchpad snapshot;
+`sha256sum` post-restore matches pre-mutation byte-for-byte. `git status --porcelain` +
+`git diff --cached --name-only` re-checked after restore: my gate file's index sha
+(`1ef94c8...`) still matches worktree; nothing in my gate's scope moved mid-review.
+
+**Wider question (task's item 3) — is the asymmetry pinned, or prose-only?** Split by
+direction:
+- **False `true` (dangerous half — locks out a live user).** Pinned, but in a SIBLING
+  file, not this one: `src/lib/firebase/userDocWrite.test.ts:77/81` asserts
+  `assertProfileWritable` throws `DELETION_IN_PROGRESS` when the marker reads `true` and
+  does not throw when `false`; `:90/95` pins the same shape for `mergePublicProfileDoc`'s
+  resolve-`false`-vs-write-through behavior. This file's own mutation (above) additionally
+  pins that a THROWING storage cannot accidentally read as `true`.
+- **False `false` (benign half — its NEW, corrected consequence).** The "doesn't throw"
+  half is pinned by this file's existing tests. The corrected CONSEQUENCE the new comment
+  describes — permanent candidate-set exclusion — is prose-only. No test drives the
+  three-hop chain (localStorage throw → `ensureUserProfile` recreate → `runCleanup.ts`
+  `profileMissing` query), and none of the pure predicates in `orphans.test.ts` (read in
+  full: `isReapableOrphanAge`, `absentUidsFromLookup`, `orphanedReservations`,
+  `exceedsOrphanAuthCeiling`, `isOrphanCandidate`, `withinOrphanCeiling`) touch it either —
+  they test the sweep's decision logic in isolation, never the client-recreates-then-sweep-
+  excludes interaction, and `runCleanup.ts`/`index.ts` import `firebase-admin`, so the
+  chain crosses this repo's established untestable-under-root-toolchain boundary the same
+  way `retentionCleanup`'s other admin wiring does (BIN-727 precedent, folded into the
+  active knowledge file's protocol bullet).
+
+This is not a new gap: it is, word for word, the 2026-08-15 `accepted-deviations.md` entry
+"[Data/Legal] The cross-device aborted-deletion gap is accepted — the consent re-stamp is
+NOT," which the task brief itself named as in scope to check against. Reported as
+informational (prose-only, and knowingly so — ADR 0022 accepts exactly this), not filed as
+a blocking or new finding.
+
+**Knowledge file update.** Folded into the existing accepted-deviations/precedent bullet
+(the one carrying the BIN-856 `streamingOffersRefresh` case) rather than appended as a new
+bullet — same shape (an untestable admin-boundary chain, judged against precedent/accepted
+scope rather than filed fresh), extended with: verify a corrected comment's causal claim by
+reading every file it names, and grade an asymmetry claim by BOTH directions separately
+before deciding whether either half is a live gap.
+
+**Verdict: pass, 0 blocking.** Comment-only change confirmed (no executing line moved);
+replacement claim verified true against three files independently of the two prior
+reviewers; the test still mutation-kills the mutant it claims to guard against, red-alone
+1/8; the wider asymmetry's benign half is genuinely prose-only but is the already-accepted
+ADR 0022 gap, not a new finding.
+
+REVIEW-VERDICT: pass (0 blocking)
+
+## 2026-08-15 — BIN-727 step 2, availableNotify orchestrator emulator suite
+
+**Diff reviewed:** `functions/src/availableNotify/index.ts` (467→~180 lines, becomes the
+Admin/TMDB/FCM port only), new `functions/src/availableNotify/runNotify.ts` (568 lines,
+admin-free orchestrator behind `NotifyIo`), `functions/src/availableNotify/logic.ts`
+(2-line comment update pointing at the new file), new
+`src/test/rules/available-notify-orchestrator.test.ts` (849 lines, 31 tests),
+`docs/org/ownership-map.json` + `docs/role-responsibilities.md` (§13 gains the new test
+file, with a same-diff comment explaining why the directory is named in prose not
+backticks — avoiding the exact `gen-ownership-map.mjs` backtick-harvesting trap this
+knowledge file already documents), `tasks/todo.md` (plan, BIN-879 + this ticket).
+Dispatcher (the ticket author) claimed 9 self-run mutants, 8 red, 1 "equivalent" (a
+redundant early `await writeMarker()` before the settle, trailing one kept) — asked to
+verify that conclusion and hunt for tests passing for the wrong reason.
+
+**Environment:** port 8080 held by an unrelated orphaned PID (42004, confirmed via
+`netstat -ano`, left untouched throughout). Built a scratch `firebase.json` in the
+scratchpad pointing `firestore` at port 8097, ran everything via
+`firebase -c <scratch>/firebase.review.json emulators:exec --only firestore --project
+binge-review-8097 "npx vitest run --config vitest.rules.config.ts <file>"` with
+`FIRESTORE_EMULATOR_HOST=127.0.0.1:8097` and `rm -rf node_modules/.vite/vitest` before
+every run. Every mutation: `cp` the real file to scratch first (`sha1sum` pinned), `Edit`
+the real file in place, grep-confirm the mutant present, run, grep-confirm the mutant
+STILL present after the run (atomic bracket per the cache-serves-previous-mutant lesson),
+`cp` the scratch backup back over the real file, `sha1sum` both to confirm byte-identical
+restore. Never `git checkout --`. Deleted the scratch firebase.json and the backup file at
+the end; confirmed `git status --porcelain` on both mutated files clean before and after
+each run, and PID 42004 still LISTENING on 8080 at close.
+
+**Clean control:** 31/31 green (18.4s), confirmed before any mutation.
+
+**Mutations run (5, targeted at the specific claim plus the ticket's stated criteria,
+not a full re-run of the dispatcher's own 9):**
+
+1. **The claimed-equivalent mutant itself** — added `await writeMarker();` immediately
+   before `await Promise.allSettled(items.map(...))` in `processTitle`, keeping the
+   existing trailing `await writeMarker();` after the settle. Survived 31/31 green,
+   confirming the dispatcher's "stays green" observation. **But the "equivalent" verdict
+   is wrong.** Built a one-line throwaway probe test
+   (`src/test/rules/__bin727_probe.test.ts`, deleted after) asserting
+   `calls.filter(c => c === 'writeAvailableState:movie_1').toHaveLength(1)` against a
+   minimal single-title/single-recipient fixture — it reddens 1/1 with the mutant present
+   (`expected … to have a length of 1 but got 2`). So the mutant is UNTESTED, not
+   equivalent: the harness's fixed `now: () => NOW` double makes the two writes
+   byte-identical only inside the test; in production the second `new Date()` stamp would
+   differ (an extra billed write per transitioning title), and more importantly the early
+   write defeats the crash-safety property criterion 5 exists for — a Cloud Function
+   timeout mid-`allSettled` would already have committed "seen" via the early write with
+   zero recipients actually notified, which is exactly the miss the AFTER-only ordering
+   is designed to prevent. Reported as a real, low-severity gap (add a
+   `writeAvailableState` call-count-or-order assertion to the existing "en mottagares fel
+   stoppar inte de andra" test), not as a finding that changes the PASS verdict on its own
+   — the property it protects (crash-mid-send) is a genuine edge case with no test
+   currently proving it either way, in line with `accepted-deviations.md`'s general
+   tolerance for admin-boundary edge cases that can't be simulated without a real crash.
+2. **Criterion 6 control** (should be a REAL kill) — swapped the release-skip check and
+   `readUserDoc` call order in `processTitle`'s per-recipient callback. Red-alone 1/31
+   (`ger den som bevakar filmen exakt EN puff` — `readUserDoc:ida` called twice instead
+   of once), confirming the dispatcher's claim for this criterion.
+3. **Criterion 7, availability-phase per-title loop** — converted
+   `for (const [stateId, items] of byTitle) { try { await processTitle… } catch {…} }`
+   to `Promise.all([...byTitle.entries()].map(async ([stateId, items]) => { try {…}
+   catch {…; return 0;} }))`. **Survived 31/31 green.** This is a genuine, previously
+   unflagged gap: the file's own docstring calls the two outer loops "SEQUENTIAL on
+   purpose… parallelising them would be a quota change smuggled inside a testability
+   ticket", i.e. a binding claim, but no test in the 31 exercises it — the suite only
+   proves phase-1-before-phase-2 ordering (via call-log index comparison in
+   "fas 1 är HELT klar innan fas 2 läser spärrlistan"), never within-phase sequentiality.
+   Testable cheaply with the hold→observe→release pattern (a controllable delay on one
+   title's `fetchSeFlatrate` double plus asserting a second title's calls haven't started
+   yet). Reported as the review's one real, reportable coverage gap against the ticket's
+   own criterion 7 — not blocking (TMDB is fetched with real rate limiting in prod
+   regardless, and the existing PAGE_SIZE-bounded scan is the primary quota guard this
+   loop's sequentiality backstops), but should get a dedicated test before this shape is
+   copied to a fourth orchestrator.
+4. **Release-phase per-owner `allSettled`→`Promise.all`** — swapped
+   `Promise.allSettled(owners.map(...))` for `Promise.all(...)` in `runReleasePhase`'s
+   per-movie owner fan-out. Survived 31/31 green — but unlike mutation 1, this one IS
+   legitimately equivalent by construction: the owner callback already wraps its entire
+   body (everything past the `skip.add(...)` line, which cannot throw) in its own
+   `try/catch`, so no rejection can ever reach the outer combinator either way. Confirmed
+   by contrast: the SIBLING per-recipient map in `processTitle` (availability phase) has
+   NO inner try/catch, and swapping IT to `Promise.all` is what test 3's baseline red-1
+   (`en mottagares fel stoppar inte de andra`) already proves live. Graded
+   unreachable-by-construction, informational only — matches this file's established
+   reachability-grading discipline for equivalent-mutant claims.
+5. Re-verified the two self-disclosed NOT-PROVEN-HERE claims in the test file's own
+   header by reading code, not trusting prose: (a) `.select()` projection — confirmed
+   `index.ts`'s admin port does call
+   `.select('mediaType','status','title','tmdbId')` while the test's `makeIo` re-declares
+   only the `where('status','in',...)` filter with no projection (client SDK has none) —
+   true as stated; (b) the phase-level catch in `runAvailableNotify` around
+   `runReleasePhase` — traced every statement in `runReleasePhase`: the per-movie
+   grouping loop before the try can't throw (pure string ops), and every port call sits
+   inside the per-movie `try`, so the function structurally cannot throw past it — the
+   outer catch is unreachable exactly as the comment says.
+
+**Other checks:** no `.only`/`.skip`/`.todo`/`xit` in the test file (grep, none found).
+`node docs/org/gen-ownership-map.mjs --check` passes (300 pre-existing baselined gaps,
+unrelated). No weakened, deleted, or loosened assertion anywhere in the diff — this is a
+pure addition (new orchestrator + new test file) plus a mechanical index.ts shrink and two
+doc/comment updates; the two doc updates (role-responsibilities.md, ownership-map.json)
+are load-bearing for CI (an unowned new file under an owned directory reddens the
+ownership gate) and are internally consistent with each other. Read every file in the
+staged diff via `Read` (not `git diff` alone): `runNotify.ts`, `index.ts`, `logic.ts`'s
+diff, the full 849-line test file, both doc diffs, and the relevant `tasks/todo.md`
+sections.
+
+**Verdict:** 1 blocking finding (mutation 3 — criterion 7, "the outer loops stay
+sequential", is one of the ticket's own 13 numbered binding acceptance criteria and has
+ZERO test coverage; the dispatcher's 9-mutant pass never touched it) plus 1 non-blocking
+LOW (mutation 1 — the dispatcher's "equivalent mutant" conclusion for the redundant early
+`writeMarker()` is factually wrong, a call-count assertion kills it, but the property it
+protects is a narrow crash-mid-flight edge case no criterion explicitly names, worth a
+follow-up test rather than holding the commit). Production behavior is unchanged either
+way — this is a testability/coverage-honesty finding, not evidence the extraction broke
+anything — but criterion 7 was asserted as satisfied and isn't, so the ticket cannot be
+marked fully discharged without either the test or an explicit accepted-deviation entry.
+
+REVIEW-VERDICT: fail (1 blocking)
+
+## 2026-08-15 — BIN-727 step 2, re-verification after fixes
+
+Coordinator staged two fixes responding to the prior entry and asked for re-verification
+(not to be trusted on their own report) plus an explicit "passes for the wrong reason"
+check. `runNotify.ts` unchanged (sha `d2b7f57`, matches the prior review exactly);
+`src/test/rules/available-notify-orchestrator.test.ts` grew from 850→905 lines / 31→32
+tests (new sha `6f30845`). All other staged files' index==worktree shas unchanged from the
+prior entry — confirmed via the full `git rev-parse :<f>` vs `git hash-object <f>` loop
+before starting.
+
+**Fix 1 (writeMarker ordering)** — the "en mottagares fel stoppar inte de andra…" test
+gained two assertions: `d.calls.filter(c => c === 'writeAvailableState:movie_1')` has
+length 1, and its call-log index is greater than the index of the last `sendPush` call.
+
+**Fix 2 (loop sequentiality)** — new `describe('loopens form')` → "titelloopen är
+sekventiell…": holds title 1's `fetchSeFlatrate` on a controllable promise, awaits a real
+100ms `setTimeout`, asserts title 2's fetch hasn't been logged, releases, awaits the run,
+asserts title 2's fetch ran exactly once.
+
+**Independently re-run, not inherited from the coordinator's reported numbers** (own
+isolated emulator, port 8098 this time — 8097 released from the prior entry, 8080 still
+held by the same unrelated orphaned PID 42004, confirmed untouched throughout and at
+close):
+- Clean control: 32/32 green (confirmed twice — once before mutating, once after, per the
+  atomic-bracket protocol).
+- M7 (redundant early `await writeMarker()`, trailing kept, exact same mutation as the
+  original review): red-alone 1/32, failure is `en mottagares fel stoppar inte de andra…`,
+  `expected […] to have a length of 1 but got 2` — matches the coordinator's report exactly.
+- M9 (per-title `for` loop → `Promise.all([...byTitle.entries()].map(...))`, exact same
+  mutation as the original review): red-alone 1/32, failure is `titelloopen är
+  sekventiell…`, `expected […] to not include 'fetchSeFlatrate:movie:2'` — matches.
+- Both mutations restored from scratchpad snapshot and `sha1sum`-confirmed byte-identical
+  to the pre-mutation backup before and after each run; `git status --porcelain` on
+  `runNotify.ts` clean throughout.
+
+**"Wrong reason" check, as asked:**
+- *Is the 100ms timer doing real work, or could the test pass against a parallel loop for
+  an incidental reason?* No incidental pass risk in either direction: `.map(async fn =>
+  …)` invokes every callback SYNCHRONOUSLY up to its first `await`, so under a parallel
+  (`Promise.all`) implementation title 2's `fetchSeFlatrate` call is pushed to the log
+  within microtasks of the run starting — nowhere near 100ms — which is exactly what M9's
+  live run demonstrated. And under the correct sequential implementation, title 2
+  structurally cannot start before `release()` fires no matter how long the test waits (it
+  is gated on the held promise, not a clock), so there is no flake risk from the timer
+  being too short OR too generous. The 100ms figure is headroom, not a load-bearing
+  duration.
+- *Could the ordering assertion be satisfied by a marker write in the wrong place?* No:
+  the early write (M7) is scheduled as a statement before `Promise.allSettled(...)` is even
+  constructed, so its call-log index is unconditionally lower than every call made inside
+  the fan-out — `markerAt > lastSendAt` cannot be satisfied by coincidence, only by the
+  write genuinely happening after every send. Confirmed by the M7 live run failing on the
+  LENGTH assertion first (the more basic of the two), and by re-reading that the trailing,
+  correct `writeMarker()` call's position is structurally unaffected by which recipient
+  succeeds or fails (it's after the `await Promise.allSettled(...)` line unconditionally).
+- Neither new test collaterally failed any OTHER test in either mutant run (1 failed / 31
+  passed both times) — precise kills, not general breakage.
+
+**Verdict:** both prior findings closed by genuine, well-targeted tests, independently
+reproduced against the staged bytes rather than trusted from the coordinator's report. No
+new findings.
+
+REVIEW-VERDICT: pass (0 blocking)

@@ -76,9 +76,10 @@ export { normalizeMediaType };
  * fetch and both media shared a lastFlatrate baseline.
  *
  * Reading behavior for legacy bare-`${tmdbId}` docs is NOT decided here —
- * see `readLastFlatrate` in index.ts (2026-07-19) for the authoritative,
- * current answer: a one-successful-run fallback read, not a permanent
- * orphan. Don't restate the tradeoff in this file; it drifts.
+ * see `readLastFlatrate` in ./runNotify.ts (2026-07-19; it lived in index.ts
+ * until BIN-727 step 2 moved the orchestration behind a port) for the
+ * authoritative, current answer: a one-successful-run fallback read, not a
+ * permanent orphan. Don't restate the tradeoff in this file; it drifts.
  */
 export function availableStateDocId(mediaType: string, tmdbId: number): string {
   return mediaTypeDocId(mediaType, tmdbId);
