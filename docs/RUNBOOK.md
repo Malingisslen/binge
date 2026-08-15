@@ -114,8 +114,8 @@ Om det håller i sig:
 
 ### 3c. Graceful degradation på gång
 
-`SubscriptionAdvisorWidget` har redan ett `hasError`-state som visar
-"Kunde inte räkna ut ditt tips" istället för tom panel (Sprint 3 12.4).
+`useSubscriptionAdvisor` har redan ett `hasError`-state som `src/app/savings/page.tsx`
+visar som "Kunde inte räkna på dina tjänster just nu" istället för tom panel (Sprint 3 12.4).
 
 Andra komponenter bör göra liknande — Sentry-grouping `app:*` visar var
 error boundaries triggas.
