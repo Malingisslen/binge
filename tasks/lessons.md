@@ -305,3 +305,46 @@ Batch-1:s skyldiga granskare är #25, rollen som äger kvalitetsgrindarna, på e
 hela syfte är att VIDGA kvalitetsgrindarna. Samma runda: mätfilen påstod att BIN-909 hade
 byggts och committats, nio minuter innan biljettens egen kommentar sa att ingen kod skrivits —
 raderna skrevs 13:53, före att någon commit existerade.
+
+### 2026-08-16 — [Testing] Ett `.mjs`-skript med CRLF kan inte ens PARSAS av vitest på Windows — `npm test` hoppar tyst över sviten
+
+**Trigger:** du kör (eller litar på) `npm test` lokalt på Windows och en svit rör ett skript
+med shebang under `scripts/` eller `docs/`.
+
+**Rule:** anta ALDRIG att `npm test` lokalt körde samma filer som CI. Vites shebang-strippare
+är `/^#!.*\n/` — LF-only — så ett utcheckat skript med CRLF får sin shebang kvar, ssr-import-
+preludiet hamnar framför den, och rolldown dör på `Invalid Character !`. Symptomet är ett
+parsfel som ser ut som en trasig fil, inte som en miljöfråga. Bevisa miljöhypotesen med en
+ORÖRD granne innan du rör din egen fil: om två filer failar identiskt är det inte din ändring.
+Kör mot LF-normaliserade kopior (snapshotta till scratchpad först, återställ efteråt, verifiera
+med `git diff` att inga radslut läckte in), och kontrollera efteråt att sviternas filnamn
+faktiskt förekommer i CI:s körlista.
+
+**Example:** BIN-891, 2026-08-16. `npx vitest run scripts/check-workflow-map.test.mjs` kunde
+inte parsas i NÅGON Windows-arbetskopia vid HEAD. Den orörda grannen
+`scripts/check-public-env.test.mjs` failade identiskt, HEAD:s egen version av lintern gick
+igenom LF-extraherad, och den redigerade filen gick igenom i samma stund den LF-normaliserades.
+CI på Linux var opåverkad — alltså hoppar `npm test` tyst över två skript-sviter på Malins
+maskin, med grön utskrift. Samma runda: ett muteringsregex skrivet för LF rapporterade
+`MUTANT applied: false` mot CRLF-filen, och andra försöket korrumperade filens radslut mitt i
+en array. Fångades bara för att mutanten assertades FÖRE och EFTER körningen (2026-08-03).
+
+### 2026-08-16 — [Workflow] Kanalen som följdbiljetter filas i kan vara FULL — en misslyckad `create_issue` får aldrig bli en tyst nedprioritering
+
+**Trigger:** post-sprint-fasen ska fila följdbiljetter för uppskjutet omfång, granskarfynd och
+testluckor, och skrivningen returnerar ett fel som inte handlar om innehållet.
+
+**Rule:** behandla ett fel från spårningssystemet som en LEVERANSFRÅGA, inte som ett hinder att
+runda. Fynden måste ändå landa någonstans varaktigt: skriv var och en som en kommentar på det
+NÄRMASTE befintliga öppna ärendet, märk den med varför den inte blev en egen biljett, och samla
+en fullständig lista över de oskapade biljetterna på ETT ställe så ingen behöver rekonstruera
+dem ur en körningslogg som strax försvinner. Rapportera taket som en punkt Malin måste åtgärda
+— nästa sprint kan inte fila något alls förrän det är löst. Att bara nämna felet i slutrapporten
+är samma evaporationsklass som BIN-707/708: "kunde inte filas" och "hittade inget" blir samma
+sträng för varje läsare efteråt.
+
+**Example:** efterkörningen 2026-08-16 hade sju följdbiljetter att fila — bland dem ett hål där
+tre av elva valda biljetter aldrig delades ut, och ett där `docs/workflow-map*` matchas av noll
+blockerande granskare. `create_issue` svarade "You've exceeded the free issue limit for this
+workspace" på båda försöken. Alla sju parkerades i stället som fullständiga kommentarer på
+BIN-866, BIN-874, BIN-901, BIN-917, BIN-891 och BIN-853, med hela listan upprepad på BIN-866.
