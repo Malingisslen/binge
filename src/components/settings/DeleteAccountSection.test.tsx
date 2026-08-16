@@ -57,6 +57,13 @@ const PREFLIGHT_ERROR = `${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): 
 // that `AppShell` has already swapped it out for the limbo screen.
 const PARTIAL_ERROR = `${DELETION_HANDED_OFF}: ${CASCADE_PARTIAL}: FirebaseError: Failed to get document because the client is offline.`;
 const RECENT_LOGIN_ERROR = `${DELETION_HANDED_OFF}: Firebase: Error (${REQUIRES_RECENT_LOGIN}).`;
+// The same classification, UNTAGGED — and the only one of the four that can be.
+// BIN-813 gave the freshness gate a second message for a session that is already
+// marked (a retry of an aborted deletion), and `AuthContext` throws it BEFORE the
+// try/catch that stamps `DELETION_HANDED_OFF`. So it classifies as `recent-login`
+// while the component is genuinely still mounted — the one combination the file
+// had no fixture for (BIN-908 finding 1, integration review 2026-08-15).
+const STALE_MARKED_ERROR = `${REQUIRES_RECENT_LOGIN}: sessionen är för gammal för att slutföra raderingen`;
 
 const PROMISE_CLAUSE = 'Ingenting har raderats.';
 const PREFLIGHT_MSG = 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.';
@@ -128,6 +135,30 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     expect(toast.show.mock.calls[0][0]).not.toContain('Ta bort mitt konto');
   });
 
+  it('förkontrollen på ett ANDRA försök: samma recent-login-text, men knappen finns kvar', async () => {
+    // BIN-908 finding 1. Den här formen fanns inte förut: en klassificering
+    // `recent-login` UTAN hand-over-taggen. Den uppstår när någon återkommer till
+    // inställningssidan efter en avbruten radering — markören står, förkontrollen
+    // kastar BIN-813:s "slutföra"-variant, och den kastas FÖRE try-blocket i
+    // AuthContext, så den taggas aldrig.
+    //
+    // Två saker måste hålla samtidigt, och de kommer från olika håll:
+    //   - texten från klassificeringen (`recent-login`), som varken lovar att
+    //     ingenting raderats eller att allt är klart, och
+    //   - knappen från taggen (som saknas), för här ÄR komponenten monterad —
+    //     AppShell har inte bytts ut, eftersom kaskaden aldrig startade om.
+    // Testet ovanför pinnar den taggade varianten UTAN knapp; det är kombinationen
+    // av samma text MED knapp som ingenting sa något om.
+    auth.deleteAccount.mockRejectedValue(new Error(STALE_MARKED_ERROR));
+
+    await attemptDelete();
+
+    expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG, RETRY_ACTION);
+    // Och den får inte glida över i förkontrollens lugnande löfte bara för att
+    // felet kommer från samma gate: markören står, så kaskaden HAR kört en gång.
+    expect(toast.show.mock.calls[0][0]).not.toContain(PROMISE_CLAUSE);
+  });
+
   it('avbrott mitt i kaskaden: säger att data KAN vara borta — aldrig att ingenting hände', async () => {
     auth.deleteAccount.mockRejectedValue(new Error(PARTIAL_ERROR));
 
@@ -187,6 +218,9 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     const cases: [Error, boolean][] = [
       [new Error(PREFLIGHT_ERROR), true],
       [new Error('auth/network-request-failed'), true],
+      // Samma klassificering som raden under, motsatt utfall — beviset för att
+      // regeln verkligen läser TAGGEN och inte klassificeringen (BIN-908).
+      [new Error(STALE_MARKED_ERROR), true],
       [new Error(RECENT_LOGIN_ERROR), false],
       [new Error(PARTIAL_ERROR), false],
       [new Error(`${DELETION_HANDED_OFF}: auth/network-request-failed`), false],
