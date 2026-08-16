@@ -736,6 +736,36 @@
       "label": "Sentry (ingest)",
       "context": "external-api",
       "path": "src/lib/sentry.ts"
+    },
+    {
+      "id": "recap-hook",
+      "label": "useRecap + coverageGap wrapper",
+      "context": "client-state",
+      "path": "src/hooks/useRecap.ts, src/lib/recaps/coverageGap.ts"
+    },
+    {
+      "id": "cf-logRecapMiss",
+      "label": "logRecapMiss (callable)",
+      "context": "backend-api",
+      "path": "functions/src/recapCoverage/index.ts"
+    },
+    {
+      "id": "premiarer-page",
+      "label": "Premiärer & finaler (kvartalsvy)",
+      "context": "web-app",
+      "path": "src/app/calendar/premiarer/page.tsx"
+    },
+    {
+      "id": "premiere-hooks",
+      "label": "usePremiereEvents / useDiscoveryPremieres",
+      "context": "client-state",
+      "path": "src/hooks/usePremiereEvents.ts, src/hooks/useDiscoveryPremieres.ts"
+    },
+    {
+      "id": "guider-page",
+      "label": "Guider (hub-of-hubs)",
+      "context": "web-app",
+      "path": "src/app/guider/page.tsx, src/lib/seo/hubLinks.ts"
     }
   ],
   "actions": [
@@ -2572,11 +2602,12 @@
     {
       "id": "flow-static",
       "label": "Static & passive pages",
-      "description": "Legal/policy pages (villkor, integritet, community-guidelines) are static server-rendered content with no backend calls. Library/browse views (calendar, my/all, my/films, my/avbrutna, my/vill-se, my/diary, series, films, search, recommendations) and small inline widgets (SearchDropdown, NotInterestedButton, AddToGroupButton) read exclusively through existing client-state contexts (auth-context, watchlist-context) that already stream from Firestore/TMDB elsewhere in the map — these views don't open a distinct new backend path, they just render/filter/search data already resident in context state, occasionally issuing an incremental Firestore write (e.g. NotInterestedButton, AddToGroupButton) through the same rules-gated per-user pattern as the rest of the app. One exception: '/', '/films' and '/series' ALSO open a distinct build-time-only TMDB path — SEO WP1 seeds their client grids so the exported static HTML carries crawlable title links (see the seed step below; /discover's identical seed is under flow-feed).",
+      "description": "Legal/policy pages (villkor, integritet, community-guidelines) are static server-rendered content with no backend calls. Library/browse views (calendar, my/all, my/films, my/avbrutna, my/vill-se, my/diary, series, films, search, recommendations) and small inline widgets (SearchDropdown, NotInterestedButton, AddToGroupButton) read exclusively through existing client-state contexts (auth-context, watchlist-context) that already stream from Firestore/TMDB elsewhere in the map — these views don't open a distinct new backend path, they just render/filter/search data already resident in context state, occasionally issuing an incremental Firestore write (e.g. NotInterestedButton, AddToGroupButton) through the same rules-gated per-user pattern as the rest of the app. One exception: '/', '/films' and '/series' ALSO open a distinct build-time-only TMDB path — SEO WP1 seeds their client grids so the exported static HTML carries crawlable title links (see the seed step below; /discover's identical seed is under flow-feed). '/guider' (BIN-424, the \"hub-of-hubs\") belongs here for the opposite reason: it fetches nothing at all, at build time or at runtime — its link lists come straight from the curated constants in src/lib/seo/hubLinks.ts — but it is the only page that links EVERY pre-rendered SEO landing page (all /provider, /billigaste and /forsvinner pages), which the footer exposed only a fraction of, so the rest had near-zero internal links and leaned on the sitemap alone for crawl discovery.",
       "covers": [
         "/villkor",
         "/integritet",
         "/community-guidelines",
+        "/guider",
         "/calendar",
         "/my/all",
         "/my/films",
@@ -2614,6 +2645,13 @@
           "payload": "SearchDropdown/NotInterestedButton/AddToGroupButton — occasional rules-gated per-user read/write (search-as-you-type, not-interested flag, group add)",
           "transport": "firestore-query",
           "verified": "inferred"
+        },
+        {
+          "from": "static-passive-pages",
+          "to": "guider-page",
+          "payload": "'/guider' renders force-static from the curated hubSections constants — no TMDB call, no Firestore read, no client state; the footer links to it, so every pre-rendered page is one hop from every /provider, /billigaste and /forsvinner landing page (hubLinks.test.ts guards that the constants stay exhaustive)",
+          "transport": "static render (no data fetch)",
+          "verified": true
         },
         {
           "from": "static-passive-pages",
@@ -2703,6 +2741,77 @@
         }
       ],
       "area": "ops & compliance"
+    },
+    {
+      "id": "flow-recap-gaps",
+      "label": "Recap-lucka → prioriteringsräknare",
+      "description": "When a viewer opens a spoiler-safe recap that does not exist yet, the miss is recorded so backfill can be prioritised by real demand instead of guesswork (BIN-544). useRecap fires it only on a SETTLED negative — a failed or timed-out read must never masquerade as \"no recap exists\" — and the effect keys on the boundary's primitive season/episode fields, not the object, so a duplicate Firestore snapshot for one write cannot double-count. A season-only show with zero per-episode boundaries is deliberately NOT a miss: it may already be fully covered at season level, and logging it would send the backfill pipeline after work that is done. The callable is the ONLY writer of recapCoverageGaps/{tmdbId} — the collection is sealed to clients in firestore.rules, so the counters cannot be forged by writing Firestore directly (the same sealed-collection pattern as recordAskBinge). It aggregates per SHOW, not per episode, because the consuming question is \"which show needs backfill\". App Check OR an authenticated caller is required, since recap misses happen for logged-out browsing too, and the client wrapper swallows every error: telemetry must never break the recap panel it is attached to.",
+      "covers": [
+        "logRecapMiss"
+      ],
+      "steps": [
+        {
+          "from": "recap-hook",
+          "to": "cf-logRecapMiss",
+          "payload": "httpsCallable(functions,'logRecapMiss')({tmdbId}) from src/lib/recaps/coverageGap.ts — fire-and-forget, dynamically imported (firebase/functions is not in the main bundle), no-op during SSR, every error swallowed",
+          "transport": "https callable (europe-west1)",
+          "verified": true
+        },
+        {
+          "from": "cf-logRecapMiss",
+          "to": "firestore",
+          "payload": "gate: request.app (App Check) OR request.auth.uid, else failed-precondition; validateMissInput(data) rejects anything that is not a usable tmdbId with invalid-argument",
+          "transport": "in-process compute",
+          "verified": true
+        },
+        {
+          "from": "cf-logRecapMiss",
+          "to": "firestore",
+          "payload": "recapCoverageGaps/{tmdbId}.set({count: FieldValue.increment(1), lastMissedAt: serverTimestamp()}, {merge:true}) — one bounded single-doc increment per call, no rate limit needed (same cost shape as recordAskBinge)",
+          "transport": "Firestore write",
+          "verified": true
+        }
+      ],
+      "area": "data pipelines"
+    },
+    {
+      "id": "flow-premiarer",
+      "label": "Premiärer & finaler (kvartalsvy)",
+      "description": "The quarter view at /calendar/premiarer answers \"what is coming\" in two layers, and only the first one is about your own library. Layer 1 composes the existing calendar entries with watchlist-derived premiere pills and groups the quarter by month — pure composition over hooks the calendar already owns, so it opens no new backend path. Layer 2 is DISCOVERY of titles you do not follow, and it is deliberately split in two phases because they cost very different amounts: new shows (S1) come from one cheap /discover/tv page pair keyed on first_air_date, whereas a RETURNING show's season premiere is not its first_air_date at all — finding those needs a capped candidate pool plus a per-title tv-lite fan-out. That second phase is therefore gated on visibility (useInView with a 300px margin, once), so the expensive fan-out never competes with the page's own personal calendar fan-out in the 8-slot semaphore at mount; the sentinel is always rendered, because an empty section would leave no node to observe and latch the gate shut forever. Everything already in your library — any status — plus anything marked not-interested is excluded by composite media-type key, so a movie you dismissed cannot suppress a same-numbered TV premiere.",
+      "covers": [
+        "/calendar/premiarer"
+      ],
+      "steps": [
+        {
+          "from": "premiarer-page",
+          "to": "premiere-hooks",
+          "payload": "usePremiereEvents(): quarterWindow() + coveredTmdbIdsInWindow(entries) + derivePremierePills(watchlist) → selectQuarterEvents → groupEntriesByMonth; all logic lives in the pure helpers under src/lib/calendar/premieres.ts, the hook is glue",
+          "transport": "client-state-read",
+          "verified": true
+        },
+        {
+          "from": "premiere-hooks",
+          "to": "watchlist-context",
+          "payload": "reads the already-streaming watchlist + calendar entries and the NotInterested context — no distinct Firestore path of its own, the read-repair effect stays on its single callsite inside useCalendarEntries",
+          "transport": "client-state-read",
+          "verified": true
+        },
+        {
+          "from": "premiere-hooks",
+          "to": "tmdb-api",
+          "payload": "discovery phase 1 (eager): discoverTV first_air_date within the quarter, pages 1-2 — queryKey head 'discover-tv' is on the persist allowlist, so the pools are cached legally across sessions",
+          "transport": "TMDB REST",
+          "verified": true
+        },
+        {
+          "from": "premiere-hooks",
+          "to": "tmdb-api",
+          "payload": "discovery phase 2 (visibility-gated): discover(air_date + returning) → candidate pool capped at 20 → per-title getTVShowLite fan-out, keeping only next_episode_to_air that is a season premiere (S>=2 E1). Per-title tv-lite responses are NEVER persisted (shared in-memory with the calendar). Do not raise the cap to fill a thin list — widen the cheap discover pages instead",
+          "transport": "TMDB REST",
+          "verified": true
+        }
+      ],
+      "area": "library"
     }
   ]
 }

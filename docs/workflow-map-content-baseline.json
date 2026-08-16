@@ -29,6 +29,8 @@
     "flow-hygiene": 4481,
     "flow-gdpr": 4897,
     "flow-static": 1902,
-    "flow-crash-telemetry": 4426
+    "flow-crash-telemetry": 4426,
+    "flow-recap-gaps": 1788,
+    "flow-premiarer": 2242
   }
 }

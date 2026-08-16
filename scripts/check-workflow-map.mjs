@@ -1,5 +1,13 @@
-#!/usr/bin/env node
 // check-workflow-map.mjs — workflow-map freshness linter (CI + local).
+//
+// NO SHEBANG, deliberately (BIN-891). This module is imported by
+// scripts/check-workflow-map.test.mjs, and vitest's transform hoists the
+// node-builtin import shims to the top of the file. A `#!` line then ends up
+// mid-line and the file fails to PARSE — but only on a checkout where it has
+// CRLF endings, i.e. only on Windows (core.autocrlf=true), never in CI. That
+// makes it a failure no remote gate can see. Nothing runs this file as a bare
+// executable: ci.yml, deploy.yml and the commit gate all invoke it as
+// `node scripts/check-workflow-map.mjs`, so the shebang bought nothing.
 //
 // The interactive workflow map (docs/workflow-map.html) is data-driven: its
 // embedded <script id="data"> JSON lists every component with a repo path, and
@@ -14,11 +22,19 @@
 //      mapped flow fails CI. Key-agnostic (every array-valued key but
 //      "comment" counts) and segment-boundary matched, both pinned by
 //      scripts/check-workflow-map.test.mjs (BIN-789).
-//   6. BOUNDARY ENUMERATION: `boundaries` in the universe is only HALF hand-curated —
-//      every src/app/**/{error,global-error}.tsx is walked from disk and must be listed
-//      (BIN-808). A new crash boundary fails CI until it is in the universe AND claimed
-//      by a flow. Exemptions are a path->reason map and an exemption that stops matching
-//      a real file fails too, so the list cannot rot.
+//   6/7. UNIVERSE ENUMERATION: none of the universe's three lists runs on honour any
+//      more. Each is walked from the tree and cross-checked BOTH ways — an entry the
+//      tree has and the universe lacks fails, and an entry the universe lists that the
+//      tree no longer has fails too:
+//        - `boundaries` (check 6, BIN-808): every src/app/**/{error,global-error}.tsx;
+//        - `functions`  (check 7, BIN-891): every export of functions/src/index.ts;
+//        - `routes`     (check 7, BIN-891): every src/app/**/page.tsx, as its URL path.
+//      A new crash boundary, Cloud Function or route fails CI until it is in the
+//      universe AND claimed by a flow. Exemptions are a path->reason MAP per list, the
+//      reason is enforced by this linter (not only by the test file), and an exemption
+//      that stops matching something the walk finds fails too — so no list can rot into
+//      permission nobody remembers granting. Each walk carries a floor, so a walk broken
+//      by a moved directory fails loudly instead of passing vacuously on an empty list.
 //   4. CONTENT FLOOR: every flow must carry substantive prose — a label, a
 //      real description, at least one step, and a non-empty payload on every
 //      step. This is the anti-silent-loss guard (BIN-459): coverage (check 3)
@@ -171,11 +187,15 @@ export function checkContentRatchet(actions, baseline, problems) {
 
 // ── Check 3 — coverage cross-check against the enumerated universe ───────────────────
 // docs/workflow-map-universe.json is a plain object of KEY -> string[]. EVERY array-valued
-// key is enforced (only "comment" is exempt), so adding or renaming a key — `functions`,
-// `routes`, the partly-enumerated `boundaries` (BIN-760/780; check 6 walks 11 of its 12
-// entries) — keeps its entries required
-// rather than silently dropping the rule. BIN-789: none of this was tested, and the whole
-// `boundaries` guard worked by accident.
+// key is enforced (only "comment" is exempt), so adding or renaming a key — `functions`
+// and `routes` (enumerated by check 7), the partly-enumerated `boundaries` (BIN-760/780;
+// check 6 walks every entry except the hand-curated ones its predicate excludes) — keeps
+// its entries required rather than silently dropping the rule. BIN-789: none of this was
+// tested, and the whole `boundaries` guard worked by accident.
+//
+// Counts are deliberately NOT written into this prose. A comment saying "11 of 12" is
+// wrong the moment a twelfth boundary lands, and nothing turns red when it does (BIN-891);
+// describe what the walk finds, and let the exported floors carry the only numbers.
 const UNIVERSE_COMMENT_KEY = 'comment';
 
 export function universeEntries(universe) {
@@ -231,30 +251,43 @@ export function checkCoverage(universe, actions, problems) {
   return { covered, universeSize: entries.size };
 }
 
-// ── Check 6 — the crash-boundary half of the universe is ENUMERABLE (BIN-808) ────────
+// ── Checks 6 & 7 — the universe is ENUMERABLE, list by list (BIN-808, BIN-891) ───────
 // `boundaries` used to be documented as wholly hand-curated. It is not: an app-router
 // crash boundary is any src/app/**/{error,global-error}.tsx, and that set can be walked.
 // The ticket originally asked for a heuristic — "imports captureError, is not a route or
-// a function export" — which was measured and REJECTED: all ten segment boundaries import
+// a function export" — which was measured and REJECTED: every segment boundary imports
 // the shared SegmentError component (which is what actually calls captureError), so the
 // heuristic finds NONE of them, while flagging src/lib/queryClient.ts, which is not a
-// boundary at all. Enumerating the filenames is both cheaper and correct, and it is the
-// same enumerate-and-cross-check the universe already prescribes for routes and functions.
+// boundary at all. Enumerating the filenames is both cheaper and correct.
+//
+// BIN-891: `functions` and `routes` were left on honour when check 6 shipped, and had
+// ALREADY drifted — logRecapMiss, /guider and /calendar/premiarer existed in the tree,
+// were absent from the universe, and therefore required no flow at all, quietly falsifying
+// CLAUDE.md's "a new function or route requires a map flow". The universe's own comment
+// had said all along how to regenerate them (exports of functions/src/index.ts; page.tsx
+// directories under src/app), i.e. both were enumerations written as instructions to a
+// human. They are walks now, on the same shape as check 6 — which is why the mechanics
+// below are ONE parameterized routine and three specs, not three copies that drift.
 //
 // What stays hand-curated: an off-device-transmitting client file that belongs to no
 // route, no function AND no boundary filename — src/components/layout/SegmentError.tsx is
-// today's only one. Nothing enumerates those, which is why the universe comment now names
-// two halves instead of one.
+// today's only one. Nothing enumerates those, which is why the universe comment names two
+// halves for `boundaries` and none for the other two lists.
 const APP_DIR = 'src/app';
 const BOUNDARY_FILENAME = /^(error|global-error)\.tsx$/;
+const FUNCTIONS_ENTRY = 'functions/src/index.ts';
+const ROUTE_FILENAME = 'page.tsx';
 
-// A floor, not a count, and it compares against the WALK (11 files today — the universe's
-// 12th entry, SegmentError.tsx, is hand-curated and never walked). A walk that returns
-// nothing — src/app renamed, a permissions error swallowed by the catch below — would make
-// every assertion in this check vacuously true, which is the exact silent-pass this check
-// exists to remove. Set below today's real number so an ordinary route deletion does not
-// trip it, and far above zero so a broken walk does.
+// Floors, not counts, and each compares against its own WALK (never against the universe,
+// whose hand-curated entries are not walked). A walk that returns nothing — src/app or
+// functions/src/index.ts renamed, a permissions error swallowed by a catch below — would
+// make every assertion in its check vacuously true, which is the exact silent-pass these
+// checks exist to remove. Each is set below today's real number so an ordinary deletion
+// does not trip it, and far above zero so a broken walk does. They are exported because a
+// literal repeated in the test file is a second answer to one question, and the two drift.
 export const MIN_CRASH_BOUNDARIES = 8;
+export const MIN_FUNCTION_EXPORTS = 15;
+export const MIN_ROUTES = 30;
 
 export function enumerateCrashBoundaries(root = ROOT, dir = APP_DIR) {
   let entries;
@@ -272,80 +305,207 @@ export function enumerateCrashBoundaries(root = ROOT, dir = APP_DIR) {
   return found.sort();
 }
 
-// Deliberate exclusions, path -> one line of reason. EMPTY today, and that is the honest
-// state: every crash boundary in the tree transmits and belongs in the universe. A map
-// rather than an array so an exclusion must carry an argument — and the argument is
-// enforced HERE, by the check, not only by the test file (integration review, 2026-08-14:
-// `hasOwnProperty` alone silences a path whose value is '' or null, so the map shape by
-// itself proves nothing). An entry that stops matching a real file is reported too, so the
-// list cannot rot into permission nobody remembers granting.
+// The functions half of the walk (BIN-891): what functions/src/index.ts actually exports,
+// which is exactly what Firebase deploys. Both export shapes in that file count — the two
+// inline `export const x = onDocumentCreated(…)` triggers and the twenty-odd
+// `export { x } from './x'` re-exports — while `export type` and `export default` are not
+// deployable functions and are skipped. Parsing beats a manifest here: the file IS the
+// manifest, and any second list of function names would be the drift this check removes.
+const EXPORT_DECLARATION = /^[ \t]*export\s+(?!type\b|default\b)(?:async\s+)?(?:const|let|var|function\s*\*?|class)\s+([A-Za-z_$][\w$]*)/gm;
+const EXPORT_NAMED_BLOCK = /^[ \t]*export\s+(?!type\b)\{([^}]*)\}/gm;
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+// Split from the file read (the repo's test-extraction convention) so the parse can be
+// driven by literal source text in the test file — the walk's fixture problem otherwise
+// forces writing temp files, and a parser tested only against the one real file passes
+// whenever it happens to agree with today's tree.
+export function parseFunctionExports(src) {
+  const names = new Set();
+  for (const [, name] of src.matchAll(EXPORT_DECLARATION)) names.add(name);
+  for (const [, block] of src.matchAll(EXPORT_NAMED_BLOCK)) {
+    for (const specifier of block.split(',')) {
+      const spec = specifier.trim();
+      if (!spec || /^type\s/.test(spec)) continue;
+      // `x as y` exports the name y — the local name is invisible to callers and to Firebase.
+      const exported = spec.split(/\s+as\s+/).pop().trim();
+      if (IDENTIFIER.test(exported) && exported !== 'default') names.add(exported);
+    }
+  }
+  return [...names].sort();
+}
+
+export function enumerateFunctionExports(root = ROOT, entry = FUNCTIONS_ENTRY) {
+  try {
+    return parseFunctionExports(readFileSync(join(root, entry), 'utf8'));
+  } catch {
+    // An unreadable/moved entry point returns nothing, which the floor then reports as the
+    // broken walk it is — never as "this repo deploys no functions".
+    return [];
+  }
+}
+
+// The routes half (BIN-891): every src/app/**/page.tsx, as the URL path a user reaches.
+// `src/app/my/films/page.tsx` -> `/my/films`, `src/app/page.tsx` -> `/`. Dynamic segments
+// keep their brackets, which is exactly how the universe already writes them
+// ('/movie/[id]'). This app has no route groups '(x)' and no parallel routes '@x' — if one
+// ever lands, its directory name would wrongly appear in the URL here, and the resulting
+// mismatch fails LOUDLY (a route the universe cannot contain) rather than going quiet.
+export function enumerateRoutes(root = ROOT, dir = APP_DIR, appDir = dir) {
+  let entries;
+  try {
+    entries = readdirSync(join(root, dir), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const found = [];
+  for (const entry of entries) {
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) found.push(...enumerateRoutes(root, rel, appDir));
+    else if (entry.name === ROUTE_FILENAME) found.push(dir.slice(appDir.length) || '/');
+  }
+  return [...new Set(found)].sort();
+}
+
+// Deliberate exclusions per list, entry -> one line of reason. ALL THREE EMPTY today, and
+// that is the honest state: every crash boundary, Cloud Function and route in the tree
+// belongs in the universe, and BIN-891's three drifted entries were added to it rather
+// than exempted from it. A map rather than an array so an exclusion must carry an argument
+// — and the argument is enforced HERE, by the check, not only by the test file
+// (integration review, 2026-08-14: `hasOwnProperty` alone silences a path whose value is
+// '' or null, so the map shape by itself proves nothing). An entry that stops matching
+// something the walk finds is reported too, so no list can rot into permission nobody
+// remembers granting.
 export const BOUNDARY_EXEMPTIONS = {};
-// Exported for the same reason MIN_CRASH_BOUNDARIES is: a literal repeated in the test
-// file is a second answer to one question, and the two drift (integration review,
-// 2026-08-14 — this batch had just removed exactly that divergence for the other floor).
+export const FUNCTION_EXEMPTIONS = {};
+export const ROUTE_EXEMPTIONS = {};
+// Exported for the same reason the floors are: a literal repeated in the test file is a
+// second answer to one question, and the two drift (integration review, 2026-08-14 — this
+// batch had just removed exactly that divergence for the other floor).
 export const MIN_EXEMPTION_REASON = 10;
 
-// NOTE: this check hard-keys `universe.boundaries`, where check 3 is deliberately
-// key-agnostic. Renaming the key leaves check 3 green and makes THIS check emit one
-// spurious "missing" per walked file — loud and immediately diagnosable, which is the
-// point: the enumeration is about one specific list, and guessing which key means
-// "boundaries" by shape would make a rename silently re-target the walk.
-export function checkBoundaryEnumeration(universe, problems, opts = {}) {
-  const found = opts.boundaries ?? enumerateCrashBoundaries();
-  const exemptions = opts.exemptions ?? BOUNDARY_EXEMPTIONS;
+// The shared mechanics of checks 6 and 7. ONE routine, three specs: the three lists differ
+// only in what they walk, what they are called, and which universe entries the walk's own
+// predicate could have produced (`inDomain` — see the reverse-direction note below). Three
+// hand-copied checks would be three things to keep in step, which is the failure mode this
+// whole file exists to prevent.
+function checkEnumeratedList(spec, universe, problems, opts = {}) {
+  const found = opts.found ?? spec.enumerate();
+  const exemptions = opts.exemptions ?? spec.exemptions;
   // `floor` is injectable ONLY so the unit tests can drive the other branches with a
-  // 2-file fixture without the floor firing alongside them. Production always takes the
+  // tiny fixture without the floor firing alongside them. Production always takes the
   // default; a caller that passes 0 is asking for the vacuous pass this guard removes,
-  // which is why the real-data test above calls it with no opts at all.
-  const floor = opts.floor ?? MIN_CRASH_BOUNDARIES;
-  const listed = new Set(Array.isArray(universe?.boundaries) ? universe.boundaries : []);
+  // which is why the real-data tests call each check with no opts at all.
+  const floor = opts.floor ?? spec.floor;
+  const listed = new Set(Array.isArray(universe?.[spec.key]) ? universe[spec.key] : []);
 
-  if (found.length < floor) {
-    problems.push(
-      `crash-boundary walk found only ${found.length} file(s) under ${APP_DIR} (floor ${floor}) — the walk is broken or the app tree moved; this check cannot pass on an empty list.`,
-    );
+  if (found.length < floor) problems.push(spec.floorProblem(found.length, floor));
+
+  for (const item of found) {
+    if (listed.has(item) || Object.prototype.hasOwnProperty.call(exemptions, item)) continue;
+    problems.push(spec.missingProblem(item));
   }
-  for (const file of found) {
-    if (listed.has(file) || Object.prototype.hasOwnProperty.call(exemptions, file)) continue;
-    problems.push(
-      `crash boundary '${file}' is missing from docs/workflow-map-universe.json boundaries[] — add it (and claim it in a flow's covers[]), or add it to BOUNDARY_EXEMPTIONS with a reason.`,
-    );
-  }
+
   const foundSet = new Set(found);
-  for (const [file, reason] of Object.entries(exemptions)) {
-    if (!foundSet.has(file)) {
-      problems.push(
-        `BOUNDARY_EXEMPTIONS names '${file}', which is not a crash boundary in the tree any more — delete the exemption.`,
-      );
-    }
+  for (const [item, reason] of Object.entries(exemptions)) {
+    if (!foundSet.has(item)) problems.push(spec.staleExemptionProblem(item));
     if (typeof reason !== 'string' || reason.trim().length < MIN_EXEMPTION_REASON) {
-      problems.push(
-        `BOUNDARY_EXEMPTIONS['${file}'] has no usable reason — an exclusion without an argument is a silence, which is what this check exists to remove.`,
-      );
+      problems.push(spec.unreasonedExemptionProblem(item));
     }
   }
-  // The REVERSE direction: a boundary-shaped entry the universe still lists but the tree no
-  // longer has. Nothing else catches it — check 3 stays green because the flow still claims
-  // it, and check 1 never sees it (only global-error.tsx and SegmentError.tsx exist as
-  // nodes[].path entries), so the universe and the map would keep documenting a deleted
-  // file forever.
+
+  // The REVERSE direction: an entry the universe still lists but the tree no longer has.
+  // Nothing else catches it — check 3 stays green because a flow still claims it, and
+  // check 1 only sees the handful of paths that are also nodes[] entries — so the universe
+  // and the map would keep documenting a deleted file, function or page forever.
   //
-  // The predicate is DELIBERATELY identical to the walk's own — under APP_DIR *and* a
-  // boundary filename — so "listed but not found" can only mean deleted. Keying on the
-  // filename alone was probed and rejected (integration review, 2026-08-14): a hand-curated
-  // entry named error.tsx anywhere outside src/app would be demanded for deletion with a
-  // message that is false, because the walk never looked there. The hand-curated half is
-  // whatever this predicate excludes; nothing enumerates it.
-  for (const file of listed) {
-    if (!file.startsWith(`${APP_DIR}/`)) continue;
-    if (!BOUNDARY_FILENAME.test(file.slice(file.lastIndexOf('/') + 1))) continue;
-    if (!foundSet.has(file)) {
-      problems.push(
-        `docs/workflow-map-universe.json lists crash boundary '${file}', which no longer exists in the tree — remove it from boundaries[] and from every flow's covers[].`,
-      );
-    }
+  // `inDomain` is DELIBERATELY the walk's own predicate, so "listed but not found" can only
+  // mean deleted. Keying on something looser was probed and rejected (integration review,
+  // 2026-08-14): a hand-curated entry named error.tsx outside src/app would be demanded for
+  // deletion with a message that is false, because the walk never looked there. The
+  // hand-curated half of a list is whatever its predicate excludes; nothing enumerates it.
+  for (const item of listed) {
+    if (!spec.inDomain(item)) continue;
+    if (!foundSet.has(item)) problems.push(spec.deletedProblem(item));
   }
   return found.length;
+}
+
+// NOTE: each spec hard-keys its universe key, where check 3 is deliberately key-agnostic.
+// Renaming a key leaves check 3 green and makes the matching check here emit one spurious
+// "missing" per walked entry — loud and immediately diagnosable, which is the point: an
+// enumeration is about one specific list, and guessing which key means "routes" by shape
+// would make a rename silently re-target the walk.
+const BOUNDARY_LIST = {
+  key: 'boundaries',
+  enumerate: () => enumerateCrashBoundaries(),
+  exemptions: BOUNDARY_EXEMPTIONS,
+  floor: MIN_CRASH_BOUNDARIES,
+  inDomain: (entry) =>
+    entry.startsWith(`${APP_DIR}/`) && BOUNDARY_FILENAME.test(entry.slice(entry.lastIndexOf('/') + 1)),
+  floorProblem: (n, floor) =>
+    `crash-boundary walk found only ${n} file(s) under ${APP_DIR} (floor ${floor}) — the walk is broken or the app tree moved; this check cannot pass on an empty list.`,
+  missingProblem: (file) =>
+    `crash boundary '${file}' is missing from docs/workflow-map-universe.json boundaries[] — add it (and claim it in a flow's covers[]), or add it to BOUNDARY_EXEMPTIONS with a reason.`,
+  staleExemptionProblem: (file) =>
+    `BOUNDARY_EXEMPTIONS names '${file}', which is not a crash boundary in the tree any more — delete the exemption.`,
+  unreasonedExemptionProblem: (file) =>
+    `BOUNDARY_EXEMPTIONS['${file}'] has no usable reason — an exclusion without an argument is a silence, which is what this check exists to remove.`,
+  deletedProblem: (file) =>
+    `docs/workflow-map-universe.json lists crash boundary '${file}', which no longer exists in the tree — remove it from boundaries[] and from every flow's covers[].`,
+};
+
+const FUNCTION_LIST = {
+  key: 'functions',
+  enumerate: () => enumerateFunctionExports(),
+  exemptions: FUNCTION_EXEMPTIONS,
+  floor: MIN_FUNCTION_EXPORTS,
+  // A deployed function is a bare identifier. Anything else the list ever grows (a path, a
+  // URL) is by definition not something this walk could have produced, so it stays check 3's.
+  inDomain: (entry) => IDENTIFIER.test(entry),
+  floorProblem: (n, floor) =>
+    `Cloud Function walk found only ${n} export(s) in ${FUNCTIONS_ENTRY} (floor ${floor}) — the parse is broken or the entry point moved; this check cannot pass on an empty list.`,
+  missingProblem: (name) =>
+    `Cloud Function export '${name}' is missing from docs/workflow-map-universe.json functions[] — add it (and claim it in a flow's covers[]), or add it to FUNCTION_EXEMPTIONS with a reason.`,
+  staleExemptionProblem: (name) =>
+    `FUNCTION_EXEMPTIONS names '${name}', which ${FUNCTIONS_ENTRY} does not export any more — delete the exemption.`,
+  unreasonedExemptionProblem: (name) =>
+    `FUNCTION_EXEMPTIONS['${name}'] has no usable reason — an exclusion without an argument is a silence, which is what this check exists to remove.`,
+  deletedProblem: (name) =>
+    `docs/workflow-map-universe.json lists Cloud Function '${name}', which ${FUNCTIONS_ENTRY} no longer exports — remove it from functions[] and from every flow's covers[].`,
+};
+
+const ROUTE_LIST = {
+  key: 'routes',
+  enumerate: () => enumerateRoutes(),
+  exemptions: ROUTE_EXEMPTIONS,
+  floor: MIN_ROUTES,
+  // Every entry the route walk can produce starts with '/'; nothing else in routes[] could
+  // have come from a page.tsx, so nothing else is claimed as deleted.
+  inDomain: (entry) => entry.startsWith('/'),
+  floorProblem: (n, floor) =>
+    `route walk found only ${n} ${ROUTE_FILENAME} file(s) under ${APP_DIR} (floor ${floor}) — the walk is broken or the app tree moved; this check cannot pass on an empty list.`,
+  missingProblem: (route) =>
+    `route '${route}' has a ${ROUTE_FILENAME} under ${APP_DIR} but is missing from docs/workflow-map-universe.json routes[] — add it (and claim it in a flow's covers[]), or add it to ROUTE_EXEMPTIONS with a reason.`,
+  staleExemptionProblem: (route) =>
+    `ROUTE_EXEMPTIONS names '${route}', which has no ${ROUTE_FILENAME} under ${APP_DIR} any more — delete the exemption.`,
+  unreasonedExemptionProblem: (route) =>
+    `ROUTE_EXEMPTIONS['${route}'] has no usable reason — an exclusion without an argument is a silence, which is what this check exists to remove.`,
+  deletedProblem: (route) =>
+    `docs/workflow-map-universe.json lists route '${route}', which no longer has a ${ROUTE_FILENAME} under ${APP_DIR} — remove it from routes[] and from every flow's covers[].`,
+};
+
+// The three public entry points. Each keeps its own `opts` alias for the walk result
+// (`boundaries` / `functions` / `routes`) so a test reads as what it is driving.
+export function checkBoundaryEnumeration(universe, problems, opts = {}) {
+  return checkEnumeratedList(BOUNDARY_LIST, universe, problems, { ...opts, found: opts.boundaries });
+}
+
+export function checkFunctionEnumeration(universe, problems, opts = {}) {
+  return checkEnumeratedList(FUNCTION_LIST, universe, problems, { ...opts, found: opts.functions });
+}
+
+export function checkRouteEnumeration(universe, problems, opts = {}) {
+  return checkEnumeratedList(ROUTE_LIST, universe, problems, { ...opts, found: opts.routes });
 }
 
 // Build the content-baseline object from the current flows. Deterministic
@@ -428,6 +588,10 @@ export function main() {
     // Check 6's message names both halves of the fix; check 3 only speaks up if the reader
     // did the first half and stopped. One problem, in sequence, never twice at once.
     checkBoundaryEnumeration(universe, problems);
+    // Same sequencing for check 7: a brand-new function or route is missing from the
+    // universe first, so check 3 has nothing to iterate and stays silent until it is added.
+    checkFunctionEnumeration(universe, problems);
+    checkRouteEnumeration(universe, problems);
   }
 
   if (problems.length) {

@@ -35,6 +35,15 @@ import {
   BOUNDARY_EXEMPTIONS,
   MIN_CRASH_BOUNDARIES,
   MIN_EXEMPTION_REASON,
+  parseFunctionExports,
+  enumerateFunctionExports,
+  enumerateRoutes,
+  checkFunctionEnumeration,
+  checkRouteEnumeration,
+  FUNCTION_EXEMPTIONS,
+  ROUTE_EXEMPTIONS,
+  MIN_FUNCTION_EXPORTS,
+  MIN_ROUTES,
 } from './check-workflow-map.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -477,6 +486,297 @@ test('enumeration — an exemption without a real reason FAILS, map shape alone 
     floor: 0,
   });
   assert.equal(belowFloor.length, 1);
+});
+
+// ── Check 7 — functions & routes are enumerable too (BIN-891) ───────────────────────
+//
+// The other two universe lists ran on honour until BIN-891 and had ALREADY drifted:
+// logRecapMiss, /guider and /calendar/premiarer existed in the tree, were absent from the
+// universe, and so required no flow at all — silently falsifying CLAUDE.md's "a new
+// function or route requires a map flow". These tests pin both walks, both directions of
+// each cross-check, and the fact that the checks are wired into main().
+
+test('function parse — both export shapes count, type/default exports never do', () => {
+  // Literal source, not the real file: a parser tested only against today's index.ts
+  // passes whenever it happens to agree with today's tree.
+  const src = [
+    "import { onCall } from 'firebase-functions/v2/https';",
+    'export const inlineTrigger = onDocumentCreated(',
+    'export async function asyncEntry() {}',
+    "export { reExported } from './reExported';",
+    "export { localName as publicName } from './aliased';",
+    "export { first, second } from './pair';",
+    "export type { SomeType } from './types';",
+    "export { type OnlyAType, alsoReal } from './mixed';",
+    'export default somethingElse;',
+    "export * from './star';",
+    '  export const indented = 1;',
+    "// export const commentedOut = onSchedule('every 24 hours');",
+  ].join('\n');
+  assert.deepEqual(parseFunctionExports(src), [
+    'alsoReal',
+    'asyncEntry',
+    'first',
+    'indented',
+    'inlineTrigger',
+    'publicName',
+    'reExported',
+    'second',
+  ]);
+});
+
+test('function parse — an empty or unparsable file yields nothing (the floor then speaks)', () => {
+  assert.deepEqual(parseFunctionExports(''), []);
+  assert.deepEqual(parseFunctionExports('const notExported = 1;\nexport default x;'), []);
+});
+
+test('function walk — the real entry point yields every deployed export, sorted and unique', () => {
+  const found = enumerateFunctionExports();
+  // One of each export shape, so a parser that handles only one cannot pass.
+  assert.ok(found.includes('onFriendRequestCreate'), 'inline `export const` trigger missing');
+  assert.ok(found.includes('retentionCleanup'), '`export { x } from` re-export missing');
+  // The export BIN-891 was filed about: it was in the tree and outside the universe.
+  assert.ok(found.includes('logRecapMiss'), 'logRecapMiss missing — the drift this check exists for');
+  assert.ok(found.length >= MIN_FUNCTION_EXPORTS, `only ${found.length} exports parsed`);
+  assert.deepEqual(found, [...new Set(found)].sort());
+});
+
+test('route walk — the real tree yields URL paths, root included, brackets kept', () => {
+  const found = enumerateRoutes();
+  for (const r of found) assert.ok(r.startsWith('/'), `not a URL path: ${r}`);
+  assert.ok(found.includes('/'), 'the root route is missing — src/app/page.tsx maps to /');
+  assert.ok(found.includes('/movie/[id]'), 'a dynamic segment must keep its brackets');
+  assert.ok(found.includes('/my/films'), 'a nested route is missing');
+  // Both routes BIN-891 was filed about, one of them two levels deep.
+  assert.ok(found.includes('/guider'), '/guider missing — the drift this check exists for');
+  assert.ok(found.includes('/calendar/premiarer'), '/calendar/premiarer missing');
+  assert.ok(found.length >= MIN_ROUTES, `only ${found.length} routes walked`);
+  assert.deepEqual(found, [...new Set(found)].sort());
+});
+
+test('function enumeration — an export the universe forgot is a problem, naming both edits', () => {
+  const problems = [];
+  checkFunctionEnumeration({ functions: ['retentionCleanup'] }, problems, {
+    functions: ['retentionCleanup', 'brandNewNotify'],
+    exemptions: {},
+    floor: 0,
+  });
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('brandNewNotify'), problems[0]);
+  assert.ok(problems[0].includes('functions[]'), problems[0]);
+  assert.ok(problems[0].includes('covers[]'), problems[0]);
+});
+
+test('route enumeration — a route the universe forgot is a problem, naming both edits', () => {
+  const problems = [];
+  checkRouteEnumeration({ routes: ['/feed'] }, problems, {
+    routes: ['/feed', '/brandnew'],
+    exemptions: {},
+    floor: 0,
+  });
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes('/brandnew'), problems[0]);
+  assert.ok(problems[0].includes('routes[]'), problems[0]);
+  assert.ok(problems[0].includes('covers[]'), problems[0]);
+});
+
+test('check 7 — the REVERSE direction: listed but gone from the tree FAILS, both lists', () => {
+  // Same hole check 6 closed for boundaries: check 3 stays green because a flow still
+  // claims the deleted thing, so nothing else would ever notice a removed function or page.
+  const fnProblems = [];
+  checkFunctionEnumeration({ functions: ['retentionCleanup', 'deletedNotify'] }, fnProblems, {
+    functions: ['retentionCleanup'],
+    exemptions: {},
+    floor: 0,
+  });
+  assert.equal(fnProblems.length, 1);
+  assert.ok(fnProblems[0].includes('deletedNotify'), fnProblems[0]);
+  assert.ok(fnProblems[0].includes('no longer exports'), fnProblems[0]);
+
+  const routeProblems = [];
+  checkRouteEnumeration({ routes: ['/feed', '/removed'] }, routeProblems, {
+    routes: ['/feed'],
+    exemptions: {},
+    floor: 0,
+  });
+  assert.equal(routeProblems.length, 1);
+  assert.ok(routeProblems[0].includes('/removed'), routeProblems[0]);
+  assert.ok(routeProblems[0].includes('no longer has'), routeProblems[0]);
+});
+
+test('check 7 — the reverse check only claims what its own walk could have produced', () => {
+  // The BIN-808 lesson carried forward: a predicate looser than the walk demands deletion
+  // with a message that is false. Neither list can contain what the other walks, and
+  // neither walk can produce a boundary path — so those entries are left to check 3.
+  const fnProblems = [];
+  checkFunctionEnumeration(
+    { functions: ['retentionCleanup', 'src/components/layout/SegmentError.tsx', '/feed'] },
+    fnProblems,
+    { functions: ['retentionCleanup'], exemptions: {}, floor: 0 },
+  );
+  assert.deepEqual(fnProblems, []);
+
+  const routeProblems = [];
+  checkRouteEnumeration(
+    { routes: ['/feed', 'retentionCleanup', 'src/app/global-error.tsx'] },
+    routeProblems,
+    { routes: ['/feed'], exemptions: {}, floor: 0 },
+  );
+  assert.deepEqual(routeProblems, []);
+});
+
+test('check 7 — an exemption silences that entry and nothing else, on both lists', () => {
+  const fnProblems = [];
+  checkFunctionEnumeration({ functions: [] }, fnProblems, {
+    functions: ['quietOne', 'loudOne'],
+    exemptions: { quietOne: 'deliberately undocumented, see the exemption note' },
+    floor: 0,
+  });
+  assert.equal(fnProblems.length, 1);
+  assert.ok(fnProblems[0].includes('loudOne'), fnProblems[0]);
+
+  const routeProblems = [];
+  checkRouteEnumeration({ routes: [] }, routeProblems, {
+    routes: ['/quiet', '/loud'],
+    exemptions: { '/quiet': 'deliberately undocumented, see the exemption note' },
+    floor: 0,
+  });
+  assert.equal(routeProblems.length, 1);
+  assert.ok(routeProblems[0].includes('/loud'), routeProblems[0]);
+});
+
+test('check 7 — an exemption that no longer matches the tree FAILS instead of rotting', () => {
+  const fnProblems = [];
+  checkFunctionEnumeration({ functions: ['stillHere'] }, fnProblems, {
+    functions: ['stillHere'],
+    exemptions: { goneNotify: 'was exempt once, long ago' },
+    floor: 0,
+  });
+  assert.equal(fnProblems.length, 1);
+  assert.ok(fnProblems[0].includes('goneNotify'), fnProblems[0]);
+  assert.ok(/delete the exemption/i.test(fnProblems[0]), fnProblems[0]);
+
+  const routeProblems = [];
+  checkRouteEnumeration({ routes: ['/still'] }, routeProblems, {
+    routes: ['/still'],
+    exemptions: { '/gone': 'was exempt once, long ago' },
+    floor: 0,
+  });
+  assert.equal(routeProblems.length, 1);
+  assert.ok(routeProblems[0].includes('/gone'), routeProblems[0]);
+  assert.ok(/delete the exemption/i.test(routeProblems[0]), routeProblems[0]);
+});
+
+test('check 7 — an exemption without a real reason FAILS, on both lists', () => {
+  // The linter enforces the argument, not just the test file: hasOwnProperty silences a
+  // key whose value is '' or null exactly as well as a real reason does.
+  for (const bad of ['', '   ', 'why', null, undefined, 42]) {
+    const fnProblems = [];
+    checkFunctionEnumeration({ functions: [] }, fnProblems, {
+      functions: ['quietOne'],
+      exemptions: { quietOne: bad },
+      floor: 0,
+    });
+    assert.equal(fnProblems.length, 1, `value ${JSON.stringify(bad)} was accepted`);
+    assert.ok(/no usable reason/.test(fnProblems[0]), fnProblems[0]);
+
+    const routeProblems = [];
+    checkRouteEnumeration({ routes: [] }, routeProblems, {
+      routes: ['/quiet'],
+      exemptions: { '/quiet': bad },
+      floor: 0,
+    });
+    assert.equal(routeProblems.length, 1, `value ${JSON.stringify(bad)} was accepted`);
+    assert.ok(/no usable reason/.test(routeProblems[0]), routeProblems[0]);
+  }
+  // Exactly at the threshold on both sides, or `<` -> `<=` survives (the off-by-one no
+  // fixture on either side of the gap can see).
+  const atFloor = [];
+  checkFunctionEnumeration({ functions: [] }, atFloor, {
+    functions: ['quietOne'],
+    exemptions: { quietOne: 'x'.repeat(MIN_EXEMPTION_REASON) },
+    floor: 0,
+  });
+  assert.deepEqual(atFloor, [], 'a reason of exactly MIN_EXEMPTION_REASON chars must be accepted');
+  const belowFloor = [];
+  checkRouteEnumeration({ routes: [] }, belowFloor, {
+    routes: ['/quiet'],
+    exemptions: { '/quiet': 'x'.repeat(MIN_EXEMPTION_REASON - 1) },
+    floor: 0,
+  });
+  assert.equal(belowFloor.length, 1);
+});
+
+test('check 7 — an empty walk FAILS on its floor instead of passing vacuously', () => {
+  // functions/src/index.ts renamed, or src/app moved: every other assertion in the check
+  // goes trivially true. Called with NO floor override, so it is the shipped constant.
+  const fnProblems = [];
+  checkFunctionEnumeration({ functions: [] }, fnProblems, { functions: [], exemptions: {} });
+  assert.equal(fnProblems.length, 1);
+  assert.ok(/floor/.test(fnProblems[0]) && /only 0 export/.test(fnProblems[0]), fnProblems[0]);
+
+  const routeProblems = [];
+  checkRouteEnumeration({ routes: [] }, routeProblems, { routes: [], exemptions: {} });
+  assert.equal(routeProblems.length, 1);
+  assert.ok(/floor/.test(routeProblems[0]) && /only 0 page\.tsx/.test(routeProblems[0]), routeProblems[0]);
+});
+
+test('check 7 — the COMMITTED universe already lists every walked function and route', () => {
+  // Guards the real data. This is what would have caught BIN-891's three drifted entries,
+  // and what catches the fourth.
+  const universe = JSON.parse(readFileSync(join(ROOT, 'docs/workflow-map-universe.json'), 'utf8'));
+
+  const fnProblems = [];
+  const fnCount = checkFunctionEnumeration(universe, fnProblems);
+  assert.deepEqual(fnProblems, [], `universe lost a Cloud Function: ${fnProblems.join(' | ')}`);
+  assert.ok(fnCount >= MIN_FUNCTION_EXPORTS, `walk parsed only ${fnCount}`);
+
+  const routeProblems = [];
+  const routeCount = checkRouteEnumeration(universe, routeProblems);
+  assert.deepEqual(routeProblems, [], `universe lost a route: ${routeProblems.join(' | ')}`);
+  assert.ok(routeCount >= MIN_ROUTES, `walk found only ${routeCount}`);
+
+  // Both exemption maps are empty today, and the test says so out loud: an exemption added
+  // later without a reason string is exactly what this shape exists to prevent.
+  for (const [name, map] of [['FUNCTION_EXEMPTIONS', FUNCTION_EXEMPTIONS], ['ROUTE_EXEMPTIONS', ROUTE_EXEMPTIONS]]) {
+    for (const [entry, reason] of Object.entries(map)) {
+      assert.equal(typeof reason, 'string', `${name}['${entry}'] has no reason`);
+      assert.ok(reason.length >= MIN_EXEMPTION_REASON, `${name}['${entry}']'s reason is not a reason: ${reason}`);
+    }
+  }
+});
+
+test('check 7 — both new checks are actually WIRED INTO main(), not just exported', () => {
+  // Same blind spot, and the same reason, as the check-6 wiring test above: these tests
+  // call the checks directly, so deleting their call sites in main() leaves every one of
+  // them green while CI stops running them. Source-level because main() reads the real,
+  // passing repo and cannot be driven to a failure from here.
+  const src = readFileSync(join(ROOT, 'scripts/check-workflow-map.mjs'), 'utf8');
+  const body = src.slice(src.indexOf('export function main('));
+  assert.ok(
+    /checkFunctionEnumeration\(\s*universe\s*,\s*problems\s*\)/.test(body),
+    'the call to checkFunctionEnumeration(universe, problems) is gone from main() — check 7 is half dead code',
+  );
+  assert.ok(
+    /checkRouteEnumeration\(\s*universe\s*,\s*problems\s*\)/.test(body),
+    'the call to checkRouteEnumeration(universe, problems) is gone from main() — check 7 is half dead code',
+  );
+});
+
+test('check 7 — the three BIN-891 entries are in the universe AND claimed by a flow', () => {
+  // The ticket's own acceptance: enumeration alone would only have made CI red. Each of the
+  // three must ALSO be documented, or the map still does not say what leaves the device.
+  const universe = JSON.parse(readFileSync(join(ROOT, 'docs/workflow-map-universe.json'), 'utf8'));
+  const data = extractDataJson(readFileSync(join(ROOT, 'docs/workflow-map.html'), 'utf8'));
+  const claims = new Set();
+  for (const action of data.actions || []) for (const c of action.covers || []) claims.add(c);
+  for (const entry of ['logRecapMiss', '/guider', '/calendar/premiarer']) {
+    assert.ok(
+      universe.functions.includes(entry) || universe.routes.includes(entry),
+      `${entry} is missing from the universe again`,
+    );
+    assert.ok([...claims].some((c) => coversEntry(c, entry)), `${entry} is claimed by no flow`);
+  }
 });
 
 test('coverage — no single covers[] token stands in for more than one boundary', () => {
