@@ -111,9 +111,14 @@ const CODE_ROOTS = ['src/', 'functions/', 'extension/', 'shared/'];
 // patterns — and against a third, independent signal (the `.test.mjs` siblings inside
 // vitest's own `include` globs) — instead of against a hand-copied list. All four
 // widenings before that were reactive, found by a reviewer after the hole already existed.
+// BIN-880 (2026-08-16) added `gate-symmetry.test.mjs`, the check that walks the whole
+// tracked tree comparing THIS router's answer against the blocking gate's. It is review
+// machinery by definition, so it belongs in both lists for the same reason route.test.mjs
+// does: weakening the check must not be a change nobody reviews.
 export const TOOLING_CODE_FILES = new Set([
   'docs/org/route.mjs',
   'docs/org/route.test.mjs',
+  'docs/org/gate-symmetry.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   'scripts/check-workflow-map.mjs',
@@ -121,6 +126,12 @@ export const TOOLING_CODE_FILES = new Set([
   'scripts/check-public-env.mjs',
   'scripts/check-public-env.test.mjs',
 ]);
+// Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
+// the two remaining root test-runner configs: the blocking gate already stops a commit
+// touching either (`\.(ts|tsx)$`, plus `vitest.*\.config\.ts$` for the rules runner) while
+// this router answered `skip` — a commit held for a review the router called unnecessary,
+// the same drift as BIN-830 seen from the other side. Widening the ROUTER, not the gate,
+// is the conservative half of that pair: it adds no new blocking obligation.
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
   'firestore.indexes.json',
@@ -128,6 +139,8 @@ const CODE_ROOT_FILES = new Set([
   'next.config.mjs',
   'tailwind.config.ts',
   'vitest.config.ts',
+  'vitest.rules.config.ts',
+  'vitest.setup.ts',
   'package.json',
 ]);
 const CODE_EXT_RE = /\.(ts|tsx|js|jsx|mjs|cjs|css|json|rules)$/;
@@ -410,12 +423,12 @@ function selftest() {
     // docs/org/ are `owned` / [25]; all four under scripts/ are `unmapped-code` / [14] —
     // the deliberate #14-fallback seat §25 says the check scripts keep.
     //
-    // `--selftest` is invoked by NOTHING — not package.json, not ci.yml, not deploy.yml,
-    // not a hook — so a stale pin here cannot fail a deploy. That is a reason to keep it
-    // honest by hand, not a licence to ship it red: the Usage line advertises "exit
-    // non-zero on fail", and a documented command that is knowingly broken teaches the
-    // next reader to ignore it. Wiring this block into a gate, or folding it into
-    // route.test.mjs, is its own job (BIN-880).
+    // `--selftest` used to be invoked by NOTHING — not package.json, not ci.yml, not
+    // deploy.yml, not a hook — so a stale pin here could not fail a deploy, and a
+    // documented command ("exit non-zero on fail" in the Usage block above) that nobody
+    // runs teaches the next reader to ignore it. BIN-880 wired it: docs/org/gate-symmetry
+    // .test.mjs spawns this exact command and fails if it exits non-zero, and `npm test`
+    // gates deploy.yml. A red case here now stops a release.
     { paths: ['docs/org/gen-ownership-map.mjs'], tier: 'medium', mustSeat: 25, reasonCode: 'owned' },
     { paths: ['scripts/check-public-env.mjs'], tier: 'medium' },
     // A high-stakes path outranks everything, even when nothing else in the set is owned.

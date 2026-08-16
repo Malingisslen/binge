@@ -43,6 +43,10 @@ function gateMatches(agent, file) {
     ),
   );
   const gate = cfg.reviewGates.find((g) => g.agent === agent);
+  // BIN-906 #4: deleting a whole gate OBJECT (not just one of its patterns) used to blow
+  // up on the next property read and redden ~800 cases with a message about `undefined`,
+  // pointing at this file instead of at the config that changed.
+  if (!gate) throw new Error(`.claude/shared-plugin.json → reviewGates has no entry for ${agent}`);
   const exact = new Set(gate.exact || []);
   return (
     (exact.has(file) || (gate.patterns || []).some((p) => new RegExp(p).test(file))) &&
@@ -51,6 +55,22 @@ function gateMatches(agent, file) {
 }
 
 const integrationGateMatches = (file) => gateMatches('binge-integration-reviewer', file);
+
+describe('the gates this file interrogates exist (BIN-906)', () => {
+  it('names both gate objects before anything asserts against them', () => {
+    // Deliberately FIRST in the file, and named: every block below reads the blocking
+    // side through `gateMatches`, so a deleted gate object is the one failure that says
+    // WHICH object is gone instead of repeating a type error a few hundred times.
+    for (const agent of ['binge-integration-reviewer', 'binge-security-reviewer']) {
+      expect(() => gateMatches(agent, 'docs/org/route.mjs')).not.toThrow();
+      // …and it still has something to match with: an entry stripped to an empty
+      // pattern list blocks nothing while remaining findable by name.
+      expect(gateMatches(agent, 'src/lib/firebase/userData.ts') || gateMatches(agent, 'src/app/page.tsx')).toBe(
+        true,
+      );
+    }
+  });
+});
 
 describe('folder-ownership inheritance (BIN-788)', () => {
   it('seats the directory owner for an unlisted sibling file', () => {
@@ -279,13 +299,21 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // Same shape as BIN-838's script-self-test floor (405a2fc) — "the floor is not
     // decoration".
     //
-    // A FLOOR, not an equality: adding a ninth gate script is the desired direction and
+    // A FLOOR, not an equality: adding a further gate script is the desired direction and
     // must never fail. Pinning the exact count would punish the improvement — the same
     // trap taken out of the `it.each` above in this diff, whose three over-tight pins
     // moved into one isolated case, and out of gen-ownership-map.test.mjs's baseline
     // assertion in bfb82f4.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(8);
-    expect(new Set(GATE_SCRIPTS).size).toBe(GATE_SCRIPTS.length); // no duplicate padding
+    //
+    // BIN-906 #2 removed the `new Set(GATE_SCRIPTS).size === GATE_SCRIPTS.length` line
+    // that used to sit here. It guarded against padding the floor with duplicates, which
+    // was a real risk while the list was hand-written — but since BIN-874 derived it from
+    // a Set (`[...TOOLING_CODE_FILES]`) duplicates are impossible by construction, and a
+    // line that cannot fail reads as coverage while proving nothing. Same reasoning that
+    // retired `expect(isCodePath(path)).toBe(true)` from the `it.each` above; the
+    // dedup line on GATE_FILES further down is kept, because that list is two
+    // independent `readdirSync` calls concatenated, not a Set being spread.
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(9);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
@@ -460,7 +488,22 @@ const REVIEW_CANDIDATES = [
   ),
 ].sort();
 
-describe('the advising list and the blocking gate cannot drift apart (BIN-874)', () => {
+// BIN-906 #1 — the block used to be called "the advising list and the blocking gate
+// cannot drift apart", which promises the whole repo while the cases below only walk
+// tooling `.mjs` under docs/ and scripts/. Two whole pattern classes sit outside that
+// glob and this block is blind to both: the repo-wide `\.(ts|tsx)$` entry and
+// `^\.github/(workflows|actions)/` — deleting either from reviewGates left the suite at
+// 837/837 green. Those belong to BIN-880, whose docs/org/gate-symmetry.test.mjs walks
+// every git-TRACKED path and compares the ownership map against the gate; both deletions
+// redden it. The name here now says what this block actually covers.
+// BIN-906 #3 — and the DISCOVERY half below is keyed on a `.test.mjs` sibling, so a
+// tooling `.mjs` that nobody wrote a test for is nominated by nothing and stays invisible
+// to it (live examples: docs/org/metrics/log_event.mjs, referenced from
+// .claude/shared-plugin.json → delivery.metrics.logReviewCommand, and
+// docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs). That is a stated
+// limit of the word "mechanical", NOT a request to widen: narrow-before-broad is Malin's
+// 2026-08-08 call, alternative (a).
+describe('the advising list and the blocking gate cannot drift apart for tooling `.mjs` (BIN-874)', () => {
   it.each(TOOLING_MJS)('%s gets the same answer from both lists', (path) => {
     // The biconditional is the point: `isCodePath` false + gate true means a commit is
     // blocked for a review the router never asks for, and true + false is the BIN-830
