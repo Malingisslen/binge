@@ -115,10 +115,19 @@ interface Spy {
   transactions: number;
   /** Aggregate doc ids written, in order. */
   writes: string[];
+  /**
+   * Messages passed to `log.error`, in order. Recorded rather than discarded
+   * because a swallowed transaction failure leaves NO trace in the data — the
+   * count that results is a perfectly plausible number — so that log line is the
+   * only evidence the failure happened. `.claude/rules/accepted-deviations.md`
+   * calls it the one thing the 2026-08-16 accept does NOT cover, and until this
+   * spy existed nothing enforced that: deleting the log line left the suite green.
+   */
+  errors: string[];
 }
 
 function makeSpy(): Spy {
-  return { callbackStarts: 0, transactions: 0, writes: [] };
+  return { callbackStarts: 0, transactions: 0, writes: [], errors: [] };
 }
 
 /**
@@ -136,7 +145,7 @@ function makeIo(
   hooks: { afterRead?: (docId: string) => Promise<void> } = {},
 ): AggregateIo {
   return {
-    log: { info: () => {}, warn: () => {}, error: () => {} },
+    log: { info: () => {}, warn: () => {}, error: (m) => { spy.errors.push(m); } },
     runTransaction: (fn) => {
       spy.transactions += 1;
       return runTransaction(db, async (tx) => {
@@ -503,8 +512,22 @@ describe('när transaktionen misslyckas', () => {
     // help today either: `retry` is opt-in in firebase-functions v2 and this
     // trigger does not set it, so a throw changes the log line and nothing else.
     // Turning redelivery on is a cost decision on a trigger that fires on every
-    // watchlist write, and it is filed separately rather than decided here.
+    // watchlist write, and Malin took it on 2026-08-16: accept the risk, not the
+    // cost (BIN-915, closed; rationale in .claude/rules/accepted-deviations.md).
+    // So this test pins DECIDED behaviour, not a placeholder. If it goes red,
+    // check WHICH assertion first — `docId` also depends on aggregateDocId, so an
+    // unrelated doc-id regression can redden this without the failure path having
+    // moved at all. Only a change to the swallow/log behaviour itself is grounds
+    // for reopening the decision. (An earlier, uncommitted draft of this comment
+    // claimed any red here meant the failure path changed; the test reviewer
+    // disproved it by mutating the namespaced branch, 2026-08-16.)
     expect(out).toEqual({ kind: 'failed', docId: 'movie_603' });
     expect(await aggregate(db, 'movie_603')).toBeNull();
+    // The accept explicitly does NOT cover losing this log line, so pin it here.
+    // Without this assertion the whole `logger.error` call could be deleted with
+    // the suite fully green — a "protected boundary" nothing protected, which is
+    // worse than not claiming one (found by the test reviewer, 2026-08-16).
+    expect(spy.errors).toHaveLength(1);
+    expect(spy.errors[0]).toContain('movie_603');
   });
 });

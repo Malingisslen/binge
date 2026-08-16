@@ -157,9 +157,15 @@ export function aggregateDocId(event: RatingEvent, log: AggregateLogger): string
  * alternative is `retry: true` on the trigger options, which is OFF by default in
  * firebase-functions v2 (options.d.ts, "Whether failed executions should be
  * delivered again") and is therefore NOT what a rethrow would buy today — a rethrow
- * with retry off changes nothing but the log line. Turning redelivery on for a
- * trigger that fires on every watchlist write is a cost change against the
- * 25 SEK/mån cap and is filed as its own ticket, not decided here.
+ * with retry off changes nothing but the log line.
+ *
+ * DECIDED, so do not re-open it in a review: Malin accepted this risk on
+ * 2026-08-16 (BIN-915, closed) rather than take the cost. Turning redelivery on
+ * means `retry: true` on a trigger that fires on EVERY watchlist write, against a
+ * 25 SEK/mån cap, to protect a display-only average. Full rationale and the
+ * re-open trigger: `.claude/rules/accepted-deviations.md`. What is NOT accepted is
+ * removing the `logger.error` below — the drift is invisible in the data, so that
+ * log line is the only place this failure exists at all.
  */
 export async function runCommunityRatingAggregate(
   io: AggregateIo,

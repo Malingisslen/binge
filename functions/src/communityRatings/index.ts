@@ -6,7 +6,11 @@
  *
  * Fires on every watchlist write but no-ops unless the doc's `rating` changed
  * (the common case). A transaction + a stored `lastEventId` (BIN-148) makes
- * redelivery of the *same* event idempotent so the aggregate can't drift.
+ * redelivery of the *same* event idempotent so the aggregate can't drift FROM
+ * REDELIVERY. It can still drift the other way: a swallowed transaction failure
+ * loses that rating for good, which is an accepted risk as of 2026-08-16 — and
+ * `retry: true` in the trigger options below is the fix that was declined, so this
+ * is the file where someone would type it. See `.claude/rules/accepted-deviations.md`.
  * Aggregate doc id is `${mediaType}_${tmdbId}` so a movie and a TV show that
  * share a TMDB numeric id never collide.
  *

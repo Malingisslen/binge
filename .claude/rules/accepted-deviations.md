@@ -136,6 +136,64 @@ next one. Do not file "the limbo screen is too aggressive" or "block writes at t
 site instead". `deleteAccount()` and its retry are never gated — that part is ADR 0019
 condition 3 and is separately tested. — 2026-08-13
 
+### [Data/Cost] communityRatingMaintain swallows transaction failures — a TRANSIENT one is accepted
+`functions/src/communityRatings/runAggregate.ts` catches every transaction error, logs it
+and returns normally, so Cloud Functions records a successful delivery.
+
+**Accepted:** a TRANSIENT failure costing ONE rating on ONE title. Do not re-file "a
+transient swallowed transaction failure drifts the aggregate by one rating", and do not
+re-propose `retry: true`. **Why:** Malin's call 2026-08-16 (BIN-915, closed as decided), on
+#27 Database Administrator's condition 5 from the BIN-727 critique, which refused to let the
+behaviour ship implicit — "silence isn't a decision" — and named a dated line here as what a
+"swallow it" answer requires. The only fix CONSIDERED (a failed-docId repair marker and a
+reconciliation pass were never weighed) is `retry: true` on the trigger, which is opt-in in
+firebase-functions v2 and unset, so a bare rethrow buys nothing here beyond a Cloud
+Monitoring execution-status flip that nothing in this project consumes — no Sentry on the
+functions side, no dashboard. That trigger fires on EVERY watchlist write (status changes,
+notes, instant-week read-repair), so redelivery is a real cost against the 25 SEK/mån cap,
+and a poison event would retry for up to 7 days — to protect a display-only average. Risk
+accepted over cost.
+
+**NOT accepted, still fileable — all three:**
+1. **A SYSTEMATIC failure of this path.** The `catch` is bare and swallows a permanent
+   condition identically to a transient one: a bug thrown inside the callback, denied Admin
+   credentials, a port that throws on every delivery. Then every rating on every title is
+   lost while Cloud Functions reports 100% success, and per the above nothing would say so.
+   That finding's remedy is a HEALTH SIGNAL, not `retry: true`. Never priced here.
+2. **Removing or downgrading the `logger.error`** on that path. The drift is invisible in
+   the data — every count looks plausible — so that log line is the only place this failure
+   exists at all. It is now asserted by the "när transaktionen misslyckas" test rather than
+   merely asked for here: when this entry was first written the call could be deleted with
+   the whole suite green, which the test reviewer found and which made this paragraph a
+   boundary nothing enforced.
+3. **The other drift mechanisms** `runAggregate.ts`'s header names — e.g. the dedup check
+   leaving the transaction, removing the `tx.get`, a second writer outside it. Non-exhaustive
+   list; all remain must-catch regressions.
+
+**Scope:** this accept reaches `communityRatingMaintain` and nothing else. Never cite it to
+wave through swallow-and-log elsewhere — it says nothing about how any other function
+handles errors, good or bad. Each is judged on its own stakes, and an unfinished Art. 17
+erasure is not a display-only average. Generalising a narrow accept is exactly how BIN-748's
+rejected `localStorage` flag came back as a shipped one.
+
+**Re-open when:** a `communityRatings: aggregate update failed` line appears in the function
+logs. That log line IS the observation channel, and it is the only one — the two triggers
+this entry first named ("observed drift on a real title", "a support report about a wrong
+average") cannot fire, because the drift is invisible in the data and `MIN_SAMPLE = 5` means
+no badge renders at today's user count. An accept whose re-open facts are unreachable is
+permanent by construction, which was not the intent.
+
+**What the user sees, precisely:** a WRONG "Binge-snitt" on one title, in EITHER direction —
+a lost rating below the mean skews the shown average high, not low. The count is one short of
+truth, and it can get worse without a second failure: if that user later REMOVES the rating,
+`ratingDelta` applies `countDelta: -1` for a rating that was never counted and nothing floors
+the result at zero, so a low-count title can reach a stored count of zero or below.
+`useCommunityRating.ts` hides the badge at `count <= 0`, so it can stay hidden even once five
+real raters exist. The "när transaktionen misslyckas" test pins the swallow itself; note its
+`docId` assertion also depends on `aggregateDocId`, so a red there is not by itself evidence
+the failure path moved — read which assertion failed before treating it as grounds to
+reopen. — 2026-08-16
+
 ### [Data/Legal] The cross-device aborted-deletion gap is accepted — the consent re-stamp is NOT
 A user who aborts a deletion on one device and merely LOADS an authenticated page on
 another has no marker there: `ensureUserProfile` recreates `users/{uid}`, and
