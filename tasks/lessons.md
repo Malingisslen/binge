@@ -283,3 +283,25 @@ nämnaren växer bara med nya registreringar, så 1 av 3 konton vägrades perman
 raderingar i ett sexkontosprojekt hade kilat fast sopningen för gott — exakt det utfall den
 finns för att förhindra. Golvet på 5 löser båda. Testgranskaren visade dessutom att golvets
 STORLEK var opinnad upp till 29, eftersom alla kvarvarande testfall rörde sig med konstanten.
+
+## 2026-08-16 — [Workflow] En `medium`-tier hos en arbetare som inte kan kalla kritiken går rakt igenom hålet som bara lagades för `top`
+
+**Trigger:** en obevakad sprint delar ut en biljett vars router-tier kräver en granskning
+INNAN bygget — och du har redan skrivit regeln för `full-panel`.
+
+**Rule:** kapacitetskollen vid utdelning måste täcka VARJE tier över `skip`, inte bara den
+högsta. BIN-744/BIN-776:s formulering ("`single` och arbetaren kan inte konvenera en → bygg
+den, men den parkerar för påseende") är inte ett skydd: den blinda kritiken körs då aldrig av
+någon, den skjuts bara vidare till en människa som inte är rollen, på kod som redan ligger på
+main. Läs REGELN där den utlöser, inte bara där den skrevs — en spärr som bevisligen fungerar
+för sitt värsta fall kan vara helt frånvarande för fallet bredvid.
+
+**Example:** sprinten 2026-08-16 gjorde exakt rätt med BIN-909 (`top`, full panel, drogs ut
+före första raden kod, med routerns råa utdata på biljetten) och lät samtidigt BIN-908
+(`medium`, #19 Kundsupport) och BIN-880/BIN-906 (`medium`, #25 Engineering Manager) committas
+och pushas med kritiken oskuldad. Sprintens egen logg skrev `{"ran":false,
+"outcome":"declined-unattended-shipped"}` på alla tre — den VISSTE, och shippade ändå.
+Batch-1:s skyldiga granskare är #25, rollen som äger kvalitetsgrindarna, på en commit vars
+hela syfte är att VIDGA kvalitetsgrindarna. Samma runda: mätfilen påstod att BIN-909 hade
+byggts och committats, nio minuter innan biljettens egen kommentar sa att ingen kod skrivits —
+raderna skrevs 13:53, före att någon commit existerade.
