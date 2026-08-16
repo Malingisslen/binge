@@ -2164,7 +2164,7 @@
         {
           "from": "cf-communityRatingMaintain",
           "to": "firestore",
-          "payload": "transaction on titleRatingsAggregate/{mediaType}_{tmdbId} — ONE transaction reads the doc, skips if lastEventId already processed (BIN-148 redelivery guard), else rewrites {count,sum} as plain numbers computed from that same read. BIN-727 (2026-08-16) removed FieldValue.increment: the read has to happen anyway for lastEventId, so the transaction's optimistic concurrency already gives what the sentinel gave. Removing that read, or adding a second writer outside this transaction, would break it",
+          "payload": "transaction on titleRatingsAggregate/{mediaType}_{tmdbId} — ONE transaction reads the doc, skips if lastEventId already processed (BIN-148 redelivery guard), else rewrites {count,sum} as plain numbers computed from that same read. BIN-727 (2026-08-16) removed FieldValue.increment: the read has to happen anyway for lastEventId, so the transaction's optimistic concurrency already gives what the sentinel gave. Removing that read, or adding a second writer outside this transaction, would break it. If that transaction THROWS, the error is caught, logged and swallowed — Cloud Functions records a successful delivery and that one rating is permanently missing from the aggregate (it never self-heals: a later 4→5 edit carries countDelta 0). Accepted risk as of 2026-08-16 for a TRANSIENT failure — a systematic one is explicitly not covered and needs a health signal, not retry. See .claude/rules/accepted-deviations.md",
           "transport": "Firestore transaction",
           "verified": true
         },
