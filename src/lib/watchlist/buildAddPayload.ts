@@ -1,17 +1,24 @@
 import type { MediaType, WatchStatus, WatchlistItem } from '@/types';
 
-/** Not acceptable from a caller. Most are filled by the context; two are here
+/** Not acceptable from a caller. Most are filled by the context; three are here
  *  because the add path refuses to write them at all:
  *   - `notes` — notes live in the owner-only `watchlistNotes` subcollection
  *     (BIN-505), so accepting one would be a lie.
+ *   - `tags` (BIN-164/BIN-894) — the same privacy invariant, one collection over:
+ *     free-text tags capture third-party personal data ("med mamma") and live in
+ *     the owner-only `watchlistTags` subcollection, NEVER on the publicly-readable
+ *     watchlist doc. `WatchlistItem.tags` exists only as an IN-MEMORY join
+ *     (WatchlistContext joins the tags listener onto `items`), so a caller handed a
+ *     joined row could otherwise pass it straight back in.
  *   - `addedAtIsFallback` (BIN-640) — derived at READ time from whether the doc
  *     had a stored `addedAt`; it is never persisted. Listing it here is what stops
  *     `Carryable` from structurally admitting it onto `WatchlistAddPayload`, where
  *     it would ride into the merge-write and fail the whole thing against
- *     firestore.rules' `hasOnly` allowlist. That is the failure `notes` caused. */
+ *     firestore.rules' `hasOnly` allowlist. That is the failure `notes` caused, and
+ *     `tags` — also absent from that allowlist — would cause identically. */
 type ServerOwned =
   | 'addedAt' | 'addedAtIsFallback' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount'
-  | 'providersCheckedAt' | 'visibility' | 'notes';
+  | 'providersCheckedAt' | 'visibility' | 'notes' | 'tags';
 
 /** Identity + display fields. Every call knows these, so they are always written. */
 type AlwaysWritten = 'tmdbId' | 'mediaType' | 'status' | 'title' | 'posterPath' | 'releaseYear';

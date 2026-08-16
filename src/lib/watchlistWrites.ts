@@ -372,14 +372,22 @@ export function buildAddWrite(
     : {};
   const countedRewatch = 'rewatchCount' in rewatch;
 
-  // BIN-505: notes live ONLY in the owner-only watchlistNotes subcollection, and the
-  // watchlist-doc rules REJECT a non-null inline `notes` -- so a re-mark of a NOTED title
-  // would be permission-denied if one rode along. Belt AND braces, deliberately:
-  // `WatchlistAddPayload` no longer accepts `notes` at all, which stops every type-checked
-  // caller; this runtime strip stays for the ones types cannot reach (a cast, plain JS, a
-  // future refactor that widens the signature). A privacy invariant, not a convention.
+  // BIN-505/BIN-164: notes AND tags live ONLY in their owner-only subcollections
+  // (watchlistNotes / watchlistTags), because both are free text that captures third-party
+  // personal data. The watchlist doc is publicly readable, and isValidWatchlistItem's
+  // `hasOnly` allowlist names NEITHER field -- so either one riding along fails the ENTIRE
+  // merge-write with permission-denied, on an unrelated status change. Belt AND braces,
+  // deliberately: `WatchlistAddPayload` accepts neither key (BIN-894 added `tags` to
+  // ServerOwned beside `notes`), which stops every type-checked caller; this runtime strip
+  // stays for the ones types cannot reach (a cast, plain JS, a future refactor that widens
+  // the signature). Privacy invariants, not conventions.
+  //
+  // `tags` is the likelier accident of the two: WatchlistContext JOINS the tags listener
+  // onto every item in memory, so a caller holding a row it read from the context already
+  // has a populated `tags` in hand.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { notes: _strippedNotes, ...itemFields } = item as WatchlistAddPayload & { notes?: unknown };
+  const { notes: _strippedNotes, tags: _strippedTags, ...itemFields } =
+    item as WatchlistAddPayload & { notes?: unknown; tags?: unknown };
 
   return {
     ...itemFields,

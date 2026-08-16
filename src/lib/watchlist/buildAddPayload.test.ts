@@ -18,6 +18,10 @@ function existing(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
     status: 'mina',
     rating: 4.5,
     notes: 'bästa säsongen är 4',
+    // BIN-894: populated on purpose. `tags` is joined onto every item in memory by
+    // WatchlistContext, so the realistic `current` a caller holds HAS tags — and the
+    // exact-key assertions below are what prove none of them reaches the payload.
+    tags: ['med mamma'],
     title: 'Game of Thrones',
     posterPath: '/poster.jpg',
     releaseYear: 2011,
@@ -61,9 +65,11 @@ describe('buildWatchlistAddPayload', () => {
     ]) {
       expect(keys).not.toContain(absent);
     }
-    // `notes` is not merely absent from the output — it is not part of the input
-    // type at all, because addItem refuses to write notes (BIN-505).
+    // `notes` and `tags` are not merely absent from the output — neither is part of
+    // the input type at all, because the add path refuses to write them (BIN-505 /
+    // BIN-164+BIN-894). Both are owner-only free text on a publicly-readable doc.
     expect(keys).not.toContain('notes');
+    expect(keys).not.toContain('tags');
   });
 
   it('a genuine new add that supplies arrays writes them, so the created doc keeps its array contract', () => {
@@ -164,6 +170,44 @@ describe('WatchlistAddPayload — never carries read-derived fields (BIN-640)', 
       addedAtIsFallback: true,
     };
     expect(payload.tmdbId).toBe(1);
+  });
+});
+
+// BIN-894 — `tags` is `notes`' twin, and was the half left unguarded.
+//
+// Free-text tags capture third-party personal data ("med mamma"), so BIN-164 put them
+// in the owner-only `watchlistTags` subcollection and NEVER on the watchlist doc, which
+// is publicly readable. `WatchlistItem.tags` exists only as an in-memory join — but
+// `WatchlistAddPayload` is derived FROM `WatchlistItem`, so until `tags` joined
+// ServerOwned the payload type structurally admitted it, and `buildAddWrite` spreads the
+// payload straight into the merge-write.
+//
+// The failure is not subtle either: isValidWatchlistItem's `hasOnly` allowlist has no
+// `tags` key, so such a write is permission-denied for the WHOLE document — a user's
+// unrelated status change would just fail. Same mechanism `notes` hit in BIN-505.
+describe('WatchlistAddPayload — never carries owner-only free text (BIN-894)', () => {
+  it('rejects tags at the type level', () => {
+    const payload: WatchlistAddPayload = {
+      tmdbId: 1,
+      mediaType: 'movie',
+      status: 'sedd',
+      title: 'X',
+      posterPath: null,
+      releaseYear: null,
+      // @ts-expect-error tags are owner-only and must not be assignable to the payload
+      tags: ['med mamma'],
+    };
+    expect(payload.tmdbId).toBe(1);
+  });
+
+  it('never carries tags forward from the existing row, even on a full re-mark', () => {
+    // The decisive case: `current` is the joined row, so it HOLDS tags. A carry() line
+    // for tags — the shape every other preserved field has — would leak them onto the
+    // public doc, so assert the key is absent rather than that the value is empty.
+    const payload = buildWatchlistAddPayload({
+      ...base, status: 'sedd', current: existing({ tags: ['med mamma', 'gråtfilm'] }),
+    });
+    expect(Object.keys(payload)).not.toContain('tags');
   });
 });
 

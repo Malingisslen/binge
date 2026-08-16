@@ -283,6 +283,19 @@ describe('buildAddWrite — what intent may never touch', () => {
     }
   });
 
+  it('strips inline tags on both paths (BIN-164/BIN-894 is the same privacy invariant)', () => {
+    // Off-type on purpose, exactly like the note above: `WatchlistAddPayload` no longer
+    // accepts `tags` either. This is the likelier accident of the two — WatchlistContext
+    // JOINS tags onto every item in memory, so a caller that spreads a row it read from
+    // the context is holding populated tags without having typed the word.
+    // `hasOnly` has no `tags` key, so one landing here is permission-denied for the
+    // whole doc, not a quiet extra field.
+    const withTags = { ...payload(), tags: ['med mamma'] } as WatchlistAddPayload;
+    for (const intent of BOTH) {
+      expect(keys(buildAddWrite(withTags, intent, ctx()))).not.toContain('tags');
+    }
+  });
+
   it('uses the INJECTED clock for every stamp, never a client Date', () => {
     // Identity, not shape. A client `new Date()` would typecheck and read fine, and
     // silently write the wrong month into Dagbok and the monthly activity counters
