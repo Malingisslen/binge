@@ -132,6 +132,7 @@ vi.mock('@/lib/firebase/db', () => ({
 
 import { WatchlistProvider, useWatchlist } from './WatchlistContext';
 import type { WatchlistItem, MediaType, WatchStatus } from '@/types';
+import type { TitleWriteOutcome } from '@/lib/watchlistWrites';
 
 // Hjälpare: en watchlist-doc med minimala fält som docToItem läser.
 function doc(tmdbId: number, mediaType: MediaType = 'tv') {
@@ -165,8 +166,12 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // fixture in this file to supply the field — which silently un-tests addItem's
 // stamping decision, the one place that decides whether providersCheckedAt is
 // written at all.
-let upsertTitleRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<void>) | null = null;
-let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<void>) | null = null;
+// BIN-895: both doors now RESOLVE with what the write did (`TitleWriteOutcome`), so
+// these refs carry that through — typing them `Promise<void>` would no longer compile,
+// and widening them to `Promise<unknown>` would let the outcome assertions below read
+// anything at all.
+let upsertTitleRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
+let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
 let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
@@ -672,6 +677,33 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
       await mountSeeded([seenFilm(2)]);
       await act(async () => { await upsertTitleRef!(markSeen()); });
       expect('rewatchCount' in lastPayload('users/u1/watchlist/movie_42')).toBe(false);
+    });
+
+    // BIN-895. The confirmation toast has to describe THIS write, and it cannot see
+    // `current` — it holds the row as it was at render, while the write re-reads the
+    // live ref after its own await. So the write reports back, and what it reports has
+    // to be the payload's own answer: asserted against `rewatchCount` in the SAME
+    // payload, so a report derived from anything else shows up as a disagreement.
+    it('reports the counted rewatch back to the caller', async () => {
+      await mountSeeded([seenFilm(2)]);
+      let outcome: TitleWriteOutcome | null = null;
+      await act(async () => { outcome = await logViewingRef!(markSeen()); });
+      const payload = lastPayload('users/u1/watchlist/movie_42');
+      expect(payload.rewatchCount).toBe(3);
+      expect(outcome).toEqual({ countedRewatch: true });
+    });
+
+    it('reports NO count back when the same write counts nothing', async () => {
+      // The half that matters: a report hard-coded to the intent (or to the caller's
+      // stale view of the status) would claim a rewatch here, on a write that carries
+      // no rewatchCount at all. That sentence is the only place the user is ever told
+      // a permanent counter moved.
+      await mountSeeded([seedDoc({ tmdbId: 42, mediaType: 'movie', status: 'vill_se' })]);
+      let outcome: TitleWriteOutcome | null = null;
+      await act(async () => { outcome = await logViewingRef!(markSeen()); });
+      const payload = lastPayload('users/u1/watchlist/movie_42');
+      expect('rewatchCount' in payload).toBe(false);
+      expect(outcome).toEqual({ countedRewatch: false });
     });
 
     it('counts nothing on a FIRST viewing, however the caller asks', async () => {
@@ -1533,10 +1565,10 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
     expect(setDoc).toHaveBeenCalledTimes(1);
   });
 
-  it('addedAt-reparationen skriver INGENTING under en pabörjad radering (BIN-816)', async () => {
-    // Systemisk skrivning, ingen anvandarhandling — samma resonemang som
-    // notes-migreringen ovan. Den har effekten ligger i samma provider och
-    // overlever pa exakt samma satt att skalet bytts ut mot limbo-skarmen.
+  it('addedAt-reparationen skriver INGENTING under en påbörjad radering (BIN-816)', async () => {
+    // Systemisk skrivning, ingen användarhandling — samma resonemang som
+    // notes-migreringen ovan. Den här effekten ligger i samma provider och
+    // överlever på exakt samma sätt att skälet bytts ut mot limbo-skärmen.
     window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
     try {
       mount();

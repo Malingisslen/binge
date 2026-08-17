@@ -11,7 +11,7 @@ import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
 import { isDeletionStarted } from '@/lib/deletionMarker';
-import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, type WriteIntent } from '@/lib/watchlistWrites';
+import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, outcomeOfAddWrite, type WriteIntent, type TitleWriteOutcome } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -171,8 +171,14 @@ interface WatchlistState {
    * 'Sedd' entry in StatusButton's menu (and QuickAddButton's identical one), which
    * is exactly the gesture Malin ruled must not count, 2026-07-31. It reaches
    * `upsertTitle` via useMarkSeen and counts nothing, and StatusButton.test pins it.
+   *
+   * BIN-895 — both doors RESOLVE with what the write actually did
+   * (`TitleWriteOutcome`), so a caller that DESCRIBES the write to the user reads the
+   * payload's own answer instead of deriving it a second time from a render closure
+   * that may already be stale. Still exactly one parameter, deliberately: the outcome
+   * comes BACK, intent never travels IN — that is the shape BIN-655 removed.
    */
-  upsertTitle: (item: WatchlistAddPayload) => Promise<void>;
+  upsertTitle: (item: WatchlistAddPayload) => Promise<TitleWriteOutcome>;
   /**
    * BIN-655 — the HUMAN add: the user just told us they watched this.
    *
@@ -190,8 +196,11 @@ interface WatchlistState {
    * and firestore.rules' isValidWatchlistItem uses a `hasOnly` allowlist, where a
    * stray key either lands as junk or fails the whole merge-write with
    * permission-denied. That already bit us once, with `notes`.
+   *
+   * BIN-895 — resolves with `TitleWriteOutcome`; see `upsertTitle` above. This is the
+   * door whose answer anyone actually needs: `countedRewatch` is true only here.
    */
-  logViewing: (item: WatchlistAddPayload) => Promise<void>;
+  logViewing: (item: WatchlistAddPayload) => Promise<TitleWriteOutcome>;
   // BIN-560 Phase 4: every per-title mutator takes mediaType so it can (a) address
   // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
   // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
@@ -223,8 +232,11 @@ const WatchlistContext = createContext<WatchlistState>({
   listenerFailed: false,
   libraryKnown: false,
   retryListener: () => {},
-  upsertTitle: async () => {},
-  logViewing: async () => {},
+  // BIN-895: outside a provider nothing is written, so nothing was counted. The
+  // default has to be a real outcome rather than `undefined` — a consumer that
+  // describes the write reads this too.
+  upsertTitle: async () => ({ countedRewatch: false }),
+  logViewing: async () => ({ countedRewatch: false }),
   updateStatus: async () => {},
   updateWatchedAt: async () => {},
   updateRating: async () => {},
@@ -661,8 +673,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // The payload itself is built by `buildAddWrite` in src/lib/watchlistWrites.ts, beside
   // the six guards it shares with `buildStatusUpdate`. Keeping it out of this file is not
   // tidiness: it is what makes the parity matrix testable without a Firebase env.
-  const writeTitle = useCallback(async (item: WatchlistAddPayload, intent: WriteIntent) => {
-    if (!uid) return;
+  const writeTitle = useCallback(async (
+    item: WatchlistAddPayload,
+    intent: WriteIntent,
+  ): Promise<TitleWriteOutcome> => {
+    // BIN-895: no uid, no write — so nothing was counted, and the caller may say so.
+    if (!uid) return { countedRewatch: false };
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
     // BIN-593: read the LIVE ref, not the render-closure `items` -- see itemsRef's
@@ -672,36 +688,44 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const current = findItem(item.mediaType, item.tmdbId);
 
     // first_title_added-beslut (BIN-56 + BIN-38), se ref-kommentaren ovan:
-    //  - Snapshoten har redan settlat -> vi vet sakert om biblioteket ar tomt.
-    //    Fyra direkt om inget snapshot annu sett en titel (genuin forsta add).
-    //  - Snapshoten har INTE settlat (kall laddning) -> vi kan inte skilja ny fran
-    //    atervandande anvandare. Spara en pending-kandidat och lat forsta snapshoten
-    //    avgora. Fyra aldrig vid add-tid i detta lage.
+    //  - Snapshoten har redan settlat → vi vet säkert om biblioteket är tomt.
+    //    Fyra direkt om inget snapshot ännu sett en titel (genuin första add).
+    //  - Snapshoten har INTE settlat (kall laddning) → vi kan inte skilja ny från
+    //    återvändande användare. Spara en pending-kandidat och låt första snapshoten
+    //    avgöra. Fyra aldrig vid add-tid i detta läge.
     let fireFirstNow = false;
     if (firstSnapshotSettledRef.current) {
       if (!everNonEmptyRef.current) fireFirstNow = true;
       everNonEmptyRef.current = true;
     } else {
-      // Kall laddning: rakna varje add (BIN-110) sa snapshoten kan subtrahera
-      // sessionens egna skrivningar. Behall bara den FORSTA addens mediaType for
-      // event-payloaden (en anvandare har bara EN forsta titel).
+      // Kall laddning: räkna varje add (BIN-110) så snapshoten kan subtrahera
+      // sessionens egna skrivningar. Behåll bara den FÖRSTA addens mediaType för
+      // event-payloaden (en användare har bara EN första titel).
       pendingAddCountRef.current += 1;
       if (pendingFirstMediaTypeRef.current == null) {
         pendingFirstMediaTypeRef.current = item.mediaType;
       }
     }
 
-    await setDoc(ref, buildAddWrite(item, intent, {
+    // BIN-895: the payload is held rather than passed inline, so the outcome reported
+    // back is read off the BYTES that were written — not re-derived from `current` a
+    // second time. Re-deriving is what put the confirmation toast and the counter in
+    // disagreement, and `current` here is already the live row the toast lacked.
+    const write = buildAddWrite(item, intent, {
       current,
       snapshotSettled: firstSnapshotSettledRef.current,
       listenerFailed: listenerFailedRef.current,
       visibilityFields: effectiveVisibilityNow(),
       serverTimestamp,
-    }), { merge: true });
+    });
+    await setDoc(ref, write, { merge: true });
     trackEvent('title_added_watchlist', { mediaType: item.mediaType, status: item.status });
     if (fireFirstNow) {
       trackEvent('first_title_added', { mediaType: item.mediaType });
     }
+    // Only after the await: a rejected write never reports a count (the caller's own
+    // await rejects with it), so the toast cannot describe something Firestore refused.
+    return outcomeOfAddWrite(write);
     // BIN-593: `items` is deliberately NOT a dep -- the lookup reads itemsRef, so this
     // callback no longer needs to be recreated on every snapshot.
     // BIN-595: depend on effectiveVisibilityNow (which is itself memoised on

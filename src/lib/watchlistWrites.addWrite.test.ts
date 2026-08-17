@@ -403,9 +403,15 @@ describe('BIN-655 — the flag is gone and stays gone', () => {
     // function cannot be handed a flag, and TypeScript enforces that for every existing
     // caller — but only while the signature stays one parameter. This is the part the
     // compiler cannot defend against, because widening it is legal.
+    //
+    // The RETURN type is deliberately not pinned: BIN-895 changed it from
+    // `Promise<void>` to `Promise<TitleWriteOutcome>` so the write can report what it
+    // actually wrote, and that is the OPPOSITE direction — an answer coming back, not
+    // intent going in. What this guard owns is the parameter list, so it matches any
+    // return type and keeps asserting the one thing that matters.
     const ctxSrc = readFileSync(join(SRC, 'contexts', 'WatchlistContext.tsx'), 'utf8');
     for (const name of ['upsertTitle', 'logViewing']) {
-      const decl = new RegExp(`^\\s*${name}: \\(([^)]*)\\) => Promise<void>;`, 'm').exec(ctxSrc);
+      const decl = new RegExp(`^\\s*${name}: \\(([^)]*)\\) => Promise<[^;]+>;`, 'm').exec(ctxSrc);
       expect(decl, `${name} is not declared on WatchlistState`).not.toBeNull();
       expect(decl![1].split(',')).toHaveLength(1);
       expect(decl![1]).not.toContain('countsAsViewing');

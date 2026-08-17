@@ -14,10 +14,21 @@ import type { MediaType, WatchlistItem } from '@/types';
 // breaks — counting nothing ever, or counting on an ordinary re-mark, which is
 // the exact thing Malin ruled out (the count is editable nowhere).
 
+// BIN-895: both write doors resolve with what the write actually did. The mocks say
+// "nothing counted" by default and each test that wants a count says so explicitly —
+// which is the point of the ticket: the toast follows THIS answer, never the hook's own
+// reading of `getItem`, which is a render closure the write has already outlived.
+const NO_COUNT = { countedRewatch: false } as const;
+const COUNTED = { countedRewatch: true } as const;
+
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: MediaType, tmdbId: number) => WatchlistItem | null>(() => null),
-  upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
-  logViewing: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
+  upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<{ countedRewatch: boolean }>>(
+    async () => ({ countedRewatch: false }),
+  ),
+  logViewing: vi.fn<(payload: Record<string, unknown>) => Promise<{ countedRewatch: boolean }>>(
+    async () => ({ countedRewatch: false }),
+  ),
   updateRating: vi.fn(async () => {}),
 }));
 const toast = vi.hoisted(() => ({ show: vi.fn(), showRating: vi.fn() }));
@@ -67,17 +78,36 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
   // say so, or it is indistinguishable from an ordinary re-mark.
   it('confirms a counted rewatch in its own words', async () => {
     watchlist.getItem.mockReturnValue({ status: 'sedd', rating: 4 } as never);
+    // BIN-895: the WRITE says a rewatch was counted, and that is what the sentence
+    // reports. Before this the hook re-derived the answer from `getItem` above.
+    watchlist.logViewing.mockResolvedValueOnce(COUNTED);
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(film, { countsAsViewing: true }); });
 
     expect(toast.show).toHaveBeenCalledWith('The Matrix — omtitt räknad');
   });
 
+  // BIN-895, and the whole ticket in one test: render state and the write disagree.
+  // `getItem` says 'sedd' — the exact fixture that made the old code claim an omtitt —
+  // while the write, which re-read the live row after its own await, counted nothing.
+  // A remote status change in that window is how the two come apart. The counter is
+  // editable nowhere, so a sentence claiming it moved when it did not is the whole harm.
+  it('follows the write, not the render closure, when the two disagree', async () => {
+    watchlist.getItem.mockReturnValue({ status: 'sedd', rating: 4 } as never);
+    watchlist.logViewing.mockResolvedValueOnce(NO_COUNT);
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => { await result.current(film, { countsAsViewing: true }); });
+
+    expect(toast.show).toHaveBeenCalledWith('The Matrix — Sedd');
+    expect(toast.show).not.toHaveBeenCalledWith('The Matrix — omtitt räknad');
+  });
+
   // The case that matters most, and the one that catches a toast which stopped
-  // asking the shared helper: the flag IS passed, but the title is not 'sedd',
-  // so the write counts nothing. Claiming a rewatch here would be a lie about a
-  // number the user cannot correct. (An earlier cut of this toast dropped the
-  // helper call and passed with only the case above — this is what found it.)
+  // asking: the flag IS passed, but the title is not 'sedd', so the write counts
+  // nothing and reports so. Claiming a rewatch here would be a lie about a number
+  // the user cannot correct. (An earlier cut of this toast derived the answer itself
+  // and passed with only the case above — this is what found it. Since BIN-895 the
+  // derivation is gone; what is pinned now is that the report is USED.)
   it('does not claim a rewatch when the flag is passed but nothing counts', async () => {
     watchlist.getItem.mockReturnValue({ status: 'vill_se', rating: 4 } as never);
     const { result } = renderHook(() => useMarkSeen());
@@ -86,8 +116,11 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     expect(toast.show).toHaveBeenCalledWith('The Matrix — Sedd');
   });
 
-  // Same shape on the TV branch: the payload carries 'mina', which can never be
-  // a rewatch, so the toast must not claim one however the caller asks.
+  // Same shape on the TV branch. The payload carries 'mina', which `rewatchFields`
+  // can never count (pinned in watchlistWrites' own suite), so the write reports no
+  // count and the toast must not claim one however the caller asks. What is pinned
+  // HERE is that the TV branch reads its own write's report — it has a second await
+  // and an early return in front of it, which is where a branch loses the answer.
   it('does not claim a rewatch for a series', async () => {
     watchlist.getItem.mockReturnValue({ status: 'sedd', rating: 4 } as never);
     const { result } = renderHook(() => useMarkSeen());

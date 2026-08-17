@@ -416,17 +416,17 @@ export function buildAddWrite(
     ...rewatch,
     updatedAt: serverTimestamp(),
     // BIN-593 -- `watchedAt` is user-authored. Malin, 2026-07-25: "har man manuellt
-    // justerat 'sett' ska det bara andras om man sjalv manuellt andrar igen." Two ways it
+    // justerat 'sett' ska det bara ändras om man själv manuellt ändrar igen." Two ways it
     // is written here, and only one of them touches an existing date:
     //
     //  - the FIRST automatic stamp on a title provably without one
     //    (`canAutoStampWatchedAt`). BOTH intents, deliberately: a bulk import of a film
     //    the user has never seen still deserves its first date.
     //  - a COUNTED rewatch, which is the human saying "I watched this, now" -- precisely
-    //    the carve-out BIN-593 leaves open ("bara om man sjalv manuellt andrar igen").
+    //    the carve-out BIN-593 leaves open ("bara om man själv manuellt ändrar igen").
     //    `'viewing'` only, by construction, since `rewatch` is empty on the bulk path.
     //    Without it the rewatch is invisible: the count says x2 while Dagbok, Statistik's
-    //    monthly activity and Streamingradgivarens films-this-month lens all keep
+    //    monthly activity and Streamingrådgivarens films-this-month lens all keep
     //    crediting the ORIGINAL viewing. The cost is real and accepted -- a title stores
     //    one date, so the earlier one is replaced.
     //
@@ -481,4 +481,37 @@ export function buildAddWrite(
       ? { ratedAt: serverTimestamp() }
       : {}),
   };
+}
+
+/**
+ * BIN-895 — what a write actually DID, for the one caller that has to describe it.
+ *
+ * `useMarkSeen`'s confirmation toast has to say whether an omtitt was counted, and it
+ * cannot answer that itself: it holds the RENDER closure's row while `buildAddWrite`
+ * was handed the LIVE one (`findItem`, read after `await fsdb()`). A remote status
+ * change in that window made the two disagree, and the toast then claimed a rewatch
+ * the write never counted — a sentence about a permanent, un-editable counter that
+ * the counter itself contradicts.
+ *
+ * So the answer travels BACK from the payload instead of being derived a second time
+ * from older facts. Nothing to keep in sync: the key read here is the same key
+ * Firestore receives, present exactly when `rewatchFields` produced it.
+ *
+ * Deliberately NOT the mirror image — nothing needs to be built to stop a counted
+ * rewatch from going unannounced. "Sedd igen" only renders on a title the render
+ * state already says is 'sedd', so a silent-but-counted write is structurally
+ * impossible (Malin, 2026-08-16: "lägg inget skydd där").
+ *
+ * Declared BELOW `buildAddWrite` on purpose: sitting above it separated that function
+ * from its own contract JSDoc, which then read as documenting this interface instead
+ * (integration review, 2026-08-16).
+ */
+export interface TitleWriteOutcome {
+  /** The write bumped `rewatchCount`. Only ever true on the `'viewing'` path. */
+  countedRewatch: boolean;
+}
+
+/** Read the outcome off the payload `buildAddWrite` produced. */
+export function outcomeOfAddWrite(write: Record<string, unknown>): TitleWriteOutcome {
+  return { countedRewatch: 'rewatchCount' in write };
 }

@@ -9,9 +9,8 @@ import { getTVShow } from '@/lib/tmdb/client';
 import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { trackEvent } from '@/lib/analytics';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
-import { rewatchFields } from '@/lib/watchlistWrites';
 import { shouldPromptRating } from './useMarkSeen.helpers';
-import type { MediaType, TMDBTVShow, WatchStatus } from '@/types';
+import type { MediaType, TMDBTVShow } from '@/types';
 
 export interface MarkSeenInput {
   tmdbId: number;
@@ -59,7 +58,7 @@ export function useMarkSeen() {
     // could forget it.
     const write = opts?.countsAsViewing ? logViewing : upsertTitle;
 
-    const promptRating = () => {
+    const promptRating = (counted: boolean) => {
       // BIN-641: a counted rewatch says so. It is the app's only permanent,
       // un-editable write, and it is made on a screen that does not show the
       // count (Bibliotek renders "x2", the title page doesn't) — so without this
@@ -67,24 +66,19 @@ export function useMarkSeen() {
       // tell the two apart. The rating nudge still wins when there is no rating:
       // that one asks for something, this one only confirms.
       //
-      // Asks the SAME helper the write asks, rather than re-deriving the rule —
-      // otherwise the toast and the counter drift and the message becomes a lie.
-      // `current != null` is null-safety, not a guarantee: it reads the render
-      // closure while the write reads the live ref, so a remote status change in
-      // between can still make this claim a rewatch the write did not count. The
-      // reverse (silent but counted) cannot happen — the entry only renders while
-      // render state says 'sedd'. BIN-655 did NOT close this: it made intent a
-      // function choice rather than a flag, which is a different problem. The toast
-      // still reads the render closure while the write reads the live ref, so the
-      // race survives. Tracked in BIN-895.
+      // BIN-895: `counted` is REPORTED BY THE WRITE — `outcomeOfAddWrite` reads it
+      // off the payload Firestore received. It is not re-derived here, and must not
+      // be: this closure holds the row as it was at RENDER, while the write path
+      // re-reads the live ref after its own `await`. A remote status change in that
+      // window used to make the toast claim an omtitt the counter never got, and the
+      // counter is editable nowhere, so the sentence was the one thing left saying
+      // it happened. BIN-655 did not close this (it turned intent into a function
+      // choice, a different problem) — the answer now travels back instead.
       //
-      // `writtenStatus` is the status the PAYLOAD carries, not a literal 'sedd':
-      // the TV branch writes 'mina', and passing 'sedd' here would let a TV call
-      // toast a rewatch over a write that counts nothing.
-      const writtenStatus: WatchStatus = mediaType === 'tv' ? 'mina' : 'sedd';
-      const counted = Boolean(opts?.countsAsViewing)
-        && current != null
-        && 'rewatchCount' in rewatchFields(writtenStatus, current.status, current.rewatchCount);
+      // Nothing guards the mirror image, on purpose: "Sedd igen" only renders while
+      // render state already says 'sedd', so a counted-but-silent write cannot occur
+      // (Malin, 2026-08-16). The TV branch is covered for free — it writes 'mina',
+      // which `rewatchFields` can never count, so the payload never carries the key.
       if (shouldPromptRating('sedd', current?.rating ?? null)) {
         showRating(`Betygsätt ${title}?`, (rating) => {
           void updateRating(mediaType, tmdbId, rating);
@@ -98,6 +92,11 @@ export function useMarkSeen() {
     };
 
     if (mediaType === 'tv') {
+      // BIN-895: declared out here rather than initialised to `false`, so a write that
+      // never reports leaves this un-assigned (a compile error) instead of quietly
+      // toasting "no rewatch". The catch below returns, so nothing reads it unless the
+      // write assigned it.
+      let counted: boolean;
       try {
         const tvShow = await queryClient.fetchQuery<TMDBTVShow>({
           queryKey: ['tv', tmdbId],
@@ -105,7 +104,7 @@ export function useMarkSeen() {
           staleTime: TMDB_STALE.TV_DETAIL,
         });
         const last = tvShow.last_episode_to_air;
-        await write(buildWatchlistAddPayload({
+        ({ countedRewatch: counted } = await write(buildWatchlistAddPayload({
           tmdbId, mediaType, status: 'mina', title, posterPath, releaseYear, current,
           // `?? undefined` is load-bearing: a null here must mean "we don't know,
           // keep what's stored", NOT "clear it". The helper writes an explicit null
@@ -121,16 +120,16 @@ export function useMarkSeen() {
           subscriptionProviders: input.subscriptionProviders,
           genreIds: input.genreIds,
           tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
-        }));
+        })));
       } catch {
         show('Kunde inte hämta serieinfo, försök igen');
         return;
       }
-      promptRating();
+      promptRating(counted);
       return;
     }
 
-    await write(buildWatchlistAddPayload({
+    const { countedRewatch } = await write(buildWatchlistAddPayload({
       tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear, current,
       // See the TV branch: null means "unknown, preserve", not "clear".
       totalSeasons: input.totalSeasons ?? undefined,
@@ -140,6 +139,6 @@ export function useMarkSeen() {
       genreIds: input.genreIds,
       tmdbStatus: input.tmdbStatus ?? undefined,
     }));
-    promptRating();
+    promptRating(countedRewatch);
   }, [getItem, upsertTitle, logViewing, updateRating, show, showRating, queryClient]);
 }

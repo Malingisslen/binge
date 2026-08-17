@@ -123,6 +123,17 @@ settings page's own message for that case still truthfully says nothing was dele
 file "a transient failure locks the user out"; it is the accepted cost, and moving the
 marker later reopens the resurrection window. — 2026-08-13
 
+**Narrowed 2026-08-16 (BIN-813 / BIN-921).** That last clause covers the first-chunk
+failure ITSELF, which `applyDeletionPlan` leaves untagged so it lands in the `untouched`
+branch and its literal "Ingenting har raderats". It does NOT cover a later attempt from a
+session older than `RECENT_LOGIN_MAX_AGE_MS`: the marker is already down, so
+`AuthContext`'s freshness gate throws BIN-813's second message, `classifyDeletionFailure`
+answers `recent-login`, and the user is told the deletion has been started but not
+finished. Nothing there is false — that text never claims data is gone — but it
+deliberately stops reassuring, and the reassurance is exactly what BIN-813 took away.
+Do not "restore" the nothing-was-deleted wording to that branch, and do not file the pair
+as a contradiction. — 2026-08-16
+
 ### [Security/UX] A half-deleted session is blocked from writing, not merely warned
 `AppShell` replaces the entire app with `DeletionLimbo` for a marked session, so a user
 whose connection merely dropped mid-deletion cannot save anything until they retry or sign
