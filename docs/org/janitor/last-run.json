@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-08-10",
+  "lastRun": "2026-08-17",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
   "retroDue": true,
   "acceptRate": null,
-  "notes": "No dossier-staleness dir (gitignored local state, expected). Security Architect weekly world-watch scan due and run. Full org-retro due (44d since go-live, only shakedown logged). Cruft sweep skipped BIN-505 plan (unchecked checkboxes, per rule)."
+  "notes": "Dossier-staleness dir absent (gitignored local state); scanned security-architect (weekly, no material delta); full retro overdue since 2026-07-25; no accept-rate tool in this repo."
 }

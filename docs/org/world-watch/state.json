@@ -79,7 +79,7 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-08-10",
+      "lastScan": "2026-08-17",
       "snapshot": {
         "nextjs-advisories": "2026-08-10: Direct WebFetch worked. No advisories published after 2026-07-21 (same 9-CVE July batch already tracked, issue #44 closed). package-lock.json still resolves next@16.2.12, still patched. No change.",
         "ghsa-npm": "2026-08-10: Direct WebFetch worked. No new advisories surfaced this cycle for next, react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* packages. No change.",
@@ -88,7 +88,14 @@
         "recaptcha-enterprise-relnotes": "2026-08-10: Direct WebFetch blocked by egress proxy (docs.cloud.google.com). WebSearch fallback found no entries dated August 2026, and nothing affecting ReCaptchaV3Provider usage or App Check integration. No change.",
         "gh-changelog-dependabot": "2026-08-10: Direct feed fetch blocked by egress proxy (github.blog). WebSearch fallback surfaced one new item since last scan: 'Customize Dependabot pull request branch names' (2026-08-04) — adds pull-request-branch-name options to dependabot.yml (prefix, separators, case, template); config-only, doesn't change how advisories/alerts reach the repo and Binge's dependabot.yml doesn't need it. Not filed."
       },
-      "_lastScanCoverage": "All 6 sources checked (3 direct WebFetch success: nextjs-advisories, ghsa-npm, firebase-js-sdk-releases; 3 required WebSearch fallback after egress-proxy blocks: firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot); repo cross-checked via package-lock.json resolved-version parse (next@16.2.12, firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0) and issue #47's still-open state."
+      "_lastScanCoverage": "All 6 sources checked (3 direct WebFetch success: nextjs-advisories, ghsa-npm, firebase-js-sdk-releases; 3 required WebSearch fallback after egress-proxy blocks: firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot); repo cross-checked via package-lock.json resolved-version parse (next@16.2.12, firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0) and issue #47's still-open state.",
+      "_janitorLeanScans": [
+        {
+          "date": "2026-08-17",
+          "via": "weekly-janitor-sweep",
+          "note": "Lean WebSearch check: Next.js/React CVEs, Firebase JS SDK release. No material delta vs 2026-08-10 baseline (same tracked CVE batch, issue #47 still open). Full per-source snapshot not refreshed this cycle."
+        }
+      ]
     },
     "legal-gdpr-counsel": {
       "roleNumber": 5,
