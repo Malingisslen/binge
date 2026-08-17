@@ -348,3 +348,42 @@ tre av elva valda biljetter aldrig delades ut, och ett där `docs/workflow-map*`
 blockerande granskare. `create_issue` svarade "You've exceeded the free issue limit for this
 workspace" på båda försöken. Alla sju parkerades i stället som fullständiga kommentarer på
 BIN-866, BIN-874, BIN-901, BIN-917, BIN-891 och BIN-853, med hela listan upprepad på BIN-866.
+
+---
+
+## Ett tal i en kommentar är ett OKONTROLLERAT PÅSTÅENDE tills du kört något
+
+**Trigger:** du skriver en siffra, en täckningsutsaga eller ett "den enda X" i en kommentar,
+en notis eller ett commitmeddelande — särskilt i en ändring vars ämne ÄR att påståenden ska
+beläggas.
+
+**Rule:** kör kommandot som ger svaret innan du skriver meningen. Räkna listan, resolva shan,
+proba grinden, kör routern. En mening som beskriver koden granskas av ingenting: typkontroll,
+tester och lintern läser den inte, så den enda kontrollen är att någon mäter den för hand.
+
+**Example:** BIN-905/918 (2026-08-17) tog **tretton** helhetsgranskningspass. Tolv av dem hittade
+något, och **noll av de tolv var en defekt i vad koden gör** — varje enskilt var ett påstående
+jag skrivit utan att köra något:
+
+- "commiten landade 15:25, 92 minuter senare" — 049f21b är 14:32:45Z, 39 minuter. Jag hade
+  blandat ihop två commitar, inne i rättelseraderna som fanns för att laga felaktiga uppgifter.
+- "fixturerna är de faktiska byten ur events.jsonl" — de var trimmade kopior. Läses nu ur filen.
+- "gate-symmetry fällde båda filerna" — den fällde EN, via en annan regel; produktionsfilen var
+  osynlig för alla dess tre regler. En annan kontroll fällde båda.
+- "flaggan sätts på ett enda ställe" — tre.
+- "loggens enda skrivare" — sprintmotorn skriver förbi den, inklusive de fyra rader biljetten
+  handlar om. Och "den enda anroparen" — `/org-retro` är en andra.
+- "sjunde ordet i typlistan" — sjätte. Skrivet i just den mening som fanns för att erkänna en
+  tidigare felräkning.
+- "alla fyra filer under docs/org/ ägs av #25" — åtta filer, fem ägda, tre inte, och min egen
+  commit orsakade skillnaden.
+- Planens rollbesättning: jag körde blinda kritiker från de TVÅ roller routern väljer bort, och
+  missade den enda den sätter — på den sjunde vidgningen av granskningsgrinden, alltså exakt
+  den rollens område, i commiten som dokumenterar att samma kritik uteblev förra gången.
+
+**Två av de tolv satt INNE i fixen för ett tidigare fynd.** Det är mönstrets kärna: att rätta ett
+okontrollerat påstående med ett nytt okontrollerat påstående känns som noggrannhet och är det inte.
+
+**Vad som faktiskt fungerade:** att be granskaren behandla varje tal som misstänkt och redovisa
+vilka den räknade om — och att själv köra kommandot före varje rättelse i stället för att lita på
+granskarens siffra. Prosa som beskriver kod behöver samma bevisbörda som koden.
