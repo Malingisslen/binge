@@ -21311,3 +21311,84 @@ identical residual" claim is independently verified true. The disclosure list is
 fifth gap found on this pass. No blocking findings.
 
 REVIEW-VERDICT: pass (0 blocking)
+
+
+## 2026-08-17 — BIN-905 + BIN-918 rebuilds, final review
+
+Rebuilds of two tickets each dropped by the 2026-08-16 outcome review for a claim that
+sounded checked and was not. Reviewed the full staged diff: `.claude/shared-plugin.json`,
+`docs/org/metrics/README.md`, `docs/org/metrics/check_events.mjs` (new), `check_events.test.mjs`
+(new, 32 tests), `events.jsonl`, `log_event.mjs`, `route.mjs`, `route.test.mjs`,
+`world-watch/DESIGN.md`, `src/components/settings/DeleteAccountSection.{tsx,test.tsx}`,
+`tasks/todo.md`. Index/worktree shas matched on every file at start and end; HEAD did not move.
+
+**DeleteAccountSection — the new test `kontaktvägen står kvar i BÅDA lägena`.** Wrapped the
+contact `<p>` in `{!confirming && (...)}`  (the mutant that beat the previous attempt) and ran
+the suite: exactly 1/10 red, the new test, alone — `getByRole('link', {name:'hej@binge.nu'})`
+throws once `confirming` is true and the paragraph is gone. Restored from a scratchpad copy,
+hash-verified back to the staged blob (`72f8ce8…`), clean control 10/10. Also spot-checked the
+rewritten comment's AuthContext line-number claims (536, 638, 1190-1194, 1227) against the real
+file — all four exact.
+
+**check_events.mjs / check_events.test.mjs — six claims, all verified live, six mutation runs,
+restore-and-rehash after each:**
+1. `REAL_FALSE_ROWS` reads `events.jsonl` live (not copied); confirmed the file really holds
+   exactly 4 rows at `ts:"2026-08-16T13:53:30.297Z"` with type `review`, and the count assertion
+   (`toHaveLength(4)`) plus the BIN-909 panel-length/contents assertions are real (not vacuous —
+   a filter matching zero would fail the length check).
+2. `evidenced` — reverted `evidenced++` to the old `claimsChecked - correctedAway - unverified`
+   subtraction. Exactly 1/32 red: `a VIOLATING claim is never counted as evidenced`. Confirmed
+   live (as the test file's own comments say) that the other `evidenced` assertions
+   (`PASSES a row naming a commit that already existed…`, `counts a retired claim as RETIRED`,
+   the shallow-clone case) stay GREEN under the buggy shape — they are honestly self-documented
+   as non-discriminating for this mutant, not silently vacuous.
+3. Freshness comparison — `>`→`<` (direction flip) reddens 5 tests including the two directional
+   fixtures, but leaves the inclusive-boundary fixture GREEN (direction flips are silent at
+   equality by construction). `>`→`>=` (inclusive-boundary mutant) reddens exactly
+   `PASSES a commit stamped at exactly the row time — the boundary is inclusive`, red-alone. Both
+   are real, distinct mutants; folded the general lesson into the principles file (rounding/
+   boundary bullet) rather than filing this as a gap — the test file's coverage is actually
+   complete, it's just pinned by two different mutations than "flip the operator" names as one.
+4. Shallow-clone (`historyAvailable`) — flipped `if (!historyAvailable)` to `if (historyAvailable)`:
+   5/32 red, including the dedicated shallow-checkout test and three fixtures that should have
+   gone through the real resolver path. The three states (evidenced / unverified / violation)
+   stay distinguishable.
+5. Floor — neutered the `claimsChecked === 0` push with `if (false && …)`: exactly the two floor
+   tests redden (`a file with no reaching-main claims at all FAILS the floor`,
+   `grandfathered rows do NOT satisfy the floor`), red-alone together, nothing else moves.
+6. Live-file assertion — mutated `gitCommitDate` to always `return null` (the deny-everything
+   stub shape): exactly 1/32 red, `accepts a row that obeys the contract, against real git`.
+   Confirmed live that no row in `events.jsonl` currently carries a real `commit_sha` field (one
+   textual mention inside a correction's prose, not a JSON field), so the "it passed only because
+   no live row carries the field yet" self-disclosure in the test file is accurate, not spin.
+   Cross-checked the two commit dates the correction rows and the header comment cite (`049f21b`
+   → `2026-08-16T14:32:45Z`, `851696d` → `2026-08-16T15:25:30Z`) against real `git show`: exact.
+
+**route.mjs / route.test.mjs — floor 9→12.** `TOOLING_CODE_FILES.size` computed live = 12,
+matching the new floor. `log_event.mjs` has no `.test.mjs` sibling on disk (confirmed by
+listing `docs/org/metrics/`) and is never named in a dedicated `it.each` fixture — it rides only
+inside `GATE_SCRIPTS` (`[...TOOLING_CODE_FILES]`). Tested the comment's stronger claim ("remove
+it from BOTH TOOLING_CODE_FILES and the gate regex and the floor is the only thing left that
+would notice") in two steps: (a) removing it from `TOOLING_CODE_FILES` alone was actually caught
+by TWO tests, not one — the floor AND `docs/org/metrics/log_event.mjs gets the same answer from
+both lists` (the BIN-874 symmetry check, keyed on `TOOLING_MJS`, a filesystem-derived list
+independent of `TOOLING_CODE_FILES`, so it still nominates the file and the biconditional
+`isCodePath(false) === integrationGateMatches(true)` fails); (b) since `.claude/shared-plugin.json`
+is tracked infra and a direct `Edit` to it was correctly classifier-blocked, simulated the
+regex-side removal IN MEMORY (read the real JSON, mutate the pattern string in a throwaway node
+script, replicate `gateMatches`'s exact Set/RegExp logic) rather than touching the file — with
+BOTH sides removed, `integrationGateMatches` computes `false` too, so the biconditional in (a)
+now holds and would NOT catch it; combined with (b)'s route.mjs mutation, the floor is confirmed
+as the only route.test.mjs assertion that would move. Also confirmed `docs/org/gate-symmetry
+.test.mjs`'s own documented "blind spot 1" (no owner AND no gate, invisible to all three rules)
+matches this exact double-removal scenario. The comment's claim holds, verified rather than
+trusted — no finding filed.
+
+All six events.jsonl/route.mjs claims and the DeleteAccountSection claim independently verified
+true by live mutation. No weakened assertion, no vacuous fixture, no unverified handed-down
+number found anywhere in this diff. Non-blocking observation only: the "flip the operator"
+instruction conflates two distinct mutants (direction vs. inclusive-boundary) — noted above,
+folded into the principles file, not filed against this diff since both mutants are in fact
+covered, just not both by the one described action.
+
+REVIEW-VERDICT: pass (0 blocking)

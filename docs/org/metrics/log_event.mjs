@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // log_event.mjs — append-only logger for the role-org measurement layer.
 //
 // FAILS OPEN: this must NEVER throw to its caller. Logging is observability, not a
@@ -6,7 +5,7 @@
 // log can never break a /stakeholder-review run or the ExitPlanMode hook.
 //
 // Usage:  node docs/org/metrics/log_event.mjs <type> '<json-payload>'
-//   <type>     one of: review | trigger | world-watch | freshness | retro
+//   <type>     one of: review | trigger | world-watch | freshness | retro | correction
 //   <payload>  optional JSON object string with type-specific fields
 //
 // Stamps an ISO-UTC `ts` and appends ONE JSON line to events.jsonl (next to this file,

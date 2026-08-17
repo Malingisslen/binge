@@ -248,6 +248,29 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     expect(screen.getByText('Ja, ta bort permanent')).toBeTruthy();
   });
 
+  it('kontaktvägen står kvar i BÅDA lägena — den är inte ett av bekräftelsestegets syskon', async () => {
+    // BIN-905. Poängen är inte att adressen finns, utan att den finns OAVSETT
+    // `confirming` — det är hela skälet till att den får ligga i sektionen i
+    // stället för i de fyra låsta meddelandena.
+    //
+    // Måste därför driva båda lägena. Ett test som bara läser utgångsläget är
+    // grönt även om stycket flyttas in i `{!confirming && …}`, och då försvinner
+    // adressen i exakt det ögonblick användaren står i bekräftelsesteget och är
+    // som mest osäker. Det var precis den luckan förra försöket lämnade öppen
+    // (mutanten överlevde 10/10) och den här biljetten fälldes för.
+    render(<DeleteAccountSection />);
+
+    const inStartState = screen.getByRole('link', { name: 'hej@binge.nu' });
+    expect(inStartState.getAttribute('href')).toBe('mailto:hej@binge.nu');
+
+    fireEvent.click(screen.getByText('Ta bort mitt konto'));
+
+    // Bekräftelsesteget är uppe — samma adress ska fortfarande stå där.
+    expect(screen.getByText('Ja, ta bort permanent')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'hej@binge.nu' }).getAttribute('href'))
+      .toBe('mailto:hej@binge.nu');
+  });
+
   it('knappen går att använda igen efter ett fel — ett misslyckat försök får inte se ut som ett hängt försök', async () => {
     auth.deleteAccount.mockRejectedValue(new Error(PREFLIGHT_ERROR));
 

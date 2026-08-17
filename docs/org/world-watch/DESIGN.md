@@ -336,7 +336,11 @@ exploration), to cut the ~355k cost. Result, measured honestly:
 
 ### 2.7 Measurement & tuning (BUILT 2026-06-27) — does any of this earn its cost?
 `docs/org/metrics/` (committed): an append-only `events.jsonl`, a fail-open `log_event.mjs`
-helper, and a README schema (`docs/org/metrics/README.md`).
+helper, a README schema (`docs/org/metrics/README.md`), and — since BIN-918, 2026-08-17 —
+`check_events.mjs` + its test, which fail when a row claims the work reached main without
+naming a `commit_sha` that exists and predates the row. That check exists because four rows
+stamped 2026-08-16 asserted builds as accomplished fact in the sprint's SELECTION step,
+before anything was built; they are retired by `correction` rows rather than edited.
 
 **Two instrumented gaps** (the only ones the artifacts can't already see):
 - `/stakeholder-review` logs each `review` event → clean no-condition/no-ADR approvals =
@@ -441,6 +445,14 @@ split clean:
 
 ### What's gitignored, and where its committed source lives
 
+> **Stale as of 2026-08-17 (BIN-918).** This table lists the mirror targets as they were
+> designed, not as they are deployed. `.claude/hooks/` today holds only
+> `dossier-freshness.mjs`, `map-freshness.mjs` and `preview-gate.mjs`, and `.claude/commands/`
+> is empty — the rest moved to `C:/claude-plugins`. Concretely for the row below:
+> `trigger` rows are written by `suggest-stakeholder-review.mjs` in that plugin, not by
+> `exit-plan-suggest-review.ps1`, which is not deployed here. Disclosed rather than rewritten:
+> §3 is a design record, and re-deriving the whole mirror set is its own job.
+
 | Gitignored (runs) | Committed source (survives git) |
 |---|---|
 | `.claude/hooks/world-watch-due.ps1` | `docs/org/world-watch/local-tooling/hooks/world-watch-due.ps1` |
@@ -457,7 +469,7 @@ split clean:
 | `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
 
 The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`,
-`retro-schedule.json`, README) is committed data + helper, **not** gitignored glue, so it
+`check_events.mjs` + its test, `retro-schedule.json`, README) is committed data + helper, **not** gitignored glue, so it
 needs no mirror/rebuild. Only the `org-retro-due-check.mjs` hook that *reads* the schedule
 is gitignored glue (mirrored above).
 

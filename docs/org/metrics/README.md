@@ -10,14 +10,33 @@ system on its own terms.
 ## Files
 - **`events.jsonl`** — append-only, one JSON object per line. Committed (it's data, not
   glue). Never rewrite past lines.
-- **`log_event.mjs`** — the only writer. Stamps `ts` (ISO-UTC) + `type`, appends one line.
-  **Fails open** — logging must never break a caller, so a broken log silently no-ops.
+- **`log_event.mjs`** — the only IN-REPO writer helper. Stamps `ts` (ISO-UTC) + `type`,
+  appends one line. **Fails open** — logging must never break a caller, so a broken log
+  silently no-ops. **Corrected 2026-08-17 (BIN-918):** this line said "the only writer",
+  and that is not true. `sprint-execute-parallel.js` and `suggest-stakeholder-review.mjs`
+  (both in `C:/claude-plugins`) append to `events.jsonl` directly and never call it —
+  including the four rows the `correction` section below exists for. TWO live callers do
+  use it: `.claude/shared-plugin.json` → `delivery.metrics.logReviewCommand` for `review`
+  rows, and the `/org-retro` skill for its `retro` row (all three `retro` rows in
+  `events.jsonl` — 1, 25 and 26 — were written THROUGH the helper; only row 25's `shakedown`
+  is a mode that skill emits today, so "through the helper" is the claim, not "by the skill"). The four copies under `docs/org/world-watch/local-tooling/` are dead
+  mirrors, not running code. Read any statement about "the writer" with that in mind.
+  **Second correction, same day:** the first version of this note said `logReviewCommand`
+  was the ONE caller. That was asserted, not measured, and `/org-retro` disproves it — a
+  helper with a single caller hardcoding `review` would never need the SIX-type enum this
+  very commit widens. (It said "seven-type" for one round. The enum is
+  `review | trigger | world-watch | freshness | retro | correction` — five before this diff,
+  six after. A miscount inside the sentence recording a previous miscount; twelfth
+  integration pass.)
+- **`check_events.mjs`** + its test — fails when a row claims the work reached main without
+  naming evidence for it. See the BIN-918 section below for what a clean run does and does
+  not prove.
 
 ## Logging
 ```bash
 node docs/org/metrics/log_event.mjs <type> '<json-payload>'
 ```
-`<type>` ∈ `review | trigger | world-watch | freshness | retro`. The helper adds `ts`
+`<type>` ∈ `review | trigger | world-watch | freshness | retro | correction`. The helper adds `ts`
 and `type`; the payload carries the rest. Cross-platform (Node; `node` is already a repo
 dependency). Callers wrap it so a failure is swallowed.
 
@@ -49,6 +68,93 @@ drifted the shakedown data; the writers are now pinned to this contract).
 | `outcome` | *(optional)* free-form label (`approved-with-conditions`, `parked-conditional-block`, …) |
 | `via` | *(optional)* which writer. FIVE values are live: `"sprint-execute"`, `"stakeholder-review"`, `"sprint-parallel"`, `"manual"`, `"attended-review-pass"`. Only the first is recognised as sprint-routed by `/org-retro` (it tests `via === "sprint-execute"` or a `ticket` field), so the other four land in the **ad-hoc** set and are expected to have a preceding `trigger`. See the `ran: false` note — 42 rows currently land there wrongly |
 
+### A row's prose is not authoritative on its own (BIN-918, 2026-08-17)
+
+**Before trusting what a `review` row says, look for a later `correction` event.** The log is
+append-only, so a false row is never edited — it is retired by a row of type `correction`
+carrying `corrects: {ts, ticket}`. A reader going chronologically hits the false row FIRST
+and has no signal in it that a correction exists further down. This paragraph is that signal.
+
+Four rows stamped `2026-08-16T13:53:30.297Z` are corrected this way. They were written in the
+unattended sprint's SELECTION step — before anything was built — but phrased in the past
+tense ("BIN-880 — BUILT and committed"). Three of the four became true later that afternoon —
+BIN-908 in `049f21b` at 14:32:45Z (39 minutes after the row), BIN-880 and BIN-906 in
+`851696d` at 15:25:30Z (92 minutes after it); the
+fourth, BIN-909, was never built at all. All four share a **byte-identical `ts`** and carry no
+`ticket` field, which is exactly why the correction key is `{ts, ticket}` and never `ts`
+alone, and never `commit_sha` — the row most needing correction is the one with no commit.
+
+**Two new fields:**
+
+| field | meaning |
+| --- | --- |
+| `commit_sha` | *(required on any **`review`** row claiming the work reached main)* the commit that is the evidence for that claim. Scoped to `review` rows because that is what `check_events.mjs` examines — the four `correction` rows below name commits in their prose and carry no `commit_sha`, and one of them (BIN-909) never can, since the work was never built |
+| `corrects` | *(on `type: "correction"` rows)* `{ts, ticket}` of the row being retired |
+
+**Tense rule for writers:** a row written before the build is written in the PRESENT
+("review declined, outcome unknown"). The past tense belongs to whoever holds the commit sha
+and writes it into `commit_sha`. Be aware this is a spec for a writer that does not read it:
+the sprint engine lives in `C:/claude-plugins`, must not be edited from this repo (Malin,
+2026-08-06), and nothing here stops it writing another past-tense row tomorrow.
+
+**What `node docs/org/metrics/check_events.mjs` does and does not prove.** A clean run means
+no unevidenced claim **stands** — which is weaker than "every claim is evidenced", and the
+run prints the breakdown so the two cannot be confused. A claim stops standing in four
+different ways: it names a `commit_sha` that exists and is not newer than the row
+(*evidenced*); a later `correction` retires it (*retracted, not verified*); it predates
+`RULE_EFFECTIVE_FROM` (*grandfathered*); or the checkout is shallow and the sha cannot be
+resolved at all (*unverified* — see below). At the bytes shipping with this section the live
+file scores **0 evidenced, 4 retired, 1 grandfathered**: no row in the log carries a
+`commit_sha` yet, so a reader who took "clean" as "verified" would have it exactly backwards.
+
+It does **NOT** verify that the named commit actually contains that ticket's work — a
+real sha cited for the wrong ticket, or a docs-only commit cited for a code claim, is
+invisible to it. That is deliberate: the first attempt at this check tried to close that gap
+by matching commit SUBJECT LINES and certified a docs commit for a code claim, so this
+version refuses the inference and discloses where verification stops instead of guessing.
+**It blocks no commit — but it does gate the deploy, and that is worth knowing before the
+first one fires.** `check_events.test.mjs` asserts the LIVE `events.jsonl`, and `npm test` is
+a blocking step in `deploy.yml` and `preview.yml` (and runs without `continue-on-error` in
+`ci.yml`). Nothing here stops the sprint engine writing another past-tense
+`declined-unattended-shipped` row tomorrow, so the next one turns CI red and holds the
+production hosting deploy of unrelated code until someone appends a `correction`. That is a
+deliberate trade — the row means unreviewed code reached main, which is worth stopping for —
+but the remedy must be obvious to whoever meets it at 2am: **append a `correction` row keyed
+on `{ts, ticket}`, or add the `commit_sha` the claim is missing.** If this proves too blunt,
+the fix is to move the live-file assertion into a CLI-only check rather than to weaken the
+rule.
+
+**And that escape hatch has a TRIGGER, so it does not need re-arguing.** Binding condition
+C2 from #25 Engineering Manager / Release Manager's blind critique, 2026-08-17: *the first
+time this assertion reddens `deploy.yml` or `preview.yml` for a commit unrelated to the
+flagged ticket, it converts to a CLI-only check on the next commit that touches it — not
+re-litigated as a fresh decision.* Whoever meets it at 2am inherits a made decision, not an
+open question. Until that happens the live-file assertion stays: a false row means unreviewed
+code reached main, which is worth stopping for.
+
+**Where you will actually meet it first, which is NOT in CI.** The engine's own prompt says
+"Do not commit and do not stage" for these rows, and `.claude/shared-plugin.json` lists
+`docs/org/metrics/events\.jsonl$` in `delivery.cleanTreeIgnore`, so the sprint's clean-tree
+check waves the new row through. The first symptom is therefore a red **local** `npm test`
+on an UNSTAGED row — which a sprint that just wrote it will read as its own batch failing.
+Check `git status` for `events.jsonl` before suspecting the code under test. CI and the
+deploy only redden once the row is committed. Claims written before
+`2026-08-16T00:00:00.000Z` predate the rule and are grandfathered; the run prints how many.
+In a SHALLOW checkout (`ci.yml` and `preview.yml` use the default depth 1; only `deploy.yml`
+sets `fetch-depth: 0`) no historical sha resolves, so the existence and freshness lookups are
+reported as *unverified* rather than answered as absence — otherwise the first row written to
+this contract would fail CI while passing on deploy, and a check that punishes the first
+person to obey it gets switched off.
+
+> ⚠️ **The counts in the sections BELOW this block are stale.** They were measured when each
+> was written and have not been re-derived; the 2026-08-17 date on this block applies to this
+> block only. Measured 2026-08-17 for comparison: 53 `ran: false` rows (48 `declined-unattended`
+> + 4 `declined-unattended-shipped` + 1 `already-satisfied`), 52 of 53 via `sprint-parallel`,
+> 53 of 109 non-`skip` `review` rows. Every qualitative claim below still holds and every
+> ratio moved the same direction, so nothing there is misleading in substance — but the
+> figures are not current. Disclosed rather than silently re-derived, which is the same
+> discipline as the `correction` rows above. Tracked as BIN-929.
+
 **Rows with `ran: false` are NOT reviews and must be excluded from every rate.** They exist
 because a review that was OWED and refused has to leave a trace — a repo where nothing
 sensitive was touched would otherwise look identical. The unattended sprint writes TWO
@@ -58,10 +164,17 @@ different outcomes, and the second is the alarming one:
   Nothing shipped.
 - `outcome: "declined-unattended-shipped"` — the ticket was **built and committed with the
   review still owed** (the `panelPolicy: park` path). Code reached main unreviewed. Do not
-  read the `ran: false` family as "nothing happened". *Zero rows in the log carry this
-  today* — every one of the 41 sprint-written rows is the pulled-out variant. The writer
-  exists (`sprint-execute-parallel.js`, the `panelOwed` branch), so the day the first one
-  appears it should be legible as the different, worse thing it is.
+  read the `ran: false` family as "nothing happened".
+
+  **Updated 2026-08-17 (BIN-918).** This paragraph used to end "*Zero rows in the log carry
+  this today* — every one of the 41 sprint-written rows is the pulled-out variant", and
+  predicted that the day the first one appeared it should be legible as the different,
+  worse thing it is. That day was 2026-08-16: four rows carry it, stamped
+  `2026-08-16T13:53:30.297Z`. Three describe code that did reach main unreviewed
+  (`049f21b`, `851696d`); the fourth, BIN-909, describes a build that never happened. All
+  four are retired by `correction` rows — see the section above. Left as a corrected
+  sentence rather than a silent edit, because a count in prose going stale without anyone
+  noticing is the same defect class the correction rows exist for.
 
 A third, `"already-satisfied"`, is hand-written by an attended pass that found the review
 had already run. All three are excluded by the same `ran !== false` filter.

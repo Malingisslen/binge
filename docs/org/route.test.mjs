@@ -193,12 +193,17 @@ const GATE_SCRIPTS = [...TOOLING_CODE_FILES];
 
 describe('the router and the gate scripts cannot clear themselves (BIN-805)', () => {
   it.each(GATE_SCRIPTS)('%s routes medium, not skip', (path) => {
-    // Assert the property this block is named for and nothing more — the eight no longer
-    // answer alike. Measured at these bytes: the four under docs/org/ are `owned`/[25] —
-    // BIN-834 + BIN-869 NAMED three of them in §25 and the fourth
-    // (gen-ownership-map.test.mjs) inherits, which is exactly why the two named tests
-    // below can assert `inherited === []` and that fourth file could not. The four under
-    // scripts/ are `unmapped-code`/[14].
+    // Assert the property this block is named for and nothing more — the twelve do not
+    // answer alike. Measured at these bytes: of the EIGHT under docs/org/, five are
+    // `owned`/[25] — BIN-834 + BIN-869 NAMED three of them in §25 and gen-ownership-map
+    // .test.mjs inherits, which is exactly why the two named tests below can assert
+    // `inherited === []` and that file could not. The THREE under docs/org/metrics/ are
+    // `unmapped-code`/[14], as are the four under scripts/.
+    //
+    // Corrected 2026-08-17 (ninth integration pass): this said "the four under docs/org/
+    // are owned" and "the four under scripts/", counts that BIN-880 and then BIN-918 both
+    // outgrew. The substance mattered more than the arithmetic — it asserted that
+    // everything under docs/org/ has an owner, which is exactly the gap BIN-930 tracks.
     // Pinning either specific answer HERE would defeat the point: the router's own
     // failure text tells you to fix an unowned path by naming it in
     // docs/role-responsibilities.md, and a `[14]` pin would make following that advice
@@ -313,7 +318,16 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // retired `expect(isCodePath(path)).toBe(true)` from the `it.each` above; the
     // dedup line on GATE_FILES further down is kept, because that list is two
     // independent `readdirSync` calls concatenated, not a Set being spread.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(9);
+    // Raised 9 → 12 with BIN-918's three additions. A FLOOR, not an equality — the
+    // objection to equality pins above is about pinning a specific answer, not about
+    // advancing a shrink guard with the list it guards. It matters most for
+    // docs/org/metrics/log_event.mjs, the one new entry with NO `.test.mjs` sibling:
+    // remove it from both TOOLING_CODE_FILES and the gate regex and the symmetry
+    // biconditional reads false === false, gate-symmetry is blind (no owner, no gate —
+    // its own blind spot 1) and the DISCOVERY half never nominates it. This floor is the
+    // only thing left that would notice, and BIN-918 left it at 9 until the twelfth
+    // integration pass measured it.
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(12);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
@@ -498,9 +512,11 @@ const REVIEW_CANDIDATES = [
 // redden it. The name here now says what this block actually covers.
 // BIN-906 #3 — and the DISCOVERY half below is keyed on a `.test.mjs` sibling, so a
 // tooling `.mjs` that nobody wrote a test for is nominated by nothing and stays invisible
-// to it (live examples: docs/org/metrics/log_event.mjs, referenced from
-// .claude/shared-plugin.json → delivery.metrics.logReviewCommand, and
-// docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs). That is a stated
+// to it (live example: docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs.
+// docs/org/metrics/log_event.mjs WAS the other one and no longer is — BIN-918 put it in
+// both lists on 2026-08-17, after a reviewer rather than a check noticed that a commit
+// editing it reached nobody. It still has no test sibling, so it stays outside the
+// DISCOVERY half; what changed is that the gate now stops it). That is a stated
 // limit of the word "mechanical", NOT a request to widen: narrow-before-broad is Malin's
 // 2026-08-08 call, alternative (a).
 describe('the advising list and the blocking gate cannot drift apart for tooling `.mjs` (BIN-874)', () => {

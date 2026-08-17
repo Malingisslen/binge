@@ -19,8 +19,21 @@ export function DeleteAccountSection() {
     } catch (err: unknown) {
       // Två fall som ser likadana ut och betyder motsatta saker — se lib/authErrors.
       // Vår egen förkontroll (BIN-748) kastar INNAN något raderats, så där är
-      // löftet sant. Firebases eget requires-recent-login kan bara nå hit EFTER
-      // kaskaden, och då vore samma mening en lögn.
+      // löftet sant. Utan preflight-koden vore samma mening en lögn.
+      //
+      // BIN-905, 2026-08-17: den meningen sa tidigare att den otaggade varianten
+      // "bara kan nå hit EFTER kaskaden". Slutsatsen står, mekanismen var fel.
+      // Sedan BIN-813 kastar färskhetsporten i AuthContext (rad 1190-1194) ett
+      // OTAGGAT requires-recent-login när markören står — alltså FÖRE den här
+      // omgångens kaskad, och före try-blocket som stämplar hand-over-taggen.
+      // Löftet vore ändå falskt, men av en annan anledning: står markören har en
+      // TIDIGARE kaskad redan kört.
+      //
+      // Testet "förkontrollen på ett ANDRA försök" pinnar den kombinationen. Det
+      // pinnar KLASSIFICERINGENS beteende, inte en användarväg: står markören
+      // sätter AuthContext rad 536 flaggan redan vid profilladdning, så AppShell
+      // visar limbo-skärmen och den här komponenten monteras aldrig. Testet når
+      // läget för att det mockar useAuth utan skal.
       //
       // Den grenen sa tidigare bara "logga in igen" och teg om vad som hann hända
       // (BIN-796). Tystnad läses inte som osäkerhet utan som "inget hände", så en
@@ -91,11 +104,51 @@ export function DeleteAccountSection() {
         Biljetten ber om den "helst även" i meddelandena; de fyra texterna är
         låsta och juridiskt godkända (BIN-813 villkor 4) och pinnade ordagrant i
         DeleteAccountSection.test.tsx, så att skriva in adressen i dem är att
-        skriva om dem — precis det acceptansen förbjuder. Den här raden syns
-        dessutom SAMTIDIGT som varje toast: felgrenen sätter `confirming` till
-        false, så sektionen står kvar i sitt utgångsläge bakom notisen, och till
+        skriva om dem — precis det acceptansen förbjuder.
+
+        Raden står OVILLKORLIGT, utanför {!confirming}-ternären nedan, och det är
+        hela poängen: den finns både i utgångsläget och medan bekräftelsesteget
+        är uppe, alltså också i sekunden användaren är som mest osäker. Till
         skillnad från notisen självdör den inte efter 2,5 sekunder (WCAG 2.2.1,
-        #2 Tillgänglighet i BIN-813:s första panel).
+        #2 Tillgänglighet i BIN-813:s första panel). Testet "kontaktvägen står
+        kvar i BÅDA lägena" driver båda och dör på en {!confirming && …}-mutant.
+
+        BIN-905 — vad den här kommentaren INTE längre påstår, och varför:
+
+        Den sa tidigare att raden syns samtidigt som VARJE toast, med skälet att
+        felgrenen sätter `confirming` till false. Bägge halvorna var fel.
+
+        Räckvidden avgörs av HAND-OVER-TAGGEN, inte av klassificeringen — samma
+        skiljelinje som `deletionWasHandedOff` nedan, och att härleda den ur
+        `kind` i stället är att svara på samma fråga på två sätt. Ett fel som
+        bär taggen kastades efter att markören lagts ned; då har AppShell bytt
+        ut hela appen mot DeletionLimbo och den här komponenten är avmonterad.
+        Det gäller taggad `recent-login`, `partial` OCH en taggad GENERISK gren:
+        ett avbrott i snapshot-läsningarna, planbygget eller första klumpen ger
+        samma generiska text men taggas ändå (se lib/authErrors DELETION_HANDED_
+        OFF, och fixturen `${DELETION_HANDED_OFF}: auth/network-request-failed` i
+        testfilen). Bara otaggade fel lämnar sektionen monterad.
+
+        Flaggan sätts inte på ett ställe utan på tre — AuthContext rad 536 (vid
+        profilladdning, om markören står), rad 638 (storage-lyssnaren mellan
+        flikar) och rad 1227 (i catch-blocket, efter rad 1220). AppShell rad
+        42-44 räknar upp alla tre.
+
+        Följden är värd att skriva ut, för den är inte uppenbar: kombinationen
+        "otaggad recent-login med sektionen monterad" nås i praktiken inte från
+        inställningssidan. Står markören redan vid profilladdning renderas
+        limbo-skärmen och den här komponenten monteras aldrig. Den kombinationen
+        finns som fixtur för att låsa klassificeringens beteende, inte för att
+        beskriva en användarväg (integrationsgranskningen 2026-08-17).
+
+        Ingen blir utan adress: DeletionLimbo bär en egen, lika ovillkorlig, i
+        sitt <p> på rad 114-118 — inte i notisen, som aldrig bär någon adress
+        alls. Den raden är dessutom mer framträdande än den här (text-sm/ink-2
+        mot text-xs/ink-3) och pinnad ordagrant i DeletionLimbo.test.tsx:56-67
+        (#19 Kundsupports blinda kritik, 2026-08-17).
+
+        Skälet: `setConfirming(false)` är inte det som får raden att överleva
+        notisen. Elementet ligger utanför ternären och hade renderats oavsett.
       */}
       <p className="text-xs text-ink-3 mb-2">
         Fastnar raderingen? Mejla{' '}

@@ -125,6 +125,35 @@ export const TOOLING_CODE_FILES = new Set([
   'scripts/check-workflow-map.test.mjs',
   'scripts/check-public-env.mjs',
   'scripts/check-public-env.test.mjs',
+  // BIN-918. The metrics-log claim check. Added here in the SAME commit as its
+  // `reviewGates` pattern. What named the gap was route.test.mjs's BIN-874 block —
+  // "has a test in vitest's include globs but is missing from TOOLING_CODE_FILES" —
+  // which flagged both files. gate-symmetry.test.mjs flagged only the .test.mjs
+  // sibling; the production file matched none of its three rules. Note what that
+  // means: the discovery half is keyed on a `.test.mjs` sibling EXISTING, so a
+  // tooling .mjs shipped without a test is nominated by nothing at all.
+  'docs/org/metrics/check_events.mjs',
+  'docs/org/metrics/check_events.test.mjs',
+  // The log's only IN-REPO writer helper, added alongside its reader. It routed
+  // skip/doc-only with no gate at all, so this commit's TWO edits to it — `correction`
+  // added to its type enum, and its shebang deleted — reached zero reviewers. And
+  // gate-symmetry could not see that either, since "no owner and no gate" is the blind
+  // spot named in its own header. Found by a reviewer, not by a check.
+  //
+  // The shebang removal is prophylactic: the same line on check_events.mjs made that
+  // module unparseable under vitest once it picked up CRLF endings, silently dropping 31
+  // tests from the suite. Nothing invokes either file directly. See _note8 in
+  // .claude/shared-plugin.json for the full account.
+  //
+  // Do NOT read this as "the log's write path is now reviewed". The four rows BIN-918
+  // exists for never went through this file: the sprint engine in C:/claude-plugins
+  // appends to events.jsonl directly, and so does suggest-stakeholder-review.mjs for
+  // every `trigger` row. TWO callers do use the helper: shared-plugin.json's
+  // delivery.metrics.logReviewCommand (`review` rows) and the /org-retro skill (`retro`
+  // rows — all three `retro` rows in events.jsonl went THROUGH the helper). Gating it costs nothing and is right; it just
+  // buys less than it sounds like. ("The one caller" here was wrong until the tenth
+  // integration pass measured it.)
+  'docs/org/metrics/log_event.mjs',
 ]);
 // Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
 // the two remaining root test-runner configs: the blocking gate already stops a commit
@@ -419,9 +448,17 @@ function selftest() {
     // original BIN-864/873 reasoning and it still applies to this one file: naming an
     // owner in docs/role-responsibilities.md is an INTENDED improvement, and a case that
     // pinned `unmapped-code` would report that improvement as a failure. What must never
-    // change is that it stops being `skip`. Measured at these bytes: all four files under
-    // docs/org/ are `owned` / [25]; all four under scripts/ are `unmapped-code` / [14] —
-    // the deliberate #14-fallback seat §25 says the check scripts keep.
+    // change is that it stops being `skip`. Measured at these bytes: TOOLING_CODE_FILES
+    // holds 12 paths, 8 of them under docs/org/. FIVE of those eight are `owned` / [25]
+    // (route, route.test, gate-symmetry.test, gen-ownership-map, gen-ownership-map.test);
+    // the THREE under docs/org/metrics/ are `unmapped-code` / [14], as are all four under
+    // scripts/ — the deliberate #14-fallback seat §25 says the check scripts keep.
+    //
+    // This sentence said "all four files under docs/org/ are owned" until 2026-08-17. It
+    // was already off by one after BIN-880 added gate-symmetry.test.mjs, and BIN-918 made
+    // it false in SUBSTANCE by adding three unowned metrics paths — so "everything under
+    // docs/org/ has an owner" would have been read straight past the gap BIN-930 exists
+    // for. Caught by the ninth integration pass on the commit that broke it.
     //
     // `--selftest` used to be invoked by NOTHING — not package.json, not ci.yml, not
     // deploy.yml, not a hook — so a stale pin here could not fail a deploy, and a
