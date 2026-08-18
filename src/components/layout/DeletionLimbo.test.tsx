@@ -66,6 +66,29 @@ describe('DeletionLimbo', () => {
     );
   });
 
+  it('säger att raderingen slutförs härifrån — utan att lova en ångra-knapp (BIN-911)', () => {
+    render(<DeletionLimbo />);
+
+    // Sjudygnslöftet är sant på DEN HÄR enheten och blev efter ADR 0022 fel för
+    // gott för den som återkommer på en annan. Den låsta texten får inte skrivas
+    // om, så raden är ett TILLÄGG som pekar tillbaka hit.
+    expect(document.body.textContent).toContain('Raderingen slutförs härifrån.');
+    expect(document.body.textContent).toContain('kom tillbaka hit och tryck på knappen');
+
+    // #19 Kundsupport: raden får ALDRIG glida över i ett löfte om att ångra.
+    // Det finns ingen självbetjäningsväg tillbaka — den som vill behålla kontot
+    // hamnar i ett supportmedierat fall-till-fall-beslut (RUNBOOK §5f) som ofta
+    // inte kan rädda något. Ett verb som "ångra" skickar folk dit i onödan.
+    expect(document.body.textContent).not.toContain('ångra');
+    expect(document.body.textContent).not.toContain('avbryt');
+
+    // Och den låsta meningen står ordagrant kvar bredvid tillägget — samma
+    // skydd som kontaktraden ovan har, av samma skäl.
+    expect(document.body.textContent).toContain(
+      'städas kontot bort automatiskt inom sju dygn',
+    );
+  });
+
   it('slutför raderingen — inte bara tystar återskapandet', async () => {
     render(<DeletionLimbo />);
 

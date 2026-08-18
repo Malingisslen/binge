@@ -135,6 +135,60 @@ export function DeletionLimbo() {
             Logga ut
           </button>
         </div>
+
+        {/*
+          BIN-911 — sjudygnslöftet ovan är sant på DEN HÄR enheten och bara här.
+          Efter ADR 0022 (Malins accept 2026-08-15) gäller det inte för den som
+          senare laddar en inloggad sida på en enhet UTAN markören: profilen
+          återskapas, kontot lämnar sopningens urval permanent, och de sju dygnen
+          inträffar aldrig. För den gruppen är meningen fel för gott, inte
+          tillfälligt — och den låsta texten får inte skrivas om (juridiskt
+          godkänd, BIN-877:s acceptans + BIN-813 villkor 4).
+
+          Malins val 2026-08-16 var en HANDLING i stället för ett förbehåll om
+          enheter: skärmen ska vara lugnande och kort, och en brasklapp gör den
+          oroligare utan att hjälpa.
+
+          #19 Kundsupports blinda kritik (2026-08-17) rättade vilken handling det
+          skulle vara, och rättelsen är hela poängen med den här raden:
+
+          "om du ångrar dig" vore fel verb. Det antyder en ångra-knapp som inte
+          finns (se kommentaren om det medvetna frånvarot av avbryt ovan). Den som
+          vill BEHÅLLA kontot har ingen självbetjäningsväg alls — RUNBOOK §5f är ett
+          supportmedierat fall-till-fall-beslut som bara kan rädda det kaskaden
+          inte hunnit ta. En rad som bjuder in till det skickar folk till ett svar
+          som oftast gör dem besvikna.
+
+          Den ärliga handlingen är den här: den här skärmen är den enda som ERBJUDER
+          att slutföra en påbörjad radering,
+          och knappen fungerar ÄVEN efter att en annan enhet återskapat profilen —
+          `collectDeletionRefs` byggs om från Firestore vid varje försök och
+          raderingar mot redan borta dokument är no-ops (RUNBOOK §5f). Det är en
+          verklig, kodverifierad utväg.
+
+          Precision, efter helhetsgranskningen 2026-08-17: den här kommentaren sa först
+          "att slutföra fungerar BARA härifrån", och det tog i. Raderingen kan också
+          slutföras genom att STARTA OM den från inställningssidan på den andra enheten —
+          `DeleteAccountSection` anropar samma `deleteAccount()`, och ADR 0022:s accept
+          vilar just på att "radera igen startar om kedjan". Det som är sant är att ingen
+          annan yta erbjuder att slutföra en redan PÅBÖRJAD radering. Den användarsynliga
+          raden påverkas inte: den säger bara att raderingen inte fortsätter av sig själv
+          på den andra enheten, vilket stämmer.
+
+          Vad raden INTE gör, sagt rakt ut så ingen tror mer om den: den når inte
+          personen i det ögonblick skadan sker. Den som aldrig återvänder hit ser
+          den aldrig. Den når dem som får ett kaskadfel och läser skärmen i samma
+          sittning, före de rört någon annan enhet — en meningsfull del av
+          populationen, inte hela.
+
+          Placerad som hjälptext intill knappen, inte som en tredje paragraf
+          (#19:s villkor): skärmen har redan två textblock efter den låsta, och en
+          orolig läsare ska inte behöva ta sig igenom ett till.
+        */}
+        <p className="text-xs text-ink-3 mt-2">
+          Raderingen slutförs härifrån. Loggar du in på en annan enhet fortsätter den inte
+          där — kom tillbaka hit och tryck på knappen.
+        </p>
       </div>
     </main>
   );
