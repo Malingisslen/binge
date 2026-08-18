@@ -1046,8 +1046,15 @@
         {
           "from": "cf-offers",
           "to": "firestore",
-          "payload": "write streamingOffers/{tmdbId} + append priceHistory/{tmdbId}.points + streamingHealth/current (admin in-app alert on degradation — NO push)",
+          "payload": "write streamingOffers/{mediaType}_{tmdbId} + append priceHistory/{mediaType}_{tmdbId}.points + delete the superseded legacy bare-id doc + streamingHealth/current (admin in-app alert on degradation — NO push)",
           "transport": "Firestore write",
+          "verified": true
+        },
+        {
+          "from": "cf-offers",
+          "to": "firestore",
+          "payload": "BIN-565 runIdBackfill (last statement of the handler, after the alarm sends): re-keys up to 200 remaining bare-id docs per run onto {mediaType}_{tmdbId} — write first, delete second; an existing namespaced doc wins and the bare one is just dropped; a doc with no usable mediaType is never guessed, only logged. Reuses the one unpaginated scan readExisting() already does, and makes NO vendor call.",
+          "transport": "Firestore read+write",
           "verified": true
         },
         {
@@ -1799,7 +1806,7 @@
         {
           "from": "cf-weekly-digest",
           "to": "firestore",
-          "payload": "batch getAll(streamingOffers/{tmdbId}) in chunks of 300 → buildLeavingDigest(): subscription-type offers leaving within 14d on an owned (canonicalised) provider, soonest-per-title, sorted nearest-first",
+          "payload": "batch getAll(streamingOffers/{mediaType}_{tmdbId}) in chunks of 300, then one fallback pass over legacy bare ids for the misses (accepted only when the doc’s own mediaType matches) → buildLeavingDigest(): subscription-type offers leaving within 14d on an owned (canonicalised) provider, soonest-per-title, sorted nearest-first",
           "transport": "Firestore read (getAll batch)",
           "verified": true
         },
@@ -2246,7 +2253,7 @@
         {
           "from": "movie-tv-page",
           "to": "firestore",
-          "payload": "useStreamingOffers(tmdbId) reads streamingOffers/{tmdbId} (10s-timeout race) — populated by the separate cf-offers daily job",
+          "payload": "useStreamingOffers(tmdbId, mediaType) reads streamingOffers/{mediaType}_{tmdbId}, falling back once to the legacy bare id when that misses (10s-timeout race) — populated by the separate cf-offers daily job",
           "transport": "Firestore read",
           "verified": true
         },
