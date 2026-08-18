@@ -21392,3 +21392,237 @@ folded into the principles file, not filed against this diff since both mutants 
 covered, just not both by the one described action.
 
 REVIEW-VERDICT: pass (0 blocking)
+
+## 2026-08-17 — BIN-565 doc-id migration port + V7 writer guard, BIN-911 helper-text negatives
+
+**Diff reviewed** (`git diff --cached --stat`): `functions/src/streamingOffers/backfillIds.ts`
+(new, 222 lines), `functions/src/streamingOffers/backfillIds.test.ts` (new, 279 lines, 19
+tests), `functions/src/streamingOffers/index.ts` (modified — wires `runIdBackfill` into the
+existing refresh cron via a `makeBackfillIo` port), `src/components/layout/DeletionLimbo.tsx`
++ `.test.tsx` (BIN-911, one new helper-text line + one new test), `tasks/todo.md` (plan +
+role critiques), plus `.claude/agents/binge-code-reviewer.knowledge{,.archive}.md` (the code
+reviewer's own artifacts, out of this agent's scope). All five reviewed files opened with
+Read; all worktree/index shas re-confirmed matching after every mutation-restore cycle.
+
+**Mutations run, live, isolated to a single command each (grep mutant present before AND
+after), scratchpad-snapshot restore, hash-confirmed against the staged index every time:**
+
+1. Primary-writer bare-id mutation (`index.ts:319`, `streamingOffersDocId(mediaType, tmdbId)`
+   → `String(tmdbId)`) — re-derived the diff's own claimed result exactly: red-alone 1/19 on
+   the V7 guard test. Confirms the widened regex (both `col.doc(...)` and
+   `collection('streamingOffers').doc(...)` shapes) genuinely catches the site BIN-523 was
+   filed about.
+2. **New finding, live-proven**: added a throwaway function to `index.ts` writing a bare id
+   through a VARIABLE-BOUND doc ref (`const ref = db.collection('streamingOffers')
+   .doc(String(tmdbId)); await ref.set(...)`) — the exact idiom the file's own `legacyRef`
+   already uses today, just for a delete instead of a set. Full 19-test suite stayed GREEN.
+   The V7 guard's chained-call assumption (`.doc(<expr>)` immediately followed by
+   `.set`/`.update`/`.create`/`.delete` within 160 chars) cannot see a write reached through
+   an intervening variable, and by construction can't see a batch write
+   (`batch.set(col.doc(id), data)`) either. Reported BLOCKING: the guard is #27's binding
+   criterion V7 ("no future writer may reintroduce a bare id"), and this is a concrete,
+   demonstrated bypass using a shape the file already contains.
+3. `runIdBackfill`'s `complete = targets.length === 0` → `complete = bareFound === 0` —
+   red-alone 1/19, exactly the "an unattributable doc does not block completeness" test.
+   Confirms that claim is genuinely mutation-tested, not merely asserted.
+4. The overwrite-protection branch (`if (await io.exists(target.toId))`) neutered to
+   `if (false && ...)` — red-alone 1/19, exactly "drops a bare doc WITHOUT overwriting an
+   existing namespaced one". Confirms the data-safety case is real.
+5. **New finding, live-proven**: reversed the real `migrate()` implementation in `index.ts`
+   (write-then-delete → delete-then-write — the literal data-loss shape its own comment
+   warns against: "the reverse loses the document outright if the run dies between the
+   two") — full 19-test suite stayed GREEN. The test titled "writes the namespaced doc
+   BEFORE deleting the bare one" captures order via a fake **atomic** port method
+   (`io.migrate = async () => { order.push('migrate'); }`) and can only prove `dropBare`
+   wasn't ALSO independently called in the same pass — a different, weaker property than its
+   name and comment ("Order is the whole safety property") claim. The real order guarantee
+   lives entirely inside the untestable admin-wired `migrate()` and is genuinely unpinned by
+   any test in this diff. Reported BLOCKING given it's a data-loss-preventing invariant and
+   the test's own docstring overclaims coverage it doesn't have.
+6. BIN-911: mutated `DeletionLimbo.tsx`'s new helper-text paragraph to include "Om du ångrar
+   dig, mejla oss" — red-alone 1/11 on the new test's `not.toContain('ångra')` assertion.
+   Confirms the negative assertions are meaningful (whole-body scoped, so they also guard
+   against the word appearing ANYWHERE else on the screen in future edits), not vacuous.
+
+**Non-blocking finding**: "THE CASE THE OLD PROPOSALS GOT WRONG: a title that left the work
+set still migrates" is framed as decisive but isn't — `runIdBackfill`'s signature has no
+work-set input at all (by design; the module doesn't import `readWorkSet`/`isIntentTitle`),
+so no mutation of this file could reintroduce a work-set gate without also breaking the
+admin-free import boundary. The test is mechanically identical to the pre-existing "migrates
+a bare doc and reports the tally" test (single bare doc → migrates), just with a different
+media type already covered by the dedicated `targetFor` movie/tv cases. The real protection
+against the rejected design is structural (no work-set parameter exists to gate on), not this
+test. LOW — legitimate as a documentation/regression-anchor test, but its own framing
+overclaims what it discriminates.
+
+**Verdict at time of review: fail (2 blocking)** — the V7 guard's variable-bound/batch-write
+blind spot, and the order-test's overclaimed coverage of `migrate()`'s internal sequencing.
+Both are real, both are cheaply nameable, neither required weakening any existing assertion
+to find (this diff's own V7 test comment is unusually honest about its OWN prior gaps — the
+`col.doc`-only version and the `[^)]*` truncation bug are both disclosed and dated in-file,
+which is why the two NEW gaps found here are worth holding to the same bar rather than
+excusing on "the file already self-corrects twice, so trust round three").
+
+## 2026-08-17 — BIN-565 re-review: prior 2 blockers closed, integration review's 3 fixes verified, 1 new gap found
+
+**Diff reviewed** (`git diff --cached --name-status`): `functions/src/index.ts` (comment
+only), `functions/src/streamingOffers/backfillIds.ts` + `.test.ts` (both changed since the
+prior round), `functions/src/streamingOffers/index.ts` (comment only — the header claiming
+the fallback is "transitional" was struck), `functions/src/streamingOffers/logic.ts` (comment
+only, same correction), `functions/src/weeklyDigest/index.ts` (comment only), `src/hooks/
+useStreamingOffers.ts` (comment only), `src/components/layout/DeletionLimbo.tsx` + `.test.tsx`
+(unchanged from prior round, re-verified), `tasks/todo.md` (plan doc, replaced). Every staged
+path's `git rev-parse :<f>` matched `git hash-object <f>` at both the start and the end of
+this pass — no split index/worktree, no mid-review mover.
+
+**The prior round's two blocking findings, re-derived live and confirmed CLOSED:**
+1. Order-pinning: the port now exposes `writeNamespaced`/`deleteBare` as separate methods: a
+   fake port pushes `write:<id>`/`delete:<id>` onto a `calls` array. Reversing the real two
+   `await`s in `runIdBackfill` (write-then-delete → delete-then-write) reddens "writes the
+   namespaced doc BEFORE deleting the bare one" red-alone (1/24). The "drops a bare doc
+   WITHOUT overwriting" sibling is pinned the same way (mutated the exists-branch to also
+   call `writeNamespaced` before deleting — 2/24 red: itself plus its own call-log assertion).
+2. Variable-bound / batch-write blind spot: NOT silently patched — kept as an honestly-labeled
+   residual, now with a THIRD dedicated test ("no batch write exists — the one shape this
+   guard genuinely cannot see") that asserts the shape is ABSENT rather than claiming to catch
+   it. Correct call for a shape (`batch.set(col.doc(id), data)`) no chained-call or bound-ref
+   regex can see by construction.
+
+**The integration review's three follow-on fixes (all named in-file as "integration review,
+2026-08-17"), each re-derived live in ONE grep-before/grep-after/vitest command, restored from
+a scratchpad snapshot, hash-confirmed against the staged index after every restore:**
+3. Multi-line writer scan: the old `[^;\n]`-bounded regex could not see a chain broken across
+   lines — this repo's own dominant idiom (availableNotify does exactly that). Dropped a
+   three-line probe module (`.collection('streamingOffers')\n.doc(id)\n.set(...)`) into
+   `functions/src/`: reddened "no OTHER file under functions/src writes to streamingOffers"
+   red-alone (1/24). Removed the probe: back to 24/24 green.
+4. Batch-write escape hatch scoped to `index.ts` only: `const wb = db.batch(); wb.set(col.doc
+   (id), …)` in a NEW module passed with zero batch matches AND zero offenders under the OLD
+   single-file scope. Now runs the same file walk as the cross-file test, filtered to files
+   whose body contains the collection name at all. Re-verified live with the same probe: red
+   alone (1/24) on "a batch write appeared."
+5. Capped-log false positive: the old gate (`targets.length > migrated + droppedSuperseded`)
+   fired "capped for this run" on a run that processed everything it had, because a doc that
+   vanished between scan and read is skipped without being acted on. Mutated the gate back to
+   the old form live: reddened exactly "does NOT report 'capped' when a doc merely vanished"
+   (1/24) and left both "DOES report 'capped'" and "caps work per run" green — the decisive
+   negative test is red-alone, the positive-control tests correctly don't discriminate (old
+   and new gate agree in the genuinely-capped case), confirming the two new tests pin the
+   right thing rather than merely restating each other.
+
+**NEW finding this round, live-proven, NOT yet named anywhere in the diff's comments — BLOCKING.**
+The scoping filter for the batch-write test, `body.includes("'streamingOffers'")`, and in fact
+ALL THREE V7 writer-detection regexes across both files, hardcode a single-quoted literal. A
+double-quoted `db.collection("streamingOffers").doc(String(tmdbId)).set({tmdbId})` dropped into
+a brand-new probe module — the exact BIN-523 defect class this whole guard exists to prevent —
+left the FULL 24-test suite green with zero offenders reported by any of the three V7 tests:
+invisible to the primary single-file scan (different file), invisible to the cross-file
+chained/bound-ref scan (both regexes anchor on `'streamingOffers'` literally), and invisible to
+the batch-scope filter (the probe file never matches the single-quote substring, so it's
+excluded from that walk entirely — not merely unclassified within it). Confirmed this is not
+merely a contrived mutant: `eslint.config.mjs` carries no `quotes` rule and there is no
+Prettier config anywhere in the repo, so a double-quoted literal is an ordinary, unenforced
+stylistic choice, not a deliberately adversarial one. Distinguished live from a decoy that
+looks similar but ISN'T a gap: a module-scoped constant (`const COL = 'streamingOffers'; …
+db.collection(COL).doc(id).set(...)`) IS caught, because the single-quoted literal still
+appears verbatim in the file body, which is all any of the three scans require — so "builds
+the name from a constant" is a false alarm and "double/back-tick-quotes the literal" is the
+real one. Fix is mechanical (widen every `'streamingOffers'` pattern to `['"\`]streamingOffers
+['"\`]`) but is not in this diff; filed as blocking rather than waved through given the guard's
+own tests call it "#27 binding criterion" and stakes are silent cross-title data corruption.
+
+**Also re-verified, unchanged from the prior round and still holding:** the two BIN-911
+negative assertions (`not.toContain('ångra')`, `not.toContain('avbryt')`) are non-vacuous —
+appending "Om du ångrar dig, hör av dig." to the new helper-text paragraph (keeping the
+required positive text intact, so the mutant models a realistic DRIFT rather than a deletion)
+reddens the BIN-911 test red-alone (1/11) specifically on the `not.toContain('ångra')` line,
+not on an earlier assertion. Deleting the whole new `<p>` block also reddens the same test
+alone (1/11), on the positive assertions instead — confirms the test isn't structured so one
+half masks the other. Both `functions/src/index.ts`, `streamingOffers/index.ts`,
+`streamingOffers/logic.ts`, `weeklyDigest/index.ts` and `useStreamingOffers.ts` changes in this
+diff are comment-only (verified via `git diff --cached` per file) and own no test obligation.
+
+**Verdict at time of review: fail (1 blocking)** — the prior round's 2 blockers are closed,
+the integration review's 3 fixes are confirmed genuine, and this round's own re-derivation
+surfaced exactly one new gap of the same family the file has now closed three times in a row.
+Folded into `.claude/agents/binge-test-reviewer.knowledge.md`'s existing BIN-565 bullet
+(extended in place, not a new bullet) rather than filed as a fresh entry, since it's the same
+V7-guard-scope-completeness class as the three siblings already documented there.
+
+## 2026-08-18 — BIN-565 V7 writer guard, round N+1: quote-agnostic + newline fixes closed live; a fifth (two-hop bound-ref) gap found open
+
+**Diff reviewed:** staged `functions/src/streamingOffers/backfillIds.test.ts` only (plus two
+unrelated comment-only edits elsewhere, out of scope), against a review request explicitly
+scoping this round to the V7 writer-guard section (lines ~99-336) and asking me to re-verify
+three prior fixes and hunt for a remaining bypass.
+
+**Fixes re-derived live, each with the mutant asserted present before AND after in one command,
+restored from a scratchpad snapshot (never `git checkout --`):**
+
+1. Quote-agnostic `COL = ` `['"\`]streamingOffers['"\`]` ` `` shared across all four scans.
+   Probe: new file `functions/src/streamingOffers/__probeQuote.ts` with
+   `db.collection("streamingOffers").doc(String(tmdbId)).set({ tmdbId })` (double-quoted, bare
+   id). Result: 24 pass → 1 fail ("no OTHER file… writes to streamingOffers") with probe
+   present; 24/24 green after `rm` and re-run. Confirms the previously-blocking single-quote-
+   only gap is closed.
+2. Single-file bound-ref scan's `[^;\n]` → `[^;]` (span newlines) AND `(?:db\.)?` →
+   `(?:db\s*\.\s*)?` (optional-prefix whitespace) together. Probe: spliced a new function into
+   `functions/src/streamingOffers/index.ts`:
+   ```
+   const ref = db
+     .collection('streamingOffers')
+     .doc(String(tmdbId));
+   await ref.set({ tmdbId });
+   ```
+   Result: 24 pass → 1 fail ("every streamingOffers doc-id expression… is namespaced",
+   `bare streamingOffers WRITE id(s): ref = .doc(String(tmdbId))`) with probe present; 24/24
+   green after restore (`cp` from scratchpad backup, confirmed `git diff` empty against the
+   staged blob afterward).
+3. `writes the namespaced doc BEFORE deleting the bare one` genuinely pins the order now that
+   the port is split into `writeNamespaced`/`deleteBare`. Reversed the two `await`s in
+   `runIdBackfill` (`backfillIds.ts`): 24 pass → 1 fail, exact assertion
+   `expect(calls).toEqual(['write:movie_7', 'delete:7'])` red-alone (1/24), matching the prior
+   round's claim exactly. Restored, re-verified green, `git diff` empty.
+
+**New check requested — is the shared `COL` const a single point of failure?** Typoed it to
+`` `['"\`]streamingOffer['"\`]` `` (singular, missing the trailing `s`). Result: 2 of 24 tests
+fail, both by NAME and with SPECIFIC messages pointing at the broken constant — "the primary
+writer moved or was renamed — re-point this guard before trusting it" (the single-file scan's
+self-check) and "no file mentions the collection — the scope filter broke" (the batch-write
+scan's scope-floor). The THIRD scan ("no OTHER file under functions/src writes to
+streamingOffers") does NOT fail — it silently reports zero writers, a genuine false negative on
+its own — but since the other two floors already redden the suite, a broken `COL` cannot ship
+silently. Judged non-blocking: named in the knowledge file so a future round knows which one of
+the four scans is uniquely blind to its own shared dependency breaking.
+
+**New bypass found, BLOCKING, not disclosed anywhere in the file:** every bound-ref regex
+(single-file AND cross-file) follows exactly ONE hop of variable binding — a name assigned
+directly from `collection(COL)` or from the literal `col`. A TWO-HOP chain — bind a collection
+ref to an arbitrary name, then derive a doc ref from THAT name under a second arbitrary name —
+is invisible to both. Probe spliced into `index.ts`:
+```
+const c = db.collection('streamingOffers');
+const ref = c.doc(String(tmdbId));
+await ref.set({ tmdbId });
+```
+Result: full 24/24 GREEN with a genuine bare-id write reaching Firestore — the exact BIN-523
+cross-title corruption shape ("looks like data, not like a bug") the entire V7 guard exists to
+catch. Verified this also clears the cross-file scan by inspection of its regex: `boundNames`
+captures any name bound straight off `collection(COL)`, but `boundWrite` only re-checks writes
+through THAT SAME name (`name.doc(...).set(`/`name.set(`), never a name later derived from it.
+Restored, `git diff` empty against the staged `index.ts` and `backfillIds.test.ts` blobs
+afterward (full-tree `git status --porcelain` on `functions/src/streamingOffers/` showed no
+stray files, no leftover probes).
+
+This is distinct from the already-closed one-hop bound-ref gap (`legacyRef`-shaped,
+`const ref = db.collection(...).doc(<bare>); ref.set(...)`, closed by the `(?:col\b|collection(COL))`
+alternation): the two-hop shape defeats detection precisely because the file's OWN pre-existing
+`col`-based writes still satisfy all four floors (`matches.length >= 4`, the primary-writer
+presence check, `writesChecked >= 2`, `bound.length >= 1`), so nothing looks thin. Unlike the
+batch-write gap (which the file honestly names as "the one shape this guard genuinely cannot
+see" via a dedicated absence-assertion test), this one is neither fixed nor disclosed.
+
+**Verdict: fail, 1 blocking** (the two-hop bound-ref bypass). The three re-verified fixes and
+the COL-SPOF check are informational/closed, folded into the existing BIN-565 bullet in
+`.claude/agents/binge-test-reviewer.knowledge.md` in place (not a new bullet — same
+scan-scope-completeness family as the four siblings already documented there).

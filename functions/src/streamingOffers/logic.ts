@@ -7,12 +7,24 @@ import type { IntentItem, ExistingOffer, WorkItem, HealthDoc, HealthStatus, Deli
  * are unrelated titles, so the primary offers doc is namespaced by media type
  * exactly like availableNotifyState.
  *
- * LEGACY bare-`${tmdbId}` docs are NOT migrated or deleted. Both readers
- * (src/hooks/useStreamingOffers.ts and weeklyDigest's readOffers) fall back to
- * the bare id and accept it only when its stored `mediaType` field matches what
- * they asked for — so a title keeps showing its last known offers until the
- * refresh cron rewrites it under the namespaced id. Rewriting the collection
- * eagerly would spend MOTN quota (the scarce resource) for zero user value.
+ * LEGACY bare-`${tmdbId}` docs ARE migrated and deleted, by `runIdBackfill` — see
+ * ./backfillIds.ts. This paragraph said the opposite until 2026-08-17 (BIN-565), and
+ * justified it with "rewriting the collection eagerly would spend MOTN quota (the scarce
+ * resource) for zero user value". Both halves turned out wrong: the migration is pure
+ * Firestore copying and spends NO vendor quota, and the value is not zero — #27 DBA
+ * measured that the old population never drains on its own, because `isIntentTitle`
+ * requires `vill_se`/`mina` and a watched title leaves the refresh work set permanently.
+ *
+ * Corrected here rather than left to rot: this is the comment a future author reads
+ * before deciding whether the reader fallbacks can go, and two files in one directory
+ * teaching opposite answers is the exact failure BIN-565 exists to end (integration
+ * review, 2026-08-17).
+ *
+ * Both readers (src/hooks/useStreamingOffers.ts and weeklyDigest's readOffers) still fall
+ * back to the bare id, accepting it only when its stored `mediaType` matches what they
+ * asked for. That fallback stays until an exhaustive query proves zero bare docs remain
+ * (#27's criteria 4-5) — the migration completing is not the same as the migration being
+ * PROVEN complete.
  */
 export function streamingOffersDocId(mediaType: string, tmdbId: number): string {
   return mediaTypeDocId(mediaType, tmdbId);

@@ -7694,3 +7694,88 @@ not-yet-fully-deleted account, not part of what this runbook section exists to c
 Conclusion returned to the coordinator: the three-item list plus the existing §5e username
 sweep is COMPLETE for the passive-recreate case; nothing else fires without a deliberate
 further action in the app.
+
+### 2026-08-17 — V7 regression guard: comment claims two patterns, regex implements one
+
+BIN-565 (streamingOffers doc-id backfill). The comment above backfillIds.test.ts's V7 guard
+says it pulls "every collection('streamingOffers')...doc(<expr>) and every col.doc(<expr>)"
+in the module, but the code is [...src.matchAll(/col.doc(([^)]*))/g)] — one pattern
+only. The module has a SECOND writer to the same collection at index.ts:319,
+db.collection('streamingOffers').doc(streamingOffersDocId(mediaType, tmdbId)).set(...) (the
+normal MOTN-refresh write, and the exact site BIN-523 was originally filed about, not the new
+migration code). That line never contains the literal substring col.doc(, so the regex
+cannot reach it.
+
+Verified live: mutated line 319 to .doc(String(tmdbId)) (bare id, the historical bug shape),
+hashed the file before/after, ran npx vitest run functions/src/streamingOffers/backfillIds.test.ts
+from repo root (functions/ has no vitest.setup.ts of its own — run from root, matches the
+lessons-digest note that root npm test covers admin-free functions/** tests) — 19/19 still
+green with the mutant present. Restored via Edit (git checkout -- was blocked by the
+auto-mode classifier on this repo); restored hash verified equal to the pre-mutation
+git hash-object.
+
+The ticket (tasks/todo.md, BIN-565 V7) marks this guard [x] complete and binds it as #27
+DBA's acceptance criterion: "en framtida skrivare som återinför det fångas STRUKTURELLT". As
+shipped that claim only holds for the migration's OWN Firestore port (col.doc(...) inside
+makeBackfillIo), not for the module's pre-existing primary writer. Everything ELSE in the
+diff was correct and independently verified: scan-before-continue ordering (criterion 1),
+write-then-delete order in migrate() (criterion 2), targetFor refusing an unusable mediaType
+rather than guessing (criterion 3), complete never read as proof anywhere (criterion 4 —
+though also never logged/surfaced anywhere despite backfillIds.ts claiming "the cron's audit
+record shows when this became possible"; the claim and the code diverge, non-blocking), and
+the uncaught-throw comment in index.ts accurately describing the blast radius (no try/catch
+anywhere in the file, verified by reading it). Filed as a review finding, not blocking —
+production code is currently correct; only the regression net is narrower than advertised.
+
+Separately, src/components/layout/DeletionLimbo.tsx's new BIN-911 comment names a function
+collectDeletionPlan, which does not exist — the real function (confirmed via grep + read of
+src/lib/firebase/accountDeletion.ts) is collectDeletionRefs. Comment-only, no runtime effect;
+the behavioural claim itself (plan rebuilt from Firestore every attempt, delete-of-already-
+deleted is a no-op) is accurate per docs/RUNBOOK.md lines ~308-313 and accountDeletion.ts's
+own docstring on applyDeletionPlan. Freshly-authored prose gets the same scrutiny as stale
+prose — this was wrong on day one, not stale.
+
+### 2026-08-17 — final pass: BIN-565's two named blocking gaps closed, one new comment splice found
+
+Re-review of the same BIN-565/BIN-911 diff after the round that fixed the two `fail (2
+blocking)` items the test-reviewer's 2026-08-17 entry above named (V7's variable-bound/batch
+blind spot; the order-test's overclaimed coverage of `migrate()`'s internal sequencing).
+Verified independently by reading the current bytes, not by trusting the archive:
+
+- `functions/src/streamingOffers/index.ts`'s `makeBackfillIo` now exposes `writeNamespaced`
+  and `deleteBare` as SEPARATE `BackfillIo` methods (no more opaque `migrate()`), and
+  `backfillIds.test.ts` asserts the real call sequence via a `calls: string[]` array pushed
+  from inside the fake port (`['write:movie_7','delete:7']`; `['delete:7']` for the
+  already-superseded case) — genuinely pins write-before-delete now, not merely an atomic
+  mock's internal ordering. `npx vitest run functions/src/streamingOffers/backfillIds.test.ts
+  src/components/layout/DeletionLimbo.test.tsx` from repo root: 35/35 green.
+- `backfillIds.test.ts`'s V7 guard grew three more scans beyond the original single regex:
+  a bound-ref scan (`const legacyRef = db.collection('streamingOffers').doc(...)` followed by
+  a later `.set`/`.update`/`.create` through the bound name), a batch/bulkWriter-binding scan
+  asserting NO such write exists in any file touching the collection, and a cross-file "no
+  second writer" scan over the whole `functions/src` tree. Each carries its own dated
+  in-file comment naming the exact bypass it was added for and citing the reviewer who found
+  it — read as intended, not merely trusted.
+- `collectDeletionPlan` no longer appears anywhere in `DeletionLimbo.tsx`; the current text
+  reads `collectDeletionRefs`, matching the real export.
+
+New, independent finding — not previously flagged, not in either archived entry above:
+`functions/src/weeklyDigest/index.ts`'s BIN-565 doc-comment update (the "corrected the stale
+story" file this round's dispatch specifically asked to re-verify) splices its new paragraph
+INTO the middle of the pre-existing sentence — "BIN-523: … Titles whose" / [new BIN-565
+paragraph] / "namespaced doc doesn't exist yet get ONE fallback lookup…" — and leaves the
+OLD trailing sentence, "The fallback disappears title by title as the refresh cron rewrites
+each doc under the new id; without it the digest would go quiet for months," completely
+unqualified two lines below the correction that says that exact claim is false for a title
+that left the refresh work set (every completed watch, per `logic.ts`'s own corrected header
+in the SAME commit). Read straight through, the comment now asserts both "this was never
+going to happen for every title" and "this happens title by title, guaranteed" a few lines
+apart. Compare with `src/hooks/useStreamingOffers.ts`'s identical correction in the same
+diff, done right: the new BIN-565 paragraph is APPENDED after the original block closes,
+and it explicitly supersedes the "until the background refresh rewrites it" clause rather
+than leaving a contradicting absolute standing nearby. Filed as the primary finding of this
+pass — see the folded principle above (Comment-vs-code corpus) for the general shape:
+a correction landing BETWEEN two halves of one sentence, instead of after the whole block,
+is the tell that it was pasted in without reading past the insertion point.
+
+REVIEW-VERDICT: fail (1 blocking)

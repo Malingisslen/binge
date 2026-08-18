@@ -15,6 +15,15 @@ import type { Offer, StreamingOffersDoc } from '@/lib/streaming/offers';
  * the bare `${tmdbId}` id; we fall back to those ONCE, and only when the legacy
  * doc's own `mediaType` matches, so a title keeps its offers until the
  * background refresh rewrites it under the new id.
+ *
+ * BIN-565 (2026-08-17): "until the background refresh rewrites it" was never going to
+ * happen for every title. The refresh work set requires status `vill_se`/`mina`, so a
+ * watched title leaves it permanently and its bare doc is never revisited — which is why
+ * `runIdBackfill` (functions/src/streamingOffers/backfillIds.ts) now finishes the
+ * migration outright. This fallback stays until an exhaustive query PROVES zero bare docs
+ * remain; the migration completing is not the same as it being proven complete. Removing
+ * it early costs a title its "Billigast: hyr för X kr" line with no visible error at all —
+ * the provider logos come from TMDB and keep rendering, so the page looks fine.
  */
 export function useStreamingOffers(
   tmdbId: number | undefined,

@@ -233,7 +233,9 @@ export { logRecapMiss } from './recapCoverage';
 // ── Streaming offers refresh (MOTN) ──────────────────────────────────────────
 // streamingOffersRefresh: daglig schemalagd collectionGroup-scan → MOTN-fetch
 // för intent-titlar (film/vill_se + tv/mina med providers) → skriver
-// streamingOffers/{tmdbId} + streamingHealth/current. Admin-notif vid warn/critical.
+// streamingOffers/{mediaType}_{tmdbId} + streamingHealth/current. Admin-notif vid
+// warn/critical. (Doc-id:t var bare `{tmdbId}` FÖRE BIN-523; kvarvarande gamla dokument
+// flyttas av runIdBackfill, BIN-565.)
 export { streamingOffersRefresh } from './streamingOffers';
 
 // ── Cineasterna catalog sync ──────────────────────────────────────────────────

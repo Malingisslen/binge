@@ -7940,3 +7940,130 @@ words.
 
 **REVIEW-VERDICT: pass (0 blocking)**
 
+### 2026-08-18 — BIN-565 (streamingOffers doc-id backfill, Admin-SDK) + BIN-911 (DeletionLimbo one-line addition) — first security pass, re-verifying after 11 code/test-reviewer rounds
+
+**Scope.** `functions/src/streamingOffers/{backfillIds.ts (new), backfillIds.test.ts (new), index.ts,
+logic.ts}`, `functions/src/weeklyDigest/index.ts` (comment only), `functions/src/index.ts` (comment
+only), `src/hooks/useStreamingOffers.ts` (comment only), `src/components/layout/DeletionLimbo.{tsx,
+test.tsx}`, `tasks/todo.md`, both other agents' knowledge/archive files (skimmed for secrets/context
+only, out of security scope). No prior entry for BIN-565 exists in THIS archive — the "eleven passes"
+in the dispatch were code-reviewer/test-reviewer rounds (confirmed by grepping their archives), so this
+is a from-bytes review, not a re-review of my own prior ruling.
+
+**The three data-safety invariants, verified from the current bytes (`runIdBackfill`,
+`backfillIds.ts:180-244`).**
+1. *Write-before-delete, no delete-without-durable-write path.* The only branch that deletes without a
+   prior write in THIS invocation is the `exists(target.toId)` branch — legitimate, because the
+   namespaced doc's existence (written by either a prior backfill pass or the refresh cron) IS the
+   durable write; overwriting it would move data backwards. The migrate branch is `writeNamespaced` then
+   `deleteBare`, unconditionally, both awaited, nothing between them — pinned by the port split (two
+   methods, not one opaque `migrate()`) and asserted on a `calls` sequence log in the test, not a counter.
+2. *No overwrite of an existing namespaced doc.* `if (await io.exists(target.toId)) { deleteBare; continue; }`
+   runs BEFORE any read of the bare doc's data — the write path is structurally unreachable once the
+   target exists. Pinned: `'drops a bare doc WITHOUT overwriting an existing namespaced one'`.
+3. *Refusal to guess a media type.* `targetFor` requires `doc.mediaType === 'movie' | 'tv'` on the FIELD;
+   `parseMediaTypeFromDocId` is deliberately not imported (comment names why: a bare id carries no type
+   by construction, so the fallback could only ever return null here — importing it would invite a future
+   "simplification" that quietly re-derives from the id and reopens BIN-523). Verified live in
+   `mediaTypeDocId.ts` (unchanged, Read anyway): `parseMediaTypeFromDocId` only matches `movie_`/`tv_`
+   prefixes and returns null on a bare numeric id — so even if someone wired it back in, it could not
+   silently misattribute; the refusal is belt-and-braces, not the only thing standing between here and a
+   guess.
+
+**runIdBackfill placement.** Confirmed the last statement in `streamingOffersRefresh`'s handler body
+(`index.ts:471`), after the `logger.info('streamingOffersRefresh done', …)` line, deliberately NOT
+wrapped in try/catch (comment: a swallowed throw would make a stuck migration look completed — the
+"silence reads as success" shape named as BIN-918's subject). It receives `scanned` from `readExisting()`
+— the SAME `.select('checkedAt','offers','tmdbId','mediaType')` scan MOTN-prioritization already pays
+for — not a second collection read; the comment's claim to this effect is true because the data
+literally flows from one function's return into the other's argument, traced by reading both call
+sites, not trusted from the comment alone. No code path between `readWorkSet`/`readExisting` and this
+call invokes `fetchOffers`/`motn.ts` — grepped: the only `fetchOffers` call site is inside the per-title
+batch loop, which is textually and causally separate from the backfill call at the bottom.
+
+**Cost envelope.** `readExisting()` is one unpaginated `.select(4 fields).get()` over the whole
+`streamingOffers` collection — pre-existing pattern (not new to this diff), already the established
+public-read-no-PII rollup shape this file's own principles accept at Binge's scale. `BACKFILL_PER_RUN =
+200` bounds the migrate/drop loop to ≤400 Firestore ops (200 potential write+delete pairs) per 24h
+invocation — negligible against the 25 SEK/mån Blaze cap and independent of the 300/cycle MOTN vendor
+cap (zero vendor calls, confirmed: `makeBackfillIo` only touches `db.collection('streamingOffers')`, no
+import of `motn.ts`).
+
+**The throttled-cycle parking question, priced rather than assumed.** `index.ts:234-252`'s early return
+(`usedThisCycle >= STREAMING_HARD_CYCLE_CAP`) skips `runIdBackfill` too, and the in-code comment (added
+this round, integration-review-dated 2026-08-17) is honest that `applyThrottleObservation` on two
+consecutive 429s burns `count` to the cap, making this branch true for up to ~31 days (the rest of a
+billing cycle). Graded: NOT a safety/data-integrity problem — the migration is idempotent (re-running it
+after N days of parking is identical in effect to running it daily; nothing decays or races against a
+deadline) and self-terminating (does nothing once the bare-doc population is empty). It is a pure
+availability/latency cost: the reader fallbacks (`useStreamingOffers.ts`, `weeklyDigest/readOffers`)
+stay load-bearing for longer than the ticket's header implies, which both reader comments already say
+explicitly ("stays until an exhaustive query PROVES zero bare docs remain"). Not a new deviation to file
+— the existing `communityRatingMaintain` swallowed-transaction accept and the `tmdbTosSweep` cap-gate
+precedent both already establish "self-healing delay under vendor throttling, priced and disclosed in a
+comment, is an accepted class" on this codebase; this is the same shape, one level up (a whole
+sub-feature's completion delayed, not a single record's).
+
+**Two-Scheduler-delivery race, read and graded, not just quoted.** `index.ts:463-470` discloses a real
+window: two overlapping `onSchedule` deliveries could interleave so that a stale `writeNamespaced`
+(built from the pre-refresh `scanned` snapshot) lands AFTER the other invocation's fresh
+`streamingOffers/{mediaType}_{tmdbId}` write, producing one stale overwrite. Bounded correctly: the
+stale doc's older `checkedAt` sends the title back to tier-0 in `selectRefreshBatch` on the NEXT run, so
+it self-corrects within one more cycle and never compounds. Admin-SDK-only, no client-reachable trigger,
+so this is data-freshness noise, not a security boundary. Consistent with the file's own "Admin-SDK
+sweeps" cost-not-security framing.
+
+**DeletionLimbo.tsx / BIN-911.** Diff is a pure ADDITION after the existing button row (confirmed by
+`git diff` hunk boundaries — every changed line is a `+`, zero `-` in the component). Read the full file:
+the PageHeader `title`/`standfirst` and the two `<p>` blocks above the buttons (legally-approved per
+BIN-813 condition 4 / BIN-877) are byte-identical to what round upon round of the aborted-deletion
+archive entries above already cleared — no textual overlap between the new BIN-911 paragraph and the
+locked sentences, and the new copy is careful (per its own comment trail, citing a #19 Customer Support
+blind critique) to say "kom tillbaka hit" rather than any word implying an undo path that doesn't exist
+(`DeletionLimbo.test.tsx`'s new case asserts `not.toContain('ångra')`/`'avbryt'`). No auth/write-path
+change — the component still offers exactly the same two actions (`deleteAccount`, `signOut`); this is
+copy-only. Not a trust-boundary change, so out of the "large change" bar for this reviewer's own
+domain — reviewed anyway per the dispatch's explicit ask.
+
+**No firestore.rules / firestore.indexes.json in this diff** (`git diff --cached --name-only` confirmed
+neither file present) — `streamingOffers` is Admin-SDK write / public-read (`allow read: if true; allow
+write: if false`), unchanged, and the migration bypasses rules entirely like every other sweep in this
+class, so no manual rules deploy is owed. `functions/**` DID change (`backfillIds.ts` new,
+`streamingOffers/index.ts`, `logic.ts`, root `index.ts` comment, `weeklyDigest/index.ts` comment) — per
+this repo's standing deploy-order note, `deploy.yml`'s drift guard will fail the push-triggered hosting
+job on this commit; a targeted `firebase deploy --only functions:streamingOffersRefresh` ships the new
+migration logic, hosting ships separately via `workflow_dispatch`. No new user-owned subcollection
+(`streamingOffers` stays global/public, not `users/{uid}/**`), so `collectUserDataSnapshots` needs no
+change and this isn't a GDPR-completeness surface.
+
+**V7 writer-guard (`backfillIds.test.ts`), re-verified from bytes, not trusted from the dispatch's
+summary of prior rounds' fixes.** Read the full test file. All the fixes the dispatch and the other
+agents' archives claim are present ARE present: `COL = `['"\`]streamingOffers['"\`]`` (any-quote-style),
+the single-file bound-ref scan spans newlines (`[^;]` not `[^;\n]`, plus the `(?:db\s*\.\s*)?` whitespace
+fix for a chain broken across lines), the cross-file scan is newline-spanning and REF-anchored (not
+"mentions the collection AND has a .set somewhere," which the file's own comment says used to false-flag
+`weeklyDigest`), and a THIRD test asserts — rather than silently passes on — the one shape none of the
+regex scans can see (`batch.set(col.doc(id), data)`, an argument-passed ref). This is the file's own
+honest-disclosure pattern already generalized in this reviewer's knowledge.md ("read its regex against
+the chokepoint's OWN idiom" / residual disclosure), so no new principle to fold — an instance of an
+existing one, correctly executed.
+
+**Not re-raised (accepted-deviations, checked):** Tillsammans anon-vote forgery, the session-expiry
+gate, blocking-as-hygiene, create-only reports, the fail-open `effectiveVisibility` read, the aborted-
+deletion marker's lack of retirement, the limbo screen blocking writes, the cross-device deletion gap
+(ADR 0022), the `communityRatingMaintain` swallowed-transaction accept (cited above as the closest
+precedent for the throttled-parking finding, not re-filed).
+
+**PoC status.** DERIVED. The destructive logic (`writeNamespaced`/`deleteBare`) is exercised by the
+REAL `runIdBackfill` against a fake `BackfillIo` port in `backfillIds.test.ts` (24 tests, order asserted
+on a call-sequence log) — that is a live unit-level proof of the safety property, not a rules-emulator
+PoC, because there is no rules surface here (Admin SDK bypasses `firestore.rules` entirely). No
+independent re-run performed this round; traced the port wiring (`makeBackfillIo` in `index.ts`) against
+the tested port interface and confirmed the two match field-for-field.
+
+No blocking findings. No new failure class for this file's principles — this diff instantiates two
+already-generalized classes (Admin-SDK sweep safety trio; self-terminating migration under a shared
+vendor-budget gate) rather than introducing a new one.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+

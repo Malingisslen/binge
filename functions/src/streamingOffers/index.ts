@@ -6,6 +6,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { isIntentTitle, dedupeIntent, selectRefreshBatch, computeHealth, streamingOffersDocId, classifyRunOutcome, nextRunsWithoutSuccess } from './logic';
 import { fetchOffers, RATE_LIMITED, REQUEST_REJECTED } from './motn';
 import { cheapestRent, appendPricePoint, type PricePoint } from './priceHistory';
+import { runIdBackfill, type BackfillIo, type BackfillScanDoc } from './backfillIds';
 import { mediaTypeDocId, parseMediaTypeFromDocId, resolveTmdbId } from '../shared/mediaTypeDocId';
 import { motnBillingCycleId } from '../util/dayId';
 import { applyThrottleObservation, notifyOnceForCycle, reserveMotnSlot, sendAdminSystemNotification } from '../util/notifyOnce';
@@ -72,6 +73,52 @@ async function readWorkSet(): Promise<WorkItem[]> {
 }
 
 /**
+ * BIN-565 — the Firestore half of the id migration. Everything it decides lives in
+ * backfillIds.ts; this only maps each decision onto one Firestore operation.
+ *
+ * `perRunLimit` is deliberately small. The remaining population is bounded (every title
+ * tracked before BIN-523 that the cron never revisited) and this runs every 24h, so a low
+ * cap drains it within days while keeping any single invocation's runtime and write count
+ * far below anything that could threaten the 25 SEK/mån ceiling.
+ */
+const BACKFILL_PER_RUN = 200;
+
+function makeBackfillIo(scanned: readonly BackfillScanDoc[]): BackfillIo {
+  const db = getFirestore();
+  const col = db.collection('streamingOffers');
+  return {
+    perRunLimit: BACKFILL_PER_RUN,
+    log: logger,
+    // The rows the run ALREADY scanned, handed in — not a second query.
+    //
+    // This took a correction: the first version ran its own
+    // `col.select('tmdbId','mediaType').get()` while its comment claimed to reuse
+    // readExisting()'s scan, so every invocation silently paid for the whole collection
+    // TWICE. The security review measured it. `readExisting()` already selects a superset
+    // of the two fields needed here, so the scan is genuinely shared now — and the claim
+    // is true because the data flows, not because a comment says so.
+    async scanAll(): Promise<readonly BackfillScanDoc[]> {
+      return scanned;
+    },
+    async readDoc(id) {
+      const snap = await col.doc(id).get();
+      return snap.exists ? (snap.data() as Record<string, unknown>) : undefined;
+    },
+    async exists(id) {
+      return (await col.doc(id).get()).exists;
+    },
+    // One Firestore operation each, and nothing else. The ORDER of the two lives in
+    // runIdBackfill, where a test can see it — see backfillIds.ts for why that moved.
+    async writeNamespaced(target, data) {
+      await col.doc(target.toId).set({ ...data, tmdbId: target.tmdbId, mediaType: target.mediaType });
+    },
+    async deleteBare(id) {
+      await col.doc(id).delete();
+    },
+  };
+}
+
+/**
  * Read current streamingOffers state for prioritization (acceptable full read at
  * this scale).
  *
@@ -81,9 +128,15 @@ async function readWorkSet(): Promise<WorkItem[]> {
  * the library would look never-checked at once and the governor would burn the
  * whole 300-call monthly MOTN budget re-fetching data it already has.
  */
-async function readExisting(): Promise<ExistingOffer[]> {
+async function readExisting(): Promise<{ existing: ExistingOffer[]; scanned: readonly BackfillScanDoc[] }> {
   const db = getFirestore();
   const snap = await db.collection('streamingOffers').select('checkedAt', 'offers', 'tmdbId', 'mediaType').get();
+  // BIN-565: the id migration classifies the SAME rows, so it takes them from here rather
+  // than re-scanning. Collected before the loop's `continue`s, which drop exactly the
+  // unattributable docs the migration most needs to see and report.
+  const scanned: BackfillScanDoc[] = snap.docs.map(
+    (d) => ({ id: d.id, mediaType: d.get('mediaType'), tmdbId: d.get('tmdbId') }),
+  );
   const out: ExistingOffer[] = [];
   for (const d of snap.docs) {
     // Recover the media type from the doc ID when the field is missing or junk —
@@ -108,7 +161,7 @@ async function readExisting(): Promise<ExistingOffer[]> {
       nextLeaving: leavings[0] ?? null,
     });
   }
-  return out;
+  return { existing: out, scanned };
 }
 
 async function notifyAdmin(status: 'warn' | 'critical', intervalDays: number, users: number): Promise<boolean> {
@@ -181,11 +234,26 @@ export const streamingOffersRefresh = onSchedule(
     if (usedThisCycle >= STREAMING_HARD_CYCLE_CAP) {
       logger.warn('streamingOffersRefresh: MOTN cycle cap already reached — skipping run', { motnCycle, usedThisCycle });
       await notifyOnceForCycle(budgetRef, notifyAdminStreamingStale);
+      // BIN-565: this return ALSO skips the id migration at the end of the handler, even
+      // though that migration spends no MOTN call at all. An unforced coupling, kept
+      // deliberately rather than by oversight: a cycle-capped day means the vendor budget
+      // is exhausted, which is the one situation where the least code should run, and the
+      // migration is self-terminating with no deadline. It simply resumes when the cycle
+      // rolls over. Moving the migration above this check is the fix if it ever matters.
+      //
+      // "Rare" was measured only against ordinary spend (9/day × 31 = 279 ≤ 300). It is
+      // NOT rare on the failure path: `applyThrottleObservation` → `reserveThrottleSignal`
+      // burns `count` to the cap on two consecutive 429 runs, which makes this branch true
+      // for the REST of the billing cycle — up to ~31 days of early returns, every one
+      // skipping the migration too. Still acceptable, for the same reason: a month where
+      // the vendor is throttling us is not a month to run extra writes. Priced here rather
+      // than left as an unmeasured word (integration review, 2026-08-17).
       return;
     }
 
     const workSet = await readWorkSet();
-    const existing = await readExisting();
+    const { existing, scanned } = await readExisting();
+
     const batch = selectRefreshBatch(workSet, existing, nowMs, PER_RUN_SELECT);
 
     // BIN-545: the batch carries (tmdbId, mediaType) pairs. It used to be bare
@@ -240,9 +308,17 @@ export const streamingOffersRefresh = onSchedule(
       written += 1;
 
       // The namespaced doc now supersedes the legacy bare-id one, so retire it.
-      // Without this, readExisting's full-collection scan carries ~2 rows per
-      // title FOREVER — it runs unpaginated every 24h, so it is the worst
-      // standing cost in the pipeline. Gated on the legacy doc's own mediaType:
+      //
+      // BIN-565 (2026-08-17) made this a fast path rather than the only path. Its old
+      // justification — "without this, readExisting's scan carries ~2 rows per title
+      // FOREVER" — stopped being true the moment runIdBackfill shipped: that pass retires
+      // the same doc later in this SAME invocation, through its already-exists branch.
+      // Kept because retiring it here saves the migration a round trip, and because a
+      // refresh that just wrote fresh data is the best-informed place to drop the stale
+      // twin. Corrected rather than left standing: a stale reason on a live code path is
+      // what the integration review caught one file over, in logic.ts, this same commit.
+      //
+      // Gated on the legacy doc's own mediaType:
       // a movie and a show sharing a tmdbId want the SAME bare doc, and deleting
       // one unconditionally would destroy the sibling's only data path.
       const legacyRef = db.collection('streamingOffers').doc(String(tmdbId));
@@ -345,5 +421,53 @@ export const streamingOffersRefresh = onSchedule(
       runsWithoutSuccess: health.runsWithoutSuccess, outcome,
       intervalDays: health.refreshIntervalDays,
     });
+
+    // BIN-565 — finish the doc-id migration. Pure Firestore copying, no MOTN call, so it
+    // spends nothing from the vendor budget this function rations. Self-terminating: once
+    // no bare doc remains it does nothing. See backfillIds.ts for why the ticket's two
+    // proposed shapes (a work-set gate, a dated cutoff) are both unsound.
+    //
+    // LAST STATEMENT IN THE HANDLER, and that position took two corrections to reach.
+    //
+    // It first sat before `selectRefreshBatch`, justified as "so the scan that feeds it is
+    // not what keeps the old ids alive". That reason was false: `existing` and `scanned`
+    // come from the SAME `.get()`, so the batch is identical wherever this runs. Moving it
+    // below the streamingHealth write fixed the counter but not the alarms — and the
+    // alarms are the part that reaches a human.
+    //
+    // Both `notifyAdmin` and `notifyAdminFeedDown` are EDGE-triggered: they compare `prev`,
+    // the top-of-run snapshot, against a status the health write has already persisted. A
+    // throw between the write and the sends therefore consumes the transition PERMANENTLY —
+    // the next run compares warn to warn and stays silent. Replayed against the incident
+    // BIN-856 exists for (MOTN answering 400 for a month): a migration that throws on the
+    // run where `feedStatus` first goes `warn` suppresses that message. Precisely: a
+    // SYSTEMATIC failure suppresses every one after it too, while `streamingHealth/current`
+    // sits red and nobody is told; a one-off throw only eats that single transition — the
+    // later `warn`→`critical` edge still fires, since the comparison is on values, not on
+    // a consumed edge. The systematic case is the one worth placing this call for. And the fallback
+    // loudness does not exist here — accepted-deviations.md (2026-08-16) measured that a
+    // Cloud Functions execution-status flip is consumed by nothing in this project.
+    //
+    // Placed last, a failure costs only the migration. Deliberately still NOT wrapped in a
+    // try/catch: the invocation fails, which is the honest signal, and swallowing would
+    // make a permanently-stuck migration look completed — the "silence reads as success"
+    // shape BIN-918 was filed about.
+    //
+    // `scanned` is the pre-REFRESH snapshot, not merely pre-migration: the loop above
+    // deletes superseded bare docs at its own legacy-cleanup step. Harmless in direction —
+    // nothing in this repo writes a bare id, so `complete` cannot read true while the
+    // collection is dirty — but up to PER_RUN_SELECT of those deletes are no-ops counted
+    // into `droppedSuperseded`/`bareFound`. Read the tally as a pre-refresh count; it is
+    // what a human uses to decide whether the reader fallbacks may finally go.
+    //
+    // Two overlapping Scheduler deliveries can both reach this: the 20h idempotency guard
+    // reads `lastRunAt`, written at the end of a run. The real window is between
+    // `exists(toId)` returning false and `writeNamespaced` — if the other invocation's
+    // refresh writes that same namespaced doc inside it, this one overwrites it with
+    // pre-refresh `offers` AND an older `checkedAt`. ONE stale overwrite, corrected by the
+    // next refresh: the old `checkedAt` sends the title straight back to the front of
+    // `selectRefreshBatch`. Not "can never happen", which is what this comment claimed
+    // until the integration review measured it (2026-08-17). The delete is idempotent.
+    await runIdBackfill(makeBackfillIo(scanned));
   },
 );

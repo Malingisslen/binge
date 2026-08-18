@@ -74,8 +74,21 @@ async function readLibraryTitles(uid: string): Promise<DigestTitle[]> {
  * `${tmdbId}` id, accepted only when that doc's own `mediaType` field matches
  * the title we asked for — otherwise we'd hand a movie the TV show's leaving
  * dates, which is precisely the bug being fixed. The fallback disappears title
- * by title as the refresh cron rewrites each doc under the new id; without it
- * the digest would go quiet for months (the cron refreshes ~9 titles a day).
+ * by title as the refresh cron rewrites each doc under the new id — but ONLY for
+ * titles still in the refresh work set; without it the digest would go quiet for
+ * months (the cron refreshes ~9 titles a day).
+ *
+ * BIN-565 (2026-08-17): that "title by title" clause was the whole of the story until
+ * now, and it was never going to finish. The work set requires status `vill_se`/`mina`,
+ * so a watched title leaves it permanently and its bare doc is never revisited —
+ * `runIdBackfill` (../streamingOffers/backfillIds.ts) finishes the migration for those.
+ * This pass stays until an exhaustive query PROVES zero bare docs remain; the migration
+ * completing is not the same as it being proven complete.
+ *
+ * Removing it early is the expensive mistake here, not keeping it: #18 Community Manager
+ * measured that a lost offer does not surface as an error. `hasDigestContent` can simply
+ * decide there is nothing to send, and a digest that never arrives is never experienced
+ * as a missing one — so a real leaving-soon window can pass with nothing to notice.
  */
 async function readOffers(titles: DigestTitle[]): Promise<Map<string, DigestOffer[]>> {
   const db = getFirestore();
