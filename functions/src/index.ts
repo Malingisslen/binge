@@ -285,9 +285,25 @@ export { weeklyDigestNotify } from './weeklyDigest';
 export { tmdbFieldsSweep } from './tmdbTosSweep';
 
 // ── "Vad försvinner"-rollup (BIN-178 SEO) ────────────────────────────────────
-// leavingRollup: daglig scan av streamingOffers → en liten publik doc
-// streamingLeaving/current.byProvider (titlar vars abonnemangs-offer lämnar inom
-// ~45 dygn, per kanonisk provider). /forsvinner/[provider]-sidan läser EN doc
-// klient-sidigt och berikar titlar via TMDB. Admin SDK; streamingLeaving är
-// publik läs (katalogdata) + klient-aldrig-skriv i firestore.rules.
+// leavingRollup: var 96:e timme (CADENCE_HOURS i leavingRollup/config.ts) frågar
+// MOTN:s /changes-endpoint vad som LÄMNAR SE inom 31 dygn (WINDOW_DAYS; MOTN:s
+// eget tak för fönstret) → en liten publik doc streamingLeaving/current.byProvider,
+// per kanonisk provider. Bara expirationer av abonnemangstyp med känd tidsstämpel
+// (logic.ts:97). /forsvinner/[provider]-sidan läser EN doc klient-sidigt och berikar
+// titlar via TMDB. Admin SDK; streamingLeaving är publik läs (katalogdata) +
+// klient-aldrig-skriv i firestore.rules.
+//
+// Rättelse 2026-08-18 (fynd i helhetsgranskningen av BIN-565). Raderna sa "daglig
+// scan av streamingOffers ... inom ~45 dygn". Tre fel i en mening:
+//   - kadensen är 96h sedan BIN-543/ADR 0016, inte daglig;
+//   - jobbet LÄSER inte streamingOffers — `grep -n "collection(" functions/src/
+//     leavingRollup/` ger exakt två träffar, motnLeavingBudget (räknaren) och
+//     streamingLeaving (skrivningen). Källan är MOTN:s /changes, inte vår egen
+//     kollektion. Katalogen NÄMNER streamingOffers på elva ställen, men varenda
+//     en är en kommentar om systerjobbet som delar MOTN-kvoten;
+//   - fönstret är 31 dygn (WINDOW_DAYS), inte ~45.
+// Ett tal i en kommentar är ett okontrollerat påstående tills någon kört något
+// (tasks/lessons.md, 2026-08-17) — och första försöket att skriva DEN HÄR
+// rättelsen påstod "nämner kollektionen inte en enda gång", vilket grep
+// omedelbart motbevisade. Att nämna och att läsa är inte samma sak.
 export { leavingRollup } from './leavingRollup';
