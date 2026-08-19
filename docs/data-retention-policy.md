@@ -275,8 +275,15 @@ säger det också — meddelandet skiljer sedan BIN-876 på "ingenting raderades
 "en del kan redan vara borta", och båda pekar på ett omförsök. VAR knappen sitter
 avgörs inte av vilket meddelande det är utan av när felet uppstod: föll det INNAN
 markören lades ned står inställningssidan kvar och bär sin egen "Försök
-igen"-knapp; föll det efter är sidan redan utbytt mot limbo-skärmen, och båda
-meddelandena pekar då på dess "Slutför raderingen".
+igen"-knapp; föll det efter är sidan redan utbytt mot limbo-skärmen, som bär
+"Slutför raderingen".
+
+Sedan BIN-925 (2026-08-19) namnger bara `partial`-meddelandet den knappen.
+`recent-login`-texten namnger ingen alls, eftersom den strängen renderas i BÅDA
+lägena — med hand-over-taggen har limbo-skärmen knappen, utan den heter den enda
+synliga kontrollen "Försök igen" — så varje formulering som pekar ut en knapp är
+med nödvändighet falsk i det ena. `partial` har inte det problemet: den grenen kan
+aldrig nås otaggad, så dess hänvisning är alltid sann.
 
 **Kvarstående lucka: det delvis kaskaderade läget har INGET fönster och ingen
 sopning.** Sopningen ovan letar efter Auth-konton *utan* `users/{uid}`. Avbryts

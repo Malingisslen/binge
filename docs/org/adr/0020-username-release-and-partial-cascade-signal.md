@@ -178,6 +178,18 @@ in force regardless of how the three questions above are answered:
    screen's "Slutför raderingen" instead; the two branches that fire BEFORE the marker keep
    theirs. Recorded here so the reversal reads as what it is rather than as a regression
    against this condition.
+
+   **Superseded in part again by BIN-925 (2026-08-19), on Malin's decision.** "Those
+   branches name the limbo screen's button" is now true of `partial` only. The
+   `recent-login` string renders in BOTH states — tagged, where the limbo screen owns the
+   button, and untagged (BIN-813's second attempt), where the only visible control is the
+   toast's own "Försök igen" — so no wording that names a button can be true in both. It
+   therefore names none: *"Raderingen har påbörjats men inte slutförts. Logga in igen för
+   att avsluta den."* `partial` is unaffected because `CASCADE_PARTIAL` is always re-wrapped
+   in `DELETION_HANDED_OFF` before the classifier sees it, so that branch can never render
+   untagged. #19 Customer Support and #5 Legal/GDPR ran blind and independently produced the
+   same replacement. Note that ADR 0021 condition 4's "No fifth phrasing" still stands and
+   is what ruled out splitting the string in two — the count is locked, the wording was not.
    - *"Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och
      försök igen."*
    - *"Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data

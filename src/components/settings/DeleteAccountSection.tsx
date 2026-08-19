@@ -65,7 +65,7 @@ export function DeleteAccountSection() {
       const msg = kind === 'preflight'
         ? 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.'
         : kind === 'recent-login'
-          ? 'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Slutför raderingen för att avsluta den.'
+          ? 'Raderingen har påbörjats men inte slutförts. Logga in igen för att avsluta den.'
           : kind === 'partial'
             ? 'Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data kan redan vara borttagen. Tryck på Slutför raderingen — resten går igenom utan att skada det som redan tagits bort.'
             : 'Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och försök igen.';
@@ -84,14 +84,27 @@ export function DeleteAccountSection() {
       // berättar samma sak kvarstående i stället för i 2,5 sekunder — och
       // `setConfirming(true)` vore en no-op på en avmonterad komponent, ett
       // löfte om en knapp som inte finns (integrationsgranskningen 2026-08-13).
-      // Texterna ovan pekar därför på limbo-skärmens "Slutför raderingen".
+      // `PARTIAL_MSG` pekar därför på limbo-skärmens "Slutför raderingen".
       //
-      // BIN-936: `DeletionLimbo` har SIN EGEN formulering för samma fyra koder, och det
-      // är med flit — de två skärmarna beskriver samma läge från var sin sida av den här
-      // komponentens avmontering, så den ena skickar vidare och den andra står för
-      // åtgärden. Vad de aldrig får göra är att namnge OLIKA knappar. Bindningen ligger i
-      // `DeleteAccountSection.test.tsx` (blocket "BIN-936"), som renderar limbo-skärmen
-      // och läser knappens faktiska etikett — kör det testet om du rör endera texten.
+      // BIN-925 (Malins beslut 2026-08-19): `recent-login`-texten gör det INTE längre.
+      // Den grenen tjänar TVÅ lägen ur en enda sträng — med hand-over-taggen är
+      // komponenten avmonterad och limbo-skärmen har knappen; utan taggen (BIN-813:s
+      // andra försök) lever komponenten och toastens enda kontroll heter "Försök igen".
+      // Ingen formulering som namnger en knapp kan vara sann i båda. #19 Kundsupport och
+      // #5 Juridik landade oberoende av varandra på samma svar: sluta namnge knappen.
+      // Texten är nu sann oavsett vilken skärm läsaren står på, och limbo-skärmen säger
+      // ändå själv vad som ska tryckas.
+      //
+      // `PARTIAL_MSG` behåller sin knapphänvisning, och det är inte en inkonsekvens:
+      // `CASCADE_PARTIAL` kastas bara inifrån `runDeletionCascade`, som alltid slås in i
+      // `DELETION_HANDED_OFF` (`AuthContext.tsx:1228`) innan klassificeraren ser det. Den
+      // grenen kan alltså aldrig nås otaggad, så dess hänvisning är alltid sann. Båda
+      // rollerna verifierade det var för sig.
+      //
+      // BIN-936: `DeletionLimbo` har SIN EGEN formulering för samma fyra koder, med flit
+      // — de två skärmarna beskriver samma läge från var sin sida av avmonteringen. Vad
+      // de aldrig får göra är att namnge OLIKA knappar. Bindningen ligger i
+      // `DeleteAccountSection.test.tsx` (blocket "BIN-936") och gäller nu `PARTIAL_MSG`.
       if (deletionWasHandedOff(message)) {
         toast(msg);
       } else {

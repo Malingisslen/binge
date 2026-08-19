@@ -72,8 +72,13 @@ const STALE_MARKED_ERROR = `${REQUIRES_RECENT_LOGIN}: sessionen är för gammal 
 
 const PROMISE_CLAUSE = 'Ingenting har raderats.';
 const PREFLIGHT_MSG = 'Du måste logga in igen innan du kan ta bort ditt konto. Ingenting har raderats.';
+// BIN-925, Malins beslut 2026-08-19: namnger inte längre någon knapp. Den här grenen
+// renderas i TVÅ lägen — med hand-over-taggen (limbo-skärmen tar över och har knappen)
+// och utan den (komponenten lever, toastens åtgärd heter "Försök igen") — så en text som
+// namnger en knapp är med nödvändighet falsk i det ena. #19 Kundsupport och #5 Juridik
+// godkände samma formulering oberoende av varandra.
 const RECENT_LOGIN_MSG =
-  'Raderingen har påbörjats men inte slutförts. Logga in igen och tryck på Slutför raderingen för att avsluta den.';
+  'Raderingen har påbörjats men inte slutförts. Logga in igen för att avsluta den.';
 const PARTIAL_MSG =
   'Raderingen avbröts av ett anslutningsfel innan den hann bli klar. En del av din data kan redan vara borttagen. Tryck på Slutför raderingen — resten går igenom utan att skada det som redan tagits bort.';
 const GENERIC_MSG = 'Kunde inte ta bort kontot. Ingenting har raderats. Kontrollera anslutningen och försök igen.';
@@ -120,11 +125,14 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     // happens after the marker is down, so `AppShell` has already replaced this
     // component with the limbo screen. A retry button would call `setConfirming`
     // on something unmounted — a promise the UI cannot keep (integration review,
-    // 2026-08-13). The limbo screen's own "Slutför raderingen" is the button,
-    // and the text below names it.
+    // 2026-08-13). The limbo screen's own "Slutför raderingen" is the button —
+    // but since BIN-925 this text no longer NAMES it, because the same string
+    // also renders in the untagged case where that button is not on screen.
     expect(toast.show).toHaveBeenCalledWith(RECENT_LOGIN_MSG);
     expect(toast.show.mock.calls[0][1]).toBeUndefined();
-    expect(toast.show.mock.calls[0][0]).toContain('Slutför raderingen');
+    // Asserted as an absence, not dropped: naming a button here is precisely the
+    // defect BIN-925 removed, and a silent deletion would let it come back.
+    expect(toast.show.mock.calls[0][0]).not.toContain('Slutför raderingen');
     expect(toast.show.mock.calls[0][0]).not.toContain(PROMISE_CLAUSE);
     // BIN-796: silence read as "nothing happened". The message must say deletion
     // started, and must not claim it finished either — both halves, or the honest
@@ -132,11 +140,13 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     expect(toast.show.mock.calls[0][0]).toContain('påbörjats');
     expect(toast.show.mock.calls[0][0]).not.toContain('raderat');
     // There is no auto-resume — logging in only refreshes the token the preflight
-    // reads. A message that stops at "logga in igen" strands the user on an empty
-    // but still-existing account, so naming the action that finishes the job is
-    // part of the promise (#19 Customer Support critique, 2026-08-07). The name
-    // changed on 2026-08-13: the button is now the limbo screen's "Slutför
-    // raderingen", pinned above, because this component is no longer on screen.
+    // reads. #19's 2026-08-07 critique asked the message to name the action that
+    // finishes the job, so the user is not stranded on an empty but still-existing
+    // account. BIN-925 revisited that: the button was named, then renamed, and now
+    // is not named at all, because ONE string serves two screens and only one of
+    // them has the button. What discharges #19's original concern instead is the
+    // limbo screen itself, which replaces the whole app moments later and states
+    // the action in its own words with the button directly beneath it.
     expect(toast.show.mock.calls[0][0]).not.toContain('Ta bort mitt konto');
   });
 
@@ -291,56 +301,57 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
 
 // ── BIN-936 / BIN-925: de två skärmarna hålls ihop av något ─────────────────────────
 //
-// #19 Customer Supports blinda kritik, 2026-08-18. Två skärmar beskriver samma
-// klassificerade feltillstånd från var sin sida av en avmontering: den här sektionen
-// berättar det från en skärm som är på väg att försvinna, `DeletionLimbo` från skärmen
-// som tar över. Ingenting band ihop dem — och de fyra texterna är juridiskt godkända och
-// får inte skrivas om (BIN-813 villkor 4), så det enda som KAN byggas är bindningen.
+// #19 Customer Supports blinda kritik, 2026-08-18, och BIN-925:s fix 2026-08-19.
 //
-// Vad testet faktiskt gör, utan skryt: det renderar limbo-skärmen och läser knappens
-// `textContent`, och jämför DEN strängen med de två meddelandena. Etiketten står visserligen
-// skriven en gång till i `getByRole`-frågan nedan — det här är alltså ingen "sista kopian".
-// Det som gör testet till en spärr och inte en omskrivning av dagens strängar är att det
-// blir rött åt BÅDA hållen: döps knappen om hittar `getByRole` ingenting, och formuleras
-// något av meddelandena om faller `toContain`. (En tidigare version av den här kommentaren
-// räknade upp "tre ställen" och kallade sig "inte en fjärde kopia". Båda var fel —
-// integrationsgranskningen 2026-08-19 räknade om.)
+// Två skärmar beskriver samma klassificerade feltillstånd från var sin sida av en
+// avmontering: den här sektionen berättar det från en skärm som är på väg att försvinna,
+// `DeletionLimbo` från skärmen som tar över. Ingenting band ihop dem.
+//
+// Bindningen gäller nu `PARTIAL_MSG` och bara den. `RECENT_LOGIN_MSG` namnger sedan
+// BIN-925 ingen knapp alls, eftersom den grenen renderas i BÅDA lägena — med
+// hand-over-taggen (limbo-skärmen har knappen) och utan den (toastens åtgärd heter
+// "Försök igen"). En text som namnger en knapp är då med nödvändighet falsk i det ena.
+// `PARTIAL_MSG` har inte det problemet: `CASCADE_PARTIAL` kastas bara inifrån
+// `runDeletionCascade`, som alltid slås in i `DELETION_HANDED_OFF` innan klassificeraren
+// ser det, så den grenen kan aldrig nås otaggad.
+//
+// Vad testet gör: renderar limbo-skärmen och läser knappens `textContent`, och jämför DEN
+// strängen med meddelandet. Etiketten står skriven en gång till i `getByRole`-frågan —
+// det här är alltså ingen "sista kopian". Det som gör det till en spärr är att det blir
+// rött åt BÅDA hållen: döps knappen om hittar `getByRole` ingenting, formuleras
+// meddelandet om faller `toContain`.
 describe('BIN-936 — båda skärmarnas texter för samma feltillstånd namnger samma åtgärd', () => {
-  it('hand-over-texterna namnger limbo-knappens FAKTISKA etikett, inte en kopia av den', () => {
+  it('hand-over-texten namnger limbo-knappens FAKTISKA etikett, inte en kopia av den', () => {
     render(<DeletionLimbo />);
 
-    // Frågan ställs till skärmen, inte till en konstant. Byter limbo-skärmen namn på
-    // knappen kastar `getByRole` här; byter något av meddelandena formulering faller
-    // `toContain` nedanför. Båda riktningarna fäller alltså testet, vilket är hela
-    // skälet att det finns.
     const label = screen.getByRole('button', { name: 'Slutför raderingen' }).textContent!.trim();
 
-    // De två grenar som saknar en egen knapp — hand-over har skett, den här komponenten
-    // är avmonterad, och texten pekar med flit vidare till limbo-skärmen.
-    expect(RECENT_LOGIN_MSG).toContain(label);
+    // Den gren som saknar en egen knapp och ALLTID är taggad: hand-over har skett, den
+    // här komponenten är avmonterad, och texten pekar med flit vidare till limbo-skärmen.
     expect(PARTIAL_MSG).toContain(label);
+
+    // Och motsatsen, pinnad så BIN-925 inte kan återställas i förbifarten: den gren som
+    // renderas i båda lägena får INTE namnge knappen. Utan den här raden vore fixen ett
+    // borttaget påstående i stället för ett bytt.
+    expect(RECENT_LOGIN_MSG).not.toContain(label);
   });
 
-  it('den otaggade andra-försöks-grenen namnger en knapp som INTE är dess synliga åtgärd', async () => {
-    // Den kvarstående luckan, pinnad i stället för bortputsad. `STALE_MARKED_ERROR`
-    // klassificeras som `recent-login` men saknar hand-over-taggen, så komponenten lever
-    // och toasten får sin åtgärd — märkt "Försök igen". Meddelandet säger ändå "Slutför
-    // raderingen", som är limbo-skärmens knapp.
+  it('den otaggade andra-försöks-grenen namnger den åtgärd som FAKTISKT syns', async () => {
+    // `STALE_MARKED_ERROR` klassificeras som `recent-login` men saknar hand-over-taggen,
+    // så komponenten lever och toasten får sin åtgärd — märkt "Försök igen". Före BIN-925
+    // sa meddelandet ändå "Slutför raderingen", limbo-skärmens knapp, som inte finns här.
     //
     // #19:s åtkomlighetsfynd (statiskt härlett vid `2d67ff7`, inte mekaniskt bevisat):
-    // ingen verklig användarväg når det här läget, eftersom `AuthContext` sätter
+    // ingen verklig användarväg når läget, eftersom `AuthContext` sätter
     // `deletionInProgress` vid :536, :638 och :1227 medan färskhetsspärrens throw ligger
-    // vid ~:1190 — före markören — och `AppShell` då redan bytt ut hela appen. Testet är
-    // därför ett DEFENSIVT kontraktstest, inte en beskrivning av något användare möter.
-    // Återöppna BIN-925 om någon av de tre anropsplatserna tas bort eller flyttas
-    // relativt den throwen.
+    // vid ~:1190 — före markören — och `AppShell` då redan bytt ut hela appen. Fixen är
+    // alltså förebyggande: texten är sann även om den ordningen någon gång ändras.
     auth.deleteAccount.mockRejectedValue(new Error(STALE_MARKED_ERROR));
 
     await attemptDelete();
 
     const action = toast.show.mock.calls[0][1] as { label: string };
     expect(action.label).toBe('Försök igen');
-    expect(action.label).not.toBe('Slutför raderingen');
-    expect(toast.show.mock.calls[0][0]).toContain('Slutför raderingen');
+    expect(toast.show.mock.calls[0][0]).not.toContain('Slutför raderingen');
   });
 });
