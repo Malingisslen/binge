@@ -429,6 +429,28 @@ Owns the process.
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`
+- **The local commit hooks** (BIN-917). `lefthook.yml` is the only commit-TIME gate this repo
+  has: deleting a command from it disarms a check for every commit made on every machine, and
+  it reached zero blocking reviewers and zero owning roles until now. It is the same class as
+  the reviewGates roster one bullet down — machinery that decides how the repo is reviewed —
+  and it was found the hard way: BIN-917's first draft searched for `.husky` and a
+  `precommit` script, found neither, and concluded no commit-time mechanism existed. It had
+  been here since 2026-08-08.
+  → `lefthook.yml`
+- **The dependency manifest those upgrades land in** (BIN-919). `package.json` carries the
+  framework pins, the npm scripts every gate and workflow invokes, and the test/lint
+  wiring — so it decides how the repo builds and how it is checked. It was the one tracked
+  path the router called code, did not route `skip`, and no commit gate stopped. Seated
+  here rather than left on the permanent #14 fallback for the same reason as the router
+  itself: the fallback is a seat of last resort for code nobody claimed, not an answer for
+  a file that decides how everything else is verified. The lockfile is deliberately NOT
+  owned here: it is machine-generated and routes skip, and whether that is right is an open
+  question tracked on BIN-930 rather than settled in passing. Written without backticks on
+  purpose — the generator harvests every backtick-quoted tracked path in a section, so
+  merely NAMING the lockfile in a sentence that declines to own it would own it. It did,
+  for one round: A2 went red with "package-lock.json (owned by #25, blocking gate: none)".
+  Same trap this section's next bullet already documents for directories.
+  → `package.json`
 - **The commit-gate roster itself** — which reviewer agent blocks which staged path
   (`reviewGates`), and the decided-deviations ledger that tells a reviewer what it may
   NOT flag. Removing a pattern from either quietly disarms a gate, so the file that

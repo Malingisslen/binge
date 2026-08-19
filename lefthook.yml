@@ -38,3 +38,28 @@ pre-commit:
       run: npx eslint {staged_files}
       fail_text: "eslint found problems in the staged files. Fix them, or justify with a scoped inline disable."
       priority: 2
+
+# BIN-917's criterion 4, and the reason it lives here rather than nowhere.
+#
+# The ticket asks that a batch not reach the COMMITTER without a stakeholder-review row in
+# docs/org/metrics/events.jsonl. The first attempt at this ticket declared that impossible in
+# this repo — "no .husky, no precommit in package.json" — and pulled the criterion out. Both
+# probes were true and the conclusion was false: THIS FILE is the commit-time mechanism, it
+# has been here since 2026-08-08, and the integration review found it in one grep. A search
+# that looks for one tool's spelling and concludes the capability is absent is the same shape
+# as the defect the ticket is about.
+#
+# `commit-msg` rather than `pre-commit` because the subject line is the evidence: the commit
+# does not exist yet, so nothing can walk history for it, but the message being written names
+# the tickets. `{1}` is the path to the message file.
+#
+# NOT glob-gated, unlike the two above, and deliberately: the check reads the SUBJECT, not the
+# staged files, and a code-changing commit that touches no `.ts` is exactly the case that
+# escaped on 2026-08-16 (049f21b is a test-file commit). It costs one node process and one
+# file read — no toolchain, no compile. Measured well under a second.
+commit-msg:
+  commands:
+    review-coverage:
+      run: node docs/org/metrics/check_review_coverage.mjs --message {1}
+      fail_text: "This commit names a ticket with no stakeholder-review row (BIN-917). Log the review, or fix the subject."
+      priority: 1

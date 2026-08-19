@@ -154,6 +154,20 @@ export const TOOLING_CODE_FILES = new Set([
   // buys less than it sounds like. ("The one caller" here was wrong until the tenth
   // integration pass measured it.)
   'docs/org/metrics/log_event.mjs',
+  // BIN-917's coverage check and its test, added in the SAME commit as their entry in
+  // .claude/shared-plugin.json's integration-gate alternation — the BIN-830 lesson, which
+  // is that widening one of the two lists never widens the other. It asks the inverse
+  // question to its check_events.mjs neighbour: not "does this row carry its evidence"
+  // but "is there a row at all", because the 2026-08-16 failure was silence rather than
+  // a false claim. Two modes: `--message` runs from lefthook's `commit-msg` hook and refuses
+  // the commit being written (BIN-917 criterion 4, literally); with no flag it walks history
+  // under `npm test` and gates the DEPLOY, as a backstop for anything that got in before the
+  // hook existed or with `LEFTHOOK=0`. The first draft shipped only the second and declared
+  // the first impossible — "no .husky, no precommit in package.json" — which was two true
+  // probes and a false conclusion: `lefthook.yml` had been the commit-time mechanism here
+  // since 2026-08-08.
+  'docs/org/metrics/check_review_coverage.mjs',
+  'docs/org/metrics/check_review_coverage.test.mjs',
 ]);
 // Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
 // the two remaining root test-runner configs: the blocking gate already stops a commit
@@ -449,16 +463,20 @@ function selftest() {
     // owner in docs/role-responsibilities.md is an INTENDED improvement, and a case that
     // pinned `unmapped-code` would report that improvement as a failure. What must never
     // change is that it stops being `skip`. Measured at these bytes: TOOLING_CODE_FILES
-    // holds 12 paths, 8 of them under docs/org/. FIVE of those eight are `owned` / [25]
+    // holds 14 paths, 10 of them under docs/org/. FIVE of those ten are `owned` / [25]
     // (route, route.test, gate-symmetry.test, gen-ownership-map, gen-ownership-map.test);
-    // the THREE under docs/org/metrics/ are `unmapped-code` / [14], as are all four under
+    // the FIVE under docs/org/metrics/ are `unmapped-code` / [14], as are all four under
     // scripts/ — the deliberate #14-fallback seat §25 says the check scripts keep.
     //
     // This sentence said "all four files under docs/org/ are owned" until 2026-08-17. It
     // was already off by one after BIN-880 added gate-symmetry.test.mjs, and BIN-918 made
     // it false in SUBSTANCE by adding three unowned metrics paths — so "everything under
     // docs/org/ has an owner" would have been read straight past the gap BIN-930 exists
-    // for. Caught by the ninth integration pass on the commit that broke it.
+    // for. Caught by the ninth integration pass on the commit that broke it. Then BIN-917
+    // broke it AGAIN, in exactly the same way, by adding the two check_review_coverage
+    // paths 300 lines above this paragraph while leaving 12/8/three standing — caught by
+    // the integration review of THAT commit. A count written into prose beside the list it
+    // counts will keep going stale; if it goes wrong a third time, derive it instead.
     //
     // `--selftest` used to be invoked by NOTHING — not package.json, not ci.yml, not
     // deploy.yml, not a hook — so a stale pin here could not fail a deploy, and a

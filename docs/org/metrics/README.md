@@ -31,6 +31,15 @@ system on its own terms.
 - **`check_events.mjs`** + its test — fails when a row claims the work reached main without
   naming evidence for it. See the BIN-918 section below for what a clean run does and does
   not prove.
+- **`check_review_coverage.mjs`** + its test *(BIN-917, 2026-08-18)* — the inverse question:
+  fails when a code-changing commit has no `review` row at all. **Two modes**, and they gate
+  different things: `--message <file>` is run by `lefthook.yml`'s `commit-msg` hook and
+  REFUSES THE COMMIT, reading the log from the **index** (an unstaged row is invisible to it,
+  deliberately — see the function's own comment); with no flag it walks history under
+  `npm test` and gates the deploy, as the backstop for anything committed before the hook
+  existed or with `LEFTHOOK=0`. It shares `ticketOf` and `historyIsAvailable` with
+  `check_events.mjs` so both files answer "which ticket is this row about?" identically.
+  Its header states what it does NOT catch, including that a `ran:false` row satisfies it.
 
 ## Logging
 ```bash
@@ -67,6 +76,7 @@ drifted the shakedown data; the writers are now pinned to this contract).
 | `ran` | *(optional)* `false` when no critique actually happened — see below. NOTE: `trigger` rows also carry a `ran` field, with a DIFFERENT meaning (`null` = "did a review follow? unknown"). One name, two meanings, in one log |
 | `outcome` | *(optional)* free-form label (`approved-with-conditions`, `parked-conditional-block`, …) |
 | `via` | *(optional)* which writer. FIVE values are live: `"sprint-execute"`, `"stakeholder-review"`, `"sprint-parallel"`, `"manual"`, `"attended-review-pass"`. Only the first is recognised as sprint-routed by `/org-retro` (it tests `via === "sprint-execute"` or a `ticket` field), so the other four land in the **ad-hoc** set and are expected to have a preceding `trigger`. See the `ran: false` note — 42 rows currently land there wrongly |
+| `timing` | *(optional, added 2026-08-18 by BIN-917)* WHEN the critique ran relative to the code. Three values are live: `"pre-build"` (before the first edit — the intended order), `"retroactive"` (after the code was already on main; the review is real, the gate it should have been was not there), `"pre-build-logged-late"` (ran in the right order, written to this log afterwards). **Read by nothing today** — `/org-retro` does not consult it, verified 2026-08-18 by grepping the whole `role-org` plugin for `timing`/`retroactive`/`pre-build`. That grep is not empty: it returns exactly one hit, `skills/stakeholder-review/SKILL.md:125`, the words "ordering/timing dependency" in prose, which reads no field. Named here so the next person to run it does not think they have found a contradiction. It is recorded so a future rubber-stamp or calibration measurement can tell a post-hoc audit apart from a gate that worked, which it currently cannot: without this field the 7 rows written that day are indistinguishable from 7 reviews that fired on time. Documented here rather than left to drift, which is the whole point of this table |
 
 ### A row's prose is not authoritative on its own (BIN-918, 2026-08-17)
 
@@ -103,9 +113,13 @@ run prints the breakdown so the two cannot be confused. A claim stops standing i
 different ways: it names a `commit_sha` that exists and is not newer than the row
 (*evidenced*); a later `correction` retires it (*retracted, not verified*); it predates
 `RULE_EFFECTIVE_FROM` (*grandfathered*); or the checkout is shallow and the sha cannot be
-resolved at all (*unverified* — see below). At the bytes shipping with this section the live
-file scores **0 evidenced, 4 retired, 1 grandfathered**: no row in the log carries a
-`commit_sha` yet, so a reader who took "clean" as "verified" would have it exactly backwards.
+resolved at all (*unverified* — see below). At the bytes that shipped with this section
+(BIN-918) the live file scored **0 evidenced, 4 retired, 1 grandfathered**: no row carried a
+`commit_sha` at all, so a reader who took "clean" as "verified" would have had it exactly
+backwards. As of BIN-917 (2026-08-18) it reads **5 evidenced, 4 retired, 1 grandfathered** —
+the first rows in this log to carry their sha. The point of the sentence is unchanged and is
+why it is worth keeping both numbers: "no unevidenced claim stands" is still weaker than
+"every claim is evidenced", and the four retired ones are retracted, not verified.
 
 It does **NOT** verify that the named commit actually contains that ticket's work — a
 real sha cited for the wrong ticket, or a docs-only commit cited for a code claim, is

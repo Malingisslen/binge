@@ -21626,3 +21626,562 @@ see" via a dedicated absence-assertion test), this one is neither fixed nor disc
 the COL-SPOF check are informational/closed, folded into the existing BIN-565 bullet in
 `.claude/agents/binge-test-reviewer.knowledge.md` in place (not a new bullet — same
 scan-scope-completeness family as the four siblings already documented there).
+
+## 2026-08-18 — BIN-917/919 review coverage check + gate-symmetry floor raise (staged pre-commit)
+
+Scope reviewed: two staged test files per the dispatching agent's instructions —
+`docs/org/metrics/check_review_coverage.test.mjs` (NEW, 26 tests, for the new
+`check_review_coverage.mjs` module) and `docs/org/gate-symmetry.test.mjs` (MODIFIED: A1
+rekeyed `reasonCode === 'owned' || 'high-stakes'` to `tier !== 'skip'`; two floors raised
+400 to 700; a new floor added at 230; a regression guard for the rekey added). Also read
+for context (not mutation-tested): `docs/org/metrics/check_review_coverage.mjs`,
+`docs/org/route.mjs` diff, `.claude/shared-plugin.json` diff, `docs/org/ownership-map.json`
+diff, `docs/role-responsibilities.md` diff, `docs/org/metrics/README.md` diff,
+`docs/org/metrics/events.jsonl` diff. Read `.claude/rules/accepted-deviations.md` in full —
+nothing in it bears on this diff (no re-flag risk).
+
+Mutations run, each with: pre-mutation `git hash-object` vs `git rev-parse :path` check
+(clean both times before starting), snapshot to scratchpad, `python3 -c` line-splice
+mutation with `newline=''` to avoid EOL churn, grep the mutant AND run vitest in one
+command, restore from scratchpad snapshot, re-verify hash matches original, `git status
+--porcelain` clean after each. `rm -rf node_modules/.vite/vitest` before every run.
+
+1. A1 regression guard reality check (the dispatching agent's #1 ask). Reverted
+   `a1Offenders`'s body in `docs/org/gate-symmetry.test.mjs` to the superseded
+   `(v.reasonCode === 'owned' || v.reasonCode === 'high-stakes')`. Result: 8 passed / 1
+   failed, red-ALONE at exactly "A1 is keyed on the tier, so it catches an UNOWNED code
+   path with no gate" (`expected [] to have a length of 1 but got +0`). The fix (calling
+   the real exported `a1Offenders()` instead of a locally-declared copy of the predicate)
+   is REAL, not vacuous. Restored; hash matched; `git status --porcelain` clean.
+
+2. Floor re-measurement (the dispatching agent's #2 ask). Wrote a standalone ESM script
+   reproducing `gate-symmetry.test.mjs`'s exact VERDICTS derivation (`route()` +
+   `blockingGates()` over `git ls-files -z`) against the live tree. Measured: TRACKED
+   1005, `tier !== 'skip'` 885, `gates.length > 0` 878, `ownedByGatekeeper` 18,
+   `high-stakes` 9, `unmapped-code` (isCodePath) 295 — all six figures in the staged
+   comment matched the live re-measurement exactly. Floors: 800/1005=80%, 700/885=79%,
+   700/878=80%, 15/18=83%, 230/295=78%, 7/9=78%. All in the 76-83% band the file's own
+   comment claims, none anywhere near the flagged-and-fixed 45% (BIN-926) pattern. No
+   decorative floor found in this file.
+
+   Separately measured `check_review_coverage.test.mjs`'s two live-repo anti-vacuity
+   floors: `commits.length >= 500` against a live 948 (53%), `feat/fix-like >= 200`
+   against a live 589 total matches across the OWES_REVIEW regex (broken down: feat 254,
+   fix 226, refactor 39, perf 29, test 26, build 3, ci 12). These two are looser than the
+   gate-symmetry floors, but their stated job is coarse ("the walk returned almost
+   nothing" / "the denominator regex is dead") — a total-parse-failure or total-regex-death
+   signal — not a tight anti-halving guard; the PRECISE per-type claim (does `test` still
+   match) is separately pinned by a dedicated branch test (see mutation 4 below) that
+   catches a regex narrowing to feat+fix-only (which would sail past a 200 floor at 480
+   matches) directly. Not filed as a gap — the two floors are doing the coarse job their
+   own failure message claims, and the fine-grained job is covered elsewhere.
+
+3. THE FLOOR half-pair (empty walk MUST fail / empty eligible MUST NOT), the dispatching
+   agent's #3 "empty ELIGIBLE set does NOT fail" ask. Mutated `findCoverageGaps`'s hard
+   floor from `if (commits.length === 0)` to `if (eligible === 0)` — i.e. implementing the
+   blind critique's literal wording the module's own header explains it deliberately did
+   NOT implement. Result: 3 red (`grandfathers a feat/fix older than the epoch`, `...but an
+   empty ELIGIBLE set is NOT a violation...`, and one more), confirming both the deviation's
+   existence is real and BOTH halves are pinned as claimed. Restored; hash matched.
+
+4. `test` type inclusion in `OWES_REVIEW` — the module's own header calls this the
+   load-bearing widening (catches `049f21b`, half of BIN-917's own headline incident).
+   Removed `|test|` from the regex. Result: red-ALONE at exactly "so do the other
+   code-changing types — refactor, perf, test, build, ci" (`test(radering): ... (BIN-908):
+   expected false to be true`). Real, not decorative. Restored; hash matched.
+
+5. `effectiveFrom` parameter vs captured constant. Mutated `findCoverageGaps` to ignore
+   its `effectiveFrom` option parameter and always use the module constant
+   `COVERAGE_EFFECTIVE_FROM`. Result: red-ALONE at "the epoch is honoured from the
+   parameter, not from a captured constant". Real. Restored; hash matched.
+
+6. NEW GAP FOUND (the dispatching agent's #5 "mutation-test one more you doubt" ask): the
+   grandfathering boundary `Date.parse(commit.date) < epoch` (strict `<`). Mutated to
+   `<=`. Result: 26/26 GREEN — no fixture in the file sits exactly at the epoch; BEFORE/
+   AFTER/mid are all well clear of it. This is a genuine, unpinned strict-inequality
+   boundary of the shape the house knowledge file names as "the most-repeated regression
+   here". Real-world reach is LOW: git commit timestamps are second-precision and the
+   epoch (`2026-08-18T00:00:00.000Z`) is a literal midnight-UTC constant nobody is likely
+   to land on by chance, so filed non-blocking. Folded into the existing "Boundary &
+   threshold completeness" bullet in the principles file (the `>=` vs `>` bullet) rather
+   than creating a new one — same family as its existing DST/date-string/staleness
+   entries. Restored; hash matched.
+
+Other checks performed, no gap found: confirmed both new/changed files parse and RUN under
+vitest with non-zero test counts (26 tests in `check_review_coverage.test.mjs`, 9 in
+`gate-symmetry.test.mjs`, both files appearing in the run's file list, neither CRLF-broken
+nor carrying a broken escape per the BIN-891/dispatching-agent caution — both files are
+plain LF/no-shebang or pre-existing tracked CRLF, `file` command checked directly).
+Confirmed the live-repo tests in both files actually EXECUTED locally (not early-returned
+via `historyIsAvailable()` — this is a full, non-shallow local checkout) and passed,
+meaning the real repo's 1005 tracked paths / 948 commits were actually walked, not skipped.
+Confirmed the `check_review_coverage.mjs` live test's own claim ("On its first run this
+found two: 634d62e (BIN-565) and 2e5993a (BIN-911)") is backed by real new rows in the
+staged `events.jsonl` diff naming exactly those two shas. Confirmed
+`check_review_coverage.mjs`'s early-return-on-shallow-checkout pattern is the SAME
+architecture already established and accepted for its sibling `check_events.mjs`
+(`historyIsAvailable()`), not a new gap. No test found weakened, skipped, or given a
+loosened assertion anywhere in either file. `accepted-deviations.md` re-read in full;
+nothing in this diff matches any entry there, so nothing was at risk of being wrongly
+re-flagged.
+
+**Verdict: pass, 0 blocking.** One LOW/non-blocking finding filed (item 6 above, the
+epoch-boundary `<`/`<=` gap) — informational, folded into the principles file, not filed
+as a blocking finding given its near-unreachable real-world trigger (exact-millisecond
+epoch match on a second-precision git timestamp).
+
+## 2026-08-18 — BIN-917 RE-REVIEW: commit-msg mode added, denominator widened, epoch test — mainMessage untested (found on re-review)
+
+Re-review of a materially changed version of the same staged diff (prior entry above was
+the first pass, marked pass/0 blocking). Changes since: `gradeSubject`/`mainMessage`
+exports added (the commit-time `--message` mode, wired into `lefthook.yml`'s new
+`commit-msg` block); `OWES_REVIEW` widened from `feat|fix` to
+`feat|fix|refactor|perf|test|build|ci`; `gate-symmetry.test.mjs` also changed materially
+(191 lines) despite the dispatching agent's claim it was untouched — `a1Offenders`
+extracted, A1 rekeyed from `reasonCode` to `tier !== 'skip'` (BIN-919), a new regression
+test, floors raised 400→700 (×2) and a new `unmapped-code` floor (230) added.
+
+Both files opened with Read in full before grading. `.claude/rules/accepted-deviations.md`
+re-read in full; nothing in this diff matches any entry there.
+
+**Parses/runs, non-zero counts (BIN-891/BIN-802 caution):**
+`npx vitest run docs/org/metrics/check_review_coverage.test.mjs docs/org/gate-symmetry.test.mjs`
+→ 42/42 green (34 in the metrics file, 8 in gate-symmetry, later 9 with a temp debug `it`
+removed before finishing). Both files appear in the run's file list.
+
+**Mutation testing, each: backup to scratchpad → edit real file → grep mutant present +
+run suite in the same command → restore → `sha256sum` verify byte-identical:**
+
+1. `gradeSubject`'s not-code-changing branch (`if (!owesReviewRow(subject))` →
+   `if (owesReviewRow(subject))`). Result: 6/33 red, including the cross-mode agreement
+   test. Real.
+2. `gradeSubject`'s no-ticket branch (`tickets.length === 0` → `!== 0`). Result: 4/33 red.
+   Real.
+3. `gradeSubject`'s missing-ticket branch (`missing.length > 0` → `> 999`). Result: 3/33
+   red. Real.
+4. `mainMessage`'s exit-code branch (`if (verdict.ok) return 0; … return 1;` →
+   `if (!verdict.ok) …`). **Result: 0/42 red — SURVIVED.** Confirmed independently by
+   grepping the test file for `mainMessage`: zero references anywhere. Nothing calls this
+   function at all, unit or subprocess — the whole commit-time gate's pass/fail decision is
+   unexercised by `npm test`. Manually ran the compiled CLI by hand (`node
+   docs/org/metrics/check_review_coverage.mjs --message <fixture>`) against a covered and
+   an uncovered subject and confirmed correct behavior at HEAD — but that confirmation
+   lives in a terminal, not in the suite. Same class as the existing "CLI script's own
+   `main()` exit-code branch" principles-file bullet (`check-public-env.mjs`,
+   `gen-ownership-map.mjs`); this is the third instance, and the first on a COMMIT-TIME
+   gate rather than a deploy-time one, which raises the stakes — a silently-inverted commit
+   hook either blocks every clean commit or waves through every violating one, forever,
+   with a green `npm test` throughout. Also confirmed the CLI dispatch itself
+   (`flag === -1 ? main() : mainMessage(...)`) is equally untested: nothing in either test
+   file invokes the script as a subprocess with `--message` (only `route.mjs --selftest`
+   gets that treatment, via `execFileSync` in `gate-symmetry.test.mjs`).
+   **Filed as the review's one blocking-adjacent finding** — LOW-MED per the established
+   grading of this class, not blocking outright, since the two prior instances were graded
+   the same way and this repo's precedent doesn't escalate a thin, mechanical wrapper
+   branch to blocking on its own. Folded into the existing principles-file bullet (third
+   confirmed instance) rather than filed as a fresh one.
+5. Epoch boundary, independently re-verified (the prior pass's own finding): `Date.parse
+   (commit.date) < epoch` → `<= epoch`. Result: 1/33 red, at exactly "a commit landing
+   EXACTLY on the epoch is judged, not grandfathered". Confirmed still kills it after the
+   file changed materially since the first pass.
+6. Denominator regex, removing `test` from `OWES_REVIEW`. Result: 1/33 red immediately, at
+   "so do the other code-changing types". Confirms the widened denominator (the reason for
+   this whole re-review round: `049f21b` is a `test(...)` commit) is genuinely pinned, not
+   just asserted in prose.
+7. Cross-mode agreement test, isolated: gave `gradeSubject` its OWN copy of the denominator
+   regex (`OWES_REVIEW_DIVERGED`, missing `perf`) instead of calling `owesReviewRow`.
+   Result: exactly 1/33 red — ONLY "agrees with the history rule about what owes a row"
+   fired, no sibling test caught it. Confirms this test does real, non-redundant work: if a
+   future edit gives the two modes independently-diverging denominators (rather than both
+   calling the same `owesReviewRow`), this is the only thing that notices, and a commit
+   could then pass the hook and fail the deploy on the same subject.
+8. `gate-symmetry.test.mjs`'s `a1Offenders` (BIN-919 rekey): reverted to the superseded
+   `(reasonCode === 'owned' || reasonCode === 'high-stakes')` predicate. Result: exactly
+   1/9 red, at the new "A1 is keyed on the tier, so it catches an UNOWNED code path with no
+   gate" regression test — confirms the file's own claimed prior finding (the FIRST version
+   of that test declared a local copy of the predicate and stayed green under this same
+   revert, 9/9) is now fixed; the current version genuinely calls the real exported
+   function and catches its own regression.
+
+**Numbers re-derived independently (the standing "a number in prose is unverified" lesson,
+now applied a 13th+ time):**
+
+- Header's "135 commits since 2026-08-01 … 61 docs/chore/style … 74 eligible (vs 55 under
+  the old feat|fix-only rule)" — reproduced EXACTLY via `git log --no-merges --since
+  ="2026-08-01T00:00:00Z"` piped through the real regexes: 135 total, 74 matching
+  `OWES_REVIEW`, 61 matching `docs|chore|style`. Correct.
+- Header's epoch-derivation table (2026-08-18 → 2/2/0/587; 2026-08-16 → 8/4/4/581;
+  2026-08-01 → 74/5/69/515, `eligible/covered/violations/grandfathered`) — reproduced
+  EXACTLY by importing the real `findCoverageGaps`/`readGitLog` against the real
+  `events.jsonl` at all three epochs. Correct.
+- README's "5 evidenced, 4 retired, 1 grandfathered" for the sibling `check_events.mjs` —
+  reproduced EXACTLY by calling `findViolations` against the live `events.jsonl`
+  (`claimsChecked: 9, evidenced: 5, correctedAway: 4, grandfathered: 1`). Correct.
+- **"129 of the 948 in full history" / "129 unprefixed in all 948 of history" (both the
+  module header and the test file repeat this figure) — DOES NOT REPRODUCE.** Independently
+  re-derived via a node script replicating the real `OWES_REVIEW`/docs-chore-style/revert
+  logic against the real `git log --no-merges` output: 948 total, 589 owes, 213
+  docs/chore/style, 4 genuine `revert:`-typed commits, **142 unprefixed, 146
+  revert+unprefixed combined** — not 129 under any of four tested interpretations (case-
+  sensitive/insensitive, revert-included/excluded). Off by 13–17 depending on reading.
+  **Non-blocking**: the figure appears only in prose comments, never in a test assertion —
+  grepped both files for `129`, zero hits inside an `expect(...)`. Reported as a finding,
+  not filed as blocking, per the same standard the house lesson already applies to comment
+  counts (correct the comment, don't weaken or add a test for a number nothing asserts).
+- `gate-symmetry.test.mjs`'s "LIVE VALUES ON THE TREE THIS SHIPS WITH … 1005 tracked, 885
+  non-skip, 878 gated, 18 owned by #25, 9 high-stakes, 295 unmapped code" — measured live by
+  injecting a temporary debug `it()` block into the real file (removed before finishing,
+  hash-verified restored): actual figures 1005/**886**/**879**/**19**/9/295. Off by exactly
+  +1 on three of six numbers (non-skip, gated, gatekeeper), matching on the other three.
+  Non-blocking — the assertions use floors (700/700/15/230), not exact equality, and all
+  pass with headroom; likely one commit's drift between when the comment was authored and
+  this review's HEAD.
+
+**Verdict: pass, 0 blocking.** One LOW-MED finding (`mainMessage`'s untested exit-code
+branch + untested CLI dispatch, item 4 above) graded non-blocking per this repo's own
+established precedent for the same class on two prior files, and folded into the existing
+principles-file bullet as a third confirmed instance rather than filed fresh. One
+informational finding (the "129" figure, comment-only, no assertion depends on it).
+Recommended, not required: a two-line `expect(mainMessage(fixturePath)).toBe(0/1)` closing
+item 4 the same way `check-public-env.mjs`'s equivalent gap was recommended to close.
+
+Housekeeping note: `.claude/agents/binge-test-reviewer.knowledge.md` is 269KB, roughly 9x
+this file's stated 30k-char cap, entirely from one accumulating bullet
+("Extract-then-test & layering") that has never been condensed. Out of scope for this
+review to fix; flagged for a dedicated maintenance pass rather than silently ignored.
+
+## 2026-08-19 — BIN-917 final pass: mainMessage confirmed closed, stagedEventsLog found open
+
+Diff reviewed: staged `docs/org/metrics/check_review_coverage.mjs` +
+`check_review_coverage.test.mjs` (new files), `docs/org/gate-symmetry.test.mjs` (comment +
+`a1Offenders` regression test, unchanged code since the prior pass), plus supporting config
+(`.claude/shared-plugin.json`, `docs/org/ownership-map.json`, `docs/role-responsibilities.md`,
+`lefthook.yml`, `docs/org/route.mjs`, `docs/org/metrics/README.md`, `events.jsonl`).
+
+Mutations run (all via scratchpad-snapshot/restore, hash-verified before and after,
+`git diff --stat` empty after every restore):
+
+1. `mainMessage`: `if (verdict.ok)` → `if (!verdict.ok)`. Baseline 39/39 green → mutant
+   4/39 red (all four `mainMessage` describe-block cases). KILLED — matches the requester's
+   claim.
+2. `gradeSubject` branch A: `if (!owesReviewRow(subject))` → `if (owesReviewRow(subject))`.
+   9/39 red. KILLED.
+3. `gradeSubject` branch B: `tickets.length === 0` → `!== 0` (targeted the gradeSubject
+   occurrence specifically, not findCoverageGaps's identical-looking line). 11/39 red (both
+   functions share the literal, so both went red — correctly, since both really do rely on
+   the same predicate text). KILLED.
+4. `gradeSubject` branch C: `missing.length > 0` → `>= 0` (gradeSubject's own occurrence,
+   isolated with a byte-offset match to avoid touching findCoverageGaps's copy). 2/39 red.
+   KILLED.
+5. `gradeSubject` branch D: final `return { ok: true, tickets }` → unconditional
+   `{ ok: false, reason: 'MUTANT-D' }`. 2/39 red. KILLED.
+6. Epoch boundary: `Date.parse(commit.date) < epoch` → `<= epoch`. 1/39 red (the dedicated
+   "commit landing EXACTLY on the epoch" case). KILLED — confirms the requester's claim that
+   the earlier `<`/`<=` gap (documented in knowledge.md as a prior finding) is now closed.
+7. `ticketsWithAReviewRow`: reverted to `row.ticket`-only (dropped the `ticketOf` import
+   usage, matching the pre-fix shape). 2/39 red: "finds the id in the PROSE… real engine row
+   shape" and "replays the real incident log and sees all four rows". KILLED — confirms the
+   requester's claim, and independently verified the fixture is honest: `git show
+   851696d:docs/org/metrics/events.jsonl | tail -4` shows the four real rows for
+   BIN-880/906/908/909, each with NO `ticket` field and a `plan` string starting
+   `"BIN-nnn — BUILT and committed…"` — byte-for-byte the shape the "real engine row shape"
+   test fixture uses. Not a comfortable fiction.
+8. `stagedEventsLog()`: collapsed to `return { text: readFileSync(EVENTS_PATH, 'utf8'),
+   source: 'MUTANT-WORKTREE-ALWAYS' };` before the `try` block, i.e. always read the working
+   tree instead of `git show :events.jsonl`. **39/39 GREEN — SURVIVED.** This is the one
+   requested mutation that was NOT caught. No test in the file ever makes the index and the
+   working tree disagree: every `mainMessage` fixture writes its subject to a scratch file
+   outside the repo and then reads the SAME `events.jsonl`, staged or not, so the two sources
+   are always byte-identical in every fixture that exists. The function's own comment names
+   this exact distinction as "the difference between a gate and a rubber stamp" — the
+   behaviour the module was written to guarantee is untested. Filed as the review's one
+   blocking finding; folded into `binge-test-reviewer.knowledge.md`'s existing "wrapper
+   around a pure function is untested" bullet (third-instance mainMessage paragraph) rather
+   than a new bullet, since it is the same file, the same class, one function over.
+
+Cross-checks against prose claims (BIN-905/918-style: run the command, don't transcribe):
+- `docs/org/gate-symmetry.test.mjs`'s "LIVE VALUES … 886/879/19" comment: reproduced with an
+  independent script calling `route()` over `git ls-files` — got tracked=1005, nonSkip=886,
+  gated=879, ownedByGatekeeper=19, highStakes=9, unmappedCode=295. All six match exactly.
+- `docs/org/metrics/README.md`'s "5 evidenced, 4 retired, 1 grandfathered": ran
+  `node docs/org/metrics/check_events.mjs` directly — output reads "5 evidenced, 4 retired by
+  a correction…, 1 grandfathered". Matches.
+- `check_review_coverage.mjs`'s COVERAGE_EFFECTIVE_FROM docstring epoch table (2 eligible / 2
+  covered / 0 violations at 2026-08-18) was NOT independently re-derived this pass — out of
+  time budget; flagged as unverified rather than silently trusted.
+
+Verdict: FAIL, 1 blocking. Graded blocking rather than LOW-MED (unlike the structurally
+similar check-public-env.mjs/gen-ownership-map.mjs main()-exit-code residuals in this same
+knowledge bullet) because the motivating scenario is not hypothetical here: the function's
+own comment names the sprint engine writing UNSTAGED review rows as the concrete threat, and
+README already documents that behaviour as real and current (42 such rows). A regression to
+"always read the working tree" would silently defeat the one property BIN-917's commit-time
+half exists for, on the exact incident shape (BIN-908/909/880/906, 2026-08-16) the ticket was
+filed about, with `npm test` staying green throughout. Both `check_review_coverage.test.mjs` and `docs/org/gate-symmetry.test.mjs` were
+confirmed to parse and run (39 and 9 tests respectively, non-zero, file lists show them by
+name) per BIN-891/802. Full `npm test` run in background; not yet returned at time of
+writing this entry (see final message for the result).
+
+## 2026-08-19 — BIN-917/BIN-919 follow-up review: stagedEventsLog fix verified, gate-symmetry re-verified
+
+**Context.** Re-review of the same staged batch as the prior 2026-08-19 entry, after the
+finding recorded there (`stagedEventsLog` mutable to a plain worktree read, 39/39 green) was
+fixed. Files judged: `docs/org/metrics/check_review_coverage.mjs`,
+`docs/org/metrics/check_review_coverage.test.mjs`, `docs/org/gate-symmetry.test.mjs`, plus
+`docs/org/route.mjs`, `docs/org/ownership-map.json`, `docs/role-responsibilities.md`,
+`.claude/shared-plugin.json`, `lefthook.yml`, `docs/org/metrics/README.md` read for context.
+All opened with `Read`, not `git diff`.
+
+**The fix, as shipped.** `stagedEventsLog` is now exported:
+`stagedEventsLog(repoDir = dirname(EVENTS_PATH), relPath = 'docs/org/metrics/events.jsonl')`.
+The production call site (`mainMessage()`, inside the same file) calls it with NO arguments,
+so the defaults are the only path the real commit-msg hook ever exercises. Verified the
+defaults are honest: `git show :docs/org/metrics/events.jsonl` run with `cwd` set to
+`dirname(EVENTS_PATH)` (a subdirectory) correctly resolves the repo-ROOT-relative path,
+because git's bare `:path` form (no `./` prefix) is resolved relative to the worktree root
+regardless of cwd — confirmed by direct invocation, output matched the real staged
+`events.jsonl` bytes.
+
+**Mutations run against the FINAL bytes, each snapshotted from and restored to
+`C:/Users/malla/AppData/Local/Temp/claude/.../scratchpad/check_review_coverage.mjs.orig`,
+hash-verified equal before and after every mutation (`md5sum`):**
+
+1. Collapse `stagedEventsLog` to a plain `readFileSync` of the worktree (the exact mutation
+   from the prior finding, source string left claiming "the index"). `npx vitest run
+   docs/org/metrics/check_review_coverage.test.mjs` → **7 of 42 failed** (the three new
+   `stagedEventsLog` cases plus the four `mainMessage` cases that reach it through the real
+   default-argument call path). Restored, hash matched original, 42/42 green.
+2. Swap the two default arguments (`repoDir = 'docs/org/metrics/events.jsonl'`, `relPath =
+   dirname(EVENTS_PATH)`) — the "seam could drift from what the hook actually runs" case.
+   → **4 of 42 failed**, all three `mainMessage`-driven cases plus nothing else (the direct
+   `stagedEventsLog(repo, rel)` unit cases pass explicit arguments so this mutation is
+   invisible to them — only the real no-arg call path catches it, which is the point: the
+   defaults are load-bearing for the production caller, not decoration for the tests).
+   Restored, hash matched, 42/42 green.
+3. Make the fallback branch's `source` string falsely claim `'the index (what this commit
+   will contain)'` instead of announcing the working-tree fallback. → **1 of 42 failed** (the
+   "falls back to the working tree, and SAYS so" case). Restored, hash matched, 42/42 green.
+
+All three seams die. The three new git-repo fixtures (`git init`/`config`/`add`/`commit` in
+`mkdtempSync(tmpdir())`, then a second `writeFileSync`+`add` for the staged state, then a
+third un-added `writeFileSync` for the worktree state) are real divergence, not theatre —
+confirmed by mutation 1 actually failing on exactly the assertions that compare staged vs.
+worktree content (`BIN-2` staged / `BIN-3` on disk).
+
+**`docs/org/gate-symmetry.test.mjs`.** Diff against HEAD is NOT "two comment corrections" —
+it is the full BIN-919 rekey (A1 from `reasonCode`-enumeration to `tier !== 'skip'`), still
+uncommitted. Verified the six live-value comments in the "derived inputs" test
+(1005 tracked / 886 non-skip / 879 gated / 19 owned-by-#25 / 295 unmapped-code / 9
+high-stakes) reproduce EXACTLY via a standalone script computing the same `route()` +
+`blockingGates()` walk the test does — all six match to the integer. Verified the
+"probe 6→7 / 2 offenders" claim in the A1 header comment by literally running the described
+probe (strip the tooling alternation from the integration gate's patterns, recompute): new
+keying (`tier !== 'skip'`) → 7 offenders (`gen-ownership-map.mjs`, `check_events.mjs`,
+`check_review_coverage.mjs`, `log_event.mjs`, `route.mjs`, `check-public-env.mjs`,
+`check-workflow-map.mjs`); old keying (`reasonCode === 'owned' || 'high-stakes'`) → 2
+(`gen-ownership-map.mjs`, `route.mjs`). Matches the comment's file list exactly.
+
+Mutation: reverted the exported `a1Offenders` function body back to the superseded
+`reasonCode`-based filter (same file, same snapshot/restore discipline as above) →
+**1 of 9 failed** — exactly the dedicated "A1 is keyed on the tier" regression case, the
+rest of the file (which walks the real repo tree) stayed green because on THIS tree every
+offender the rekey exists to catch happens to already carry a gate. This confirms the
+regression guard calls the real exported predicate rather than a local restatement of it
+(the earlier vacuity the module's own comment records: "the first version of that guard
+declared its own local copy of the predicate... reverting the rule here left the guard
+perfectly green... measured by mutation: the reverted rule passed 9/9").
+
+**Full suite.** `docs/org` test files: 5 passed, 948 passed. Both files under review
+individually: 42/42 and 9/9, and together 51/51.
+
+**Knowledge base updates made in this pass:**
+- Rewrote the existing `stagedEventsLog` bullet (Extract-then-test & layering) in place to
+  add a CLOSED clause carrying the three mutation results above, rather than leaving it
+  read as an open finding.
+- Added a new bullet to "Vacuous / non-discriminating oracles" for the general lesson: a
+  regression guard for a rekeyed rule must call the SAME exported function the rule runs,
+  never a local reimplementation of the predicate — illustrated with the `a1Offenders`
+  case and its 9/9-green-under-revert history.
+
+**Verdict: PASS, 0 blocking.** Both fixes hold under mutation on the bytes as staged; no
+weakened, deleted or skipped assertion found anywhere in the diff; `accepted-deviations.md`
+consulted, nothing in this diff touches a listed deviation.
+
+## 2026-08-19 — check_review_coverage.mjs REPO_ROOT fix: import assertion is real, its behavioural twin is decorative
+
+**Diff reviewed.** Staged: `docs/org/metrics/check_review_coverage.mjs` and
+`check_review_coverage.test.mjs` (both new, BIN-917), plus untouched-since-last-pass siblings
+(`gate-symmetry.test.mjs`, `route.mjs`, `ownership-map.json`, `role-responsibilities.md`,
+`lefthook.yml`, `README.md`, `events.jsonl`, `todo.md`, knowledge/archive files themselves).
+Reviewer's brief: verify a specific integration-review finding and its fix. The bug: default
+`repoDir` for `stagedEventsLog()` used to be `dirname(EVENTS_PATH)` (the metrics directory).
+`git show :<relPath>` resolves against the worktree top and tolerates any cwd inside the repo,
+so the git branch worked; the fallback's `join(repoDir, relPath)` does not tolerate that, and
+under the real no-arg call composed to `docs/org/metrics/docs/org/metrics/events.jsonl` →
+ENOENT. Fails closed (hook dies, commit refused), not silently — but the docblock claimed a
+working fallback that could not run, and all 42 prior tests missed it because every fixture
+passes an explicit `repoDir` that IS a repo root.
+
+**The fix, as staged.** (1) `REPO_ROOT = join(dirname(EVENTS_PATH), '..', '..', '..')` is now
+the default. (2) An import-time assertion: `if (join(REPO_ROOT, 'docs/org/metrics/events.jsonl')
+!== EVENTS_PATH) throw new Error(...)`. (3) A new test, `'the PRODUCTION defaults compose'`,
+calling `stagedEventsLog(undefined, 'docs/org/metrics/events.jsonl')`, with a comment claiming
+it uses "a relPath that forces the git branch to fail". (4) The test file's `REPO` constant
+renamed to `METRICS_DIR`.
+
+**Mutations run, in place on the tracked file (backup to scratchpad, sha256 verified restored
+after each), `node_modules/.vite/vitest` cleared before each run.**
+
+1. `sed -i` dropped one `'..'` from `REPO_ROOT` (→ `join(dirname(EVENTS_PATH), '..', '..')`,
+   which resolves to `<repo>/docs` instead of `<repo>`). `npx vitest run
+   docs/org/metrics/check_review_coverage.test.mjs`: `Test Files 1 failed (1)`, `Tests no
+   tests`, stderr shows the import assertion's own message
+   (`REPO_ROOT (C:\binge\docs) and the default relPath do not compose to EVENTS_PATH …`), exit
+   code confirmed **1** via a separate `echo EXIT=$?` run. Loud, not the BIN-802 silent-skip
+   shape — the claim in the module's own comment holds.
+
+2. With the same broken `REPO_ROOT`, disabled the import-time assertion (`if (false) { throw
+   … }`) via a scripted string replace and reran: **all 43 tests passed.** This falsifies the
+   design intent stated in the module's comment ("There is also a behavioural half in the test
+   file … because an assertion this quiet is easy to delete") — if the import assertion is ever
+   removed, the behavioural test does not catch the same regression.
+
+3. Traced why: a one-line Node probe (`node -e "import(...).then(m => { const log =
+   m.stagedEventsLog(undefined, 'docs/org/metrics/events.jsonl'); console.log(log.source,
+   log.text.length); })"`) with the mutation from (2) still applied showed `source: 'the index
+   (what this commit will contain)'` — the git branch, not the fallback. `git show
+   :docs/org/metrics/events.jsonl` succeeds regardless of `cwd` as long as `cwd` is anywhere
+   inside the repo (which `<repo>/docs` still is) and the path is genuinely in the index (which
+   it is, this file being staged). So the test's own comment — "a relPath that forces the git
+   branch to fail" — is false: this relPath is exactly the one guaranteed to make the git branch
+   succeed. The fallback's `join()` logic, which is the actual thing this test is supposed to be
+   proving, is never exercised by it.
+
+4. Restored the file from the scratchpad backup; `sha256sum` matched the pre-mutation hash
+   (`baec8f27fb6a7a8ede529253b2bf37dab4ccc7bb777374e4e59da82b017e58e7`) exactly. Reran clean:
+   `Test Files 1 passed (1)`, `Tests 43 passed (43)`. `git status --porcelain` on the file showed
+   only the pre-existing `A` (staged new file), no working-tree diff.
+
+5. `npx eslint check_review_coverage.mjs check_review_coverage.test.mjs`: no output, clean.
+
+**Verdict on the three questions asked.**
+- Import-time assertion: real, load-bearing, verified to fail loud (not silent) under the exact
+  mutation it exists to catch.
+- Behavioural test: **decorative** for its stated purpose. It passes today because the real repo
+  it runs against always satisfies the git branch first; it would not catch a REPO_ROOT
+  regression if the import assertion were ever deleted, contrary to the design rationale given
+  for adding it. Its own inline comment's factual claim ("forces the git branch to fail") is
+  false and unverified-until-run — same class this repo has hit repeatedly (a number or claim in
+  a comment nobody ran).
+- Recommendation, not itself blocking further action this pass: export `REPO_ROOT` (or the
+  composed boolean) for a direct, git-independent unit assertion, or mock the `git show` call so
+  the fallback branch is genuinely forced under the true default; either way correct the false
+  comment.
+
+Folded into `.claude/agents/binge-test-reviewer.knowledge.md`'s existing `stagedEventsLog`
+bullet (the one already carrying this seam's history) rather than appended new, since the
+bullet's prior "CLOSED (2026-08-19)" clause described the now-superseded, still-buggy
+`dirname(EVENTS_PATH)` default and needed correcting in place, not just extending.
+
+Other files in the staged diff (`gate-symmetry.test.mjs`'s BIN-919 rekey, `route.mjs`,
+`ownership-map.json`, `lefthook.yml`, `role-responsibilities.md`) were read via `git diff
+--cached` for context but not re-judged: per the task brief they are byte-identical to a prior
+pass, and `lefthook.yml`'s new `commit-msg` block was cross-checked against the module's
+`--message` flag handling and found consistent (no new finding).
+
+**Verdict: PASS, 0 blocking.** The shipped fix (REPO_ROOT + import-time assertion) is correct
+and verified to fail loud under mutation. The one real test-quality gap found — the behavioural
+test's false "forces the git branch to fail" claim and its resulting decorativeness — is real
+but does not leave the property itself unprotected (the import assertion covers it today), so it
+is filed as a should-fix improvement rather than a blocker on this specific delta.
+
+## 2026-08-19 — check_review_coverage.mjs: the decorative test replaced, fix verified by re-running the exact prior scenario
+
+**Diff reviewed.** `docs/org/metrics/check_review_coverage.mjs` and `check_review_coverage.test.mjs`,
+both already staged from the prior pass in this same file (dated entry immediately above),
+acted on that pass's recommendation. Siblings in the staged diff (`gate-symmetry.test.mjs`,
+`route.mjs`, `ownership-map.json`, `role-responsibilities.md`, `lefthook.yml`, `README.md`,
+`events.jsonl`, `todo.md`, `.claude/shared-plugin.json`) were opened via `git diff --cached` for
+context — matching diff stats and no red-flag test patterns (`grep` for `.skip`/`.only`/
+`xit`/`xdescribe`/weakened-assertion shapes: zero hits) — but not re-judged, consistent with the
+prior pass's own scoping of them as byte-identical since its review.
+
+**What changed, read in full via `Read`.** (1) `REPO_ROOT` and `DEFAULT_EVENTS_REL` are now
+exported (previously `REPO_ROOT` alone was exported, `DEFAULT_EVENTS_REL` was an inline default
+argument value). (2) The import-time assertion and `stagedEventsLog`'s default parameters both
+now reference the two exported constants — one spelling of each, not two. (3) The false comment
+("a relPath that forces the git branch to fail") is gone; the module's docstring above the
+constants now states plainly that no behavioural call can reach the broken branch, citing the
+prior review's measurement as the reason. (4) The decorative test
+(`'the PRODUCTION defaults compose'` calling `stagedEventsLog(undefined, DEFAULT_EVENTS_REL)`) is
+replaced by two direct tests in the same `describe` block: `expect(join(REPO_ROOT,
+DEFAULT_EVENTS_REL)).toBe(EVENTS_PATH)`, and `expect(REPO_ROOT).toBe(dirname(dirname(dirname(
+METRICS_DIR))))` paired with `expect(join(METRICS_DIR, DEFAULT_EVENTS_REL)).not.toBe(EVENTS_PATH)`
+pinning the original bug's asymmetry (repoDir defaulting to the metrics dir, one level short).
+
+**Mutations run, in place on the tracked file** (scratchpad backup, sha256 `70da75...` verified
+restored after each; `node_modules/.vite/vitest` cleared before each run — this is the main
+checkout, not a worktree, so the cache is real and shared, and clearing it is safe/necessary per
+the standing lesson on stale transforms).
+
+1. **Reproduced the exact prior-review scenario**: dropped one `'..'` from `REPO_ROOT` AND
+   disabled the import-time assertion (`if (false) { … }`) in the same edit, then ran
+   `npx vitest run docs/org/metrics/check_review_coverage.test.mjs`. Result: `Test Files 1 failed
+   (1)`, `Tests 2 failed | 42 passed (44)` — exactly the two new tests
+   (`'the PRODUCTION defaults compose back to the real file'` and `'REPO_ROOT is the repo root —
+   …'`), both failing with the correct diagnostic values (`C:\binge\docs\docs\org\metrics\
+   events.jsonl` vs `C:\binge\docs\org\metrics\events.jsonl`; `C:\binge\docs` vs `C:\binge`).
+   Where the old test left this scenario 43/43 green, the new one catches it 2/44 red. Matches
+   the claim exactly.
+
+2. **Isolated each half.** Broken `REPO_ROOT` alone (assertion intact): the module throws at
+   import, `Test Files 1 failed (1)` / `Tests no tests`, printing the assertion's own message —
+   unchanged from the prior pass, still loud not silent. Assertion disabled alone, `REPO_ROOT`
+   correct: `44/44 green` — confirms the two new tests are not flaky/false-positive when nothing
+   is actually broken.
+
+3. **Checked the two new tests for tautology, as asked.** `expect(join(REPO_ROOT,
+   DEFAULT_EVENTS_REL)).toBe(EVENTS_PATH)` compares two module exports at first glance, but
+   `EVENTS_PATH` is computed independently in the sibling module `check_events.mjs` from
+   `import.meta.url`, not derived from `REPO_ROOT` — so the assertion genuinely depends on
+   `REPO_ROOT`'s VALUE, confirmed by (1) above: breaking `REPO_ROOT`'s composition flips this
+   test red. The second test's expected value, `dirname(dirname(dirname(METRICS_DIR)))`, is
+   built from `node:path`'s `dirname` chained three times — a different primitive than
+   production's `join(dirname(EVENTS_PATH), '..', '..', '..')` — so it is a second, independently
+   computed path to the same value rather than a restatement of the source line. Proved the
+   independence rather than assuming it: mutated `REPO_ROOT` to go ONE LEVEL TOO FAR (`'..','..',
+   '..','..'`, landing at `C:\`) with the import assertion still disabled — both new tests fail
+   with the over-corrected value (`C:\` vs expected `C:\binge`), and this mutation additionally
+   reddened all four `mainMessage` cases as collateral (6/44 total), because at `C:\` the
+   fallback path genuinely leaves the repo and even the git branch's `cwd` tolerance runs out.
+   Confirms the two tests discriminate in BOTH directions (too-short and too-long), not just the
+   one direction the original bug happened to be.
+
+4. Restored the file from the scratchpad backup; sha256 matched the pre-mutation hash exactly
+   after all three mutation rounds; `git status --porcelain` on the file showed only the
+   pre-existing `A` (staged new file), no working-tree diff, confirmed after final restore.
+
+5. `npx eslint check_review_coverage.mjs check_review_coverage.test.mjs`: no output, clean.
+
+**Verdict on the four questions asked.**
+- Reproduction: confirmed exactly — 2/44 fail under the identical scenario that left the old test
+  43/43 green.
+- Tautology: no. Both new tests depend on `REPO_ROOT`'s actual composition and fail under
+  mutation in both directions (under- and over-correction); the second test's expected value is
+  computed via a genuinely different `node:path` code path than production, not a restatement.
+- Exporting `REPO_ROOT` + `DEFAULT_EVENTS_REL`: the right shape for this seam — the alternative
+  (mocking `git show`) would still leave the module's own default-argument values unpinned unless
+  ALSO exported, and mocking child_process here is heavier than two `export const`s for values
+  that are already meant to be the single source of truth (the import-time assertion reads them
+  too). No drift risk observed: both the assertion and the default parameters read the SAME two
+  exports, so there is exactly one place either could go stale.
+- No other comment in the two files was found false, and no other assertion reads as decorative
+  under the mutations run this pass (the `mainMessage`/`gradeSubject`/`findCoverageGaps`/
+  `ticketsWithAReviewRow`/`parseGitLog` coverage was reviewed and mutation-tested in the prior
+  pass and is unchanged in this diff).
+
+**Verdict: PASS, 0 blocking.** The one gap the prior pass filed as should-fix is closed, verified
+by mutation against the exact scenario that proved it broken, and the fix itself is not a new
+decorative test. Also found, not blocking: `.claude/agents/binge-test-reviewer.knowledge.md` is
+~277KB against its own stated "Cap: 30k chars" — pre-existing, not introduced or worsened
+materially by this pass's fold-in, and condensing it is a separate undertaking out of scope here.

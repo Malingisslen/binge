@@ -30,14 +30,49 @@
 // Three rules, and every input is DERIVED — no hand-copied list of paths anywhere:
 //
 //   A1  A path the router calls CODE and does not route `skip` over must reach a
-//       blocking reviewer. (An owner who is never asked is not a reviewer.) That is
-//       reasonCode `owned` AND `high-stakes`: the seven HIGH_STAKES paths never answer
-//       `owned` — the tier branch that names them wins first — so a rule keyed on
-//       `owned` alone is structurally blind to firestore.rules, firestore.indexes.json,
-//       src/lib/firebase/{groups,userData,dataExport}.ts, functions/src/submitReport/
-//       and src/contexts/AuthContext.tsx. Those are the repo's most sensitive files and
-//       the ones a gate deletion hurts most; A2 cannot cover them either (none is owned
-//       by #25) and neither can B (they route `top`, never `skip`).
+//       blocking reviewer. (An owner who is never asked is not a reviewer.) Keyed on the
+//       TIER — `tier !== 'skip'` — and deliberately not on the reasonCode (BIN-919).
+//
+//       It was keyed on reasonCode `owned` OR `high-stakes` for its first two days, and
+//       the two reasons for naming both are still true and still worth knowing: the
+//       HIGH_STAKES paths never answer `owned`, because the tier branch that names them
+//       wins first, so a rule keyed on `owned` alone is structurally blind to
+//       firestore.rules, firestore.indexes.json, src/lib/firebase/{groups,userData,
+//       dataExport}.ts, functions/src/submitReport/ and src/contexts/AuthContext.tsx —
+//       the repo's most sensitive files, the ones a gate deletion hurts most, and ones
+//       A2 cannot cover either (none is owned by #25) nor B (they route `top`, never
+//       `skip`).
+//
+//       What that enumeration still missed is a THIRD reasonCode: `unmapped-code`, code
+//       that no role owns. Per BIN-788 that is a real review obligation seated on the #14
+//       fallback, not a `skip` — so a rule that listed two of the three answers was blind
+//       to a whole class, and `package.json` sat in it, reaching zero blocking reviewers
+//       while the router demanded a critique (BIN-919). Keying on the tier asks the
+//       question the rule actually means — "did the router decline to clear this path?" —
+//       instead of re-deriving it from an enumeration that has now been wrong twice.
+//       Measured before the change: of 859 code paths, 556 `owned`, 294 `unmapped-code`,
+//       9 `high-stakes`; 293 of the 294 already reached a gate, so the rekey surfaced
+//       exactly one new offender — the file the ticket was about.
+//
+//       SAY THE NEXT PART PRECISELY, because the obvious summary of this commit is wrong.
+//       The rekey is NOT what closes `package.json`. That file also gained an owner in the
+//       same commit, which makes it answer `owned`, which the OLD keying already saw —
+//       probed by deleting the new gate pattern and re-grading: both keyings then report
+//       it. The ownership half alone would have closed that one file. What the rekey buys
+//       is the CLASS, and that was probed too: strip the tooling alternation from the
+//       integration gate and the old keying reports 2 offenders (route.mjs and
+//       gen-ownership-map.mjs, the two that happen to be owned) while this rule reports 7
+//       — adding check_events.mjs, log_event.mjs, check_review_coverage.mjs,
+//       check-public-env.mjs and check-workflow-map.mjs, every one of them code nobody
+//       owns. FIVE files' worth of blindness, on the exact gate whose five previous
+//       widenings were each found by a human. That is the measurement that justifies the
+//       rekey; "it catches package.json" is not. (It read 6/four for one round — measured
+//       before this same commit added check_review_coverage.mjs, which the integration
+//       review caught. The argument gets stronger, which is why it is worth being right.)
+//
+//       The cost is real and forward-looking: a NEW root-level config file (a .nvmrc, a
+//       renovate.json) that nobody owns and no gate matches now fails `npm test`, and
+//       therefore the deploy, until it gets one or the other. That brake is the point.
 //   A2  A path owned by role #25 Engineering Manager / Release Manager must reach a
 //       blocking reviewer, code or prose. #25 owns the process and the quality gates
 //       BY DEFINITION, so anything in that role's patterns decides how the repo is
@@ -57,10 +92,25 @@
 //
 // Known blind spots, stated rather than implied:
 //
-//   1. A path with NO owning role and no gate is invisible to all three rules —
-//      `package.json` is the live example (the router calls it code, nothing owns it, no
-//      gate matches it). Closing that is an ownership decision (name an owner in
-//      docs/role-responsibilities.md and regenerate the map), not a test.
+//   1. CLOSED 2026-08-18 (BIN-919). It used to read: "a path with NO owning role and no
+//      gate is invisible to all three rules — `package.json` is the live example (the
+//      router calls it code, nothing owns it, no gate matches it). Closing that is an
+//      ownership decision, not a test." Both halves were fixed, in one commit rather than
+//      one-or-the-other: A1 now keys on `tier !== 'skip'`, which makes the whole
+//      `unmapped-code` class visible to the check, AND `package.json` itself got an owner
+//      (#25, docs/role-responsibilities.md) and a gate (binge-integration-reviewer).
+//      Fixing only the file would have left the CLASS invisible and the next such path
+//      just as silent — the old note's "an ownership decision, not a test" was half
+//      wrong, and the half it got wrong is the half that generalises.
+//
+//      What remains true is narrower, and is A1's stated limit rather than a blind spot:
+//      a path no role owns still satisfies A1 as long as SOME gate stops it. ALL 295
+//      unowned code paths are in exactly that position on the tree this ships with —
+//      reviewed, but unattributed. That is BIN-871's subject, not this file's. (The first
+//      draft of this sentence said "293 of the 294 … today", which was the count BEFORE
+//      this commit; measured after, it is 295 of 295, and the "one that isn't" it implied
+//      was package.json, the very file this commit fixes. A present-tense number copied
+//      from a pre-change measurement, inside the commit that changed it.)
 //   2. The rules count reviewers, they do not identify them. `blockingGates` returning a
 //      non-empty list satisfies A1/A2 no matter WHICH agent is in it, so "firestore.rules
 //      lost its SECURITY reviewer but still matches some other gate" is not a shape this
@@ -116,18 +166,29 @@ const VERDICTS = TRACKED.map((path) => {
   };
 });
 
-// `high-stakes` as well as `owned`: route() decides the tier top-down, so a HIGH_STAKES
-// path answers `high-stakes` and NEVER `owned`, however many roles own it (firestore.rules
-// is owned by #4/#6/#27 and still reports `high-stakes`). Keyed on `owned` alone this rule
-// could not see the seven paths it exists to protect — measured: with `^firestore\.rules$`
-// removed from the security gate, that file reached zero blocking reviewers and all three
-// rules still reported perfect symmetry.
-const advisedCodeWithoutGate = VERDICTS.filter(
-  (v) =>
-    isCodePath(v.path) &&
-    (v.reasonCode === 'owned' || v.reasonCode === 'high-stakes') &&
-    v.gates.length === 0,
-);
+// Keyed on the TIER, not on an enumeration of reasonCodes (BIN-919 — the header explains
+// why at length). `tier !== 'skip'` is the question the rule means: the router looked at
+// this path and declined to clear it. Every reasonCode that answers anything other than
+// `skip` is therefore in scope by construction — `owned`, `high-stakes` AND `unmapped-code`
+// — and a fourth one invented tomorrow is in scope the day it is added, without anyone
+// remembering to extend a list here. The two enumerations this replaced were each wrong
+// once: `owned` alone was blind to the seven high-stakes paths (route() decides the tier
+// top-down, so firestore.rules answers `high-stakes` and NEVER `owned` however many roles
+// own it — measured: with `^firestore\.rules$` removed from the security gate, that file
+// reached zero blocking reviewers and all three rules still reported perfect symmetry),
+// and `owned`+`high-stakes` was blind to `unmapped-code`, where package.json sat.
+// A NAMED FUNCTION rather than an inline filter, and that is load-bearing rather than
+// tidiness: the regression guard for the rekey has to run the SAME code the rule runs. The
+// first version of that guard declared its own local copy of the predicate and asserted
+// against that — so reverting the rule here left the guard perfectly green while its
+// comment claimed it would go red. Measured by mutation: the reverted rule passed 9/9. A
+// guard that cannot see the thing it guards is worse than none, because it reads as
+// coverage. Anything testing A1 must call THIS.
+export function a1Offenders(verdicts) {
+  return verdicts.filter((v) => isCodePath(v.path) && v.tier !== 'skip' && v.gates.length === 0);
+}
+
+const advisedCodeWithoutGate = a1Offenders(VERDICTS);
 const gatekeeperPathsWithoutGate = VERDICTS.filter((v) => v.ownedByGatekeeper && v.gates.length === 0);
 const gatedButRoutedSkip = VERDICTS.filter((v) => v.gates.length > 0 && v.tier === 'skip');
 
@@ -169,14 +230,24 @@ describe('the gate config has the shape this check reads (BIN-880)', () => {
 });
 
 describe('an advising owner without a blocking gate (BIN-880)', () => {
-  it('A1: every owned CODE path reaches a blocking reviewer', () => {
+  it('A1: every CODE path the router does not clear reaches a blocking reviewer', () => {
+    // The name says "does not clear", not "owned": since BIN-919 this rule is keyed on the
+    // TIER, so an offender may well have no owning role at all. The old name and the old
+    // failure message both said "owned", which would have been simply false for the
+    // `unmapped-code` offenders the rekey exists to surface — telling whoever hits it to go
+    // looking for an owner that was never there.
     const offenders = advisedCodeWithoutGate
       .filter((v) => !(v.path in ACCEPTED_ASYMMETRIES))
       .map((v) => `${v.path} (router: ${v.tier}/${v.reasonCode}, blocking gate: none)`);
 
     expect(
       offenders,
-      `code with an owning role that no commit gate stops — widen .claude/shared-plugin.json → reviewGates, or add a reasoned entry to ACCEPTED_ASYMMETRIES:\n${offenders.join('\n')}`,
+      'code the router will not clear that no commit gate stops. Three remedies, and the '
+      + 'right one depends on the reasonCode above: widen .claude/shared-plugin.json → '
+      + 'reviewGates; or give the path an owner in docs/role-responsibilities.md and '
+      + 'regenerate docs/org/ownership-map.json (which is the fix when the reasonCode is '
+      + '`unmapped-code`, though note it changes WHO advises, not whether a commit is '
+      + `stopped); or add a reasoned entry to ACCEPTED_ASYMMETRIES:\n${offenders.join('\n')}`,
     ).toEqual([]);
   });
 
@@ -226,10 +297,45 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     // a `-z` that stopped splitting) would make all three assert `[] === []` and report
     // total symmetry — the shrink-reads-as-a-pass class this whole family exists to stop
     // (BIN-838/823/850). Floors, not equalities: the repo is expected to grow.
+    //
+    // TWO OF THESE WERE RAISED 2026-08-18, and the reason is worth keeping: #25's blind
+    // critique of the commit that introduced them measured each floor against its live
+    // value and found `tier !== 'skip'` at 400 against an actual 883, and `gates.length >
+    // 0` at 400 against an actual 875 — floors at 45% and 46%, which would sit still while
+    // a regression silently halved the router's output. That is BIN-926's subject and the
+    // BIN-838/823/850 family: a floor far below the real value is decoration. Both are now
+    // 700. The other three were already tight and are unchanged.
+    //
+    // LIVE VALUES ON THE TREE THIS SHIPS WITH, measured rather than remembered — 1005
+    // tracked, 886 non-skip, 879 gated, 19 owned by #25, 9 high-stakes, 295 unmapped code.
+    // So every floor below sits between 76% and 83% of its live value. Floors, not
+    // equalities: the repo is expected to grow, and a floor that has to be edited on every
+    // commit gets edited without being thought about.
+    //
+    // Three of those six read 885/878/18 for one round. Not a miscount — they were measured
+    // BEFORE the same commit gave lefthook.yml an owner (#25), which moved it from `skip` to
+    // `owned` and added exactly one to each of the three counts it belongs to. The test
+    // reviewer caught the drift. Recorded because it is the cheapest possible illustration of
+    // why these numbers carry a date and a method: a measurement taken mid-commit describes a
+    // tree that no longer exists by the end of it.
     expect(TRACKED.length).toBeGreaterThanOrEqual(800);
-    expect(VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(400);
-    expect(VERDICTS.filter((v) => v.gates.length > 0).length).toBeGreaterThanOrEqual(400);
+    expect(VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(700);
+    expect(VERDICTS.filter((v) => v.gates.length > 0).length).toBeGreaterThanOrEqual(700);
     expect(VERDICTS.filter((v) => v.ownedByGatekeeper).length).toBeGreaterThanOrEqual(15);
+    // A1 is keyed on the tier, so its scope is every non-skip code path — but the class it
+    // was widened to SEE is `unmapped-code`, and nothing above would notice if route.mjs
+    // stopped emitting that answer. Then A1 would quietly narrow back to the pre-BIN-919
+    // rule while every assertion in this file stayed green: the rekey undone by a change
+    // somewhere else, with no test to say so.
+    //
+    // Set at 230 against a live 295 (78%), deliberately in the same band as its neighbours.
+    // It was 100 for one round — 34% of live, looser than the two floors this very commit
+    // raises for being at 45%. A floor written to a rule the same commit calls decoration
+    // is not a floor, and the outcome verifier caught it.
+    expect(
+      VERDICTS.filter((v) => isCodePath(v.path) && v.reasonCode === 'unmapped-code').length,
+      'the `unmapped-code` class has collapsed — A1 has silently narrowed back to what it was before BIN-919',
+    ).toBeGreaterThanOrEqual(230);
     // A1's high-stakes half specifically: if route.mjs's HIGH_STAKES list were emptied,
     // no verdict would carry this reasonCode and that half of A1 would pass vacuously
     // while looking identical to a green run. Floor, not an equality — the list is
@@ -240,6 +346,44 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     expect(TRACKED).toContain('CLAUDE.md');
     expect(TRACKED).toContain('.claude/shared-plugin.json');
     expect(TRACKED).toContain('firestore.rules');
+  });
+
+  it('A1 is keyed on the tier, so it catches an UNOWNED code path with no gate', () => {
+    // The regression guard for BIN-919's rekey. It runs `a1Offenders` — the real rule, not
+    // a restatement of it — because the first version of this test declared a local copy of
+    // the predicate and was therefore vacuous: reverting the rule left it green while its
+    // own comment promised it would go red (measured; 9/9 passed with the rule reverted).
+    //
+    // The obvious guard would not have worked either: `package.json` gained an OWNER in the
+    // same commit, so a test pinning that one file passes under the superseded keying too
+    // and proves nothing. What actually separates the two rules is a path that is CODE, is
+    // not `skip`, and is owned by NOBODY. The synthetic verdicts below use real repo paths,
+    // because `isCodePath` is part of the rule and an invented filename would fail it for
+    // the wrong reason.
+    const unownedUngatedCode = {
+      path: 'docs/org/route.mjs', tier: 'medium', reasonCode: 'unmapped-code', gates: [],
+    };
+    expect(
+      a1Offenders([unownedUngatedCode]),
+      'A1 no longer sees code that no role owns — the BIN-919 rekey has been reverted, and this is the whole class it was widened to catch',
+    ).toHaveLength(1);
+
+    // …and it must still catch everything the superseded keying did, or the rekey traded
+    // one blind spot for another. Both `owned` and `high-stakes` route non-skip, so this
+    // holds by construction — pinned anyway, because "by construction" is an argument and a
+    // test is what replaces an argument.
+    expect(a1Offenders([
+      { path: 'docs/org/route.mjs', tier: 'medium', reasonCode: 'owned', gates: [] },
+      { path: 'firestore.rules', tier: 'top', reasonCode: 'high-stakes', gates: [] },
+    ]), 'A1 stopped seeing owned or high-stakes code').toHaveLength(2);
+
+    // The negative half, so the rule is not simply "everything is an offender": a gated
+    // path and a `skip` path are both fine, and a non-code path is out of A1's scope.
+    expect(a1Offenders([
+      { path: 'docs/org/route.mjs', tier: 'medium', reasonCode: 'owned', gates: ['binge-integration-reviewer'] },
+      { path: 'docs/org/route.mjs', tier: 'skip', reasonCode: 'doc-only', gates: [] },
+      { path: 'docs/RUNBOOK.md', tier: 'medium', reasonCode: 'owned', gates: [] },
+    ]), 'A1 is flagging paths it should not').toEqual([]);
   });
 
   it('the gate-matching helper subtracts excludes, like the real hook does', () => {
