@@ -387,3 +387,72 @@ okontrollerat påstående med ett nytt okontrollerat påstående känns som nogg
 **Vad som faktiskt fungerade:** att be granskaren behandla varje tal som misstänkt och redovisa
 vilka den räknade om — och att själv köra kommandot före varje rättelse i stället för att lita på
 granskarens siffra. Prosa som beskriver kod behöver samma bevisbörda som koden.
+
+## 2026-08-19 — [Workflow] En kritik som VIDGAR omfånget ogiltigförklarar riskklassningen
+
+**Trigger:** en blind rollkritik ställer ett bindande villkor som drar in en fil som inte fanns i
+biljettens filuppsättning.
+
+**Regel:** kör routern igen på den NYA filuppsättningen, före första raden kod. Riskklassen följer
+det som faktiskt ska ändras, inte det biljetten trodde skulle ändras.
+
+**Exempel:** BIN-766 pekade på `functions/src/communityRatings/`. `node docs/org/route.mjs` gav
+`tier: "medium"`, panel `[27]`. #27:s villkor 2 krävde en formspärr i `firestore.rules` — utan den
+blir fixen en ny röstfusk-väg. Omkörning med `firestore.rules` i uppsättningen gav
+`tier: "top"`, `reasonCode: "high-stakes"`, `panel: [27, 4, 6, 7, 13]`.
+
+Hade jag byggt vidare på den första klassningen hade en `top`-ändring i säkerhetsreglerna gått
+igenom på en enda rollkritik. Fyra av de fem rollerna hade var sitt villkor som ingen av de andra
+hittade — #7 mätte att den strikta regeln fäller 35 befintliga fixturer, #6 att `MIN_SAMPLE = 5`
+gör att ETT konto kan trolla fram en badge, #13 att legacy-grenen har samma bugg genom en annan
+dörr, #4 att `create`-only faktiskt är säkert mot delete-then-create.
+
+BIN-744/776/917 skrev kapacitetskollen för URVALET. Det här är samma regel en våning ner: också
+under bygget, varje gång omfånget växer.
+
+## 2026-08-19 — [Workflow] Granskarens rapport om vad den läst är inte bevis — loggen är
+
+**Trigger:** en grind vägrar med "granskaren läste aldrig X" medan granskarens rapport listar X.
+
+**Regel:** grep granskningsloggen själv på filens `git rev-parse HEAD:<fil>`-sha innan du kör om.
+Läser du fel sak kör du om i onödan; litar du på rapporten kör du om i evighet.
+
+**Exempel:** push-grinden kräver EN körning vars läsmängd täcker alla filer i intervallet. Fyra
+integrationsgranskningar i rad gick igenom på sak och rapporterade full täckning. Loggen sa tre,
+sex, sex och sju läsningar. Två av dem missade var sin fil — olika fil varje gång — så
+"nästan komplett × 3" är noll för en grind som kräver en enda hel körning.
+
+Det som till slut fungerade: att lista de sju sökvägarna i ordning, säga rakt ut att bara
+`Read`-verktyget bokförs (inte `cat`, `sed`, `Grep`), sätta de fyra tidigare missade först, och
+KRÄVA ett kontrollerbart bevis — citera första raden ordagrant ur varje fil. En sammanfattning är
+inte bevis; de citerade raderna är.
+
+Samma familj som lärdomen från 2026-08-03: när en agent motsäger ett kommando du själv kan köra,
+kör det själv.
+
+## 2026-08-19 — [Workflow] Rättelsen till ett omätt tal bär oftast ett nytt omätt tal
+
+**Trigger:** du skriver om en mening för att laga ett felaktigt antal.
+
+**Regel:** avgränsa påståendet till det som faktiskt är relevant för koden bredvid, kör kommandot,
+och lägg processberättelsen i sprintplanen — inte i kodkommentaren.
+
+**Exempel:** en mening om vilka moduler som skriver till `users/{uid}/watchlist/*` föll för
+granskarna TRE gånger i rad, i samma commit:
+
+1. "`WatchlistContext` är enda skribenten" — tre skriver.
+2. Rättelsen: "alla tre bygger id:t via `mediaTypeDocId()`" — `taste/backfill.ts` anropar den noll
+   gånger (`grep -c` → 0); den `updateDoc`:ar ett id den läst ur en snapshot.
+3. Rättelsen till rättelsen: "exakt två moduler bygger någonsin ett watchlist-doc-id" —
+   `useFriendsWhoSaw.ts:59` bygger ett också, för en LÄSNING.
+
+Fjärde varvet, filat som BIN-941: `AuthContext.tsx:265` är create-kapabel och saknas fortfarande.
+
+Det som fungerade till slut var att avgränsa: spärren bryr sig bara om id byggda för en
+SKRIVNING, så det är den frågan meningen ska svara på — och läsvägen namnges uttryckligen så
+nästa läsare slipper återupptäcka den. Testgranskaren påpekade dessutom att den runda-för-runda
+självrättelse jag skrivit in i testfilen var processlogg, inte ett VARFÖR-dokument, och alltså
+inte hörde hemma i någon av doc-taxonomins sex klasser. Den flyttades till `tasks/todo.md`.
+
+Direkt fortsättning på 2026-08-17-lärdomen. Skillnaden är att den handlade om tal i prosa; den
+här handlar om att RÄTTELSEN är den farligaste platsen att skriva ett nytt.
