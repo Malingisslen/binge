@@ -265,7 +265,48 @@ service cloud.firestore {
       //  - update: notes must be absent/null OR UNCHANGED from what's stored
       //    (lets an unrelated rating/status edit on an un-migrated legacy doc pass;
       //    blocks a stale client bundle from re-introducing a note = re-leak).
+      // BIN-766 — bind the doc-id FORM, create-only. Identical in shape and reason
+      // to `canonicalSwipeDocId` in the sessions block below; read that comment for
+      // the create-vs-update argument, which applies here unchanged.
+      //
+      // Why this rule and the communityRatings aggregate are ONE change: that
+      // function derives the aggregate key from this path, and it now canonicalises
+      // the numeric part (`movie_042` -> `movie_42`) instead of trusting the path
+      // verbatim. Canonicalisation is what fixes the split average — and it is also
+      // what makes every alias spelling land on the SAME publicly-read document.
+      // Without this guard that turns a harmless fragmentation into an unbounded
+      // self-stuffing path: the aggregate is a running counter, so one account
+      // creating movie_042, movie_0042, movie_00042 … would add one genuine +1 each
+      // to a single title's badge. Do not ship one half without the other.
+      //
+      // Why no legitimate write can be refused. Two modules build a doc id for a
+      // WRITE here, and both go through mediaTypeDocId() with `tmdbId` typed `number`
+      // — a JS number template-literals without leading zeros, so neither can emit an
+      // alias shape:
+      //   · src/contexts/WatchlistContext.tsx — the create path.
+      //   · src/lib/watchlist/nextAirReadRepair.ts:172 — batch.set(…, {merge:true}),
+      //     which genuinely CAN create; its `tmdbId` is typed `number` at :57.
+      // src/lib/taste/backfill.ts:74 writes WITHOUT building an id at all: it
+      // updateDoc()s the `d.id` it read off an existing snapshot, so it only ever
+      // touches documents that already exist — grandfathered bare-numeric ones
+      // included, which is why `update` must stay unguarded.
+      // (Read sites build this id too — src/hooks/useFriendsWhoSaw.ts:59 — but a read
+      // cannot reach a create rule, so they are not what this list is about.)
+      //
+      // A CLIENT writer that hand-builds an id is what this guard is for. It cannot
+      // bind the server: Admin SDK writes bypass rules entirely. No function creates
+      // watchlist documents today — tmdbTosSweep/index.ts:124 is a batch.update on
+      // paths it already read — but one that did would have to canonicalise itself.
+      //
+      // `movie_0` stays creatable, matching the swipes residual (BIN-797) — the
+      // aggregate function skips it, so it is a doc nobody reads rather than a
+      // rating that silently counts. BIN-797 will narrow BOTH copies of this regex;
+      // its twin is `canonicalSwipeDocId` in the sessions block below.
+      function canonicalWatchlistDocId(id) {
+        return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
+      }
       allow create: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
+        && canonicalWatchlistDocId(itemId)
         && (!('notes' in request.resource.data) || request.resource.data.notes == null);
       allow update: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
         && (!('notes' in request.resource.data) || request.resource.data.notes == null
@@ -288,13 +329,17 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(uid)).data.get('isPublic', false) == true;
     }
     // BIN-164: per-title tags — OWNER ONLY, no public/friends read clause by
-    // design (see isValidTagDoc). Doc id = tmdbId, shape { tags: string[] }.
+    // design (see isValidTagDoc). Shape { tags: string[] }. The doc id is
+    // mediaTypeDocId(mediaType, tmdbId) since BIN-560 (WatchlistContext.tsx:1045),
+    // not a bare tmdbId — the wildcard's NAME is the pre-cutover leftover.
     match /users/{uid}/watchlistTags/{tmdbId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && isValidTagDoc(request.resource.data);
     }
     // BIN-505: per-title free-text notes — OWNER ONLY, no public/friends read
-    // clause (same design as watchlistTags). Doc id = tmdbId, shape { note: string }.
+    // clause (same design as watchlistTags). Shape { note: string }. Same doc-id
+    // story as watchlistTags: mediaTypeDocId() since BIN-560 (WatchlistContext.tsx:549),
+    // despite the wildcard still being named {tmdbId}.
     match /users/{uid}/watchlistNotes/{tmdbId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && isValidNoteDoc(request.resource.data);
@@ -837,6 +882,13 @@ service cloud.firestore {
       // recordSwipe (src/lib/firebase/sessions.ts) är enda skribenten och går
       // alltid via mediaTypeDocId() med tmdbId typad `number` — kanonisk per
       // konstruktion, så ingen legitim skrivning kan nekas av den här regeln.
+      //
+      // BIN-766 gav den här regeln en TVILLING: `canonicalWatchlistDocId` i
+      // `users/{uid}/watchlist/{itemId}`-blocket ovan, med samma uttryck ordagrant.
+      // De är avsiktligt två kopior — rules-språket tillåter en hoistad hjälpare,
+      // men de två samlingarna har olika legacy-arv och kan behöva glida isär.
+      // Det som INTE får hända är att bara den ena ändras: BIN-797 ska smalna av
+      // `movie_0` och måste då röra båda.
       function canonicalSwipeDocId(id) {
         return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
       }

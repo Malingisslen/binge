@@ -85,6 +85,13 @@ export function DeleteAccountSection() {
       // `setConfirming(true)` vore en no-op på en avmonterad komponent, ett
       // löfte om en knapp som inte finns (integrationsgranskningen 2026-08-13).
       // Texterna ovan pekar därför på limbo-skärmens "Slutför raderingen".
+      //
+      // BIN-936: `DeletionLimbo` har SIN EGEN formulering för samma fyra koder, och det
+      // är med flit — de två skärmarna beskriver samma läge från var sin sida av den här
+      // komponentens avmontering, så den ena skickar vidare och den andra står för
+      // åtgärden. Vad de aldrig får göra är att namnge OLIKA knappar. Bindningen ligger i
+      // `DeleteAccountSection.test.tsx` (blocket "BIN-936"), som renderar limbo-skärmen
+      // och läser knappens faktiska etikett — kör det testet om du rör endera texten.
       if (deletionWasHandedOff(message)) {
         toast(msg);
       } else {
@@ -142,10 +149,12 @@ export function DeleteAccountSection() {
         beskriva en användarväg (integrationsgranskningen 2026-08-17).
 
         Ingen blir utan adress: DeletionLimbo bär en egen, lika ovillkorlig, i
-        sitt <p> på rad 114-118 — inte i notisen, som aldrig bär någon adress
-        alls. Den raden är dessutom mer framträdande än den här (text-sm/ink-2
-        mot text-xs/ink-3) och pinnad ordagrant i DeletionLimbo.test.tsx:56-67
-        (#19 Kundsupports blinda kritik, 2026-08-17).
+        stycket som börjar "Kommer du inte vidare?" — inte i notisen, som aldrig
+        bär någon adress alls. Den är dessutom mer framträdande än den här
+        (text-sm/ink-2 mot text-xs/ink-3) och pinnad ordagrant i
+        DeletionLimbo.test.tsx (#19 Kundsupports blinda kritik, 2026-08-17).
+        Radnumren stod här förut och gick sönder inne i den commit som lade till
+        en kommentar ovanför dem — därför namnges texten i stället.
 
         Skälet: `setConfirming(false)` är inte det som får raden att överleva
         notisen. Elementet ligger utanför ternären och hade renderats oavsett.

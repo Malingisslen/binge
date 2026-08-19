@@ -163,7 +163,7 @@ describe('BIN-655 — buildAddWrite payloads satisfy the hasOnly allowlist', () 
 
 describe('users/{uid}/watchlist/{id} field whitelist', () => {
   it('allows a valid watchlist write', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertSucceeds(setDoc(ref, {
       tmdbId: 603, mediaType: 'movie', status: 'vill_se', rating: null, notes: null,
       title: 'The Matrix', posterPath: null, releaseYear: 1999, totalSeasons: null,
@@ -174,7 +174,7 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
     }));
   });
   it('rejects a watchlist write with an unknown field', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, {
       tmdbId: 603, mediaType: 'movie', status: 'vill_se', title: 'The Matrix',
       evilField: 'pwned', addedAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -185,18 +185,18 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
   // every in-library title view → permission-denied Sentry noise + a runtime
   // filter that never received data.
   it('allows a runtime-only backfill merge write', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, { runtime: 136 }, { merge: true }));
   });
   // BIN-349: ratedAt must be whitelisted AND type-bound to a timestamp.
   it('allows a ratedAt timestamp merge write (BIN-349)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, { ratedAt: serverTimestamp() }, { merge: true }));
   });
   it('rejects a non-timestamp ratedAt (type bound, BIN-349)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { ratedAt: 'igår' }, { merge: true }));
   });
@@ -207,24 +207,24 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
   // movie, etc.) fail hasOnly → permission-denied on an unrelated action. Seed a
   // post-sweep doc, then assert a normal owner merge-write still succeeds.
   it('allows a normal merge write on a post-sweep doc holding tmdbFieldsRefreshedAt (BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, { ...validWatchlist(), tmdbFieldsRefreshedAt: serverTimestamp() });
     await assertSucceeds(setDoc(ref, { rating: 4.5, updatedAt: serverTimestamp() }, { merge: true }));
   });
   it('allows a tmdbFieldsRefreshedAt timestamp merge write (BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, { tmdbFieldsRefreshedAt: serverTimestamp() }, { merge: true }));
   });
   it('rejects a non-timestamp tmdbFieldsRefreshedAt (type bound, BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { tmdbFieldsRefreshedAt: 'igår' }, { merge: true }));
   });
   // Security-panel hardening: `<= request.time` — a client can't forge a FUTURE
   // stamp to make the sweep treat the doc as perpetually fresh (skip clearing).
   it('rejects a future-dated tmdbFieldsRefreshedAt (<= request.time bind, BIN-402)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
     await assertFails(setDoc(ref, { tmdbFieldsRefreshedAt: tomorrow }, { merge: true }));
@@ -236,7 +236,7 @@ describe('users/{uid}/watchlist/{id} field whitelist', () => {
 // fields must be whitelisted or every silent read-repair write is rejected.
 describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
   it('allows a next-air-only merge write', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'tv_1399');
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     await assertSucceeds(setDoc(ref, {
       nextAirDate: '2026-07-09', nextAirCode: 'S2E03', nextAirProvider: 'HBO Max',
@@ -244,14 +244,14 @@ describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
     }, { merge: true }));
   });
   it('allows a digitalReleaseDate-only merge write', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, {
       digitalReleaseDate: '2026-08-01', nextAirUpdatedAt: serverTimestamp(),
     }, { merge: true }));
   });
   it('allows clearing next-air fields with nulls', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'tv_1399');
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     await assertSucceeds(setDoc(ref, {
       nextAirDate: null, nextAirCode: null, nextAirProvider: null,
@@ -259,14 +259,14 @@ describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
     }, { merge: true }));
   });
   it('rejects an oversize nextAirProvider', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'tv_1399');
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     await assertFails(setDoc(ref, {
       nextAirProvider: 'x'.repeat(81), nextAirUpdatedAt: serverTimestamp(),
     }, { merge: true }));
   });
   it('rejects a non-timestamp nextAirUpdatedAt', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'tv_1399');
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     await assertFails(setDoc(ref, { nextAirUpdatedAt: 'igår' }, { merge: true }));
   });
@@ -274,7 +274,7 @@ describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
   // trusts it to decide whether the next-air group is stale). Same forge risk as
   // tmdbFieldsRefreshedAt → same `<= request.time` ratchet.
   it('rejects a future-dated nextAirUpdatedAt (<= request.time bind, BIN-468)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '1399');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'tv_1399');
     await setDoc(ref, { ...validWatchlist(), tmdbId: 1399, mediaType: 'tv' });
     const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
     await assertFails(setDoc(ref, { nextAirUpdatedAt: tomorrow }, { merge: true }));
@@ -287,19 +287,19 @@ describe('users/{uid}/watchlist/{id} next-air read-repair fields', () => {
 // forever. Add the same type-bind + `<= request.time` ratchet as the other stamps.
 describe('users/{uid}/watchlist/{id} providersCheckedAt gate (BIN-468)', () => {
   it('allows a providersCheckedAt serverTimestamp merge write', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, {
       providers: [8], providersCheckedAt: serverTimestamp(),
     }, { merge: true }));
   });
   it('rejects a non-timestamp providersCheckedAt (type bound)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { providersCheckedAt: 'igår' }, { merge: true }));
   });
   it('rejects a future-dated providersCheckedAt (<= request.time bind)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     const tomorrow = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
     await assertFails(setDoc(ref, { providersCheckedAt: tomorrow }, { merge: true }));
@@ -315,7 +315,7 @@ describe('users/{uid}/watchlist/{id} providersCheckedAt gate (BIN-468)', () => {
 // matters.
 describe('users/{uid}/watchlist/{id} subscriptionProviders (BIN-814)', () => {
   it('allows writing both provider fields in one merge', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertSucceeds(setDoc(ref, {
       providers: [76, 8], subscriptionProviders: [8], providersCheckedAt: serverTimestamp(),
@@ -333,18 +333,99 @@ describe('users/{uid}/watchlist/{id} subscriptionProviders (BIN-814)', () => {
     // reason by accident. This way the assertion below is the only thing that can
     // fail, which is what makes it a ratchet test rather than a write test.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_603'), {
         ...validWatchlist(), subscriptionProviders: [8],
       });
     });
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertSucceeds(setDoc(ref, { rating: 4 }, { merge: true }));
   });
 
   it('rejects an unknown provider field (the allowlist is still closed)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { rentProviders: [2] }, { merge: true }));
+  });
+});
+
+// BIN-766 — the watchlist doc id's FORM is bound on create.
+//
+// Not a tidiness rule. `communityRatingMaintain` derives the community-average key from
+// this path, and since BIN-766 it CANONICALISES the numeric part (`movie_042` -> the real
+// `movie_42`) instead of passing it through verbatim. Canonicalising is what stops one
+// title's ratings splitting across documents nobody reads — and, in the same motion, it
+// makes every alias spelling land on ONE publicly-read document. The aggregate is a
+// running counter, so without this guard a single account could create movie_042,
+// movie_0042, movie_00042 … and add a genuine +1 to the same title from each. #4 Security
+// Architect and #27 DBA made the guard a binding condition independently; #6 DPO named
+// the visible consequence (`MIN_SAMPLE = 5` — one account could conjure a badge).
+//
+// The 35 fixtures in this file that used to create bare-numeric watchlist ids ('603',
+// '1399') were renamed to the namespaced shape in the same commit. That is not a
+// concession to the guard. Two modules build a watchlist doc id for a WRITE —
+// `WatchlistContext.tsx` and `nextAirReadRepair.ts:172` — and both go through
+// `mediaTypeDocId()` with `tmdbId` typed `number`, so no create path in the app can
+// emit a bare or padded id. `taste/backfill.ts:74` writes without building one at all
+// (`updateDoc` on an id read off an existing snapshot), which is what the
+// grandfathered-update case below is about. The fixtures were describing a
+// pre-BIN-560 world.
+describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
+  const rawWatchlistRef = (db: ReturnType<typeof ownerDb>, id: string) =>
+    doc(db, 'users', OWNER, 'watchlist', id);
+
+  it('accepts the two shapes mediaTypeDocId() actually writes', async () => {
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), validWatchlist()));
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'tv_42'), {
+      ...validWatchlist(), tmdbId: 42, mediaType: 'tv',
+    }));
+    // `movie_0` stays creatable, matching the swipes residual (BIN-797) rather than
+    // quietly diverging from it. TMDB numbers titles from 1, so this names nothing —
+    // and `aggregateDocId` skips it with a warning (runAggregate.test.ts pins that), so
+    // the effect is a document nobody reads, not a rating that silently counts.
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_0'), {
+      ...validWatchlist(), tmdbId: 0,
+    }));
+  });
+
+  // The same alias table the swipes guard uses (`doc-id format guard (BIN-624)` below).
+  // Kept identical on purpose: two collections sharing one canonical-id helper should not
+  // end up with two different spellings of "the alias set".
+  it.each([
+    ['movie_042', 'leading zero — the alias that re-keys onto the genuine movie_42'],
+    ['042', 'bare padded alias — the legacy-shaped member of the same set'],
+    ['tv_0000042', 'padded alias'],
+    ['zmovie_42', 'unknown prefix'],
+    ['season_42', 'wrong namespace entirely'],
+    ['movie_', 'empty suffix — must not resolve as Number("") === 0'],
+    ['movie_1_2', 'junk suffix'],
+    ['movie_xyz', 'non-numeric suffix'],
+    ['603', 'bare legacy id — creatable before this guard, not any more'],
+    ['MOVIE_42', 'prefix case must match — the regex is lowercase-anchored'],
+  ])('denies CREATE at %s (%s)', async (docId) => {
+    await assertFails(setDoc(rawWatchlistRef(ownerDb(), docId), validWatchlist()));
+  });
+
+  // `update` is deliberately left unguarded, for the same two reasons spelled out at
+  // `canonicalSwipeDocId`: create-vs-update is decided by whether the document EXISTS, so
+  // an attacker cannot reach the update branch on a path with no document — and a
+  // pre-existing legacy-shaped item must keep accepting ordinary edits rather than
+  // freezing the moment this rule deploys.
+  it('a grandfathered bare-numeric item can still be edited', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), validWatchlist());
+    });
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), '603'), {
+      status: 'sedd', updatedAt: serverTimestamp(),
+    }, { merge: true }));
+  });
+
+  // The guard is additive: a canonical-looking path must not buy its way past the field
+  // rules the blocks above pin. Without this, "the id is well-formed" could read as
+  // "the write is fine".
+  it('a canonical doc id does NOT excuse an invalid body', async () => {
+    await assertFails(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), {
+      ...validWatchlist(), notes: 'inline note',
+    }));
   });
 });
 
@@ -545,22 +626,22 @@ describe('BIN-505 users/{uid}/watchlistNotes/{id} owner-only', () => {
 
 describe('BIN-505 watchlist notes-null guard', () => {
   it('create with a non-null inline note is DENIED; null/absent is OK', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, { ...validWatchlist(), notes: 'inline leak' }));
     await assertSucceeds(setDoc(ref, { ...validWatchlist(), notes: null }));
   });
   it('an unrelated edit on a legacy doc that still has a note PASSES (note unchanged)', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), { ...validWatchlist(), notes: 'legacy' });
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_603'), { ...validWatchlist(), notes: 'legacy' });
     });
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertSucceeds(setDoc(ref, { rating: 4.5, updatedAt: serverTimestamp() }, { merge: true }));
   });
   it('re-introducing a CHANGED note is DENIED; deleting the note is OK', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), { ...validWatchlist(), notes: 'legacy' });
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_603'), { ...validWatchlist(), notes: 'legacy' });
     });
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, { notes: 'a new note', updatedAt: serverTimestamp() }, { merge: true }));
     await assertSucceeds(setDoc(ref, { notes: deleteField(), updatedAt: serverTimestamp() }, { merge: true }));
   });
@@ -573,28 +654,28 @@ describe('users/{uid}/watchlist/{id} rating value bound (BIN-143)', () => {
   // Watchlist ratings are the 0.5–5 half-star scale (×2 → /10 on display), NOT
   // 0–10 like reviews. The bound is 0–5; anything above 5 would render >10/10.
   it('allows in-range half-star ratings (0.5, 2.5, 5) and null', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 0.5 }));
     await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 2.5 }));
     await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: 5 }));
     await assertSucceeds(setDoc(ref, { ...validWatchlist(), rating: null }));
   });
   it('rejects ratings above the 0.5–5 scale (community-aggregate poisoning)', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, { ...validWatchlist(), rating: 500 }));
     await assertFails(setDoc(ref, { ...validWatchlist(), rating: 10 })); // old display-scale value now rejected
     await assertFails(setDoc(ref, { ...validWatchlist(), rating: 5.5 }));
   });
   it('rejects a negative rating', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, { ...validWatchlist(), rating: -5 }));
   });
   it('rejects a non-numeric rating', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, { ...validWatchlist(), rating: '5' as unknown as number }));
   });
   it('rejects an over-range rating slipped in via a merge update', async () => {
-    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await setDoc(ref, validWatchlist());
     await assertFails(setDoc(ref, { rating: 999 }, { merge: true }));
   });
@@ -667,7 +748,7 @@ describe('users/{uid}/notInterested/{id} field whitelist', () => {
 // is a *valid* doc, so the only thing that can fail the write is the auth guard.
 describe('owner guard — unauthenticated writes are rejected', () => {
   it('rejects an unauthenticated watchlist write', async () => {
-    const ref = doc(anonDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(anonDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, validWatchlist()));
   });
   it('rejects an unauthenticated review write', async () => {
@@ -686,7 +767,7 @@ describe('owner guard — unauthenticated writes are rejected', () => {
 
 describe('owner guard — non-owner writes are rejected', () => {
   it('rejects a non-owner writing to another user’s watchlist', async () => {
-    const ref = doc(otherDb(), 'users', OWNER, 'watchlist', '603');
+    const ref = doc(otherDb(), 'users', OWNER, 'watchlist', 'movie_603');
     await assertFails(setDoc(ref, validWatchlist()));
   });
   it('rejects a non-owner writing to another user’s episodeProgress', async () => {
@@ -712,7 +793,7 @@ describe('owner guard — non-owner writes are rejected', () => {
 // the wrong reason.
 describe('owner guard — positive control (factory shapes are schema-valid)', () => {
   it('owner can write validWatchlist()', async () => {
-    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'watchlist', '603'), validWatchlist()));
+    await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER, 'watchlist', 'movie_603'), validWatchlist()));
   });
   it('owner can write validReview()', async () => {
     await assertSucceeds(setDoc(doc(ownerDb(), 'reviews', 'r1'), validReview(OWNER)));

@@ -51,6 +51,14 @@ export function DeletionLimbo() {
       // Same classifier as the settings page, deliberately — see authErrors.
       // The two screens say different things about the same four codes, but they
       // must never disagree about WHICH code they are looking at.
+      //
+      // BIN-936: nor about which BUTTON they name. The wordings differ on purpose —
+      // the settings page narrates this state from a screen about to unmount and hands
+      // the reader on, while this screen owns the action and says so in the present
+      // tense — but "Slutför raderingen" below is the one thing both sides spell, so it
+      // is the one thing that can silently drift. `DeleteAccountSection.test.tsx`
+      // (describe "BIN-936") renders this component and reads the button's real label
+      // rather than repeating it; run that test if you touch either wording.
       const kind = classifyDeletionFailure(err instanceof Error ? err.message : '');
       setError(
         kind === 'preflight' || kind === 'recent-login'

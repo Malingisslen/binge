@@ -49,7 +49,7 @@
  */
 
 import { ratingDelta, isNoOp, type AggregateDelta } from './logic';
-import { mediaTypeDocId, parseMediaTypeFromDocId } from '../shared/mediaTypeDocId';
+import { mediaTypeDocId, parseMediaTypeFromDocId, parseTmdbIdFromDocId } from '../shared/mediaTypeDocId';
 
 /** An arbitrary Firestore document's fields, as read back. */
 export type DocData = Record<string, unknown>;
@@ -97,7 +97,12 @@ export interface RatingEvent {
 /** What one delivery did, returned so a test can read it without parsing logs. */
 export type AggregateOutcome =
   | { kind: 'noop' }                                    // the rating did not change
-  | { kind: 'skipped-unknown-media-type' }              // legacy id, unusable mediaType
+  // Both of aggregateDocId's null paths land here: a legacy bare id whose body carries
+  // no usable mediaType, AND (since BIN-766) a doc id whose numeric part will not parse
+  // to a positive integer. The NAME says only the first, which is a leftover — the two
+  // are told apart by the `log.warn` text, and per BIN-915's accept that log is this
+  // function's only observation channel, so keep them distinguishable there.
+  | { kind: 'skipped-unknown-media-type' }
   | { kind: 'duplicate'; docId: string }                // this event was already applied
   | { kind: 'applied'; docId: string; count: number; sum: number }
   | { kind: 'failed'; docId: string };
@@ -110,34 +115,65 @@ function numberOr0(v: unknown): number {
 /**
  * The aggregate doc id for a watchlist write, or null when it cannot be attributed.
  *
- * BIN-560 Phase 4 — derived from the watchlist doc's PATH, never its body. This is
- * the vote-stuffing invariant behind the rules comment that `titleRatingsAggregate`
- * is "never client-written": Firestore enforces one doc per path, so a path-derived
- * aggregate key means at most one rating per account per title. Reading the tmdbId
- * from the user-writable BODY (which rules whitelist but never value-bind) would
- * decouple the key from the unique path — a user could create N docs under
- * different itemIds, each carrying a spoofed `{tmdbId: X}`, and each would
- * independently increment titleRatingsAggregate/X.
+ * BIN-560 Phase 4 — derived from the watchlist doc's PATH, never its body. Reading
+ * the tmdbId from the user-writable BODY (which rules whitelist but never
+ * value-bind) would decouple the key from the unique path — a user could create N
+ * docs under different itemIds, each carrying a spoofed `{tmdbId: X}`, and each
+ * would independently increment titleRatingsAggregate/X.
  *
- * Post-cutover the doc id already IS `${mediaType}_${tmdbId}`, so it is the
- * aggregate id verbatim. The legacy bare-numeric branch preserves the ORIGINAL
- * trust model: the id part still comes from the path, only the PREFIX comes from
- * the body's mediaType — so a wrong body mediaType mis-buckets that one doc's
- * single vote and cannot stuff a real aggregate. That branch is kept as
- * defence-in-depth (the Fork-A reset means no bare ids exist in prod today), and
- * it is tested rather than trusted: untested defence-in-depth is the code nobody
- * notices broke until the day it is actually exercised.
+ * BIN-766 — what makes "at most one rating per account per title" true.
+ * The path alone does NOT establish it, and the earlier version of this comment
+ * claimed it did. Firestore enforces one doc per path, but MANY paths spell the
+ * same title: `movie_42`, `movie_042`, `movie_0042`, … Before this fix the id was
+ * returned verbatim, so those aliases FRAGMENTED into separate aggregate documents
+ * — the bug this function was rewritten for: a real user's rating landed in an
+ * average nobody reads. Canonicalising the numeric part fixes that, and in the same
+ * motion funnels every alias onto one publicly-read document. That is strictly
+ * worse than fragmentation unless something stops the aliases being created at all.
+ *
+ * That something is `firestore.rules`' create-only shape guard on
+ * `users/{uid}/watchlist/{itemId}` (mirroring `canonicalSwipeDocId`, added in the
+ * same commit). Path-derivation + that guard is the invariant; either one alone is
+ * not. #4 Security Architect and #27 DBA both made the guard a binding condition
+ * for this change, independently, and #6 DPO named the concrete consequence of
+ * shipping without it: `MIN_SAMPLE = 5` means one account could push a title's
+ * badge into existence on its own.
+ *
+ * The numeric part goes through `parseTmdbIdFromDocId`, never a hand-rolled parse:
+ * that helper is strict-digits, so `movie_` and `movie_1_2` are NaN rather than the
+ * `Number('') === 0` phantom (#7 QA named this as the mutation that survives a
+ * naive finite-check). A non-finite or non-positive id is SKIPPED with a warning —
+ * never written as `movie_NaN`, and never as `movie_0`, which BIN-646 established
+ * is no genuine title. The guard is unconditional on purpose: BIN-624 may make the
+ * server parser strict, turning `movie_042` into NaN instead of 42, and this code
+ * must be correct either way rather than bound to that ticket's outcome.
+ *
+ * The legacy bare-numeric branch preserves the ORIGINAL trust model: the id part
+ * still comes from the path, only the PREFIX comes from the body's mediaType — so a
+ * wrong body mediaType mis-buckets that one doc's single vote and cannot stuff a
+ * real aggregate. It is canonicalised too (`'042'` + body `movie` used to produce
+ * `movie_042` by the other door). Kept as defence-in-depth — the Fork-A reset means
+ * no bare ids exist in prod today — and tested rather than trusted: untested
+ * defence-in-depth is the code nobody notices broke until it is exercised.
  */
 export function aggregateDocId(event: RatingEvent, log: AggregateLogger): string | null {
   const docIdRaw = event.watchlistDocId;
+  // Path prefix wins when it exists; the body is consulted ONLY for a legacy bare
+  // id, which is what keeps a spoofed body mediaType from re-bucketing a namespaced
+  // doc into the other media type's aggregate.
   const pathMediaType = parseMediaTypeFromDocId(docIdRaw);
-  if (pathMediaType != null) return docIdRaw; // namespaced id == aggregate id
-  const bodyMediaType = (event.after?.mediaType ?? event.before?.mediaType) as string | undefined;
-  if (bodyMediaType !== 'movie' && bodyMediaType !== 'tv') {
+  const mediaType = pathMediaType
+    ?? ((event.after?.mediaType ?? event.before?.mediaType) as string | undefined);
+  if (mediaType !== 'movie' && mediaType !== 'tv') {
     log.warn(`communityRatings: skipping ${docIdRaw} — unknown mediaType`);
     return null;
   }
-  return mediaTypeDocId(bodyMediaType, docIdRaw);
+  const tmdbId = parseTmdbIdFromDocId(docIdRaw);
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    log.warn(`communityRatings: skipping ${docIdRaw} — unparseable tmdbId`);
+    return null;
+  }
+  return mediaTypeDocId(mediaType, tmdbId);
 }
 
 /**

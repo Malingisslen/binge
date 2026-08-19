@@ -17,7 +17,7 @@
 // This is the code every CSV import and every onboarding run executes, writing to every
 // title in every library. A behaviour change here is silent and retroactive.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { buildAddWrite, type AddWriteContext, type WriteIntent } from './watchlistWrites';
 import type { WatchlistItem, WatchStatus } from '@/types';
 import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
@@ -385,11 +385,37 @@ function sourceFiles(dir: string): string[] {
 describe('BIN-655 — the flag is gone and stays gone', () => {
   const files = sourceFiles(SRC);
 
+  // BIN-937: two assertions below each used to re-read the WHOLE src/ tree with
+  // readFileSync, so each one paid for its own full-tree pass of pure I/O inside vitest's
+  // 5s default. Under load (parallel workers, another suite, a background run) that ran
+  // out twice at 5000ms while passing in five other full runs the same evening — and a
+  // timeout in a RATCHET test reads exactly like the regression it exists to catch, which
+  // is the expensive part. Read once, share the result. The assertions themselves are
+  // untouched; only where they read from changed.
+  const source = new Map<string, string>();
+  beforeAll(() => {
+    for (const f of files) source.set(f, readFileSync(f, 'utf8'));
+  });
+
+  // A miss means the cache and the file list disagree — the one way this caching could
+  // turn a real assertion into a vacuous one, by silently matching nothing. Throwing is
+  // what keeps "read from the cache" as strong as "read from disk".
+  const read = (f: string): string => {
+    const s = source.get(f);
+    if (s === undefined) throw new Error(`BIN-937: no cached source for ${f}`);
+    return s;
+  };
+
   it('finds a real source tree, so the assertions below are not vacuous', () => {
     // A walk that returns nothing makes every `expect` in this block trivially true —
     // the silent-pass this whole ticket is about, one level up.
     expect(files.length).toBeGreaterThan(200);
     expect(files.some(f => f.endsWith('WatchlistContext.tsx'))).toBe(true);
+    // …and the same question asked of the CACHE the heavy assertions actually read, not
+    // just of the list they iterate. An empty or short cache would make both of them pass
+    // on nothing, which is the identical silent-pass one layer further in.
+    expect(source.size).toBe(files.length);
+    expect(read(files.find(f => f.endsWith('WatchlistContext.tsx'))!).length).toBeGreaterThan(0);
   });
 
   it('neither entry point takes a second parameter', () => {
@@ -440,7 +466,7 @@ describe('BIN-655 — the flag is gone and stays gone', () => {
     // that for a guard nobody can read.
     const offenders = files
       .filter((f) => !f.endsWith('watchlistWrites.addWrite.test.ts'))
-      .filter((f) => /\baddItem\s*\??\.?\s*\(/.test(readFileSync(f, 'utf8')));
+      .filter((f) => /\baddItem\s*\??\.?\s*\(/.test(read(f)));
     expect(offenders).toEqual([]);
   });
 
@@ -473,7 +499,7 @@ describe('BIN-655 — the flag is gone and stays gone', () => {
     // the same way as above — a name followed by `(`, `,` or `}` is a use, not a story.
     const callers = files
       .filter((f) => !/\.test\.tsx?$/.test(f))
-      .filter((f) => /\blogViewing\s*[(,}]/.test(readFileSync(f, 'utf8')))
+      .filter((f) => /\blogViewing\s*[(,}]/.test(read(f)))
       .map((f) => f.split(/[\\/]/).slice(-2).join('/'))
       .sort();
     expect(callers).toEqual([

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { DeleteAccountSection } from './DeleteAccountSection';
+import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 import { CASCADE_PARTIAL, DELETION_HANDED_OFF, REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT } from '@/lib/authErrors';
 
 // BIN-777, and the Customer Support critique that gated it (2026-08-06).
@@ -36,6 +37,10 @@ import { CASCADE_PARTIAL, DELETION_HANDED_OFF, REQUIRES_RECENT_LOGIN, STALE_SESS
 
 const auth = vi.hoisted(() => ({
   deleteAccount: vi.fn<() => Promise<void>>(async () => {}),
+  // BIN-936 renders `DeletionLimbo` in this file to read its button's REAL label
+  // instead of spelling it a third time. That screen also offers a sign-out, so
+  // the shared mock has to carry it. No assertion in this file reads it.
+  signOut: vi.fn<() => Promise<void>>(async () => {}),
 }));
 const toast = vi.hoisted(() => ({ show: vi.fn() }));
 
@@ -281,5 +286,61 @@ describe('DeleteAccountSection — vad användaren får veta när raderingen fai
     expect(screen.getByText('Ta bort mitt konto')).toBeTruthy();
     expect(screen.queryByText('Raderar…')).toBeNull();
     expect(screen.queryByText('Ja, ta bort permanent')).toBeNull();
+  });
+});
+
+// ── BIN-936 / BIN-925: de två skärmarna hålls ihop av något ─────────────────────────
+//
+// #19 Customer Supports blinda kritik, 2026-08-18. Två skärmar beskriver samma
+// klassificerade feltillstånd från var sin sida av en avmontering: den här sektionen
+// berättar det från en skärm som är på väg att försvinna, `DeletionLimbo` från skärmen
+// som tar över. Ingenting band ihop dem — och de fyra texterna är juridiskt godkända och
+// får inte skrivas om (BIN-813 villkor 4), så det enda som KAN byggas är bindningen.
+//
+// Vad testet faktiskt gör, utan skryt: det renderar limbo-skärmen och läser knappens
+// `textContent`, och jämför DEN strängen med de två meddelandena. Etiketten står visserligen
+// skriven en gång till i `getByRole`-frågan nedan — det här är alltså ingen "sista kopian".
+// Det som gör testet till en spärr och inte en omskrivning av dagens strängar är att det
+// blir rött åt BÅDA hållen: döps knappen om hittar `getByRole` ingenting, och formuleras
+// något av meddelandena om faller `toContain`. (En tidigare version av den här kommentaren
+// räknade upp "tre ställen" och kallade sig "inte en fjärde kopia". Båda var fel —
+// integrationsgranskningen 2026-08-19 räknade om.)
+describe('BIN-936 — båda skärmarnas texter för samma feltillstånd namnger samma åtgärd', () => {
+  it('hand-over-texterna namnger limbo-knappens FAKTISKA etikett, inte en kopia av den', () => {
+    render(<DeletionLimbo />);
+
+    // Frågan ställs till skärmen, inte till en konstant. Byter limbo-skärmen namn på
+    // knappen kastar `getByRole` här; byter något av meddelandena formulering faller
+    // `toContain` nedanför. Båda riktningarna fäller alltså testet, vilket är hela
+    // skälet att det finns.
+    const label = screen.getByRole('button', { name: 'Slutför raderingen' }).textContent!.trim();
+
+    // De två grenar som saknar en egen knapp — hand-over har skett, den här komponenten
+    // är avmonterad, och texten pekar med flit vidare till limbo-skärmen.
+    expect(RECENT_LOGIN_MSG).toContain(label);
+    expect(PARTIAL_MSG).toContain(label);
+  });
+
+  it('den otaggade andra-försöks-grenen namnger en knapp som INTE är dess synliga åtgärd', async () => {
+    // Den kvarstående luckan, pinnad i stället för bortputsad. `STALE_MARKED_ERROR`
+    // klassificeras som `recent-login` men saknar hand-over-taggen, så komponenten lever
+    // och toasten får sin åtgärd — märkt "Försök igen". Meddelandet säger ändå "Slutför
+    // raderingen", som är limbo-skärmens knapp.
+    //
+    // #19:s åtkomlighetsfynd (statiskt härlett vid `2d67ff7`, inte mekaniskt bevisat):
+    // ingen verklig användarväg når det här läget, eftersom `AuthContext` sätter
+    // `deletionInProgress` vid :536, :638 och :1227 medan färskhetsspärrens throw ligger
+    // vid ~:1190 — före markören — och `AppShell` då redan bytt ut hela appen. Testet är
+    // därför ett DEFENSIVT kontraktstest, inte en beskrivning av något användare möter.
+    // Återöppna BIN-925 om någon av de tre anropsplatserna tas bort eller flyttas
+    // relativt den throwen.
+    auth.deleteAccount.mockRejectedValue(new Error(STALE_MARKED_ERROR));
+
+    await attemptDelete();
+
+    const action = toast.show.mock.calls[0][1] as { label: string };
+    expect(action.label).toBe('Försök igen');
+    expect(action.label).not.toBe('Slutför raderingen');
+    expect(toast.show.mock.calls[0][0]).toContain('Slutför raderingen');
   });
 });

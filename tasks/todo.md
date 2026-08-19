@@ -1,3 +1,216 @@
+# Sprint 2026-08-19 — `--pick malin`, fyra biljetter
+
+Malin valde alla fyra kandidaterna i ett interaktivt `--pick`-pass. Sessionen är BEVAKAD
+och kan sammankalla panel, så tier-spärren (BIN-744/776/917) är uppfylld för alla fyra —
+kritiken körs FÖRE första Edit/Write, vilket är regeln BIN-917 finns för.
+
+**Basläge, mätt före första ändring (HEAD `2d67ff7`):**
+
+* `git status --porcelain` → tomt.
+* `npm test` → 257 filer, 4218 passerade, 4 skippade, exit 0, 106 s.
+
+## Routing — rå utdata, körd på den FAKTISKA filuppsättningen vid HEAD
+
+| Biljett | Router | Panel | Kritik |
+| -- | -- | -- | -- |
+| BIN-937 | `tier: medium`, `reasonCode: owned` | #5 Legal / GDPR Counsel | SUPPORT WITH CONDITIONS |
+| BIN-936 + BIN-925 | `tier: medium`, `reasonCode: owned` | #19 Customer Support / Success | SUPPORT WITH CONDITIONS |
+| BIN-766 | `tier: medium` → **omroutad `top`** | #27, #4, #6, #7, #13 | #27 klar; 4/6/7/13 pågår |
+| BIN-868 | `tier: medium`, `reasonCode: owned` | #25 Engineering Manager / Release Manager | pågår |
+
+**BIN-766 omroutades under körningen.** #27:s bindande villkor 2 kräver en formspärr i
+`firestore.rules`. Routern på den nya filuppsättningen
+(`runAggregate.ts` + `firestore.rules` + `src/test/rules/firestore-rules.test.ts`) ger
+`tier: "top"`, `reasonCode: "high-stakes"`, `panel: [27, 4, 6, 7, 13]`. Ingen tier ärvd
+från plan, biljettkommentar eller tidigare körning (BIN-787/788) — routern kördes om.
+
+---
+
+## BIN-937 — [Tier A] spärrhake-testet timeoutar under belastning
+
+**Disposition:** build. **Fix:** (B) — läs trädet en gång, återanvänd innehållet.
+
+`src/lib/watchlistWrites.addWrite.test.ts` → blocket `BIN-655 — the flag is gone and stays
+gone`. `sourceFiles(SRC)` vandrar hela `src/`, och varje `it` läser sedan om VARENDA fil
+med `readFileSync`. Rent I/O inuti vitests 5 s-standardtimeout. Timeoutade två gånger på
+5000 ms under en lång session; grön i fem andra fullkörningar samma kväll.
+
+**Acceptanskriterier (#5:s villkor 1–5 inviklade, bindande):**
+
+1. Filinnehåll läses EXAKT en gång, nycklat på samma `sourceFiles(SRC)`-lista som redan
+   beräknas — ingen andra, avvikande uppräkning. Båda de tunga `it`-fallen konsumerar
+   samma cache. *(diff)*
+2. Diffen rör bara schemaläggning/uppsättning: noll ändringar inuti något `expect(...)`,
+   inuti `callers`-listan eller i något regexuttryck. *(diff)*
+3. Vakuitetskontrollen (`finds a real source tree…`) körs mot det cachen FAKTISKT
+   innehåller, så en tom/trasig cache faller högljutt i stället för att göra båda de tunga
+   testerna gröna på ingenting. *(diff)*
+4. Ingen global `testTimeout`-höjning i `vitest.config.ts` — det skulle lossa deadlinen
+   för alla 257 testfiler. *(diff)*
+5. `npm test` körs efter fixen med rensad `node_modules/.vite/vitest`, och resultatet
+   redovisas med siffror — inte i prosa. *(diff)*
+6. **#5:s villkor 5:** följdbiljett filad för `src/lib/firebase/userDocWrite.chokepoint.test.ts`,
+   som har identisk form (egen `walk(SRC)` + per-fil `readFileSync`, ingen timeout-override)
+   och samma exponering. *(diff — biljetten filad före commit)*
+
+## BIN-936 + BIN-925 — [Tier A] de två raderingsskärmarnas texter kan glida isär
+
+**Disposition:** build. Byggs som EN ändring; BIN-925:s kriterium 1 kräver ändå exakt den
+jämförelse BIN-936 beskriver.
+
+**Bindande begränsning:** de fyra låsta meddelandena och limbo-skärmens juridiskt godkända
+text får INTE skrivas om (BIN-813 villkor 4). Fixen är ett test plus nedskriven motivering.
+
+**Acceptanskriterier (#19:s villkor 1–5, bindande):**
+
+1. Testet hårdkodar INTE limbo-knappens etikett en tredje gång. Det renderar
+   `<DeletionLimbo />`, läser knappens faktiska text via
+   `getByRole('button', { name: 'Slutför raderingen' })`, och hävdar att den literalen är
+   en delsträng av BÅDE `RECENT_LOGIN_MSG` och `PARTIAL_MSG`. Ett namnbyte på endera sidan
+   ska fälla testet. *(diff)*
+2. Samma testfil pinnar den kvarstående luckan: för den otaggade andra-försöks-grenen
+   (`STALE_MARKED_ERROR`) hävdas att toast-åtgärdens etikett är `Försök igen`, inte
+   `Slutför raderingen` — alltså att meddelandet namnger en knapp som inte är den synliga
+   åtgärden i just den renderingen. *(diff)*
+3. En rad kommentar intill BÅDA textblocken som säger att de beskriver samma klassificerade
+   läge från var sin sida av en avmontering, och som namnger testfilen som binder dem. *(diff)*
+4. BIN-925:s biljett — inte bara kodkommentaren — bär åtkomlighetsfyndet i en mening med en
+   namngiven återöppningsutlösare: de tre `setDeletionInProgress(true)`-anropsplatserna
+   (`AuthContext.tsx:536`, `:638`, `:1227`) relativt färskhetsspärrens throw (~`:1190`). *(diff)*
+5. Ingen av biljetterna rör de fyra låsta strängarna eller någon knappetikett. *(diff)*
+
+**Åtkomlighet — #19:s fynd:** läget är INTE nåbart via någon verklig användarväg vid
+`2d67ff7`, härlett statiskt (inte mekaniskt bevisat). BIN-925:s kriterium 1 löses därför
+med alternativ (b): testet formuleras om till vad det bevisligen är, ett defensivt
+kontraktstest av regeln taggen-före-klassificeringen.
+
+**BIN-925 kriterium 2 är `kind: run`** — beslut om texten kräver Malin + #5 Juridik. Kan
+per definition inte produceras av ett bygge. Markeras `awaiting-run`, går till "Behöver dig",
+och är INGEN grund att hålla tillbaka batchen.
+
+## BIN-766 — [Tier C] betygssnittet delas i två av ett felformat id
+
+**Disposition:** build. **Väntar på panelen** (#4, #6, #7, #13) innan första raden kod.
+
+#27:s villkor är redan bindande:
+
+1. Ingen `mediaTypeDocId(pathMediaType, parseTmdbIdFromDocId(...))` utan `Number.isFinite`-spärr
+   emellan — annars skrivs strängen `movie_NaN`.
+2. Formspärr på `users/{uid}/watchlist/{itemId}` `create` i `firestore.rules`, speglad på
+   det befintliga `canonicalSwipeDocId` (`firestore.rules:840-841`), `create`-only.
+3. Invariantkommentaren `runAggregate.ts:118-120` rättas i samma commit — den blir sann
+   först GIVET regelspärren.
+4. Tester: `movie_042` → `movie_42`; legacy-grenen oförändrad; skräp-id hoppas över med
+   varning, aldrig `movie_NaN`.
+
+## BIN-868 — [Tier A] ägarkarts-spärren — **PREMISSEN IFRÅGASATT**
+
+**Väntar på #25.** Urvalspassets egen granskning av main hittade detta:
+
+* `docs/org/gen-ownership-map.test.mjs:32-37` gör redan precis den jämförelse biljetten
+  efterfrågar: `expect(buildMap(tracked).map).toEqual(readJson('docs/org/ownership-map.json'))`.
+* Den filen körs av `npm test` — verifierat: `npx vitest run docs/org/gen-ownership-map.test.mjs`
+  → 1 fil, 11 tester, exit 0. Och `npm test` grindar både `ci.yml` och `deploy.yml`.
+* Filhuvudet i `gen-ownership-map.mjs` rad 9–13 säger att `--check` MEDVETET inte rapporterar
+  kartdrift, just för att testet gör det "instead of waiting for someone to remember a flag".
+  Skrivet i `bfb82f4` **2026-08-12**, samma dag biljetten skapades (15:11).
+
+Alltså: biljettens hål 2 är ett dokumenterat medvetet designbeslut, och skyddet den ber om
+finns redan och blockerar redan deployen. Hål 1 ("körs ingenstans automatiskt") gäller
+SKRIPTET men inte upprätthållandet. #25 fick uppgiften att mäta detta självständigt.
+
+
+## Utfall — mätt, inte påstått
+
+**Efter bygget, HEAD `2d67ff7` + arbetsträdet:**
+
+* `npm test` (efter `rm -rf node_modules/.vite/vitest`) → **258 filer, 4230 passerade, 4 skippade**, exit 0. Basläget var 257/4218.
+* `npm run typecheck` → exit 0.
+* `npx eslint` på alla sju ändrade filer → exit 0.
+* `npm run test:rules` → **6 filer, 330 passerade**, exit 0. Kördes på port 8085 via en
+  egen scratchpad-config: 8080 hölls av **Butlerys** emulator (annat projekt, kanske en
+  levande session) och den rörs inte.
+* `node scripts/check-workflow-map.mjs` → OK, 100 noder, 31 flöden, täckning 76/76.
+
+**Muteringsprov — varje ny spärr prövad mot det avgörande fallet:**
+
+| Mutant | Utfall |
+| -- | -- |
+| Limbo-knappen döps om till "Avsluta raderingen" | BIN-936-testet föll (1 failed / 11 passed) |
+| `&& canonicalWatchlistDocId(itemId)` strykes ur regeln | exakt de 10 alias-fallen föll (10 failed / 241 passed) |
+
+Båda återställdes från scratchpad-snapshot och verifierades med `sha1sum` — identiska.
+Aldrig `git checkout --`.
+
+**#6 Dataskyddsombudets villkor 3 — skarp data, som kritiken inte kunde mäta:**
+`firestore_list_documents` på `titleRatingsAggregate` i `binge-nu` → **262 dokument, hela
+listningen (ingen `nextPageToken`), noll icke-kanoniska id:n, noll utfyllda alias, noll
+id-noll.** Ingen migrering behövs, ingen befintlig delning finns att laga.
+
+## Panelens villkor — hur de landade
+
+Alla fem BIN-766-roller körde blint, var för sig, före första raden kod. Fyra av fem gav
+SUPPORT WITH CONDITIONS; #25 gav BLOCK på BIN-868 (se nedan).
+
+**Två konflikter i panelen, och hur de löstes:**
+
+1. **#4 vs #7 om regelns bredd.** #4 ville spegla `canonicalSwipeDocId` ordagrant, vilket
+   nekar bara-numeriska id:n på create. #7 mätte att det fäller **35 befintliga fixturer**
+   i `firestore-rules.test.ts` och krävde ett uttryckligt val. Valt: #4:s strikta regel,
+   och de 35 fixturerna namnrymdade (30 × `'603'`, 5 × `'1399'`). Skälet: två moduler bygger
+   ett watchlist-doc-id för en SKRIVNING — `WatchlistContext` och `nextAirReadRepair` — och
+   båda gör det via `mediaTypeDocId()` med `tmdbId` typad `number`, så ingen create-väg i
+   appen kan avge en bar eller utfylld form. (`taste/backfill` skriver utan att bygga något
+   id alls; `useFriendsWhoSaw` bygger ett men bara för att LÄSA.) Fixturerna beskrev en
+   värld före BIN-560.
+
+   Den här meningen fälldes av granskarna tre gånger på rad — först "enda skribenten", sen
+   en fix som klumpade in `backfill` bland id-byggarna, sen en som glömde att läsvägarna
+   också bygger id:t. Varje version var ett tal eller ett "exakt N" jag inte hade räknat.
+   Det är lärdomen från BIN-905/918 som slår till igen, och den hör hemma i planen snarare
+   än i koden: kör kommandot före meningen.
+2. **#13 vs #7 om var funktionen bor.** #13 ville flytta `aggregateDocId` till `logic.ts`;
+   #7 ville ha testerna i `runAggregate.test.ts`. Flytten kräver `RatingEvent` och
+   `AggregateLogger`, som DEKLARERAS i `runAggregate.ts` — den hade gett en importcykel för
+   att flytta en funktion. Avvikelse tagen och skriven i testfilens huvud: funktionen står
+   kvar, testerna ligger i `runAggregate.test.ts`. Det gemensamma målet — ett rent test utan
+   emulator, kört av `npm test` — är uppfyllt.
+
+## BIN-868 — STÄNGD SOM OBSOLET, inte byggd
+
+#25 gav **BLOCK** och bevisade det mekaniskt i stället för att lita på biljetten eller
+filens kommentarer: handredigerade in en drift i `ownership-map.json`, körde
+`npx vitest run docs/org/gen-ownership-map.test.mjs`, fick 1 failed / 10 passed med den
+drivande skillnaden utskriven, återställde, bekräftade rent träd.
+
+Skyddet biljetten ber om finns alltså redan, i `gen-ownership-map.test.mjs:32-37`, och
+`npm test` grindar både `ci.yml` och `deploy.yml`. Att bygga det biljetten beskriver hade
+rest en ANDRA, konkurrerande driftkoll bredvid den som fungerar — precis den delade hjärna
+filens eget huvud (rad 9–13, skrivet i `bfb82f4`) argumenterar emot.
+
+## Avvikelselogg
+
+- [discovery] BIN-766: routern gav `medium` på biljettens egen filuppsättning, men #27:s
+  bindande villkor 2 drar in `firestore.rules` → omroutad till `top`, full panel. Tiern
+  följer den FAKTISKA filuppsättningen, inte biljettens.
+- [discovery] BIN-868: premissen granskad mot main före bygget (regeln "kolla biljettens
+  premiss mot main"). Drift-detekteringen finns redan i `gen-ownership-map.test.mjs` och
+  grindar deployen via `npm test`. Inget byggt innan #25 svarat.
+
+## Behöver dig (Tier D / `kind: run`)
+
+- **BIN-766:** manuell deploy efter commit, i DEN HÄR ordningen — `deploy.yml` skickar
+  bara hosting:
+  1. `firebase deploy --only firestore:rules`
+  2. `firebase deploy --only functions`
+
+  Ordningen är inte en stilfråga. Skickas funktionen först är kanoniseringen live medan
+  alias-id:n fortfarande får skapas — exakt det fönster hela regelspärren finns för.
+  `firestore.rules` säger det själv: "Do not ship one half without the other.
+- **BIN-925 kriterium 2:** beslut om de låsta texterna (du + #5 Juridik). Byggs inte här.
+
+---
+
 # BIN-917 + BIN-919 — 2026-08-18
 
 Vald av Malin i ett `--pick`-pass. Båda är verifierat trasiga vid HEAD (`6d157c5`), båda

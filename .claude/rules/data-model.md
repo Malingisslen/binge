@@ -14,9 +14,19 @@ paths:
 
 ```
 users/{uid}                               — profil, preferenser, termsAcceptedAt, onboardingCompletedAt
-users/{uid}/watchlist/{tmdbId}           — status (vill_se/mina/sedd/avbruten), rating, providers, isPublic (denormaliserad)
-users/{uid}/episodeProgress/{tmdbId}     — per-avsnitt watched-state
-users/{uid}/notInterested/{tmdbId}       — gömda titlar från rekommendationer
+users/{uid}/watchlist/{mediaType_tmdbId} — mediaTypeDocId(), t.ex. movie_42 / tv_42 (BIN-560).
+                                           Sedan BIN-766 binder firestore.rules FORMEN på create
+                                           (`^(movie|tv)_(0|[1-9][0-9]*)$`) — communityRatings
+                                           härleder betygsaggregatets nyckel ur den här vägen och
+                                           kanoniserar sifferdelen, så en alias-stavning (movie_042)
+                                           skulle annars landa på samma publika dokument som den
+                                           riktiga titeln och kunna räknas om och om igen.
+                                           update är AVSIKTLIGT ogrindad: ett legacy bara-numeriskt
+                                           dokument måste kunna redigeras vidare.
+                                           Fält: status (vill_se/mina/sedd/avbruten), rating,
+                                           providers, isPublic (denormaliserad)
+users/{uid}/episodeProgress/{mediaType_tmdbId} — per-avsnitt watched-state (alltid tv_N)
+users/{uid}/notInterested/{mediaType_tmdbId}   — gömda titlar från rekommendationer
 users/{uid}/notifications/{notifId}      — inbox
 users/{uid}/blocked/{targetUid}          — blockerade användare
 users/{uid}/following/{targetUid}        — följ-out
@@ -38,7 +48,7 @@ sessions/{id}/swipes/{mediaType_tmdbId}   — mediaTypeDocId(), t.ex. movie_42 /
 
 groups/{groupId}                         — permanenta grupper, inviteToken + inviteTokenRotatedAt
 groups/{id}/members/{uid}
-groups/{id}/watchlist/{tmdbId}
+groups/{id}/watchlist/{mediaType_tmdbId}
 
 usernames/{username}                     — global username-reservation, värdet är { uid }
 reports/{reportId}                       — UGC-moderation, create-only från klient, admin-läses via Console
