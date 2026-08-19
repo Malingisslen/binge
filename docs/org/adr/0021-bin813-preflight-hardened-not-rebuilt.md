@@ -87,9 +87,33 @@ Binding conditions on the rescoped build, from the panel:
    "first chunk failure stays untagged" behaviour is pinned in test with a warning.
 4. No fifth phrasing. The four `classifyDeletionFailure` strings and the limbo-screen text
    are locked and legal-approved.
-5. Any attempt-1 → attempt-2 sequence test belongs in `DeletionLimbo.test.tsx`, not
-   `DeleteAccountSection.test.tsx` — the latter component cannot be reached in that state,
-   so a test placed there is green without covering anything.
+5. An attempt-1 → attempt-2 sequence test must live in the file that can actually
+   OBSERVE the preflight — that is, one that exercises `AuthContext`'s own
+   `deleteAccount`, not a component that mocks it away. `DeleteAccountSection.test.tsx`
+   is still the wrong home: that component cannot be reached in the attempt-2 state, so
+   a test placed there is green without covering anything.
+
+   **Amended 2026-08-19 (Malin), and the original wording is worth keeping visible
+   because acting on it cost a finished batch.** This condition first named
+   `DeletionLimbo.test.tsx` as the required home. That file mocks the whole hook —
+   `vi.mock('@/hooks/useAuth', …)` at line 22 — so it structurally cannot see the
+   preflight inside `AuthContext`, and a sequence test placed there would have been
+   green while covering nothing. The exact failure the condition was written to
+   prevent, one file to the left.
+
+   The builder of sprint 2026-08-14 spotted this, deviated deliberately, and put the
+   coverage in `AuthContext.test.tsx` — where it lives today, as *"the refusal carries
+   BOTH codes the settings UI matches on"*: attempt 1 throws `requires-recent-login`,
+   attempt 2 throws the stale-session preflight code. That is the sequence, proven
+   against the real gate. The outcome grader, holding only this condition and the diff,
+   could answer nothing but `intent=fail`, and reviewed code was withdrawn on a
+   sentence nobody stood behind (BIN-901).
+
+   Two things follow, and both are now mechanical rather than remembered: a condition
+   naming a FILE must first be checked against what that file can observe; and a
+   builder departing from a written criterion declares it, with its source, before
+   grading — which the sprint engine now carries as a first-class outcome
+   (`superseded`), shipped in claude-plugins `9559c55` for BIN-854.
 
 Two findings outside this ticket's scope, filed on Malin's approval the same day:
 

@@ -168,6 +168,14 @@ person to obey it gets switched off.
 > ratio moved the same direction, so nothing there is misleading in substance — but the
 > figures are not current. Disclosed rather than silently re-derived, which is the same
 > discipline as the `correction` rows above. Tracked as BIN-929.
+>
+> **Partly superseded 2026-08-19 (BIN-881/885 pass).** Three figures below WERE re-derived
+> that day and are current: the `ran: false` share (53 of 122 non-`skip` rows), the
+> rubber-stamp rate measured both ways (3% unfiltered / 6% filtered, same numerator of 4),
+> and the `tier` enum breakdown over all 124 `review` rows. Each says the date it was
+> measured. Everything else below is still as this block describes it, and BIN-929 stays
+> open for the rest — a partial re-count that claimed to be a full one would be the same
+> defect in a smaller size.
 
 **Rows with `ran: false` are NOT reviews and must be excluded from every rate.** They exist
 because a review that was OWED and refused has to leave a trace — a repo where nothing
@@ -223,26 +231,36 @@ path, and by THAT reading none of these rows qualifies: 0 of 42 say `approve`. T
 readings, two answers — which is itself the argument for filtering them out explicitly
 instead of relying on whichever one runs.)
 
-What they do today is pad the population — **42 of 93 non-`skip` `review` rows are
-`ran: false`**, of which 32 of 83 were already there at `5ea6c3f`. That pushes the headline
-rubber-stamp rate DOWN, i.e. it flatters the panel: nearly half its "reviews" never sat.
+What they used to do was pad the population, and it is worth keeping the size of that in
+view: **re-counted 2026-08-19, 53 of 122 non-`skip` `review` rows are `ran: false`** — 43%
+of the population was reviews that never sat. (The figure read 42 of 93 when this was first
+written on 2026-08-13; the log has grown since, the proportion has not meaningfully moved.)
 
-> **The shipped scorecard does not filter them yet.** `/org-retro` defines the population
-> in prose as "`review` events, excluding `tier:skip`" — there is no `ran` clause anywhere
-> in the skill. Its only executable one-liner over `events.jsonl` is a worked example that
-> groups rows by `x.type` and applies no tier filter at all. (The older in-repo fork's
-> one-liner DOES filter `tier !== 'skip'` — it is the copy a reader is likeliest to paste,
-> and it has no `ran` clause either.) The live skill lives in `C:/claude-plugins` and
-> must not be edited from this repo (Malin, 2026-08-06), so this rule is prose the analyzer
-> has never read. Tracked as BIN-881. Until it lands, read the rubber-stamp rate as a lower
-> bound and filter `ran !== false` by hand.
+Unfiltered they push the headline rubber-stamp rate DOWN, i.e. they flatter the panel.
+Measured both ways on 2026-08-19, over the same log: **122 rows → 4 rubber-stamps (3%)**
+unfiltered, **69 rows → 4 rubber-stamps (6%)** with `ran !== false`. Same numerator, half
+the denominator — the rate the panel is judged by was being halved by reviews nobody held.
+
+> **The shipped scorecard now filters them (BIN-881, landed 2026-08-19).** `/org-retro`
+> defines its population as "`review` events, excluding `tier:skip` **and excluding every
+> row with `ran: false`**", with the same clause on the trigger-calibration question, and
+> the reason written beside it. The filter is `x.ran !== false`, never `x.ran === true`,
+> so legacy rows carrying no `ran` field at all still count as held. The live skill lives
+> in `C:/claude-plugins` and was changed there, in its own session (Malin, 2026-08-06) —
+> claude-plugins `9559c55`.
+>
+> The in-repo fork under `docs/org/world-watch/local-tooling/` was fixed in the same pass:
+> its calibration one-liner now filters `ran !== false` too, and it no longer dies on the
+> first trigger row (it called `.join()` on `signals`, which the writer emits as a
+> comma-separated STRING — BIN-885).
 
 Those rows also write `panel` as role-title STRINGS rather than the numbers this table
 pins, and `tier` drifts the same way: the table pins the router's `top`/`medium`/`skip`,
-but the log actually holds `single` 53, `full` 10, `medium` 21, `top` 8, `skip` 2 and one
-row with none — the sprint engine writes its own `tierMap` values, and all 42 `ran: false`
-rows are `single` (38) or `full` (4). Both drifts are pre-existing, and both are another
-reason to exclude these rows rather than parse them. Do not trust either enum.
+but the log actually holds (**re-counted 2026-08-19**, 124 `review` rows) `single` 78,
+`medium` 21, `full` 13, `top` 8, `skip` 2, `full-panel` 1 and one row with none — the
+sprint engine writes its own `tierMap` values, and all 53 `ran: false` rows are `single`
+(47) or `full` (6). Both drifts are pre-existing, and both are another reason to exclude
+these rows rather than parse them. Do not trust either enum.
 
 
 > **Legacy tolerance (pre-schema-fix events):** events written before the writer fix carry a
@@ -254,14 +272,24 @@ reason to exclude these rows rather than parse them. Do not trust either enum.
 ### `trigger` — the ExitPlanMode suggest-hook fired *(instrumented — this is the calibration signal)*
 | field | meaning |
 |---|---|
-| `signals` | the high-stakes tokens that matched in the plan |
-| `suggested` | *documented, but ZERO rows carry it* — the live writer emits `fired: true` instead. Pre-existing drift, same class as `signals` |
-| `signals` (shape) | documented above as the matched tokens; the live writer emits a comma-separated STRING, not an array — the fork's calibration one-liner does `(x.signals \|\| []).join(',')` on it, which THROWS `TypeError: (x.signals \|\| []).join is not a function` on the FIRST trigger row (run and confirmed 2026-08-13). The two summary lines print, then the per-trigger correlation loop — the whole point of that section — dies before emitting one line. The falsy branch is unreachable: no row carries an empty string |
+| `signals` | the high-stakes tokens that matched in the plan, as a **comma-separated STRING** — `suggest-stakeholder-review.mjs:39` does `[...hitSet].sort().join(',')` before writing. Not an array. Re-counted 2026-08-19: 19 of 19 `trigger` rows are strings, 0 are arrays |
+| `fired` | always `true` on a written row — the hook only writes when it fires. Re-counted 2026-08-19: 19 of 19 rows carry it |
+| ~~`suggested`~~ | **never existed.** This table used to document it; ZERO rows have ever carried it (re-counted 2026-08-19: 0 of 19). The writer emits `fired`. Corrected by BIN-885 |
+
+> **The `signals`-shape crash, fixed 2026-08-19 (BIN-885).** The in-repo fork's calibration
+> one-liner did `(x.signals || []).join(',')` — and `String.prototype` has no `join`, so it
+> threw `TypeError: (x.signals || []).join is not a function` on the FIRST trigger row. The
+> falsy branch never saved it: no row carries an empty string. What made this invisible for
+> months is that the two summary lines print BEFORE the loop, so the section looked like one
+> that simply had nothing to say rather than one that died. It now handles both shapes and
+> runs through all 19 rows — verified by running it, not by reading it.
 
 > The hook can't know whether a review *actually ran* — `/org-retro` correlates `trigger`
-> events with later `review` events (by time) to score calibration: suggested-and-ran vs
-> suggested-and-ignored, and (via the manual spot-check) high-stakes plans that ran with
-> no trigger at all.
+> events with later `review` events (by time) to score calibration: fired-and-a-review-ran
+> vs fired-and-ignored, and (via the manual spot-check) high-stakes plans that ran with
+> no trigger at all. The correlation counts only reviews that actually happened — rows
+> with `ran: false` are excluded on both sides, since a declined review could never have
+> had a preceding trigger and counting it reads as the hook missing.
 >
 > **Only ad-hoc plans fire this hook.** `/sprint-execute` convenes its panel internally
 > (§2b) without going through ExitPlanMode, so sprint-routed reviews have **no** preceding
