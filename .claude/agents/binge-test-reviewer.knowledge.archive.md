@@ -22304,3 +22304,176 @@ soften any of the above.
 unnecessary (but harmless) rename to `movie_603`; (2) the BIN-936 block's comment overstating that
 it avoids hardcoding a fourth copy of the button label, when the mechanism (query-miss-throws +
 content-miss-reddens) is what actually does the work, not the literal's absence.
+
+## 2026-08-19 — BIN-941 three new tests, doc-id guard vs cascadeVisibilityToItems create race
+
+**Diff reviewed:** `src/test/rules/firestore-rules.test.ts` (+64/-15), `firestore.rules`
+(comment-only, +39/-15), `.claude/rules/accepted-deviations.md` (+34, one new dated entry).
+Three new tests added to `describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)')`:
+1. `the visibility cascade cannot resurrect a deleted bare-numeric item` — no pre-seed,
+   `setDoc(rawWatchlistRef('603'), { effectiveVisibility, isPublic }, { merge: true })`,
+   `assertFails`.
+2. `...not even after it existed and was deleted` — seeds '603' with `validWatchlist()` via
+   `withSecurityRulesDisabled`, `assertSucceeds(deleteDoc(...))` under ENFORCED rules, then
+   repeats test 1's exact assertion.
+3. `and the denial takes its whole batch with it` — `writeBatch` with one canonical
+   (`movie_42`, pre-seeded, so this leg is an UPDATE) and one bare-numeric (`603`, unseeded,
+   so this leg is a CREATE) ref, both `set(merge:true)` with the cascade payload, asserts
+   `batch.commit()` fails as a whole.
+
+**Claim verified by reading `firestore.rules` in full (not `git diff`):** `isValidWatchlistItem`
+(lines 91-166) is a `hasOnly` allowlist with per-field OPTIONAL type/value binds
+(`!('field' in d) || ...`) and literally no required-field clause — confirmed `effectiveVisibility`
+and `isPublic` carry ZERO type/value validation, only list membership. So a two-field
+`{effectiveVisibility, isPublic}` body passes the field check on ANY id, canonical or not, and
+`canonicalWatchlistDocId(itemId)` is the sole gate on a legacy id. The dispatching agent's #27/#7
+premise held up under direct inspection.
+
+**Redundancy analysis (test 2 vs test 1 vs the existing `it.each` '603' row):** Firestore Rules
+decides create-vs-update purely via `resource == null` at eval time — no memory of prior
+document history. Seeding '603', deleting it (an ordinary `allow delete: if isOwner(uid)`, no
+id-guard), then re-attempting the SAME merge-create is rules-evaluation-IDENTICAL to never
+having seeded it at all. Verdict: test 2 does not prove anything test 1 doesn't for the property
+under test (the create-branch id-guard); its only incremental content is the unlabeled
+`assertSucceeds(deleteDoc(...))` step, which is real coverage of a DIFFERENT, generic,
+already-well-covered rule. Reported as a non-blocking test-quality nit, not a defect — flagged
+for possible collapse/relabel, not required.
+
+Test 1 itself, checked against the PRE-EXISTING `it.each` row `['603', 'bare legacy id...']`
+(same file, ~30 lines above): same id, same guard, payload-independent given the no-floor fact
+above — so as a raw mutation-kill-set the two are equivalent TODAY. Kept it anyway as
+legitimate "decided-behaviour needs a test with the REAL caller's payload" documentation
+(repo's own standing principle), not required by discriminating power alone.
+
+Test 3 (batch) is clearly non-redundant: read the `update` rule (firestore.rules:334-336,
+NOT id-gated) and `create` rule (:331-333, id-gated) directly — `movie_42`'s leg is
+independently valid (update, no id check), `603`'s leg is independently denied (create,
+id check fires), so the whole-batch failure genuinely exercises Firestore batch atomicity
+combined with the guard, which nothing else in the file does. Matches the accepted-deviations
+entry's "tar hela sin chunk med sig" cost claim precisely.
+
+**Mutation evidence — checked, not just trusted.** Dispatching agent reported: delete
+`&& canonicalWatchlistDocId(itemId)` from the create rule -> 13/254 red (10 alias rows + all
+3 new tests), full suite 333 green after restore, verified by sha1sum. Could not independently
+reproduce live: `firebase emulators:exec` failed immediately (`Port 8080 is not open... could
+not start Firestore Emulator`) — `netstat` showed a PID already LISTENING on 8080, almost
+certainly the concurrently-running `binge-security-reviewer` per the dispatching agent's own
+warning that a concurrent restore had invalidated a review on this repo before. Chose NOT to
+point my own suite at that live instance (`FIRESTORE_EMULATOR_HOST` override) because both
+reviewers' `beforeEach(() => testEnv.clearFirestore())` would race and corrupt each other's
+runs — this is exactly the collision class the warning named. Fell back to hand-trace per the
+"if a guard blocks a mutation, hand-trace and report as static-only" rule: read both the
+`create` and `update` rules and `canonicalWatchlistDocId`'s regex directly, confirmed the
+reported behavior is consistent with the code as read (id-guard removal makes every '603' case
+pass field validation, since no floor exists, so all four '603'-pivoting tests — the it.each
+row, tests 1/2/3 — must flip together).
+
+**Proposed mutation, hand-traced (looking for a split between the `it.each` table and the 3
+new tests):** loosen `canonicalWatchlistDocId`'s regex to admit leading zeros (e.g. drop the
+`[1-9][0-9]*` restriction) — this would flip 3 `it.each` ALIAS rows (`movie_042`, `042`,
+`tv_0000042`) red while leaving all 3 new tests green, since none of them touch a
+`movie_`/`tv_`-prefixed padded id — they only ever use bare `'603'`. Conclusion: the `it.each`
+table protects a WIDER bug class (numeric-alias canonicalization across prefixed ids) that the
+3 new tests do not cover and were never meant to; they are narrowly scoped to the decided
+cascade-payload/batch-atomicity behavior. No mutation found that separates test 3 from tests
+1/2/the it.each '603' row — all four pivot on the identical `canonicalWatchlistDocId('603')`
+evaluation.
+
+**Removal reviewed:** the test file's BIN-766 header comment was cut from a restated writer
+inventory to a pointer at `firestore.rules`' comment (the enforcement point) — legitimate
+navigation-pointer per `.claude/rules/code-style.md`'s doc-taxonomy, consistent with the
+stated drift history (this file's copy wrong twice in one day). Checked the ONE test whose
+comprehension depended on the removed detail (`a grandfathered bare-numeric item can still be
+edited`, ~line 415) — it retains its OWN unrelated local explanation (lines 410-414, untouched
+by this diff) — so no reader-facing loss there.
+
+**Found independently, not previously flagged by the dispatching agent:** the retained sentence
+"no create path in the app can emit a bare or padded id" (pre-existing text, kept verbatim
+through the edit, not new to this diff) now sits three lines above tests whose entire point is
+that ONE write path (`cascadeVisibilityToItems`, newly documented in this same commit's
+`firestore.rules` change) CAN reach the create branch carrying a bare-numeric id — the id is
+inherited from a pre-existing snapshot rather than freshly "emitted"/constructed, so the
+sentence is defensible under a narrow reading, but it is now genuinely ambiguous in exactly the
+spot where a skimming reader would most want precision. Filed as a non-blocking clarity nit,
+not required for this commit.
+
+**accepted-deviations.md entry read in full:** bounded on all four axes (mechanism/severity/
+scope/time) per the standing rule for waivers; explicitly and repeatedly states the
+canonical-id race is NOT solved and remains open (filed BIN-942), preserves the DPO's
+insistence that the open half be legible rather than folded into the accept. No overclaim
+found.
+
+**Verdict: PASS, 0 blocking.** Two non-blocking notes: (1) test 2 is a near-duplicate of test 1
+for the property under test — its only real incremental value is an unlabeled `allow delete`
+assertion; (2) the retained "no create path... can emit a bare or padded id" sentence should be
+tightened given the tests immediately below it prove a create path CAN carry one via the
+delete-race, even though it doesn't construct it fresh.
+
+## 2026-08-19b — BIN-941 re-review: two advisory notes acted on, mutation re-confirmed live
+
+**Diff re-read (whole file via `Read`, no offset/limit possible — 2370 lines, paged in two
+reads of 947 lines each since the tool's 256KB/page cap forced it):**
+`src/test/rules/firestore-rules.test.ts` staged diff vs HEAD (`b71414a`) is now +71/-15 across
+one hunk: the BIN-766 header comment rewrite and ONE consolidated BIN-941 test (was two in the
+prior pass — the near-duplicate flagged as note 1 is gone, not just relabeled). `firestore.rules`
+(+39/-15, comment-only) and `.claude/rules/accepted-deviations.md` (+34, one new dated entry,
+read in full) are unchanged since the prior pass per the dispatching agent, and `git diff` on
+both confirms zero delta against what that pass already reviewed.
+
+**Note 1 resolution — consolidation, not relabeling.** The surviving test
+(`the visibility cascade cannot resurrect a deleted bare-numeric item`) drives seed→delete→
+merge-create, and its own comment states outright: same rules evaluation as the `it.each`
+table's `'603'` row, no mutation separates them, the only addition is the caller's real
+two-field payload and the delete that produces the state — not extra guard coverage. That is
+an accurate, load-bearing admission rather than a padded justification; it also names the prior
+duplicate ("a second version of this test asserting the never-existed case separately") so a
+future reader knows the collapse was deliberate. No residual redundancy in this describe block
+that isn't disclosed in its own comment.
+
+**Note 2 resolution — wording checked for genuine disambiguation, not just rephrasing.**
+"no create path in the app can emit a bare or padded id" → "no writer CONSTRUCTS a bare or
+padded id", with an explicit second sentence: constructing is what no writer does; REACHING the
+create rule carrying a legacy id read off a snapshot is what `cascadeVisibilityToItems` still
+does, and that write is refused on purpose. Read both sentences together against the two tests
+immediately below (resurrect-attempt, batch-atomicity) — the distinction (construct vs. reach)
+maps exactly onto the code fact (`mediaTypeDocId()`-built ids vs. an id read off `d.ref` in an
+existing snapshot) and resolves the ambiguity flagged last pass rather than trading one vague
+phrase for another.
+
+**Suite re-run live, twice** (`npx vitest run --config vitest.rules.config.ts`, pointed at the
+existing local Firestore emulator on 8080 — `firebase emulators:exec` refused to bind because a
+STALE orphaned `java …firestore…jar` process (PID 27828, uptime 1h29m, no parent shell) already
+held the port; `Get-CimInstance Win32_Process`'s command line confirmed it was a leftover jar,
+not a concurrent reviewer — the Bash `Stop-Process` was classifier-blocked, so left it running
+and pointed vitest at it directly instead, which the suite's own `FIRESTORE_EMULATOR_HOST`
+fallback in `beforeAll` supports): **6 files / 332 tests, all green**, both before and after
+the mutation below (hash-verified restore of `firestore.rules`, `git diff --stat` empty).
+Was 333 before this round's consolidation — the arithmetic matches removing exactly one test,
+not skipping one (`grep -c "it\("`/`.skip` scan: zero `.skip`/`.only`/`xit`/`xdescribe` in the
+staged diff). `npm run typecheck` clean.
+
+**Mutation re-run LIVE this round (previously only hand-traced, port-blocked).** Loosened
+`canonicalWatchlistDocId` in `firestore.rules` from `'^(movie|tv)_(0|[1-9][0-9]*)$'` to
+`'^(movie|tv)_[0-9]+$'` (admits leading zeros), ran with `-t "BIN-766|BIN-941"`: **2 red, not
+3** — `movie_042` and `tv_0000042` flip; the `it.each` table's third listed alias
+(`'042'`, no `movie_`/`tv_` prefix) was already denied by the prefix branch and can never
+react to a zero-padding-only mutation, regardless of what runs. The remaining BIN-941 test and
+the batch test stayed green throughout (13 passed in the filtered run) — both pivot on the bare
+id `'603'` (no leading zero to strip) and the canonical `'movie_42'`, neither touched by this
+mutation. **Qualitative conclusion from the prior pass survives**: the `it.each` table still
+guards a class (prefixed numeric-alias canonicalization) the BIN-941 tests don't and were never
+meant to. **The literal count from the prior pass's archive entry was wrong** — corrected here
+and folded into `binge-test-reviewer.knowledge.md`'s existing hand-trace-under-a-blocked-guard
+bullet: a hand-traced exact count must be re-verified, not repeated as fact, the moment the
+blocker clears. Restored `firestore.rules` from a scratchpad snapshot, verified by md5sum match
+and `git diff --stat` empty before moving on.
+
+**accepted-deviations.md re-checked against the specific bar in this review's brief**: the new
+dated entry (`### [Data/UX] Synlighetskaskaden nekas — med flit …`) states the acceptance is
+scoped to legacy/bare-numeric ids only, and its own "INTE accepterat" paragraph names the
+canonical-id race as open, verified live by #7 QA, filed as BIN-942, with an explicit
+instruction not to read the entry as saying the resurrection problem is solved. Matches the
+task's requirement precisely; no overclaim.
+
+**Verdict: PASS, 0 blocking.** Nothing new flagged — this pass exists to re-verify the prior
+pass's own notes were acted on honestly and to correct one number in its own archive record.
