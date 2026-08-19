@@ -8067,3 +8067,203 @@ vendor-budget gate) rather than introducing a new one.
 
 **REVIEW-VERDICT: pass (0 blocking)**
 
+
+### 2026-08-19 — BIN-766 gap-fill re-review: runAggregate.ts / runAggregate.test.ts (mutated-bytes coverage repair)
+
+**Context.** A prior pass on this same staged diff returned `pass (0 blocking)`, but its coverage was
+invalid for two files: a binge-test-reviewer mutation run was live against
+`functions/src/communityRatings/runAggregate.ts` concurrently, so the reviewed bytes were a MUTATED
+snapshot, and `functions/src/communityRatings/runAggregate.test.ts` was never opened at all. This round
+re-`Read` both against the settled, index-matching tree and re-derived the finding from bytes, not from
+the prior verdict.
+
+**What changed (BIN-766).** `aggregateDocId()` used to return a namespaced watchlist doc id (`movie_…`/
+`tv_…`) VERBATIM. Now it resolves media type from the PATH prefix (body only for a legacy bare-numeric
+id — closing a spoofable-body re-bucketing path), and canonicalises the numeric part through the shared,
+STRICT `parseTmdbIdFromDocId` (`/^[0-9]+$/`, never `Number()` alone), skipping with a `log.warn` on
+non-finite or non-positive. Paired in the SAME commit with `firestore.rules`' new
+`canonicalWatchlistDocId` create-only shape guard (`^(movie|tv)_(0|[1-9][0-9]*)$`), mirroring the
+existing `canonicalSwipeDocId`.
+
+**Q1 — both halves of `!Number.isFinite(tmdbId) || tmdbId <= 0` load-bearing?** Yes, confirmed by two
+DISTINCT test cases: `movie_0` exercises `<=0` alone (`isFinite(0)` true), and `movie_`/`movie_1_2`/
+`movie_xyz`/`tv_` exercise `isFinite` alone (`parseTmdbIdFromDocId` returns `NaN`, and `NaN <= 0` is
+`false`, so dropping the isFinite half would let `movie_NaN` write to `titleRatingsAggregate` — a
+collection Admin-SDK-only and therefore with ZERO rules protection against a malformed id).
+
+**Q2 — does the new code silently skip anything the OLD code attributed, beyond the deliberate alias/
+garbage/zero cases?** Traced the actual OLD/NEW diff (not just the current file). OLD code: `if
+(pathMediaType != null) return docIdRaw` — returned ANY namespaced-prefixed id verbatim with NO digit
+validation at all (`movie_xyz`, `movie_1_2`, `movie_` all "attributed" as garbage doc ids under the old
+code). NEW code correctly reclassifies all of those as skips — matches the documented "deliberate"
+category, not a new loss. One SUBTLER effect surfaced and is NOT a skip-regression but a NEW (bounded,
+non-blocking) collision surface: `canonicalWatchlistDocId`'s digit group `[1-9][0-9]*` has no LENGTH cap,
+and `Number(digits)` loses precision past 2^53 — an account could self-create two distinct arbitrarily-
+long watchlist doc ids (e.g. `movie_9007199254740993` vs `...992`) that canonicalise onto the SAME
+synthetic aggregate doc, self-stuffing a FAKE tmdbId's rating count. Not exploitable against any REAL
+title (no real TMDB id is remotely 2^53-scale, and float rounding can't jump a huge string down to a
+small real id) — same cost class as the already-accepted `movie_1`…`movie_999999` junk-doc volume
+residual (ADR 0015, `canonicalSwipeDocId`), which this very diff's own rule comment cites as precedent
+for `movie_0`. Judged NON-BLOCKING: reported as informational, folded into the knowledge.md doc-id-alias
+principle rather than filed as a ticket (would need Malin's read on whether the existing accepted
+residual is worth revisiting at all — not a defect unique to this diff).
+
+**Q3 — does the test prove WHICH null-return branch each case exits through?** Yes.
+`runAggregate.test.ts`'s `it.each` skip-cases and the `movie_0`/`'603'` cases each assert
+`log.warn.mock.calls[0][0]` contains the specific message (`'unparseable tmdbId'` vs `'unknown
+mediaType'`), and the file's own header comment explains why the body deliberately omits `mediaType` so
+only the id-guard branch is reachable for the namespaced garbage cases — verified this reasoning holds
+by hand-tracing `aggregateDocId` for each fixture.
+
+**Q4 — is the long comment block factually true against the code as it stands?** Traced every claim
+against the diff and against `functions/src/shared/mediaTypeDocId.ts` and `functions/src/
+communityRatings/logic.ts`. All confirmed: path-prefix-wins-body-only-for-legacy; strict-digit parse
+behavior (`movie_`/`movie_1_2` → NaN, not the `Number('')===0` phantom); the legacy bare-numeric branch
+still derives the id from the PATH and canonicalises through the "other door" (`ev('042','movie')` →
+`movie_42`, pinned by test); `ratingDelta`'s 4→5 edit genuinely producing `countDelta: 0` (confirmed
+against `logic.ts`); the `movie_0`-stays-creatable / aggregate-skips-it pairing matches the rules diff
+and its own test. The ONE known imprecision (`firestore.rules`' "WatchlistContext is the sole writer" —
+`nextAirReadRepair.ts` also writes, update-only via `batch.set(..., {merge:true})` onto pre-existing
+docs) was pre-identified as already found/filed; re-confirmed it's still true and did NOT re-file it.
+
+**Accepted-deviations check.** BIN-915's swallowed-transaction accept covers this exact file's `catch`
+block (unchanged by this diff) — not re-flagged. Tillsammans anon-vote/session-expiry accepts are
+unrelated to this surface.
+
+**PoC / mutation status.** `aggregateDocId` is a pure function with 10 unit-test cases covering every
+branch pairwise (canonical unchanged, alias-collapse, legacy-both-doors, four garbage NaN shapes, zero,
+unknown-mediaType, and the anti-spoofing case). The paired rules guard (`canonicalWatchlistDocId`) has a
+live-emulator suite in `firestore-rules.test.ts` (10 `it.each` denial cases sharing the exact alias table,
+plus create-vs-update grandfathering and a "canonical id doesn't excuse an invalid body" additive-guard
+check) — did not re-run the emulator suite this round (no code changed there since the file was already
+read in full and traced by hand against the rule text), relying on Read + hand-trace, consistent with
+"an unchanged file the diff depends on is exempt from re-reading, never from re-derivation."
+
+**New knowledge folded in place** (not appended raw): extended the existing "A LOOSE doc-id parser makes
+ALIASES collide" bullet in knowledge.md with the length-cap/float-precision variant above — same failure
+family (parser/writer mismatch → alias collision), new mechanism (unbounded digit count rather than
+padding), so merged rather than added as a new bullet, and the file was trimmed elsewhere (~600 chars) to
+stay under the 30k cap.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+
+### 2026-08-19 — BIN-766 comment-only re-read: firestore.rules / runAggregate.ts (prose-truth check, not a new code review)
+
+**Context.** Two prior passes on this staged diff both returned `pass (0 blocking)` (see the gap-fill
+entry immediately above). Since the second pass, only comment text changed in both files — verified this
+myself: `git diff HEAD -- firestore.rules functions/src/communityRatings/runAggregate.ts` shows the entire
+delta confined to comment lines (the corrected writer list on `canonicalWatchlistDocId`, the new
+cross-reference paragraph on `canonicalSwipeDocId`, and the `AggregateOutcome` header note); `aggregateDocId`,
+`runCommunityRatingAggregate`, `canonicalWatchlistDocId`'s regex, `canonicalSwipeDocId`'s regex, and the
+`allow create`/`allow update` clauses are byte-identical to what the entry above already reviewed and traced
+line-by-line. No mutation probe needed — nothing executable moved.
+
+**Claim 1 — three writers, verified against the tree, not the comment.** Ran a repo-wide grep for the
+literal `'watchlist'` collection segment (135 files touch the word; narrowed to actual `doc(db, 'users',
+uid, 'watchlist', …)` write call sites) and separately grepped `fsdb()|setDoc|updateDoc|writeBatch` inside
+every component the grep flagged as a plausible direct writer (`StatusButton.tsx`, `QuickAddButton.tsx`,
+`OnboardingFlow.tsx`, `QuickRateModal.tsx`) — all empty, confirming they go through `useWatchlist()` →
+`WatchlistContext.tsx`, not a bypass. Production write sites to `users/{uid}/watchlist/{itemId}` are
+exactly three: `WatchlistContext.tsx` (multiple `batch.update`/`setDoc(...,{merge:true})`/`deleteDoc`, all
+keyed `mediaTypeDocId(mediaType, tmdbId)`), `nextAirReadRepair.ts:172` (`batch.set(...,{merge:true})`,
+`NextAirUpdate.tmdbId: number` confirmed at :57), `backfill.ts:74` (`updateDoc` on `d.id` — reuses an
+existing doc's own id, never reaches create). CSV import (`app/settings/import/page.tsx`) is NOT a fourth
+writer — it calls `upsertTitle` (`useWatchlist()`), i.e. the same `WatchlistContext.tsx` door, confirmed by
+`buildAddPayload.ts`'s own header ("WatchlistContext's two add entry points — upsertTitle (bulk) and
+logViewing"). Group watchlist writes (`groups/{id}/watchlist/...`, `src/lib/firebase/groups.ts`) are a
+different collection, out of scope for this rule. No fourth writer found — the corrected comment is TRUE
+and, as far as a full-repo grep can establish, COMPLETE. The claim it replaced ("WatchlistContext is the
+sole writer") was genuinely false, matching what the entry above had already flagged as a known imprecision.
+
+**Claim 2 — regex twin.** `canonicalWatchlistDocId` (firestore.rules:299) and `canonicalSwipeDocId`
+(firestore.rules:882) both read `id.matches('^(movie|tv)_(0|[1-9][0-9]*)$')` — byte-identical, confirmed by
+Read, not diff. Cross-reference is bidirectional: the watchlist comment names `canonicalSwipeDocId` "in the
+sessions block below" (line 297), and the swipe comment names `canonicalWatchlistDocId` "i
+users/{uid}/watchlist/{itemId}-blocket ovan" (line 875-876) — both point at BIN-797 as the ticket that will
+need to touch both if `movie_0` narrows.
+
+**Claim 3 — `AggregateOutcome`'s `skipped-unknown-media-type` covering two null paths.** Judged
+non-blocking. This is a distinct code path from the one BIN-915's accept governs: `aggregateDocId`'s two
+null returns are a deliberate early-exit `log.warn` before any transaction opens (garbage/legacy id
+shapes), not the transaction `catch` block BIN-915 discusses (which logs `log.error` and returns `{kind:
+'failed'}`). The two reasons ARE already distinguishable — by the `log.warn` text, which the new comment
+explicitly flags as load-bearing and warns not to remove, the same posture BIN-915 already takes toward its
+own `logger.error` line. A hypothetical regression that made `parseTmdbIdFromDocId` return NaN for every
+real id would indeed silently zero out the aggregate under this one label — but that is a pre-existing
+property of code already reviewed and passed in the entry above (Q3 there confirmed the log text, not the
+union member name, is what a test can key on), not something this comment-only diff introduced or
+concealed; the comment if anything makes the collapse MORE visible than the previous, incomplete comment
+did. Not filed as a ticket — informational only, folded nowhere in knowledge.md since it does not change
+what any future review should check (the log-text-is-the-signal principle is already captured under
+"Admin-SDK sweeps and scheduled writers").
+
+**Accepted-deviations check.** Re-read `.claude/rules/accepted-deviations.md` in full this round. BIN-915's
+scope paragraph ("this accept reaches `communityRatingMaintain` and nothing else") covers this file's
+`catch` block, unchanged by this diff — not re-flagged. Tillsammans anon-vote/session-expiry entries
+unrelated to this surface.
+
+No blocking findings. No new failure class — this round exercised "verify a corrected comment against the
+tree by grep, not just against the diff" and "distinguish a deliberate early-exit skip from the swallowed-
+transaction class an accepted deviation actually names", both already covered by the existing "An
+attestation is a load-bearing claim" and BIN-915-scope principles.
+
+**REVIEW-VERDICT: pass (0 blocking)**
+
+## 2026-08-19 — BIN-766 writer-inventory paragraph, round 4: comment-only, verified by grep against the whole tree
+
+**Scope.** `firestore.rules` staged blob 559b867 vs the security-reviewer's last-reviewed blob
+5a294ae (from `review-ledger.jsonl`). Diffed the two blob objects directly (`git cat-file -p
+<sha> > file`, `git diff --no-index`) since the working tree already held the staged content and
+`git diff --cached`/`git diff` both showed nothing useful for "since my last pass". Confirmed: the
+delta is confined to the `canonicalWatchlistDocId` writer-inventory paragraph, prose only — no
+line outside a `//` comment changed. Rule text (`canonicalWatchlistDocId`'s regex, the `allow
+create`/`allow update` clauses, `canonicalSwipeDocId`'s twin comment) is byte-identical to the
+prior reviewed version.
+
+**Independently re-derived the inventory instead of trusting the paragraph's count**, per the
+dispatching agent's own admission that this paragraph had been wrong three times running (false
+"sole writer"; false "all three build via mediaTypeDocId" when backfill.ts builds none; a fourth
+draft still needed the read-site carve-out). Grepped every write verb (`setDoc`/`updateDoc`/
+`deleteDoc`/`batch.set`/`batch.update`/`batch.delete`/`addDoc`/`writeBatch`) against every
+non-test file mentioning `'watchlist'`, excluding `watchlistTags`/`watchlistNotes`
+(different collections) and `groups/{id}/watchlist` (different collection, different rules
+block — the task explicitly warned not to conflate it). Result:
+
+- `src/contexts/WatchlistContext.tsx` has **five** call sites building a watchlist doc id via
+  `mediaTypeDocId()`, not one: `writeTitle` (:683, the true create — `setDoc(...,{merge:true})`
+  on a doc that may not exist), `setRuntime` (:960), `refreshTmdbFields` (:1005), `updateNotes`
+  (:876) — all `setDoc(...,{merge:true})`, technically create-capable — plus `removeItem`'s
+  `deleteDoc` (:1015) and two `batch.update` migration sites (:555, :616). The paragraph
+  collapses all of this to "WatchlistContext.tsx — the create path", which is accurate only at
+  MODULE granularity (one file, one canonical id-builder used everywhere in it) and would be
+  wrong if read as a call-site count. It does not overclaim a count anywhere in its actual
+  wording (it never says "one call site" or "the only write"), so this is not a fourth factual
+  error — but it is the shape the first two errors took, and a future editor tightening this
+  paragraph must not "fix" it into an explicit single-call-site claim without re-grepping.
+- `src/lib/watchlist/nextAirReadRepair.ts:172` — confirmed `batch.set(...,{merge:true})`,
+  `tmdbId: number` at :57, matches the comment exactly.
+- `src/lib/taste/backfill.ts:74` — confirmed `updateDoc(doc(...,d.id), update)`, `d.id` read off
+  an existing `getDocs()` snapshot, builds no id. Matches.
+- `src/hooks/useFriendsWhoSaw.ts:59` — confirmed `getDoc`, read-only. No second read-site found
+  building a watchlist doc id (every other read in the tree uses whole-collection
+  `getDocs`/`onSnapshot`/`collectionGroup`, never a constructed single-doc path) — so the
+  comment's plural "Read sites build this id too" names only one because there is only one;
+  loose plural phrasing, not a wrong count.
+- `functions/src/**`: zero write verbs anywhere against a literal `'watchlist'` path outside
+  `tmdbTosSweep/index.ts:124`'s `batch.update(db.doc(path), ...)` on paths already read via
+  `scanPage`, and `communityRatings/runAggregate.ts`'s `tx.set(docId, ...)`, which targets
+  `titleRatingsAggregate`, a DIFFERENT collection, not `users/{uid}/watchlist`. Confirms "no
+  Cloud Function creates watchlist documents".
+
+No rule-expression, helper-body or allow-clause change to review (comment-only, confirmed by
+blob diff). No blocking findings. `.claude/rules/accepted-deviations.md` re-read in full;
+nothing here touches Tillsammans anon-vote/session-expiry or any other listed entry.
+
+No new failure class this round — this exercised "verify an attestation's claimed count against
+the tree by command, at the granularity the claim is actually made at" (module vs call-site),
+already covered by the existing "A number in prose is unverified" / attestation principles. Not
+folded into knowledge.md; nothing here changes what a future review should check that isn't
+already written down.
+
+**REVIEW-VERDICT: pass (0 blocking)**

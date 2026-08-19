@@ -22185,3 +22185,122 @@ by mutation against the exact scenario that proved it broken, and the fix itself
 decorative test. Also found, not blocking: `.claude/agents/binge-test-reviewer.knowledge.md` is
 ~277KB against its own stated "Cap: 30k chars" — pre-existing, not introduced or worsened
 materially by this pass's fold-in, and condensing it is a separate undertaking out of scope here.
+
+## 2026-08-19 — BIN-766/936/937: doc-id shape guard on watchlist, aggregateDocId branch split, DeletionLimbo binding, addWrite cache
+
+**Diff reviewed (staged, `git diff --cached`):** `firestore.rules` (+23), `.claude/rules/data-model.md`
+(+/-12), `functions/src/communityRatings/runAggregate.ts` (+/-73), `functions/src/communityRatings/
+runAggregate.test.ts` (new, 108 lines), `src/test/rules/firestore-rules.test.ts` (+/-147, of which
+35 lines are `'603'`/`'1399'` -> `'movie_603'`/`'tv_1399'` renames plus a new `describe('doc-id
+format guard (BIN-766)')` block), `src/components/layout/DeletionLimbo.tsx` (+8, comment only),
+`src/components/settings/DeleteAccountSection.tsx` (+7, comment only), `src/components/settings/
+DeleteAccountSection.test.tsx` (+57, new `describe('BIN-936 ...')` block), `src/lib/
+watchlistWrites.addWrite.test.ts` (+/-32, `readFileSync` per-assertion -> shared `beforeAll` cache).
+`tasks/todo.md` (+199, the sprint plan/panel/outcome record - read for context, not graded as
+production code).
+
+**1. The 35 renamed fixtures.** Counted independently: `grep -c` on the diff found exactly 30
+`'603'`->`'movie_603'` and 5 `'1399'`->`'tv_1399'` removed/added line pairs = 35, matching the diff's
+own claim. Traced every removed bare-numeric watchlist-collection reference in `git show
+HEAD:src/test/rules/firestore-rules.test.ts` (23 occurrences under `'watchlist', '603'|'1399'`) and
+confirmed all 23 are among the 35 renamed lines; the only bare-numeric watchlist reference
+remaining post-diff is the deliberate `withSecurityRulesDisabled` seed in the new "grandfathered
+bare-numeric item can still be edited" test. None of the 35 renamed fixtures' own assertions are
+about doc-id SHAPE - they test field-whitelist, type-binds, `<=request.time` ratchets, notes-null
+guard, rating bounds, and owner/auth guards. No test that specifically pinned "a bare-numeric CREATE
+succeeds" was found anywhere in the pre-diff file (all pre-diff bare-'603' creates were
+`assertSucceeds`, none `assertFails`), so nothing was silently defanged by the rename - the subject
+the renames would have defanged (bare-numeric create acceptance) didn't exist as a pinned behavior
+before this diff; it is now explicitly pinned as DENIED in the new block. One cosmetic nit, not
+filed as blocking: the "BIN-505 watchlist notes-null guard" block's two "legacy doc" tests also got
+renamed to `movie_603`, even though neither the `withSecurityRulesDisabled` seed nor the
+subsequent MERGE write is affected by the new create-only guard - harmless, just unnecessary.
+
+**2. New BIN-766 describe block vs. sibling BIN-624.** Read both `it.each` alias tables in full
+(firestore-rules.test.ts:389-399 and :1471-1481) - text-identical entry-for-entry (10 rows: leading
+zero, bare padded alias, padded alias, unknown prefix, wrong namespace, empty suffix, junk suffix,
+non-numeric suffix, bare legacy, wrong case). Grandfathered-update test seeds `'603'` via
+`withSecurityRulesDisabled` then asserts a MERGE succeeds - genuinely proves `update` stays
+ungated (mirrors the swipes sibling). "Canonical id does not excuse an invalid body" test asserts
+`assertFails` on `movie_42` + `notes: 'inline note'` - not vacuous, since `movie_42` alone passes
+the new guard; only the pre-existing notes-null guard denies it, so this specifically proves the
+guards are ANDed, not that one alone gates.
+
+**Mutation run (my own, independently reproducing the reviewer-supplied claim), FIRESTORE
+EMULATOR:** stray `java.exe` (pid 15660) already held port 8080 (unrelated leftover, not started by
+me - confirmed via `netstat`/`tasklist`, left alone per the shared-worktree lesson); worked around
+it using the test file's own `FIRESTORE_EMULATOR_HOST` fallback rather than touching the process.
+Snapshot `firestore.rules` to scratchpad. Removed `&& canonicalWatchlistDocId(itemId)` from the
+`allow create` clause (grepped to confirm 0 occurrences remained), ran
+`FIRESTORE_EMULATOR_HOST=localhost:8080 npx vitest run --config vitest.rules.config.ts src/test/
+rules/firestore-rules.test.ts`: 10 failed / 241 passed, all 10 failures exactly the new
+`it.each` alias-table cases, nothing else moved. Restored from scratchpad, re-ran: 251/251
+green. Matches the reviewer-supplied claim exactly.
+
+**3. `functions/src/communityRatings/runAggregate.test.ts`.** Confirmed it matches
+`vitest.config.ts`'s `functions/src/**/*.{test,spec}.ts` include glob (grepped the config
+directly) and ran standalone under plain `npx vitest run`: 10/10 pass. Read `aggregateDocId`'s
+full new body (`runAggregate.ts:154-172`) - two distinct `null`-return branches (`unknown
+mediaType` vs. `unparseable tmdbId`), each with its own `log.warn` message, and every skip test in
+the new file asserts BOTH `toBeNull()` and `log.warn.mock.calls[0][0]` containing the
+branch-specific substring. Mutation: swapped the two warning-message strings between the
+branches (`unknown mediaType` vs `unparseable tmdbId` at their respective `log.warn` call sites,
+verified landed via grep before running). Result: 6/10 failed - exactly the tests asserting
+`toContain('unparseable tmdbId')` for `movie_0`/junk-suffix cases and `toContain('unknown
+mediaType')` for the bare-id case, confirming the branch-discrimination is real, not decorative.
+Restored from scratchpad snapshot, re-ran clean: 10/10.
+
+**4. `DeleteAccountSection.test.tsx` BIN-936 block.** Read the full file (343 lines). The binding
+test's `getByRole('button', { name: 'Slutfor raderingen' })` embeds the literal string as its own
+query filter - so the describe-block header's claim "reads the button's real label ... not a fourth
+hardcoded copy" is not literally accurate (the literal IS present a fourth time, inside the query).
+Judged the MECHANISM anyway, per the task's framing (does it catch drift in both directions):
+Mutation A - renamed the limbo button label (`DeletionLimbo.tsx:140`, `'Slutfor raderingen'` ->
+`'Avsluta raderingen'`): `getByRole` throws (element not found) -> 1 failed / 11 passed in
+`DeleteAccountSection.test.tsx`, matching the reviewer-supplied claim exactly. Mutation B -
+reworded the production RECENT_LOGIN message (`DeleteAccountSection.tsx:68`, dropped "och tryck pa
+Slutfor raderingen" clause): 3 failed / 9 passed - the main describe's exact-string assertion,
+the BIN-908 second-attempt test, and the BIN-936 binding test's own `toContain` all reddened.
+Both directions genuinely caught; restored both files from scratchpad snapshots, re-ran clean
+(12/12) after each. Verdict: real, non-vacuous binding; the "not a copy" framing in the comment is a
+LOW/non-blocking accuracy nit, not a coverage gap - folded into the knowledge file as a note to
+judge the mechanism, not the self-description.
+
+**5. `watchlistWrites.addWrite.test.ts` beforeAll cache.** Diffed against HEAD: confirmed ZERO
+changes inside any `expect(...)`, the `callers` expected list, or either regex - only
+`readFileSync(f, 'utf8')` call sites replaced with `read(f)` reading from a `Map` populated once in
+`beforeAll`, plus two NEW vacuity assertions (`source.size === files.length`, a non-empty read of a
+known file). Ran standalone: 51/51 green. Mutation - broke the cache: emptied the `beforeAll`
+loop (cache stays empty) and changed `read()`'s cache-miss branch from `throw` to `return s ?? ''`
+(silently treating every file as empty). Result: 2 failed / 49 passed - critically, the
+"finds a real source tree" vacuity-guard test (the NEW `source.size` assertion) failed FIRST,
+and separately the `logViewing`-callers test failed loudly (empty `callers` != expected 2-item list)
+- but the `addItem`-offenders test (`expect(offenders).toEqual([])`) DID silently pass on nothing,
+confirming the exact vacuity trap the task asked about. The suite as a WHOLE still reports red
+(via the vacuity-guard test), so a developer would see the failure and investigate before trusting
+the offenders result - the added self-check test is what prevents this from being a silent
+regression. Restored from scratchpad snapshot, re-ran clean: 51/51.
+
+**Knowledge-file fold-ins (same pass, in place, not appended-only):** (a) the empty-collection
+vacuity bullet gained a clause on `beforeAll`-cache-vs-vacuity for source-scan ratchets; (b) the
+Firestore-rules-testing section gained a new bullet on mass fixture renames triggered by a new
+create-only doc-id guard, with the audit checklist and the reproduced mutation counts; (c) the
+`runAggregate.ts`/BIN-727 mega-bullet gained a short "fifth use of the pattern" clause on
+multi-branch-null discrimination; (d) the rekeyed-rule vacuity bullet's section gained a new short
+bullet on `getByRole(role, {name: LITERAL})` as a cross-component binding idiom. File is
+already ~281KB against its own stated 30k-char cap - pre-existing (noted in the prior 2026-08-18
+archive entry too), not meaningfully worsened by these compact fold-ins, condensing it is out of
+scope for this pass.
+
+**Accepted-deviations check:** read `.claude/rules/accepted-deviations.md` in full. Nothing in this
+diff touches the tmdbTosSweep mutating-mode gate, the Tillsammans anon-vote/session-expiry accepts,
+the visibility fail-open accept, the communityRatingMaintain swallowed-transaction accept (this
+diff does not touch the `catch`/`logger.error` in `runCommunityRatingAggregate`, only
+`aggregateDocId` above it), or the deletion-marker/limbo accepts (DeletionLimbo/DeleteAccountSection
+changes here are comment-only). No accepted-deviation was re-flagged; none applies as a reason to
+soften any of the above.
+
+**Verdict: PASS, 0 blocking.** Two LOW/non-blocking notes only: (1) the notes-null-guard tests'
+unnecessary (but harmless) rename to `movie_603`; (2) the BIN-936 block's comment overstating that
+it avoids hardcoding a fourth copy of the button label, when the mechanism (query-miss-throws +
+content-miss-reddens) is what actually does the work, not the literal's absence.

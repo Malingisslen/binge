@@ -19,8 +19,8 @@ Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons 
   re-run — exactly the target test must fail; restore byte-identical (verify by hash). A `<= 1` range check
   once masked a broken ratchet (BIN-540). Tooling-blocked → restore anyway, label DERIVED. **A stale
   module-transform cache FABRICATES results either way — 3× now:** one mutation per `npx vitest run <file>
-  --no-cache`, never a mutate/restore loop in one process, dump the mutated LINE in the same command. **A
-  leftover mutation-harness file INSIDE `src/test/rules/`** corrupts every LATER run (BIN-624): `git status
+  --no-cache`, never a mutate/restore loop in one process, dump the mutated LINE in the same command. A
+  leftover mutation-harness file INSIDE `src/test/rules/` corrupts every LATER run (BIN-624): `git status
   --porcelain` the test dir first, delete a stray `*mutant*`/`*_poc*` file.
 - **A test title is not coverage** — an `it()` naming "rejects 0 → 1" actually asserted `5`. A mock with FEWER
   FIELDS than the real hook can't exercise what the missing one gates (a `useAuth` mock lacking `user` encodes
@@ -33,9 +33,9 @@ Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons 
   idiom.** BIN-816's guard first detected WRITES: `doc\(\s*\w+\s*,` misses `kit.doc(kit.db,'users',uid)`,
   the style the sanctioned module itself uses, and requiring BOTH a 'ref' and a 'write' regex let a hoisted
   `const ref = doc(...)` through. What works: a **whitelist over the REFERENCE** (naming the doc at all
-  fails; each exemption must also assert the guard call), every exemption still MATCHES, each ALTERNATION
-  pinned by its own unit case (r4 — the `collection()` half was otherwise droppable green), and a fileset
-  floor just under the real count (BIN-838). Residual: segment-form misses a template-literal path.
+  fails; each exemption must also assert the guard call), each ALTERNATION pinned by its own unit case (r4 —
+  the `collection()` half was otherwise droppable green), and a fileset floor just under the real count
+  (BIN-838). Residual: segment-form misses a template-literal path.
 - **`hasOnly` bounds the KEY SET only** — never presence, never values. A merge-written field needs the entry
   AND a per-field bind; one unrecognized key rejects the ENTIRE write (BIN-349/93). A `hasOnly` field with no
   value bind is fine unbound if a SIBLING shipped field of identical shape (rendered only through an
@@ -247,39 +247,41 @@ Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons 
   an operator path.** 'A failed check means could-not-check' (BIN-848/816) covers ERRORS only; a
   SUCCESSFUL-but-wrong read (renamed collection, wrong db id, inverted predicate) makes every candidate
   legitimately absent and one run eats the population. Demand `MAX_PER_RUN` that deletes NOTHING when
-  exceeded, on any sweep whose unit of destruction can't be restored. A purely PROPORTIONAL bound
-  (`> 0.25*checked`) LATCHES — candidates shrink only by deletion, so the backlog disables the sweep for good
-  (under 50 users, ONE orphan of three trips it, r3); require `> max(FLOOR, fraction*checked)` and pin the
-  decisive SMALL case. **The floor BOUNDS the latch, it does not remove it** (r4) — above it the wedge is
-  permanent and cheap to plant (one `signUp` mints a profile-less Auth account). Rate the REFUSAL itself: a
-  RUNBOOK clear-by-hand entry, and any LEGAL doc claim ('deleted within 7 days') a runbook-only fix leaves
-  false. **WHERE it lives:** the admin-free predicate module — extracting the predicate still leaves the CALL
-  unpinned; ask for the filtered SET, not a boolean. Same ceiling on every sibling sweep; check each
-  refusal's fail-safe DIRECTION (`absentUidsFromLookup` refuses `disabled:true` as absent — a suspended
-  account still owns its handle).
+  exceeded. A purely PROPORTIONAL bound (`> 0.25*checked`) LATCHES — candidates shrink only by deletion, so
+  the backlog disables the sweep for good (under 50 users, ONE orphan of three trips it, r3); require
+  `> max(FLOOR, fraction*checked)` and pin the decisive SMALL case. **The floor BOUNDS the latch, it does not
+  remove it** (r4) — above it the wedge is permanent and cheap to plant (one `signUp` mints a profile-less
+  Auth account). Rate the REFUSAL itself: a RUNBOOK clear-by-hand entry, and any LEGAL claim ('deleted within
+  7 days') a runbook-only fix leaves false. **WHERE it lives:** the admin-free predicate module — extracting
+  the predicate still leaves the CALL unpinned; ask for the filtered SET, not a boolean. Check each refusal's
+  fail-safe DIRECTION (`absentUidsFromLookup` refuses `disabled:true` as absent — a suspended account still
+  owns its handle).
 - **A new privileged API call inside an existing function invalidates the post-deploy attestation scoped to
-  the OLD permission.** BIN-848 verified only `firebaseauth.users.get`, claiming its sweep was "the only
-  caller of an Auth user-management API"; BIN-816 added `listUsers` + `deleteUsers` (a DELETE permission). A
-  missing runtime role makes the sweep inert with a green deploy — grep the attestation, name the new
-  permission, add its log-line acceptance bar in the same commit.
+  the OLD permission.** BIN-848 verified only `firebaseauth.users.get`; BIN-816 added `listUsers` +
+  `deleteUsers` (a DELETE permission). A missing runtime role makes the sweep inert with a green deploy —
+  grep the attestation, name the new permission, add its log-line acceptance bar in the same commit.
 - A shared `Set`/`Map` accumulator returned only at loop-end fails twice on a throw from unit K: K+1..M
   skipped, 1..K-1's writes discarded. try/catch-continue per unit, error-REPORTING callback gets its OWN
-  nested try/catch (BIN-848). Three paths writing the same ambiguous '0/success' summary: give the outer
-  `.catch()` a sentinel a legit run can't produce (`-1`, never `0`), require a second ATTEMPTED counter too.
+  nested try/catch (BIN-848). Give the outer `.catch()` a sentinel a legit run can't produce (`-1`, never
+  `0`), require a second ATTEMPTED counter too.
 - **collectionGroup matches by LEAF collection id regardless of parent path** — grep other writers/readers of
   that leaf name before trusting one (`collectionGroup('watchlist')` also matches `groups/{id}/watchlist/{id}`,
-  safe only because those docs lack `status`). Append each page before the `size < PAGE_SIZE` break; uid comes
-  from the doc PATH (`d.ref.parent.parent?.id`), never client content.
+  safe only because those docs lack `status`). uid comes from the doc PATH (`d.ref.parent.parent?.id`), never
+  client content.
 - Bare-tmdbId keying collides movie and TV: grouping keys, state doc ids, FCM `tag`s, inbox ids and action
-  URLs all need `mediaTypeDocId`. Fixing one collection's keying bug → grep every OTHER collection keyed on
-  the same bare id (BIN-523).
+  URLs all need `mediaTypeDocId`. Fixing one keying bug → grep every OTHER collection keyed on the same bare
+  id (BIN-523).
 - A doc-id namespacing migration on a doc holding a MULTI-WRITER map needs a VALUE-level merge, never a
   document-level `??` fallback — the first post-cutover write creates a one-entry namespaced doc HIDING every
   pre-cutover entry (BIN-608 `swipes.votes`; pin a legacy-key test). A doc id is a trust boundary only if it
   appears in the allow-expression, and a FORM guard is not a VOLUME guard: BIN-624's `canonicalSwipeDocId`
   still permits `movie_1`…`movie_999999` (junk-doc cost, ADR 0015).
 - **A LOOSE doc-id parser makes ALIASES collide in a last-write-wins Map** (`'movie_042'` took `movie_42`'s
-  slot, BIN-618): the parser must be the writer's STRICT inverse.
+  slot, BIN-618): the parser must be the writer's STRICT inverse. A STRICT parser can still alias two
+  DIFFERENT ids if the create rule's digit group has no LENGTH cap: unbounded `[1-9][0-9]*` +
+  `Number(digits)` loses precision past 2^53, so two huge id strings can round to one float and
+  canonicalise onto the same doc (BIN-766 review). Same junk-doc cost class as the `movie_1`…
+  `movie_999999` volume residual above — a length cap is worth it only if that residual is revisited.
 
 ## Deploy order (deploy.yml is hosting-only)
 - Order is direction-dependent — decide it. Name a TARGETED command (`--only
@@ -303,11 +305,10 @@ Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons 
 - **When a diff's ticket matches a gap NAMED in a prior entry, re-grep to confirm FULL closure** — a targeted
   fix routinely leaves an identical-pattern sibling unfixed. A ticket AC promising 'a new test proves X' with
   no test file in the diff is itself the finding; same for an ADR's Consequences saying a field 'will be
-  added to `hasOnly()`'. **On a RE-review, MUTATE each accepted fix — never grep for it.** BIN-816 r3: the
-  one-line re-read that closed the round-1 Art. 17 hole sat in a file with 64 passing tests, sixteen named
-  for that ticket, and neutering the clause left 64/64 green. A named test block is not a pin, and a fix
-  nothing pins is one refactor from silently gone. Mutate the WIRING too, not only the predicate a fix
-  extracted into a testable module. **Reproduce the author's own mutation count — it is a claim** (r4:
+  added to `hasOnly()`'. **On a RE-review, MUTATE each accepted fix — never grep for it.** BIN-816 r3: a
+  one-line re-read sat in a file with 64 passing tests, sixteen named for that ticket, and neutering the
+  clause left 64/64 green — a named test block is not a pin. Mutate the WIRING too, not only the predicate a
+  fix extracted into a testable module. **Reproduce the author's own mutation count — it is a claim** (r4:
   'reddens exactly 1 of 66' was 2). When every round shares ONE staged blob there is no per-round diff:
   mtime-sort `git diff --cached --name-only` for the real delta — r4's brief named five files, eight moved.
 - **Shared-checkout hazard: a sibling's mutation loop can land INSIDE your window** — 4× now — so a clean
