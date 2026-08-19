@@ -279,17 +279,40 @@ service cloud.firestore {
       // creating movie_042, movie_0042, movie_00042 … would add one genuine +1 each
       // to a single title's badge. Do not ship one half without the other.
       //
-      // Why no legitimate write can be refused. Two modules build a doc id for a
-      // WRITE here, and both go through mediaTypeDocId() with `tmdbId` typed `number`
-      // — a JS number template-literals without leading zeros, so neither can emit an
-      // alias shape:
+      // Which writes this can refuse, and why that is the intended outcome.
+      //
+      // FOUR modules write here, and they split by MECHANISM, not by safety. The first
+      // two BUILD the id, both through mediaTypeDocId() with `tmdbId` typed `number` —
+      // a JS number template-literals without leading zeros, so neither can emit an
+      // alias shape and neither can ever be refused:
       //   · src/contexts/WatchlistContext.tsx — the create path.
       //   · src/lib/watchlist/nextAirReadRepair.ts:172 — batch.set(…, {merge:true}),
       //     which genuinely CAN create; its `tmdbId` is typed `number` at :57.
-      // src/lib/taste/backfill.ts:74 writes WITHOUT building an id at all: it
-      // updateDoc()s the `d.id` it read off an existing snapshot, so it only ever
-      // touches documents that already exist — grandfathered bare-numeric ones
-      // included, which is why `update` must stay unguarded.
+      // The other two REUSE an id read off a live snapshot, so both can carry a
+      // grandfathered bare-numeric shape:
+      //   · src/lib/taste/backfill.ts:74 — updateDoc(), which cannot create at all, so
+      //     it only touches documents that already exist. That is why `update` must
+      //     stay unguarded.
+      //   · src/contexts/AuthContext.tsx:265 — cascadeVisibilityToItems' batch.set on
+      //     `d.ref` with {merge:true}. An update while the doc exists — but a CREATE if
+      //     the user deletes that title between the getDocs and the commit, and then
+      //     this rule REFUSES it. **That refusal is deliberate** (Malin, 2026-08-19;
+      //     dated entry in .claude/rules/accepted-deviations.md).
+      // The reason it is right is not that resurrecting a deleted doc feels dubious.
+      // It is that a create under a non-canonical id is the alias multiplication this
+      // guard exists to stop — see the paragraph above. Rules read shape, not intent,
+      // and refusing here is the guard doing its documented job.
+      // Cost, accepted: a batch is all-or-nothing, so one refused legacy item withholds
+      // the visibility stamp from up to 449 siblings until the `visibilitySyncPending`
+      // retry re-reads a snapshot the deleted doc has left. Self-healing by construction.
+      //
+      // STILL OPEN, and this guard does NOT close it: the same race on a CANONICAL id
+      // is permitted, because the shape matches and isValidWatchlistItem is a hasOnly
+      // ceiling with no required-field floor. cascadeVisibilityToItems then recreates
+      // the deleted title as a two-field ghost on the public-readable path. Verified
+      // against the emulator, filed as BIN-942. Do not read this block as saying the
+      // resurrect problem is solved — it is solved for legacy ids only.
+      //
       // (Read sites build this id too — src/hooks/useFriendsWhoSaw.ts:59 — but a read
       // cannot reach a create rule, so they are not what this list is about.)
       //

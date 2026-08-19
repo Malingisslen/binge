@@ -362,13 +362,17 @@ describe('users/{uid}/watchlist/{id} subscriptionProviders (BIN-814)', () => {
 //
 // The 35 fixtures in this file that used to create bare-numeric watchlist ids ('603',
 // '1399') were renamed to the namespaced shape in the same commit. That is not a
-// concession to the guard. Two modules build a watchlist doc id for a WRITE —
-// `WatchlistContext.tsx` and `nextAirReadRepair.ts:172` — and both go through
-// `mediaTypeDocId()` with `tmdbId` typed `number`, so no create path in the app can
-// emit a bare or padded id. `taste/backfill.ts:74` writes without building one at all
-// (`updateDoc` on an id read off an existing snapshot), which is what the
-// grandfathered-update case below is about. The fixtures were describing a
-// pre-BIN-560 world.
+// concession to the guard: no writer CONSTRUCTS a bare or padded id, so the fixtures were
+// describing a pre-BIN-560 world. Construct is the precise word — `cascadeVisibilityToItems`
+// can still REACH the create rule carrying a legacy id it read off a snapshot, which is
+// what the BIN-941 tests further down are about, and that write is refused on purpose.
+//
+// The writer inventory that backs that claim lives in ONE place: the comment above
+// `canonicalWatchlistDocId` in `firestore.rules`, which is the enforcement point. It used
+// to be restated here almost verbatim, and the pair drifted — this file's copy was wrong
+// twice in one day while the rules copy was corrected separately (BIN-941, #13's
+// condition 3). Two hand-kept copies of one fact is the drift class this repo keeps
+// re-learning; read it there.
 describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
   const rawWatchlistRef = (db: ReturnType<typeof ownerDb>, id: string) =>
     doc(db, 'users', OWNER, 'watchlist', id);
@@ -417,6 +421,59 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), '603'), {
       status: 'sedd', updatedAt: serverTimestamp(),
     }, { merge: true }));
+  });
+
+  // ── The shape cascadeVisibilityToItems actually sends (BIN-941) ────────────────────
+  //
+  // `AuthContext.tsx`'s `cascadeVisibilityToItems` does `batch.set(d.ref, {…}, {merge:true})`
+  // on refs it read from a snapshot. That is an UPDATE while the document exists — but if the
+  // user deletes the title between the `getDocs` and the `commit`, merge-on-a-missing-doc is a
+  // CREATE, and the guard applies. On a grandfathered bare-numeric id it is refused, and
+  // Malin decided 2026-08-19 that the refusal is correct (see accepted-deviations.md).
+  //
+  // These pin it, because a decided behaviour with no test is one the next refactor reverses.
+  // The `it.each` table above proves the denial with `validWatchlist()` — the FULL payload.
+  // That is not the same proposition: `isValidWatchlistItem` is a `hasOnly` ceiling with no
+  // required-field floor, so a two-field body passes the FIELD check outright and the doc-id
+  // guard is the only thing left standing between it and a write. #27 and #7 both asked for
+  // the caller's real payload rather than a convenient one.
+  const cascadePayload = { effectiveVisibility: 'public', isPublic: true };
+
+  it('the visibility cascade cannot resurrect a deleted bare-numeric item', async () => {
+    // Driven as the sequence a user actually performs — the item exists, they delete it,
+    // and the in-flight cascade then merges onto the ref it read before the delete.
+    //
+    // Worth knowing while reading this: rules decide create-vs-update purely on whether
+    // the document is there NOW, with no memory of it having existed. So the assertion
+    // below is the same rules evaluation as `denies CREATE at 603` in the table above,
+    // and no mutation can separate them. What this adds is the caller's real two-field
+    // payload and the delete that produces the state — not extra guard coverage.
+    // (Test review, 2026-08-19, which caught a second version of this test asserting the
+    // never-existed case separately as if it were a different proposition.)
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', '603'), validWatchlist());
+    });
+    await assertSucceeds(deleteDoc(rawWatchlistRef(ownerDb(), '603')));
+    await assertFails(setDoc(rawWatchlistRef(ownerDb(), '603'), cascadePayload, { merge: true }));
+  });
+
+  it('and the denial takes its whole batch with it — the accepted cost', async () => {
+    // The consequence Malin accepted, stated as a test rather than as prose. The cascade
+    // commits in chunks of 450; a Firestore batch is all-or-nothing, so ONE refused legacy
+    // item withholds the visibility stamp from every sibling in its chunk until the
+    // `visibilitySyncPending` retry re-reads a snapshot the deleted doc has left.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_42'), validWatchlist());
+    });
+    // ONE db handle: `ownerDb()` builds a fresh Firestore instance per call, and a batch
+    // refuses refs from a different one ("Provided document reference is from a different
+    // Firestore instance") — which fails the test for a reason that has nothing to do with
+    // the rules.
+    const db = ownerDb();
+    const batch = writeBatch(db);
+    batch.set(rawWatchlistRef(db, 'movie_42'), cascadePayload, { merge: true });
+    batch.set(rawWatchlistRef(db, '603'), cascadePayload, { merge: true });
+    await assertFails(batch.commit());
   });
 
   // The guard is additive: a canonical-looking path must not buy its way past the field
