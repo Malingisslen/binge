@@ -47,7 +47,12 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
     if (watched) {
       await Promise.all([
         markEpisode(season, episode, watched),
-        updateProgress('tv', tmdbId, season, episode),
+        // BIN-954: one of exactly two watch-intent calls in this file (the other is
+        // markSeasonWatched). Ticking an episode of a series you don't follow is you
+        // saying you watch it, so updateProgress may ADD it with a full payload instead
+        // of writing the identity-less fragment it used to. The four other calls below
+        // deliberately pass nothing.
+        updateProgress('tv', tmdbId, season, episode, { addIfMissing: true }),
       ]);
       // Auto-advance: if this was the last episode of the season, point to next season.
       //
@@ -69,6 +74,15 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
         && episode >= episodeCount
         && isSeasonFullyWatched(progressRef.current, season, episodeCount, episode)
       ) {
+        // BIN-954: no `addIfMissing` — the await above has already written the document,
+        // adding it first if it was missing, so this call is an update. The snapshot has
+        // not landed yet, so `findItem` inside updateProgress is still empty; what keeps
+        // this from being read as "absent" is the session ref updateProgress marks when IT
+        // adds. Passing the flag here instead would re-run the whole add.
+        // The one case where the document is still missing: the add above failed on its
+        // TMDB fetch. Then this call writes nothing either — which is the right outcome,
+        // since a pointer to season+1 on a series that was never added is the fragment
+        // this ticket exists to stop.
         await updateProgress('tv', tmdbId, season + 1, 0);
       }
     } else {
@@ -96,7 +110,8 @@ export function useEpisodeProgressWithSync(tmdbId: number) {
     }
     await Promise.all([
       markSeason(season, episodeCount),
-      updateProgress('tv', tmdbId, season, episodeCount),
+      // BIN-954: the second and last watch-intent call — see markEpisodeWatched above.
+      updateProgress('tv', tmdbId, season, episodeCount, { addIfMissing: true }),
     ]);
   }, [markSeason, updateProgress, tmdbId]);
 

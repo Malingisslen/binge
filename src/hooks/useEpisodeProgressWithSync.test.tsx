@@ -122,12 +122,17 @@ describe('season 0 never reaches the watchlist marker (BIN-679)', () => {
   });
 });
 
+// BIN-954. `toHaveBeenCalledWith` matches the argument list EXACTLY, so every assertion
+// in this file is also the pin on which calls carry the add-intent flag and which do not.
+// Two carry it — the tick and markSeasonWatched, the two gestures that mean "I am watching
+// this" — and the four un-tick / auto-advance calls must not, or un-ticking an episode
+// would add the series the user is stepping away from.
 describe('numbered seasons are unchanged (BIN-679 must not touch them)', () => {
   it('ticking a numbered episode still writes the marker', async () => {
     const { result } = renderHook(() => useEpisodeProgressWithSync(DOCTOR_WHO));
     await act(async () => { await result.current.markEpisodeWatched(4, 3, true); });
 
-    expect(updateProgress).toHaveBeenCalledWith('tv', DOCTOR_WHO, 4, 3);
+    expect(updateProgress).toHaveBeenCalledWith('tv', DOCTOR_WHO, 4, 3, { addIfMissing: true });
   });
 
   it('still auto-advances on a genuinely completed numbered season', async () => {
@@ -135,7 +140,10 @@ describe('numbered seasons are unchanged (BIN-679 must not touch them)', () => {
     const { result } = renderHook(() => useEpisodeProgressWithSync(DOCTOR_WHO));
     await act(async () => { await result.current.markEpisodeWatched(4, 3, true, 3); });
 
-    expect(updateProgress).toHaveBeenNthCalledWith(1, 'tv', DOCTOR_WHO, 4, 3);
+    expect(updateProgress).toHaveBeenNthCalledWith(1, 'tv', DOCTOR_WHO, 4, 3, { addIfMissing: true });
+    // BIN-954: the follow-up carries NO flag — the call above has already written (and if
+    // necessary created) the document, so this one is always an update. Handing it the
+    // flag would re-run the whole add: a second TMDB fetch and a second analytics event.
     expect(updateProgress).toHaveBeenNthCalledWith(2, 'tv', DOCTOR_WHO, 5, 0);
   });
 
@@ -151,6 +159,47 @@ describe('numbered seasons are unchanged (BIN-679 must not touch them)', () => {
     const { result } = renderHook(() => useEpisodeProgressWithSync(DOCTOR_WHO));
     await act(async () => { await result.current.markSeasonWatched(2, 13); });
 
-    expect(updateProgress).toHaveBeenCalledWith('tv', DOCTOR_WHO, 2, 13);
+    expect(updateProgress).toHaveBeenCalledWith('tv', DOCTOR_WHO, 2, 13, { addIfMissing: true });
+  });
+});
+
+// BIN-954, acceptance criterion 6, asserted as ONE statement over the whole surface rather
+// than left implicit in the per-gesture tests above. The negative half is the load-bearing
+// one: an un-tick that carried the flag would add the series you are stepping away from.
+describe('the add-intent flag reaches exactly the two watch gestures (BIN-954)', () => {
+  it('the non-watch calls pass no options object at all', async () => {
+    // Season 3 holds exactly one watched episode, so a single tick completes it (driving
+    // the auto-advance) and a single un-tick empties it (driving the 0,0 reset).
+    base.progress = progressOf({ 3: { 1: true } });
+    const { result } = renderHook(() => useEpisodeProgressWithSync(DOCTOR_WHO));
+
+    // a watch gesture, plus the auto-advance it triggers
+    await act(async () => { await result.current.markEpisodeWatched(3, 1, true, 1); });
+    // un-tick the only watched episode → the 0,0 reset
+    await act(async () => { await result.current.markEpisodeWatched(3, 1, false); });
+    // un-tick the whole season → the same reset by the other route
+    await act(async () => { await result.current.markSeasonUnwatched(3, [1]); });
+
+    // toHaveBeenNthCalledWith matches the argument list exactly, so a 4-argument
+    // expectation FAILS if a 5th sneaks in. One of these four is the watch gesture.
+    expect(updateProgress.mock.calls).toHaveLength(4);
+    expect(updateProgress).toHaveBeenNthCalledWith(1, 'tv', DOCTOR_WHO, 3, 1, { addIfMissing: true });
+    expect(updateProgress).toHaveBeenNthCalledWith(2, 'tv', DOCTOR_WHO, 4, 0);
+    expect(updateProgress).toHaveBeenNthCalledWith(3, 'tv', DOCTOR_WHO, 0, 0);
+    expect(updateProgress).toHaveBeenNthCalledWith(4, 'tv', DOCTOR_WHO, 0, 0);
+    // Three of the hook's four non-watch call sites are driven here (auto-advance, the
+    // un-tick reset, the season un-tick). The fourth — the un-tick that falls back to a
+    // LOWER position instead of to 0,0 — is pinned in the same exact-argument form by
+    // 'un-ticking a numbered episode still falls back to the highest numbered one' above.
+  });
+
+  it('the two watch gestures both pass it', async () => {
+    const { result } = renderHook(() => useEpisodeProgressWithSync(DOCTOR_WHO));
+    await act(async () => { await result.current.markEpisodeWatched(4, 3, true); });
+    await act(async () => { await result.current.markSeasonWatched(2, 13); });
+
+    expect(updateProgress.mock.calls).toHaveLength(2);
+    expect(updateProgress).toHaveBeenNthCalledWith(1, 'tv', DOCTOR_WHO, 4, 3, { addIfMissing: true });
+    expect(updateProgress).toHaveBeenNthCalledWith(2, 'tv', DOCTOR_WHO, 2, 13, { addIfMissing: true });
   });
 });

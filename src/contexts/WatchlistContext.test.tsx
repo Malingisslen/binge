@@ -47,6 +47,23 @@ vi.mock('@/lib/firebase/utils', () => ({
   toDate: (v: unknown) => v ?? null,
 }));
 
+// BIN-954: updateProgress reaches TMDB (dynamic import, same shape as the groups sync
+// above) when it has to ADD a series the user just started ticking. Only getTVShowLite is
+// stubbed — `extractYear` stays REAL so the releaseYear assertion proves the actual
+// derivation rather than a fixture echo.
+const getTVShowLite = vi.fn();
+vi.mock('@/lib/tmdb/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/tmdb/client')>();
+  return { ...actual, getTVShowLite: (...args: unknown[]) => getTVShowLite(...args) };
+});
+
+// BIN-954: the add path's only failure channel — a TMDB error must be reported, not
+// swallowed into silence, and must NOT fall back to writing the identity-less fragment.
+const captureError = vi.fn();
+vi.mock('@/lib/sentry', () => ({
+  captureError: (...args: unknown[]) => captureError(...args),
+}));
+
 // --- Firestore-mock --------------------------------------------------------
 // lazySubscribe: kör attach() synkront och exponerar onSnapshot-callbacken
 // så testet kan driva snapshot-sekvensen manuellt. BIN-164: contexten har nu
@@ -173,7 +190,7 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 let upsertTitleRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
 let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
 let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
-let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number) => Promise<void>) | null = null;
+let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<void>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
 let removeItemRef: ((mediaType: MediaType, tmdbId: number) => Promise<void>) | null = null;
 let updateTagsRef: ((mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>) | null = null;
@@ -239,6 +256,8 @@ beforeEach(() => {
   deleteDoc.mockClear();
   buildStatusUpdate.mockClear();
   syncProgressToGroups.mockClear();
+  getTVShowLite.mockReset();
+  captureError.mockClear();
   snapshotCallback = null;
   tagsSnapshotCallback = null;
   notesSnapshotCallback = null;
@@ -552,6 +571,269 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
         uid: 'u1', tmdbId: 5, lastWatchedSeason: 2, lastWatchedEpisode: 3, status: 'mina',
       }),
     );
+  });
+
+  // --- BIN-954 -------------------------------------------------------------
+  // Ticking an episode on a series you do NOT follow used to write a document carrying
+  // ONLY lastWatchedSeason/lastWatchedEpisode/updatedAt — no tmdbId, no mediaType, no
+  // status, no title. Same broken document BIN-942 is about, but reached by an ordinary
+  // deliberate gesture instead of a race, every time. Malin, 2026-08-20: add the series
+  // properly, with a full payload.
+  //
+  // The three identity fields asserted below are exactly the ones BIN-942's create-floor
+  // will require, which is why this ticket blocks that one.
+  const TV_SHOW = {
+    id: 1399,
+    name: 'Sagan om is och eld',
+    original_name: 'Game of Thrones',
+    poster_path: '/got.jpg',
+    first_air_date: '2011-04-17',
+    number_of_seasons: 8,
+    genres: [{ id: 18, name: 'Drama' }, { id: 10765, name: 'Sci-Fi & Fantasy' }],
+    status: 'Ended',
+  };
+
+  it('BIN-954: ticking an episode on an untracked series ADDS it with a full payload', async () => {
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await mountSeeded([]); // settled snapshot, empty library — the title is genuinely absent
+
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [ref, payload] = setDoc.mock.calls[0] as [{ _path: string }, Record<string, unknown>];
+    expect(ref._path).toBe('users/u1/watchlist/tv_1399');
+    // The three whose absence IS the bug.
+    expect(payload.tmdbId).toBe(1399);
+    expect(payload.mediaType).toBe('tv');
+    expect(payload.status).toBe('mina');
+    // ...and the display fields, so the row is not a blank line in the library.
+    // preferOriginalTitle: the Latin original wins over the localized name.
+    expect(payload.title).toBe('Game of Thrones');
+    expect(payload.posterPath).toBe('/got.jpg');
+    // Real extractYear (only getTVShowLite is stubbed), so this is a derivation, not an echo.
+    expect(payload.releaseYear).toBe(2011);
+    // The position rides in the SAME write: one Firestore write per gesture, not two.
+    expect(payload.lastWatchedSeason).toBe(2);
+    expect(payload.lastWatchedEpisode).toBe(5);
+    // No half-stamped provider group — shouldStampProvidersAtAdd needs BOTH provider
+    // fields, and supplying neither is what keeps the title page's repair reachable.
+    expect(payload.providersCheckedAt).toBeUndefined();
+
+    await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalledTimes(1));
+    expect(syncProgressToGroups).toHaveBeenCalledWith(expect.objectContaining({ status: 'mina' }));
+  });
+
+  it('BIN-954: the same gesture on a series ALREADY in the library still writes progress only', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+
+    await act(async () => {
+      await updateProgressRef!('tv', 5, 2, 3, { addIfMissing: true });
+    });
+
+    // The intent flag is permission to add a MISSING title, never a re-add of a present
+    // one: progress must still never touch status (WatchlistContext's own rule).
+    expect(getTVShowLite).not.toHaveBeenCalled();
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.status).toBeUndefined();
+    expect(payload.title).toBeUndefined();
+    expect(payload.lastWatchedSeason).toBe(2);
+  });
+
+  it('BIN-954: UN-ticking on an untracked series writes nothing at all — no fragment', async () => {
+    await mountSeeded([]);
+
+    await act(async () => {
+      // The un-tick path (and markSeasonUnwatched) pass no intent, deliberately: removing
+      // an episode is not "I am watching this". Before this ticket the merge-write below
+      // created the identity-less ghost anyway.
+      await updateProgressRef!('tv', 1399, 0, 0);
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(getTVShowLite).not.toHaveBeenCalled();
+    // The group sync still fires on the write-nothing branch: a series followed only
+    // inside a group (SeasonPageClient with ?fromGroup=) is absent from the personal
+    // library but its progress still belongs to the group.
+    await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalledTimes(1));
+  });
+
+  it('BIN-954: during a cold load the OLD merge-write is kept — the add is never guessed', async () => {
+    // No snapshot delivered, so the listener has not settled. "Absent from items" and
+    // "absent from Firestore" are indistinguishable here, and guessing "add it" could
+    // rewrite the status of a series the user had set to 'avbruten'. This negative case is
+    // what stops the add branch from quietly becoming unconditional.
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+    });
+
+    expect(getTVShowLite).not.toHaveBeenCalled();
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.status).toBeUndefined();
+    expect(payload.lastWatchedSeason).toBe(2);
+    expect(payload.lastWatchedEpisode).toBe(5);
+  });
+
+  // #27 Database Administrator, binding condition 1 (blind critique 2026-08-20).
+  it('BIN-954: the auto-advance write inside the SAME gesture is not dropped', async () => {
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await mountSeeded([]);
+
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+      // useEpisodeProgressWithSync's auto-advance: same gesture, intentionally NO flag,
+      // and the snapshot has not landed — so findItem is still empty. Without the
+      // session ref this second call would read as "absent, no intent" and be silently
+      // dropped, losing the season+1 pointer for the very gesture that created the row.
+      await updateProgressRef!('tv', 1399, 3, 0);
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    // Added ONCE. A second add would mean a second TMDB fetch and a second analytics event.
+    expect(getTVShowLite).toHaveBeenCalledTimes(1);
+    expect(trackEvent.mock.calls.filter(c => c[0] === 'title_added_watchlist')).toHaveLength(1);
+    const [, second] = setDoc.mock.calls[1] as [unknown, Record<string, unknown>];
+    expect(second.lastWatchedSeason).toBe(3);
+    expect(second.lastWatchedEpisode).toBe(0);
+    expect(second.status).toBeUndefined(); // an update, not a second add
+  });
+
+  // #27 Database Administrator, binding condition 2 (blind critique 2026-08-20).
+  it('BIN-954: a TMDB failure writes nothing, reports it, and leaves the add retryable', async () => {
+    getTVShowLite.mockRejectedValueOnce(new Error('tmdb down'));
+    await mountSeeded([]);
+
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+    });
+
+    // Never the fragment: no title data means no honest document.
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ scope: 'watchlist', kind: 'updateProgress-add' }),
+    );
+
+    // Self-correcting: the failed attempt is NOT memoised, so the next tick adds for real.
+    // That is what makes the residual (a tick recorded in episodeProgress with no library
+    // row) temporary rather than permanent.
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 6, { addIfMissing: true });
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.tmdbId).toBe(1399);
+    expect(payload.status).toBe('mina');
+  });
+
+  // The integration reviewer's blocking finding, 2026-08-20. `addedByProgressRef` is a
+  // SECOND cache of "this document exists", and removeItem pruned only the first
+  // (`itemsRef`). Add-by-ticking then remove is the likeliest sequence a user performs,
+  // and it turned every later progress write back into a fragment-creator.
+  it('BIN-954: a series added by ticking and then removed does not resurrect as a fragment', async () => {
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await mountSeeded([]);
+
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+
+    // "Undo what I just did" — and no snapshot lands in between, which is the whole point.
+    await act(async () => {
+      await removeItemRef!('tv', 1399);
+    });
+    setDoc.mockClear();
+
+    // Un-ticking carries no watch intent, and the document is gone. A stale session mark
+    // would read as "it exists", send this down the merge branch, and CREATE the ghost.
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 0, 0);
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // The narrower half of the same defect, found by the code reviewer one round later.
+  // Pruning the session mark inside removeItem only helps when the add has already
+  // finished. Firestore applies a pending write optimistically, so "Ta bort" becomes
+  // clickable the moment the add's setDoc is ISSUED — a removal in that window prunes a
+  // key that is not there yet, and the add then writes it back over a deleted document.
+  it('BIN-954: a removal issued WHILE the add is in flight leaves no stale mark', async () => {
+    await mountSeeded([]);
+    // Hold the TMDB fetch open so the add is provably still in flight during the removal.
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let addSettled = false;
+    let add!: Promise<void>;
+    await act(async () => {
+      add = updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true })
+        .then(() => { addSettled = true; });
+    });
+    expect(addSettled).toBe(false);
+
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => { releaseShow(TV_SHOW); await add; });
+    setDoc.mockClear();
+
+    // The document is deleted. A mark that outlived it would send this un-tick down the
+    // merge branch and re-create the identity-less fragment.
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 0, 0);
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // Kills a mutant the first round of tests left alive: deleting the `mediaType === 'tv'`
+  // guard changed nothing observable. No production caller can pass a film (films have no
+  // episodes, verified by grep — all six call sites pass 'tv'), so the guard's only job is
+  // to stop a FUTURE caller from adding one, and the payload hardcodes mediaType: 'tv'.
+  it('BIN-954: the add branch is TV-only — a progress write never adds a film', async () => {
+    await mountSeeded([]);
+
+    await act(async () => {
+      await updateProgressRef!('movie', 550, 1, 1, { addIfMissing: true });
+    });
+
+    expect(getTVShowLite).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  // Kills the other surviving mutant: moving the session mark to BEFORE the write left the
+  // suite green, because `known` is computed before any await, so no sequence of SUCCESSFUL
+  // calls can tell the two apart. A FAILED write can — and that is exactly the property the
+  // ordering exists for.
+  it('BIN-954: an add whose write FAILS stays retryable — the session mark is never a lie', async () => {
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await mountSeeded([]);
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await act(async () => {
+      await expect(updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true })).rejects.toThrow();
+    });
+
+    // The write never landed, so the document does not exist. Marking it as present before
+    // the write would send the next gesture down the merge branch — a create of the very
+    // fragment this ticket removes. The retry must be a full add.
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 6, { addIfMissing: true });
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    const [, second] = setDoc.mock.calls[1] as [unknown, Record<string, unknown>];
+    expect(second.tmdbId).toBe(1399);
+    expect(second.mediaType).toBe('tv');
+    expect(second.status).toBe('mina');
   });
 
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {

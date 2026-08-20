@@ -1,3 +1,686 @@
+# BIN-954 — att bocka av ett avsnitt på en serie du inte följer skapar ett halvt dokument
+
+**Status:** v2 — #27:s blinda kritik körd och invikt (SUPPORT WITH CONDITIONS, tre
+villkor, ingen omroutning). Byggt och grönt. Blockerar BIN-942 (planen längre ned).
+
+Router på den faktiska filuppsättningen
+(`src/contexts/WatchlistContext.tsx`, `src/hooks/useEpisodeProgressWithSync.ts`,
+`src/lib/watchlist/buildAddPayload.ts`) — rå utdata:
+`tier: "medium"`, `reasonCode: "owned"`, `panel: [27]`, `highStakes: []`,
+`unownedCode: []`, `unmappedCode: []`.
+Alltså: **en blind kritik från #27 Database Administrator / Data-layer Engineer**
+före första Edit. Vidgar kritiken filuppsättningen (t.ex. in i `firestore.rules`)
+körs routern om (BIN-766-lärdomen).
+
+**Basläge, HEAD `409d19f`:** `git status --porcelain` → bara `tasks/todo.md`.
+
+**Utfall, mätt efter bygget** (`rm -rf node_modules/.vite/vitest` före varje körning):
+`npm test` → **258 filer, 4242 passerade, 4 skippade, 0 fel.** Basläget var 258/4230/4,
+alltså +12 nya tester (10 i `WatchlistContext.test.tsx`, 2 i hookens fil).
+`npx tsc --noEmit` → tyst. `npx eslint` på de fyra rörda filerna → 0 fel
+(3 kvarstående `_args`-varningar som fanns före ändringen).
+
+**En körning av fyra föll**, med ett test jag inte hann fånga namnet på; de tre därefter var
+gröna med identiska siffror. Redovisat som det är — inte bortförklarat — men inte heller
+utrett, eftersom det inte gick att återskapa. Misstanken är samma kall-cache-timeout som
+BIN-937 handlade om (körningen låg direkt efter en `rm -rf` av vite-cachen).
+
+**Muteringsprövat, sju mutanter, alla fällda** (patchen assertad före OCH efter körningen,
+återställning från scratchpad-kopia verifierad med `md5sum`):
+`known` utan sessionsmängden → 1 fallet test; `if (known || !libraryKnown)` → `if (known)`
+→ 1; `addIfMissing: true` flyttad till avbockningsvägen → 2; raderingens rensning av
+sessionsmängden borttagen → 1; `mediaType === 'tv'`-vakten borttagen → 1; markeringen
+flyttad till före skrivningen → 1; raderingsräknarens kontroll borttagen → 1.
+
+## Klarspråk
+
+Bockar du av ett avsnitt på en serie du **inte** följer sparar appen idag en trasig,
+halv rad i ditt bibliotek: ingen titel, ingen affisch, ingen status. Den syns som en
+tom rad — även på din publika profil — och raderingsknappen kan inte träffa den.
+
+Efter fixen: bockar du av ett avsnitt på en serie du inte följer **läggs serien till
+på riktigt** (titel, affisch, år, status "Följer") tillsammans med din position.
+Malins beslut 2026-08-20. Bockar du *bort* ett avsnitt på en serie du inte följer
+läggs ingenting till — och inget halvt dokument skrivs längre.
+
+**En följd som Malin bör känna till** (integrationsgranskningen, varv 3): det här gäller
+även när man bockar av ett avsnitt inifrån en GRUPP. Öppnar du en säsongssida via en grupps
+watchlist (`?fromGroup=`) och bockar av ett avsnitt, hamnar serien i ditt EGET bibliotek
+under "Följer". Det följer direkt av beslutet — en bockning är en bockning oavsett var man
+står — men det är en ny sak som händer på en yta som förut bara rörde gruppen.
+
+## Vad som är fel — mätt
+
+`updateProgress` (`src/contexts/WatchlistContext.tsx:890` vid HEAD `409d19f`, före ändringen)
+grindar bara på `if (!uid) return;`
+och gör sedan `setDoc(ref, { lastWatchedSeason, lastWatchedEpisode, …visFields, updatedAt }, { merge: true })`.
+Finns inget dokument är det en **create** av ett fältfragment.
+
+Anropsställen, räknade med kommandot:
+`grep -c "updateProgress('tv'" src/hooks/useEpisodeProgressWithSync.ts` → **6**
+(rad 50, 72, 84, 86, 99, 118 vid HEAD `409d19f`). Radnumren efter ändringen står medvetet
+INTE här: två granskningsrundor i rad rättade dem, och båda rättelserna var själva fel
+inom en timme — varje ny kommentarsrad i filen flyttar dem. Det som behövs är
+uppdelningen: **två** tittar-anrop, **fyra** som inte är det.
+`grep -rn updateProgress src --include=*.ts --include=*.tsx`, filtrerat på SÖKVÄG utanför
+hooken och kontexten, ger **noll** produktionsanropare och **fem** träffar som alla är
+kommentarer (`useGroupMemberProgress.ts:21`, `groups.ts:569/572/717`,
+`canonicalSpecials.ts:27`). **Rättelse:** v1 skrev "fyra" — det talet kom av ett filter på
+radinnehåll i stället för på sökväg, vilket åt upp en av träffarna. Den bärande halvan
+(noll anropare) stod sig. Alla sex passerar `'tv'`; `updateProgress` når aldrig en film.
+
+De sex delar sig i två avsikter:
+
+* **Tittar-avsikt (2):** rad 50 (bocka av ett avsnitt) och rad 99 (markera hel säsong sedd).
+* **Inte tittar-avsikt (4):** rad 72 (auto-advance till nästa säsong, körs EFTER att rad 50
+  redan skrivit), rad 84/86 (avbocka ett avsnitt) och rad 118 (avbocka en hel säsong).
+
+Kalendern kan inte nå felet: `useCalendarEntries` bygger avsnittsposter enbart ur
+`getByStatus('mina','tv')`, alltså serier som redan finns i biblioteket. Reellt nåbara
+vägar är säsongssidan (`SeasonPageClient`) och seriesidans säsongslista
+(`TVShowPageClient:501` → `SeasonList`), som båda skickar `markEpisodeWatched` ogrindat.
+
+## Vad som byggs
+
+**Allt i `updateProgress`.** Ingen grind i `SeasonPageClient`, `EventCard`,
+`TVShowPageClient`, `SeasonList` eller `SeasonEpisodePanel` — de rörs inte alls.
+
+### 1. Avsikten skickas in, den gissas inte
+
+`updateProgress` får ett femte, valfritt argument:
+`opts?: { addIfMissing?: boolean }`. Hooken skickar `{ addIfMissing: true }` på **exakt
+två** ställen (rad 50 och rad 99) och ingenting på de fyra andra.
+
+Varför inte härleda avsikten ur positionen (`season > 0 || episode > 0`): en avbockning
+ned till en lägre position är också en position skild från noll, så härledningen skulle
+lägga till serien när användaren gör tvärtom. Avsikten finns bara hos anroparen.
+
+Auto-advance (rad 72) får medvetet INTE flaggan: den körs efter att rad 50:s skrivning
+committats, så dokumentet finns redan. Utan den regeln hade den andra skrivningen
+(snapshoten hinner inte landa emellan, så `findItem` är fortfarande tom) blivit ett
+andra fullständigt tillägg med en andra `title_added_watchlist`-händelse.
+
+### 2. Fyra grenar i stället för en
+
+```
+const known = current != null || addedByProgressRef.current.has(`${uid}:${docId}`);
+const libraryKnown = firstSnapshotSettledRef.current && !listenerFailedRef.current;
+
+A. known                    → oförändrat: merge-skrivning av bara progressfälten.
+B. !known && libraryKnown && opts.addIfMissing && mediaType === 'tv'
+                            → fullständigt tillägg (nedan).
+C. !known && libraryKnown   → INGEN skrivning alls. Det finns inget att uppdatera,
+                              och en merge här är per definition en create av ett fragment.
+D. !known && !libraryKnown  → oförändrat (gren A:s skrivning).
+```
+
+`addedByProgressRef` är #27:s villkor 1 (se nedan): en sessionsmängd över doc-id som
+DENNA funktion just skapat. Snapshoten har inte landat när auto-hoppet körs, så utan
+den läser gren C "finns inte" och sväljer auto-hoppets skrivning. Märks först EFTER
+att skrivningen gått igenom, så ett misslyckat tillägg förblir omförsökbart. Nollställs
+vid uid-byte, som `migratedNotesRef` och `repairedAddedAtRef`.
+
+**Gruppsynken körs på ALLA grenar**, även gren C som inte skriver något. Upptäckt vid
+bygget: en serie man följer bara inne i en grupp (`SeasonPageClient` med `?fromGroup=`)
+saknas i det egna biblioteket men har progress som hör till gruppen. Att flytta in
+synken i skrivgrenarna hade tagit bort den funktionen.
+
+`libraryKnown` läses ur de två refs som `writeTitle` redan använder
+(det `buildAddWrite`-ctx-objekt `writeTitle` bygger), inte ur den härledda
+state-variabeln som contexten exponerar — den
+definieras efter `updateProgress` och skulle tvinga in en ny dep i `useCallback`.
+
+**Gren D är avsiktlig och oförändrad.** Under en kall laddning går det inte att skilja
+"finns inte" från "inte läst än", och att gissa "lägg till" där skulle kunna skriva om
+status för en serie användaren satt till `avbruten`. Kvarvarande risk i D är exakt den
+kapplöpning BIN-942 tar hand om: golvet nekar skrivningen och BIN-942:s C loggar den.
+BIN-954 gör alltså D **smalare**, aldrig bredare.
+
+### 3. Tilläggets payload
+
+Grenen B återanvänder den befintliga tilläggsvägen — `upsertTitle` → `writeTitle` →
+`buildAddWrite` — via `buildWatchlistAddPayload`, så `addedAt`, `updatedAt`,
+synlighetsfälten, `dropped` och analytics-händelserna får exakt den form varje annan
+tilläggsyta har. Ingen ny skrivväg.
+
+Titeldata hämtas med `getTVShowLite(tmdbId)` (samma lite-anrop kalendern och rådgivaren
+redan använder, `append_to_response=watch/providers`):
+
+| Fält | Källa |
+| -- | -- |
+| `tmdbId` / `mediaType` | anropet |
+| `status` | `'mina'` — TV:s "följer"-status (`watchStatus.ts:TV_STATUS_OPTIONS`); `vill_se` för TV är avskaffat |
+| `title` | `preferOriginalTitle(show.name, show.original_name)` — samma val som `TVShowPageClient:134` |
+| `posterPath` | `show.poster_path ?? null` |
+| `releaseYear` | `extractYear(show.first_air_date)` (`tmdb/client.ts:309`) |
+| `totalSeasons` | `show.number_of_seasons ?? null` |
+| `genreIds` | `show.genres?.map(g => g.id) ?? []` |
+| `tmdbStatus` | `show.status ?? null` |
+| `lastWatchedSeason` / `lastWatchedEpisode` | anropets `season` / `episode` |
+
+**`providers` och `subscriptionProviders` utelämnas medvetet.** `shouldStampProvidersAtAdd`
+(`tmdbFieldsRefresh.ts:64`) kräver båda för att stämpla `providersCheckedAt`; utelämnade
+fält gör att stämpeln uteblir, raden läses som färsk-behövande och nästa titelsidbesök
+fyller i paret (`planTmdbFieldsRefresh`). Det är den självläkande riktningen BIN-468/814
+redan dokumenterar.
+
+Positionen ligger **i samma skrivning** som tillägget. Grenen B kostar alltså inte en
+extra Firestore-skrivning jämfört med idag — det är fortfarande en `setDoc` per gest,
+bara med fullständig payload.
+
+### 4. När TMDB inte svarar
+
+Misslyckas `getTVShowLite` skrivs **ingenting** till watchlist-dokumentet; felet loggas
+via `captureError(err, { scope: 'watchlist', kind: 'updateProgress-add' })` och gesten
+avslutas utan att kasta. Avsnittsbocken själv (`episodeProgress`, en helt annan
+skrivning i `useEpisodeProgress`) landar ändå.
+
+Skälet att inte kasta: `markEpisodeWatched` anropas via `void` från `EpisodeRow`, så ett
+kast blir en ofångad promise-rejection → Sentry-brus av samma sort `setRuntime` redan
+sväljer. Skälet att inte falla tillbaka på fragmentskrivningen: fragmentet ÄR buggen.
+Praktiskt är läget nästan onåbart — säsongssidan renderar inga avsnitt alls om TMDB är
+nere (`useTVSeason`).
+
+### 5. Typer och kontraktsyta
+
+* `WatchlistState.updateProgress` (rad 213) och default-kontexten (rad 244) får det nya
+  valfria argumentet. Bredare signatur, inga befintliga anropare bryts.
+* `useEpisodeProgressWithSync` importerar inget nytt; den skickar bara flaggan.
+* `WatchlistContext.tsx` behöver `getTVShowLite`, `extractYear`, `preferOriginalTitle`,
+  `buildWatchlistAddPayload`, `captureError`. Vilka som redan är importerade kontrolleras
+  med `grep -n` i filen före Edit; importlistan skrivs efter vad kommandot svarar, inte
+  efter minnet.
+
+## Bindande acceptanskriterier
+
+1. `updateProgress` skriver aldrig ett dokument som saknar `tmdbId`, `mediaType` eller
+   `status` **när biblioteket är känt**. Grenarna B och C är det som garanterar det.
+   *(kind: diff)*
+2. Test: bocka av ett avsnitt på en serie som inte finns i `items`, med settlad snapshot →
+   den skrivna payloaden bär `tmdbId`, `mediaType: 'tv'`, `status: 'mina'`, `title`,
+   `posterPath`, `releaseYear`, `lastWatchedSeason`, `lastWatchedEpisode`. *(kind: diff)*
+3. Test: samma gest på en serie som REDAN finns → payloaden innehåller **ingen**
+   `status`-nyckel och ingen `title`-nyckel. Det är kriteriet som pinnar
+   "progress ändrar aldrig status" — regeln som står i `updateProgress` egen inledande
+   kommentar. *(kind: diff)*
+4. Test: **avbocka** ett avsnitt på en serie som inte finns i `items`, settlad snapshot →
+   ingen `setDoc` mot watchlist-dokumentet. *(kind: diff)*
+5. Test: serie saknas och snapshoten har INTE settlat → beteendet är det gamla (gren D).
+   Det negativa fallet är vad som hindrar att gren B tyst blir ovillkorlig. *(kind: diff)*
+6. Test i hookens testfil: `addIfMissing` skickas på exakt de två tittar-anropen och på
+   inget av de fyra andra. Diffkontroll:
+   `grep -c "addIfMissing: true" src/hooks/useEpisodeProgressWithSync.ts` → **2**.
+   *(kind: diff)*
+7. Ingen ändring i `SeasonPageClient`, `EventCard`, `TVShowPageClient`, `SeasonList`,
+   `SeasonEpisodePanel` eller `SeasonRow`. *(kind: diff)*
+8. `npm test` körs med rensad `node_modules/.vite/vitest` och redovisas med siffror.
+   *(kind: diff)*
+9. Ingen global `testTimeout`-höjning. **Rättelse mot v1:** v1 sa "ingen ändring i något
+   `expect(...)` som fanns före ändringen". Det gick inte att hålla och skulle ha varit
+   fel att hålla: `toHaveBeenCalledWith` matchar argumentlistan EXAKT, så de tre
+   påståendena om tittar-anropen i `useEpisodeProgressWithSync.test.tsx` föll när ett
+   femte argument tillkom. De är uppdaterade till att namnge det nya argumentet — alltså
+   skärpta, inte försvagade, och det är precis den strikthet som gör dem till villkor 6:s
+   bevis. Inget påstående är borttaget, uppmjukat eller skippat. *(kind: diff)*
+
+## #27:s bindande villkor — och hur vart och ett är avklarat
+
+Blind kritik 2026-08-20, #27 Database Administrator / Data-layer Engineer.
+Verdict: SUPPORT WITH CONDITIONS. Hen bekräftade dessutom mot `firestore.rules:92-124`
+att **varje fält planen skriver står i `isValidWatchlistItem`s `hasOnly`-lista**, och att
+de fyra råa `.data()`-läsarna av `providers`/`genreIds` (`functions/src/insights/rollup.ts`,
+`functions/src/streamingOffers/index.ts`, `src/lib/taste/backfill.ts`) alla redan är
+`Array.isArray`-skyddade — så att utelämna fälten är säkert för varje läsare. Ingen
+`firestore.rules`-ändring behövs, alltså **ingen omroutning**.
+
+10. **Villkor 1 — auto-hoppet tappade sin skrivning.** Ett riktigt fynd, och planens egen
+    v1-text motsade sig själv: den påstod att dokumentet "finns redan" när auto-hoppet
+    körs, samtidigt som den använde att snapshoten INTE hunnit landa som argument på
+    raden ovanför. Följden hade varit att den som bockar av säsongsfinalen på en
+    färdigsedd säsong av en serie hen inte följer fick serien tillagd — men pekaren kvar
+    på finalen i stället för på nästa säsong. **Åtgärd:** `addedByProgressRef` (gren-
+    beskrivningen ovan) + ett test som driver båda anropen i EN gest och hävdar två
+    skrivningar, ett TMDB-anrop och en `title_added_watchlist`. Muteringsprövat: tas
+    sessionsmängden bort faller exakt det testet. *(kind: diff)*
+11. **Villkor 2 — TMDB-felet lämnar en avsnittsbock utan biblioteksrad.** `markEpisode`
+    och `updateProgress` körs parallellt i `Promise.all`, så avsnittsbocken landar även
+    när tillägget inte gör det, och hämtningen sker vid KLICKET, inte vid sidladdningen —
+    planens "säsongssidan renderar inget om TMDB är nere" täckte bara det senare.
+    **Åtgärd:** läget är accepterat men självläkande, och det är nu bevisat i stället för
+    påstått: en misslyckad hämtning märks INTE i `addedByProgressRef`, så nästa bockning
+    på samma serie gör om tillägget. Test: första bockningen misslyckas → ingen skrivning
+    alls (aldrig fragmentet) + `captureError` med `scope: 'watchlist'`,
+    `kind: 'updateProgress-add'`; andra bockningen lägger till på riktigt. *(kind: diff)*
+12. **Villkor 3 — produktionssiffran är prosa tills någon kört frågan.** Riktigt i
+    princip, men den mätningen gjordes **samma dag** (2026-08-20) och är uttryckligen
+    överlämnad som "återanvänd, mät inte om": 411 watchlist-dokument över alla tre
+    kontona, hela listningar, noll utan `tmdbId`/`mediaType`/`status`. Den är alltså
+    **inte** omkörd här, och det står så här i stället för att låtsas. Siffran bär bara
+    ett beslut — att ingen städning av gamla fragment behövs — och den ändras inte av
+    den här ändringen. *(kind: run — redovisad, ej omkörd)*
+
+## Granskningsrundan — tre varv, ett blockerande fynd
+
+**Varv 1** (säkerhet, integration, kod): alla tre pass, 0 blockerande, 6 icke-blockerande
+fynd. Åtgärdade i EN putsrunda, se listan nedan.
+
+**Varv 2** (säkerhet, integration, test på de nya byten): säkerhet och test pass;
+**integrationsgranskningen fällde bygget på ett riktigt fel** (nästa stycke). Testgranskaren
+lät dessutom två mutanter överleva — båda är nu döda.
+
+**Varv 3** (säkerhet, integration, kod på de slutliga byten): säkerhet och kod pass;
+kodgranskaren hittade **samma defekt en gång till, en nivå smalare** (nästa stycke men två),
+och integrationsgranskaren fällde bygget på ett fel i BIN-942:s PLAN, inte i BIN-954:s kod —
+"Vad som byggs — C" beskrev fortfarande den form tre blinda kritiker underkände
+(`console.warn`, sju anropsplatser), 55 rader ovanför det stycke som ersätter den. Det är
+ADR-slår-tråden-mönstret som bitit repot fyra gånger: någon som läser rubriken "vad som
+byggs" bygger den döda formen. Rättat och försett med en varningsruta.
+
+Granskningarna kördes om från början efter varje ändring. En granskning bokförd på gamla
+bytes räknas inte, och ledgern — inte granskarens rapport — är beviset.
+
+### Den smalare halvan av samma defekt (varv 3, kodgranskaren)
+
+Att rensa markeringen i `removeItem` räcker bara när tillägget redan hunnit bli klart.
+Firestore lägger på en väntande skrivning optimistiskt, så "Ta bort" blir klickbar i samma
+ögonblick som tilläggets skrivning SKICKAS — långt innan den svarar. En radering i det
+fönstret rensar en nyckel som ännu inte finns, och tillägget skriver sedan tillbaka den över
+ett dokument användaren just raderat. Nästa progress-skrivning läser den som bevis på att
+dokumentet finns → merge-grenen → fragmentet tillbaka.
+
+Kodgranskaren kallade det icke-blockerande. Det byggdes ändå: utfallet för användaren är
+identiskt med det fel som blockerade varv 2 — en tom rad som kan synas på en publik profil —
+och gesten (lägg till, ångra direkt) är den kommentarerna själva kallar den vanligaste.
+
+Fixen är en räknare, `removalTickRef`, som `removeItem` ökar SYNKRONT före sin första await.
+Tilläggsgrenen läser av den före sin första await och avstår från att markera om den rört
+sig. Medvetet grovkornig — den räknar alla raderingar, inte bara den här titelns: att avstå
+för mycket kostar en extra tilläggsskrivning vid nästa bockning, att avstå för lite kostar
+en spökrad på en publik profil. Pinnat av ett test som håller TMDB-hämtningen öppen, kör
+raderingen mitt i, släpper den och avbockar; muteringsprövat.
+
+### Det blockerande felet: den andra cachen städades inte vid radering
+
+`removeItem` rensade `itemsRef` men inte `addedByProgressRef`. De är två cachar av samma
+sak — "det här dokumentet finns" — och den nya var den farligare att ha inaktuell.
+
+Följd: lade du till en serie genom att bocka av ett avsnitt och tog bort den igen i samma
+session (den vanligaste ångra-sekvensen som finns), läste varje senare progress-skrivning
+den gamla markeringen som bevis på att dokumentet fanns, tog merge-grenen — och skapade
+exakt det identitetslösa fragment biljetten finns för att ta bort. På både bock- och
+avbockningsvägen, eftersom `known` kortsluter före avsiktsflaggan.
+
+Fix: `addedByProgressRef.current.delete(...)` bredvid den befintliga `itemsRef`-rensningen,
+med samma "REQUIRED, not defensive"-motivering. Pinnat av testet *"a series added by
+ticking and then removed does not resurrect as a fragment"*, muteringsprövat (tas raden
+bort faller exakt det testet).
+
+### De två överlevande mutanterna, nu döda
+
+* **`mediaType === 'tv'`-vakten kunde tas bort utan att något test föll.** Ingen
+  produktionsanropare skickar film (alla sex skickar `'tv'`), så vakten skyddar bara mot en
+  framtida anropare — och payloaden hårdkodar `mediaType: 'tv'`. Nytt test: en
+  film-`updateProgress` med avsiktsflaggan hämtar ingenting och skriver ingenting.
+* **Markeringen kunde flyttas till FÖRE skrivningen utan att något test föll.** `known`
+  räknas ut före varje await, så ingen följd av LYCKADE anrop kan skilja de två åt. En
+  MISSLYCKAD skrivning kan — och det är precis den egenskap ordningen finns för. Nytt test:
+  en add vars skrivning avvisas gör nästa bockning till ett fullständigt tillägg igen, inte
+  till en merge mot ett dokument som inte finns.
+
+### De sex icke-blockerande fynden från varv 1
+
+1. **`status: 'mina'` beskrevs som "den enda status en TV-titel lagras under".** Falskt —
+   `avbruten` är en riktig lagrad TV-status (`watchStatus.ts`: `TV_STATUS_OPTIONS` är
+   `['mina','sedd','avbruten']`). Meningen säger nu det sanna: `mina` är den status en
+   NY-spårad TV-titel börjar i, och grenen nås bara när ingen lagrad status finns.
+2. **"så detta är alltid en uppdatering"** om auto-hoppet. Falskt i ett fall: om
+   tittar-anropets TMDB-hämtning misslyckades finns dokumentet inte, och auto-hoppet
+   skriver då ingenting heller. Kommentaren säger nu det, och varför det är rätt utfall.
+3. **Testet hette "de fyra" men drev tre anrop**, och en av dess kommentarer beskrev ett
+   0,0-fall som i själva verket föll tillbaka på 3,2. Omskrivet: det driver nu fyra anrop
+   med exakta argumentlistor (tittar-gesten + auto-hoppet + två nollställningar) och pekar
+   ut var det fjärde icke-tittande anropsstället pinnas.
+4. **`providers` skickas nu som `[]` i stället för att utelämnas — men `subscriptionProviders`
+   utelämnas fortfarande, och asymmetrin är avsiktlig.** `buildAddPayload`s kontrakt säger
+   att ett äkta nytt tillägg skickar `providers` explicit så det skapade dokumentet uppfyller
+   `WatchlistItem`s icke-valfria arraytyper; det här var det första äkta tillägget som bröt
+   det. `shouldStampProvidersAtAdd` kräver en ICKE-tom lista, så stämpeln uteblir precis som
+   förut och självläkningen är oförändrad. `subscriptionProviders` däremot: `docToItem` läser
+   frånvaro som "aldrig ifylld" och `[]` som "kollat, ingen tjänst har den". Den här ytan har
+   inte kollat något och får därför inte påstå det andra — samma val som onboarding,
+   CSV-importen och `CompanionSection` gör. (Varv 2, integrationsgranskningens valfria fynd 1.)
+5. **`libraryKnown` uttrycktes med samma formel på två ställen i filen.** Formeln bor nu i
+   en ren funktion, `isLibraryKnown(snapshotSettled, listenerFailed)`, som båda anropar.
+   De kan inte dela VÄRDE (det ena är reaktivt state, det andra måste läsas efter ett
+   await), men de delar nu formeln — det är den delen som kan glida isär.
+6. **"fyra träffar är kommentarer"** i skrivvägsräkningen var fem. Rättat ovan, med orsaken
+   (filtret satt på radinnehåll i stället för på sökväg). Samma runda: BIN-942-planens
+   radnummerlista blev falsk i samma commit som den låg i, eftersom den här ändringen
+   flyttade varje rad i filen. Den listan är omräknad OCH ersatt med funktionsnamn.
+
+Två fynd byggdes medvetet INTE. Båda är filade som **BIN-955** (låg prioritet):
+
+* **Två snabba bockningar på samma ospårade serie kan lägga till den två gånger.**
+  Sessionsmärket sätts efter att skrivningen gått igenom, vilket skyddar den sekventiella
+  kedjan (tick → auto-hopp) men inte två oberoende gester. Kostar två TMDB-anrop, två
+  skrivningar och två `title_added_watchlist`. Inte datafördärvande — båda skrivningarna
+  bär identiska identitetsfält. Kodgranskaren avstod uttryckligen från att blockera på den.
+* **TMDB-hämtningen går inte via React Query** och bär ingen `AbortSignal`, till skillnad
+  från `useMarkSeen`s. Att lägga den i `queryClient.fetchQuery` skulle ge
+  `WatchlistProvider` — som sitter ovanför nästan hela appen — ett hårt beroende på att en
+  `QueryClientProvider` är monterad ovanför DEN, för en cache ingen nåbar anropare värmt
+  (seriesidan håller `['tv', id]`, det fulla svaret, inte den lätta nyckeln). Skälet står
+  nu i koden i stället för att vara underförstått.
+
+## Vad som INTE byggs
+
+* Ingen migrering av redan existerande fragmentdokument. Produktionskollen 2026-08-20
+  (411 watchlist-dokument över tre konton) fann **noll** dokument utan
+  `tmdbId`/`mediaType`/`status` — det finns inget att städa.
+* Ingen grind i UI:t som gömmer bockarna för serier man inte följer. Malin valde bort det.
+* `firestore.rules` rörs inte här. Golvet är BIN-942.
+
+## Rollback
+
+Ren hosting-ändring: `git revert`, push, deploy. Inga regler, inga funktioner, ingen data.
+
+## Kartan
+
+`docs/workflow-map.html` — kontrolleras efter kodcommiten om
+`.claude/state/workflow-map-stale.json` stämplats; i så fall i **egen commit**.
+
+---
+
+# BIN-942 — en raderad titel kan återuppstå som ett publikt spökdokument
+
+**Status:** v4 — C:s rollkritik (villkor 11) KLAR, alla tre villkor invikta nedan. Den kalla planrevisionen underkände v1 (5 röda) och v2 (4 röda). Alla är
+åtgärdade nedan, var och en med kommandot som verifierade den. Panel A+B klar; C behöver en
+egen kort runda före bygget (villkor 11).
+
+Router på den faktiska filuppsättningen: `tier: top`, `reasonCode: high-stakes`,
+`panel: [27, 5, 4, 6, 7]`. Oförändrad när `WatchlistContext.tsx` läggs till.
+
+**Basläge, HEAD `409d19f`:** träd rent bortsett från den här filen; `npm test` → 258 filer,
+4230 passerade, 4 skippade.
+
+## Klarspråk
+
+Raderar du en titel i samma stund som appen uppdaterar din synlighet kan titeln komma
+tillbaka som en tom rad — synlig för dig och, om profilen är publik, för andra. Du kan inte
+ta bort den; raderingsknappen siktar fel. Vi stoppar det i koden som skriver OCH i
+databasreglerna som avgör vad som får skapas.
+
+Bieffekt: nio skrivvägar i `WatchlistContext` (betyg, status, avsnitt, speltid,
+anteckningar …) plus en till utanför den kan i samma sällsynta läge bli nekade. De skulle då
+misslyckas ohanterat. **Sex** av de nio får därför fånga felet och logga det; `setRuntime`
+och `refreshTmdbFields` fångar redan, och anteckningsvägen (`updateNotes`) är ännu inte
+avgjord — dess nekande är atomärt med anteckningsskrivningen. (Tilläggsvägen `writeTitle`
+är den tionde merge-skrivningen men bär alltid golvfälten, så den nekas inte av golvet; den
+kastar vidare med flit, se villkor 15.) Ingen notis — den går inte att nå därifrån (se C). Användaren ser
+inget oförklarat, eftersom raden ändå försvinner när listan uppdateras.
+
+## Vad som är fel
+
+`cascadeVisibilityToItems` (`AuthContext.tsx:265`) gör `batch.set(d.ref, {…}, {merge:true})`
+på snapshot-referenser. Raderas titeln mellan `getDocs` och `commit` är det en **CREATE**.
+Bevisat mot emulatorn av #7 QA (merge till icke-existerande `movie_777` → `assertSucceeds`).
+**Det provet finns inte i trädet** — det var ad hoc, och ska läggas till och ses falla rött först.
+
+Spöket går inte att ta bort (`docToItem` läser identitetsfälten som `undefined`; `removeItem`
+bygger sitt raderingsmål ur samma fält), och det självläker inte — kaskadens filter matchar
+det och stämplar om det.
+
+## Skrivvägar — räknade om, med kommandot
+
+**RÄTTELSE 2026-08-20 (integrationsgranskningen, BIN-954:s runda) — den här listan var
+för snäv, och radnumren är borttagna för gott.** Radnummer i den här filen har rättats tre
+gånger och varit fel tre gånger; varje kommentarsrad flyttar dem. Räkna om själv, med
+kommandot, precis före bygget.
+
+`grep -c "merge: true" src/contexts/WatchlistContext.tsx` → **10**. **Det är rätt ankare.**
+Den tidigare listan använde `grep -n "await setDoc(ref"` → åtta träffar, minus
+`watchlistTags` → sju. Men golvet (`hasAll(['tmdbId','mediaType','status'])` på create)
+träffar VARJE merge-skrivning mot watchlist-samlingen som kan visa sig vara en create —
+inte bara de som råkar heta `setDoc(ref`. Minst tre till:
+
+* `setRuntime` — `setDoc(doc(...), { runtime }, { merge: true })`, alltså inte `ref`.
+* `refreshTmdbFields` — samma form.
+* `updateNotes` — `batch.set(itemRef, …, { merge: true })`. Den är ATOMÄR med
+  anteckningsskrivningen, så ett nekande tar med sig anteckningen och kastar vidare.
+
+Sidoeffekten "sju vanliga redigeringar kan bli nekade" är alltså **tio** — nio av de tio
+merge-skrivarna i `WatchlistContext` (alla utom `writeTitle`, som alltid bär golvfälten och
+därför aldrig nekas av golvet) plus `nextAirReadRepair` utanför filen — och
+villkor 14/15:s anropsplatsuppräkning måste räknas om från `merge: true`-ankaret innan C
+byggs. `setRuntime` och `refreshTmdbFields` fångar redan (villkor 10 säger det); `updateNotes`
+gör det INTE och har en egen `catch` som avmarkerar och kastar vidare — den måste vägas
+separat.
+
+Skribenter i scope, med namn i stället för rader: `writeTitle`, `updateVisibility`,
+`updateStatus`, `updateWatchedAt`, `updateRating`, `updateProgress`, `updateTmdbStatus`,
+`setRuntime`, `refreshTmdbFields`, `updateNotes`.
+Plus `AuthContext.tsx:265`, `nextAirReadRepair.ts` (`batch.set` + `merge`)
+och `taste/backfill.ts` (`updateDoc`, kan aldrig skapa).
+
+**BIN-954 ändrade `updateProgress`.** Den skriver inte längre alls när titeln saknas och
+biblioteket är känt, och den lägger till med fullständig payload på tittar-vägen. Kvar
+under golvet: kall laddning/död lyssnare, som fortfarande gör en merge som kan visa sig
+vara en create. `updateProgress` hör alltså fortfarande till villkor 14:s uppräkning.
+
+**RÄTTELSE mot v2:** v2 påstod att alla sju skriver mot befintliga dokument. **Fel.** Raden i
+`writeTitle` är tillägg-vägen. Att lägga till en titel ÄR en create, varje gång, inte
+bara i en kapplöpning. Golvet gäller alltså varje tillägg i appen.
+
+Det klarar golvet: `buildAddPayload.ts:24` deklarerar
+`AlwaysWritten = 'tmdbId' | 'mediaType' | 'status' | 'title' | 'posterPath' | 'releaseYear'`,
+en äkta övermängd av golvet. Men det var otestat och otänkt — den största regressionsrisken i
+hela ändringen, och den får ett eget bindande kriterium (villkor 12).
+
+## Vad som byggs — A + B + C
+
+**A.** `cascadeVisibilityToItems`: `batch.set(…, {merge:true})` → `batch.update(…)`. Ingen ny
+`try/catch` runt `batch.commit()`.
+
+**B.** `allow create` på `users/{uid}/watchlist/{itemId}` får
+`request.resource.data.keys().hasAll(['tmdbId','mediaType','status'])`. Endast create.
+
+**C — tyst men städat (Malins beslut 2026-08-20).** De **sex** redigeringsvägarna
+(`updateVisibility`, `updateStatus`, `updateWatchedAt`, `updateRating`, `updateProgress`,
+`updateTmdbStatus`) fångar **bara** `permission-denied` och loggar med `console.error` +
+`captureError({ scope: 'watchlist', kind: … })`. Ingen notis.
+
+> **LÄS "C — slutlig form efter rollkritik" NEDAN INNAN DU BYGGER DEN HÄR.** Två tidigare
+> formuleringar av det här stycket är döda och ersatta där: `console.warn` (som #6
+> visade var en REGRESSION — ett ohanterat fel når Sentry idag, `console.warn` gör det
+> inte) och "de sju call sites" (`writeTitle` kastar vidare och är UNDANTAGEN; sju
+> `captureError`-anrop i diffen är därför FEL, det ska vara sex). Stycket ovan är
+> uppdaterat till den avgjorda formen — men rubriken "Vad som byggs" är den ett bygge
+> läser först, så kontrollera alltid mot villkoren 14–19.
+
+**Varför ingen notis, mätt:** `src/components/Providers.tsx:65-70` nästlar `ToastProvider`
+INUTI `WatchlistProvider`. `WatchlistContext` kan alltså inte anropa `useToast` — notisen
+existerar inte på den nivån. Alternativen var att flytta providern (rör hela appens uppstart)
+eller låta felet bubbla till varje anropande komponent (många ställen, lätt att glömma ett).
+Malin valde den tysta varianten. Det som gör den ärlig: titeln ÄR borta, och
+snapshot-lyssnaren tar bort raden ändå.
+
+Formen speglar `setRuntime` och `refreshTmdbFields`, som redan gör exakt detta.
+(Radnummer utelämnade med flit: BIN-954 flyttade dem en gång redan.)
+
+## Malins gränser
+
+**BIN-941 (bindande):** *"bygg INTE om kaskaden så den tål ett nekande. Ingen migrering, ingen
+kod som hanterar nekad chunk."* Sakens kärna står kvar: skrivningen nekas, chunken faller,
+inget fångar den nekade chunken, ingen migrering. C rör enskilda redigeringar, inte chunken.
+Det som vidgas är att nekandet gäller alla id:n — vilket ÄR BIN-942.
+
+**Den daterade posten 2026-08-19 vidgas på fyra axlar, inte två** (v2 sa två):
+
+* **Mekanism:** från `set(merge:true)`-create nekad av formspärren → `NOT_FOUND` från `update`.
+* **Allvarlighet:** ny restrisk — **tio** skrivvägar kan nekas i kapplöpningen: nio av de
+  tio `merge: true`-skrivarna i `WatchlistContext` (alla utom `writeTitle`, som alltid bär
+  golvfälten) plus `nextAirReadRepair`. **Sex** av dem tystas (villkor 14); `setRuntime`
+  och `refreshTmdbFields` fångar redan, `updateNotes` är ännu inte avgjord.
+  Talen är räknade från `merge: true`-ankaret, inte från `setDoc(ref`, som missar tre.
+* **Räckvidd:** från bara gamla id:n → alla id:n.
+* **Tid:** från "tills pre-BIN-560-dokumenten är borta" → permanent.
+
+Lyft till Malin 2026-08-20 före första Edit; hon valde varianten med felhantering, och sedan
+den tysta formen.
+
+**2026-07-30-posten (fail-open `effectiveVisibility`)** namnges nu: A gör misslyckade
+synlighetskaskader vanligare, och en misslyckad kaskad är indata till just den accepten. Den
+öppnas INTE — mitigeringen (`visibilitySyncPending` + varning + omförsök) är oförändrad och
+`markVisibilitySyncPending` rörs inte. Villkor 13 låter #6 och #4 säga sitt om det.
+
+## Bindande villkor
+
+1. Bara `batch.set`→`batch.update` i `cascadeVisibilityToItems`. *(#27)*
+2. Ingen ny swallow runt `batch.commit()`. *(#27)*
+3. Golvet gäller ENDAST `allow create`. *(#4, #27, #6)*
+4. Emulatortest på ett KANONISKT id: läggs till, ses falla **rött först**, vänds av golvet. *(#7)*
+5. Emulatortest: golvet läcker inte till `update` — delskrivning mot befintligt dokument passerar. *(#7)*
+6. Emulatortest: golvet blockerar bar `{runtime}`- och bar `{nextAirUpdatedAt}`-create. *(#27)*
+7. `AuthContext.test.tsx:106`:s mock-`writeBatch` får `.update()` (mönster `WatchlistContext.test.tsx:118`). BIN-587-blockets fem påståenden passerar med NOLL ändrad text. *(#7)*
+8. Nytt enhetstest: kaskaden anropar `batch.update`, aldrig `batch.set`. *(#7)*
+9. Ny daterad post supersederar 2026-08-19-posten, **och den gamla retireras ordagrant till `.claude/accepted-deviations.archive.md`** (filhuvudet kräver det; modellen är 2026-07-24-posten, INTE 2026-08-15 som v2 felaktigt citerade — den säger uttryckligen "EXTENDS … does not supersede"). Nya posten avgränsas på alla fyra axlar med `Accepted` / `NOT accepted, still fileable` / `Scope` / `Re-open when`. Regelkommentarens "STILL OPEN" rättas i SAMMA commit. *(#4, #27, #6, #5)*
+10. `flushNextAirWrites`/`setRuntime`/`refreshTmdbFields` får ingen anropsplatsfix — de täcks av golvet, de två senare fångar redan. Egen biljett filas. *(#27, #7)*
+11. **C har inte granskats av panelen** — den tillkom efter att rollerna svarat på A+B. Före bygget: blind kritik från #7 QA, #4 Säkerhet och #6 Dataskydd på A+B+C. *(planrevisionen F3)*
+12. **Emulatortest: en äkta `buildAddWrite`-payload skapar fortfarande dokumentet under golvet**, och en payload som tappat ett golvfält gör det inte. Utan det kan ingen lägga till en titel om golvet är fel. *(planrevisionen F1)*
+13. Skribentinventeringen kompletteras på **alla tre ställen** — `firestore.rules`, `src/test/rules/firestore-rules.test.ts` och `docs/workflow-map.html` — inte bara två. BIN-941:s kvarvarande punkt 2. *(planrevisionen F7)*
+
+## C — slutlig form efter rollkritik (#7 QA, #4 Säkerhet, #6 Dataskydd, 2026-08-20)
+
+C tillkom efter att panelen svarat på A+B, så den fick en egen blind runda. Alla tre gav
+SUPPORT WITH CONDITIONS och ändrade formen på tre punkter. Ingen av dem hade jag tänkt på.
+
+**1. `console.warn` var en REGRESSION, inte en neutral form.**
+`src/lib/sentry.ts` har ingen console-fångst, men Sentrys webb-SDK har `globalHandlers`
+med `onunhandledrejection: true` i sina DEFAULT-integrationer, och `S.init()` sätter aldrig
+`defaultIntegrations` — #6 verifierade det genom att läsa
+`node_modules/@sentry/browser/.../sdk.js` och `.../globalhandlers.js`. **Ett ohanterat fel
+når alltså Sentry idag.** Att byta det mot `console.warn` hade gjort riktiga fel osynliga.
+
+Formen blir i stället `console.error` + `captureError(err, { scope: 'watchlist', kind })`
+(`src/lib/sentry.ts:96`, samma kanal som `queryClient.ts` och `SegmentError.tsx`).
+Inget `uid` i `extra`. *(#4 villkor 1, #6 villkor 2, #7 fynd 1)*
+
+**2. Fånga BARA `permission-denied`.**
+En bred catch sväljer också nätverksfel och kvotfel — och repot har gjort exakt det misstaget
+förut och rullat tillbaka det: `src/lib/firebase/groups.ts:206-215` beskriver hur
+sammanslagningen före 2026-07-20 fick en dålig mobiluppkoppling att rapporteras som en ogiltig
+länk. Samma hjälpare återanvänds:
+`(err as { code?: string } | null)?.code === 'permission-denied'`.
+Allt annat kastas vidare, precis som idag. *(#4 villkor 2, #7 villkor 1, #6 villkor 2)*
+
+**3. Tillägg-vägen (`writeTitle`) får INTE tystas.**
+Den returnerar `outcomeOfAddWrite(write)` och kommentaren strax under `setDoc`-raden säger varför:
+*"a rejected write never reports a count … so the toast cannot describe something Firestore
+refused."* Det är BIN-895:s fix. Sväljs felet där rapporterar knappen "tillagd" om en titel
+golvet nekade — samma falska besked BIN-895 stängde, återöppnat på create-vägen.
+
+`writeTitle` loggar därför och **kastar vidare**. Bara de sex redigeringarna
+(`updateVisibility`, `updateStatus`, `updateWatchedAt`, `updateRating`, `updateProgress`,
+`updateTmdbStatus`) tystas. *(#6 villkor 1 — hen sa uttryckligen att hen inte skriver under på
+alternativet.)*
+
+**Varför de sex är säkra att tysta:** golvet är create-only, så de kan bara nekas när
+måldokumentet inte finns — alltså exakt kapplöpningen. Titeln ÄR borta och
+snapshot-lyssnaren tar bort raden. Med narrowingen i punkt 2 sväljs inget annat.
+
+### Villkor för C (bindande)
+
+14. De sex — `updateVisibility`, `updateStatus`, `updateWatchedAt`, `updateRating`,
+    `updateProgress`, `updateTmdbStatus` (namn, inte radnummer: BIN-954 flyttade alla) —
+    fångar **bara** `permission-denied`, loggar med
+    `console.error` + `captureError({ scope: 'watchlist', kind: '<call site>' })`, och kastar
+    allt annat vidare. Diffkontroll: sju `captureError`-anrop är FEL — det ska vara sex, med
+    var sitt `kind`. *(#4:1-2, #6:2, #7:1)*
+15. `writeTitle` (tillägg-vägen) loggar och **kastar vidare**. Diffkontroll: dess catch slutar på
+    `throw`, eller så saknar den catch helt. *(#6:1)*
+16. Test per call site, båda riktningarna, i `src/contexts/WatchlistContext.test.tsx`
+    (matchar `vitest.config.ts`:s glob; mönstret finns i testerna
+    *"swallows a Firestore failure without throwing"* och det som gör
+    `batchCommit.mockRejectedValueOnce(new Error('permission-denied'))` — namn i stället
+    för radnummer, som BIN-954 flyttade):
+    * `permission-denied` → löftet resolvar, och `captureError` anropades med rätt `kind`
+      (spionerat — "kastade inte" ensamt bevisar inte att det loggades).
+    * annan kod (t.ex. `unavailable`) → löftet avvisas fortfarande.
+    Det negativa fallet är vad som hindrar att narrowingen tyst blir en bred catch igen. *(#7:2, #4:3)*
+17. Test: en create som golvet nekar vid 721 lämnar anroparens löfte **avvisat**. Villkor 12
+    bevisar bara att en bra payload släpps igenom — inte att en nekad syns för anroparen. *(#6:5)*
+18. Villkor 12:s negativa halva måste mutera `buildAddWrite()`s FAKTISKA returvärde
+    (t.ex. `delete write.tmdbId`), inte ett handbyggt objekt — annars dubblerar den villkor 6
+    och prövar inget nytt. Skrivs i testets kommentar. *(#7:3)*
+19. Den nya daterade posten delar upp sig som `communityRatingMaintain`-posten (2026-08-16)
+    gör: **Accepted** = bara den smala kapplöpningen (create-golvets nekande mot ett samtidigt
+    raderat dokument, sex call sites, 721 undantagen). **NOT accepted, still fileable** =
+    (a) 721 som sväljer tyst, (b) ett SYSTEMATISKT nekande av de sex (regelregression, eller en
+    klientbugg som gör varje merge-skrivning till en create). Observationskanalen som namnges
+    som re-open-trigger är `captureError`-scope/kind. *(#6:3, #4:4)*
+20. Samma post namnger **riktningsasymmetrin**: mekaniskt är A symmetrisk, men en misslyckad
+    publik→privat-kaskad lämnar objekt kvar i det ÖPPNARE läget (2026-07-30-postens farliga
+    riktning), medan privat→publik bara blir mer privat än avsett — aldrig ett läckage.
+    "Kaskadfel" får inte stå som en odifferentierad risk. *(#6:4)*
+21. `firebase deploy --only firestore:rules` körs i **samma sittning** som pushen, inte senare.
+    Skälet står under "Behöver dig". *(#4:5)*
+
+### Det #4 eskalerade till Malin, och som är sagt
+
+Kodfixen (A) stänger bara kaskadens EGEN väg.
+
+**RÄTTELSE 2026-08-20 (integrationsgranskningen, varv 4): här stod "de sex andra
+skrivvägarna". Fel — och fel på ett farligt sätt, eftersom sex är antalet TYSTADE vägar
+(villkor 14), inte antalet EXPONERADE.** Två olika frågor, två olika mängder, och den som
+läser sex som svar på båda tappar `updateNotes` (vars nekande är atomärt med
+anteckningsskrivningen och uttryckligen ännu inte vägt) och `nextAirReadRepair` ur
+exponeringen.
+
+Räknat med kommandot: `grep -n "merge: true" src/contexts/WatchlistContext.tsx` → **10**
+träffar, en per skrivväg. `writeTitle` bär alltid golvfälten (`buildAddPayload`s
+`AlwaysWritten`), så **nio** av dem kan bli en spök-create — `updateVisibility`,
+`updateStatus`, `updateWatchedAt`, `updateRating`, `updateNotes`, `updateProgress`,
+`updateTmdbStatus`, `setRuntime`, `refreshTmdbFields` — plus
+`src/lib/watchlist/nextAirReadRepair.ts` (`batch.set` + `merge`). De kan skapa spöken precis
+som idag **tills golvet ligger ute**.
+Golvet deployas manuellt och grindas inte av CI. Fönstret mellan push och regel-deploy är
+alltså en öppen bugg, inte städning. Sagt till Malin 2026-08-20.
+
+
+## Rollback
+
+* **A och C** går med hosting: `git revert`, push, deploy.
+* **B** är `firestore.rules` och deployas manuellt. En revert i git ändrar INTE reglerna på
+  servern — det krävs ett nytt `firebase deploy --only firestore:rules`.
+* Ordningen vid återställning är omvänd mot deployen: reglerna först tillbaka, sedan koden.
+  Tvärtom skulle återställa den create-kapabla kaskaden under det strikta golvet.
+
+## Behöver dig (Tier D) — sekvensen, rättad
+
+v2:s instruktion gick inte att följa: pushen dör på `deploy.yml:47-55`-vakten, så det finns
+ingen hosting-deploy att vänta in.
+
+1. Push (deployen går **röd med flit** — vakten stoppar allt som rör `firestore.rules`).
+2. Hosting via **Run workflow**-knappen på `deploy.yml` (`workflow_dispatch` hoppar över vakten).
+3. `firebase deploy --only firestore:rules`.
+
+Koden (A+C) måste ut FÖRE reglerna (B) — omvänt mot BIN-766. Går golvet ut först nekas
+skrivvägarna innan felhanteringen finns på plats.
+
+## Kartan
+
+`flow1`-steget och "STILL OPEN (BIN-942)"-stycket blir falska. Uppdateras i en **egen commit**
+efter kodcommiten (e2cf608-lärdomen).
+
+## Öppna frågor
+
+Inga arkitekturändrande okända. v1:s antagande om `hasAll`-semantik var meningslöst (golvet är
+create-only; på en create finns inget tidigare dokument, så deltat ÄR resultatdokumentet) och
+är struket. v2:s enda kvarvarande okända — hur C skulle nå en notis — är mätt och avgjord: den
+kan inte, och den tysta formen valdes.
+
+---
+
 # Sprint 2026-08-19 — `--pick malin`, fyra biljetter
 
 Malin valde alla fyra kandidaterna i ett interaktivt `--pick`-pass. Sessionen är BEVAKAD
