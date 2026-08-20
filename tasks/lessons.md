@@ -456,3 +456,69 @@ inte hörde hemma i någon av doc-taxonomins sex klasser. Den flyttades till `ta
 
 Direkt fortsättning på 2026-08-17-lärdomen. Skillnaden är att den handlade om tal i prosa; den
 här handlar om att RÄTTELSEN är den farligaste platsen att skriva ett nytt.
+
+---
+
+## 2026-08-20 — Ett radnummer i ett plandokument är falskt i samma commit som det ligger i
+
+**Utlösare:** en plan eller ett ADR som pekar ut anropsställen i kod som ÄNDRAS i samma commit.
+
+**Regel:** namnge funktionen, testet eller symbolen — aldrig raden. Behövs ett tal, skriv
+kommandot bredvid det så nästa läsare mäter om i stället för att ärva. Och kontrollera att
+ANKARET matchar det spärren faktiskt bryr sig om, inte det som är lätt att greppa.
+
+**Exempel (BIN-954):** listan över `updateProgress`-anropsställen och `setDoc`-skrivvägar
+rättades TRE gånger under fyra granskningsvarv och var fel tre gånger. Varje ny kommentarsrad
+jag skrev flyttade raderna igen, så varje rättelse bar ett nytt omätt tal. Två granskare fann
+det oberoende. Samma runda visade att ankaret också var fel: `grep "await setDoc(ref"` gav åtta
+skrivvägar, men BIN-942:s create-golv träffar varje `merge: true`-skrivning — tio. Tre saknades
+helt ur inventeringen eftersom de skrev via `setDoc(doc(...))` eller `batch.set`. Nio av de tio
+kan bli en spök-create; `writeTitle` bär alltid golvfälten.
+
+Fortsättning på 2026-08-17 och 2026-08-19: de handlade om tal i prosa och om att rättelsen bär
+ett nytt tal. Den här handlar om talet som blir fel UTAN att någon rör meningen.
+
+---
+
+## 2026-08-20 — En ny cache av "dokumentet finns" måste följa raderingen, även mitt i flykten
+
+**Utlösare:** du inför en andra cache av "den här posten existerar" bredvid en befintlig.
+
+**Regel:** rensa den överallt den gamla rensas — OCH inse att ett märke satt EFTER ett await
+bara skyddar den sekventiella kedjan, inte en samtidig systeroperation. Bumpa en
+generationsräknare synkront före raderingens första await; läs av den före skrivarens första
+await och jämför efteråt. Att i stället märka FÖRE skrivningen är sämre: nästa anrop tar då
+merge-grenen mot ett dokument som ännu inte finns.
+
+**Exempel (BIN-954):** en sessionsmängd lades bredvid `itemsRef` i `WatchlistContext`. Två
+granskningsvarv i rad hittade samma defekt i två storlekar, båda med samma utfall — det
+identitetslösa fragment biljetten fanns för att ta bort återuppstod. Först för att `removeItem`
+rensade `itemsRef` men inte den nya mängden (lägg till genom en avsnittsbock, ångra i samma
+session). Sedan för att Firestore lägger på en väntande skrivning optimistiskt, så "Ta bort"
+blir klickbar i samma ögonblick som tilläggets `setDoc` SKICKAS: raderingens rensning träffade
+en nyckel som ännu inte fanns, och tillägget skrev tillbaka den över ett raderat dokument.
+
+Testet som fäller båda: håll hämtningen öppen med en styrbar promise, kör raderingen mitt i,
+släpp, observera. Ett test som kör operationerna i följd är grönt mot båda mutanterna.
+
+---
+
+## 2026-08-20 — Commit-grinden läser granskarens SISTA domrad, inte om fyndet är lagat
+
+**Utlösare:** en granskare slutar på `REVIEW-VERDICT: fail` och du lagar fyndet.
+
+**Regel:** kör om SAMMA granskare tills den slutar på en godkännande domrad. Den måste öppna
+varje fil med `Read` igen — ledgern bokför bara Read-verktyget — och grinden kräver EN körning
+som täcker allt. Säg i uppdraget vilka blobbar som är byte-identiska med förra varvet och vad
+som ändrats, så blir omkörningen billig.
+
+**Exempel (BIN-954):** integrationsgranskaren fällde varv 4 på ett tal i `tasks/todo.md` — en
+fil som inte ens matchar någon `reviewGates`-pattern. Jag lagade det och försökte committa:
+blockerad, eftersom grinden såg en fällande dom mot KODfilerna. Ett blockerande fynd i ett
+plandokument kostar alltså ändå en full omkörning; det är ett skäl att mäta plandokumentets
+påståenden från början.
+
+Andra grinden samma commit: `review-coverage` kräver en `review`-rad i
+`docs/org/metrics/events.jsonl` för biljetten i ämnesraden, och raden måste vara STAGEAD
+(filen ligger i `cleanTreeIgnore`, så en ostageаd rad är osynlig). Kör aldrig
+`log_event.mjs review` utan argument — den skriver då en tom rad som måste plockas bort för hand.
