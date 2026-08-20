@@ -1023,6 +1023,13 @@
           "verified": true
         },
         {
+          "from": "web-app",
+          "to": "watchlist-context",
+          "payload": "BIN-954 — a SECOND door into the library, and the only one that is not an add control: ticking an episode. updateProgress used to merge-write lastWatchedSeason/lastWatchedEpisode blindly, so ticking an episode on a series absent from the library CREATED a document with no tmdbId, mediaType, status or title — an untargetable blank row, visible on the public profile. It now branches: title present (or added by this same function moments ago, tracked in a per-uid session Set that removeItem prunes and a removal counter invalidates mid-flight) → the old merge; title known-absent AND the caller passed the watch intent (opts.addIfMissing, sent by exactly two of useEpisodeProgressWithSync’s six call sites — the tick and ‘markera hela säsongen sedd’) AND mediaType is tv → a full add through upsertTitle with title/poster/year from getTVShowLite and the position in the SAME write; title known-absent with no watch intent → no write at all; library not yet known (cold load or dead listener) → unchanged, which is the residual BIN-942’s create-floor refuses. Ticking from a group-context season page (?fromGroup=) therefore now puts the series in the ticker’s OWN library as ‘mina’.",
+          "transport": "React context",
+          "verified": true
+        },
+        {
           "from": "watchlist-context",
           "to": "firestore",
           "payload": "setDoc users/{uid}/watchlist/{mediaType}_{tmdbId} — doc id is the composite mediaTypeDocId (BIN-560), so a movie and a TV show sharing a tmdbId no longer collide; denormalized effectiveVisibility/isPublic so read rules skip the parent join. BIN-595: every mutator (both add entry points included) re-stamps those two DENORMALISED fields only when shouldStampVisibility() says the title carries NO per-item `visibility` override — re-marking a title you had made private no longer silently republishes it. The override field itself is written by updateVisibility alone.",
