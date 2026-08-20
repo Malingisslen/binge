@@ -22477,3 +22477,120 @@ task's requirement precisely; no overclaim.
 
 **Verdict: PASS, 0 blocking.** Nothing new flagged — this pass exists to re-verify the prior
 pass's own notes were acted on honestly and to correct one number in its own archive record.
+
+## 2026-08-20 — BIN-954: fragment-write closed with a 4-branch guard, two mutants died, two survived
+
+**Scope reviewed (staged, HEAD 409d19f):** `src/contexts/WatchlistContext.test.tsx`
+(788a62ea748a23ed3723a7169d488484c891c246), `src/hooks/useEpisodeProgressWithSync.test.tsx`
+(8168076efa5155ca7ebde94de040123cd6a23c1f), `src/contexts/WatchlistContext.tsx`
+(57bc0590f93aa4c505ba5e4307c0d3d03311c231), `src/hooks/useEpisodeProgressWithSync.ts`
+(c6007f834f4adce91159c30a1ed369e220d11d25). All four read with the Read tool; index==worktree
+sha confirmed both before and after mutation work.
+
+**What changed.** `updateProgress` used to unconditionally `setDoc(merge:true)` progress
+fields, creating an identity-less fragment (no tmdbId/mediaType/status) whenever the ticked
+series was absent from the library. New shape, four branches gated on `known` (item present
+OR added earlier this session via a new `addedByProgressRef` Set) and `libraryKnown`
+(`snapshotSettled && !listenerFailed`, factored into `isLibraryKnown()` so the context's
+derived state and the callback's post-await read share one formula): known -> unchanged merge;
+known-absent + `opts.addIfMissing` + `mediaType === 'tv'` -> full add via
+`buildWatchlistAddPayload` -> `upsertTitle`; known-absent without intent -> no write; library
+not yet known (cold load) -> unchanged old merge (deliberately: cannot distinguish "absent"
+from "not loaded yet"). The hook (`useEpisodeProgressWithSync.ts`) passes
+`{ addIfMissing: true }` on exactly 2 of 6 `updateProgress` calls (verified:
+`grep -c "addIfMissing: true"` -> 2, `grep -n "updateProgress("` -> 6 call sites).
+
+**Numbers re-verified, not inherited:**
+- `npm test` (cache cleared first): 258 files, 4238 passed, 4 skipped, 0 failed - matches
+  `tasks/todo.md`'s claim exactly, re-run myself rather than transcribed.
+- `git hash-object` vs `git rev-parse :<f>` for all four files: index==worktree, both before
+  starting mutation work and after every restore.
+- `extractYear('2011-04-17')` traced into `src/lib/tmdb/client.ts:309` -
+  `parseInt(dateStr.substring(0,4))` -> 2011. The `payload.releaseYear` assertion is a genuine
+  derivation: `vi.mock('@/lib/tmdb/client', importOriginal)` spreads the real module and only
+  overrides `getTVShowLite`, so `extractYear` and `preferOriginalTitle` (also unmocked) ran for
+  real. `buildWatchlistAddPayload` itself is not mocked anywhere in the test file either - the
+  BIN-954 payload assertions exercise the real production composition, not a mock's call shape.
+- The three pre-existing `useEpisodeProgressWithSync.test.tsx` assertions that gained the 5th
+  argument: diffed against HEAD, confirmed STRICT-to-STRICTER (added an exact-match argument to
+  `toHaveBeenCalledWith`/`toHaveBeenNthCalledWith`, which fails on any extra/missing arg) -
+  the whole file's diff removes exactly one line total (a type signature widening), no
+  assertion deleted, softened or skipped.
+- 'the non-watch calls pass no options object at all' test's closing comment, claiming the
+  4th non-watch call site (fallback to a lower position, not 0,0) is pinned exact-argument-form
+  by a separate named test above: read that test - `toHaveBeenCalledWith('tv', DOCTOR_WHO, 3,
+  1)`, 4 args, no options - TRUE, confirmed by tracing all 6 call sites in
+  `useEpisodeProgressWithSync.ts` (lines 55/86/98/100/114/133) against which test drives which.
+
+**Cold-load test reaches the branch it claims to.** `authState.uid = 'u1'` always set in
+`beforeEach`, so `if (!uid) return` never short-circuits; `firstSnapshotSettledRef` defaults
+`false` and the "during a cold load" test never invokes `snapshotCallback`, so it stays false.
+Not taken on faith - mutation #2 below is the live proof this test is sensitive to exactly the
+branch it names, not passing for an unrelated reason.
+
+**Mutation run - 4 candidates named by the dispatching agent, each: python-scripted single
+in-place replace (count asserted ==1) -> `rm -rf node_modules/.vite/vitest` -> `grep -n` to
+confirm the mutant landed -> `npx vitest run` both test files -> restore from a scratchpad copy
+(`cp` before first mutation) -> `md5sum` both files to confirm byte-identical restore ->
+`git diff --stat` empty. All four restores clean.**
+
+1. `known = current != null || addedByProgressRef.current.has(...)` -> `current != null` (drop
+   the session Set). DIED - 1 failed: 'the auto-advance write inside the SAME gesture is
+   not dropped' (`expected setDoc called 2 times, got 1`). Exactly the criterion this Set
+   exists for.
+2. `if (known || !libraryKnown)` -> `if (known)` (drop the cold-load fallback). DIED - 1
+   failed: 'during a cold load the OLD merge-write is kept' - `getTVShowLite` unexpectedly
+   called (the mutant routes cold-load into the add branch, which then explodes on an
+   unmocked-for-that-test `getTVShowLite` returning `undefined`, since the test only asserts
+   `setDoc`/`getTVShowLite` call counts, not a full add). Confirms the test is sensitive to
+   exactly the `!libraryKnown` term, not passing vacuously.
+3. `else if (opts?.addIfMissing && mediaType === 'tv')` -> `else if (opts?.addIfMissing)` (drop
+   the media-type guard). SURVIVED - 117/117 green. No test in either file ever calls
+   `updateProgress` with `mediaType: 'movie'` and `addIfMissing: true`. Real latent risk if
+   ever reached: `buildWatchlistAddPayload` hardcodes `mediaType: 'tv'` literally inside the
+   add branch (not derived from the passed-in `mediaType`), so a hypothetical future
+   `movie`+`addIfMissing` caller would write a doc whose Firestore path says movie
+   (`mediaTypeDocId(mediaType, tmdbId)` uses the real param) but whose payload claims
+   `mediaType: 'tv'` - a genuine data-integrity mismatch, currently unreachable because
+   `grep -rn updateProgress src` outside the hook/context returns zero production callers and
+   the hook only ever passes `'tv'` literally. Judged: non-blocking test-gap, not
+   equivalent-dismissed - the guard is reachable through the function's own public signature
+   even though nothing exercises the other value today. Folded into the knowledge principles
+   file as a named case (single-caller-hardcodes-the-safe-literal), distinguished from the
+   already-documented "provably unreachable defense-in-depth guard, exempt" bullet.
+4. `addedByProgressRef.current.add(...)` moved from AFTER `await upsertTitle(payload)` to
+   BEFORE it. SURVIVED - 117/117 green. Traced why: the only two-call chain in the hook
+   (tick -> auto-advance) is `await`ed fully sequentially in
+   `useEpisodeProgressWithSync.ts` (never `Promise.all`'d), and the test harness drives it the
+   same way (`await updateProgressRef!(...); await updateProgressRef!(...)` inside one `act`).
+   By the time call 2 starts, call 1's entire function body - including whichever line marks
+   the ref - has already returned, so the mark's position relative to the `await` inside call 1
+   is unobservable to any currently-reachable caller. The production comment's claim ("marking
+   BEFORE would let a concurrent second call take the merge branch against a document that
+   doesn't exist yet") describes a genuinely different construction - two `Promise.all`'d or
+   otherwise interleaved calls - that no test builds and that the current codebase never
+   produces either. Judged: the comment's specific ordering rationale is unverified, not
+   confirmed - reported as such rather than credited at face value, and not filed as a
+   blocking gap since BIN-955 (two independent rapid clicks) already names and defers the
+   underlying concurrency question as a known, accepted residual.
+
+**Also checked and found sound, no issues:**
+- `getByStatus`/removeItem/rewatch/BIN-593/BIN-641 pre-existing describe blocks in
+  `WatchlistContext.test.tsx`: `git diff --cached` hunk boundaries confirm all edits are
+  contained in the single new BIN-954 block (lines ~576-737) plus the one signature-widening
+  line; nothing pre-existing outside that block was touched.
+- `accepted-deviations.md` read in full: the one live BIN-954-adjacent entry (synlighetskaskadens
+  nekande) is about a different code path (`cascadeVisibilityToItems`) and does not bear on
+  this diff; nothing here re-flags an accepted deviation.
+- `tasks/todo.md` first section (lines 1-307, the BIN-954 plan) read in full: acceptance
+  criteria 1-9 and #27's three binding conditions (10-12) all map onto tests that exist and are
+  mutation-confirmed for criterion 10 (the auto-advance Set) and pinned by a dedicated test for
+  criterion 11 (TMDB failure). Criterion 12 (411-doc production count) is explicitly marked
+  "reused, not re-run" in the plan itself and the plan says so plainly rather than implying a
+  fresh measurement - not a false-precision violation.
+
+**Verdict: PASS, 2 blocking-candidate mutants investigated, 0 filed as blocking.** Both
+survivors (mediaType guard, mark-ordering) are real, verified-live gaps but neither is
+exploitable by any current production call site, and one (the ordering claim) overlaps
+BIN-955's already-accepted deferred residual. Reported as non-blocking findings for the parent
+agent to relay, not filed as new tickets by this review (out of scope for a test-reviewer pass).

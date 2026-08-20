@@ -7779,3 +7779,118 @@ a correction landing BETWEEN two halves of one sentence, instead of after the wh
 is the tell that it was pasted in without reading past the insertion point.
 
 REVIEW-VERDICT: fail (1 blocking)
+
+### 2026-08-20 — BIN-954, concurrent-gesture race in the "mark after write" progress-add guard
+
+Reviewed `src/contexts/WatchlistContext.tsx` (`updateProgress`), `src/hooks/useEpisodeProgressWithSync.ts`
+plus both test files, staged for BIN-954 ("ticking an episode on a series you don't follow
+creates a fragment doc"). The plan's own binding condition 1 (a blind #27 critique) already
+caught and fixed the SEQUENTIAL race — the auto-advance write inside one gesture chain
+(Promise.all → await → a second updateProgress call) — with `addedByProgressRef`, a session
+Set marked only AFTER `upsertTitle` resolves, deliberately (a failed add must stay retryable).
+Mutation-verified myself: reverting `known` to drop the ref check fails exactly 1 test
+(`the auto-advance write inside the SAME gesture is not dropped`), matching the ticket's own
+claim, restored from a scratchpad copy and hash-verified back to the staged blob
+(`84b5694c6dd3926c6e87ccd61fcb70c9a0c64193`).
+
+That guard does NOT cover a second, independent race the plan never considers: two
+INDEPENDENT user gestures (e.g. ticking two different episode checkboxes on the same
+not-yet-followed series in quick succession — nothing disables the checkboxes while a write
+is in flight, `markEpisodeWatched` is invoked via bare `void handler()` from `EpisodeRow`/
+`SeasonList`/`SeasonEpisodePanel`). Both calls compute `known` synchronously (before either's
+first `await`), both read `addedByProgressRef` as not-yet-marked (the mark only lands after
+the FIRST call's `upsertTitle` resolves, which requires an `await import(...)` + a TMDB
+round-trip + a Firestore write), so both independently enter the "add" branch. Confirmed by
+instrumenting the branch entry directly (console probe inside a scratchpad-restored copy of
+the file, reverted byte-for-byte afterward, hash-verified): both concurrent calls print
+"enter branch B". The downstream consequence (two `getTVShowLite` fetches, two `upsertTitle`
+writes, two `title_added_watchlist` analytics events for one logical add) follows directly
+from straight-line code reading once both branch entries are proven; a full end-to-end replay
+inside the SAME test harness hit an unrelated mocking artifact (a concurrent dynamic
+`import('@/lib/tmdb/client')` intermittently missed the `vi.mock` and hit the real
+implementation, throwing "NEXT_PUBLIC_TMDB_API_KEY is not set" for the second call) — noted
+as a test-rig quirk, not a rebuttal of the branch-entry race, which was captured cleanly.
+
+Severity judged non-blocking: not data-destructive (both writes carry the same identity
+fields; last-write-wins is harmless), self-limited to a narrow double-click/rapid-tick timing
+window, and in the same class as already-accepted self-healing races in this codebase
+(`groups.ts` myGroupsCache, BIN-510). Reported as a should-fix advisory, not a blocker.
+Folded into the knowledge file's "sync-ref-before-await" principle as the mirror case:
+marking a guard AFTER a write protects sequenced calls, not concurrent independent ones.
+
+Also verified and did NOT flag (checked because the review brief asked): the
+`known || !libraryKnown` truth table (5 cells, all match the plan's stated behaviour); the
+`buildWatchlistAddPayload`/`buildAddPayload.ts` merge contract with `current` undefined and
+`lastWatchedSeason`/`lastWatchedEpisode` supplied (carried; nothing destroyed, nothing
+omitted that should ride); the TMDB-failure control flow (payload stays null, falls through
+to the group sync, no partial/fragment write); `firestore.rules`' `isValidWatchlistItem`
+`hasOnly` list against every key branch B's payload can carry (all present, spot-checked
+myself rather than trusting #27's cited line range) — no rules change needed, matching the
+router's `reasonCode: "owned"` (no re-route). `status: 'mina'` unconditionally riding in
+`upsertTitle`'s payload is existing, by-design `upsertTitle`/bulk-write semantics (every
+bulk-add caller already does this), not a new hole BIN-954 opens — noted but not filed.
+`syncProgressToGroups` receiving `syncStatus` (`'mina'` post-add, else unchanged
+`current?.status ?? null`) is byte-identical to pre-diff behaviour for every existing title
+(diffed the two call sites directly).
+
+REVIEW-VERDICT: pass (0 blocking)
+
+### 2026-08-20b — BIN-954 round 3: removeItem racing a still-in-flight addIfMissing write
+
+Round 1/2 (see the entry above) covered a self-race: two concurrent progress ticks on the
+same untracked series both reading `known=false` before either's `addedByProgressRef` mark
+lands, causing a double add. This round hunted the cross-operation sibling explicitly named
+in the review brief: does `removeItem`'s cleanup of `addedByProgressRef` (the BIN-954-round-2
+blocking fix) race against a CONCURRENT `updateProgress` add rather than a completed one?
+
+Traced the interleaving by hand against the staged bytes (`WatchlistContext.tsx`):
+`updateProgress` branch B computes `known`/`libraryKnown` synchronously, then (on missing)
+awaits `getTVShowLite`, builds the payload, and awaits `upsertTitle(payload)` — which
+internally awaits `setDoc(ref, write, {merge:true})`. Only AFTER that resolves does it run
+`addedByProgressRef.current.add(...)`. `removeItem` awaits `deleteDoc(ref)`, then
+SYNCHRONOUSLY prunes both `itemsRef` and `addedByProgressRef`.
+
+Firestore's default `onSnapshot` behaviour applies a pending local write optimistically
+(`hasPendingWrites: true`) before the server round-trip completes — so a "Ta bort" control
+gated on the title being in `items`/`getItem()` can become clickable the instant `setDoc` is
+CALLED inside the add, well before `upsertTitle`'s own promise resolves. If `removeItem` is
+invoked in that window:
+1. `removeItem`'s `deleteDoc` is issued AFTER the add's `setDoc` (client call order).
+   Firestore applies same-client writes to one document in issuance order, so the server
+   state converges to DELETED (create, then delete).
+2. `removeItem` resolves first (its own round trip can easily beat the add's, or simply
+   finish before the add's `await upsertTitle` continuation runs) and prunes
+   `addedByProgressRef` — a no-op, since the add hasn't marked yet.
+3. The add's `await upsertTitle(payload)` then resolves and runs
+   `addedByProgressRef.current.add(...)` — AFTER the prune, so the key ends up marked
+   "present" even though the document was deleted.
+4. The next progress write on that series reads `known=true` via the stale mark, takes the
+   ordinary merge branch, and creates the exact identity-less fragment doc this ticket
+   exists to remove — reproducing the bug on the add-then-immediately-undo sequence the
+   ticket's own commentary names as "the most likely undo a user performs."
+
+Not covered by BIN-955 (that ticket is the same-operation double-add, no delete involved)
+and not covered by the round-2 blocking fix or its test ("added by ticking and then removed"
+drives the SEQUENTIAL case — remove fully awaited before the next call — not a remove
+overlapping an in-flight add). No test in either touched file drives this interleaving.
+
+Severity: judged non-blocking, same class as BIN-955 — narrow concurrent-timing window,
+self-limited to a stale session flag (not persisted, cleared on uid change), and the doc it
+recreates is the SAME shape the codebase tolerated before this ticket, not a new worse one.
+Reported as a should-file-a-follow-up finding, not a blocker; folded into the knowledge
+file's "sync-ref-before-await" principle as the cross-operation case (a sibling mutation's
+cleanup racing this guard's own post-write mark), rather than a new bullet.
+
+Also re-verified rather than trusted: `isLibraryKnown`'s two call sites pass
+`(snapshotSettled, listenerFailed)` in the same order as its signature (no argument-order
+bug); `grep -c "addIfMissing: true" src/hooks/useEpisodeProgressWithSync.ts` → 2, matching
+the ticket's own claim; the six `updateProgress('tv'` call sites (2 carrying the flag, 4 not)
+recounted directly rather than trusting the ticket's line numbers, which it explicitly
+declines to cite for exactly this reason. The failed-write-propagates-as-a-rejection path
+(setDoc in branch B rejecting bubbles through `Promise.all` in the hook to a bare `void
+markEpisodeWatched(...)` call site, unlike the TMDB-fetch failure which IS caught) was
+checked and NOT filed: branch A's ordinary write already has this exact shape pre-diff
+(unwrapped `setDoc`, same `void`-called hook chain), so it is a pre-existing asymmetry in
+this file's error handling, not a regression this diff introduces.
+
+REVIEW-VERDICT: pass (0 blocking)
