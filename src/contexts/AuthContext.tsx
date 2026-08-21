@@ -262,10 +262,32 @@ async function cascadeVisibilityToItems(
   await Promise.all(chunks.map(chunk => {
     const batch = writeBatch(db);
     for (const d of chunk) {
-      batch.set(d.ref, {
+      // BIN-942 — `update`, NEVER `set(…, { merge: true })`. These refs come out of a
+      // snapshot, so between `getDocs` above and this commit the user can delete a title.
+      // A merge against a document that is gone is not an update, it is a CREATE: the
+      // deleted title comes back carrying only these two fields — no tmdbId, no mediaType,
+      // no status, no title. It renders as a blank row in the library AND on the
+      // publicly-readable profile, so it reveals that the account HELD that title after the
+      // user asked for it to be gone (Art. 17), and `removeItem` cannot even target it —
+      // its delete key is built from the fields the ghost lacks. Proven against the
+      // emulator, not reasoned: a bare two-field merge onto a missing canonical id used to
+      // `assertSucceeds`.
+      //
+      // `update` carries an existence precondition Firestore enforces regardless of rules,
+      // so this closes the cascade's own race on code-deploy alone, before the rules floor
+      // ships. The sibling repair in WatchlistContext (`addedAt`) already chose `update`
+      // for exactly this reason and says so in its own comment; this was the last
+      // snapshot-writer still using the risky pattern.
+      //
+      // Accepted cost, unchanged from that sibling: a batch is all-or-nothing, so one
+      // deleted title withholds the stamp from up to 449 siblings until BIN-587's
+      // `visibilitySyncPending` retry re-reads a snapshot the deleted doc has left. That
+      // retry is real — see the effect that clears the flag only on success. Firestore
+      // never bills a rejected batch, so this costs no extra writes.
+      batch.update(d.ref, {
         effectiveVisibility: visibility,
         isPublic: isPublicMirror,
-      }, { merge: true });
+      });
     }
     return batch.commit();
   }));

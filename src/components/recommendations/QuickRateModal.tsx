@@ -94,14 +94,24 @@ export default function QuickRateModal({ open, onClose }: Props) {
     // planQuickRateWrite, next to buildStatusUpdate and unit-tested there —
     // BIN-599 fixed the rewatch-inflation here with no test to hold it down.
     const plan = planQuickRateWrite(existing);
+    // BIN-942: `updateRating`/`updateStatus` swallow ONE refusal — the create-floor saying no
+    // because the title was deleted mid-flight — and resolve anyway. Retiring the card
+    // regardless would permanently mark it handled for this pass on a write that never landed,
+    // with no way back to it. So track whether every write that ran actually landed.
+    // (`upsertTitle` needs no tracking: a refused add rejects, so we never reach the line
+    // below — that is BIN-895's rule, and it is why the add path is deliberately unguarded.)
+    let landed = true;
     if (plan === 'add-as-seen') {
       await upsertTitle(buildItemFromTmdb(t, 'sedd', rating, existing));
     } else {
-      if (rating !== null) await updateRating('movie', t.id, rating);
+      if (rating !== null) landed = await updateRating('movie', t.id, rating) === 'written';
       // 'rating-only' means the film is ALREADY 'sedd' — writing the status
       // again would be counted as a rewatch that never happened.
-      if (plan === 'rating-and-status') await updateStatus('movie', t.id, 'sedd');
+      if (plan === 'rating-and-status') {
+        landed = await updateStatus('movie', t.id, 'sedd') === 'written' && landed;
+      }
     }
+    if (!landed) return;
     setRated(prev => new Set(prev).add(t.id));
   };
 

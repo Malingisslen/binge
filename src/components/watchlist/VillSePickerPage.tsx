@@ -42,7 +42,14 @@ export default function VillSePickerPage() {
   // från 'vill_se', vilket är feedbacken; toasten bekräftar i klartext.
   const markSeen = useCallback(
     async (item: WatchlistItem) => {
-      await updateStatus(item.mediaType, item.tmdbId, 'sedd');
+      // BIN-942: the toast is gated on the write actually landing. `updateStatus` swallows
+      // one specific refusal — the create-floor saying no because the title was deleted
+      // mid-flight — and RESOLVES, so an ungated toast would confirm "Markerad som sedd" for
+      // a write Firestore refused. That is the false confirmation BIN-895 closed for the add
+      // path, and two reviewers found it reopened here. On a refusal the card still leaves the
+      // list (the title is gone entirely), so the disappearance is the whole feedback and
+      // saying nothing is the honest option — there is no action left to offer.
+      if (await updateStatus(item.mediaType, item.tmdbId, 'sedd') !== 'written') return;
       toast(`Markerad som sedd: ${item.title}`);
     },
     [updateStatus, toast]

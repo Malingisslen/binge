@@ -148,7 +148,8 @@ vi.mock('@/lib/firebase/db', () => ({
 }));
 
 import { WatchlistProvider, useWatchlist } from './WatchlistContext';
-import type { WatchlistItem, MediaType, WatchStatus } from '@/types';
+import type { WatchlistItem, MediaType, WatchStatus, ItemVisibility } from '@/types';
+import type { ItemWriteOutcome } from './WatchlistContext';
 import type { TitleWriteOutcome } from '@/lib/watchlistWrites';
 
 // Hjälpare: en watchlist-doc med minimala fält som docToItem läser.
@@ -189,17 +190,20 @@ function seedDoc(over: { tmdbId: number } & Record<string, unknown>) {
 // anything at all.
 let upsertTitleRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
 let logViewingRef: ((item: Omit<WatchlistItem, 'addedAt' | 'updatedAt' | 'watchedAt' | 'dropped' | 'rewatchCount' | 'providersCheckedAt' | 'visibility' | 'subscriptionProviders'> & { subscriptionProviders?: number[] }) => Promise<TitleWriteOutcome>) | null = null;
-let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>) | null = null;
-let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<void>) | null = null;
+let updateStatusRef: ((mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<ItemWriteOutcome>) | null = null;
+let updateProgressRef: ((mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<ItemWriteOutcome>) | null = null;
 let setRuntimeRef: ((mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>) | null = null;
 let removeItemRef: ((mediaType: MediaType, tmdbId: number) => Promise<void>) | null = null;
 let updateTagsRef: ((mediaType: MediaType, tmdbId: number, tags: string[]) => Promise<void>) | null = null;
-let updateRatingRef: ((mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<void>) | null = null;
+let updateRatingRef: ((mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<ItemWriteOutcome>) | null = null;
 let updateNotesRef: ((mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>) | null = null;
 let refreshTmdbFieldsRef: ((mediaType: MediaType, tmdbId: number, fields: Record<string, unknown>) => Promise<void>) | null = null;
 // BIN-598/BIN-630: the two mutators that had zero coverage.
-let updateWatchedAtRef: ((mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<void>) | null = null;
-let updateTmdbStatusRef: ((mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<void>) | null = null;
+let updateWatchedAtRef: ((mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<ItemWriteOutcome>) | null = null;
+let updateTmdbStatusRef: ((mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<ItemWriteOutcome>) | null = null;
+// BIN-942: the sixth guarded edit path had no test handle at all — it is the one mutator
+// nothing in this file could reach, which is why it needed adding rather than reusing.
+let updateVisibilityRef: ((mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => Promise<ItemWriteOutcome>) | null = null;
 // BIN-596: the readiness flags the add surfaces gate on, as the components see
 // them (a ref is invisible to a component).
 let readiness: { loading: boolean; snapshotSettled: boolean; listenerFailed: boolean; libraryKnown: boolean } | null = null;
@@ -213,6 +217,7 @@ function Harness() {
     retryListenerRef = wl.retryListener;
     updateWatchedAtRef = wl.updateWatchedAt;
     updateTmdbStatusRef = wl.updateTmdbStatus;
+    updateVisibilityRef = wl.updateVisibility;
     upsertTitleRef = wl.upsertTitle;
     logViewingRef = wl.logViewing;
     updateStatusRef = wl.updateStatus;
@@ -1439,6 +1444,33 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     return setDoc.mock.calls.filter(c => (c[0] as { _path: string })._path.startsWith(pathPrefix));
   }
 
+  // BIN-942 — the one create-floor-exposed write that deliberately keeps THROWING.
+  //
+  // The item-doc write here is batched atomically with the user's own note text, so a
+  // refusal discards what they just typed; a silent swallow would make a lost note look
+  // like a saved one. Same rule as the add path, opposite of the six edits that ARE
+  // swallowed. Nothing pinned that decision until now, so a later "make it consistent with
+  // the six" tidy-up would reopen it with the whole suite green.
+  //
+  // `captureError` is asserted beside the rejection because the caller does not await this
+  // (`NotesBlock`'s onChange returns void), so the only signal that survives is the tagged
+  // Sentry report — which is exactly what the dated deviation entry names as its re-open
+  // trigger. Untagged, it would be indistinguishable from every other unhandled rejection.
+  it('a floor refusal REJECTS rather than being swallowed — and is tagged (BIN-942)', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    batchCommit.mockRejectedValueOnce(
+      Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }),
+    );
+
+    await act(async () => {
+      await expect(updateNotesRef!('tv', 5, 'min anteckning')).rejects.toThrow();
+    });
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'permission-denied' }),
+      expect.objectContaining({ scope: 'watchlist', kind: 'updateNotes' }),
+    );
+  });
+
   // BIN-533: the eager migration's async IIFE (`await fsdb()` then `await
   // batch.commit()`, both no-internal-await mocks) needs a couple of
   // microtask ticks to register its setDoc calls — act() only flushes work
@@ -2543,5 +2575,123 @@ describe('WatchlistContext — title-page backfill reactivity is NOT migrated aw
     const call = setDoc.mock.calls.find(c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_81');
     expect(call).toBeDefined();
     expect(call![1]).toEqual({ runtime: 95 }); // pure denormalisation — never updatedAt
+  });
+});
+
+// ── BIN-942: the create-floor's blast radius on the ordinary edit paths ───────────────
+//
+// `firestore.rules` now refuses a CREATE into the watchlist collection unless the payload
+// carries tmdbId + mediaType + status. Every one of these six mutators writes a partial
+// merge, so in one narrow race — the user deletes the title between the snapshot this call
+// read and the write landing — the merge is a create and the server refuses it.
+//
+// That refusal is the fix working: before the floor, those same writes silently RESURRECTED
+// the deleted title as an identity-less ghost on the publicly-readable profile. So the six
+// swallow `permission-denied` (the title is gone, the listener drops the row, there is
+// nothing to say and nothing to retry) and rethrow everything else.
+//
+// The negative half of each pair is the load-bearing one. A bare `catch` here would eat
+// `unavailable`, `deadline-exceeded` and every offline error on six of the app's most
+// common writes — the exact mistake this repo shipped once in `joinGroupViaToken` and rolled
+// back, where a bad mobile connection was reported as "the invite link is invalid".
+describe('WatchlistContext — the create-floor refusal is swallowed, nothing else is (BIN-942)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap(docs));
+    });
+  }
+
+  function denied() {
+    return Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+  }
+  function offline() {
+    return Object.assign(new Error('The service is currently unavailable.'), { code: 'unavailable' });
+  }
+
+  // One row per guarded call site, so a seventh mutator added without a guard has no row
+  // here and a guard removed from one of the six fails exactly one row.
+  const GUARDED: [kind: string, run: () => Promise<ItemWriteOutcome>][] = [
+    ['updateVisibility', () => updateVisibilityRef!('tv', 5, 'public')],
+    ['updateStatus', () => updateStatusRef!('tv', 5, 'avbruten')],
+    ['updateWatchedAt', () => updateWatchedAtRef!('tv', 5, new Date('2026-01-02'))],
+    ['updateRating', () => updateRatingRef!('tv', 5, 4)],
+    ['updateProgress', () => updateProgressRef!('tv', 5, 2, 3)],
+    ['updateTmdbStatus', () => updateTmdbStatusRef!('tv', 5, 'Ended')],
+  ];
+
+  it.each(GUARDED)('%s: a floor refusal resolves and is reported to Sentry', async (kind, run) => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    setDoc.mockRejectedValueOnce(denied());
+
+    // Resolving is not on its own proof that anything was logged — assert the report too,
+    // and assert the `kind`, which is what the dated deviation entry names as its re-open
+    // trigger. A shared helper with a wrong `kind` would be invisible without this.
+    //
+    // BIN-942 review round 1: it resolves to 'refused', not to undefined, and that is the
+    // load-bearing half. Swallowing makes the promise RESOLVE, and two callers outside the
+    // context read a resolved promise as success — a toast and a permanently-retired card.
+    // The outcome is what lets them tell the difference.
+    await act(async () => { await expect(run()).resolves.toBe('refused'); });
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'permission-denied' }),
+      expect.objectContaining({ scope: 'watchlist', kind }),
+    );
+  });
+
+  it.each(GUARDED)('%s: any OTHER error still rejects — the catch is not broad', async (_kind, run) => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    setDoc.mockRejectedValueOnce(offline());
+
+    await act(async () => { await expect(run()).rejects.toThrow('The service is currently unavailable.'); });
+    expect(captureError).not.toHaveBeenCalled();
+  });
+
+  it.each(GUARDED)('%s: a write that LANDS answers written', async (_kind, run) => {
+    // The positive half of the same contract. Without it, a helper hard-wired to return
+    // 'refused' would pass every test above and silently suppress every confirmation in the
+    // app — the failure mode is invisible precisely because nothing throws.
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+
+    await act(async () => { await expect(run()).resolves.toBe('written'); });
+    expect(captureError).not.toHaveBeenCalled();
+  });
+
+  it('a refused status write does NOT report status_changed to analytics', async () => {
+    // Same root cause one layer in: the context's own analytics call sat after the guarded
+    // write and fired regardless, recording a status nobody has.
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    setDoc.mockRejectedValueOnce(denied());
+
+    await act(async () => { await updateStatusRef!('tv', 5, 'avbruten'); });
+    expect(trackEvent).not.toHaveBeenCalledWith('status_changed', expect.anything());
+  });
+
+  it('a status write that LANDS still reports status_changed', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+
+    await act(async () => { await updateStatusRef!('tv', 5, 'avbruten'); });
+    expect(trackEvent).toHaveBeenCalledWith('status_changed', { mediaType: 'tv', status: 'avbruten' });
+  });
+
+  // The add path is deliberately NOT guarded. It reports its outcome back to the caller
+  // (BIN-895), so swallowing a refusal here would make the button say "added" about a title
+  // Firestore refused — the exact false confirmation BIN-895 closed, reopened on the create
+  // path the floor introduces.
+  it('the ADD path is not swallowed — a refused create still rejects for the caller', async () => {
+    await mountSeeded([]);
+    setDoc.mockRejectedValueOnce(denied());
+
+    await act(async () => {
+      await expect(upsertTitleRef!(newTitle(900, 'movie'))).rejects.toThrow();
+    });
+    expect(captureError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'writeTitle' }),
+    );
   });
 });

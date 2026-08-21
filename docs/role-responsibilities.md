@@ -131,7 +131,7 @@ Owns the **25 SEK/mån Firebase Blaze cap** (50/90/100% alerts).
 
 ## 4. Security Architect
 
-Owns access control and the attack surface — the **~787-line `firestore.rules`**
+Owns access control and the attack surface — **`firestore.rules`**
 is the real boundary.
 
 - Owner-only access, field whitelisting (`hasOnly`), value-bound validation.
@@ -139,6 +139,13 @@ is the real boundary.
 - Admin-flag escalation prevention (Console-only).
 - SHA-256-hashed, rotatable invite tokens (plaintext never persisted).
   → `src/lib/firebase/groups.ts`, `src/lib/firebase/utils.ts`
+- Distinguishing a server REFUSAL from infrastructure noise. Only `permission-denied`
+  proves the server rejected a write on its merits; `unavailable`, `deadline-exceeded`
+  and offline all go away on their own. Collapsing the two shipped once and was rolled
+  back (a bad mobile connection reported as "the invite link is invalid"), and BIN-942
+  gave the predicate a second caller — the watchlist edit paths that swallow the
+  create-floor's refusal. One definition, so the two cannot drift.
+  → `src/lib/firebase/errorCodes.ts`
 - Server-authoritative rate limiting (`submitReport` callable).
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.

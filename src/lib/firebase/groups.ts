@@ -1,5 +1,6 @@
 import { fsdb, lazySubscribe } from './db';
 import { toDate, generateSecureToken, sha256Hex } from './utils';
+import { isPermissionDenied } from './errorCodes';
 import { mediaTypeDocId, resolveTmdbId } from '@/lib/mediaTypeDocId';
 import {
   buildHouseholdContribution,
@@ -210,9 +211,9 @@ export async function disableInviteToken(groupId: string): Promise<void> {
 // tillbaka": användaren gav upp och bad ägaren rotera en fungerande token,
 // och anroparens retry-gren var i praktiken död kod eftersom den bara triggar
 // på ett KASTAT fel.
-function isPermissionDenied(err: unknown): boolean {
-  return (err as { code?: string } | null)?.code === 'permission-denied';
-}
+// BIN-942 moved the predicate itself to `errorCodes.ts` so the watchlist edit paths
+// share ONE definition with this one; the reasoning above is why it exists and stays here.
+// (imported at the top of this file)
 
 export async function joinGroupViaToken(params: {
   groupId: string;
@@ -909,7 +910,7 @@ export function subscribeToGroupHousehold(
         cb(snap.docs.map(d => householdDocToObject(d.id, d.data())));
       },
       err => {
-        if (err.code === 'permission-denied') onDenied?.();
+        if (isPermissionDenied(err)) onDenied?.();
         else onError?.();
       },
     ));

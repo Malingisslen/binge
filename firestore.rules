@@ -281,37 +281,38 @@ service cloud.firestore {
       //
       // Which writes this can refuse, and why that is the intended outcome.
       //
-      // FOUR modules write here, and they split by MECHANISM, not by safety. The first
-      // two BUILD the id, both through mediaTypeDocId() with `tmdbId` typed `number` —
-      // a JS number template-literals without leading zeros, so neither can emit an
-      // alias shape and neither can ever be refused:
+      // FOUR modules write here, and they split by MECHANISM, not by safety. Two BUILD
+      // the id, both through mediaTypeDocId() with `tmdbId` typed `number` — a JS number
+      // template-literals without leading zeros, so neither can emit an alias shape and
+      // neither can ever be refused by THIS guard:
       //   · src/contexts/WatchlistContext.tsx — the create path.
-      //   · src/lib/watchlist/nextAirReadRepair.ts:172 — batch.set(…, {merge:true}),
-      //     which genuinely CAN create; its `tmdbId` is typed `number` at :57.
-      // The other two REUSE an id read off a live snapshot, so both can carry a
-      // grandfathered bare-numeric shape:
-      //   · src/lib/taste/backfill.ts:74 — updateDoc(), which cannot create at all, so
-      //     it only touches documents that already exist. That is why `update` must
-      //     stay unguarded.
-      //   · src/contexts/AuthContext.tsx:265 — cascadeVisibilityToItems' batch.set on
-      //     `d.ref` with {merge:true}. An update while the doc exists — but a CREATE if
-      //     the user deletes that title between the getDocs and the commit, and then
-      //     this rule REFUSES it. **That refusal is deliberate** (Malin, 2026-08-19;
-      //     dated entry in .claude/rules/accepted-deviations.md).
-      // The reason it is right is not that resurrecting a deleted doc feels dubious.
-      // It is that a create under a non-canonical id is the alias multiplication this
-      // guard exists to stop — see the paragraph above. Rules read shape, not intent,
-      // and refusing here is the guard doing its documented job.
-      // Cost, accepted: a batch is all-or-nothing, so one refused legacy item withholds
-      // the visibility stamp from up to 449 siblings until the `visibilitySyncPending`
-      // retry re-reads a snapshot the deleted doc has left. Self-healing by construction.
+      //   · src/lib/watchlist/nextAirReadRepair.ts — batch.set(…, {merge:true}), which
+      //     genuinely CAN create; its `tmdbId` is typed `number`.
+      // Two REUSE an id read off a live snapshot, so either could carry a grandfathered
+      // bare-numeric shape — but neither can create, so neither reaches this rule:
+      //   · src/lib/taste/backfill.ts — updateDoc(), which cannot create at all, so it
+      //     only touches documents that already exist. That is why `update` must stay
+      //     unguarded.
+      //   · src/contexts/AuthContext.tsx — cascadeVisibilityToItems, which since BIN-942
+      //     uses batch.update on `d.ref`. `update` carries an existence precondition
+      //     Firestore enforces regardless of rules, so a title deleted between the
+      //     getDocs and the commit fails the batch instead of being re-created. Read
+      //     that function, not this comment, for the guarantee.
       //
-      // STILL OPEN, and this guard does NOT close it: the same race on a CANONICAL id
-      // is permitted, because the shape matches and isValidWatchlistItem is a hasOnly
-      // ceiling with no required-field floor. cascadeVisibilityToItems then recreates
-      // the deleted title as a two-field ghost on the public-readable path. Verified
-      // against the emulator, filed as BIN-942. Do not read this block as saying the
-      // resurrect problem is solved — it is solved for legacy ids only.
+      // CLOSED 2026-08-20 by BIN-942's `requiredWatchlistFields` below — read that
+      // function, not this paragraph, for the guarantee. Until then the same race on a
+      // CANONICAL id was permitted: the shape matched, and isValidWatchlistItem is a
+      // hasOnly CEILING with no required-field FLOOR, so a merge onto a title deleted
+      // mid-flight recreated it as a two-field ghost on the public-readable path.
+      // Verified against the emulator before the fix, and again after.
+      //
+      // The cascade fix and the floor are NOT redundant. `batch.update` closes only the
+      // cascade's own race; the floor covers every OTHER merge-writer into this
+      // collection that can still turn into a create — the ones in WatchlistContext plus
+      // nextAirReadRepair. Removing either leaves a live hole.
+      //
+      // Two independent guards now, and they answer different questions: this one asks
+      // whether the ID is canonical, the floor asks whether the PAYLOAD is a real title.
       //
       // (Read sites build this id too — src/hooks/useFriendsWhoSaw.ts:59 — but a read
       // cannot reach a create rule, so they are not what this list is about.)
@@ -328,8 +329,35 @@ service cloud.firestore {
       function canonicalWatchlistDocId(id) {
         return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
       }
+      // BIN-942 — the required-field FLOOR, create-only. isValidWatchlistItem is a
+      // `hasOnly` ceiling: it says which keys are ALLOWED and never which are REQUIRED, so
+      // a two-field payload passed it happily. That is how a merge-write racing the user's
+      // delete resurrected a deleted title as an identity-less ghost — visible on the
+      // publicly-readable profile, revealing the account HELD that title after the user
+      // asked for it to be gone (Art. 17), and untargetable by removeItem, whose delete key
+      // is built from the very fields the ghost lacks.
+      //
+      // CREATE-ONLY, deliberately, and never on update. A merge-write against an EXISTING
+      // document is evaluated as an update, so every ordinary partial edit — a rating, a
+      // status, an episode position — keeps passing untouched. Add this to `allow update`
+      // and every one of those edits would need to resend the whole identity block.
+      //
+      // Three fields, not more: `tmdbId`, `mediaType` and `status` are exactly what
+      // buildAddPayload's `AlwaysWritten` guarantees on every genuine add, so no legitimate
+      // create is refused — including the episode-tick add path BIN-954 shipped, which goes
+      // through the same `writeTitle` door. Every other client writer into this collection
+      // omits at least `tmdbId` AND `mediaType`, so all of them are refused on a create and
+      // none of them is a create anyone intended.
+      //
+      // The cost is real and accepted: in the race, the raced edit is denied and its own
+      // call site logs it. See the dated entry in .claude/rules/accepted-deviations.md for
+      // the four-axis scope — what is accepted, what is still fileable, and what re-opens it.
+      function requiredWatchlistFields(d) {
+        return d.keys().hasAll(['tmdbId', 'mediaType', 'status']);
+      }
       allow create: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
         && canonicalWatchlistDocId(itemId)
+        && requiredWatchlistFields(request.resource.data)
         && (!('notes' in request.resource.data) || request.resource.data.notes == null);
       allow update: if isOwner(uid) && isValidWatchlistItem(request.resource.data)
         && (!('notes' in request.resource.data) || request.resource.data.notes == null

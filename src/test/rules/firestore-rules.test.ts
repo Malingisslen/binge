@@ -119,6 +119,21 @@ describe('BIN-655 — buildAddWrite payloads satisfy the hasOnly allowlist', () 
     });
   }
 
+  // BIN-942 — the negative half of the floor, and the biggest regression risk in that
+  // change: if the floor is wrong, NOBODY can add a title. The two CREATE cases above are
+  // the positive half (they now also prove the floor lets a real add through). This is the
+  // half that proves the floor is not vacuous, and villkor 18 / #7's condition 3 require it
+  // to MUTATE the builder's actual return value — a hand-built body would only re-prove the
+  // bare-shape cases in the doc-id block below and pin nothing new.
+  it('BIN-942: the same payload minus one floor field is refused', async () => {
+    const ref = doc(ownerDb(), 'users', OWNER, 'watchlist', OWNER_ITEM);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const write = buildAddWrite(payload() as any, 'bulk', writeCtx() as any);
+    expect(write).toHaveProperty('tmdbId'); // guard the guard: no tmdbId, nothing proven
+    delete write.tmdbId;
+    await assertFails(setDoc(ref, write, { merge: true }));
+  });
+
   it('MERGE-UPDATE: a counted rewatch on top of a stored doc is accepted', async () => {
     // The path that writes the MOST fields onto an EXISTING doc — and the only one
     // that writes `rewatchCount` and overwrites `watchedAt`. A merge is judged against
@@ -423,13 +438,20 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     }, { merge: true }));
   });
 
-  // ── The shape cascadeVisibilityToItems actually sends (BIN-941) ────────────────────
+  // ── A two-field merge onto a title deleted mid-flight (BIN-941) ────────────────────
   //
-  // `AuthContext.tsx`'s `cascadeVisibilityToItems` does `batch.set(d.ref, {…}, {merge:true})`
-  // on refs it read from a snapshot. That is an UPDATE while the document exists — but if the
-  // user deletes the title between the `getDocs` and the `commit`, merge-on-a-missing-doc is a
-  // CREATE, and the guard applies. On a grandfathered bare-numeric id it is refused, and
-  // Malin decided 2026-08-19 that the refusal is correct (see accepted-deviations.md).
+  // Any `setDoc(ref, {…}, {merge:true})` on a ref read from a snapshot is an UPDATE while the
+  // document exists — but if the user deletes the title between the read and the write,
+  // merge-on-a-missing-doc is a CREATE, and the guard applies. On a grandfathered
+  // bare-numeric id it is refused, and Malin decided 2026-08-19 that the refusal is correct
+  // (the entry is retired to `.claude/accepted-deviations.archive.md`; its successor is dated
+  // 2026-08-20).
+  //
+  // BIN-942 moved `cascadeVisibilityToItems` — the writer this block was originally written
+  // about — to `batch.update`, which cannot create, so it no longer reaches this rule at all.
+  // The payload below is still exactly what it sent, and it is still the shape the other
+  // merge-writers into this collection can send, which is what these pin. Their inventory
+  // lives in `firestore.rules` — read it there, not here.
   //
   // These pin it, because a decided behaviour with no test is one the next refactor reverses.
   // The `it.each` table above proves the denial with `validWatchlist()` — the FULL payload.
@@ -439,9 +461,9 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
   // the caller's real payload rather than a convenient one.
   const cascadePayload = { effectiveVisibility: 'public', isPublic: true };
 
-  it('the visibility cascade cannot resurrect a deleted bare-numeric item', async () => {
+  it('a two-field merge cannot resurrect a deleted bare-numeric item', async () => {
     // Driven as the sequence a user actually performs — the item exists, they delete it,
-    // and the in-flight cascade then merges onto the ref it read before the delete.
+    // and an in-flight write merges onto the ref it read before the delete.
     //
     // Worth knowing while reading this: rules decide create-vs-update purely on whether
     // the document is there NOW, with no memory of it having existed. So the assertion
@@ -483,6 +505,66 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     await assertFails(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), {
       ...validWatchlist(), notes: 'inline note',
     }));
+  });
+
+  // ── BIN-942: the required-field FLOOR ─────────────────────────────────────────────
+  //
+  // The block above proves the doc-id guard refuses a ghost on a LEGACY id. On a
+  // canonical id — the overwhelmingly common case — it refused nothing: the shape matched,
+  // and `isValidWatchlistItem` is a `hasOnly` CEILING that never says which fields are
+  // REQUIRED. So a two-field body sailed through, and the deleted title came back as a
+  // blank row on the publicly-readable profile that `removeItem` could not even target.
+  //
+  // The floor (`requiredWatchlistFields`) is create-only and asks a different question
+  // from the doc-id guard: that one asks whether the ID is canonical, this one asks
+  // whether the PAYLOAD is a real title.
+  describe('the required-field floor (BIN-942)', () => {
+    it('a two-field merge cannot resurrect a deleted CANONICAL item either', async () => {
+      // The headline. Same sequence a user actually performs — the item exists, they
+      // delete it, and an in-flight write merges onto the ref it read before the
+      // delete — but on `movie_42`, where every guard that existed before this ticket
+      // says yes. Before the floor this assertion was `assertSucceeds`.
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_42'), validWatchlist());
+      });
+      await assertSucceeds(deleteDoc(rawWatchlistRef(ownerDb(), 'movie_42')));
+      await assertFails(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), cascadePayload, { merge: true }));
+    });
+
+    it('does NOT leak to update — a partial edit on a live doc still passes', async () => {
+      // The whole reason the floor is create-only. Rules decide create-vs-update purely on
+      // whether the document is there now, so an ordinary rating or status edit sends a
+      // two- or three-key body and must keep working. Bind this to the floor and every
+      // partial edit in the app would have to resend the identity block.
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_42'), validWatchlist());
+      });
+      await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), {
+        rating: 4, ratedAt: serverTimestamp(),
+      }, { merge: true }));
+    });
+
+    // Every `merge: true` writer into this collection can become a create in the same
+    // race. These are the four payload SHAPES that were never asserted against the CREATE rule —
+    // #7's condition 1, 2026-08-20: the plan originally asked for only the first two, so
+    // the other two would have been asserted in prose and nowhere else.
+    it.each([
+      ['setRuntime', { runtime: 120 }],
+      ['flushNextAirWrites', { nextAirUpdatedAt: serverTimestamp(), nextAirDate: '2026-09-01' }],
+      ['refreshTmdbFields', {
+        tmdbFieldsRefreshedAt: serverTimestamp(),
+        title: 'The Matrix', posterPath: null, genreIds: [28, 878], tmdbStatus: null,
+      }],
+      ['updateNotes', { notes: deleteField(), effectiveVisibility: 'private', isPublic: false }],
+    ])('denies a bare %s create on a canonical id', async (_writer, body) => {
+      await assertFails(setDoc(rawWatchlistRef(ownerDb(), 'movie_42'), body, { merge: true }));
+    });
+
+    // The two halves that prove the floor reads what production actually SENDS live in the
+    // BIN-655 describe above, where the real `buildAddWrite` helpers are in scope:
+    // 'CREATE: a bulk/viewing write of a brand-new title is accepted' (which the floor now
+    // also has to let through) and 'BIN-942: the same payload minus one floor field is
+    // refused'. Naming them here so this block is not read as the whole story.
   });
 });
 

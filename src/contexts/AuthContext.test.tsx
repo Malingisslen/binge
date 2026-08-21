@@ -103,8 +103,21 @@ type FakeDoc = { id: string; ref: { _path: string }; data: () => Record<string, 
 const getDocsMock = vi.fn<(q: unknown) => Promise<{ docs: FakeDoc[] }>>(async () => ({ docs: [] }));
 const batchSets: { ref: { _path: string }; data: Record<string, unknown> }[] = [];
 const batchCommit = vi.fn<() => Promise<void>>(async () => {});
+// BIN-942: `update` is what the cascade calls now — `set(…, {merge:true})` against a
+// snapshot ref is a CREATE when the title was deleted mid-cascade, which is the ghost this
+// ticket removes. Both land in the SAME `batchSets` array on purpose, so the five BIN-587
+// assertions below still read what the cascade wrote without a single word changed; the
+// `batchWriteKinds` tally beside it is what pins WHICH method was used.
+const batchWriteKinds: string[] = [];
 const writeBatch = vi.fn(() => ({
-  set: (ref: { _path: string }, data: Record<string, unknown>) => { batchSets.push({ ref, data }); },
+  set: (ref: { _path: string }, data: Record<string, unknown>) => {
+    batchWriteKinds.push('set');
+    batchSets.push({ ref, data });
+  },
+  update: (ref: { _path: string }, data: Record<string, unknown>) => {
+    batchWriteKinds.push('update');
+    batchSets.push({ ref, data });
+  },
   commit: () => batchCommit(),
 }));
 
@@ -284,6 +297,7 @@ beforeEach(() => {
   getDocsMock.mockClear();
   getDocsMock.mockImplementation(async () => ({ docs: [] }));
   batchSets.length = 0;
+  batchWriteKinds.length = 0;
   batchCommit.mockReset();
   batchCommit.mockImplementation(async () => {});
   // mockReset (inte mockClear): ett test som byter ut batch-fabriken ska inte
@@ -557,6 +571,23 @@ describe('AuthContext — failed visibility cascade no longer fails open (BIN-58
     expect(flagWrites()).toHaveLength(0); // ingen extra write på happy path
   });
 
+  // BIN-942. The whole fix is one method name, so this is the assertion that carries it.
+  // `set(…, { merge: true })` against a snapshot ref is a CREATE when the title was deleted
+  // between `getDocs` and `commit` — the deleted title comes back as a two-field ghost on
+  // the publicly-readable path. `update` cannot create; Firestore enforces the existence
+  // precondition regardless of the rules, so this closes the cascade's own race on
+  // code-deploy alone, before the rules floor ships.
+  it('the cascade writes with update, never with set — a deleted title cannot be resurrected', async () => {
+    renderAuth();
+    await login({ username: 'malin', defaultVisibility: 'private', isPublic: false });
+    getDocsMock.mockImplementation(async () => ({ docs: [watchlistDoc('m1'), watchlistDoc('m2')] }));
+
+    await act(async () => { await ctx!.updateDefaultVisibility('public'); });
+
+    expect(batchWriteKinds).toEqual(['update', 'update']);
+    expect(batchWriteKinds).not.toContain('set');
+  });
+
   it('records visibilitySyncPending on the profile when the item cascade throws', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     renderAuth();
@@ -633,11 +664,16 @@ describe('AuthContext — failed visibility cascade no longer fails open (BIN-58
     writeBatch.mockImplementation(() => {
       const mine: Record<string, unknown>[] = [];
       const isRetryBatch = ++batches === 1;
+      // BIN-942: same shape as the module-level mock — the cascade calls `update` now,
+      // and this local override has to follow or the whole interleaving test throws
+      // "update is not a function" instead of exercising the race it is about.
+      const record = (ref: { _path: string }, data: Record<string, unknown>) => {
+        mine.push(data);
+        batchSets.push({ ref, data });
+      };
       return {
-        set: (ref: { _path: string }, data: Record<string, unknown>) => {
-          mine.push(data);
-          batchSets.push({ ref, data });
-        },
+        set: record,
+        update: record,
         commit: async () => {
           if (isRetryBatch) await retryCommit;
           timeline.push(`commit:${String(mine[0]?.effectiveVisibility)}`);

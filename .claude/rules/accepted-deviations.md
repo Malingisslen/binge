@@ -227,36 +227,88 @@ this state — treat it as an overdue Art. 17 request completed by hand, not as 
 operation (`docs/RUNBOOK.md` §5f). This EXTENDS the 2026-08-13 "no natural retirement"
 entry above (same root cause, different consequence); it does not supersede it. — 2026-08-15
 
-### [Data/UX] Synlighetskaskaden nekas — med flit — när den råkar återuppväcka ett legacy-id
-`cascadeVisibilityToItems` (`src/contexts/AuthContext.tsx:265`) gör
-`batch.set(d.ref, {effectiveVisibility, isPublic}, { merge: true })` på referenser den läst
-ur en snapshot. Medan dokumentet finns är det en update. Raderar användaren titeln mellan
-`getDocs` och `batch.commit()` är merge-mot-ett-borta-dokument i stället en **create**, och
-på ett grandfathered bara-numeriskt id nekar BIN-766:s `canonicalWatchlistDocId` den.
+### [Data/UX] Regelgolvet nekar en samtidig redigering — och de sex tystar just det nekandet
+`firestore.rules` kräver sedan BIN-942 att varje **create** i `users/{uid}/watchlist/{itemId}`
+bär `tmdbId`, `mediaType` och `status` (`requiredWatchlistFields`). Golvet är create-only.
 
-**Accepterat:** att nekandet sker, och att det tar hela sin chunk med sig. **Why:** Malins
-beslut 2026-08-19. En create under ett icke-kanoniskt id är exakt den alias-multiplikation
-BIN-766:s spärr finns för — regler läser form, inte avsikt, så nekandet är spärren som gör
-sitt dokumenterade jobb, inte en olycka. Att bygga om kaskaden så den tål ett nekande
-avfärdades uttryckligen.
+Följden: en `setDoc(…, { merge: true })` mot ett dokument som hunnit raderas är en create,
+och nekas nu. **Tio skrivvägar** kan träffas — nio av de tio `merge: true`-skrivarna i
+`WatchlistContext` plus `flushNextAirWrites` i `nextAirReadRepair.ts`. Den tionde,
+`writeTitle`, kan aldrig nekas: `buildAddPayload`s `AlwaysWritten` är en äkta övermängd av
+golvet, så varje äkta tillägg passerar. Räkna aldrig av `writeTitle` från de tio och tro att
+nio är ett fel — de är två olika mängder.
 
-**Omfång — fyra axlar, så tystnaden inte får betyda mer än den ska:**
-* **Mekanism:** bara `set(merge:true)` på en snapshot-referens vars dokument hunnit
-  raderas. `taste/backfill.ts:74` (`updateDoc`) kan aldrig nå create-grenen; de två
-  id-byggande skribenterna kan aldrig avge en alias-form.
-* **Allvarlighet:** en batch är allt-eller-inget, så upp till 449 syskon i samma chunk
-  blir ostämplade. Det landar i `visibilitySyncPending` (BIN-587, posten 2026-07-30) och
-  självläker: nästa `getDocs` ser inte det raderade dokumentet, så samma post kan inte
-  fälla igen.
-* **Räckvidd:** bara grandfathered bara-numeriska id:n. Kanoniska id:n nekas ALDRIG —
-  se nedan.
-* **Tid:** gäller tills de sista pre-BIN-560-dokumenten är borta. Mängden krymper bara.
+Sex av dem sväljer nekandet (`guardedItemWrite`): `updateVisibility`, `updateStatus`,
+`updateWatchedAt`, `updateRating`, `updateProgress`, `updateTmdbStatus`. De fångar **bara**
+`permission-denied` via den delade `isPermissionDenied`, loggar med `console.error` +
+`captureError({ scope: 'watchlist', kind: '<anropsplats>' })`, och kastar allt annat vidare.
 
-**INTE accepterat, och fortfarande öppet:** samma kapplöpning på ett **kanoniskt** id.
-Formen matchar, `isValidWatchlistItem` är ett `hasOnly`-tak utan golv för obligatoriska
-fält, och kaskaden återskapar då den raderade titeln som ett tvåfältsspöke
-(`effectiveVisibility`, `isPublic`) på den publikt läsbara vägen — vilket avslöjar att
-kontot hade titeln efter att användaren bett om att få bort den. Verifierat mot emulatorn
-av #7 QA, filat som **BIN-942**. #6 Dataskyddsombudet krävde att den halvan skrivs som
-öppen och inte får läsas in i beslutet ovan. Läs alltså aldrig den här posten som att
-återuppväckandet är löst — det är löst för legacy-id:n. — 2026-08-19
+**Accepted:** att de sex tystar exakt det här nekandet, utan notis till användaren.
+**Why:** golvet är create-only, så de kan bara nekas när måldokumentet inte finns — alltså
+just den kapplöpningen. Titeln ÄR raderad, och snapshot-lyssnaren tar bort raden ändå, så det
+finns ingenting att berätta och ingenting att göra om. Alternativet — att låta felet bubbla —
+ger en ofångad promise-rejection per vanlig redigering utan att användaren kan göra något åt
+den. Malins beslut 2026-08-20, efter panelrundan på A+B+C och en fokuserad omkritik från #6,
+#4, #27 och #7 när skrivvägsinventeringen visade sig vara tio i stället för sju.
+
+**"Utan notis" gäller kontexten, inte anroparna — och det är en skillnad som kostade ett
+underkänt granskningsvarv.** `WatchlistContext` kan inte nå en notis (`Providers.tsx` nästlar
+`ToastProvider` INUTI `WatchlistProvider`), men två anropare HAR en egen bekräftelse:
+`VillSePickerPage` toastar "Markerad som sedd", och `QuickRateModal` pensionerar kortet. Ett
+sväljt nekande resolvar löftet, så båda hade bekräftat en skrivning Firestore vägrade — samma
+falska besked BIN-895 stängde för tilläggsvägen. Därför returnerar de sex numera ett utfall
+(`ItemWriteOutcome`), och varje anropare som säger något är gatad på det. Det som är accepterat
+är alltså TYSTNAD, aldrig en osann bekräftelse. Lägger du till en anropare som bekräftar i ord
+eller i UI-tillstånd: grinda den på utfallet.
+
+**Ett undantag, medvetet:** `useMarkSeen`s `trackEvent('rate_on_sedd')` avfyras ovillkorligt
+efter `void updateRating(...)`. Det är inte samma sak som `status_changed`, som namnger en
+dataändring — `rate_on_sedd` mäter att betygsfrågan BESVARADES, och det gjorde den. Ingen
+påstår något om vad som lagrades, och användaren ser ingen bekräftelse. Skulle händelsen
+någon gång läsas som "ett betyg finns", grinda den då.
+
+**Riktningsasymmetri — "kaskadfel" får aldrig stå som en odifferentierad risk.** Mekaniskt är
+`cascadeVisibilityToItems` symmetrisk, men konsekvensen är det inte. En misslyckad
+**publik→privat**-kaskad lämnar objekt kvar i det ÖPPNARE läget — det är 2026-07-30-postens
+farliga riktning, och den mitigeras av `visibilitySyncPending` (BIN-587), inte av den här
+posten. En misslyckad **privat→publik** gör bara titlar mer privata än användaren bad om:
+irriterande, aldrig ett läckage.
+
+**NOT accepted, still fileable — fyra saker:**
+1. **`writeTitle` som sväljer tyst.** Tillägg-vägen rapporterar sitt utfall till anroparen
+   (BIN-895), så ett nekande MÅSTE avvisa; annars säger knappen "tillagd" om en titel
+   Firestore vägrade. Den är avsiktligt utanför `guardedItemWrite` och har ett eget test.
+2. **Ett SYSTEMATISKT nekande av de sex** — en regelregression, eller en klientbugg som gör
+   varje merge-skrivning till en create. Då tystas varje redigering i appen och användaren
+   ser en app som tar emot allt och sparar ingenting. Samma klass som
+   `communityRatingMaintain`-postens punkt 1: den smala accepten säger ingenting om den breda.
+3. **`updateNotes`.** Den är exponerad och är INTE tystad — den har en befintlig catch som
+   avmarkerar `migratedNotesRef`, nu även taggar Sentry, och kastar vidare. Skälet att inte
+   tysta den: dess item-doc-skrivning ligger i samma ATOMÄRA batch som användarens egen
+   anteckningstext i `watchlistNotes`, så ett nekande kastar bort texten hen just skrev — inte
+   bara en synlighetsstämpel. En sparning som misslyckas får inte se ut som en sparning som
+   lyckades. Vad användaren ser idag: ingenting. `NotesBlock`s `onChange` returnerar `void`,
+   så ingen inväntar löftet; texten ligger kvar i fältet. Det är fileable, inte accepterat.
+4. **`console.warn`-blindheten på de tre återstående vägarna** — `setRuntime`,
+   `refreshTmdbFields` och `flushNextAirWrites`. De fångar redan, men med `console.warn`, som
+   Sentrys `globalHandlers` inte ser. Golvet gör nekanden vanligare där. Filad separat; att de
+   "fångar redan" är inte samma sak som att de rapporterar.
+
+**Scope:** den här accepten når `WatchlistContext`s sex tystade redigeringsvägar och ingenting
+annat. Citera den aldrig för att vinka igenom svälj-och-logga någon annanstans — varje väg
+bedöms på sina egna insatser, och `updateNotes` i samma fil är exemplet på att svaret blir ett
+annat när det som går förlorat är användarens egen text. Att generalisera en smal accept är
+precis hur BIN-748:s avvisade `localStorage`-flagga kom tillbaka som en shippad.
+
+**Re-open when:** en `watchlist`-scope dyker upp i Sentry med ett `kind` från listan ovan.
+Det är observationskanalen, och den är den enda — nekandet är osynligt i datan (raden är
+borta ändå) och användaren har inget att rapportera. Tre olika signaler, samma kanal:
+`kind` = en av de sex → punkt 2 om den återkommer systematiskt; `kind: 'updateNotes'` → punkt
+3; `kind: 'updateProgress-add'` (BIN-954) är en annan sak och hör inte hit. Utan taggarna hade
+den här posten haft en re-open-utlösare som inte går att nå, vilket är permanent by
+construction — samma fel `communityRatingMaintain`-posten skrevs för att undvika.
+
+Supersederar 2026-08-19-posten om synlighetskaskadens nekande, som är retirerad ordagrant till
+`.claude/accepted-deviations.archive.md`. Den accepterade nekandet på ett gammalt
+bara-numeriskt id och sa själv att samma kapplöpning på ett kanoniskt id var öppen; BIN-942
+stängde den halvan. — 2026-08-20

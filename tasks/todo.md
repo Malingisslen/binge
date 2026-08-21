@@ -540,8 +540,16 @@ synlighetskaskader vanligare, och en misslyckad kaskad är indata till just den 
 3. Golvet gäller ENDAST `allow create`. *(#4, #27, #6)*
 4. Emulatortest på ett KANONISKT id: läggs till, ses falla **rött först**, vänds av golvet. *(#7)*
 5. Emulatortest: golvet läcker inte till `update` — delskrivning mot befintligt dokument passerar. *(#7)*
-6. Emulatortest: golvet blockerar bar `{runtime}`- och bar `{nextAirUpdatedAt}`-create. *(#27)*
-7. `AuthContext.test.tsx:106`:s mock-`writeBatch` får `.update()` (mönster `WatchlistContext.test.tsx:118`). BIN-587-blockets fem påståenden passerar med NOLL ändrad text. *(#7)*
+6. Emulatortest: golvet blockerar en bar create för **var och en av de fyra nyupptäckta
+   skrivarnas nyttolastform** — `{runtime}` (`setRuntime`), `{nextAirUpdatedAt}`
+   (`flushNextAirWrites`), `planTmdbFieldsRefresh`-formen (`refreshTmdbFields`) och
+   `{ notes: deleteField(), …visFields }` (`updateNotes`). **Utvidgat 2026-08-20 av #7:s
+   villkor 1** — v4 krävde bara de två första, så två av fyra former hade varit påstådda i
+   prosa och aldrig emulatorprövade. *(#27, #7)*
+7. `AuthContext.test.tsx:106`:s mock-`writeBatch` får `.update()`. Mönstret finns i
+   `WatchlistContext.test.tsx`s `writeBatch`-mock — **rad 118 var fel citat** (#7:s villkor 3,
+   2026-08-20; 118 är `snapshotErrorCallback`). Leta upp mocken på namn, inte rad.
+   BIN-587-blockets fem påståenden passerar med NOLL ändrad text. *(#7)*
 8. Nytt enhetstest: kaskaden anropar `batch.update`, aldrig `batch.set`. *(#7)*
 9. Ny daterad post supersederar 2026-08-19-posten, **och den gamla retireras ordagrant till `.claude/accepted-deviations.archive.md`** (filhuvudet kräver det; modellen är 2026-07-24-posten, INTE 2026-08-15 som v2 felaktigt citerade — den säger uttryckligen "EXTENDS … does not supersede"). Nya posten avgränsas på alla fyra axlar med `Accepted` / `NOT accepted, still fileable` / `Scope` / `Re-open when`. Regelkommentarens "STILL OPEN" rättas i SAMMA commit. *(#4, #27, #6, #5)*
 10. `flushNextAirWrites`/`setRuntime`/`refreshTmdbFields` får ingen anropsplatsfix — de täcks av golvet, de två senare fångar redan. Egen biljett filas. *(#27, #7)*
@@ -607,17 +615,22 @@ snapshot-lyssnaren tar bort raden. Med narrowingen i punkt 2 sväljs inget annat
       (spionerat — "kastade inte" ensamt bevisar inte att det loggades).
     * annan kod (t.ex. `unavailable`) → löftet avvisas fortfarande.
     Det negativa fallet är vad som hindrar att narrowingen tyst blir en bred catch igen. *(#7:2, #4:3)*
-17. Test: en create som golvet nekar vid 721 lämnar anroparens löfte **avvisat**. Villkor 12
-    bevisar bara att en bra payload släpps igenom — inte att en nekad syns för anroparen. *(#6:5)*
+17. Test: en create som golvet nekar i `writeTitle` lämnar anroparens löfte **avvisat**.
+    Villkor 12 bevisar bara att en bra payload släpps igenom — inte att en nekad syns för
+    anroparen. (Radnumret "721" är struket 2026-08-20 på #7:s villkor 4 — samma förbud mot
+    radnummer som resten av planen.) *(#6:5)*
 18. Villkor 12:s negativa halva måste mutera `buildAddWrite()`s FAKTISKA returvärde
     (t.ex. `delete write.tmdbId`), inte ett handbyggt objekt — annars dubblerar den villkor 6
     och prövar inget nytt. Skrivs i testets kommentar. *(#7:3)*
 19. Den nya daterade posten delar upp sig som `communityRatingMaintain`-posten (2026-08-16)
     gör: **Accepted** = bara den smala kapplöpningen (create-golvets nekande mot ett samtidigt
-    raderat dokument, sex call sites, 721 undantagen). **NOT accepted, still fileable** =
-    (a) 721 som sväljer tyst, (b) ett SYSTEMATISKT nekande av de sex (regelregression, eller en
-    klientbugg som gör varje merge-skrivning till en create). Observationskanalen som namnges
-    som re-open-trigger är `captureError`-scope/kind. *(#6:3, #4:4)*
+    raderat dokument, sex call sites, `writeTitle` undantagen). **NOT accepted, still fileable**
+    = (a) `writeTitle` som sväljer tyst, (b) ett SYSTEMATISKT nekande av de sex (regelregression,
+    eller en klientbugg som gör varje merge-skrivning till en create), (c) `updateNotes`
+    (villkor 23). Observationskanalen som namnges som re-open-trigger är `captureError`
+    scope/kind — **för alla tre**, vilket är hela skälet att villkor 25 taggar `updateNotes`
+    i stället för att lämna den på en otaggad ofångad rejection. (Radnumren strukna
+    2026-08-20; #7:s villkor 4 och 5.) *(#6:3, #4:4, #7:4-5)*
 20. Samma post namnger **riktningsasymmetrin**: mekaniskt är A symmetrisk, men en misslyckad
     publik→privat-kaskad lämnar objekt kvar i det ÖPPNARE läget (2026-07-30-postens farliga
     riktning), medan privat→publik bara blir mer privat än avsett — aldrig ett läckage.
@@ -660,9 +673,18 @@ alltså en öppen bugg, inte städning. Sagt till Malin 2026-08-20.
 v2:s instruktion gick inte att följa: pushen dör på `deploy.yml:47-55`-vakten, så det finns
 ingen hosting-deploy att vänta in.
 
-1. Push (deployen går **röd med flit** — vakten stoppar allt som rör `firestore.rules`).
-2. Hosting via **Run workflow**-knappen på `deploy.yml` (`workflow_dispatch` hoppar över vakten).
-3. `firebase deploy --only firestore:rules`.
+1. `npm run test:rules` lokalt, grönt. **Tillagt 2026-08-20 (#7:s villkor 7):** `npm test`
+   kör INTE emulatorsviten (`vitest.config.ts` exkluderar `src/test/rules/**`). CI och
+   `deploy.yml` kör den, men asynkront — steg 4 nedan kan annars ske medan den fortfarande
+   går.
+2. Push (deployen går **röd med flit** — vakten stoppar allt som rör `firestore.rules`).
+3. Hosting via **Run workflow**-knappen på `deploy.yml` (`workflow_dispatch` hoppar över vakten).
+4. **Före deployen:** `git hash-object firestore.rules` ska vara identisk med den committade
+   bloben. Deployen läser ARBETSTRÄDET, inte commiten — och under BIN-942:s granskning låg
+   filen i flera minuter med golvet ersatt av `&& true /* MUTANT */`, satt av en systersession
+   som muteringsprövade. En deploy i det fönstret hade shippat golvet AVSTÄNGT, tyst och
+   framgångsrikt. (Integrationsgranskningen, varv 4.)
+5. `firebase deploy --only firestore:rules`.
 
 Koden (A+C) måste ut FÖRE reglerna (B) — omvänt mot BIN-766. Går golvet ut först nekas
 skrivvägarna innan felhanteringen finns på plats.
@@ -671,6 +693,328 @@ skrivvägarna innan felhanteringen finns på plats.
 
 `flow1`-steget och "STILL OPEN (BIN-942)"-stycket blir falska. Uppdateras i en **egen commit**
 efter kodcommiten (e2cf608-lärdomen).
+
+## v5 — vad BIN-954 ändrade i förutsättningarna (2026-08-20, efter `7a5eb45`)
+
+Panelen svarade på en inventering som var **för snäv**, och två av villkoren räknar med den.
+Ingenting i A eller B ändras; det som ändras är sidoeffektbokföringen och att en väg till
+måste få en uttalad disposition. Skrivet före första Edit i BIN-942.
+
+### 1. Ankaret var fel, inte bara talet
+
+Inventeringen byggde på `grep "await setDoc(ref"` → åtta träffar, sju i scope. Men golvet är
+ett **create-golv** och träffar varje `merge: true`-skrivning mot samlingen, oavsett hur
+anropet råkar vara formulerat. `grep -c "merge: true" src/contexts/WatchlistContext.tsx` → **10**,
+och tre av dem syntes inte i det gamla ankaret:
+
+| Skrivare | Varför den missades | Exponerad? |
+| -- | -- | -- |
+| `setRuntime` | `setDoc(doc(...), …)`, inte `setDoc(ref, …)` | **Ja** |
+| `refreshTmdbFields` | samma form | **Ja** |
+| `updateNotes` | `batch.set(itemRef, …, { merge: true })` | **Ja** |
+
+Plus `nextAirReadRepair.ts` utanför filen (`batch.set` + `merge`).
+
+`writeTitle` är den tionde och är **inte** exponerad: `buildAddPayload`s `AlwaysWritten` är en
+äkta övermängd av golvet, så dess create passerar alltid. Efter BIN-954 gäller samma sak för
+`updateProgress` tilläggsgren — men dess merge-gren är kvar och är exponerad.
+
+**Räkningen blir alltså: tio skrivvägar kan nekas, inte sju.** Nio i `WatchlistContext`
+(alla utom `writeTitle`) plus `nextAirReadRepair`.
+
+### 2. `setRuntime` och `refreshTmdbFields` — villkor 10 står, med en anmärkning
+
+Båda grindar redan på att titeln finns (`if (!current …) return`), så bara kapplöpningen når
+dem, och båda fångar redan. Villkor 10 (ingen anropsplatsfix, egen biljett) står kvar.
+
+**Anmärkningen:** `setRuntime`, `refreshTmdbFields` OCH `flushNextAirWrites` fångar alla med
+`console.warn` — tre ställen, inte ett (#6 och #27 fann det oberoende). Panelens punkt 1 slog fast att
+`console.warn` är en REGRESSION jämfört med ett ohanterat fel, eftersom Sentrys
+`globalHandlers` fångar det senare men inte det förra. B gör nekanden vanligare på just de
+här vägarna. Det är inte ett skäl att bygga om dem i den här biljetten — det är ett skäl att
+följdbiljetten säger `captureError`, inte "fångar redan, klart".
+
+### 3. `updateNotes` — den enda som behöver ett BESLUT
+
+Nyupptäckt, och den enda av de tre som inte redan är avhandlad.
+
+**Varför den är exponerad:** item-doc-skrivningen är villkorad
+(`current?.notes != null || Object.keys(visFields).length > 0`). Är titeln raderad och
+snapshoten landad är `current` `undefined`, och `shouldStampVisibility(undefined)` är **true**
+(`undefined?.visibility == null`), så `visFields` är icke-tom och skrivningen sker. Mot ett
+borta dokument är den en create med bara `notes: deleteField()` + de två synlighetsfälten —
+golvet nekar. Batchen är atomär, så **anteckningsskrivningen faller med den**, och
+`updateNotes` avmarkerar `migratedNotesRef` och kastar vidare.
+
+**Vad användaren ser idag:** `NotesBlock`s `onChange` returnerar `void` och ingen inväntar
+löftet, så ett nekande blir en ofångad promise-rejection. Den når Sentry (globalHandlers) men
+inte användaren. Anteckningstexten ligger kvar i textarean.
+
+**RÄTTELSE 2026-08-20 (#6):** meningen nedan sa ursprungligen "ingen catch". Fel — en catch
+FINNS redan (den avmarkerar `migratedNotesRef` och kastar vidare). Det som saknas är
+Sentry-taggen, och den läggs till enligt villkor 25.
+
+**Disposition: LÄMNA BETEENDET, TAGGA SIGNALEN.** Samma regel som villkor 15
+ger `writeTitle`: en sparning som misslyckas får inte se ut som en sparning som lyckades. Att
+tysta den här vore värre än de sex — de sex skriver om metadata på en rad som ändå försvinner
+ur listan, den här är användarens egen text, och batchens atomicitet gör att ett nekande
+kastar bort den texten. Den namnges i den daterade posten som en känd, kastande väg, och
+observationskanalen är `captureError` med `kind: 'updateNotes'` (villkor 25) — inte en otaggad
+ofångad rejection, som inte gick att skilja från appens alla andra.
+
+**Det jag INTE föreslår, och varför:** att grinda item-doc-skrivningen på `current != null`.
+Det skulle stänga exponeringen helt, men det ändrar också en BIN-595-avvägning under kall
+laddning (då är `current` undefined och stämplingen sker med flit), och det är en
+omdesign av en väg som inte är den här biljettens ämne.
+
+### 4. Vad som INTE ändras
+
+Villkor 14:s sex står oförändrade — `updateVisibility`, `updateStatus`, `updateWatchedAt`,
+`updateRating`, `updateProgress`, `updateTmdbStatus`. Diffkontrollen "sju `captureError`-anrop
+är FEL, det ska vara sex" är fortfarande rätt. A, B, deploysekvensen, arkiveringssteget och
+testvillkoren är oförändrade.
+
+### 5. Villkor som tillkommer (den fokuserade kritiken 2026-08-20)
+
+Fyra roller kritiserade DELTAT blint — #6 Dataskydd, #4 Säkerhet, #27 Databas, #7 QA. Alla
+fyra: SUPPORT WITH CONDITIONS. **Ingen vidgade filuppsättningen, så ingen omroutning.**
+Routern kördes ändå om på den faktiska uppsättningen: `tier: "top"`,
+`reasonCode: "high-stakes"`, `panel: [27, 5, 4, 6, 7]`, `highStakes: [AuthContext.tsx,
+firestore.rules]` — oförändrat.
+
+**Det de bekräftade genom att själva köra kommandot**, inte bara läsa planen:
+
+* Inventeringen är nu **komplett vid tio**. #27 räknade om hela repot, klient och
+  `functions/`, och hittade ingen elfte. `taste/backfill.ts` (`updateDoc`) och
+  `WatchlistContext`s två `batch.update`-vägar kan aldrig skapa. Den enda Admin-SDK-skrivaren
+  mot samlingen är `tmdbTosSweep` — den förbigår regler helt men är update-only, och den är
+  redan namngiven i regelkommentaren.
+* **Golvet är rätt vid tre fält.** #4 spårade varje nyttolast: `writeTitle` bär alltid alla
+  tre; de nio andra saknar minst `tmdbId` OCH `mediaType` — även `buildStatusUpdate`, som
+  returnerar `status` men inte de andra två. Inget legitimt skapande nekas.
+* **BIN-954:s nya create-väg är säker.** `updateProgress` tilläggsgren skriver inte själv —
+  den bygger en payload och går via `upsertTitle` → `writeTitle`, samma dörr som alla andra
+  tillägg. #7 räknade tio produktionsanropare av `buildWatchlistAddPayload`, alla genom den
+  dörren. Villkor 12/18:s golvtest täcker alltså den nya vägen transitivt; det står här
+  eftersom planen aldrig sa det.
+* **A skyddar sig själv redan vid kod-deployen.** `update()` bär ett existensvillkor
+  Firestore tillämpar oavsett regler, så kaskadens egen kapplöpning stängs av A ensam. Det är
+  de nio andra vägarna som är öppna tills B ligger ute — vilket är precis det deployfönstret
+  handlar om.
+* **`visibilitySyncPending` är en verklig självläkning**, inte ett påstående: flaggan sätts
+  vid fel och en egen effekt kör om kaskaden vid nästa laddning och rensar flaggan först vid
+  lyckat resultat. Chunkstorleken är **450 exakt**. Firestore debiterar aldrig en batch som
+  reglerna avvisar, så A kostar inget extra i skrivningar.
+* **`console.warn`-blindheten finns på TRE ställen**, inte ett: `setRuntime`,
+  `refreshTmdbFields` och `flushNextAirWrites` (två catch-ställen i samma fil). #6 och #27
+  fann det oberoende av varandra.
+* **`updateNotes` HAR redan en catch.** v5 §3 sa "ingen catch" — fel. Catchen avmarkerar
+  `migratedNotesRef` och kastar vidare; det som saknas är Sentry-taggen.
+
+**Nya bindande villkor:**
+
+25. **`updateNotes` får `captureError(e, { scope: 'watchlist', kind: 'updateNotes' })` inuti
+    sin BEFINTLIGA catch, före `throw e`.** Rent additivt: ingen ny catch, ingen ändrad
+    styrflödeslogik, ingen tystnad, ingen notis. Utan taggen är postens re-open-utlösare för
+    `updateNotes` en otaggad ofångad rejection, omöjlig att skilja från appens alla andra —
+    exakt den ouppnåeliga utlösare `communityRatingMaintain`-posten är skriven för att
+    förhindra. *(#6:1, och den löser #7:5)*
+    **Ingen konflikt med #4:s "ingen kodändring för `updateNotes`":** #4:s poäng var att den
+    inte får svälja. Den kastar fortfarande vidare.
+26. Diffkontrollen i villkor 14 räknas om: efter den här batchen finns **åtta**
+    `captureError`-anrop i `WatchlistContext.tsx` — ett från BIN-954 (`updateProgress-add`),
+    sex nya för de tystade redigeringsvägarna, och ett för `updateNotes` (som kastar vidare).
+    Var och en med sitt eget `kind`. Sju var rätt tal före villkor 25; det är det inte längre.
+    *(#6:1, #7:5)*
+27. Den daterade posten säger för `updateNotes`: **befintlig catch, nu taggad, kastar
+    fortfarande vidare, ingen signal till användaren** — inte "ingen catch". *(#6:2, #6:4)*
+28. Den daterade posten säger uttryckligen att batchens atomicitet gör att ett nekande på
+    item-doc-skrivningen **också kastar bort användarens väntande anteckningstext** i samma
+    commit — inte bara att synlighetsstämplingen uteblir. Det är kostnaden, och den ska stå
+    skriven. *(#4:1)*
+29. Rättelsen av regelkommentaren (villkor 9) får INTE tappa Admin-SDK-meningen — den som
+    säger att `tmdbTosSweep` förbigår reglerna men är update-only. Den är #27:s egen
+    obligatoriska upplysning och är lätt att råka radera när "STILL OPEN" skrivs om.
+    *(#27:2)*
+30. Nytt enhetstest för `updateNotes` i det befintliga
+    `describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-522)')`:
+    `batch.commit()` avvisar med `permission-denied` → `updateNotes(...)` **avvisar**, och
+    `captureError` anropades med `kind: 'updateNotes'`. Utan det kan en framtida "gör den
+    konsekvent med de sex"-städning tyst öppna precis det v5 §3 resonerade emot, och
+    ingenting faller. *(#7:2)*
+31. Följdbiljetten (villkor 10/24) namnger **alla tre** `console.warn`-ställena —
+    `setRuntime`, `refreshTmdbFields` och `flushNextAirWrites` — och säger `captureError`,
+    inte "fångar redan". *(#6:3, #27:1, #7:6)*
+32. `npm run test:rules` körs lokalt och redovisas grönt **före** den manuella regeldeployen.
+    `npm test` kör inte emulatorsviten; CI och `deploy.yml` gör det, men asynkront.
+    *(#7:7)* — inlagt som steg 1 under "Behöver dig".
+
+## v6 — granskningsvarv 1 underkände: en tyst nekad skrivning bekräftades i UI:t
+
+**Kod- och integrationsgranskaren hittade samma defekt oberoende av varandra**, och
+säkerhetsgranskaren passerade. Det är ett riktigt användarfel, inte en formalitet.
+
+### Defekten
+
+C:s hela poäng är att de sex redigeringsvägarna SVÄLJER golvets nekande. Att svälja betyder
+att löftet **resolvar**. Två anropare utanför `WatchlistContext` läser ett resolvat löfte som
+bevis på att skrivningen skedde:
+
+* `VillSePickerPage.markSeen` — `await updateStatus(...)` och sedan
+  `toast("Markerad som sedd: X")`, ovillkorligt. Filens egen kommentar säger att toasten
+  "bekräftar i klartext". I exakt den kapplöpning biljetten handlar om bekräftar den alltså
+  något som Firestore vägrade.
+* `QuickRateModal.markRated` — `setRated(...)` körs ovillkorligt efter de bevakade
+  skrivningarna och pensionerar kortet permanent för det passet.
+* Dessutom, inne i kontexten: `trackEvent('status_changed', …)` avfyrades ovillkorligt.
+
+Det är samma falska bekräftelse BIN-895 stängde för tilläggsvägen, och exakt det villkor 15
+och #6:s villkor 1 förbjuder — bara en dörr bort. Den daterade posten påstod dessutom
+"utan notis till användaren" och "Notis går dessutom inte att nå därifrån": sant om
+kontexten, **falskt om de här anroparna**, som redan håller `useToast`.
+
+### Fixen — utfallet blir observerbart i stället för gissat
+
+`guardedItemWrite` returnerar nu `ItemWriteOutcome` (`'written' | 'refused'`), och de sex
+mutatorerna returnerar det vidare. Kontraktet är en enda mening som håller för alla grenar
+och alla sex: **`'written'` = biblioteksdokumentet speglar nu det anropet; `'refused'` = det
+gör det inte.** Det täcker golvets nekande, `updateProgress` gren C (som med flit inte skriver
+något) och tilläggsgrenens TMDB-fel utan att någon av dem måste kallas något de inte är.
+
+En anropare som inte säger något behöver fortfarande inte bry sig om värdet — `await` av ett
+`Promise<ItemWriteOutcome>` i void-läge kompilerar oförändrat, så inga andra anropsställen rörs.
+
+Gatade anropare: `VillSePickerPage` (ingen toast vid `'refused'` — kortet försvinner ändå,
+eftersom titeln är helt borta, och det finns ingen åtgärd kvar att erbjuda),
+`QuickRateModal` (kortet pensioneras inte), och `updateStatus`
+egen `trackEvent`.
+
+### Villkor som tillkommer
+
+33. `guardedItemWrite` returnerar `ItemWriteOutcome`, och de sex mutatorerna returnerar det.
+    Diffkontroll: ingen av de sex får ha kvar `Promise<void>` i `WatchlistState`. *(kod+integration)*
+34. `VillSePickerPage.markSeen` toastar INTE vid `'refused'`; `QuickRateModal.markRated`
+    markerar INTE kortet som hanterat vid `'refused'`; `updateStatus` avfyrar INTE
+    `status_changed` vid `'refused'`. Ett test per påstående. *(kod+integration)*
+35. Den daterade posten rättas: "utan notis till användaren" ersätts av att de anropare som
+    HAR en bekräftelse är gatade på utfallet. Och inversionen "sju i stället för tio" rättas
+    till "tio i stället för sju" — den motsäger postens egen rubrikräkning tre stycken ovanför
+    och inbjuder nästa läsare att "rätta" tiotalet nedåt. *(integration)*
+36. `groups.ts`s sista inline-stavning av predikatet (`subscribeToGroupHousehold`) använder den
+    delade hjälparen — annars är "en definition, så de inte kan glida isär" inte sant om filen
+    hjälparen bröts ut ur. *(integration, valfritt fynd 4)*
+37. Kommentaren "denied for exactly one reason" mjukas upp: `isValidWatchlistItem` kan neka en
+    UPDATE också, och det är just det systematiska fallet posten listar som icke-accepterat.
+    *(integration, valfritt fynd 5)*
+
+### Noterat, inte byggt
+
+Säkerhetsgranskaren: `isValidWatchlistItem` värdebinder aldrig `tmdbId`/`mediaType`/`status`
+(bara `hasOnly` på nyckeluppsättningen, plus `rating`-intervallet från BIN-143). Golvet stänger
+alltså spöket som SAKNAR identitet, inte ett med skräptypad identitet. Föregående biljettens
+defekt, inte den här — filat separat.
+
+## v7 — granskningsvarv 2: regelkommentaren motsade sig själv
+
+Säkerhet, kod och test: **pass, 0 blockerande**. Testgranskaren dödade sex enhetsmutanter och
+en regelmutant på egen hand. Integrationsgranskaren fällde EN sak, och den var riktig.
+
+**Fyndet.** Skribentinventeringen i `firestore.rules` beskrev fortfarande
+`cascadeVisibilityToItems` som en `batch.set(…, {merge:true})` som "denna regel NEKAR", och
+citerade 2026-08-19-posten som skäl — men A i samma commit gjorde kaskaden till `batch.update`
+(som aldrig når create-regeln), och samma commit arkiverade den posten. Stycket direkt under
+var redan omskrivet till "CLOSED 2026-08-20", så kommentarens två halvor sa emot varandra. Det
+är den enda kopian av inventeringen — testfilen säger uttryckligen "läs den där" — så nästa
+läsare hade lärt sig att det är riskfritt att återinföra `set(merge:true)` i kaskaden.
+
+**Åtgärdat enligt strykregeln** (`.claude/rules/code-style.md`, tillagd 2026-08-21): de falska
+satserna är BORTTAGNA, inte omskrivna. Kaskaden är flyttad till "kan inte skapa"-klassen bredvid
+`taste/backfill.ts`, citatet av den arkiverade posten är struket, och alla radnummer i
+uppräkningen är borta. Ett nytt stycke säger varför A och B inte är överlappande: `batch.update`
+stänger bara kaskadens EGEN kapplöpning, golvet täcker de nio andra merge-skrivarna. Testfilens
+blockrubrik och två testnamn beskrev också en nyttolast ingen anropare längre skickar på
+create-vägen — omdöpta till vad de faktiskt prövar.
+
+**Två valfria fynd åtgärdade:** en klausul på `ItemWriteOutcome` om att `'refused'` på
+avbockningsvägen INTE betyder att användarens gest misslyckades (`episodeProgress` skrivs
+parallellt), och `useMarkSeen`s `rate_on_sedd` är namngiven i den daterade posten som medvetet
+ogatad — den mäter att betygsfrågan besvarades, inte att ett betyg lagrades.
+
+**Kartan** ligger som en vanlig oincheckad ändring i arbetsträdet och committas direkt efter
+kodcommiten.
+
+**RÄTTELSE (integrationsgranskningen, varv 4):** den låg först i en stash, och planen kallade
+den "kartans stash". Den stashen innehöll **tolv** filer, fem av dem i sitt läge FÖRE
+granskningsvarv 3 — bland annat `WatchlistContext.tsx` utan `ItemWriteOutcome`, alltså precis
+den kod två granskare blockerade på. Ett `git stash pop`, som meningen inbjöd till, hade
+antingen krockat i alla tolv eller tyst backat granskad kod. Kartan är utplockad med
+`git checkout stash@{0} -- docs/workflow-map.html`, verifierad (bär BIN-942-texten, ingen
+"STILL OPEN", lintern grön) och stashen är **borttagen** så ingen kan poppa den av misstag.
+Det är också BIN-707/708-lärdomen: en stash är den artefaktklass som avdunstar, en oincheckad
+fil i trädet syns i varje `git status`.
+
+## Utfall — byggt 2026-08-20
+
+**Formen på C avviker medvetet från villkor 14:s diffkontroll, och det är en skärpning.**
+Villkor 14 sa "sex `captureError`-anrop, ett per anropsplats". Sex identiska try/catch-block
+är precis det en integrationsgranskare kallar "ett begrepp hanterat sex gånger", så de sex
+delar i stället EN hjälpare, `guardedItemWrite(kind, write)`. Räkningen blir därför:
+**tre `captureError`-anropsställen** i `WatchlistContext.tsx` — ett i hjälparen, ett i
+`updateProgress` tilläggsgren (BIN-954), ett i `updateNotes` — och **åtta distinkta `kind`**.
+`grep -c "guardedItemWrite(" src/contexts/WatchlistContext.tsx` → **7** (sex anrop + en
+definition). Villkorets AVSIKT — varje anropsplats individuellt identifierad, ingen missad —
+är uppfylld och lättare att bevisa; dess bokstav är det inte.
+
+`isPermissionDenied` flyttades ur `groups.ts` till en ny ren
+`src/lib/firebase/errorCodes.ts` och importeras av båda, så villkor 2:s "samma hjälpare
+återanvänds" är bokstavligt sann i stället för en kopia. Det utvidgar diffen med två filer
+(`errorCodes.ts`, `groups.ts`) — inom säkerhetsgrindens befintliga `^src/lib/firebase/`-mönster,
+ingen ny tier.
+
+**Mätt:**
+
+* `npm test` (rensad vite-cache) → **259 filer, 4269 passerade, 4 skippade, 0 fel.**
+  Basläget före BIN-942 var 258/4242/4, alltså +27 nya tester och en ny testfil
+  (`VillSePickerPage.test.tsx`, som inte fanns).
+
+  **Två körningar av sex föll på ETT test var, båda gånger utan att jag hann fånga namnet;
+  körningen direkt efteråt var grön med identiska siffror.** Samma mönster som under BIN-954.
+  Redovisat som det är, inte bortförklarat och inte utrett — det går inte att återskapa på
+  begäran. Misstanken är fortfarande kall-cache-timeouten BIN-937 handlade om (båda
+  körningarna låg direkt efter `rm -rf node_modules/.vite/vitest` under hög last).
+  Värt en egen biljett om det händer en tredje gång.
+* `npm run test:rules` mot emulatorn på egen port (8085; 8080 hålls av Butlery) →
+  **6 filer, 339 tester, 0 fel.** Basläget var 331 vid BIN-941; +7 nya här, +1 sedan tidigare.
+* `npx tsc --noEmit` tyst. `npx eslint` på batchens alla lintbara `.ts/.tsx`-filer → **0 fel**;
+  varningarna som finns är sedan tidigare (`_args`, `no-img-element`). Talen som stod här är
+  strukna: de räknade en körning gjord innan v6 lade till fyra filer, och båda var fel för
+  batchen som den ser ut nu.
+
+**Muteringsprövat, fyra mutanter, alla fällda** (patchen assertad före OCH efter körningen,
+återställning från scratchpad-kopia verifierad med `md5sum`):
+
+* Golvet borttaget ur `firestore.rules` → **6 av 7** nya regeltester röda. Det sjunde är
+  "läcker inte till update", som MÅSTE förbli grönt — det är villkor 5:s poäng. Det är
+  villkor 4:s "ses falla rött först", utfört efteråt i stället för före, med samma bevisvärde.
+* `guardedItemWrite` utan `isPermissionDenied`-kollen (bred catch) → 6 röda.
+* `updateNotes` utan sin `captureError` → 1 röd.
+* (BIN-954:s fyra mutanter kördes i föregående commit och står i dess avsnitt.)
+
+* **Ägarkartan:** den nya `errorCodes.ts` var en ägarlös granne i en katalog kartan listar
+  fil-för-fil, vilket BIN-788/803:s spärrhake fällde. Filen är nu namngiven under #4 Säkerhet
+  i `docs/role-responsibilities.md` — rätt roll, eftersom hela dess syfte är att skilja ett
+  serverNEKANDE från infrastrukturbrus, och det var #4:s eget villkor 2 som krävde den delade
+  hjälparen. `node docs/org/route.mjs src/lib/firebase/errorCodes.ts` → `tier: medium`,
+  `panel: [4]`.
+
+**Följdbiljett filad före commit: BIN-957** — de tre `console.warn`-ställena
+(`setRuntime`, `refreshTmdbFields`, `flushNextAirWrites` ×2), villkor 10/24/31.
+
+**Regelkommentaren:** "STILL OPEN"-stycket är omskrivet till "CLOSED 2026-08-20", och
+Admin-SDK-meningen om `tmdbTosSweep` är bevarad ordagrant (villkor 29).
+
+**Kartan:** `flow1`-steget om kaskaden är omskrivet i samma svep. Det bryter mot
+e2cf608-lärdomen om det ligger i kodcommiten — **kartan committas separat**.
 
 ## Öppna frågor
 

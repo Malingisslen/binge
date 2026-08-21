@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 188,
+  "patternCount": 189,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -50,6 +50,7 @@
         "firestore.rules",
         "src/lib/firebase/appCheck.ts",
         "src/lib/firebase/db.ts",
+        "src/lib/firebase/errorCodes.ts",
         "src/lib/firebase/groups.ts",
         "src/lib/firebase/utils.ts"
       ]

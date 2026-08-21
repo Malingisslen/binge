@@ -5,6 +5,7 @@ import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import QuickRateModal from './QuickRateModal';
 import type { WatchlistItem } from '@/types';
+import type { ItemWriteOutcome } from '@/contexts/WatchlistContext';
 
 // BIN-611 acceptance: "a test fails if updateStatus(…, 'sedd') is called for an
 // item already at 'sedd' via QuickRateModal's rating flow".
@@ -25,8 +26,11 @@ import type { WatchlistItem } from '@/types';
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: string, tmdbId: number) => WatchlistItem | null>(() => null),
   upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
-  updateRating: vi.fn<(mediaType: string, tmdbId: number, rating: number | null) => Promise<void>>(async () => {}),
-  updateStatus: vi.fn<(mediaType: string, tmdbId: number, status: string) => Promise<void>>(async () => {}),
+  // BIN-942: these two now answer whether the write LANDED. The floor can refuse one when the
+  // title was deleted mid-flight, and the modal must not retire a card on a write that never
+  // happened. Default 'written' so every pre-existing assertion below is unchanged.
+  updateRating: vi.fn<(mediaType: string, tmdbId: number, rating: number | null) => Promise<ItemWriteOutcome>>(async () => 'written'),
+  updateStatus: vi.fn<(mediaType: string, tmdbId: number, status: string) => Promise<ItemWriteOutcome>>(async () => 'written'),
   // Mirrors the provider's own derivation rather than hardcoding libraryKnown —
   // a literal would let these tests claim a state production cannot reach, and
   // make every gate assertion below vacuous (CollectionSection.test's pattern).
@@ -103,6 +107,31 @@ describe('QuickRateModal — a rating pass is not a viewing log (BIN-611 / BIN-5
     // The add carries the rating, so no separate rating/status write follows.
     expect(watchlist.updateRating).not.toHaveBeenCalled();
     expect(watchlist.updateStatus).not.toHaveBeenCalled();
+  });
+
+  // BIN-942. `updateRating`/`updateStatus` swallow the create-floor's refusal and RESOLVE, so
+  // an ungated `setRated` would retire the card on a write that never landed — permanently for
+  // this pass, with no way back to it. Two reviewers found this independently on the same diff.
+  it('does NOT retire a card when the write was refused', async () => {
+    watchlist.getItem.mockReturnValue(seen());
+    watchlist.updateRating.mockResolvedValueOnce('refused');
+    await openModal();
+    await rate('Sett 4★');
+
+    // The write was attempted — this is not a "nothing happened" pass.
+    expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
+    // ...and the counter did not move, so the card is still there to try again.
+    expect(screen.getByText('Snabb-betyg (0 markerade)')).toBeInTheDocument();
+  });
+
+  it('DOES retire a card when the write landed', async () => {
+    // The positive control. Without it, a modal that never retires anything would pass the
+    // test above — and "nothing is ever marked" is a worse bug than the one it guards.
+    watchlist.getItem.mockReturnValue(seen());
+    await openModal();
+    await rate('Sett 4★');
+
+    expect(screen.getByText('Snabb-betyg (1 markerade)')).toBeInTheDocument();
   });
 
   it('does not clear a stored rating when a card is skipped', async () => {

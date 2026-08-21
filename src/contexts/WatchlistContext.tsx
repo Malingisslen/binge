@@ -8,6 +8,7 @@ import { needsTmdbFieldsRefresh, needsProvidersRefresh, planTmdbFieldsRefresh, t
 import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { captureError } from '@/lib/sentry';
+import { isPermissionDenied } from '@/lib/firebase/errorCodes';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
@@ -26,6 +27,69 @@ import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/ty
  */
 function isLibraryKnown(snapshotSettled: boolean, listenerFailed: boolean): boolean {
   return snapshotSettled && !listenerFailed;
+}
+
+/**
+ * BIN-942 — did this call leave the library document reflecting what was asked?
+ *
+ * `'refused'` means it did NOT: the create-floor said no because the title was deleted
+ * mid-flight, or (in `updateProgress`) there was deliberately nothing to write. Either way a
+ * caller must not confirm THE LIBRARY WRITE. `'written'` means the write landed.
+ *
+ * Scoped to the library document on purpose, and the distinction has one trap in it: on the
+ * un-tick path `useEpisodeProgressWithSync` has already written `episodeProgress`, so the
+ * user's gesture can succeed while this answers `'refused'` because the series is not in the
+ * library at all. Do not read this as "the tick failed".
+ */
+export type ItemWriteOutcome = 'written' | 'refused';
+
+/**
+ * BIN-942 — run an edit-path merge-write that the create-floor in `firestore.rules` may now
+ * refuse, and swallow ONLY that refusal.
+ *
+ * The floor (`requiredWatchlistFields`) is create-only, so in the race this ticket is about
+ * these writes are denied for one reason: the document was not there, i.e. the user deleted
+ * the title between the snapshot this call read and the write itself. Not the ONLY reason a
+ * write here can ever be refused — `isValidWatchlistItem` can also reject an update (a
+ * `hasOnly` drift after a client-before-rules deploy, say). That is the SYSTEMATIC case the
+ * dated entry lists as explicitly not accepted and still fileable, and it is why the log line
+ * below exists at all. The title IS gone and the snapshot
+ * listener removes the row anyway, so there is nothing to tell the user and nothing to retry.
+ * Before the floor these writes silently RESURRECTED the deleted title as an identity-less
+ * ghost on the publicly-readable profile; being refused is the fix working.
+ *
+ * Narrow on purpose. A bare `catch` would also eat `unavailable`, `deadline-exceeded` and
+ * every offline error, on six of the app's most common writes — and this repo shipped that
+ * exact mistake once and rolled it back (a bad mobile connection reported as "the invite link
+ * is invalid"; see `joinGroupViaToken` in `groups.ts`). `isPermissionDenied` is the SAME
+ * predicate, shared rather than copied, so the two cannot drift.
+ *
+ * `captureError` rather than `console.warn`: Sentry's default `globalHandlers` integration
+ * already reports an unhandled rejection, so swapping a throw for a `console.warn` would make
+ * a real failure LESS visible than doing nothing. This keeps the signal and adds a `kind` to
+ * filter on — which is also the re-open trigger the dated entry in
+ * `.claude/rules/accepted-deviations.md` names.
+ *
+ * NOT used by `writeTitle`. An add reports its outcome to the caller (BIN-895), so a refused
+ * add must reject, or the button says "added" about a title Firestore refused.
+ *
+ * RETURNS the outcome rather than `void`, and that is not decoration. Swallowing here makes
+ * the promise RESOLVE, and a caller with its own confirmation UI reads a resolved promise as
+ * "it worked": `VillSePickerPage` toasts "Markerad som sedd: X" and `QuickRateModal` marks the
+ * card permanently handled. Both would then claim success about a write Firestore refused —
+ * the same false confirmation BIN-895 closed for the add path, reopened one door over. Two
+ * reviewers found this independently. A caller that says nothing can keep ignoring the value.
+ */
+async function guardedItemWrite(kind: string, write: () => Promise<void>): Promise<ItemWriteOutcome> {
+  try {
+    await write();
+    return 'written';
+  } catch (err) {
+    if (!isPermissionDenied(err)) throw err;
+    console.error(`[watchlist] ${kind}: skrivningen nekades — titeln finns inte längre`, err);
+    captureError(err, { scope: 'watchlist', kind });
+    return 'refused';
+  }
 }
 
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
@@ -219,10 +283,10 @@ interface WatchlistState {
   // the namespaced doc id `mediaTypeDocId(mediaType, tmdbId)` and (b) disambiguate the
   // current-item lookup — a movie and a TV show can share a tmdbId. All call sites
   // already have mediaType in scope; the breaking signature is compiler-enforced.
-  updateVisibility: (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => Promise<void>;
-  updateStatus: (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<void>;
-  updateWatchedAt: (mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<void>;
-  updateRating: (mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<void>;
+  updateVisibility: (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => Promise<ItemWriteOutcome>;
+  updateStatus: (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => Promise<ItemWriteOutcome>;
+  updateWatchedAt: (mediaType: MediaType, tmdbId: number, watchedAt: Date) => Promise<ItemWriteOutcome>;
+  updateRating: (mediaType: MediaType, tmdbId: number, rating: number | null) => Promise<ItemWriteOutcome>;
   updateNotes: (mediaType: MediaType, tmdbId: number, notes: string | null) => Promise<void>;
   /**
    * BIN-954 — `opts.addIfMissing` says "the user just told us they WATCHED this", which is
@@ -232,8 +296,8 @@ interface WatchlistState {
    * lower episode is also a non-zero position, so a derived rule would add a series on the
    * exact gesture that means the opposite.
    */
-  updateProgress: (mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<void>;
-  updateTmdbStatus: (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<void>;
+  updateProgress: (mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => Promise<ItemWriteOutcome>;
+  updateTmdbStatus: (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => Promise<ItemWriteOutcome>;
   setRuntime: (mediaType: MediaType, tmdbId: number, runtime: number | null) => Promise<void>;
   // BIN-402: title-page lazy-refresh of the denormalized TMDB block + freshness
   // stamp (repopulates a swept-clean doc; keeps a viewed title from being swept).
@@ -259,16 +323,17 @@ const WatchlistContext = createContext<WatchlistState>({
   // describes the write reads this too.
   upsertTitle: async () => ({ countedRewatch: false }),
   logViewing: async () => ({ countedRewatch: false }),
-  updateStatus: async () => {},
-  updateWatchedAt: async () => {},
-  updateRating: async () => {},
+  // BIN-942: outside a provider nothing is written, so nothing may be confirmed.
+  updateStatus: async () => 'refused',
+  updateWatchedAt: async () => 'refused',
+  updateRating: async () => 'refused',
   updateNotes: async () => {},
-  updateProgress: async () => {},
-  updateTmdbStatus: async () => {},
+  updateProgress: async () => 'refused',
+  updateTmdbStatus: async () => 'refused',
   setRuntime: async () => {},
   refreshTmdbFields: async () => {},
   updateTags: async () => {},
-  updateVisibility: async () => {},
+  updateVisibility: async () => 'refused',
   removeItem: async () => {},
   getByStatus: () => [],
   getItem: () => null,
@@ -807,7 +872,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 
   const updateVisibility = useCallback(async (mediaType: MediaType, tmdbId: number, visibility: ItemVisibility | null) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // visibility=null → ta bort override och fall tillbaka till profilens
@@ -815,22 +880,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // "delete field" från klienten utan deleteField; istället skriver vi
     // null och låter docToItem normalisera vid läs).
     const effective = visibility ?? user?.defaultVisibility ?? 'private';
-    await setDoc(ref, {
+    return guardedItemWrite('updateVisibility', () => setDoc(ref, {
       visibility,
       effectiveVisibility: effective,
       isPublic: effective === 'public',
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }, { merge: true }));
   }, [uid, user?.defaultVisibility]);
 
   const updateStatus = useCallback(async (mediaType: MediaType, tmdbId: number, status: WatchStatus, watchedAt?: Date) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // BIN-593: live ref, not the render closure — same reason as writeTitle above.
     const currentItem = findItem(mediaType, tmdbId);
     const visFields = shouldStampVisibility(currentItem) ? effectiveVisibilityNow() : {};
-    await setDoc(ref, buildStatusUpdate(status, {
+    const outcome = await guardedItemWrite('updateStatus', () => setDoc(ref, buildStatusUpdate(status, {
       now: serverTimestamp(),
       visFields,
       currentStatus: currentItem?.status,
@@ -839,8 +904,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       watchedAtOverride: watchedAt ? Timestamp.fromDate(watchedAt) : undefined,
       // BIN-593: tri-state — se StatusUpdateContext + resolveCurrentWatchedAt.
       currentWatchedAt: resolveCurrentWatchedAt(currentItem, firstSnapshotSettledRef.current),
-    }), { merge: true });
-    trackEvent('status_changed', { mediaType, status });
+    }), { merge: true }));
+    // BIN-942: only a write that LANDED is a status change. The floor refuses this write when
+    // the title was deleted mid-flight, and an analytics event for a status nobody has is a
+    // quiet lie in the funnel — cheap to avoid, impossible to notice later.
+    if (outcome === 'written') trackEvent('status_changed', { mediaType, status });
+    return outcome;
     // BIN-593: reads itemsRef, so `items` is no longer a dependency (see writeTitle).
   }, [uid, effectiveVisibilityNow, findItem]);
 
@@ -848,7 +917,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // — det tolkas som en omtitt (rewatchFields = sedd→sedd) och räknar upp rewatchCount
   // varje gång man justerar datumet. Detta rör bara watchedAt + updatedAt.
   const updateWatchedAt = useCallback(async (mediaType: MediaType, tmdbId: number, watchedAt: Date) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     const { db, doc, setDoc, serverTimestamp, Timestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // BIN-598: live ref via findItem (was `items.find`). The date itself is the
@@ -858,11 +927,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // one mutator over).
     const current = findItem(mediaType, tmdbId);
     const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
-    await setDoc(ref, { watchedAt: Timestamp.fromDate(watchedAt), ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+    return guardedItemWrite('updateWatchedAt', () => setDoc(
+      ref, { watchedAt: Timestamp.fromDate(watchedAt), ...visFields, updatedAt: serverTimestamp() }, { merge: true },
+    ));
   }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateRating = useCallback(async (mediaType: MediaType, tmdbId: number, rating: number | null) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     const current = findItem(mediaType, tmdbId);
@@ -873,12 +944,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const safeRating = rating == null ? null : Math.max(0, Math.min(5, rating));
     // BIN-349: stamp ratedAt on set/change; clear to null on unset so a stale
     // rating-recency can't survive a cleared rating (the exact drift this fixes).
-    await setDoc(ref, {
+    return guardedItemWrite('updateRating', () => setDoc(ref, {
       rating: safeRating,
       ratedAt: safeRating == null ? null : serverTimestamp(),
       ...visFields,
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }, { merge: true }));
   }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-505: write the note to the OWNER-ONLY watchlistNotes subcollection and
@@ -924,12 +995,24 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // would leave that inline note (PII) readable to friends/public until the
       // next session. The mark is only meaningful once the write has committed.
       migratedNotesRef.current.delete(docId);
+      // BIN-942 — this path is NOT guarded by `guardedItemWrite`, deliberately, and it is
+      // the one write the create-floor can refuse that keeps throwing. Two reasons, and the
+      // second is the load-bearing one:
+      //   * the item-doc write below is batched ATOMICALLY with the user's own note text in
+      //     `watchlistNotes`, so a refusal discards the note they just typed — not merely a
+      //     visibility stamp. A failed save must never look like a save.
+      //   * `NotesBlock`'s `onChange` returns void, so nobody awaits this. The rejection
+      //     surfaces as an unhandled promise rejection, which Sentry's globalHandlers already
+      //     report — but untagged, indistinguishable from every other one in the app.
+      // Tagging it here is what makes the dated entry's re-open trigger reachable at all
+      // (#6 Data Protection, 2026-08-20). Purely additive: still rethrows, still no toast.
+      captureError(e, { scope: 'watchlist', kind: 'updateNotes' });
       throw e;
     }
   }, [uid, effectiveVisibilityNow, findItem]);
 
   const updateProgress = useCallback(async (mediaType: MediaType, tmdbId: number, season: number, episode: number, opts?: { addIfMissing?: boolean }) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     // Progress ändrar aldrig status för en titel som REDAN finns: TV bor i 'mina'
     // (vill_se för TV är avskaffat och normaliseras vid läsning), och sub-state
     // (ej_paborjad → aktiv/ikapp) härleds — inget statusbyte behövs när ett
@@ -954,6 +1037,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     const libraryKnown = isLibraryKnown(firstSnapshotSettledRef.current, listenerFailedRef.current);
     // What the group sync should say the status is. `null` = we don't know, unchanged.
     let syncStatus: WatchStatus | null = current?.status ?? null;
+    // BIN-942: did the LIBRARY document end up reflecting this call? Three ways it can be
+    // 'refused' here, and they are all honestly "no": the floor denied the merge, the TMDB
+    // fetch failed so the add never happened, or there was deliberately nothing to write.
+    // Starts pessimistic so the branch that writes nothing needs no assignment to be truthful.
+    let outcome: ItemWriteOutcome = 'refused';
 
     if (known || !libraryKnown) {
       // The ordinary write. The second half of that condition is a deliberate
@@ -964,12 +1052,12 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       const { db, doc, setDoc, serverTimestamp } = await fsdb();
       const ref = doc(db, 'users', uid, 'watchlist', docId);
       const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
-      await setDoc(ref, {
+      outcome = await guardedItemWrite('updateProgress', () => setDoc(ref, {
         lastWatchedSeason: season,
         lastWatchedEpisode: episode,
         ...visFields,
         updatedAt: serverTimestamp(),
-      }, { merge: true });
+      }, { merge: true }));
     } else if (opts?.addIfMissing && mediaType === 'tv') {
       // Malin, 2026-08-20: ticking an episode of a series you don't follow means you ARE
       // watching it, so the series is added properly — title, poster, year, status — rather
@@ -1038,6 +1126,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       }
       if (payload) {
         await upsertTitle(payload);
+        outcome = 'written';
         // AFTER the write resolves, not before: this marks "the document exists now", and
         // a failed add must stay retryable. That ordering protects the SEQUENTIAL chain
         // (tick → auto-advance), not two independent concurrent gestures — BIN-955.
@@ -1080,16 +1169,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         status: syncStatus,
       }),
     );
+    return outcome;
   }, [uid, effectiveVisibilityNow, findItem, upsertTitle]);
 
   const updateTmdbStatus = useCallback(async (mediaType: MediaType, tmdbId: number, tmdbStatus: string | null) => {
-    if (!uid) return;
+    if (!uid) return 'refused';
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId));
     // BIN-598: live ref via findItem — same privacy reason as updateWatchedAt.
     const current = findItem(mediaType, tmdbId);
     const visFields = shouldStampVisibility(current) ? effectiveVisibilityNow() : {};
-    await setDoc(ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true });
+    return guardedItemWrite('updateTmdbStatus', () => setDoc(
+      ref, { tmdbStatus, ...visFields, updatedAt: serverTimestamp() }, { merge: true },
+    ));
   }, [uid, effectiveVisibilityNow, findItem]);
 
   // BIN-93: lazy runtime backfill from title-detail views. Writes only when the

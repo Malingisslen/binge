@@ -108,3 +108,49 @@ zero user value (Blaze cost cap); the schema contract is "readers normalize", no
 clean". Do not file "inconsistent status data / missing backfill migration". — 2026-06
 
 > Live in `CLAUDE.md` → WatchStatus → **Migration**, same "läsare normaliserar" contract.
+
+
+---
+
+**Retired 2026-08-20 (BIN-942) — superseded.** The entry below accepted the visibility
+cascade's refusal on a LEGACY bare-numeric id, and said in its own words that the same race
+on a CANONICAL id was still open. BIN-942 closed that half: `cascadeVisibilityToItems` now
+uses `batch.update` (which cannot create), and `firestore.rules` gained a create-only
+required-field floor. Its replacement in `rules/accepted-deviations.md` is dated 2026-08-20
+and accepts a DIFFERENT thing — the floor's refusal of the ordinary edit paths in the same
+race. Kept verbatim below because the file header requires it and because the shape of what
+was accepted on 2026-08-19 is the reason the replacement is scoped the way it is.
+
+### [Data/UX] Synlighetskaskaden nekas — med flit — när den råkar återuppväcka ett legacy-id
+`cascadeVisibilityToItems` (`src/contexts/AuthContext.tsx:265`) gör
+`batch.set(d.ref, {effectiveVisibility, isPublic}, { merge: true })` på referenser den läst
+ur en snapshot. Medan dokumentet finns är det en update. Raderar användaren titeln mellan
+`getDocs` och `batch.commit()` är merge-mot-ett-borta-dokument i stället en **create**, och
+på ett grandfathered bara-numeriskt id nekar BIN-766:s `canonicalWatchlistDocId` den.
+
+**Accepterat:** att nekandet sker, och att det tar hela sin chunk med sig. **Why:** Malins
+beslut 2026-08-19. En create under ett icke-kanoniskt id är exakt den alias-multiplikation
+BIN-766:s spärr finns för — regler läser form, inte avsikt, så nekandet är spärren som gör
+sitt dokumenterade jobb, inte en olycka. Att bygga om kaskaden så den tål ett nekande
+avfärdades uttryckligen.
+
+**Omfång — fyra axlar, så tystnaden inte får betyda mer än den ska:**
+* **Mekanism:** bara `set(merge:true)` på en snapshot-referens vars dokument hunnit
+  raderas. `taste/backfill.ts:74` (`updateDoc`) kan aldrig nå create-grenen; de två
+  id-byggande skribenterna kan aldrig avge en alias-form.
+* **Allvarlighet:** en batch är allt-eller-inget, så upp till 449 syskon i samma chunk
+  blir ostämplade. Det landar i `visibilitySyncPending` (BIN-587, posten 2026-07-30) och
+  självläker: nästa `getDocs` ser inte det raderade dokumentet, så samma post kan inte
+  fälla igen.
+* **Räckvidd:** bara grandfathered bara-numeriska id:n. Kanoniska id:n nekas ALDRIG —
+  se nedan.
+* **Tid:** gäller tills de sista pre-BIN-560-dokumenten är borta. Mängden krymper bara.
+
+**INTE accepterat, och fortfarande öppet:** samma kapplöpning på ett **kanoniskt** id.
+Formen matchar, `isValidWatchlistItem` är ett `hasOnly`-tak utan golv för obligatoriska
+fält, och kaskaden återskapar då den raderade titeln som ett tvåfältsspöke
+(`effectiveVisibility`, `isPublic`) på den publikt läsbara vägen — vilket avslöjar att
+kontot hade titeln efter att användaren bett om att få bort den. Verifierat mot emulatorn
+av #7 QA, filat som **BIN-942**. #6 Dataskyddsombudet krävde att den halvan skrivs som
+öppen och inte får läsas in i beslutet ovan. Läs alltså aldrig den här posten som att
+återuppväckandet är löst — det är löst för legacy-id:n. — 2026-08-19
