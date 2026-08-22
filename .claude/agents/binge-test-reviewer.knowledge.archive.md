@@ -22594,3 +22594,233 @@ survivors (mediaType guard, mark-ordering) are real, verified-live gaps but neit
 exploitable by any current production call site, and one (the ordering claim) overlaps
 BIN-955's already-accepted deferred residual. Reported as non-blocking findings for the parent
 agent to relay, not filed as new tickets by this review (out of scope for a test-reviewer pass).
+
+## 2026-08-21 — BIN-942: create-floor's blast radius on the six edit paths, all mutants killed
+
+**Scope reviewed (staged, HEAD 5d8dbee), every file opened with `Read`:**
+`src/contexts/WatchlistContext.test.tsx` (5e91e4b32b4cd41dae1ca7fa2dfbb19c805ee94b),
+`src/contexts/AuthContext.test.tsx` (c559a87dce43cc963651f6b1dd36a8a067cdef87),
+`src/test/rules/firestore-rules.test.ts` (5dd2c159b6e015735933f23515b3210df7642b8d, diff hunks
+read in full context — lines 1-140 and 380-562), `src/components/watchlist/VillSePickerPage.test.tsx`
+(ba5b7e3296bdd004efe44ede13808324c2465fa6, new file, read whole),
+`src/components/recommendations/QuickRateModal.test.tsx` (1f272dfdff3a6c22a0a4a83ca246bdec830596e4,
+read whole), `src/contexts/WatchlistContext.tsx` (b66efa91da93eb8a6e9097cd7cd1dabf57463ac8, read
+whole, two pages), `src/contexts/AuthContext.tsx` (92760d209a604551a03c678706bfd61713b644fc, read
+whole, two pages), `firestore.rules` (7fae1cd0b66631f67503935c66d899dc6b02acbf, read whole, two
+pages), `src/components/watchlist/VillSePickerPage.tsx` (f7515a6d901a36998ba2d7c82c8d17ce881ef715,
+read whole), `src/components/recommendations/QuickRateModal.tsx` (3b9e35fd5a29af765d59f653fc2f19a5412f0da7,
+read whole), `src/lib/firebase/errorCodes.ts` (c11e115648aae9bd980d70375f73d80edd5e77a3, read
+whole), `src/lib/firebase/groups.ts` (5798b7c4a7ba9c3616bed168f0000e6ab922120f, read the three
+`isPermissionDenied` call sites plus surrounding context). Also `tasks/todo.md`'s BIN-942 plan
+(lines 394-981, all of v5/v6/Utfall/the 37 conditions) and `.claude/rules/accepted-deviations.md`
+in full.
+
+**What the diff does.** (A) `cascadeVisibilityToItems` (`AuthContext.tsx`) changed
+`batch.set(d.ref, {…}, {merge:true})` → `batch.update(d.ref, {…})` — a merge onto a
+snapshot ref whose document was deleted mid-cascade is a CREATE, and `update` cannot create.
+(B) `firestore.rules` gained `requiredWatchlistFields` — a create-only floor requiring
+`tmdbId`/`mediaType`/`status` on `users/{uid}/watchlist/{itemId}`. (C) six edit paths in
+`WatchlistContext.tsx` (`updateVisibility`, `updateStatus`, `updateWatchedAt`, `updateRating`,
+`updateProgress`, `updateTmdbStatus`) now share `guardedItemWrite(kind, write)`, which catches
+ONLY `permission-denied` (via the newly-extracted `src/lib/firebase/errorCodes.ts`), logs +
+`captureError`s, and returns `ItemWriteOutcome` (`'written'|'refused'`) instead of throwing;
+`writeTitle` (add path) and `updateNotes` deliberately keep throwing. Two external callers —
+`VillSePickerPage.markSeen` (toast) and `QuickRateModal.markRated` (card retirement) — gate
+their confirmation on the outcome, a fix added in a SECOND review round after the first found
+they still confirmed on a refused write (v6 in the plan).
+
+**Numbers re-verified myself, not transcribed:**
+- `npm test` (cache cleared first): 259 files, 4269 passed, 4 skipped, 0 failed — exact match
+  to `tasks/todo.md`'s Utfall claim.
+- `grep -c "guardedItemWrite("` → 7 (6 calls + 1 definition), `grep -n "captureError("` → 3
+  call sites, 8 distinct `kind` values across them (6 guarded + `updateNotes` +
+  `updateProgress-add`) — matches the plan's "tre anropsställen, åtta kinds" claim exactly.
+- `subscribeToGroupHousehold` in `groups.ts` (condition 36) confirmed using the shared
+  `isPermissionDenied`, not an inline re-spelling — read directly, not grepped.
+
+**Mutation run — 6 mutants, each: python-scripted single in-place replace (count asserted
+==1) → `rm -rf node_modules/.vite/vitest` → `grep -n` to confirm the mutant landed → `npx
+vitest run` → restore from a scratchpad copy (`cp` before first mutation) → `md5sum`/`git
+hash-object` + `git rev-parse :<f>` to confirm byte-identical restore AND index==worktree
+(both checked before AND after every mutation, not just at the end) → `git diff --stat`
+empty. All six restores clean.**
+
+1. Remove `if (!isPermissionDenied(err)) throw err;` from `guardedItemWrite` (bare catch).
+   DIED — exactly the six "any OTHER error still rejects" `it.each` rows, one per guarded
+   call site (6/131 red, `updateProgress` included since the seeded fixture makes `known`
+   true so it takes the merge branch). Proves the negative direction of each row is
+   non-vacuous per site, not just in aggregate.
+2. `guardedItemWrite` always returns `'written'` (swallow everything, never check the code).
+   DIED — 13 failed: all six "a floor refusal resolves and is reported" rows, all six "any
+   OTHER error still rejects" rows (a bare catch that never rethrows also breaks those), and
+   "a refused status write does NOT report status_changed". VillSePickerPage/QuickRateModal's
+   OWN test suites stayed green (11/11) — expected, since those mock `updateStatus`/
+   `updateRating` directly and don't exercise the real `guardedItemWrite`.
+3. `guardedItemWrite` always returns `'refused'` (even on a landed write). DIED — 8 failed:
+   all six "a write that LANDS answers written" rows plus "a status write that LANDS still
+   reports status_changed" plus one incidental BIN-593-era test. Proves the positive
+   direction is pinned, not just assumed from the negative rows' absence of failure.
+4. Remove the `outcome === 'written'` gate on `trackEvent('status_changed', …)` in
+   `updateStatus` (fire unconditionally). DIED — red-ALONE, exactly 1/131
+   ("a refused status write does NOT report status_changed to analytics").
+5. Remove `VillSePickerPage.markSeen`'s `if (await updateStatus(...) !== 'written') return;`
+   gate (call unconditionally, no early return). DIED — red-ALONE, 1/2
+   ("says nothing when the create-floor refused the write"; the positive control stayed
+   green, confirming the file isn't just "toast never fires").
+6. Remove `QuickRateModal.markRated`'s `if (!landed) return;` gate. DIED — red-ALONE, 1/9
+   ("does NOT retire a card when the write was refused"; the positive control
+   ("DOES retire a card when the write landed") stayed green).
+
+No survivors in the six unit-level mutants. A seventh mutant against the live rules emulator
+(dropping the floor conjunct from `allow create`, see below) also died — 6/339 red, exactly the
+floor-dependent tests. Zero survivors total this round — a change from the BIN-954 predecessor
+review two commits earlier, which had two (mediaType guard, mark-ordering), both already judged
+non-blocking and unrelated to this diff's surface.
+
+**Firestore rules suite, run against a live emulator** (`npx firebase emulators:exec --only
+firestore --project demo-binge-rules --config <scratchpad>/firebase.rulesport.json "npx vitest
+run --config vitest.rules.config.ts"`, port 8085, offset from the 8080 another project held) —
+clean run **6 files / 339 tests, 0 failed**, matching `tasks/todo.md`'s Utfall claim exactly.
+Condition 4's "falls red first" was re-derived by MUTATION, not trusted from the plan: dropped
+`&& requiredWatchlistFields(request.resource.data)` from the `allow create` clause on a
+scratchpad-backed copy of the tracked file (`cp` before mutating; `git hash-object`/`git
+rev-parse :firestore.rules` confirmed byte-identical to the target sha both before the mutation
+AND after the restore), re-ran the same emulator command — **exactly 6 of 339 reddened**: the
+canonical-id resurrection test, all four `it.each` payload-shape rows, and the BIN-655
+describe's negative floor test; the "does NOT leak to update" test and both CREATE positive
+tests stayed green, confirming the floor's create-only scope holds under mutation, not just by
+reading the rule text. Traced independently too: `requiredWatchlistFields` is
+`d.keys().hasAll(['tmdbId','mediaType','status'])`, gated ONLY inside `allow create` (never
+`allow update`), so the "does NOT leak to update" test's assertion structurally cannot be
+defeated by the floor. The BIN-942 negative test (`the same payload minus one floor field is refused`) mutates
+`buildAddWrite()`'s ACTUAL return value (`delete write.tmdbId`) with a guard-the-guard
+assertion (`expect(write).toHaveProperty('tmdbId')`) immediately before the delete — condition
+18's requirement, confirmed by reading the test body, not the plan's description of it.
+
+**Also checked and found sound:**
+- `AuthContext.test.tsx`'s five pre-existing BIN-587 assertions: diffed the hunk against HEAD
+  via `git diff --cached` — every existing assertion line is untouched; the only changes are
+  an added `update:` method on the mock `writeBatch` (mirroring the real `.set`) and a new
+  `batchWriteKinds` tally used by ONE new test. No strict→loose rewrite anywhere in the file.
+- `.claude/accepted-deviations.archive.md`: the superseded 2026-08-19 entry is retired
+  verbatim with a dated pointer to its replacement, matching the file-header contract.
+- `.claude/rules/accepted-deviations.md`'s new dated entry: bounded on Accepted / NOT
+  accepted-still-fileable (4 items) / Scope / Re-open-when, matching the
+  `communityRatingMaintain` precedent structure the plan cites. The re-open trigger
+  (`captureError` scope/kind) is reachable, unlike a hypothetical "observed drift" trigger.
+- Working tree restored exactly to the pre-review staged state: `git status --porcelain`
+  after all mutation work matches the state at the start of the review byte-for-byte (the
+  three touched-during-mutation files' hashes match their target shas from the task
+  description exactly).
+
+**Verdict: PASS, 0 blocking.** No findings filed. This review folded one new lesson into
+`binge-test-reviewer.knowledge.md` (a shared write-guard narrowing from throw-always to
+swallow-and-resolve rewrites the confirmation contract for every external caller — grep for
+UI/analytics confirmations gated on non-throw rather than on the resolved discriminant) rather
+than appending, since no existing bullet named this exact shape.
+
+## 2026-08-21b — BIN-942 round 2: a re-derived shape claim, one wrong count, mutation re-confirmed
+
+**Trigger.** Round 1 (same day, see the entry immediately above) passed 0 blocking after the
+first commit. Since then only comments and two test names changed in the gated files (per the
+orchestrator's diff): the doc-id-guard block's header comment in
+`src/test/rules/firestore-rules.test.ts` was rewritten to stop claiming the pinned payload is
+"the shape `cascadeVisibilityToItems` actually sends" (BIN-942 moved that writer to
+`batch.update`, which cannot create), and two test names changed from "the visibility cascade
+cannot resurrect…" to "a two-field merge cannot resurrect…". Asked to re-verify at the new
+shas and judge the new prose.
+
+**Scope reviewed (staged, HEAD 5d8dbee), every file opened with `Read`:**
+`src/test/rules/firestore-rules.test.ts` (7c6ad8a7b4361c2fe6da804dd2f43fab0f84062d, read whole,
+2451 lines), `src/contexts/WatchlistContext.test.tsx` (5e91e4b32b4cd41dae1ca7fa2dfbb19c805ee94b,
+read whole, 2697 lines), `src/contexts/AuthContext.test.tsx`
+(c559a87dce43cc963651f6b1dd36a8a067cdef87, read whole, 1890 lines),
+`src/components/watchlist/VillSePickerPage.test.tsx`
+(ba5b7e3296bdd004efe44ede13808324c2465fa6, read whole), `src/components/recommendations/
+QuickRateModal.test.tsx` (1f272dfdff3a6c22a0a4a83ca246bdec830596e4, read whole),
+`firestore.rules` (4125bb754779dd41f8794f625d0b1186dd5c0803, read whole, 1375 lines),
+`src/contexts/WatchlistContext.tsx` (5d73d6952392cdb5a104c3437e7117c2ad9c6182, read whole, 1344
+lines), `src/contexts/AuthContext.tsx` (92760d209a604551a03c678706bfd61713b644fc, read whole,
+1309 lines), `src/components/watchlist/VillSePickerPage.tsx`
+(f7515a6d901a36998ba2d7c82c8d17ce881ef715, read whole), `src/components/recommendations/
+QuickRateModal.tsx` (3b9e35fd5a29af765d59f653fc2f19a5412f0da7, read whole). Also
+`tasks/todo.md`'s BIN-942 plan (lines 394-1010: Skrivvägar, A+B+C, Malins gränser, all 37
+bindande villkor, v5/v6/v7, Utfall) and `.claude/rules/accepted-deviations.md` in full
+(including the 2026-08-20 dated entry this ticket wrote).
+
+**1. Are the two renamed tests honest, or a relabel of a stale test?** Both re-aimed
+correctly, not merely relabelled. "a two-field merge cannot resurrect a deleted bare-numeric
+item" (line 463) and "a two-field merge cannot resurrect a deleted CANONICAL item either"
+(line 521) both drive the SAME generic sequence — seed, delete, setDoc(ref, cascadePayload,
+{merge:true}), assertFails — using a hand-built two-field payload ({effectiveVisibility,
+isPublic}) that was never literally emitted only by cascadeVisibilityToItems; the rules
+evaluation cannot tell that payload apart from any other caller's. The old names implied the
+test drove the cascade function itself, which was never true even in round 1 — the new names
+say what the body actually does. Not a case of a test whose subject no longer exists being
+kept alive under new words; the underlying behaviour (create-floor refusing an identity-less
+merge) is real, current, and this is the cheapest place to pin it.
+
+**2. Is the remaining justification true — count the writers.** FALSE AS WRITTEN. The comment
+says the payload "is still the shape the nine remaining merge-writers into this collection can
+send." Grepped every merge:true (or equivalent batch.set-with-merge) writer into
+users/{uid}/watchlist/{itemId} across the whole src/ tree (not just the file under review):
+grep -n "merge: true" src/contexts/WatchlistContext.tsx → 10 lines (writeTitle,
+updateVisibility, updateStatus, updateWatchedAt, updateRating, updateNotes
+(batch.set(itemRef,…)), updateProgress, updateTmdbStatus, setRuntime, refreshTmdbFields);
+grep -n "merge: true" src/lib/watchlist/nextAirReadRepair.ts → 1 line (flushNextAirWrites,
+batch.set(doc(db,'users',uid,'watchlist',…), …, {merge:true})). grep -rn "'watchlist'" across
+src/ turned up no other merge-writer (taste/backfill.ts uses updateDoc, which cannot create —
+confirmed by reading it; accountDeletion.ts deletes, never merges). Excluding writeTitle
+(always carries the floor fields, tested separately, explicitly excluded by the same
+paragraph) leaves 9 (WatchlistContext) + 1 (flushNextAirWrites, a DIFFERENT FILE) = TEN, not
+nine. This matches .claude/rules/accepted-deviations.md's own dated entry verbatim: "Tio
+skrivvägar kan träffas — nio av de tio merge:true-skrivarna i WatchlistContext plus
+flushNextAirWrites i nextAirReadRepair.ts," and matches tasks/todo.md's "Bieffekt: nio
+skrivvägar i WatchlistContext … plus en till utanför den" and the v5 table's "Räkningen blir
+alltså: tio skrivvägar kan nekas, inte sju. Nio i WatchlistContext … plus nextAirReadRepair."
+The same test file's OWN it.each table four lines below the flagged sentence tests
+flushNextAirWrites by name alongside setRuntime/refreshTmdbFields/updateNotes — proving the
+author already knows it belongs in the set the sentence is describing. "Nine remaining
+merge-writers into this collection" undercounts by exactly the one writer that lives in a
+sibling file, the precise class of error this repo's lessons digest calls out repeatedly
+(BIN-766/941, 2026-08-20: a line number in a plan is false in the same commit it lands in;
+name the function instead). Filed as a blocking finding: src/test/rules/firestore-rules.test.ts
+— the block-comment paragraph immediately preceding "const cascadePayload = …" — "nine" should
+read "ten," or be reworded to the ticket's own consistent phrasing ("the nine WatchlistContext
+merge-writers plus nextAirReadRepair's flushNextAirWrites"), matching how every other document
+in this ticket's own paper trail states the same fact without collapsing it to a single wrong
+integer.
+
+**3. Mutation re-confirmed at the new bytes.** Snapshotted firestore.rules to scratchpad
+(git hash-object → 4125bb754779dd41f8794f625d0b1186dd5c0803, matching the task's stated sha).
+Python single-occurrence replace removed "&& requiredWatchlistFields(request.resource.data)"
+from the allow create clause (count asserted == 1 before writing); confirmed the mutant landed
+(grep -n "requiredWatchlistFields(request.resource.data)" firestore.rules → empty) and
+recorded the mutated hash (e5bb61edf2d03d54cf00ac66c82f8e62e5557d35) in the SAME command block
+as the grep. Ran npx firebase emulators:exec --only firestore --project demo-binge-rules
+--config <scratchpad>/firebase.rulesport.json "npx vitest run --config
+vitest.rules.config.ts" (port 8085). Result: 6 of 339 tests red, exactly: "BIN-942: the same
+payload minus one floor field is refused", "a two-field merge cannot resurrect a deleted
+CANONICAL item either", and the four it.each rows (setRuntime, flushNextAirWrites,
+refreshTmdbFields, updateNotes). "does NOT leak to update — a partial edit on a live doc still
+passes" and both BIN-655 CREATE-positive tests stayed green, as villkor 5/12 require.
+Re-confirmed the mutant present immediately after the run (same hash,
+e5bb61edf2d03d54cf00ac66c82f8e62e5557d35) before restoring from the scratchpad copy;
+post-restore hash 4125bb754779dd41f8794f625d0b1186dd5c0803 matched both the original and the
+staged index sha (git rev-parse :firestore.rules), and git status --porcelain firestore.rules
+showed only the pre-existing staged M, no unstaged residual.
+
+**4. Unchanged files re-read in full — nothing new.** WatchlistContext.test.tsx,
+AuthContext.test.tsx, VillSePickerPage.test.tsx, QuickRateModal.test.tsx,
+WatchlistContext.tsx, AuthContext.tsx, VillSePickerPage.tsx, QuickRateModal.tsx are
+byte-identical to round 1's reviewed shas per the task description; independently re-read
+whole and cross-checked against git diff --cached for each — no strict-to-loose rewrite, no
+.skip, no weakened assertion anywhere. AuthContext.test.tsx's batchWriteKinds tally and the
+update: mock method (both round-1 findings) are still sound on re-read.
+
+**Verdict: FAIL, 1 blocking.** Finding: src/test/rules/firestore-rules.test.ts, the doc-id
+guard block's comment above "const cascadePayload = …" — "nine remaining merge-writers into
+this collection" undercounts by one (should be ten); correct the number or the phrasing, not
+the surrounding sentence's claim structure. Folded into binge-test-reviewer.knowledge.md's
+"Firestore rules testing" bullet on BIN-941/942 counting (merged in place — the bullet already
+covered a same-family miscount, so this extends it rather than adding a new one).
