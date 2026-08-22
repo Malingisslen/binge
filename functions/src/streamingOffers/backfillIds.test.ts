@@ -148,7 +148,7 @@ describe('V7 — no writer may reintroduce a bare id (#27 binding criterion)', (
 
     // WRITES must be namespaced. DELETES may address a bare id on purpose — that is how
     // the old document gets retired, both in the refresh cron's legacy cleanup and in the
-    // migration's own `dropBare`. A guard that forbade bare ids outright would forbid the
+    // migration's own `deleteBare`. A guard that forbade bare ids outright would forbid the
     // only mechanism that removes them, which is the opposite of what BIN-565 is for.
     //
     // Classified by the operation that FOLLOWS the id, read from the source rather than
