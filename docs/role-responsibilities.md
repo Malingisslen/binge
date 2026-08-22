@@ -210,9 +210,24 @@ assertion to go green").
 
 Owns CI/CD, hosting, observability, and incident response.
 
-- Three GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
+- The GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
   blocking silent rules/functions deploys.
   → `.github/workflows/{ci,deploy,preview}.yml`
+- **The gitleaks secret scan** (BIN-922). It was the one workflow with no owning role:
+  the blocking gate covers the whole workflows directory by prefix, so a change to it
+  was stopped at commit time by a reviewer while the advising side called it
+  uninteresting — and the gate-symmetry check carried a named exception saying the
+  remedy was an ownership decision for this role or #20, with nothing tracking it.
+  Written without a backticked directory on purpose: the generator harvests every
+  backtick-quoted tracked path in a section, so naming the workflows directory in a
+  sentence ABOUT it would have handed this role all four workflows as one pattern.
+  Seated here rather than with #4 Security Architect even though its SUBJECT is
+  credential leakage: what a change to this file touches is CI plumbing — the pinned
+  gitleaks version, the download step, the exit-code flag that decides whether a hit
+  fails the job — which is this role's surface, the same as the other three workflows.
+  #4 remains the escalation for what counts as a leak, which lives in the allowlist
+  config rather than in the workflow.
+  → `.github/workflows/secret-scan.yml`
 - Static export → Firebase Hosting → Cloudflare; CSP/HSTS headers; cache tiers.
   → `firebase.json`
 - Observability — Sentry, Plausible, UptimeRobot; `SLO.md`; incident `RUNBOOK.md`;
@@ -451,8 +466,10 @@ Owns the process.
   here rather than left on the permanent #14 fallback for the same reason as the router
   itself: the fallback is a seat of last resort for code nobody claimed, not an answer for
   a file that decides how everything else is verified. The lockfile is deliberately NOT
-  owned here: it is machine-generated and routes skip, and whether that is right is an open
-  question tracked on BIN-930 rather than settled in passing. Written without backticks on
+  owned here: it is machine-generated, and whether an owner belongs beside the manifest was
+  left open when this bullet was written. BIN-934 settled the half that did not need this
+  role's answer (2026-08-22): the router now calls the lockfile code and the commit gate
+  stops it, so it reaches a reviewer without reaching an owner. Written without backticks on
   purpose — the generator harvests every backtick-quoted tracked path in a section, so
   merely NAMING the lockfile in a sentence that declines to own it would own it. It did,
   for one round: A2 went red with "package-lock.json (owned by #25, blocking gate: none)".

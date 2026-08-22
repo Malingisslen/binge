@@ -141,6 +141,93 @@ describe('non-code paths still route skip', () => {
   });
 });
 
+// The CODE_ROOT_FILES half of `isCodePath` — root-level files that are code despite
+// sitting outside CODE_ROOTS.
+describe('root-level files outside src/ that are still code', () => {
+  // BIN-923. `vitest.rules.config.ts` and `vitest.setup.ts` were promoted into
+  // CODE_ROOT_FILES by BIN-880 (851696d) and no test named either: a grep for both names
+  // across this file and gate-symmetry.test.mjs returned nothing outside route.mjs itself.
+  // Their only protection was gate-symmetry's rule B firing INDIRECTLY (a path the
+  // blocking gate stops must not route `skip`) — a whole-tree aggregation, so one future
+  // ACCEPTED_ASYMMETRIES entry or one gate narrowing removes the only thing pinning the
+  // decision, silently, and no case explains why these two are code.
+  //
+  // `not skip` rather than an exact tier/reasonCode ON PURPOSE: neither file has an owning
+  // role today, so both answer `medium`/`unmapped-code`, and NAMING an owner for either is
+  // an intended improvement that flips the reasonCode to `owned`. A case pinning it would
+  // report that improvement as a failure — the same reasoning route.mjs's golden case for
+  // `scripts/check-public-env.mjs` carries, in the same words: what must never change is
+  // that it stops being `skip`.
+  it.each(['vitest.rules.config.ts', 'vitest.setup.ts'])(
+    '%s is code and does not route skip (BIN-923)',
+    (path) => {
+      expect(isCodePath(path)).toBe(true);
+
+      const r = route([path]);
+      expect(r.tier).not.toBe('skip');
+      expect(r.panel).not.toEqual([]);
+    },
+  );
+
+  it('…and the blocking gate stops both, which is the pair BIN-880 was closing', () => {
+    // The other half of that promotion: the gate ALREADY stopped both files while the
+    // router cleared them, so widening the router added no blocking obligation. Pinned
+    // here so the two halves cannot drift apart again without a red test — rule B goes
+    // quiet the moment either path picks up an exception.
+    expect(integrationGateMatches('vitest.rules.config.ts')).toBe(true);
+    expect(integrationGateMatches('vitest.setup.ts')).toBe(true);
+  });
+
+  // BIN-934. Lockfiles are code, decided 2026-08-22, and the decision applies to BOTH.
+  // Before it, the two had landed in different classes by accident and not by judgment:
+  // `functions/package-lock.json` is code because `functions/` is a CODE_ROOT and `.json`
+  // is a code extension, while the ROOT lockfile matched nothing in the router at all and
+  // routed `skip` with zero blocking reviewers. gate-symmetry.test.mjs could not see that
+  // under either keying of its rule A1 — which is why this case lives HERE, on the
+  // router side where the hole was.
+  it.each(['package-lock.json', 'functions/package-lock.json'])(
+    '%s is code, does not route skip, and reaches the blocking gate (BIN-934)',
+    (path) => {
+      expect(isCodePath(path)).toBe(true);
+
+      const r = route([path]);
+      expect(r.tier).not.toBe('skip');
+
+      // The BIN-830 rule, asserted rather than promised: widening the ADVISING list has
+      // never widened the BLOCKING one on its own. Both lockfiles reach the reviewer
+      // class BIN-919 chose for `package.json`, so a manifest and its lockfile answer
+      // the same way.
+      expect(integrationGateMatches(path)).toBe(true);
+    },
+  );
+
+  it('the manifest and its lockfile are not in different classes by accident (BIN-934)', () => {
+    // The ticket's actual subject. Not "each file reaches some reviewer" — that is the
+    // case above — but that the four dependency files give ONE answer between them, which
+    // is what nobody had ever chosen. A revert of either half of the decision (the router
+    // entry or the gate pattern) fails this.
+    for (const path of [
+      'package.json',
+      'package-lock.json',
+      'functions/package.json',
+      'functions/package-lock.json',
+    ]) {
+      expect(isCodePath(path), `${path} is not code to the router`).toBe(true);
+      expect(route([path]).tier, `${path} routes skip`).not.toBe('skip');
+    }
+    expect(integrationGateMatches('package.json')).toBe(true);
+    expect(integrationGateMatches('package-lock.json')).toBe(true);
+
+    // The one difference that survives, pinned so it stays a documented choice rather
+    // than a fact nobody re-reads: everything under functions/ ALSO reaches the security
+    // reviewer, via that gate's blanket prefix. Incidental, unchanged by BIN-934, and the
+    // reason the root lockfile was seated with the integration reviewer rather than
+    // matched into the security gate to force a symmetry nobody decided.
+    expect(gateMatches('binge-security-reviewer', 'functions/package-lock.json')).toBe(true);
+    expect(gateMatches('binge-security-reviewer', 'package-lock.json')).toBe(false);
+  });
+});
+
 describe('the longest matching pattern wins', () => {
   it('seats the file owner over a directory owner of the same directory', () => {
     // #1 Product Designer owns BOTH `src/components/ui/` and the file itself;

@@ -104,13 +104,12 @@
 //      wrong, and the half it got wrong is the half that generalises.
 //
 //      What remains true is narrower, and is A1's stated limit rather than a blind spot:
-//      a path no role owns still satisfies A1 as long as SOME gate stops it. ALL 295
-//      unowned code paths are in exactly that position on the tree this ships with —
-//      reviewed, but unattributed. That is BIN-871's subject, not this file's. (The first
-//      draft of this sentence said "293 of the 294 … today", which was the count BEFORE
-//      this commit; measured after, it is 295 of 295, and the "one that isn't" it implied
-//      was package.json, the very file this commit fixes. A present-tense number copied
-//      from a pre-change measurement, inside the commit that changed it.)
+//      a path no role owns still satisfies A1 as long as SOME gate stops it. EVERY
+//      unowned code path is in exactly that position on the tree this ships with —
+//      reviewed, but unattributed. That is BIN-871's subject, not this file's. Re-derive
+//      the count from the tree rather than reading one here: a present-tense count
+//      written inside a commit that moves it is stale before the commit lands, and this
+//      sentence has already carried two wrong ones.
 //   2. The rules count reviewers, they do not identify them. `blockingGates` returning a
 //      non-empty list satisfies A1/A2 no matter WHICH agent is in it, so "firestore.rules
 //      lost its SECURITY reviewer but still matches some other gate" is not a shape this
@@ -206,8 +205,6 @@ const ACCEPTED_ASYMMETRIES = {
     'The security gate matches all of `^functions/` by prefix — deliberately broader than any file list, because that is where Cloud Functions code lives and an enumeration would go stale. A .gitignore inside it is caught by that breadth and routes `skip` (not a code extension, no owner). Narrowing the security gate to buy symmetry on an ignore-file would trade a real guard for a cosmetic one.',
   'scripts/scripts-self-tests-present.test.mjs':
     'The floor asserting every script under scripts/ carries a self-test (BIN-850). The test gate matches every `\\.test\\.mjs$` in the repo, which is the point of that pattern; the router leaves ordinary `scripts/` tooling as `skip` because pulling all of scripts/ into the code roots is the broad widening Malin refused (2026-08-08, alternative (a)). Same file, same reasoning, as route.test.mjs\'s NOT_REVIEW_MACHINERY entry.',
-  '.github/workflows/secret-scan.yml':
-    'The blocking gate covers `^\\.github/(workflows|actions)/` as a directory prefix on purpose (BIN-666/667: gating only the files that exist today exempts whatever is extracted tomorrow), while the ownership map names three of the four workflows — deploy, ci, preview. Closing this one means naming an owner for secret-scan.yml in docs/role-responsibilities.md and regenerating the map, which is an ownership decision for §8/§20 rather than a gate edit.',
 };
 
 describe('the gate config has the shape this check reads (BIN-880)', () => {
@@ -306,18 +303,12 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     // BIN-838/823/850 family: a floor far below the real value is decoration. Both are now
     // 700. The other three were already tight and are unchanged.
     //
-    // LIVE VALUES ON THE TREE THIS SHIPS WITH, measured rather than remembered — 1005
-    // tracked, 886 non-skip, 879 gated, 19 owned by #25, 9 high-stakes, 295 unmapped code.
-    // So every floor below sits between 76% and 83% of its live value. Floors, not
-    // equalities: the repo is expected to grow, and a floor that has to be edited on every
-    // commit gets edited without being thought about.
+    // No live values are enumerated here. A measurement taken mid-commit describes a tree
+    // that no longer exists by the end of it, so read the live numbers off the tree with
+    // the same procedure the assertions below use.
     //
-    // Three of those six read 885/878/18 for one round. Not a miscount — they were measured
-    // BEFORE the same commit gave lefthook.yml an owner (#25), which moved it from `skip` to
-    // `owned` and added exactly one to each of the three counts it belongs to. The test
-    // reviewer caught the drift. Recorded because it is the cheapest possible illustration of
-    // why these numbers carry a date and a method: a measurement taken mid-commit describes a
-    // tree that no longer exists by the end of it.
+    // Floors, not equalities: the repo is expected to grow, and a floor that has to be
+    // edited on every commit gets edited without being thought about.
     expect(TRACKED.length).toBeGreaterThanOrEqual(800);
     expect(VERDICTS.filter((v) => v.tier !== 'skip').length).toBeGreaterThanOrEqual(700);
     expect(VERDICTS.filter((v) => v.gates.length > 0).length).toBeGreaterThanOrEqual(700);
@@ -328,10 +319,10 @@ describe('the exceptions and the inputs cannot rot quietly (BIN-880)', () => {
     // rule while every assertion in this file stayed green: the rekey undone by a change
     // somewhere else, with no test to say so.
     //
-    // Set at 230 against a live 295 (78%), deliberately in the same band as its neighbours.
-    // It was 100 for one round — 34% of live, looser than the two floors this very commit
-    // raises for being at 45%. A floor written to a rule the same commit calls decoration
-    // is not a floor, and the outcome verifier caught it.
+    // Set at 230, deliberately in the same band as its neighbours. It was 100 for one
+    // round — looser than the two floors this very commit raises for being decoration.
+    // A floor written to a rule the same commit calls decoration is not a floor, and the
+    // outcome verifier caught it.
     expect(
       VERDICTS.filter((v) => isCodePath(v.path) && v.reasonCode === 'unmapped-code').length,
       'the `unmapped-code` class has collapsed — A1 has silently narrowed back to what it was before BIN-919',

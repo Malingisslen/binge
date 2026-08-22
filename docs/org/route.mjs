@@ -175,6 +175,38 @@ export const TOOLING_CODE_FILES = new Set([
 // this router answered `skip` — a commit held for a review the router called unnecessary,
 // the same drift as BIN-830 seen from the other side. Widening the ROUTER, not the gate,
 // is the conservative half of that pair: it adds no new blocking obligation.
+//
+// LOCKFILES ARE CODE. Decided 2026-08-22, BIN-934; the question was left explicitly open
+// by BIN-919 ("whether that is right is an open question") and is settled here rather
+// than in passing, because the two lockfiles had landed in different classes by accident:
+// `functions/package-lock.json` is code because `functions/` is a CODE_ROOT and `.json` is
+// a code extension, while the ROOT lockfile matched nothing at all and routed `skip`. Not
+// a judgment either way — nobody ever chose.
+//
+// The argument for calling them code is that the manifest is not the thing that decides
+// what gets installed. `package.json` carries the ranges; the lockfile carries the
+// resolved graph, which is where a transitive dependency actually changes. A lockfile-only
+// update (`npm audit fix`, a transitive bump) touches no other file, so treating the
+// manifest as reviewed code while the lockfile is invisible reviews the intention and not
+// the bytes. BIN-658 is the live example — CVEs arriving through the eslint chain, in
+// packages no line of this repo names.
+//
+// Applied to BOTH, and the blocking gate moved in the same commit (the BIN-830 rule):
+// `.claude/shared-plugin.json` now matches both lockfiles for binge-integration-reviewer.
+// That is the same reviewer class BIN-919 chose for `package.json`, deliberately, so the
+// manifest and its lockfile answer the same way. ONE difference remains and is stated
+// rather than shipped silent: `functions/package-lock.json` ALSO reaches
+// binge-security-reviewer, via that gate's blanket `^functions/` prefix — incidentally,
+// exactly as `functions/package.json` does, and for the same reason. Nobody chose a
+// supply-chain policy for the functions tree; the prefix is broad on purpose and
+// narrowing it to buy symmetry would trade a real guard for a cosmetic one.
+//
+// The cost, stated: a lockfile-only commit now routes `medium` and is stopped by a
+// reviewer. Neither lockfile has an OWNING role — they answer `unmapped-code` and seat
+// the #14 fallback — and that is left alone here on purpose. Ownership is a separate
+// decision (§25 declined it in BIN-919 and the sentence saying so is corrected in the
+// same commit as this one); what A1 requires is that the path reach a reviewer, and it now
+// does.
 const CODE_ROOT_FILES = new Set([
   'firestore.rules',
   'firestore.indexes.json',
@@ -185,6 +217,7 @@ const CODE_ROOT_FILES = new Set([
   'vitest.rules.config.ts',
   'vitest.setup.ts',
   'package.json',
+  'package-lock.json',
 ]);
 const CODE_EXT_RE = /\.(ts|tsx|js|jsx|mjs|cjs|css|json|rules)$/;
 

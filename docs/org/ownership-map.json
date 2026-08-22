@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 189,
+  "patternCount": 190,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -103,6 +103,7 @@
         ".github/workflows/ci.yml",
         ".github/workflows/deploy.yml",
         ".github/workflows/preview.yml",
+        ".github/workflows/secret-scan.yml",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "firebase.json"
       ]
