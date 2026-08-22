@@ -1112,6 +1112,13 @@
           "verified": true
         },
         {
+          "from": "watchlist-context",
+          "to": "web-app",
+          "payload": "BIN-895 — the write reports back what it counted, and the confirmation notice reads that report instead of the render closure. Both doors resolve with `TitleWriteOutcome` (`{ countedRewatch }`), read off the payload bytes `buildAddWrite` produced — `outcomeOfAddWrite` asks only whether the key `rewatchCount` is in the write — and returned only AFTER the `setDoc` await, so a rejected write reports nothing and the toast cannot describe something Firestore refused. No uid means no write, and the door reports `countedRewatch: false`. `useMarkSeen` picks its wording from that value (rating prompt, else “omtitt räknad”, else the plain status label); re-deriving it from the render closure is what put the toast and the counter in disagreement, since that closure can be a whole snapshot out of date by the time the write resolves. The TV branch declares its variable un-initialised, so a write that never reports is a compile error rather than a silent “no rewatch”.",
+          "transport": "promise resolution",
+          "verified": true
+        },
+        {
           "from": "firestore",
           "to": "watchlist-context",
           "payload": "onSnapshot pushes the change into React state on device B (watchlist + watchlistTags + watchlistNotes)",
