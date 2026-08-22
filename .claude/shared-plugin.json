@@ -152,6 +152,11 @@
         "onboarding-reserved",
         "launch-gated"
       ],
+      "_neverBuildLabelsNote": "2026-08-22, Malin's call: an unattended sprint may build anything EXCEPT work carrying a product choice that is hers. That rule is a LABEL, not a judgement -- a ticket with any of these is listed for her instead of built. Unlike reservedLabels (never scored, never touched at all), these ARE scored and reported; they just never enter a batch. It replaced four LLM passes over the whole backlog with one cheap check on the shortlist.",
+      "neverBuildLabels": [
+        "Feature",
+        "idea"
+      ],
       "typeLabels": [
         "Bug",
         "security",
