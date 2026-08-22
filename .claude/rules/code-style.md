@@ -19,6 +19,12 @@ runbooks), **machine-consumed data** (read by CI, hooks, scripts), or a **for-Ma
 - Prefer updating an existing doc of the same class over creating a new one. No V1/V2
   copies; no per-directory READMEs.
 - `/docs-sweep` (workflow-guards plugin) audits the whole repo against this taxonomy.
+- **A wrong sentence gets STRUCK, not reworded.** When a comment or a doc asserts something
+  untrue, delete it rather than write a truer version — a rewrite carries a new claim nobody
+  measured. Correct in place only when the true wording is directly readable from the code and
+  needs no counting. The carve-outs — decision records, `*.knowledge.md`, and anything naming
+  work that is still open — are listed with the rule in the four reviewer agent files and in
+  `lessons-digest.md`.
 
 ## Test-extraction pattern
 

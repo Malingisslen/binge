@@ -232,7 +232,7 @@ Categories: `[Workflow]` `[Design]` `[Data]` `[Security]` `[Testing]` `[Linear]`
 - **Rule:** At close-out, derive every per-ticket disposition from the TREE (`git log base..HEAD`, `git status --porcelain`, hashed patch files), never from a worker's self-report — and when the two disagree, the tree wins and the worker's comment gets corrected in the same pass. A "nothing was attempted" claim while `git status --porcelain` is non-empty is a contradiction the close-out must fail on, not transcribe. BIN-707/708/713 filed the forward direction (work claimed done that never landed); this is the reverse and it is worse, because the next sprint re-picks the ticket and any clean-tree step deletes the only copy.
 - **Example:** BAD — the run reports "none built", writes it onto both tickets, and leaves five staged files and a patch unaccounted for. GOOD — run `git status --porcelain` yourself, name the artifact (`batch-0-<date>-<time>.patch`) in the ticket comment, and record "built, uncommitted, recoverable from <path>" — a different instruction than "not attempted".
 
-## 2026-08-13 — [Workflow] Ett ADR med `Status: Accepted` slår kommentarstråden
+### 2026-08-13 — [Workflow] Ett ADR med `Status: Accepted` slår kommentarstråden
 
 **Trigger:** en biljett som refererar ett ADR och vars kommentarstråd säger "väntar på beslut".
 
@@ -249,7 +249,7 @@ besvarade; ingen läste den heller. En tråd är append-only och osorterad efter
 äldsta handbromsen ligger kvar bredvid svaret. Ett ADR har ett `Status`-fält just för att
 vara den enda platsen som kan svara "är det här avgjort?".
 
-## 2026-08-13 — [Testing] Ett tillstånd som uppstår och försvinner syns inte i slutläget
+### 2026-08-13 — [Testing] Ett tillstånd som uppstår och försvinner syns inte i slutläget
 
 **Trigger:** ett test som ska bevisa att en flagga ALDRIG sattes under ett förlopp.
 
@@ -267,7 +267,7 @@ return` före synlighetsreparationen) visade sig vara det enda som skyddar
 markör satt före inloggning gör profilen null och effekten återvänder tidigare. Ett test som
 inte når koden det testar är grönt av fel skäl.
 
-## 2026-08-13 — [Design] En spärrhake som räknar i andel låser sig när underlaget är litet
+### 2026-08-13 — [Design] En spärrhake som räknar i andel låser sig när underlaget är litet
 
 **Trigger:** ett skydd på formen "vägra om mer än X % av det kontrollerade ser fel ut".
 
@@ -284,7 +284,7 @@ raderingar i ett sexkontosprojekt hade kilat fast sopningen för gott — exakt 
 finns för att förhindra. Golvet på 5 löser båda. Testgranskaren visade dessutom att golvets
 STORLEK var opinnad upp till 29, eftersom alla kvarvarande testfall rörde sig med konstanten.
 
-## 2026-08-16 — [Workflow] En `medium`-tier hos en arbetare som inte kan kalla kritiken går rakt igenom hålet som bara lagades för `top`
+### 2026-08-16 — [Workflow] En `medium`-tier hos en arbetare som inte kan kalla kritiken går rakt igenom hålet som bara lagades för `top`
 
 **Trigger:** en obevakad sprint delar ut en biljett vars router-tier kräver en granskning
 INNAN bygget — och du har redan skrivit regeln för `full-panel`.
@@ -351,7 +351,7 @@ BIN-866, BIN-874, BIN-901, BIN-917, BIN-891 och BIN-853, med hela listan upprepa
 
 ---
 
-## Ett tal i en kommentar är ett OKONTROLLERAT PÅSTÅENDE tills du kört något
+### Ett tal i en kommentar är ett OKONTROLLERAT PÅSTÅENDE tills du kört något
 
 **Trigger:** du skriver en siffra, en täckningsutsaga eller ett "den enda X" i en kommentar,
 en notis eller ett commitmeddelande — särskilt i en ändring vars ämne ÄR att påståenden ska
@@ -388,7 +388,7 @@ okontrollerat påstående med ett nytt okontrollerat påstående känns som nogg
 vilka den räknade om — och att själv köra kommandot före varje rättelse i stället för att lita på
 granskarens siffra. Prosa som beskriver kod behöver samma bevisbörda som koden.
 
-## 2026-08-19 — [Workflow] En kritik som VIDGAR omfånget ogiltigförklarar riskklassningen
+### 2026-08-19 — [Workflow] En kritik som VIDGAR omfånget ogiltigförklarar riskklassningen
 
 **Trigger:** en blind rollkritik ställer ett bindande villkor som drar in en fil som inte fanns i
 biljettens filuppsättning.
@@ -410,7 +410,7 @@ dörr, #4 att `create`-only faktiskt är säkert mot delete-then-create.
 BIN-744/776/917 skrev kapacitetskollen för URVALET. Det här är samma regel en våning ner: också
 under bygget, varje gång omfånget växer.
 
-## 2026-08-19 — [Workflow] Granskarens rapport om vad den läst är inte bevis — loggen är
+### 2026-08-19 — [Workflow] Granskarens rapport om vad den läst är inte bevis — loggen är
 
 **Trigger:** en grind vägrar med "granskaren läste aldrig X" medan granskarens rapport listar X.
 
@@ -430,7 +430,7 @@ inte bevis; de citerade raderna är.
 Samma familj som lärdomen från 2026-08-03: när en agent motsäger ett kommando du själv kan köra,
 kör det själv.
 
-## 2026-08-19 — [Workflow] Rättelsen till ett omätt tal bär oftast ett nytt omätt tal
+### 2026-08-19 — [Workflow] Rättelsen till ett omätt tal bär oftast ett nytt omätt tal
 
 **Trigger:** du skriver om en mening för att laga ett felaktigt antal.
 
@@ -459,7 +459,7 @@ här handlar om att RÄTTELSEN är den farligaste platsen att skriva ett nytt.
 
 ---
 
-## 2026-08-20 — Ett radnummer i ett plandokument är falskt i samma commit som det ligger i
+### 2026-08-20 — Ett radnummer i ett plandokument är falskt i samma commit som det ligger i
 
 **Utlösare:** en plan eller ett ADR som pekar ut anropsställen i kod som ÄNDRAS i samma commit.
 
@@ -480,7 +480,7 @@ ett nytt tal. Den här handlar om talet som blir fel UTAN att någon rör mening
 
 ---
 
-## 2026-08-20 — En ny cache av "dokumentet finns" måste följa raderingen, även mitt i flykten
+### 2026-08-20 — En ny cache av "dokumentet finns" måste följa raderingen, även mitt i flykten
 
 **Utlösare:** du inför en andra cache av "den här posten existerar" bredvid en befintlig.
 
@@ -503,7 +503,7 @@ släpp, observera. Ett test som kör operationerna i följd är grönt mot båda
 
 ---
 
-## 2026-08-20 — Commit-grinden läser granskarens SISTA domrad, inte om fyndet är lagat
+### 2026-08-20 — Commit-grinden läser granskarens SISTA domrad, inte om fyndet är lagat
 
 **Utlösare:** en granskare slutar på `REVIEW-VERDICT: fail` och du lagar fyndet.
 
@@ -522,3 +522,39 @@ Andra grinden samma commit: `review-coverage` kräver en `review`-rad i
 `docs/org/metrics/events.jsonl` för biljetten i ämnesraden, och raden måste vara STAGEAD
 (filen ligger i `cleanTreeIgnore`, så en ostageаd rad är osynlig). Kör aldrig
 `log_event.mjs review` utan argument — den skriver då en tom rad som måste plockas bort för hand.
+
+---
+
+### 2026-08-21 — Stryk hellre än att formulera om
+
+**Utlösare:** en granskare hittar ett felaktigt påstående i en kommentar, ett plandokument
+eller ett beslutsprotokoll — ett tal, ett "den enda", ett "den här grenen stänger X".
+
+**Regel:** ta BORT meningen. Skriv inte en sannare version. En omskrivning bär ett nytt
+påstående som ingen har mätt, och det är så ett enda fynd blir en kedja av rättelser där
+varje rond rättar den förra. En struken mening kan inte vara fel. Rätta på plats ENDAST när
+den sanna lydelsen är direkt läsbar ur koden och inte behöver räknas — en flyttad sökväg,
+ett omdöpt symbolnamn. Allt du skulle behöva MÄTA för att skriva stryks i stället.
+
+Tre undantag, och de är hårda:
+1. Ett **beslutsprotokoll** (ADR-beslutsrad, accepterad avvikelse) är enda protokollet över
+   ett val. Det ersätts av en daterad efterföljare som citerar den verifierade koden, och
+   lyfts till Malin — aldrig en tyst radering.
+2. En **`*.knowledge.md`-punkt** följer sin egen konvention: ändras på plats. Aldrig en bar
+   strykning.
+3. Regeln får **aldrig** ta bort protokollet över olöst arbete. Ett blockerande fynd, ett
+   ouppfyllt acceptanskriterium eller en ledger-/markörrad stängs genom att koden lagas och
+   granskaren kör om — aldrig genom att meningen som namnger dem försvinner. Frestelsen att
+   stryka en mening för att klara en grind är signalen att stanna och säga det högt.
+
+Formulera fyndet så också: "skriv om X till Y" bjuder in nästa rond, "stryk X" avslutar den.
+Det binder dina egna omgranskningsvarv, inte bara första passet.
+
+**Exempel:** Synat natten till 2026-08-16. `git log --oneline b88016d..2e6d52a` ger 11
+rättelsecommitar mellan 02:16 och 04:47, flera av dem rättelser av en rättelse. `cd69009`
+heter "räkneordet är borttaget överallt i stället" — och nästa commit, `2e6d52a`,
+konstaterar att just den commiten införde ett nytt räkneord medan den tog bort ett.
+
+Regeln ligger i de fyra grindgranskarnas instruktioner och i den delade commit-spärrens
+block om fällor vid omförsök. **Bevakning:** det blocket har ingen storleksgräns — det får
+inte tyst växa till en andra digest.
