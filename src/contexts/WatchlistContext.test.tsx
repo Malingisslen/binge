@@ -903,7 +903,7 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     // unify these guards". Both new tests above run with the snapshot SETTLED, so a
     // refactor collapsing the two conditions either way would leave them green.
     //
-    // The asymmetry: `addedAt` is gated on `buildAddWrite`'s `current` alone, so during a cold
+    // The asymmetry: `addedAt` is gated on `current || listenerFailed`, so during a cold
     // load (items === []) it still writes — a doc landing without addedAt sorts
     // nowhere and never recovers. `tmdbFieldsRefreshedAt` additionally requires the
     // snapshot to have settled, so it stays SILENT here — an absent freshness stamp
