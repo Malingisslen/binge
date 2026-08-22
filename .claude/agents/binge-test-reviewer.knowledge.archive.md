@@ -22824,3 +22824,72 @@ this collection" undercounts by one (should be ten); correct the number or the p
 the surrounding sentence's claim structure. Folded into binge-test-reviewer.knowledge.md's
 "Firestore rules testing" bullet on BIN-941/942 counting (merged in place — the bullet already
 covered a same-family miscount, so this extends it rather than adding a new one).
+
+## 2026-08-22 — BIN-955/957/928 watchlist batch (recovered sprint-0 patch)
+
+**Diff reviewed**: `git diff --cached` in C:\binge, 5 files (`src/contexts/WatchlistContext.tsx`
++`.test.tsx`, `src/lib/watchlist/nextAirReadRepair.ts`+`.test.ts`, `src/lib/watchlistWrites.ts`),
+398 insertions / 71 deletions. Recovered from `.claude/state/sprint-patches/batch-0-20260822-220655.patch`
+after the sprint engine died before its ship step; nothing committed. Three tickets: BIN-955
+(in-flight dedup for `updateProgress`'s add branch), BIN-957 (`console.warn`→`console.error`+
+`captureError` on four best-effort catch sites), BIN-928 (doc-only, confirmed via `git diff` —
+the only change is a JSDoc block on `outcomeOfAddWrite`, zero executing lines touched).
+
+**Mutations run, all via backup/restore against the exact staged blob** (`git show
+:src/contexts/WatchlistContext.tsx` diffed CRLF-insensitively against the `cp`'d backup —
+confirmed byte-identical modulo line endings before trusting the backup):
+
+1. Fully disable the `inFlightAddsRef` `finally` cleanup (both success and failure never
+   delete). Result: 2/136 red (`BIN-954: a series added by ticking and then removed does not
+   resurrect as a fragment`, `BIN-954: a removal issued WHILE the add is in flight leaves no
+   stale mark`) — a stale SUCCEEDED entry outliving a later `removeItem` sends a subsequent
+   progress write down the merge branch against a deleted doc. Real, and pinned.
+2. Disable cleanup ONLY on the failure/reject branch (success still cleans up). Result:
+   136/136 green — equivalent mutant. The reader's `pendingAdd.catch(() => false)` already
+   treats a stale FAILED entry as "absent" regardless of map state, so "a failed add's mark
+   must never survive an error" is protected by construction, not by a dedicated test. Folded
+   into the knowledge file as informational/LOW, not a blocking gap.
+3. Revert `documentExists` to the pre-BIN-955 `known` (delete the `pendingAdd`/`inFlightAddsRef`
+   consultation entirely). Result: 1/137 red-ALONE — `BIN-955: two concurrent ticks on the same
+   untracked series add it exactly ONCE`. Proves the concurrency test is genuinely driven (both
+   `updateProgress` calls invoked with no `await` between them inside one `act()`, `getTVShowLite`
+   held open on an externally-resolved promise, released + `Promise.all`'d in a second `act()`),
+   not vacuous.
+4. Flip the waiter's `.catch(() => false)` to `.catch(() => true)`. Result: 2/137 red —
+   `BIN-955: a REFUSED add is not success for the call waiting on it` red-alone, plus a
+   concurrent SIBLING SESSION's own in-progress `PROBE:` test (added and removed from the
+   working tree between my checks — see contamination note below) also caught it
+   independently. Confirms the safe-direction fallback is pinned.
+5. `src/lib/watchlist/nextAirReadRepair.ts`: removed the `captureError(...)` call on the
+   `flushNextAirWrites-setup` catch site. Result: 1/20 red-alone (`a failed fsdb() reports the
+   OTHER kind`). BIN-957's four sites are each independently kind-tagged and reported+swallowed;
+   spot-checked one directly, the other three (`setRuntime`, `refreshTmdbFields`,
+   `flushNextAirWrites-chunk`) follow the identical established pattern from BIN-942's matrix
+   test and assert both halves explicitly in the diff.
+
+All mutants confirmed present via `grep -n MUTANT` immediately before AND after each vitest
+run (single command), `node_modules/.vite/vitest` cleared before every run, and every restore
+verified via `git diff --stat`/`git status --porcelain` showing the file back to ONLY its
+pre-existing staged `M` with zero unstaged residual before moving to the next mutation.
+
+**Contamination note, not part of the review verdict**: a concurrent session was actively
+mutation-testing the SAME files in this SAME shared checkout during this review — an unstaged
+`console.log('DBG', ...)` line appeared in `WatchlistContext.tsx` and later vanished; an
+untracked `src/contexts/Bin955Probe.test.tsx` (2881 lines, a near-copy of the real test file)
+appeared; and a `PROBE: removal during an in-flight add …` test appeared in
+`WatchlistContext.test.tsx` and was later removed, all without any action by this review. Care
+was taken to restore ONLY the file this review had itself mutated (`WatchlistContext.tsx`,
+`nextAirReadRepair.ts`), from a backup taken in the same window, and to never touch the test
+file (owned live by the sibling session) or the untracked probe file. Matches the existing
+"two mutation-testing reviewers on the same files collide" lesson; no new bullet needed, cited
+as an instance.
+
+**Verdict: PASS, 0 blocking.** All five acceptance-criteria-bearing checks confirmed: genuine
+concurrency drive (not sequential-vacuous), the safe-direction fallback pinned, all four
+BIN-957 sites report+swallow, no weakened/skipped/rewritten assertions anywhere in the diff
+(`git diff --cached | grep '^-'` on the two test files showed zero removed assertion lines,
+only the expected `console.warn`→`console.error` production-code swaps), and the pre-existing
+sequential auto-advance test untouched and green. One LOW/informational finding filed (not
+blocking): the in-flight map's failure-path cleanup is an equivalent mutant today, protected by
+the reader's own catch-fallback rather than by a dedicated test — worth a one-line comment
+softening or a dedicated test if this idiom gets reused, but not a ship-blocker for this diff.
