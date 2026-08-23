@@ -22893,3 +22893,97 @@ sequential auto-advance test untouched and green. One LOW/informational finding 
 blocking): the in-flight map's failure-path cleanup is an equivalent mutant today, protected by
 the reader's own catch-fallback rather than by a dedicated test — worth a one-line comment
 softening or a dedicated test if this idiom gets reused, but not a ship-blocker for this diff.
+
+## 2026-08-23 — BIN-931/932: regex-scan retirement + terminal-state log, all mutants killed
+
+**Diff reviewed**: `git diff --cached` in C:\binge, 8 staged files — new
+`eslint-rules/no-bare-streaming-offers-id.mjs` (183 lines) + its
+`eslint-rules/no-bare-streaming-offers-id.test.mjs` (179 lines, 15 cases), `eslint.config.mjs`
+(wires the rule in as `error`, no `files:` restriction), `vitest.config.ts` (adds
+`eslint-rules/**/*.{test,spec}.mjs` to `include`), `docs/org/route.mjs` +
+`.claude/shared-plugin.json` (both lists gain the new rule+test pair, BIN-830 both-in-one-commit
+discipline), and `functions/src/streamingOffers/backfillIds.{ts,test.ts}` — the .ts adds an
+`else` branch logging a terminal "no bare docs remain" line (BIN-932), the .test.ts deletes 336
+lines (confirmed via `git diff --cached --numstat` + 3 hunks only) and adds 2 new cases. Read
+every file with `Read` before mutating. First reviewer on this batch (recovered sprint worktree,
+never committed).
+
+**What the 336-line deletion actually removed** (hunk 2 of 3, confirmed against the diff
+directly): exactly the four regex source-scan `it()`s in the old "V7" describe block —
+(1) the single-file `functions/src/streamingOffers/index.ts` chained+bound-ref scan,
+(2) the cross-file "no OTHER file writes a bare id" walk, (3) the "no two-hop bound write"
+absence-assertion, (4) the "no batch write" absence-assertion. Nothing in the `runIdBackfill`
+describe block, `targetFor`, or `pendingTargets/unattributableBareIds` was touched — every
+pre-existing behavioral pin on the migration itself (migrate, drop-superseded, the work-set
+edge case, unattributable-warn, `complete` both directions, capped-logging both directions,
+write-before-delete ordering, vanished-doc skip) is byte-identical before/after.
+
+**Rule mutations (eslint-rules/no-bare-streaming-offers-id.mjs, snapshot+restore, hash-verified
+each round, CRLF file — single-line anchors only, multi-line `\n` anchors silently no-op on this
+file)**, baseline 15/15 green:
+1. `WRITE_OPS` drop `'update'` → 2/15 red alone (`chain broken across lines`, `transaction write`).
+2. `WRITE_OPS` drop `'create'` → 1/15 red alone (`collection name behind a constant`).
+3. `ID_CARRIER_PROPS` → `[]` → 1/15 red, but only `the real writer module passes` (lints
+   `functions/src/streamingOffers/index.ts`'s real `col.doc(target.toId)`) — none of the 15
+   authored fixtures exercises `.toId` directly, so this branch is covered only indirectly.
+   Not a gap (it IS killed), but worth naming.
+4. `ID_HELPERS` → `[]` → 3/15 red (`id built by streamingOffersDocId`, `id built by
+   mediaTypeDocId through a binding`, `the real writer module passes`).
+5. Binding-deref (`deref()`'s `Identifier` branch short-circuited to return itself) → 5/15 red
+   (`chain broken across lines`, `two-hop binding chain`, `batch write through an arbitrary
+   binding`, `transaction write`, `collection name behind a constant`).
+6. Argument-position check (`check(node.arguments[0], scope, node)` in the `CallExpression`
+   visitor, the `batch.set(ref, data)`/`tx.update(ref, data)` guard) commented out → 2/15 red
+   (`batch write through an arbitrary binding`, `transaction write`).
+All six red-alone. WRITE_OPS, ID_CARRIER_PROPS, ID_HELPERS, the deref/binding path and the
+member-expression callee guard are each independently pinned.
+
+**Config-scope gap found (non-blocking, filed as the new knowledge bullet, not a ship-blocker
+for this diff)**: every one of the 15 fixtures lints `filePath: 'functions/src/streamingOffers/
+__eslint-probe.ts'`. `eslint.config.mjs`'s new block carries no `files:` key. Live-probed the
+UNMUTATED rule via a real `ESLint` instance against 4 paths (`src/lib/firebase/__probe.ts`,
+`src/components/title/__probe.tsx`, `functions/src/streamingOffers/__probe.ts`,
+`scripts/__probe.mjs`) with an identical bare-id fixture — all 4 fire today (severity 2), so the
+rule genuinely protects the whole repo, not just `functions/`. Then mutated `eslint.config.mjs`
+itself (snapshot+restore+hash-verified) by adding `files: ['functions/**/*.ts']` to the new
+block — a real narrowing that would silently exempt any future `src/` writer. Result: 15/15
+STILL GREEN, because every fixture already sits inside `functions/`. Also confirmed
+`eslint.config.mjs` matches none of the patterns in `.claude/shared-plugin.json`'s
+`reviewGates` array (grepped the full `patterns` list) — so this specific narrowing shape is
+invisible to both the dedicated test file and the blocking review gate, though it is not
+exploitable today (grepped `src/` for `collection('streamingOffers')` writes: none exist).
+`_note11` in `.claude/shared-plugin.json` and the matching `route.mjs` comment both price ONE
+disarm mechanic (`rules: {}`, verified pre-existing measurement: 9/15 red) as evidence "the
+disarm is not silent" — true for that mechanic, not for a `files:` narrowing, which the diff's
+own prose does not mention. Recommendation only, not blocking: add one fixture case whose
+`filePath` sits outside `functions/` (e.g. under `src/lib/firebase/`) asserting the rule still
+reports — closes the blind spot for one `it()`.
+
+**BIN-932's two new tests, mutated independently** (`functions/src/streamingOffers/
+backfillIds.ts`, snapshot+restore+hash-verified each round), baseline 23/23 green:
+1. `if (bareFound > 0)` → `if (bareFound >= 0)` (else-branch made dead) → 1/23 red alone:
+   `SAYS SO in the log when nothing is left`. `does NOT claim nothing is left...` stayed green
+   (correctly — it asserts absence, and the terminal line still never fires because the tally
+   branch takes over).
+2. Delete the terminal `io.log.info('...no bare docs remain')` call outright → same 1/23 red
+   alone, confirming it's the log CALL pinned, not merely the branch condition.
+3. Inject an unconditional terminal log call right after `const complete = ...` (so it also
+   fires while `bareFound > 0`) → 1/23 red alone, the OTHER test: `does NOT claim nothing is
+   left while an unattributable bare doc sits there`. Neither of the two BIN-932 tests is a
+   trivial negation of the other — each has its own dedicated kill, confirmed by mutating both
+   directions and observing the OTHER test stay green in each case.
+
+**Prose claims independently re-derived** (per task instruction not to trust unmeasured
+numbers): "15 cases" in the rule test file — counted (8 report + 5 stay-quiet + 2 standalone =
+15, confirmed by the baseline run's own tally). "336 lines deleted, 2 new cases" — confirmed via
+`git diff --cached --numstat` (43/293... wait, this file's own diff --numstat header vs the
+task's framing: the task said "336 lines deleted" referring to the raw removed-line count in the
+diff, which the 3-hunk breakdown confirms — hunk 2 alone removes ~298 lines). No false claim
+found in anything read; the route.mjs correction ("No breakdown of TOOLING_CODE_FILES is written
+here. Derive it from the set instead of reading a number here.") correctly follows the repo's
+own strike-not-reword convention — it struck a stale count rather than writing a new one.
+
+**Verdict**: pass, 0 blocking. One non-blocking follow-up recommended (the config-scope fixture
+gap above); one soft observation (`ID_CARRIER_PROPS` killed only indirectly). Knowledge bullet
+folded into the existing "A SOURCE-SCANNING guard test... owes one probe PER IDIOM" bullet in
+`binge-test-reviewer.knowledge.md` rather than appended as a new one.
