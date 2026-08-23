@@ -180,14 +180,36 @@ export const TOOLING_CODE_FILES = new Set([
   // 'eslint-rules/**/*.{test,spec}.mjs' entered vitest.config.ts's include globs — it went
   // red naming both files by path.
   //
-  // eslint.config.mjs, where the rule is switched ON, is deliberately NOT here. Malin's
-  // narrow-over-broad call (2026-08-08, alternative (a)) governs, and disarming it is not
-  // silent: measured by setting that config's `rules` block to `{}` and re-running,
-  // 9 of the 15 cases in eslint-rules/no-bare-streaming-offers-id.test.mjs go red, so
-  // `npm test` — and therefore the deploy — refuses it. That is a red test rather than a
-  // blocking reviewer, which is a weaker guarantee than the two files below have.
+  // This block used to record eslint.config.mjs as deliberately NOT here, on the ground
+  // that a red test already priced the risk. SUPERSEDED 2026-08-23 by BIN-967; the decision
+  // that replaces it is below.
   'eslint-rules/no-bare-streaming-offers-id.mjs',
   'eslint-rules/no-bare-streaming-offers-id.test.mjs',
+  // THE FILE THAT SWITCHES THE RULE ON IS ALSO REVIEW MACHINERY. Decided 2026-08-23,
+  // BIN-967, and added in the SAME commit as its `reviewGates` pattern (_note12) per the
+  // BIN-830 rule: this router only ADVISES, `.claude/shared-plugin.json` BLOCKS, and
+  // widening one never widens the other.
+  //
+  // The two files above are gated, so the rule cannot be weakened unwitnessed — but the
+  // switch is one hop further out, and emptying this config's `rules` block disarms the
+  // rule completely while every gated file stays byte-identical. That is _note4's "the
+  // gate could disarm itself unwitnessed", read one file along, and it is the same argument
+  // BIN-869 used to put the integration reviewer's own instruction file behind its own gate.
+  //
+  // WHAT THE RED TEST ACTUALLY COVERS, re-measured for this ticket rather than carried
+  // forward as prose: with the `rules` block set to `{}`,
+  // `npx vitest run eslint-rules/no-bare-streaming-offers-id.test.mjs` answers
+  // `9 failed | 6 passed (15)`. So the disarm is caught — by `npm test`, which gates the
+  // DEPLOY. It was never caught at COMMIT time, and code reaching main past a red suite is
+  // exactly what the two-list pairing exists to stop.
+  //
+  // COST: `git log --oneline --no-merges -- eslint.config.mjs | wc -l` answers 4 for the
+  // whole history of the repo, so the new obligation lands on a file that has changed four
+  // times ever. Malin's narrow-over-broad standing call (2026-08-08, alternative (a)) was
+  // the previous entry's reason for leaving it out and is honoured rather than overridden:
+  // one exact filename in each of the two lists, the shape BIN-934 used for
+  // package-lock.json — not a directory, not a glob.
+  'eslint.config.mjs',
 ]);
 // Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
 // the two remaining root test-runner configs: the blocking gate already stops a commit

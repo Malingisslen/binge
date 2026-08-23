@@ -131,6 +131,29 @@
 // covered by the row written for its first version. Fixing that means deciding what a review
 // row's shelf life is, which is a policy question nobody has answered.
 //
+// AND IT NEVER ASKS WHETHER A ROW IS TRUE. BIN-963 (2026-08-23) is the case study, and it
+// is recorded here because the derivation is expensive and nothing else in the tree keeps it.
+// That ticket was filed on the reading that three rows — ts 2026-08-22T19:31:26.000Z, for
+// BIN-955/928/957, `via:"sprint-parallel"`, `ran:true` — were fabricated, BIN-918’s class.
+// Establishing that they are NOT took an artifact this check does not read: `tasks/todo.md`’s
+// sprint block carries each critique’s conditions folded in as bracketed acceptance criteria,
+// and those counts match the rows’ `must_haves` eight for eight across the whole held batch
+// (955:4, 928:2, 957:5, 931:5, 932:5, 922:4, 923:4, 934:4; the rows are in stash 9efa931,
+// `git diff 6d3d4a8 9efa931 -- docs/org/metrics/events.jsonl`). Nothing in this file, in its
+// sibling, or in the row schema links a row to the artifact that would corroborate it. The
+// finding itself is filed as a `correction` row on BIN-963, carrying no `corrects` key,
+// because no row in the log is wrong and a keyed correction would RETIRE a true one.
+//
+// NO GUARD WAS ADDED FOR THE SHAPE THAT LOOKED WRONG, and the reason is the useful part.
+// The obvious rule — refuse `via:"sprint-parallel"` together with `ran:true`, on the ground
+// that a batch agent cannot spawn the sub-agent a blind critique needs — is wrong about who
+// is speaking. The sprint ORCHESTRATOR convenes the critique at Phase 1.4 and writes the row;
+// its batch agents cannot, and say exactly that in their own receipts. So a batch note
+// reading "NOT convened" does not contradict a row reading `ran:true`: two actors, two
+// questions, both answers true. A rule keyed on that pair would refuse precisely the rows
+// the engine writes when it does the right thing — the "punishes the first person to obey
+// it" failure the epoch note above exists to avoid, arrived at from a different direction.
+//
 // SHALLOW CHECKOUTS. ci.yml and preview.yml check out at the default depth 1 while
 // deploy.yml uses `fetch-depth: 0`, so a history walk sees one commit on two of the three
 // workflows. In that state this check reports `unverified` and asserts nothing — never a

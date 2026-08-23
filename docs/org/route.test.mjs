@@ -226,6 +226,27 @@ describe('root-level files outside src/ that are still code', () => {
     expect(gateMatches('binge-security-reviewer', 'functions/package-lock.json')).toBe(true);
     expect(gateMatches('binge-security-reviewer', 'package-lock.json')).toBe(false);
   });
+
+  // BIN-967. A lint rule and the file that switches it on are one guard, not two.
+  // BIN-931 gated the rule FILE and its test and left this one out, priced against a red
+  // test; BIN-967 reversed that on 2026-08-23. Named here rather than left to
+  // gate-symmetry, for the reason the BIN-923 block above gives at length: rule B is a
+  // whole-tree aggregation, so one future ACCEPTED_ASYMMETRIES entry retires the only
+  // thing pinning the decision and nothing says why this file is code.
+  it('the lint rule and the config that switches it on answer the same way (BIN-967)', () => {
+    for (const path of [
+      'eslint-rules/no-bare-streaming-offers-id.mjs',
+      'eslint-rules/no-bare-streaming-offers-id.test.mjs',
+      'eslint.config.mjs',
+    ]) {
+      expect(isCodePath(path), `${path} is not code to the router`).toBe(true);
+      expect(route([path]).tier, `${path} routes skip`).not.toBe('skip');
+      // The BIN-830 pairing, asserted on the half that actually blocks. Emptying the
+      // config’s `rules` block disarms the rule while every other gated file stays
+      // byte-identical, so the switch has to reach a reviewer too.
+      expect(integrationGateMatches(path), `${path} reaches no blocking reviewer`).toBe(true);
+    }
+  });
 });
 
 describe('the longest matching pattern wins', () => {
