@@ -312,3 +312,32 @@ Supersederar 2026-08-19-posten om synlighetskaskadens nekande, som är retirerad
 `.claude/accepted-deviations.archive.md`. Den accepterade nekandet på ett gammalt
 bara-numeriskt id och sa själv att samma kapplöpning på ett kanoniskt id var öppen; BIN-942
 stängde den halvan. — 2026-08-20
+
+---
+
+## BIN-957: de tre `console.warn`-vägarna rapporterar nu — 2026-08-23
+
+Supersederar **punkt 4** i 2026-08-20-posten ovan, som listar `console.warn`-blindheten på
+`setRuntime`, `refreshTmdbFields` och `flushNextAirWrites` som filad och öppen. Den är stängd.
+Punkt 4 står kvar ordagrant — posten är append-only — men den beskriver inte längre koden.
+
+Fyra catch-ställen (tre funktioner; `flushNextAirWrites` har två) loggar nu med
+`console.error` och rapporterar via `captureError` i Sentry-scopet `watchlist`, med ett eget
+`kind` per anropsplats:
+
+- `setRuntime`
+- `refreshTmdbFields`
+- `flushNextAirWrites-chunk` — en enskild batch nekades
+- `flushNextAirWrites-setup` — import eller `fsdb()` föll omkull, ingenting skrevs
+
+**Catcharna är fortfarande BREDA**, inte avsmalnade till `isPermissionDenied`. Skälet, som
+skiljer dem från de sex tystade redigeringsvägarna: de här är fire-and-forget, ingen inväntar
+löftet, så ett omkast blir ett ohanterat fel användaren varken ser eller kan göra något åt.
+Det som saknades var rapporten, inte sväljandet. Sväljandet är oförändrat och varje väg har ett
+test som hävdar båda halvorna — att felet rapporteras OCH att det inte kastas vidare.
+
+**Konsekvens för 2026-08-20-postens re-open-kanal:** listan över `kind`-värden som betyder
+något i scopet `watchlist` växer med de fyra ovan. De betyder INTE punkt 2 (ett systematiskt
+nekande av de sex tystade redigeringsvägarna) — de är best-effort/self-healing-vägar, och en
+enstaka träff är väntad. Läs dem som ett eget spår, precis som `kind: 'updateProgress-add'`
+(BIN-954) hör till sin egen fråga.

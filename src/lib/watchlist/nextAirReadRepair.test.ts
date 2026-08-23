@@ -14,8 +14,18 @@ import type { TMDBTVShow, TMDBMovie, WatchlistItem } from '@/types';
 let commitOutcomes: Array<'ok' | 'fail'> = [];
 let commitIndex = 0;
 const attemptedChunks: number[][] = [];
+// BIN-957: the OTHER catch site — nothing was written at all because the import or fsdb()
+// itself fell over. It reports a different `kind` than a rejected chunk, so the two are
+// distinguishable in Sentry, and this flag is the only way to reach it from a test.
+let fsdbFails = false;
+// BIN-957: the failures are reported now, not merely logged. Mocked here because the
+// module gained a real dependency on it; the pure-function tests never reach the calls.
+const captureError = vi.fn();
+vi.mock('@/lib/sentry', () => ({
+  captureError: (...args: unknown[]) => captureError(...args),
+}));
 vi.mock('@/lib/firebase/db', () => ({
-  fsdb: async () => ({
+  fsdb: async () => (fsdbFails ? Promise.reject(new Error('fsdb down')) : {
     db: {},
     doc: (_db: unknown, ..._path: string[]) => ({ id: _path[_path.length - 1] }),
     writeBatch: () => {
@@ -196,6 +206,8 @@ describe('flushNextAirWrites — a rejected chunk rolls back its dedupe marks (B
     commitOutcomes = [];
     commitIndex = 0;
     attemptedChunks.length = 0;
+    fsdbFails = false;
+    captureError.mockClear();
   });
 
   const mkUpdate = (tmdbId: number): NextAirUpdate => ({
@@ -223,5 +235,59 @@ describe('flushNextAirWrites — a rejected chunk rolls back its dedupe marks (B
     expect(attemptedChunks).toHaveLength(1);
     expect(attemptedChunks[0]).toHaveLength(450);
     expect(attemptedChunks[0]).not.toContain(451);
+  });
+});
+
+// BIN-957: `console.warn` on these two catch sites was invisible to Sentry — its default
+// globalHandlers integration reports an unhandled rejection but never a console line, so
+// catching and warning made the failure LESS visible than not catching at all. Both sites
+// now report with their own `kind`, and both must still SWALLOW: the caller is the calendar
+// effect and a throw from there is an unhandled rejection the user cannot act on.
+describe('flushNextAirWrites — a failed repair is reported to Sentry and still swallowed (BIN-957)', () => {
+  beforeEach(() => {
+    commitOutcomes = [];
+    commitIndex = 0;
+    attemptedChunks.length = 0;
+    fsdbFails = false;
+    captureError.mockClear();
+  });
+
+  const mkUpdate = (tmdbId: number): NextAirUpdate => ({
+    mediaType: 'tv', tmdbId, delta: { nextAirDate: '2026-08-01' },
+  });
+
+  it('a rejected chunk reports kind flushNextAirWrites-chunk without throwing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      commitOutcomes = ['fail'];
+      await expect(flushNextAirWrites('bin957-chunk', [mkUpdate(1)])).resolves.toBeUndefined();
+      expect(captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { scope: 'watchlist', kind: 'flushNextAirWrites-chunk' },
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('a failed fsdb() reports the OTHER kind — nothing was written, not one chunk refused', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      fsdbFails = true;
+      await expect(flushNextAirWrites('bin957-setup', [mkUpdate(2)])).resolves.toBeUndefined();
+      expect(captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { scope: 'watchlist', kind: 'flushNextAirWrites-setup' },
+      );
+      // Nothing was attempted, and the dedupe marks were rolled back — so a later flush
+      // for the same uid retries rather than skipping the item forever.
+      expect(attemptedChunks).toHaveLength(0);
+      fsdbFails = false;
+      commitOutcomes = ['ok'];
+      await flushNextAirWrites('bin957-setup', [mkUpdate(2)]);
+      expect(attemptedChunks).toEqual([[2]]);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

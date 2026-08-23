@@ -1,3 +1,343 @@
+# SPRINT 2026-08-22
+
+Planen för DENNA körning, skriven FÖRE bygget. Det här avsnittet är det enda underlaget
+sprinten graderas mot — inget arkiveras, inget raderas, nya avsnitt läggs överst.
+
+9 biljetter, 4 batchar, 4 agenter (A–D). Blast-radius: samtliga är bokförda **Tier A** i
+urvalsavsnittet nedan (`# Sprint 2026-08-22 — Selection`); ingen biljett pinnades
+`full-panel` vid urvalet, dispositionerna är `build` eller `build-review`. Rollkritikerna
+som redan körts är invikta nedan som BINDANDE acceptanskriterier, märkta med rollens namn
+i hakparentes. **Vidgar en kritik eller en fix filuppsättningen — kör om
+`node docs/org/route.mjs <filer>` innan bygget fortsätter** (BIN-766-lärdomen).
+
+**Flagga från urvalet:** BIN-923 kom in med FÄRRE ÄN TVÅ graderbara kriterier på själva
+biljetten (ett enda). Den graderas därför mot biljettens egna kriterium PLUS #25:s fyra
+bindande villkor nedan — inga uppmjukade ersättare är uppfunna.
+
+---
+
+## Batch A — Watchlist (Agent A)
+
+### BIN-955 — Två snabba avsnittsbockningar på samma ospårade serie kan lägga till den två gånger
+**Tier:** A (urval), disposition `build`. Rollkritik: Software Architect (invikt nedan).
+**Vad ändras:** Ersätt märket `addedByProgressRef` som sätts EFTER skrivningen med ett
+per-dokument "pågår"-märke, så att två samtidiga `updateProgress`-anrop på add-grenen inte
+båda lägger till titeln (`src/contexts/WatchlistContext.tsx`).
+
+Acceptans:
+- [ ] Två samtidiga tittar-gester på samma ospårade serie ger exakt EN `title_added_watchlist`-händelse och EN tilläggsskrivning. *(kind: diff)*
+- [ ] Ett misslyckat tillägg är fortfarande omförsökbart på nästa bockning — "pågår"-märket överlever aldrig ett fel. *(kind: diff)*
+- [ ] Det andra anropet tar aldrig merge-grenen mot ett dokument som ännu inte finns. *(kind: diff)*
+- [ ] Nedskrivet beslut om `getTVShowLite` ska adoptera `fetchQuery`+`AbortSignal` här, eller skälet att inte göra det står dokumenterat i koden. *(kind: run)*
+- [ ] [Software Architect] Märket rensas när tillägget MISSLYCKAS (TMDB-hämtningen kastar eller `upsertTitle` avvisas), så omförsökbarheten består — ett märke som bara rensas vid uid-byte (`useEffect` vid rad 393) skulle göra titeln olägg-bar resten av sessionen vid ett övergående fel. *(kind: diff)*
+- [ ] [Software Architect] Den befintliga `removalTickRef`-kapplöpningsspärren (märk bara om `removalTickRef.current === removalTickAtStart`) hedras även under det nya märket — en radering som startar medan tillägget pågår måste fortfarande hindra märket från att överleva ett raderat dokument. *(kind: diff)*
+- [ ] [Software Architect] Märket uppfyller fortfarande `known`-kollens befintliga semantik (rad 1036) för det SEKVENTIELLA auto-hoppsfallet (bockning → auto-advance) — den vägen får inte regrera medan det samtidiga fallet lagas. *(kind: diff)*
+- [ ] [Software Architect] Ett test i `WatchlistContext.test.tsx` driver två SAMTIDIGA `updateProgress(..., { addIfMissing: true })` på samma ospårade TV-titel och hävdar exakt ett "written"-utfall (det andra anropet får varken göra en andra TMDB-hämtning eller ett andra `upsertTitle`). *(kind: diff)*
+
+### BIN-928 — "Räknade skrivningen en omtitt" härleds på två ställen, bara typer håller dem i synk
+**Tier:** A (urval), disposition `build`. Rollkritik: Legal / GDPR Counsel (invikt nedan).
+**Vad ändras:** En dokumentationsrad i `outcomeOfAddWrite` som namnger beroendet på
+`buildAddWrite`s nyckel, plus ett nedskrivet beslut om `rewatchCount` ska in i
+runtime-strippen (`src/lib/watchlistWrites.ts`).
+
+Acceptans:
+- [ ] `outcomeOfAddWrite` får en doc-kommentar som namnger den `buildAddWrite`-nyckel den läser och vad en vidgning av nyttolasttypen skulle bryta. *(kind: diff)*
+- [ ] Nedskrivet beslut: `rewatchCount` läggs till i runtime-strippen bredvid `notes`/`tags`, ELLER lämnas som enbart typnivå-skydd — med skälet. *(kind: diff)*
+- [ ] [Legal / GDPR] Den nya kommentaren säger BARA att `outcomeOfAddWrite` härleds ur `buildAddWrite`s skrivnyckel (en saklig beroendenotis) och formulerar inte om någon befintlig mening i filen — enligt strykregeln STRYKS en felaktig/inaktuell mening i närheten, den skrivs inte om. *(kind: diff)*
+- [ ] [Legal / GDPR] Beslutet om `rewatchCount` bokförs som ett BESLUT (daterad kommentar eller post i `accepted-deviations.md`) med skäl — och `rewatchCount` läggs INTE tyst in i notes/tags-strippen under den här biljetten: det är en numerisk räknare, inte tredjepartspersonuppgifter, och därmed ingen kandidat för den integritetsdrivna strippen. *(kind: diff)*
+
+### BIN-957 — Tre best-effort-skrivvägar loggar med console.warn — osynligt för Sentry
+**Tier:** A (urval), disposition `build`. Rollkritik: Database Administrator / Data-layer Engineer (invikt nedan).
+**Vad ändras:** `console.warn` → `console.error` + `captureError({ scope: 'watchlist', kind })`
+på `setRuntime`, `refreshTmdbFields` och båda catch-ställena i `flushNextAirWrites`
+(`src/contexts/WatchlistContext.tsx`, `src/lib/watchlist/nextAirReadRepair.ts`) — samma
+mönster som BIN-942 gav de sex tystade redigeringsvägarna.
+
+Acceptans:
+- [ ] Alla fyra catch-ställen rapporterar via `captureError` med en EGEN `kind` per anropsplats. *(kind: diff)*
+- [ ] Nedskrivet beslut: smalna av till `isPermissionDenied` som de sex redigeringsvägarna, eller förbli bred catch — med skälet (dessa är best-effort/self-healing, till skillnad från de sex). *(kind: diff)*
+- [ ] Ett test per ställe bevisar att felet BÅDE loggas OCH sväljs (inget kast). *(kind: diff)*
+- [ ] Ingenting ändras i att vägarna sväljer fel — bara HUR de rapporterar. *(kind: diff)*
+- [ ] [DBA / Data-layer] Vart och ett av de tre ställena behåller sin catch-ALLT-form (ingen avsmalning till `isPermissionDenied` som i `guardedItemWrite`) — de är best-effort-denormaliserings-/reparationsvägar som ska rapportera övergående fel likaväl som behörighetsfel. *(kind: diff)*
+- [ ] [DBA / Data-layer] `captureError` anropas med `(err, { scope: 'watchlist', kind })` enligt den etablerade signaturen i `WatchlistContext.tsx:90`, och vart och ett av de fyra ställena (setRuntime, refreshTmdbFields, `flushNextAirWrites` per-chunk-commit-felet, `flushNextAirWrites` yttre import/fsdb-felet) får en EGEN `kind`-sträng så att ett Sentry-larm kan skilja dem åt. *(kind: diff)*
+- [ ] [DBA / Data-layer] `console.error` ERSÄTTER `console.warn` (tas inte bort) bredvid `captureError`, så lokal dev-/emulator-synlighet inte går förlorad. *(kind: diff)*
+- [ ] [DBA / Data-layer] Den befintliga återrullningen av dedupe-märket i `flushNextAirWrites` två catch-ställen (`writtenThisSession.delete`) är ORÖRD av loggbytet. *(kind: diff)*
+- [ ] [DBA / Data-layer] `nextAirReadRepair.ts` importerar `captureError` från `@/lib/sentry` (speglar `WatchlistContext.tsx`s befintliga import) — ingen ny fil, bara en ny importrad. *(kind: diff)*
+
+---
+
+## Batch B — Streaming offers (Agent B)
+
+### BIN-931 — Det regexbaserade skyddet mot bare-id-skrivningar har nått sitt strukturella tak (9 vidgningsrundor)
+**Tier:** A (urval), disposition `build-review` (In Review, aldrig auto-Done).
+Rollkritik: Data / Integrations Engineer (invikt nedan).
+**Vad ändras:** De 4 regex-källkodsskanningarna + 2 frånvaro-testen ersätts av EN
+AST-baserad ESLint-regel (scope-analys, kan följa en bindning) som fäller varje
+`streamingOffers`-skrivning vars id inte härrör från `mediaTypeDocId`/`streamingOffersDocId`.
+
+Acceptans:
+- [ ] En AST-baserad ESLint-regel svarar på: når ett värde som inte spåras till `mediaTypeDocId`/`streamingOffersDocId` en skrivning mot `streamingOffers`? Raderingar med bare-id förblir tillåtna. *(kind: diff)*
+- [ ] De 4 regex-skanningarna och de 2 frånvaro-testen är borttagna, och commiten namnger VILKA av de 8 historiska hålen den nya regeln stänger. *(kind: diff)*
+- [ ] Regelns omfång skrivs från biljettens uppmätta lista — regexen vidgas INTE ytterligare som ersättning för att bygga AST-regeln. *(kind: diff)*
+- [ ] Nedskrivet beslut om regeln även ska täcka `priceHistory` (samma bare/namngivna delning). *(kind: diff)*
+- [ ] [Data / Integrations] Regeln fäller i VARJE `streamingOffers`-skrivande fil under `functions/src`, inte bara `index.ts` — ett `db.collection('streamingOffers').doc(<expr>).set/update/create(...)` i en helt ny modul måste flaggas. Det är garantin dagens andra test ("no OTHER file… writes to streamingOffers") finns för; AST-regeln måste ersätta DEN garantin, inte bara det första testets. *(kind: diff)*
+- [ ] [Data / Integrations] Regeln följer en bunden referens över `const ref = db.collection('streamingOffers').doc(expr)` och senare `ref.set(...)` — bind-sedan-skriv-formen som tog regexen tre vidgningsrundor att fånga. Icke förhandlingsbart: scope-analysen är hela skälet att välja AST. *(kind: diff)*
+- [ ] [Data / Integrations] Raderingar på bare-id förblir tillåtna — `legacyRef.delete()` i refresh-kronans städning och `deleteBare()` i migreringen får INTE flaggas; bara `set`/`update`/`create` med ett id som inte härleds ur `mediaTypeDocId`/`streamingOffersDocId`. *(kind: diff)*
+- [ ] [Data / Integrations] `npm run lint` i repo-roten kör faktiskt den nya regeln mot `functions/src/streamingOffers/index.ts` och FÄLLER på ett medvetet återinfört bare-id (verifiera genom att tillfälligt återställa källan, observera felet, återställ sedan) — `npm run lint` är det enda lint-steget som är inkopplat i CI (`ci.yml`, `deploy.yml`); `functions/package.json`s egen lint-skript är en no-op-stubbe idag. *(kind: run)*
+- [ ] [Data / Integrations] `backfillIds.ts`/`backfillIds.test.ts` fortsätter testa `runIdBackfill`s faktiska migreringsbeteende (`targetFor`/`pendingTargets`/`unattributableBareIds`, skriv-sedan-radera-ordningen) — bara de källkodsskannande regex-testen ("V7"-blocket) pensioneras. Attributions- och ordningstesten är en ANNAN garanti och får inte raderas i samma svep. *(kind: diff)*
+
+### BIN-932 — backfillIds terminalläge loggar ingenting medan headern påstår motsatsen
+**Tier:** A (urval), disposition `build`. Rollkritik: Data / Integrations Engineer (invikt nedan).
+**Vad ändras:** Antingen logga en gång när `complete && bareFound === 0`, eller smalna av
+headerns påstående till "medan bare-dokument återstår"; plus rätta testfilens kommentar
+som saknar backslashes (`functions/src/streamingOffers/backfillIds.ts` + `.test.ts`).
+
+Acceptans:
+- [ ] Antingen fyrar en loggrad på `complete && bareFound === 0`, eller headerns mening smalnas av — välj EN, skriv skälet. *(kind: diff)*
+- [ ] `backfillIds.test.ts:267`s kommentar lyder `(?:db\s*\.\s*)?` och matchar regexen på rad 275. *(kind: diff)*
+- [ ] [Data / Integrations] Terminalläget (`bareFound === 0`, dvs. klart utan något kvar att rapportera) producerar exakt ETT `io.log.info`-anrop per körning — verifierat av ett test som kör `runIdBackfill` med en skanning som ger noll bare-dokument och hävdar att loggspionen anropades en gång med `complete: true`, `bareFound: 0`. *(kind: diff)*
+- [ ] [Data / Integrations] Befintligt beteende för `bareFound > 0` är oförändrat (loggar fortfarande en gång, samma form) — inget nu pinnande test regrerar. *(kind: diff)*
+- [ ] [Data / Integrations] Om headerkommentaren över `runIdBackfill` redigeras i stället för / vid sidan av loggraden: dess påstående att flaggan "reaches a human through the log line below and NOWHERE else" rättas så att det håller i ALLA fall (idag falskt när `bareFound === 0`) — enligt strykregeln smalnas det av till det som faktiskt är sant, det formuleras inte om till en ny okontrollerad utsaga. *(kind: diff)*
+- [ ] [Data / Integrations] Skriv-först/radera-sedan-ordningen, exists-grenens dedup och `unattributable`-varningsblocket är ORÖRDA av denna diff — biljetten är en logg-/kommentarfix, inte en beteendeändring i migreringsloopen. *(kind: diff)*
+- [ ] [Data / Integrations] Testfilens backslash-rättelse rör BARA den felskrivna kommentartexten (en dokumentationsfix i en regex-beskrivande kommentar), inte någon av de faktiska `RegExp`-literalerna i assertionerna. *(kind: diff)*
+
+---
+
+## Batch C — Review-gate tooling / ägarskap (Agent C)
+
+### BIN-922 — Namnge en ägare för secret-scan.yml, den enda workflow som saknar en
+**Tier:** A (urval), disposition `build-review` (In Review, aldrig auto-Done).
+Rollkritik: #25 Engineering Manager / Release Manager (invikt nedan).
+**Vad ändras:** En ägande roll utses för `.github/workflows/secret-scan.yml`,
+`docs/org/ownership-map.json` regenereras, och den nu onödiga `ACCEPTED_ASYMMETRIES`-posten
+tas bort ur `docs/org/gate-symmetry.test.mjs`.
+
+Acceptans:
+- [ ] En ägare är namngiven för `.github/workflows/secret-scan.yml` i `docs/role-responsibilities.md`, och `ownership-map.json` är regenererad. *(kind: diff)*
+- [ ] `ACCEPTED_ASYMMETRIES`-posten för secret-scan.yml är borttagen ur `gate-symmetry.test.mjs` och kollen går grön UTAN den. *(kind: run)*
+- [ ] [#25] Den ägande rollen är §8 (DevOps/SRE) eller §20 (Manual/Release QA Tester) — de två roller som den befintliga `ACCEPTED_ASYMMETRIES`-posten själv pekar ut som rätt att avgöra det. Den får INTE tilldelas #25 (Engineering Manager / Release Manager) och inte lämnas till #14-fallbacken. *(kind: diff)*
+- [ ] [#25] `docs/org/ownership-map.json` är producerad genom att KÖRA generatorn (`gen-ownership-map.mjs`), inte handredigerad, så den förblir härledd ur `role-responsibilities.md`s backtick-citerade sökvägar. *(kind: run)*
+- [ ] [#25] `ACCEPTED_ASYMMETRIES`-posten raderas först EFTER att vitest-körningen som täcker `gate-symmetry.test.mjs` körts och gått grön utan posten — asymmetrin ska bevisas stängd, inte påstås stängd i prosa. *(kind: run)*
+- [ ] [#25] `.claude/shared-plugin.json`s `reviewGates` lämnas ORÖRD: den blockerande grindens `^\.github/(workflows|actions)/`-prefix täcker redan secret-scan.yml, så biljetten ändrar bara VEM som råder, inte om en commit stoppas. Visar det sig att en grindändring också behövs vidgas omfånget och routern måste köras om innan bygget fortsätter. *(kind: diff)*
+
+### BIN-923 — vitest.rules.config.ts / vitest.setup.ts har inget test som namnger dem som CODE_ROOT_FILES
+**Tier:** A (urval), disposition `build`. Rollkritik: #25 Engineering Manager / Release Manager (invikt nedan).
+**FLAGGAD:** biljetten bar bara ETT graderbart kriterium. Den graderas mot det plus #25:s
+fyra bindande villkor — inga mjukare ersättare uppfunna.
+**Vad ändras:** Ett namngivet testfall i `docs/org/route.test.mjs` som hävdar att båda
+filerna routas icke-`skip`, bredvid de befintliga rot-fil-fallen. Testtäckning enbart.
+
+Acceptans:
+- [ ] Ett namngivet fall i `route.test.mjs` hävdar att `vitest.rules.config.ts` OCH `vitest.setup.ts` båda routas icke-`skip`. *(kind: diff)*
+- [ ] [#25] Testfallet namnger båda filerna EXPLICIT (med filnamn, inte ett wildcard-glob) och hävdar att var och en routas icke-`skip` via samma `route()`/`CODE_ROOT_FILES`-stödda hjälpare som de befintliga rot-fil-fallen använder — inte en handrullad dubblettkoll. *(kind: diff)*
+- [ ] [#25] Testet läggs bredvid de befintliga rot-fil-fallen i `docs/org/route.test.mjs` (samma describe-block/mönster), inte som en ny fil eller en ny testkonfiguration. *(kind: diff)*
+- [ ] [#25] Ingen produktionskod, CI-konfiguration eller `CODE_ROOT_FILES`-medlemskap ändras — biljetten är enbart testtäckning för två filer som REDAN ska routas icke-`skip`. Routas någon av dem inte så idag är det en separat defekt att FILA, inte något den här biljetten tyst lagar genom att redigera `route.mjs`. *(kind: diff)*
+- [ ] [#25] `npm test` (eller den befintliga kollen som kör `route.test.mjs`) förblir grön efter tillägget, vilket bevisar att det nya fallet passerar mot `route.mjs` som den ser ut idag. *(kind: run)*
+
+### BIN-934 — Rot-package-lock.json är osynlig för routern; de två låsfilerna hamnade i olika granskarklasser av misstag
+**Tier:** A (urval), disposition `build-review` (In Review, aldrig auto-Done).
+Rollkritik: #25 Engineering Manager / Release Manager (invikt nedan).
+**Vad ändras:** Ett beslut om låsfiler räknas som kod för routern, applicerat LIKA på båda
+`package-lock.json`-filerna eller med skillnaden nedskriven
+(`docs/org/route.mjs`, ev. `.claude/shared-plugin.json`, `docs/role-responsibilities.md`).
+
+Acceptans:
+- [ ] Ett DATERAT beslut är skrivet (route.mjs-kommentar eller ADR): räknas `package-lock.json` som kod för routern? *(kind: diff)*
+- [ ] Beslutet appliceras identiskt på BÅDA låsfilerna, eller skillnaden är nedskriven med sitt skäl. *(kind: diff)*
+- [ ] Om "ja, kod": `CODE_ROOT_FILES` och `.claude/shared-plugin.json`s `reviewGates` flyttas i SAMMA commit (BIN-830-regeln), och `_note9`s mening om ogranskade beroendeuppdateringar rättas. Om "nej": beslutet skrivs in i `route.mjs` bredvid `CODE_ROOT_FILES`. *(kind: diff)*
+- [ ] [#25] Båda `package-lock.json`-filerna (rot och `functions/`) kommer ut IDENTISKT ur `docs/org/route.mjs`, eller så namnges och motiveras den kvarvarande skillnaden i en kodkommentar på samma sätt som de två `package.json`-filerna redan har — bevisat av en `route.test.mjs`-assertion som kör `isCodePath()`/`route()` på båda exakta sökvägarna och kollar samma svar (eller hävdar det dokumenterade undantaget). *(kind: diff)*
+- [ ] [#25] Om beslutet gör låsfiler till kod: `.claude/shared-plugin.json`s `reviewGates` uppdateras i SAMMA commit så att den rådgivande och den blockerande sidan inte glider isär (`functions/package-lock.json` når redan `binge-security-reviewer` via `^functions/`; rot-låsfilen når ingen grind) — bevisat av att `docs/org/gate-symmetry.test.mjs` förblir grön UTAN något nytt tyst tillagt namngivet undantag för en låsfil. *(kind: run)*
+- [ ] [#25] `docs/role-responsibilities.md` §25:s `package.json`-punkt, som idag skjuter exakt den här delningen till BIN-930 som en öppen fråga, uppdateras till att ange beslutet som fattas här i stället för att motsäga den shippade koden. *(kind: diff)*
+- [ ] [#25] `node docs/org/route.mjs --selftest` och de befintliga sviterna `route.test.mjs`/`gate-symmetry.test.mjs` förblir gröna utan att någon befintlig assertion försvagats eller raderats för att få ändringen att landa. *(kind: run)*
+
+---
+
+## Batch D — Workflow-map (Agent D, EGEN commit)
+
+### BIN-927 — Kartans omtitt-flöde saknar steget där skrivningen rapporterar tillbaka vad den räknade
+**Tier:** A (urval), disposition `build`.
+**Vad ändras:** Steget `TitleWriteOutcome`/`countedRewatch` läggs till i omtitt-flödets
+data-JSON i `docs/workflow-map.html` — i en egen commit utan något annat i.
+
+Acceptans:
+- [ ] Rapporteringssteget är tillagt i omtitt-flödets `<script id="data">`-JSON, inget annat i filen ändrat. *(kind: diff)*
+- [ ] Det shippas som EGEN commit — `git show --stat` på den commiten visar bara `docs/workflow-map.html`. *(kind: run)*
+- [ ] `node scripts/check-workflow-map.mjs` går grön. *(kind: run)*
+- [ ] Nedskrivet beslut: accepteras `git apply`-luckan i färskhetsstämplingen (PostToolUse-hooken fyrar inte på `git apply`) som den är, eller ska den få en andra utlösare — filat som uppföljning i det senare fallet. *(kind: diff)*
+
+---
+
+## Graderingsregler för den här körningen
+
+- Varje biljett bockas av mot kriterierna OVAN, inte mot en självrapport. Ett påstående om
+  att något är uppfyllt kräver att kommandot körts (`kind: run`) eller att diffen visar det
+  (`kind: diff`).
+- Per batch måste ett av {commit, patch, stash, nedskrivet misslyckande} finnas vid
+  close-out — "ingen diff" får aldrig tolkas som "inget arbete" (BIN-707/708).
+- `build-review`-biljetterna (BIN-931, BIN-922, BIN-934) går till In Review, aldrig
+  auto-Done.
+- Ingen commit-/transitionsrad skrivs av den som bygger; completion-anspråk bärs av den som
+  håller commit-shan (BIN-766-lärdomen).
+
+---
+
+# Sprint 2026-08-22 — Selection
+
+Selected via `/sprint-execute` Phase 1. 10 tickets, 4 batches, all disposition `build` or
+`build-review` (no full-panel tickets this round). Router tier per ticket resolved at
+dispatch (`node docs/org/route.mjs --md <files>`) — none pinned `full-panel` from the
+Step-0 file read below, so none trip `requiresPlanMode`; re-run the router if a critique
+widens a batch's file set (BIN-766 lesson) and recompute before commit.
+
+## Batch A — Watchlist (agent: direct or binge specialist)
+
+Files cluster around `WatchlistContext.tsx` / `watchlistWrites.ts` — keep this batch
+serial internally where two tickets touch the same function.
+
+- [ ] **BIN-689** [Tier A] disposition: build. "watchedAt räknas bara när status är sedd"
+      handkopierad på 7 ställen (`src/hooks/useServiceValue.ts`,
+      `src/components/pages/DiaryPageClient.tsx`, `src/components/pages/UserProfilePageClient.tsx`,
+      `src/app/stats/page.tsx`, `src/components/pages/WatchlistPage.tsx`,
+      `src/lib/taste/stats.ts`, `src/lib/diary.ts`). Malins beslut 2026-08-06: **JA, bygg
+      den — men som egen, seriell körning, inte buntad med annat arbete i samma filer**
+      (villkoret från 2026-08-02/06 parkeringen, bindande). Router: medium → en blind
+      kritik från **#28 Recommendations / Scoring-Integrity Engineer** krävs före commit
+      (BIN-776-regeln: kan arbetaren inte kalla in kritiken parkerar biljetten In Review,
+      byggs inte Done).
+      Acceptance:
+      - [ ] Predikatet extraherat till EN ren helper i `src/lib/` (test-extraction-mönstret), och samtliga 7 uppräknade anropsställen migrerade i SAMMA ändring — ingen partiell migrering. *(kind: diff)*
+      - [ ] Ett test dödar mutanten "ta bort sedd-gaten" (predikatet returnerar sant utan att status faktiskt är `sedd`). *(kind: diff)*
+      - [ ] `updateTags` och `removeItem` rörs INTE — de slår inte upp ett item vid HEAD, migrera dem inte i blindo. *(kind: diff)*
+      - [ ] #28:s blinda kritik loggad (`node docs/org/metrics/log_event.mjs review`) innan denna ticket stänger Done. *(kind: run)*
+
+- [ ] **BIN-955** [Tier A] disposition: build. Två snabba tittar-gester på samma ospårade
+      serie kan lägga till den två gånger (`src/contexts/WatchlistContext.tsx`
+      `updateProgress`). Uppföljning på BIN-954, ej beslutsparkerad.
+      Acceptance:
+      - [ ] Två samtidiga tittar-gester på samma ospårade serie ger EN `title_added_watchlist` och EN tilläggsskrivning (per-dokument "pågår"-märke, inte ett globalt). *(kind: diff)*
+      - [ ] Ett misslyckat tillägg är fortfarande omförsökbart på nästa bockning — "pågår"-märket överlever inte ett fel. *(kind: diff)*
+      - [ ] Det andra anropet tar aldrig merge-grenen mot ett dokument som inte finns (samma fragment-fälla BIN-954 stängde). *(kind: diff)*
+      - [ ] Beslut nedskrivet i koden/PR om `fetchQuery`+`AbortSignal` adopteras för `getTVShowLite` här, eller om skälet att INTE göra det (WatchlistProvider sitter ovanför QueryClientProvider) står kvar. *(kind: run)*
+      - [ ] `removalTickRef`-kommentaren utvidgas till att nämna BÅDA konsekvenserna (extra tilläggsskrivning + auto-hoppets gren C), inte bara den första. *(kind: diff)*
+
+- [ ] **BIN-928** [Tier A] disposition: build. "Räknade skrivningen en omtitt" härleds på
+      två ställen i `src/lib/watchlistWrites.ts` (`buildAddWrite`s rewatch-fragment vs
+      `outcomeOfAddWrite`), bara typnivå-skydd, ingen runtime-strip.
+      Acceptance:
+      - [ ] En dokumentationsrad i `outcomeOfAddWrite` namnger beroendet på `buildAddWrite`s nyckel och vad som händer om nyttolasttypen vidgas. *(kind: diff)*
+      - [ ] Beslut nedskrivet: `rewatchCount` in i runtime-strippen bredvid `notes`/`tags`, eller kvar som typnivå-skydd — med skälet. *(kind: diff)*
+
+- [ ] **BIN-957** [Tier A] disposition: build. Tre best-effort-skrivvägar loggar med
+      `console.warn` (osynligt för Sentry — `initSentry()` sätter aldrig
+      `defaultIntegrations`, så console.warn är en REGRESSION mot att låta felet bubbla).
+      `WatchlistContext.setRuntime`, `WatchlistContext.refreshTmdbFields`,
+      `src/lib/watchlist/nextAirReadRepair.ts` `flushNextAirWrites` (2 catch-ställen).
+      Krävd av #6 Dataskydd + #27 Databas (BIN-942 villkor 10/24/31), skärpt av #7 QA.
+      Acceptance:
+      - [ ] Alla fyra catch-ställen rapporterar via `console.error` + `captureError(err, { scope: 'watchlist', kind: '<anropsplats>' })`, samma form som BIN-942's sex tystade redigeringsvägar. *(kind: diff)*
+      - [ ] Beslut nedskrivet: smalna av till `isPermissionDenied` (`src/lib/firebase/errorCodes.ts`) eller förbli bred catch — med skälet (dessa är best-effort/self-healing, till skillnad från de sex). *(kind: diff)*
+      - [ ] Ett test per ställe: felet loggas OCH sväljs (inget kast) — pinnar mot en framtida ändring som tyst gör dem kastande. *(kind: diff)*
+      - [ ] Ingenting ändras i att vägarna sväljer — frågan är HUR de rapporterar, inte OM de bubblar. *(kind: diff)*
+
+## Batch B — Streaming Offers Backfill (agent: direct)
+
+Både tickets rör `functions/src/streamingOffers/backfillIds.ts` + dess testfil — samma
+batch med flit.
+
+- [ ] **BIN-931** [Tier A] disposition: build-review. Regex-baserat skydd mot bare-id-
+      skrivningar i `streamingOffers` har 9 vidgningsrundor och ett strukturellt tak
+      (kan inte följa en bindningskedja). Bygg en AST-baserad ESLint-regel i stället.
+      signoffReason: verifiera att den nya regeln FAKTISKT stänger de två kända
+      gapen (batched multi-doc write via icke-`db`/`col`-namngiven mottagare;
+      two-hop bound reference) innan de fyra regex-skanningarna + två frånvaro-testen tas bort.
+      Acceptance:
+      - [ ] En AST-baserad ESLint-regel (scope-analys, kan följa en bindning) svarar på: når ett värde som INTE kommer från `mediaTypeDocId`/`streamingOffersDocId` en skrivning mot `streamingOffers`? Raderingar med bare-id förblir tillåtna. *(kind: diff)*
+      - [ ] De fyra regex-källkodsskanningarna och de två frånvaro-testen ("no batch write exists", "no TWO-HOP bound write exists") tas bort, och commiten namnger uttryckligen VILKA av de 8 historiska hålen (se ticket-tabellen) den nya regeln stänger. *(kind: diff)*
+      - [ ] Regel-omfånget skrivs från den uppmätta listan i tickets "Mätt, INTE lagat"-stycke — vidga INTE regexen ytterligare i stället för att bygga AST-regeln. *(kind: diff)*
+      - [ ] Beslut nedskrivet om regeln även ska gälla `priceHistory` (samma bare/namngivna delning). *(kind: diff)*
+
+- [ ] **BIN-932** [Tier A] disposition: build. `backfillIds.ts` terminalläge loggar
+      ingenting när migreringen är klar (`bareFound > 0`-gate), men headern påstår att
+      loggraden är den ENDA vägen ut till en människa. Plus en kommentar i testfilen
+      saknar backslashes.
+      Acceptance:
+      - [ ] Antingen loggas en rad när `complete && bareFound === 0`, eller headerns mening smalnas av till "medan bara dokument återstår" — välj en, skriv skälet. *(kind: diff)*
+      - [ ] `backfillIds.test.ts:267`s kommentar rättas till `(?:db\s*\.\s*)?` (matchar regexen på rad 275). *(kind: diff)*
+
+## Batch C — Review-gate tooling / ownership (agent: direct)
+
+Delar `docs/org/route.mjs` / `route.test.mjs` / `gate-symmetry.test.mjs` /
+`docs/role-responsibilities.md` — en batch, för att undvika att två delar splittas över
+olika batchar och krockar vid apply.
+
+- [ ] **BIN-922** [Tier A] disposition: build-review. Namnge en ägare för
+      `.github/workflows/secret-scan.yml` (den enda av fyra workflows utan en), regenerera
+      `ownership-map.json`, ta bort undantagsposten i `gate-symmetry.test.mjs`.
+      signoffReason: bekräfta VILKEN roll (§8 eller §20) som ska äga secret-scan.yml —
+      biljetten pekar ut båda som kandidater utan att välja.
+      Acceptance:
+      - [ ] En ägare namngiven för `.github/workflows/secret-scan.yml` i `docs/role-responsibilities.md`, `ownership-map.json` regenererad (`node docs/org/gen-ownership-map.mjs`). *(kind: diff)*
+      - [ ] `ACCEPTED_ASYMMETRIES`-posten för secret-scan.yml borttagen ur `gate-symmetry.test.mjs` — den ska falla bort för att rötkollen fäller den om den är fel, inte för att någon manuellt tog bort den utan att kollen körts grön efteråt. *(kind: diff)*
+
+- [ ] **BIN-923** [Tier A] disposition: build. `vitest.rules.config.ts` och
+      `vitest.setup.ts` befordrades till `CODE_ROOT_FILES` (BIN-880, `851696d`) utan att
+      något test namnger dem direkt — bara `gate-symmetry`s helträds-regel B håller dem
+      idag, indirekt.
+      Acceptance:
+      - [ ] Ett namngivet fall i `docs/org/route.test.mjs` som hävdar att båda filerna routas icke-`skip`, bredvid de befintliga rot-fil-fallen. *(kind: diff)*
+
+- [ ] **BIN-934** [Tier A] disposition: build-review. Rot-`package-lock.json` är
+      `isCodePath: false` i routern (`docs/org/route.mjs` `CODE_ROOT_FILES`) medan
+      `functions/package-lock.json` når säkerhetsgranskaren av en slump (via
+      `^functions/`-prefixet) — ingen har valt en policy för låsfiler.
+      signoffReason: räknas låsfiler som kod för routern eller inte — en policyfråga,
+      inte en bugg. Biljetten ber uttryckligen att det AVGÖRS, inte byggs reflexmässigt.
+      Acceptance:
+      - [ ] Ett daterat beslut skrivet (i route.mjs-kommentar eller ADR): räknas package-lock.json som kod för routern? *(kind: diff)*
+      - [ ] Beslutet appliceras lika på BÅDA låsfilerna, eller skillnaden skrivs ned med sitt skäl. *(kind: diff)*
+      - [ ] Om "ja, kod": `CODE_ROOT_FILES` uppdateras OCH `.claude/shared-plugin.json`s reviewGates-lista i SAMMA commit (BIN-830-regeln — två listor flyttas tillsammans), och `_note9`s mening om ogranskade beroendeuppdateringar rättas. Om "nej": beslutet skrivs in i route.mjs bredvid `CODE_ROOT_FILES` så nästa granskare inte filar samma sak igen. *(kind: diff)*
+
+## Batch D — Workflow-map docs (agent: direct, OWN commit)
+
+- [ ] **BIN-927** [Tier A] disposition: build. Kartans omtitt-flöde
+      (`docs/workflow-map.html`, ~rad 1096) saknar steget "skrivningen rapporterar
+      tillbaka vad den räknade" (BIN-895/`b10ccf3`: `TitleWriteOutcome` +
+      `countedRewatch`).
+      **Denna ticket rör ENDAST `docs/workflow-map.html` — commit den ensam, ingen
+      annan fil i samma commit** (lessons-digest: en revert av en feature-commit som
+      bundlar en map-ändring drar tyst med sig orelaterad flödesdokumentation).
+      Acceptance:
+      - [ ] Rapporterings-steget tillagt i omtitt-flödets `<script id="data">`-JSON, inget annat ändrat i filen. *(kind: diff)*
+      - [ ] Egen commit — `git show --stat` på den commiten visar bara `docs/workflow-map.html`. *(kind: diff)*
+      - [ ] `node scripts/check-workflow-map.mjs` grön. *(kind: run)*
+      - [ ] Beslut nedskrivet: accepteras `git apply`-luckan i färskhetsstämplingen (handräddningar triggar ingen PostToolUse-hook) uttryckligen, eller föreslås en andra utlösare — filat som uppföljning om den senare. *(kind: diff)*
+
+## Needs you (Tier D) / parked / needs-approval
+
+Se separat rapport från urvalskörningen (Phase 1) för fullständig lista — 7 parkerade
+(väntar på ditt EGET svar, inte omfrågade), 4 needs-approval (mitt omdöme, inte hennes
+fråga), 16 redan avgjorda av dig sedan tidigare (build/blocked/excluded, applicerade utan
+att fråga igen), 1 obsolete (BIN-938, redan löst av design via BIN-917/919s grandfathering).
+
+## Post-sprint steps
+
+1. `npm run typecheck` (full) + `npm run lint` (full) innan commit.
+2. Fila uppföljningar för allt som upptäcks men medvetet inte byggs (samma regel som
+   alltid) — INNAN commit.
+3. Commit per batch, gates körs enligt `.claude/shared-plugin.json` → `reviewGates`.
+   Batch A/B rör `src/**`/`functions/**` → binge-code-reviewer + binge-test-reviewer.
+   Batch C/D rör `docs/org/**`/`.claude/shared-plugin.json` → binge-integration-reviewer
+   (matchar de listade patterns i `_note3`–`_note9`). `binge-security-reviewer` triggas
+   av Batch B (`^functions/`).
+4. Push. `deploy.yml` bygger + deployar hosting automatiskt — ingen manuell
+   `firestore:rules`/`functions`-deploy krävs i den här sprinten (ingen ticket rör
+   `firestore.rules` eller `functions/` utöver `backfillIds.ts`, som är hosting-sidan av
+   en redan deployad Cloud Function — bekräfta det antagandet innan push om osäker).
+5. Transitionera varje ticket: build + alla kriterier gröna → Done. build-review
+   (BIN-931/922/934) → In Review + PushNotification, aldrig auto-Done.
+6. Kör `node docs/org/metrics/log_event.mjs review …` för BIN-689 (#28-kritiken).
+
+---
 # BIN-954 — att bocka av ett avsnitt på en serie du inte följer skapar ett halvt dokument
 
 **Status:** v2 — #27:s blinda kritik körd och invikt (SUPPORT WITH CONDITIONS, tre

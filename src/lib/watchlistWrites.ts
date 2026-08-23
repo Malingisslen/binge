@@ -511,7 +511,27 @@ export interface TitleWriteOutcome {
   countedRewatch: boolean;
 }
 
-/** Read the outcome off the payload `buildAddWrite` produced. */
+/**
+ * Read the outcome off the payload `buildAddWrite` produced.
+ *
+ * BIN-928 — THE DEPENDENCY, named because nothing enforces it at runtime: the key read
+ * here is the key `buildAddWrite` spreads in from `rewatchFields`. Inside `buildAddWrite`
+ * that same key gates the `watchedAt` re-date; here it gates the sentence the user reads.
+ * One key, two consequences, and they agree only for as long as `rewatchFields` is what
+ * puts it there. Widen `WatchlistAddPayload` so a caller can pass `rewatchCount` itself and
+ * the toast reports a rewatch off the caller's own number: the key rides in through
+ * `...itemFields` and reaches the write, which is what this function reads.
+ *
+ * DECISION (BIN-928): `rewatchCount` is NOT added to `buildAddWrite`'s runtime strip beside
+ * `notes`/`tags`, and this doc line is the whole fix. That strip is a PRIVACY boundary —
+ * owner-private free text kept off a publicly-readable document — and folding a
+ * write-vs-report consistency invariant into it would leave neither reason legible, which
+ * is the confusion the strip's own comment already works to prevent. The protection stays
+ * at the type level: `buildAddPayload` omits the key as server-owned. If that ever stops being
+ * true, strip the key inside `buildAddWrite` and not here — the payload is what Firestore
+ * receives, so a fix downstream of it would make the report honest about a document that
+ * is not.
+ */
 export function outcomeOfAddWrite(write: Record<string, unknown>): TitleWriteOutcome {
   return { countedRewatch: 'rewatchCount' in write };
 }

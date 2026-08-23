@@ -1,3 +1,4 @@
+import { captureError } from '@/lib/sentry';
 import { getNextAirInfo, streamingProviderName } from '@/lib/calendar/nextAir';
 import { pickSwedishDigitalRelease } from '@/lib/calendar/releaseDate';
 import { stampOlderThan } from '@/lib/watchlist/tmdbFieldsRefresh';
@@ -182,12 +183,21 @@ export async function flushNextAirWrites(uid: string, updates: NextAirUpdate[]):
         // items försöker igen (best-effort, setRuntime-mönstret). Fortsätt med
         // resten av chunkarna.
         chunk.forEach(u => writtenThisSession.delete(keyOf(u)));
-        console.warn('[watchlist] next-air read-repair batch misslyckades:', err);
+        // BIN-957: rapporteras, inte bara loggas. `console.warn` var osynligt för Sentry
+        // (globalHandlers ser bara ohanterade rejections), så fångsten tog bort den enda
+        // rapport felet hade. Bred fångst behålls — skälet står vid `setRuntime`s catch i
+        // WatchlistContext, som den här filens header redan pekar på som mönstret.
+        console.error('[watchlist] next-air read-repair batch misslyckades:', err);
+        captureError(err, { scope: 'watchlist', kind: 'flushNextAirWrites-chunk' });
       }
     }
   } catch (err) {
     // Importen/fsdb() föll — ingenting skrevs → rulla tillbaka allt.
     pending.forEach(u => writtenThisSession.delete(keyOf(u)));
-    console.warn('[watchlist] next-air read-repair misslyckades:', err);
+    // BIN-957: eget `kind` — det här stället betyder att INGENTING skrevs (importen eller
+    // fsdb() föll), medan `-chunk` betyder att en enskild batch nekades. Samma rad i Sentry
+    // för båda hade gjort skillnaden oläsbar.
+    console.error('[watchlist] next-air read-repair misslyckades:', err);
+    captureError(err, { scope: 'watchlist', kind: 'flushNextAirWrites-setup' });
   }
 }

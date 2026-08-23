@@ -391,6 +391,24 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // FAILED add is deliberately not marked, so the next tick retries it.
   const addedByProgressRef = useRef<Set<string>>(new Set());
   useEffect(() => { addedByProgressRef.current = new Set(); }, [uid]);
+  // BIN-955: the add that is running RIGHT NOW, per document — the fact `addedByProgressRef`
+  // structurally cannot carry, because it is written after the write resolves and the whole
+  // window this closes is the one before that. Two quick ticks on different episodes of the
+  // same UNTRACKED series both pass the synchronous `known` check before either TMDB fetch
+  // lands, and both then enter the add branch: two fetches, two adds, two
+  // `title_added_watchlist` events for one logical add.
+  //
+  // Registered SYNCHRONOUSLY, before the branch's first await, so a sibling call reaching
+  // its own check finds it. A resolved value rather than a bare flag, because the waiter
+  // needs the add's OUTCOME: `true` means the document exists and the waiter may take the
+  // ordinary merge branch; `false` means nothing was written and the merge branch would
+  // CREATE the identity-less fragment BIN-954 closed — so it must not. The entry is removed
+  // as the add settles, whichever way it settled, which is what keeps a failed add
+  // retryable on the next tick.
+  //
+  // Not reset per uid, unlike its neighbours above: every key carries the uid and every
+  // entry deletes itself in a `finally`, so there is nothing left to clear.
+  const inFlightAddsRef = useRef<Map<string, Promise<boolean>>>(new Map());
   // BIN-954: how many removals have STARTED this session. `removeItem` pruning
   // addedByProgressRef is not enough on its own, because the two operations interleave:
   // the add marks the ref only after its write resolves, while a removal issued in that
@@ -1033,8 +1051,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     //     "absent from `items`" really means "absent from Firestore". Read off the same two
     //     refs writeTitle uses, not the derived `libraryKnown` state, which is computed
     //     below this callback and would drag a new dependency into it.
-    const known = current != null || addedByProgressRef.current.has(`${uid}:${docId}`);
+    const cacheKey = `${uid}:${docId}`;
+    const known = current != null || addedByProgressRef.current.has(cacheKey);
     const libraryKnown = isLibraryKnown(firstSnapshotSettledRef.current, listenerFailedRef.current);
+    // BIN-955: a fourth fact, and the only one that is not synchronous — is an add for this
+    // exact document already running? Consulted only when the three above say "absent", so
+    // a title we already know about is never made to wait. `.catch(() => false)` because the
+    // add's own caller owns its rejection (the BIN-954 test drives a refused write and
+    // asserts updateProgress rejects); a waiter must read a failed add as "the document does
+    // not exist", not inherit an error belonging to a different gesture.
+    const pendingAdd = known ? undefined : inFlightAddsRef.current.get(cacheKey);
+    const documentExists = pendingAdd ? await pendingAdd.catch(() => false) : known;
     // What the group sync should say the status is. `null` = we don't know, unchanged.
     let syncStatus: WatchStatus | null = current?.status ?? null;
     // BIN-942: did the LIBRARY document end up reflecting this call? Three ways it can be
@@ -1043,7 +1070,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // Starts pessimistic so the branch that writes nothing needs no assignment to be truthful.
     let outcome: ItemWriteOutcome = 'refused';
 
-    if (known || !libraryKnown) {
+    if (documentExists || !libraryKnown) {
       // The ordinary write. The second half of that condition is a deliberate
       // fall-through: during a cold load (or a dead listener) "not in `items`" and "not in
       // Firestore" are indistinguishable, and guessing "add it" there could rewrite the
@@ -1069,70 +1096,80 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // Snapshotted BEFORE the first await, so any removal that starts while this add is
       // in flight is visible to the mark check below.
       const removalTickAtStart = removalTickRef.current;
-      let payload: WatchlistAddPayload | null = null;
-      try {
-        // A one-shot imperative fetch, not a query: it runs only on this cold branch, so
-        // it is deliberately NOT routed through queryClient.fetchQuery the way
-        // useMarkSeen's is. Doing that would give WatchlistProvider — which sits above
-        // most of the app — a hard dependency on a QueryClientProvider being mounted
-        // above IT, for a cache neither reachable caller (season page, show page) has
-        // warmed: the show page holds ['tv', id], the full response, not this lite key.
-        // The cost is that two rapid ticks on the same untracked series can each fetch
-        // and each add — BIN-955, filed rather than hidden here.
-        const { getTVShowLite, extractYear } = await import('@/lib/tmdb/client');
-        const show = await getTVShowLite(tmdbId);
-        payload = buildWatchlistAddPayload({
-          tmdbId,
-          mediaType: 'tv',
-          // The status a newly tracked TV title starts in, and the one the "sedd"
-          // shortcut also lands as (useMarkSeen). NOT the only status a TV title can be
-          // stored under — 'avbruten' is a real stored TV status StatusButton writes
-          // (watchStatus.ts: TV_STATUS_OPTIONS is ['mina','sedd','avbruten']). Reaching
-          // this branch means the title is absent from the library, so there is no stored
-          // status to disagree with. 'vill_se' for TV was abolished 2026-06.
-          status: 'mina',
-          title: preferOriginalTitle(show.name, show.original_name),
-          posterPath: show.poster_path ?? null,
-          releaseYear: extractYear(show.first_air_date),
-          totalSeasons: show.number_of_seasons ?? null,
-          genreIds: show.genres?.map(g => g.id) ?? [],
-          tmdbStatus: show.status ?? null,
-          lastWatchedSeason: season,
-          lastWatchedEpisode: episode,
-          // Empty, not omitted, and not populated. Empty because buildAddPayload's own
-          // contract says a genuine NEW add supplies it explicitly so the created doc
-          // satisfies WatchlistItem's non-optional array types; not populated because
-          // shouldStampProvidersAtAdd needs a NON-EMPTY `providers` to stamp
-          // providersCheckedAt, and leaving that stamp absent is what keeps the row
-          // reading as stale so the next title-page view refills the pair
-          // (planTmdbFieldsRefresh). That is the self-correcting direction BIN-468/814
-          // chose; a half-stamped row would sit on the broad fallback for 60 days.
+      // BIN-955: the whole add — fetch, write, session mark — as ONE promise, created
+      // and registered BEFORE its first await so a concurrent tick on the same untracked
+      // series waits for THIS outcome instead of starting an add of its own. It resolves
+      // `true` only when the document really exists, so a waiter can never be sent down
+      // the merge branch against a document that was never created.
+      const addPromise = (async (): Promise<boolean> => {
+        let payload: WatchlistAddPayload | null = null;
+        try {
+          // A one-shot imperative fetch, not a query: it runs only on this cold branch, so
+          // it is deliberately NOT routed through queryClient.fetchQuery the way
+          // useMarkSeen's is. Doing that would give WatchlistProvider — which sits above
+          // most of the app — a hard dependency on a QueryClientProvider being mounted
+          // above IT, for a cache neither reachable caller (season page, show page) has
+          // warmed: the show page holds ['tv', id], the full response, not this lite key.
           //
-          // `subscriptionProviders` is OMITTED rather than `[]`, and the asymmetry is the
-          // point: docToItem reads absent as "never backfilled" and `[]` as "checked,
-          // nothing covers it". This surface checked nothing, so it must not claim the
-          // second. (An earlier version of this comment also enumerated which other add
-          // surfaces do and don't supply the subset. Both halves of that enumeration were
-          // wrong when counted; the rule above needs no census to stand.)
-          providers: [],
-        });
-      } catch (err) {
-        // No title data means no honest document, and writing the fragment anyway IS the
-        // bug this branch exists to close. So nothing is written here — the episode tick
-        // itself lands in `episodeProgress` (a separate doc, written in parallel by
-        // useEpisodeProgressWithSync), leaving the series un-added until the next tick.
-        // Nothing is marked in addedByProgressRef, which is what makes that retry work.
-        captureError(err, { scope: 'watchlist', kind: 'updateProgress-add' });
-      }
-      if (payload) {
+          // DECISION (BIN-955): still not adopted, and the case for it is now weaker. The
+          // one real argument was that `fetchQuery` de-duplicates concurrent identical
+          // fetches — which is the double-add above, and `inFlightAddsRef` closes it here,
+          // at the gesture rather than at the cache. The costs it would add are unchanged.
+          const { getTVShowLite, extractYear } = await import('@/lib/tmdb/client');
+          const show = await getTVShowLite(tmdbId);
+          payload = buildWatchlistAddPayload({
+            tmdbId,
+            mediaType: 'tv',
+            // The status a newly tracked TV title starts in, and the one the "sedd"
+            // shortcut also lands as (useMarkSeen). NOT the only status a TV title can be
+            // stored under — 'avbruten' is a real stored TV status StatusButton writes
+            // (watchStatus.ts: TV_STATUS_OPTIONS is ['mina','sedd','avbruten']). Reaching
+            // this branch means the title is absent from the library, so there is no stored
+            // status to disagree with. 'vill_se' for TV was abolished 2026-06.
+            status: 'mina',
+            title: preferOriginalTitle(show.name, show.original_name),
+            posterPath: show.poster_path ?? null,
+            releaseYear: extractYear(show.first_air_date),
+            totalSeasons: show.number_of_seasons ?? null,
+            genreIds: show.genres?.map(g => g.id) ?? [],
+            tmdbStatus: show.status ?? null,
+            lastWatchedSeason: season,
+            lastWatchedEpisode: episode,
+            // Empty, not omitted, and not populated. Empty because buildAddPayload's own
+            // contract says a genuine NEW add supplies it explicitly so the created doc
+            // satisfies WatchlistItem's non-optional array types; not populated because
+            // shouldStampProvidersAtAdd needs a NON-EMPTY `providers` to stamp
+            // providersCheckedAt, and leaving that stamp absent is what keeps the row
+            // reading as stale so the next title-page view refills the pair
+            // (planTmdbFieldsRefresh). That is the self-correcting direction BIN-468/814
+            // chose; a half-stamped row would sit on the broad fallback for 60 days.
+            //
+            // `subscriptionProviders` is OMITTED rather than `[]`, and the asymmetry is the
+            // point: docToItem reads absent as "never backfilled" and `[]` as "checked,
+            // nothing covers it". This surface checked nothing, so it must not claim the
+            // second. (An earlier version of this comment also enumerated which other add
+            // surfaces do and don't supply the subset. Both halves of that enumeration were
+            // wrong when counted; the rule above needs no census to stand.)
+            providers: [],
+          });
+        } catch (err) {
+          // No title data means no honest document, and writing the fragment anyway IS the
+          // bug this branch exists to close. So nothing is written here — the episode tick
+          // itself lands in `episodeProgress` (a separate doc, written in parallel by
+          // useEpisodeProgressWithSync), leaving the series un-added until the next tick.
+          // Nothing is marked in addedByProgressRef, which is what makes that retry work.
+          captureError(err, { scope: 'watchlist', kind: 'updateProgress-add' });
+        }
+        if (!payload) return false;
         await upsertTitle(payload);
-        outcome = 'written';
         // AFTER the write resolves, not before: this marks "the document exists now", and
-        // a failed add must stay retryable. That ordering protects the SEQUENTIAL chain
-        // (tick → auto-advance), not two independent concurrent gestures — BIN-955.
-        // Marking BEFORE the write would be worse, not better: the second call would then
-        // take the merge branch against a document that does not exist yet, creating
-        // exactly the fragment this branch closes.
+        // a failed add must stay retryable. Marking BEFORE the write would be worse, not
+        // better: a second call would then take the merge branch against a document that
+        // does not exist yet, creating exactly the fragment this branch closes. What the
+        // ordering does NOT cover is a second call arriving inside this window — that is
+        // what `inFlightAddsRef` is for (BIN-955); this mark is what carries the fact
+        // onwards once the in-flight entry is gone, for the auto-advance and for every
+        // later tick until the snapshot lands.
         //
         // ...and it only marks if no removal STARTED while the write was in flight. The
         // optimistic snapshot makes "Ta bort" clickable the moment the add's setDoc is
@@ -1140,9 +1177,23 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // find nothing to prune. Without this check the mark lands afterwards and outlives
         // the document it describes.
         if (removalTickRef.current === removalTickAtStart) {
-          addedByProgressRef.current.add(`${uid}:${docId}`);
+          addedByProgressRef.current.add(cacheKey);
         }
-        syncStatus = 'mina';
+        return true;
+      })();
+      inFlightAddsRef.current.set(cacheKey, addPromise);
+      try {
+        if (await addPromise) {
+          outcome = 'written';
+          syncStatus = 'mina';
+        }
+      } finally {
+        // Removed however it settled — a failed add must be retryable on the next tick, so
+        // the entry may never outlive its own promise. The identity check keeps this
+        // cleanup from dropping a LATER add's entry for the same document.
+        if (inFlightAddsRef.current.get(cacheKey) === addPromise) {
+          inFlightAddsRef.current.delete(cacheKey);
+        }
       }
     }
     // else — the title is known-absent and this is not a watch gesture (un-ticking, or the
@@ -1212,7 +1263,21 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     try {
       await setDoc(doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId)), { runtime }, { merge: true });
     } catch (err) {
-      console.warn('[watchlist] runtime-backfill misslyckades:', err);
+      // BIN-957 — `console.error` + `captureError`, the form the six guarded edit paths
+      // got in BIN-942. A `console.warn` here was WORSE than not catching at all: Sentry's
+      // default `globalHandlers` integration reports an unhandled rejection and
+      // `initSentry()` never overrides `defaultIntegrations`, but nothing in this app reads
+      // the console. So the catch removed the only report this failure had.
+      //
+      // DECISION (BIN-957): the catch stays BROAD — deliberately NOT narrowed to
+      // `isPermissionDenied` the way the six were. Those had a caller that could confirm a
+      // write in words; this one is fire-and-forget (`void setRuntime(...)` from a title
+      // page), so re-throwing anything makes an unhandled rejection out of a failure the
+      // user cannot act on, and the next title view retries regardless. What was missing
+      // was the REPORT, not the swallow. The same reasoning covers `refreshTmdbFields`
+      // below and both catch sites in `flushNextAirWrites`.
+      console.error('[watchlist] runtime-backfill misslyckades:', err);
+      captureError(err, { scope: 'watchlist', kind: 'setRuntime' });
     }
   }, [uid, items]);
 
@@ -1257,7 +1322,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     try {
       await setDoc(doc(db, 'users', uid, 'watchlist', mediaTypeDocId(mediaType, tmdbId)), payload, { merge: true });
     } catch (err) {
-      console.warn('[watchlist] tmdb-fields lazy-refresh misslyckades:', err);
+      // BIN-957 — reported rather than only logged; broad catch kept. Both halves of that
+      // choice are argued at `setRuntime`'s catch above.
+      console.error('[watchlist] tmdb-fields lazy-refresh misslyckades:', err);
+      captureError(err, { scope: 'watchlist', kind: 'refreshTmdbFields' });
     }
   }, [uid, items]);
 

@@ -554,6 +554,31 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(setDoc).not.toHaveBeenCalled();
   });
 
+  // BIN-957. Both halves in one assertion each, because the two failure modes are
+  // opposites: reporting it and still swallowing it. A future edit that re-throws turns a
+  // fire-and-forget denormalisation into an unhandled rejection; one that drops the
+  // captureError call puts the failure back where Sentry cannot see it (globalHandlers
+  // report unhandled rejections, never a console line), which is what console.warn did.
+  it('BIN-957: setRuntime reports a failed backfill to Sentry AND still swallows it', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await mountSeeded([seedDoc({ tmdbId: 7, runtime: null })]);
+      setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+      await act(async () => {
+        await expect(setRuntimeRef!('tv', 7, 95)).resolves.toBeUndefined();
+      });
+
+      expect(captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { scope: 'watchlist', kind: 'setRuntime' },
+      );
+      expect(consoleError.mock.calls.some(c => String(c[0]).includes('runtime-backfill'))).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('updateProgress writes progress fields (never status) and forwards status to group-sync', async () => {
     await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
 
@@ -839,6 +864,121 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(second.tmdbId).toBe(1399);
     expect(second.mediaType).toBe('tv');
     expect(second.status).toBe('mina');
+  });
+
+  // BIN-955. The window BIN-954's session mark structurally cannot cover: it is written
+  // AFTER the add resolves, so two ticks issued before either TMDB fetch lands both read
+  // "absent" and both enter the add branch. Nothing disables the checkboxes while a write
+  // is in flight, so this is a gesture a user can perform. Driven with a held fetch rather
+  // than by hoping two calls interleave — the state appears and vanishes, so it has to be
+  // held open to be observed at all.
+  it('BIN-955: two concurrent ticks on the same untracked series add it exactly ONCE', async () => {
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let first!: Promise<ItemWriteOutcome>;
+    let second!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      first = updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+      second = updateProgressRef!('tv', 1399, 2, 6, { addIfMissing: true });
+    });
+    // Deliberately NOT asserting the fetch count mid-flight: the branch's `await
+    // import('@/lib/tmdb/client')` is a real dynamic import, so whether it has resolved by
+    // this point depends on whether an earlier test in the file already warmed the module
+    // cache — green in a full run, red when this test is run alone. The counts below say
+    // the same thing and say it after both calls have settled.
+    await act(async () => {
+      releaseShow(TV_SHOW);
+      await Promise.all([first, second]);
+    });
+
+    // One fetch, one add, one analytics event — for one logical add.
+    expect(getTVShowLite).toHaveBeenCalledTimes(1);
+    expect(trackEvent.mock.calls.filter(c => c[0] === 'title_added_watchlist')).toHaveLength(1);
+    expect(setDoc).toHaveBeenCalledTimes(2);
+    const [, add] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(add.tmdbId).toBe(1399);
+    expect(add.status).toBe('mina');
+    // The waiter's own position still lands — as an UPDATE onto the document the first
+    // call created, never as a second add.
+    const [, update] = setDoc.mock.calls[1] as [unknown, Record<string, unknown>];
+    expect(update.lastWatchedEpisode).toBe(6);
+    expect(update.tmdbId).toBeUndefined();
+    expect(update.status).toBeUndefined();
+  });
+
+  // BIN-955, the direction that matters more than the duplicate: a waiter must read a
+  // FAILED add as "the document does not exist". The auto-advance carries no add intent,
+  // so if it believed the add had landed it would merge onto a missing document — a create,
+  // and the identity-less fragment BIN-954 removed.
+  it('BIN-955: a concurrent auto-advance writes nothing when the add it waited for FAILED', async () => {
+    await mountSeeded([]);
+    let rejectShow: (err: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise((_resolve, reject) => { rejectShow = reject; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    let advance!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+      advance = updateProgressRef!('tv', 1399, 3, 0); // no flag — the auto-advance
+    });
+
+    await act(async () => {
+      rejectShow(new Error('tmdb down'));
+      await Promise.all([tick, advance]);
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(await advance).toBe('refused');
+    expect(captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ scope: 'watchlist', kind: 'updateProgress-add' }),
+    );
+
+    // And the in-flight entry did not outlive its own promise: the next tick adds for real.
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await act(async () => {
+      await updateProgressRef!('tv', 1399, 2, 11, { addIfMissing: true });
+    });
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, payload] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(payload.tmdbId).toBe(1399);
+  });
+
+  // BIN-955, the other way an add can fail — and the one the waiter's own `.catch` exists
+  // for. A TMDB failure is caught INSIDE the add and reported as "did not happen"; a
+  // REFUSED WRITE rejects, and that rejection belongs to the gesture that made it. The
+  // waiter must read it as "the document does not exist" rather than inherit the error, and
+  // must certainly not read it as success: a `.catch(() => true)` here sends the
+  // auto-advance's merge onto a document Firestore just refused to create.
+  it('BIN-955: a REFUSED add is not success for the call waiting on it', async () => {
+    getTVShowLite.mockResolvedValue(TV_SHOW);
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+    setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+    let tickError: unknown;
+    let tick!: Promise<unknown>;
+    let advance!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true })
+        .catch((err: unknown) => { tickError = err; });
+      advance = updateProgressRef!('tv', 1399, 3, 0); // no flag — the auto-advance
+    });
+
+    await act(async () => {
+      releaseShow(TV_SHOW);
+      await Promise.all([tick, advance]);
+    });
+
+    // The add rejected, and that rejection stayed with the gesture that made it.
+    expect(tickError).toBeInstanceOf(Error);
+    // One attempt, the refused one. A second setDoc here would be the auto-advance merging
+    // onto a document that does not exist — a create, and the fragment BIN-954 removed.
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    expect(await advance).toBe('refused');
   });
 
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {
@@ -1735,6 +1875,28 @@ describe('WatchlistContext — refreshTmdbFields lazy-refresh wiring (BIN-508/40
     await act(async () => {
       await expect(refreshTmdbFieldsRef!('tv', 81, { title: 'D' })).resolves.toBeUndefined();
     });
+  });
+
+  // BIN-957: the same swallow, now reported. See setRuntime's twin test for why both
+  // halves are asserted together.
+  it('BIN-957: reports a failed lazy-refresh to Sentry AND still swallows it', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await mountSeeded([seedDoc({ tmdbId: 82 })]);
+      setDoc.mockRejectedValueOnce(new Error('permission-denied'));
+
+      await act(async () => {
+        await expect(refreshTmdbFieldsRef!('tv', 82, { title: 'E' })).resolves.toBeUndefined();
+      });
+
+      expect(captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { scope: 'watchlist', kind: 'refreshTmdbFields' },
+      );
+      expect(consoleError.mock.calls.some(c => String(c[0]).includes('tmdb-fields lazy-refresh'))).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   // BIN-560 Phase 4 COLLISION GUARD: a movie and a TV show sharing one tmdbId must
