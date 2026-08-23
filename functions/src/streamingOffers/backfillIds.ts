@@ -172,10 +172,15 @@ export interface BackfillTally {
  * against the live collection before that removal, which is a separate, deliberate step by
  * a human. It must never be read as the proof itself.
  *
- * It reaches a human through the log line below and NOWHERE else — the caller discards this
+ * It reaches a human through the log lines below and NOWHERE else — the caller discards this
  * return value. Said plainly because the first version of this comment claimed the flag fed
  * "the cron's audit record", and it did not: it was computed, returned and dropped. Logging
  * it is what made the sentence true (code review, 2026-08-17).
+ *
+ * BIN-932: the TERMINAL state used to be the one that reached nobody. The tally line was
+ * gated on `bareFound > 0`, so the day the migration finally found nothing left it logged
+ * less than a day with work to do — and that is precisely the day someone needs to hear
+ * about, because it is what opens #27's criteria 4–5.
  */
 export async function runIdBackfill(io: BackfillIo): Promise<BackfillTally> {
   const docs = await io.scanAll();
@@ -219,6 +224,17 @@ export async function runIdBackfill(io: BackfillIo): Promise<BackfillTally> {
     io.log.info('streamingOffers id backfill', {
       bareFound, migrated, droppedSuperseded, unattributable: unattributable.length, complete,
     });
+  } else {
+    // The terminal state. No second `complete` check, because there is nothing left for one
+    // to decide: `bareFound` counts targets plus unattributable, so zero forces
+    // `targets.length === 0`, which IS `complete`. A `&& complete` here would be a branch
+    // that can never take its other side.
+    //
+    // One line per invocation, forever — and forever is the point. Retiring the fallbacks is a
+    // human step (#27's criteria 4–5) that may happen long after the last bare doc went, and
+    // this line is what that person reads. A run whose whole news is "nothing left" was the
+    // only run that said nothing at all.
+    io.log.info('streamingOffers id backfill complete — no bare docs remain');
   }
   if (unattributable.length > 0) {
     // Loud, not silent: these are the only docs the migration can never finish, so they

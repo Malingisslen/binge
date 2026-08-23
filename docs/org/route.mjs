@@ -168,6 +168,26 @@ export const TOOLING_CODE_FILES = new Set([
   // since 2026-08-08.
   'docs/org/metrics/check_review_coverage.mjs',
   'docs/org/metrics/check_review_coverage.test.mjs',
+  // BIN-931's custom ESLint rule and its test, added in the SAME commit as their entry in
+  // .claude/shared-plugin.json's integration-gate alternation — the BIN-830 lesson again.
+  // It is review machinery by the same definition the entries above use: `npm run lint`
+  // fails on it, and CI runs `npm run lint`, so weakening the rule weakens a check that
+  // refuses commits. It replaced regex source scans that lived in a test file and were
+  // therefore already gated; moving that guard OUT of the test tree would have quietly
+  // moved it out of review too, which is the drift this list exists to stop.
+  //
+  // What named the gap: route.test.mjs's BIN-874 discovery half, the moment
+  // 'eslint-rules/**/*.{test,spec}.mjs' entered vitest.config.ts's include globs — it went
+  // red naming both files by path.
+  //
+  // eslint.config.mjs, where the rule is switched ON, is deliberately NOT here. Malin's
+  // narrow-over-broad call (2026-08-08, alternative (a)) governs, and disarming it is not
+  // silent: measured by setting that config's `rules` block to `{}` and re-running,
+  // 9 of the 15 cases in eslint-rules/no-bare-streaming-offers-id.test.mjs go red, so
+  // `npm test` — and therefore the deploy — refuses it. That is a red test rather than a
+  // blocking reviewer, which is a weaker guarantee than the two files below have.
+  'eslint-rules/no-bare-streaming-offers-id.mjs',
+  'eslint-rules/no-bare-streaming-offers-id.test.mjs',
 ]);
 // Root-level files that ARE code even though they sit outside CODE_ROOTS. BIN-880 added
 // the two remaining root test-runner configs: the blocking gate already stops a commit
@@ -495,21 +515,10 @@ function selftest() {
     // original BIN-864/873 reasoning and it still applies to this one file: naming an
     // owner in docs/role-responsibilities.md is an INTENDED improvement, and a case that
     // pinned `unmapped-code` would report that improvement as a failure. What must never
-    // change is that it stops being `skip`. Measured at these bytes: TOOLING_CODE_FILES
-    // holds 14 paths, 10 of them under docs/org/. FIVE of those ten are `owned` / [25]
-    // (route, route.test, gate-symmetry.test, gen-ownership-map, gen-ownership-map.test);
-    // the FIVE under docs/org/metrics/ are `unmapped-code` / [14], as are all four under
-    // scripts/ — the deliberate #14-fallback seat §25 says the check scripts keep.
+    // change is that it stops being `skip`.
     //
-    // This sentence said "all four files under docs/org/ are owned" until 2026-08-17. It
-    // was already off by one after BIN-880 added gate-symmetry.test.mjs, and BIN-918 made
-    // it false in SUBSTANCE by adding three unowned metrics paths — so "everything under
-    // docs/org/ has an owner" would have been read straight past the gap BIN-930 exists
-    // for. Caught by the ninth integration pass on the commit that broke it. Then BIN-917
-    // broke it AGAIN, in exactly the same way, by adding the two check_review_coverage
-    // paths 300 lines above this paragraph while leaving 12/8/three standing — caught by
-    // the integration review of THAT commit. A count written into prose beside the list it
-    // counts will keep going stale; if it goes wrong a third time, derive it instead.
+    // No breakdown of TOOLING_CODE_FILES is written here. Derive it from the set instead of
+    // reading a number here.
     //
     // `--selftest` used to be invoked by NOTHING — not package.json, not ci.yml, not
     // deploy.yml, not a hook — so a stale pin here could not fail a deploy, and a

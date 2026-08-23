@@ -1,5 +1,6 @@
 import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
 import nextTypescript from 'eslint-config-next/typescript';
+import noBareStreamingOffersId from './eslint-rules/no-bare-streaming-offers-id.mjs';
 
 export default [
   ...nextCoreWebVitals,
@@ -27,5 +28,11 @@ export default [
       // kravet är för strikt för vårt usecase.
       'react-hooks/use-memo': 'off',
     },
+  },
+  {
+    // BIN-931 — the structural guard against BIN-523 coming back. Rule rationale + the
+    // shapes the regexes could not see: the rule file's header.
+    plugins: { binge: { rules: { 'no-bare-streaming-offers-id': noBareStreamingOffersId } } },
+    rules: { 'binge/no-bare-streaming-offers-id': 'error' },
   },
 ];

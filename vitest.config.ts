@@ -40,6 +40,13 @@ export default defineConfig({
       // (BIN-838); that step is removed in the same commit as this line, so the two must
       // move together. scripts-self-tests-present.test.mjs replaces its MIN floor.
       'scripts/**/*.{test,spec}.mjs',
+      // BIN-931: the custom ESLint rule that structurally forbids a bare streamingOffers
+      // doc id. It replaced a set of regex source scans that lived in
+      // functions/src/streamingOffers/backfillIds.test.ts and ran with the suite, so its
+      // replacement has to run with the suite too — added here rather than left to be
+      // discovered later, which is BIN-802's "a test file outside the include globs is
+      // silently never run by `npm test` while passing when invoked by hand".
+      'eslint-rules/**/*.{test,spec}.mjs',
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,
