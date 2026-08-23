@@ -341,3 +341,29 @@ något i scopet `watchlist` växer med de fyra ovan. De betyder INTE punkt 2 (et
 nekande av de sex tystade redigeringsvägarna) — de är best-effort/self-healing-vägar, och en
 enstaka träff är väntad. Läs dem som ett eget spår, precis som `kind: 'updateProgress-add'`
 (BIN-954) hör till sin egen fråga.
+
+---
+
+## BIN-975: ingen spärr mot `via:"sprint-parallel"` + `ran:true` — 2026-08-23
+
+Ett beslut, inte en öppen punkt. Metrikkontrollerna (`docs/org/metrics/check_events.mjs`,
+`docs/org/metrics/check_review_coverage.mjs`) får INTE en regel som underkänner en
+`review`-rad för att den bär `via:"sprint-parallel"` tillsammans med `ran:true`. Fila inte
+"loggen saknar en spärr mot den kombinationen".
+
+**Why:** paret är två aktörer som svarar på var sin fråga, inte en motsägelse. Sprintens
+ORKESTRERARE sammankallar den blinda kritiken i fas 1.4 och skriver raden — den kan starta
+subagenter. Dess BATCHAGENTER kan inte, och skriver just det i sina egna kvitton. Båda
+utsagorna är sanna samtidigt, så en regel som avvisade paret skulle avvisa precis de rader
+motorn skriver när den gör rätt.
+
+**Varför posten behövs ändå:** kvittot `batch-0-20260823-131500.json` skrev
+"NOT BUILT, deliberately: the guard the brief asked for. See deviations" och bar ingen
+`deviations`-nyckel. Pekaren gick alltså ingenstans, och ett beslut som bara finns som en
+hängande pekare är för nästa granskare omtöjbart från en ofilad brist.
+
+**Re-open when:** någon kör om BIN-963:s mätning på en NY sprintrad och antalen inte stämmer
+— alltså att `tasks/todo.md`:s sprintblock saknar biljettens invikta villkor, eller att de
+inte matchar radens `must_haves`. Då är raden falsk, och frågan om en spärr är en annan
+fråga än den här. Att en batchanteckning säger "NOT convened" är däremot inget sådant fynd
+— det är vad den här posten handlar om.

@@ -151,8 +151,7 @@
 // its batch agents cannot, and say exactly that in their own receipts. So a batch note
 // reading "NOT convened" does not contradict a row reading `ran:true`: two actors, two
 // questions, both answers true. A rule keyed on that pair would refuse precisely the rows
-// the engine writes when it does the right thing — the "punishes the first person to obey
-// it" failure the epoch note above exists to avoid, arrived at from a different direction.
+// the engine writes when it does the right thing.
 //
 // SHALLOW CHECKOUTS. ci.yml and preview.yml check out at the default depth 1 while
 // deploy.yml uses `fetch-depth: 0`, so a history walk sees one commit on two of the three

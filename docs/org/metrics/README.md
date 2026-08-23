@@ -99,7 +99,7 @@ alone, and never `commit_sha` — the row most needing correction is the one wit
 | field | meaning |
 | --- | --- |
 | `commit_sha` | *(required on any **`review`** row claiming the work reached main)* the commit that is the evidence for that claim. Scoped to `review` rows because that is what `check_events.mjs` examines — the four `correction` rows below name commits in their prose and carry no `commit_sha`, and one of them (BIN-909) never can, since the work was never built |
-| `corrects` | *(on `type: "correction"` rows)* `{ts, ticket}` of the row being retired |
+| `corrects` | *(on `type: "correction"` rows)* `{ts, ticket}` of the row being retired. **Optional, and a `correction` row without it is legal** — `check_events.mjs` skips any `correction` row that lacks this key (`row.type !== 'correction' \|\| !row.corrects`), so such a row retires nothing and stands only as a finding. Which is the rule: a correction MUST omit `corrects` unless the row it names is actually false, because a keyed correction retires that row whether or not it deserved it — `check_events.mjs` then counts it as *retracted, not verified*. Live example: the BIN-963 row of 2026-08-23, whose whole content is a measurement finding no false row to retire |
 
 **Tense rule for writers:** a row written before the build is written in the PRESENT
 ("review declined, outcome unknown"). The past tense belongs to whoever holds the commit sha
