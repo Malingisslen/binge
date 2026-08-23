@@ -22825,7 +22825,16 @@ the surrounding sentence's claim structure. Folded into binge-test-reviewer.know
 "Firestore rules testing" bullet on BIN-941/942 counting (merged in place — the bullet already
 covered a same-family miscount, so this extends it rather than adding a new one).
 
-## 2026-08-22 — BIN-955/957/928 watchlist batch (recovered sprint-0 patch)
+## 2026-08-22 — BIN-955/957/928 watchlist batch (recovered sprint-0 patch, WITHDRAWN)
+
+**NONE OF THIS SHIPPED.** Read the verdict below as a measurement of a patch, not a record of
+code on main. This review passed the batch; the sprint's outcome verifier then failed BIN-955 on
+correctness and intent and BIN-928 on all three axes, BIN-957 was withdrawn as their passing
+sibling, and the whole batch was stashed back out. At HEAD `inFlightAddsRef` and the `pendingAdd`
+consultation in `documentExists` do not exist, `nextAirReadRepair.ts` still calls `console.warn`
+at both sites, and `WatchlistContext.test.tsx` holds neither the 136- nor the 137-test suite this
+entry counts against. Two reviewers reaching opposite verdicts on this batch is itself the
+finding — filed as BIN-965.
 
 **Diff reviewed**: `git diff --cached` in C:\binge, 5 files (`src/contexts/WatchlistContext.tsx`
 +`.test.tsx`, `src/lib/watchlist/nextAirReadRepair.ts`+`.test.ts`, `src/lib/watchlistWrites.ts`),
@@ -22903,12 +22912,14 @@ softening or a dedicated test if this idiom gets reused, but not a ship-blocker 
 `eslint-rules/**/*.{test,spec}.mjs` to `include`), `docs/org/route.mjs` +
 `.claude/shared-plugin.json` (both lists gain the new rule+test pair, BIN-830 both-in-one-commit
 discipline), and `functions/src/streamingOffers/backfillIds.{ts,test.ts}` — the .ts adds an
-`else` branch logging a terminal "no bare docs remain" line (BIN-932), the .test.ts deletes 336
-lines (confirmed via `git diff --cached --numstat` + 3 hunks only) and adds 2 new cases. Read
+`else` branch logging a terminal "no bare docs remain" line (BIN-932), the .test.ts deletes 293
+lines and adds 43, across 3 hunks (`git show --numstat da6aca3 -- functions/src/streamingOffers/
+backfillIds.test.ts` -> `43  293`). This entry said 336 for one round; 336 is those two summed,
+which is what `--stat` draws its bar from. Read
 every file with `Read` before mutating. First reviewer on this batch (recovered sprint worktree,
 never committed).
 
-**What the 336-line deletion actually removed** (hunk 2 of 3, confirmed against the diff
+**What the deletion actually removed** (hunk 2 of 3, confirmed against the diff
 directly): exactly the four regex source-scan `it()`s in the old "V7" describe block —
 (1) the single-file `functions/src/streamingOffers/index.ts` chained+bound-ref scan,
 (2) the cross-file "no OTHER file writes a bare id" walk, (3) the "no two-hop bound write"
@@ -22975,10 +22986,13 @@ backfillIds.ts`, snapshot+restore+hash-verified each round), baseline 23/23 gree
 
 **Prose claims independently re-derived** (per task instruction not to trust unmeasured
 numbers): "15 cases" in the rule test file — counted (8 report + 5 stay-quiet + 2 standalone =
-15, confirmed by the baseline run's own tally). "336 lines deleted, 2 new cases" — confirmed via
-`git diff --cached --numstat` (43/293... wait, this file's own diff --numstat header vs the
-task's framing: the task said "336 lines deleted" referring to the raw removed-line count in the
-diff, which the 3-hunk breakdown confirms — hunk 2 alone removes ~298 lines). No false claim
+15, confirmed by the baseline run's own tally). "336 lines deleted" — REFUTED, and the refutation
+is the useful part of this paragraph: `--numstat` answered `43  293`, this entry reasoned back to
+336 anyway, and 336 is 43+293 — the `--stat` bar width, not a deletion count. The task framing I
+was checking against carried the same wrong number, so two sources agreed and neither had run
+`--numstat`. The substantive claim it supported — the deletion took exactly the four regex sweeps
+and no behavioural coverage — is unaffected and independently confirmed (4 `it()` blocks removed,
+`runIdBackfill`'s own describe block byte-identical). No false claim
 found in anything read; the route.mjs correction ("No breakdown of TOOLING_CODE_FILES is written
 here. Derive it from the set instead of reading a number here.") correctly follows the repo's
 own strike-not-reword convention — it struck a stale count rather than writing a new one.
