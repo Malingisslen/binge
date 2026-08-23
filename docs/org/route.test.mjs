@@ -535,10 +535,16 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
     // The floor is the whole defence for the `it.each` cases above: `it.each([])`
     // registers ZERO tests and reports no error, so an empty list would make every
     // assertion in this block vanish silently (verified — 46 tests become 32).
-    expect(GATE_FILES.length).toBeGreaterThanOrEqual(7);
+    // Floors lowered 7→6 and 3→2 on 2026-08-23: dossier-freshness.mjs and
+    // map-freshness.mjs merged into the single freshness.mjs, so `.claude/hooks/`
+    // legitimately holds two .mjs files, not three. Counted from the directories,
+    // not assumed: 4 reviewer files + 2 hooks. The floors still do their only job —
+    // catching the derived list going EMPTY, which would make every `it.each` above
+    // vanish with no error.
+    expect(GATE_FILES.length).toBeGreaterThanOrEqual(6);
     expect(new Set(GATE_FILES).size).toBe(GATE_FILES.length);
     expect(REVIEWER_INSTRUCTIONS.length).toBeGreaterThanOrEqual(4);
-    expect(HOOKS.length).toBeGreaterThanOrEqual(3);
+    expect(HOOKS.length).toBeGreaterThanOrEqual(2);
   });
 
   it("the integration reviewer's OWN instructions get a second, independent reader", () => {

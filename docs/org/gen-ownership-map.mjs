@@ -12,7 +12,7 @@
 // identically"), where it runs under `npm test` instead of waiting for someone to
 // remember a flag.
 //
-// Used by the dossier-freshness PostToolUse hook (.claude/hooks/dossier-freshness.mjs):
+// Used by the freshness PostToolUse hook (.claude/hooks/freshness.mjs, stampDossier):
 // when an edited file matches a role's patterns, that role's dossier is flagged stale.
 // Also read by docs/org/route.mjs, which decides who reviews a change.
 //

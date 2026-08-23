@@ -447,7 +447,7 @@ split clean:
 
 > **Stale as of 2026-08-17 (BIN-918).** This table lists the mirror targets as they were
 > designed, not as they are deployed. `.claude/hooks/` today holds only
-> `dossier-freshness.mjs`, `map-freshness.mjs` and `preview-gate.mjs`, and `.claude/commands/`
+> `freshness.mjs` and `preview-gate.mjs`, and `.claude/commands/`
 > is empty — the rest moved to `C:/claude-plugins`. Concretely for the row below:
 > `trigger` rows are written by `suggest-stakeholder-review.mjs` in that plugin, not by
 > `exit-plan-suggest-review.ps1`, which is not deployed here. Disclosed rather than rewritten:

@@ -56,7 +56,7 @@
 //      baseline with `node scripts/check-workflow-map.mjs --update-baseline` and
 //      commit it — the ratchet forces that to be a conscious, reviewable step.
 // Semantic drift (behavior changed inside a still-existing file) is handled by
-// .claude/hooks/map-freshness.mjs + .claude/state/workflow-map-stale.json.
+// .claude/hooks/freshness.mjs (stampMap) + .claude/state/workflow-map-stale.json.
 //
 // Usage: node scripts/check-workflow-map.mjs                    (lint; exit 1 on a problem list)
 //        node scripts/check-workflow-map.mjs --update-baseline  (regenerate the content baseline)

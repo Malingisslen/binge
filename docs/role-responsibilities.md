@@ -487,7 +487,7 @@ Owns the process.
   are deliberately NOT — the reviewers append to those on every ledger run, and
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
-  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/dossier-freshness.mjs`, `.claude/hooks/map-freshness.mjs`, `.claude/hooks/preview-gate.mjs`
+  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/preview-gate.mjs`
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
   it decides from. Both are code by BIN-805's own ruling, and both routed as
@@ -500,12 +500,12 @@ Owns the process.
   without backticks on purpose: the generator harvests every backtick-quoted tracked
   path in a section, so naming one here would silently seat #25 on it and flip those
   pins red.)
-  Owning these ten paths buys a REVIEWER, not a re-audit: `dossier-freshness.mjs`
+  Owning these paths buys a REVIEWER, not a re-audit: `freshness.mjs`
   returns early for everything under the .claude and docs/org trees (de-backticked on
   purpose — a backticked DIRECTORY prefix is harvested too, and would have seated #25
   on both whole trees; measured, it added exactly those two patterns), so editing any of
   them will never flag this section stale (integration review, 2026-08-13 — verified at
-  `.claude/hooks/dossier-freshness.mjs`'s two `startsWith` guards). That is deliberate:
+  `.claude/hooks/freshness.mjs`'s two `startsWith` guards in `stampDossier`). That is deliberate:
   the hook must not self-trigger on the docs that define the system.
   → `docs/org/route.mjs`, `docs/org/route.test.mjs`, `docs/org/gen-ownership-map.mjs`
 
@@ -725,7 +725,7 @@ it absent — this section is the refresh):
   since 2026-08-01 proof of review is the RECORDED ledger (`reviewProof: "ledger"` in
   `.claude/shared-plugin.json`) — a hook logs which reviewer read which bytes and the
   verdict it ended on, and writing a marker or the ledger by hand is refused.
-- **Hooks** — `dossier-freshness`, `exit-plan-suggest-review` (high-stakes plan →
+- **Hooks** — `freshness` (dossier + workflow-map staleness), `exit-plan-suggest-review` (high-stakes plan →
   suggest a stakeholder panel), `require-review-before-commit`, workflow-map + lessons
   guards.
 - **A committed role-org layer** under `docs/org/`: this role map, the world-watch

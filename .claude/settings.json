@@ -40,11 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || echo .)\"; exec node .claude/hooks/dossier-freshness.mjs'"
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel 2>/dev/null || echo .)\"; exec node .claude/hooks/map-freshness.mjs'"
+            "command": "bash -c 'cd \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}\"; exec node .claude/hooks/freshness.mjs'"
           }
         ]
       }

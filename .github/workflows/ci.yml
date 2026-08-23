@@ -50,7 +50,7 @@ jobs:
 
       # Workflow-map freshness: every path referenced by docs/workflow-map.html
       # must still exist (renames/deletions). Semantic drift is handled by
-      # .claude/hooks/map-freshness.mjs. No deps needed.
+      # .claude/hooks/freshness.mjs. No deps needed.
       - name: Workflow map paths must exist
         run: node scripts/check-workflow-map.mjs
 

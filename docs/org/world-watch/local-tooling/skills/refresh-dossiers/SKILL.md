@@ -1,11 +1,11 @@
 ---
 name: refresh-dossiers
-description: Re-auditerar bara de roller vars dossier flaggats inaktuell (av dossier-freshness-hooken) mot nuvarande kod och uppdaterar deras avsnitt i role-responsibilities.md. Använd när användaren säger /refresh-dossiers, "uppdatera rolldossierna", "refresh role dossiers", eller när en SessionStart/notis säger att dossierer är inaktuella. Re-auditerar ALDRIG alla 28 roller — bara de flaggade.
+description: Re-auditerar bara de roller vars dossier flaggats inaktuell (av freshness-hooken) mot nuvarande kod och uppdaterar deras avsnitt i role-responsibilities.md. Använd när användaren säger /refresh-dossiers, "uppdatera rolldossierna", "refresh role dossiers", eller när en SessionStart/notis säger att dossierer är inaktuella. Re-auditerar ALDRIG alla 28 roller — bara de flaggade.
 ---
 
 # /refresh-dossiers — re-audit only the roles whose code changed
 
-The dossier-freshness hook (`.claude/hooks/dossier-freshness.mjs`) drops a marker for a
+The freshness hook (`.claude/hooks/freshness.mjs`, `stampDossier`) drops a marker for a
 role whenever a file it owns is edited. This skill re-audits **only those flagged
 roles** against the current code, updates their sections of the role map, and clears
 the markers. It **only ever edits documentation** — never app code.
