@@ -22989,8 +22989,8 @@ numbers): "15 cases" in the rule test file — counted (8 report + 5 stay-quiet 
 15, confirmed by the baseline run's own tally). "336 lines deleted" — REFUTED, and the refutation
 is the useful part of this paragraph: `--numstat` answered `43  293`, this entry reasoned back to
 336 anyway, and 336 is 43+293 — the `--stat` bar width, not a deletion count. The task framing I
-was checking against carried the same wrong number, so two sources agreed and neither had run
-`--numstat`. The substantive claim it supported — the deletion took exactly the four regex sweeps
+was checking against carried the same wrong number. The substantive claim it supported — the
+deletion took exactly the four regex sweeps
 and no behavioural coverage — is unaffected and independently confirmed (4 `it()` blocks removed,
 `runIdBackfill`'s own describe block byte-identical). No false claim
 found in anything read; the route.mjs correction ("No breakdown of TOOLING_CODE_FILES is written
