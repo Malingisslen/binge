@@ -8267,3 +8267,290 @@ folded into knowledge.md; nothing here changes what a future review should check
 already written down.
 
 **REVIEW-VERDICT: pass (0 blocking)**
+
+### 2026-08-24 — BIN-797: the two `_0` doc-id guards narrowed (staged review, HEAD 9b23aeb)
+
+**Diff.** 6 staged files. `firestore.rules` narrows BOTH copies of the canonical doc-id guard,
+`^(movie|tv)_(0|[1-9][0-9]*)$` → `^(movie|tv)_[1-9][0-9]*$`: `canonicalWatchlistDocId` (def 332,
+call 362) and `canonicalSwipeDocId` (def 949, call 1065). Plus four comment strikes, two new
+emulator tests, one new export test, one comment-only strike in `runAggregate.test.ts`, and a
+regex sync in `.claude/rules/data-model.md`.
+
+**Setup note that mattered.** `git show :<f> | md5sum` DIFFERED from `md5sum <f>` on
+`firestore.rules` and `firestore-rules.test.ts`. Byte accounting before trusting `Read`:
+`git show :<f> | sed 's/$/\r/' | md5sum` == disk md5 for both, i.e. exactly LF→CRLF, no lone CR.
+A `tr -d '\r'` normalisation would have MASKED a lone CR — the BIN-891 / `--ignore-cr-at-eol`
+trap. Reading the worktree was therefore reading the staged blob.
+
+**Q1 — anything MORE permitted?** No. Char by char: `^` · `(movie|tv)` (alternation bound inside
+parens) · `_` · `[1-9]` (excludes 0) · `[0-9]*` · `$`. New language = old minus `{_0}`, a strict
+subset. The degrouping trap the plan named is genuinely absent: the numeric alternation is GONE,
+not un-parenthesised, so the `^(movie|tv)_0|[1-9][0-9]*$` top-level-alternation widening cannot
+occur. Reproduced all four of the author's greps: exact-new-regex = 2, old alternation = 0,
+`id.matches('^(movie|tv)` = 2, and the guard-reference grep = 4 lines (2 defs + 2 calls), both
+calls under `allow create`.
+
+**Q2 — legitimate write denied?** No. Traced every writer.
+- `writeTitle` / `buildAddPayload` — `tmdbId: number` from TMDB search/detail; TMDB ids start at 1.
+- `nextAirReadRepair.flushNextAirWrites` — `batch.set(..., buildRepairPayload(...), {merge:true})`
+  carries only nextAir* fields, so a create there was ALREADY denied by BIN-942's
+  `requiredWatchlistFields` floor. No new denial.
+- `backfill.ts` (`updateDoc`) and `cascadeVisibilityToItems` (`batch.update`) cannot create.
+- `recordSwipe` (sessions.ts:128) — the decisive one. Its `tmdbId` comes from the swipe DECK, and
+  `candidates.ts` builds the deck from `discoverMovies`/`discoverTV`; the library supplies only
+  `libraryExclusionIds`, an EXCLUSION set. So a phantom `movie_0` row already sitting in a library
+  can never seed a swipe create. This was the one path where a pre-existing phantom could have
+  produced a legit-looking create, and it is closed by construction.
+- Functions touch `watchlist` only via `collectionGroup(...)` READS (Admin SDK bypasses rules
+  anyway). No client-SDK writer outside the files above.
+
+**Q3 — owner locked out?** No, structurally: `allow read, delete: if isOwner(uid)` (257–258) and
+`allow update` (365) never reference the guard; swipes `read: if true` (1060), `update` (1078),
+`delete` host-only (1085) likewise. Verified no `allow read/update/delete` references either
+guard. `removeItem` (WatchlistContext:1332) builds `mediaTypeDocId(mediaType, tmdbId)` and
+`docToItem` yields `tmdbId: 0` / `mediaType: 'movie'`, so it targets `movie_0` correctly — a
+grandfathered phantom stays self-service deletable. The two new tests seed via
+`withSecurityRulesDisabled` (correct — a live seed would be refused by the very guard) and pin
+update + delete (watchlist) and a new anon-slot vote key (swipes).
+
+**Q4 — erasure/export blocked?** No, and both are now pinned. `collectDeletionRefs` does
+`snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref))` — a REF off the snapshot, never a
+re-derived id; `toExportDocs` does `{ id: d.id, data: d.data() }` — raw passthrough. Both claims
+in the new comments verified against the unchanged source. The new `account-deletion.test.ts`
+case is a real emulator run against the real cascade, seeded like the existing 460-doc chunk test
+(minimal `users/{ME}` + the doc), so `runDeletion()` is satisfied.
+
+**Q5 — comments.** The four false sentences are STRUCK, not reworded (correct). The one NEW
+substantive claim — "`docToItem(d.data())` never sees the doc id, it reads `data.tmdbId`, so such
+a document rendered as an ordinary library item" — is TRUE: WatchlistContext:538 is
+`snap.docs.map(d => docToItem(d.data()))` and :122 is `tmdbId: data.tmdbId as number`. That
+corrects the ticket's own premise (the phantom was NOT unreadable), so the tightening is better
+motivated than filed. No added sentence claims the phantom-id-0 CLASS is closed (plan B6
+honoured); a grep of BIN-797 mentions for "creatable"/"still permits" returns nothing.
+
+**Numbers I recounted, and how.**
+- "fem andra samlingar nycklade med mediaTypeDocId() har ingen doc-id-spärr alls"
+  (firestore.rules:947-948). CORRECT. `grep -rn "mediaTypeDocId(" src | grep -v test`, plus
+  resolving the two `const docId = …` indirections at WatchlistContext:980 (`watchlistNotes`) and
+  :1044, gives seven CLIENT-WRITABLE collections keyed this way: `watchlist` + `swipes` (guarded);
+  `watchlistTags`, `watchlistNotes`, `episodeProgress`, `notInterested`, `groups/{id}/watchlist`
+  (unguarded) = 5. Matches the plan's own explicit enumeration under B6. Three more collections
+  are keyed by mediaTypeDocId at READ sites only — `titleRatingsAggregate`, `priceHistory`,
+  `streamingOffers` — all `allow write: if false`, so "no doc-id guard" there is vacuous. Recorded
+  here rather than filed: the sentence is true and panel-measured, and adding a parenthetical
+  would carry a NEW unmeasured claim.
+- "the file carries no one-digit id at all" (firestore-rules.test.ts:400). **FALSE.** Its twin at
+  :1616 says "the block", and the same commit added `tv_1` at :1618 — so removing line 403 leaves
+  a one-digit id in the file. Measured: single-digit canonical ids in that file are `movie_1` once
+  (403) and `tv_1` once (1618). The CONCLUSION survives — `canonicalWatchlistDocId` and
+  `canonicalSwipeDocId` are two SEPARATE functions, so `tv_1` pins neither the other's `*`→`+`
+  slip — which is exactly why only a grep catches the premise. Filed non-blocking: strike the
+  clause, or align the scope word to the twin's "the block" (directly readable, no counting, so
+  in-place correction is allowed under the strike rule).
+- "TMDB numbers titles from 1" — a fact, not a count; consistent with `resolveTmdbId`'s
+  long-standing `> 0` field branch and `CANONICAL_TMDB_ID = /^[1-9][0-9]*$/`.
+
+**Q6 — scope.** Leaving `functions/src/shared/mediaTypeDocId.ts` alone is right: it is the SERVER
+READ side, and per the plan #4 measured that `resolveTmdbId(0, 'movie_0')` still returns 0 there,
+feeding six server readers. That residual is unchanged by this diff (it concerns docs that already
+exist) and is BIN-624 half 2 — tightening it here would change how six readers resolve
+grandfathered docs, a different blast radius. `mediaTypeDocId.parity.test.ts` imports the two
+helper modules and never reads `firestore.rules`, so it observes nothing this diff changes;
+correctly untouched.
+
+**Mutation.** Not re-run (brief forbade it; sibling reviewers active). The author's control —
+old regex restored → exactly 4 red, the four new `_0` denials, 342 others green; restored →
+346/346 — is the right shape (it isolates the ONE clause and names the exact expected set).
+DERIVED, not reproduced. The `*`→`+` argument holds by inspection: `[1-9][0-9]+` needs ≥2 digits,
+so `movie_1` and `tv_1` would each fail their `assertSucceeds`.
+
+**Deploy.** Rules-only diff — no client source changed — so `deploy.yml` (hosting-only) ships
+nothing here and `firebase deploy --only firestore:rules` is required MANUALLY. Order is free in
+both directions: no new client code depends on the rule, and the tightening denies nothing the
+old running client emits (Q2). Plan E3 already gates the command on Malin's explicit yes.
+
+**Rejected as findings.** (a) The `movie_1`…`movie_999999` junk-doc VOLUME residual — unchanged,
+still correctly described at firestore.rules:923-926, ADR 0015. (b) Server-side `resolveTmdbId`
+permissiveness — BIN-624 half 2, named in the plan. (c) The export test mutating the shared
+`collectUserDataSnapshots` mock after `beforeAll` — order-fragile, but no later test in the file
+calls `buildUserExport`; nit, not a finding.
+
+**Verdict: pass (0 blocking), 1 non-blocking.**
+
+### 2026-08-24 — BIN-797 r2 (re-review at HEAD 9b23aeb): the corrected scope word is the next falsehood
+
+Re-review after three fixes landed on the staged diff I passed in r1. Brief said my ledger coverage was
+stale. Re-`Read` all six files: `firestore.rules`, `src/test/rules/firestore-rules.test.ts`,
+`src/test/rules/account-deletion.test.ts`, `src/lib/firebase/dataExport.coverage.test.ts`,
+`functions/src/communityRatings/runAggregate.test.ts`, `.claude/rules/data-model.md`. Tree stable across
+the whole window (md5 of all six identical at start and end; `git status --porcelain` unchanged;
+HEAD 9b23aeb throughout). Staged blob == worktree modulo trailing CR only, proven properly: raw md5
+differed by exactly 1378 bytes on `firestore.rules` and 2480 on the test file, which equal each file's
+LINE COUNT, so every CR is trailing and there is no lone CR (a `tr -d '\r'` normalisation would have
+hidden one; the line-count identity does not).
+
+**Change 1 — my r1 non-blocking finding was "fixed", and the fix is false in two new ways.**
+r1: `firestore-rules.test.ts:400` said "the file carries no one-digit id at all" while its twin at :1616
+said "the block", and the same commit's `tv_1` at :1618 falsified the file-scoped one. r2 aligned the word
+to "the block" in both copies. Measured at HEAD, both halves of the sentence are now false:
+
+- *Premise.* Node scan of each `describe` block's id literals: BLOCK1 (lines 391-587) one-digit ids =
+  ["movie_1","movie_0","tv_0"]; BLOCK2 (1608-1686) = ["tv_1","movie_0","tv_0"]. THREE each, not zero —
+  `movie_0` and `tv_0` were added to the same block's `it.each` denial table, twenty lines below, by this
+  very commit (:422-423, :1637-1638). A one-digit id is a one-digit id whether the row asserts success or
+  failure, and the sentence says "at all".
+- *Consequent.* "would ... still pass 100% of this suite" is false for the ONE-line removal the sentence
+  describes. Read-only `node -e` probe of old / new / slip regexes over 20 fixture ids: `movie_1` and `tv_1`
+  are the ONLY two whose verdict moves under `[0-9]*`→`[0-9]+`, one per block. Delete :403 alone and :1618
+  still reddens; the suite does NOT pass 100%. Both lines must go. This matches, and re-reads, the author's
+  own mutant-B measurement ("exactly 2 red, one per block") — the measurement was right, the sentence
+  drawn from it was not.
+
+Filed NON-BLOCKING with the remedy STRIKE, not re-word: this clause has now been re-worded once and the
+re-word carried two fresh unmeasured claims. A third pass would carry a third. Proposed surviving text
+needs no counting: "BIN-797: the SINGLE-DIGIT boundary — a `*`→`+` slip in the regex would reject every
+title numbered 1-9." Drift risk if left: a maintainer checking the comment's premise finds `movie_0`/`tv_0`,
+reads it as satisfied, and deletes the only positive single-digit pin in that block.
+
+**Change 2 — the struck "fem andra samlingar" sentence. Nothing load-bearing lost. Verified, not assumed.**
+Former `firestore.rules:947-948`. r1 I counted it CORRECT (5 client-writable collections); the test reviewer
+counted the same sentence true only under an unstated "client-writable" qualifier (8 by its literal wording).
+We disagreed about the SENTENCE, not the code, so the strike rule decides and the strike is right.
+Checked what went with it: (a) the half that restated "Gäller BARA create" survives at :927 with both
+numbered reasons intact at :928-934; (b) `grep -rn "fem andra"` across the tree returns only the two
+knowledge ARCHIVES (append-only audit records — the correct home for it); (c) the surviving block reads
+without a dangling connective (624-rationale, form-not-volume, create-only + 2 reasons, sole writer, twin
+note, function). The sentence asserted nothing about THIS rule's guarantee — it was context about other
+collections — so no security claim was removed. Not a finding.
+
+**Change 3 — `mockResolvedValueOnce`.** Closes my r1 nit (c). Order verified: `beforeAll` sets the
+persistent `mockResolvedValue` and calls `buildUserExport` before any `Once` is queued; the new test queues
+one `Once`, consumes it, and every later test falls back to the shared fixture. Correct, and the comment
+says exactly that.
+
+**r1 security conclusions re-derived on the new bytes — all hold.**
+- Q1 counts re-run: the new-regex grep = 2, the old-regex grep = 0, the prefix grep = 2. Guard references
+  resolve to 2 defs (:332, :946), 2 calls (:362, :1062) and 3 prose mentions (:269, :330, :940).
+- (a) Strict subset: probe says new is a subset of old over the whole fixture set, and the ONLY ids old
+  accepts that new rejects are `movie_0` and `tv_0`. No DEgrouping slip (`_0|[1-9][0-9]*` would bind
+  alternation at top level and go wider; the shipped regex keeps `(movie|tv)` grouped and the digit part
+  unparenthesised).
+- (b) Both calls sit under `allow create` only. `allow read, delete: if isOwner(uid)` (:258) and
+  `allow update` (:365) never reference the guard; swipes `read: if true` (:1057), `update` (:1075),
+  `delete` host-only (:1082) likewise. A grandfathered `_0` doc stays readable, editable, erasable —
+  now PINNED live by the two new grandfather tests (:447, :1666) instead of argued.
+- (c) No client id builder can emit `_0` on a create. `mediaTypeDocId` template-literals a `number`;
+  `docToItem` (WatchlistContext:118) reads `data.tmdbId`, never the doc id, and :538 is
+  `snap.docs.map(d => docToItem(d.data()))` — so the new comment's premise-correction is TRUE, and the
+  phantom really did render as an ordinary row. `recordSwipe` (sessions.ts:128) builds from the deck, not
+  the library.
+- Q4 export/erasure re-verified at source, not from r1: `toExportDocs` (dataExport.ts:117-122) is
+  `{ id: d.id, data: d.data() }` — raw passthrough; `collectDeletionRefs` (accountDeletion.ts:62) is
+  `snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref))` — a snapshot ref, never a re-derived id.
+  `parseTmdbIdFromDocId` returns NaN for `movie_0` (`CANONICAL_TMDB_ID = /^[1-9][0-9]*$/`,
+  mediaTypeDocId.ts:78), so the client reader really does have the hole the two new tests say the
+  export/erasure does not. `removeItem` (WatchlistContext:1332-1341) builds `mediaTypeDocId(mediaType, 0)`
+  = `movie_0`, so self-service delete reaches it.
+
+**Numbers in added text I re-counted, and with what.**
+- "the block carries no one-digit id at all" (x2) — node block scan gives 3 per block. FALSE (the finding).
+- "still pass 100% of this suite" (x2) — node regex probe: only 2 ids move, one per block. FALSE.
+- "every title numbered 1-9" — `[1-9][0-9]+` needs two or more digits. TRUE.
+- "the two are deliberate copies" / "smalnade av `_0` i båda samtidigt" — guard-reference grep, 2 defs. TRUE.
+- "the grandfather test above only covers '603'" (:446) — read :433-440, one id. TRUE.
+- data-model.md's regex "sedan BIN-797" — byte-identical to `firestore.rules`. TRUE.
+- Pre-existing "The 35 fixtures in this file" (:378) — UNTOUCHED and unaffected: the diff swapped
+  movie_0 for movie_1 and movie_0 for tv_1 and added movie_0/tv_0 rows, none of which are bare-numeric.
+  Checked precisely because a stale count sitting next to a diff is the trap.
+- ":1621 must stay a SUPERSET of `ALIASES_OF_42`" — the 5 aliases are all present; and the two alias tables
+  are identical row-for-row (12 each), so the ":408 kept identical on purpose" claim survives the two
+  added rows.
+
+**Deploy.** Rules-only; `deploy.yml` is hosting-only, so `firebase deploy --only firestore:rules` is MANUAL.
+Order free both ways: no new client code depends on the rule, and the tightening denies nothing the
+currently-running client emits.
+
+**Verdict: pass (0 blocking), 1 non-blocking (strike the mutation-justification clause in both copies).**
+
+### 2026-08-24 — BIN-797 r5 (final): three strikes verified, nothing load-bearing lost
+
+Re-review at HEAD `9b23aeb`, BIN-797 staged (not committed). Prior round: pass (0 blocking). Brief said three
+pure strikes had landed since, invalidating my ledger coverage of `firestore.rules`.
+
+**Staged-blob alignment first.** `git show :<path> | md5sum` differed from `md5sum <path>` on
+`firestore.rules` and `firestore-rules.test.ts`. NOT a sibling edit: CR count == line count on both (1378,
+2478), and `tr -d '\r' | md5sum` reproduced the index blob byte-for-byte. Pure CRLF, no lone CR. What I Read
+IS the staged blob. Worth keeping as the standard second step after the md5 mismatch, or a CRLF worktree reads
+as a contaminated one.
+
+**Counts I recomputed (command → result), not transcribed:**
+- `grep -Fc "id.matches('^(movie|tv)_[1-9][0-9]*$')" firestore.rules` → 2 ✓
+- `grep -c "(0|\[1-9\]" firestore.rules` → 0 ✓ (old grouping gone from both copies)
+- `grep -n "movie|tv" firestore.rules` → only 333 and 947, i.e. no third copy ✓
+- `grep -c "inledande nolla" firestore.rules` → 0 ✓; `grep -c "Art. 15" dataExport.coverage.test.ts` → 0 ✓
+- guard references: `canonicalWatchlistDocId` used once (line 362, `allow create`); `canonicalSwipeDocId`
+  once (line 1062, `allow create`). No `allow read/update/delete` reference → grandfathered `_0` docs stay
+  readable, editable, ERASABLE (Art. 17) ✓
+
+**Mutation counts re-derived WITHOUT re-running.** Only 2 of the 6 `src/test/rules/*.test.ts` files load the
+real `firestore.rules` (`firestore-rules.test.ts`, `account-deletion.test.ts`); the other four boot an inline
+`OPEN_RULES` const and are immune to any rules mutant. So:
+- Mutant B (`*`→`+`): the suite holds `movie_1`×14, `movie_2/3/4/5`, `movie_9` — but every one except
+  `firestore-rules.test.ts:402` (`movie_1`, watchlist block) and `:1616` (`tv_1`, swipes block) lives in
+  `tmdb-sweep-orchestrator.test.ts` under OPEN_RULES. Expected red = 2, one per block. Reported 2 ✓
+- Mutant A (old regex restored): only the four `_0` denial rows can move (`movie_0`/`tv_0` × 2 `it.each`
+  tables). Every other `_0` fixture is seeded `withSecurityRulesDisabled` and then UPDATED. Expected 4 ✓
+That is the generalizable half: bound a rules-mutant's blast radius by which suites load the real rules
+before believing any "exactly N red".
+
+**The three strikes, each checked for lost cargo and for a new claim in what survived.**
+1. `firestore.rules` BIN-624 header, `(ingen inledande nolla)` struck. Surviving main clause "KANONISKA
+   siffror" is a SUPERSET term — it stays true once `_0` is also excluded, with nothing new to measure. This
+   is the correct shape: the parenthetical enumerated a SUBSET of the exclusions, so it goes rather than
+   getting re-enumerated. Rewording it ("ingen inledande nolla och inte 0") is what starts round six.
+2. `account-deletion.test.ts`, `because "the erasure happens to not parse ids" is a property no test held
+   before this one` struck — correctly, since the 450-op test seeds `m0`…`m459`, all unparseable, and the
+   surviving sentence no longer claims uniqueness. What survives IS measurable and I measured it:
+   `accountDeletion.ts:62` is `snaps.watchlistSnap.docs.forEach(d => refs.push(d.ref))`, and
+   `grep parseTmdbIdFromDocId|mediaTypeDocId|Number(` over that file → NONE. `userData.ts`'s watchlist read
+   is an unfiltered subcollection read (the `where(...)` queries are reviews/likes/comments/reactions/lists/
+   sessions/groups). So "walks snapshot docs and their refs, never a re-derived id" holds, and "this pins it"
+   is true without being exclusive.
+3. `dataExport.coverage.test.ts`, `Art. 15` struck. Checked it was not the repo's only copy of a legal
+   framing: zero `Art. 15` anywhere now, and `Art. 20` appears in 8 files including `docs/data-export-format.md`
+   and `docs/data-retention-policy.md`. An outlier removed, not a framing lost. Surviving claims verified:
+   `mediaTypeDocId.ts`'s `CANONICAL_TMDB_ID = /^[1-9][0-9]*$/` (so `parseTmdbIdFromDocId` does reject
+   `movie_0`, BIN-646), and `dataExport.ts:117-122` `toExportDocs` maps `id: d.id` straight through.
+
+**Other added text audited for unmeasured absolutes.** `docToItem(d.data())` — `WatchlistContext.tsx:118`
+takes `data` only, call site `:538` is `snap.docs.map(d => docToItem(d.data()))`, returns `data.tmdbId` ✓.
+"the pin that reddens under it" ×2 — true per the mutant-B derivation above ✓. runAggregate.test's rewritten
+"This floor is what stops it becoming a rating anyone counts" — `runAggregate.ts:172` is
+`if (!Number.isFinite(tmdbId) || tmdbId <= 0)` ✓; a rewrite rather than a strike, but the true wording is
+directly readable from the function under test and needs no counting, so it is inside the carve-out.
+"recordSwipe är enda skribenten" (pre-existing) re-verified: `grep "'swipes'" src/ --include=*.ts*` gives one
+write path, `sessions.ts:128`, with `tmdbId: number` (`:118`); the other three hits are a type ref, a
+`getDocs` in the erasure cascade, and an `onSnapshot`.
+
+**Prior-round conclusions re-derived on the new bytes.** (a) `^(movie|tv)_[1-9][0-9]*$` ⊂
+`^(movie|tv)_(0|[1-9][0-9]*)$` — the suffix alternation was DELETED, not degrouped, so there is no top-level
+alternation-binding widening; anchors intact. (b) create-only, no read/update/delete reference. (c) no client
+builder can emit `_0`: both watchlist creators and `recordSwipe` pass `tmdbId: number` from TMDB (ids ≥ 1),
+`resolveTmdbId`'s field branch has always required `> 0`, and BIN-942's floor now also requires `tmdbId` on
+create. (d) export + erasure both pinned — erasure LIVE against the emulator, export via the mocked collector,
+which is adequate because the live deletion test exercises the SAME `collectUserDataSnapshots` and proves it
+returns the `movie_0` doc.
+
+**Not re-raised (accepted deviations, re-read this run):** anon-vs-anon vote forgery, the missing
+session-expiry gate, blocking-as-hygiene, create-only reports, the fail-open `effectiveVisibility` read, and
+the 2026-08-20 create-floor entry (a raced merge denied on a canonical id is that entry's accepted cost, not
+a BIN-797 regression). The junk-doc VOLUME residual (`movie_1`…`movie_999999`) is unchanged and still its own
+ticket — the form guard was never a volume guard.
+
+**Deploy.** Rules-only. `deploy.yml` is hosting-only, so `firebase deploy --only firestore:rules` is MANUAL;
+recorded in `tasks/plan-bin797.md` E3 as gated on Malin's explicit yes. Order is free both ways: no new client
+code depends on the rule, and the tightening denies nothing the currently-running client emits.
+`docs/workflow-map.html` still quotes the old expression and is getting its own commit — known, not re-filed.
+
+**Verdict: pass (0 blocking), 0 non-blocking.** The r4 non-blocking finding (strike the mutation-justification
+clause in both copies) is discharged by strike 1.

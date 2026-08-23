@@ -16,7 +16,7 @@ paths:
 users/{uid}                               — profil, preferenser, termsAcceptedAt, onboardingCompletedAt
 users/{uid}/watchlist/{mediaType_tmdbId} — mediaTypeDocId(), t.ex. movie_42 / tv_42 (BIN-560).
                                            Sedan BIN-766 binder firestore.rules FORMEN på create
-                                           (`^(movie|tv)_(0|[1-9][0-9]*)$`) — communityRatings
+                                           (`^(movie|tv)_[1-9][0-9]*$` sedan BIN-797) — communityRatings
                                            härleder betygsaggregatets nyckel ur den här vägen och
                                            kanoniserar sifferdelen, så en alias-stavning (movie_042)
                                            skulle annars landa på samma publika dokument som den

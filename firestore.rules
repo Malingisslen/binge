@@ -322,12 +322,15 @@ service cloud.firestore {
       // watchlist documents today — tmdbTosSweep/index.ts:124 is a batch.update on
       // paths it already read — but one that did would have to canonicalise itself.
       //
-      // `movie_0` stays creatable, matching the swipes residual (BIN-797) — the
-      // aggregate function skips it, so it is a doc nobody reads rather than a
-      // rating that silently counts. BIN-797 will narrow BOTH copies of this regex;
-      // its twin is `canonicalSwipeDocId` in the sessions block below.
+      // BIN-797 (2026-08-24) narrowed this to reject `_0`: TMDB numbers titles from 1,
+      // so `movie_0` names nothing. It was NOT the harmless unreadable doc the ticket
+      // described — `docToItem(d.data())` in WatchlistContext never sees the doc id, it
+      // reads `data.tmdbId`, so such a document rendered as an ordinary library item.
+      // CREATE-only, so a pre-existing `_0` doc still reads, updates and deletes.
+      // Its twin is `canonicalSwipeDocId` in the sessions block below; the two are
+      // deliberate copies and must be narrowed together.
       function canonicalWatchlistDocId(id) {
-        return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
+        return id.matches('^(movie|tv)_[1-9][0-9]*$');
       }
       // BIN-942 — the required-field FLOOR, create-only. isValidWatchlistItem is a
       // `hasOnly` ceiling: it says which keys are ALLOWED and never which are REQUIRED, so
@@ -911,8 +914,8 @@ service cloud.firestore {
       }
       function validVote(v) { return v == 'yes' || v == 'no' || v == 'veto'; }
       // BIN-624: doc-id formkontroll på röstdokument. Exakt den form
-      // mediaTypeDocId() skriver — `movie_`/`tv_` + KANONISKA siffror (ingen
-      // inledande nolla). Utan den kunde vem som helst med sessionslänken skapa
+      // mediaTypeDocId() skriver — `movie_`/`tv_` + KANONISKA siffror.
+      // Utan den kunde vem som helst med sessionslänken skapa
       // sessions/{id}/swipes/<vad som helst>: skräpdokument och kostnad, inte
       // röstintegritet (BIN-636:s granskning visade att inget förfalskat doc-id
       // kan dölja eller förfalska en röst på någondera sidan längre).
@@ -938,10 +941,10 @@ service cloud.firestore {
       // `users/{uid}/watchlist/{itemId}`-blocket ovan, med samma uttryck ordagrant.
       // De är avsiktligt två kopior — rules-språket tillåter en hoistad hjälpare,
       // men de två samlingarna har olika legacy-arv och kan behöva glida isär.
-      // Det som INTE får hända är att bara den ena ändras: BIN-797 ska smalna av
-      // `movie_0` och måste då röra båda.
+      // Det som INTE får hända är att bara den ena ändras; BIN-797 (2026-08-24)
+      // smalnade av `_0` i båda samtidigt.
       function canonicalSwipeDocId(id) {
-        return id.matches('^(movie|tv)_(0|[1-9][0-9]*)$');
+        return id.matches('^(movie|tv)_[1-9][0-9]*$');
       }
       function swipeShapeOk() {
         return request.resource.data.keys().hasOnly(['votes', 'updatedAt'])

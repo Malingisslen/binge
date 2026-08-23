@@ -23001,3 +23001,367 @@ own strike-not-reword convention — it struck a stale count rather than writing
 gap above); one soft observation (`ID_CARRIER_PROPS` killed only indirectly). Knowledge bullet
 folded into the existing "A SOURCE-SCANNING guard test... owes one probe PER IDIOM" bullet in
 `binge-test-reviewer.knowledge.md` rather than appended as a new one.
+
+## 2026-08-24 — BIN-797: `_0` narrowed out of both canonical doc-id guards (rules + 4 test files)
+
+**Diff reviewed** (staged at HEAD `9b23aeb`, index == worktree for all six paths, re-pinned at the
+end of the review; no movers, HEAD unchanged, `tasks/plan-bin797.md` untracked and NOT staged):
+
+```
+.claude/rules/data-model.md                        |  2 +-
+firestore.rules                                    | 22 +++++---
+functions/src/communityRatings/runAggregate.test.ts|  5 +-
+src/lib/firebase/dataExport.coverage.test.ts       | 24 +++++++++
+src/test/rules/account-deletion.test.ts            | 23 ++++++++
+src/test/rules/firestore-rules.test.ts             | 61 ++++++++++++++------
+```
+
+index shas: `a2828d8` / `d18101f` / `daba02c` / `23587d6` / `4a45f13` / `c5c2000`.
+
+Both copies of the guard go `^(movie|tv)_(0|[1-9][0-9]*)$` → `^(movie|tv)_[1-9][0-9]*$`
+(`canonicalWatchlistDocId` at firestore.rules:333, `canonicalSwipeDocId` at :950 — `grep -n
+"matches('\^(movie|tv)"` returns exactly those two lines, both on the new expression, so no third
+copy was left behind). One `assertSucceeds(movie_0)` per block is REMOVED and `movie_0` + `tv_0`
+appear instead as two new rows in each block's deny `it.each`.
+
+**Mutation evidence.** The coordinator's own run (not re-run here — the brief forbade mutating a
+shared tree while a sibling reviewer was live): old regex restored in both copies → exactly 4 red
+of 346, the four new deny rows, 342 green; restored, clean control 346/346. `npm run test:rules`
+6 files / 346 tests; `npm test` 260 files / 4300 passed / 4 skipped (rules suite is excluded from
+`npm test` by `vitest.config.ts`, so the two runs are correctly reported separately).
+
+**What I verified myself, read-only.**
+- Regex probe (`node -e`, no tree edit) over old / new / `[0-9]+`-slip for
+  `movie_42 tv_42 movie_1 tv_1 movie_0 tv_0 movie_042 603 movie_ MOVIE_42 movie_1_2`: the 4 red
+  rows are exactly the two `_0` ids × two blocks (matches the reported count), and the ONLY
+  fixtures whose verdict moves under the `*`→`+` slip are the two new positive controls
+  `movie_1` (watchlist) and `tv_1` (swipes).
+- `grep -no "'\(movie\|tv\)_[0-9]'" src/test/rules/firestore-rules.test.ts` → the only
+  single-digit canonical ids in that file are the two new controls (plus `_0`, which the slip
+  leaves denied). Single-digit ids in `available-notify-orchestrator` / `tmdb-sweep-orchestrator`
+  do NOT falsify the comment's claim: those files (and `community-ratings`,
+  `retention-cleanup`) boot `initializeTestEnvironment` with an inline `OPEN_RULES` string —
+  only `firestore-rules.test.ts` and `account-deletion.test.ts` read the real `firestore.rules`,
+  and the latter never creates a canonical single-digit id through rules (its `movie_0` and its
+  460 `m${i}` docs are seeded via `withSecurityRulesDisabled`).
+- The comment's factual reversal-reason: `docToItem(data)` (WatchlistContext.tsx:118–122, fed by
+  `snap.docs.map(d => docToItem(d.data()))` at :538) reads `data.tmdbId` and never the doc id —
+  so the retired "a document nobody reads" justification really was false, and the reversal's
+  stated reason is dead in code, not just in the diff's own prose.
+- `allow read, delete: if isOwner(uid)` + unguarded `allow update` (firestore.rules:258, :365)
+  back the "CREATE-only, so a pre-existing `_0` doc still reads, updates and deletes" claim.
+- `toExportDocs` (dataExport.ts:117–122) maps `d.id` straight through — the export test's
+  premise holds and its `id` assertion kills an `id: String(data.tmdbId)`-style mutant alone.
+- The two alias `it.each` tables were diffed line-for-line after stripping indentation and the
+  swipes-only path-traversal note: IDENTICAL, per BIN-766's audit convention, and still a
+  superset of `ALIASES_OF_42` in `mediaTypeDocId.parity.test.ts` (unchanged, 5 entries).
+- Count re-derived by hand (`grep -rn 'mediaTypeDocId(' src functions` + reading each rules match
+  block): five CLIENT-WRITABLE mediaTypeDocId-keyed collections lack a doc-id guard
+  (`episodeProgress`, `notInterested`, `watchlistTags`, `watchlistNotes`,
+  `groups/{gid}/watchlist`); three more are keyed the same way and are `allow write: if false`
+  (`streamingOffers`, `priceHistory`, `titleRatingsAggregate`).
+
+**Findings.** 0 blocking. Three non-blocking:
+1. `firestore.rules:947–948` — the new sentence "…fem andra samlingar nycklade med
+   `mediaTypeDocId()` har ingen doc-id-spärr alls" is true only under an unstated
+   client-writable qualifier (eight by its literal wording); its first half restates
+   ":928 Gäller BARA create". Strike the sentence rather than re-count it.
+2. `dataExport.coverage.test.ts:218` — `mockResolvedValue` permanently replaces the `beforeAll`
+   snapshot mock for the rest of the file. No sibling is green for the wrong reason today (they
+   read `exported`, captured in `beforeAll`, or grep source text; no `mockReset`/`restoreMocks`
+   in `vitest.config.ts`), but the next test appended inherits the phantom-only snapshots.
+   `mockResolvedValueOnce`.
+3. The `*`→`+` slip that both new positive controls exist for was NOT among the mutations run;
+   only the old-regex mutant was. Deterministic by regex semantics (probe above), so a
+   recommendation, not a defect: one extra run converts it to a measured claim.
+
+**Characterisations (not findings).** The two new grandfather tests (`a pre-existing movie_0 item
+can still be edited and deleted`, `a pre-existing movie_0 doc can still receive a NEW vote key`)
+are green BEFORE and AFTER this diff — they pin the create-only scope, and the mutations they
+would catch (moving the guard onto `allow update`/`allow delete`) redden the pre-existing `'603'`
+siblings in lockstep, so they add no incremental mutation coverage. Right to keep anyway: they
+are the decided #27/#6 proposition that no migration is needed, and their comments say exactly
+that ("the grandfather test above only covers `'603'`"). Same shape in
+`account-deletion.test.ts`: its comment says the Art. 17 property is "a property no test held
+before this one", but the sibling 460-doc chunking test already seeds ids (`m0`…`m459`) that
+`parseTmdbIdFromDocId` also rejects, so the property was incidentally held; the new test names
+the shape, which is worth having. Both new emulator tests DO drive real code — the real cascade
+(`collectUserDataSnapshots → collectDeletionRefs → applyDeletionPlan`) against the real rules as
+the authed owner, and the real `buildUserExport`/`toExportDocs` with only the userData kernel and
+`./db` mocked.
+
+**Informational.** `tasks/plan-bin797.md` is untracked; its line references
+(`firestore-rules.test.ts:400–403`, `:1597–1605`) are already stale against the staged bytes
+(400–405, 1615–1618) — the standing "a line number in a plan is false in the same commit" class.
+Don't stage it; if it must be kept, name the tests instead of the lines.
+
+**Verdict**: pass, 0 blocking. Knowledge folded IN PLACE into the two existing bullets it belongs
+to (the rules-comment-count bullet under "Firestore rules testing", and the "a MOCK edit rewrites
+the contract every sibling runs under" clause under "Review protocol & scope discipline"); no new
+bullet added.
+
+## 2026-08-24 — BIN-797 RE-REVIEW (round 2): three round-1 findings closed, one new comment-scope finding
+
+Re-review at HEAD `9b23aeb`, staged tree, 10 paths. `git rev-parse :<f>` == `git hash-object <f>`
+for all ten at start; re-pinned at end (see verdict). Files opened with `Read` this run:
+`src/test/rules/firestore-rules.test.ts`, `src/test/rules/account-deletion.test.ts`,
+`src/lib/firebase/dataExport.coverage.test.ts`, `functions/src/communityRatings/runAggregate.test.ts`,
+`firestore.rules`, `.claude/rules/data-model.md` (+ `tasks/plan-bin797.md`, untracked).
+
+### Round-1 findings, graded
+
+1. **"fem andra samlingar" sentence — STRUCK, correct.** `grep -rn "fem andra" firestore.rules`
+   and `git show HEAD:firestore.rules | grep "fem andra"` both empty. Nothing load-bearing left
+   with it: the pair-invariant half survives verbatim in the new comment ("Its twin is
+   `canonicalSwipeDocId` … must be narrowed together"), and the panel condition it was written
+   for (plan B6) is a PROHIBITION — "no replacement comment may claim the phantom-id-0 class is
+   closed" — not an obligation to state the non-closure. The new comment makes no closure claim.
+   The strike is the right shape: the disputed half was a COUNT (five client-writable vs eight by
+   the sentence's literal wording), and a re-count would have carried a new unmeasured number.
+2. **`mockResolvedValueOnce` — closes it, and cannot pass on the base fixture.** Verified the
+   semantics rather than the diff: `buildUserExport` has exactly ONE call site of the mocked
+   `collectUserDataSnapshots` (`dataExport.ts:125`, `grep -n` → single hit), so the `Once` is
+   consumed by this test's own call and the `beforeAll` `mockResolvedValue` resumes for whatever
+   is appended next; `vitest.config.ts` + `vitest.setup.ts` set no `clearMocks`/`mockReset`/
+   `restoreMocks` (grep → only MSW's `server.resetHandlers()`), so the base value genuinely
+   survives. Not green for the wrong reason: had the `Once` NOT been consumed, the base fixture
+   yields `[{id:'doc1'}]` and `expect(withPhantom.watchlist[0].id).toBe('movie_0')` reddens — the
+   assertion proves its own mock plumbing. Every sibling after it reads the `exported` object
+   built in `beforeAll` or greps source text, so ordering is safe in both directions.
+3. **The mutation I asked for was run, and I re-derived both tallies read-only.** Reported:
+   mutant B (`*`→`+`, both copies) = exactly 2 red, one "accepts the two shapes mediaTypeDocId()
+   actually writes" per block, 344 green; mutant A (old regex restored) = exactly 4 red, the four
+   new `_0` deny rows. Re-derived without touching the tree, per the r1 technique — `node -e`
+   probe of cur / slip / old over every id both blocks use: the slip moves EXACTLY `movie_1` and
+   `tv_1`; the old regex moves EXACTLY `movie_0` and `tv_0`. Two blocks × 1 positive = 2, two
+   blocks × 2 deny rows = 4. Both tallies are structurally forced. The counterfactual half of the
+   comment ("would still pass 100% of this suite") also holds: `grep -nE "'(movie|tv)_[0-9]'"`
+   over `src/test/rules/` finds one-digit ids elsewhere only in `tmdb-sweep-orchestrator.test.ts`,
+   which boots `OPEN_RULES` (checked every file's `initializeTestEnvironment({rules: …})`
+   argument: 2 of 6 read the real file), so no rules mutant can reach them.
+
+### New this round (non-blocking)
+
+- **The corrected scope word is still literally false.** `firestore-rules.test.ts:400` and
+  `:1615` now read "Without this line the block carries no one-digit id at all" — r1's wording
+  said "the file" and was corrected because the same commit added `tv_1` in the sibling block.
+  But each block ALSO gained `['movie_0', …]` / `['tv_0', …]` deny rows twelve lines below the
+  sentence, plus a grandfathered `movie_0` fixture. Measured with
+  `awk 'NR>=391 && NR<=587' … | grep -nE "(movie|tv)_[0-9]([^0-9]|$)"` → 8 hits in the watchlist
+  block. True only of ids the guard ACCEPTS. Remedy is a STRIKE of the counting clause; the next
+  clause (the named `*`→`+` mutant) is the measured half and stands alone. Filed, not fixed —
+  a fourth edit round on a comment re-stales the ledger for zero test-behaviour change.
+- **`docs/workflow-map.html` quotes the OLD regex verbatim** in the BIN-624 swipes flow
+  (`create requires ^(movie|tv)_(0|[1-9][0-9]*)$`), so this commit falsifies it.
+  `.claude/state/workflow-map-stale.json` already carries `"triggers": ["firestore.rules"]`
+  (stamped 2026-08-23T22:09Z) — the mechanism fired, the re-trace has not happened, and
+  `check-workflow-map.mjs` cannot catch it (it checks paths exist, not prose). Owed as its OWN
+  commit (plan E1; the map is referenced by 11 rules flows).
+- **Plan C4's delete half is satisfied in one collection, not both.** Watchlist has
+  update + delete on a pre-existing `movie_0`; swipes has update only. Zero mutation value —
+  `grep -n "canonicalWatchlistDocId\|canonicalSwipeDocId" firestore.rules` shows both call sites
+  under `allow create` (362, 1062) and the swipes `allow delete` (1082) is host-only and never
+  references the guard — but it is a stated criterion, so it is recorded rather than dropped.
+- Plan control numbers drifted from the tree (both `it.each` tables went 10 → **12** rows, not
+  the planned 11; A2's line numbers 329/943/359/1059 are stale). Scratch doc, untracked; do not
+  re-number it, and do not delete it either — D2/E1–E4 still name open work.
+
+### Nothing weakened
+
+The two `assertSucceeds(… 'movie_0' …)` lines removed from the "accepts the two shapes" tests are
+a legitimate flip traced against the new rule text (the rule genuinely narrowed), and each is
+replaced by MORE coverage in the same block: two deny rows, a single-digit positive control, and
+a grandfather update/delete test. No `.skip`/`.only`, no loosened matcher, no expectation rewritten
+to match output. `runAggregate.test.ts` is comment-only; `data-model.md`'s regex is byte-identical
+to `firestore.rules`' (correct-in-place carve-out: a literal readable straight off the code).
+
+Verdict: pass (0 blocking). Bullet updated in place under "Firestore rules testing"; no new
+bullet added.
+
+## 2026-08-24 — BIN-797 RE-REVIEW (round 3): the counting clause struck, nothing left that needs counting
+
+Re-review at HEAD `9b23aeb`, staged tree, 10 paths. `git rev-parse :<f>` == `git hash-object <f>`
+for all ten at start AND at end; HEAD unchanged across the run; `git status --porcelain` shows the
+same 10 `M` plus the untracked `tasks/plan-bin797.md`. No mutation run this round (the task
+forbade touching the tree); every check below is read-only.
+
+Files opened with `Read` this run, in full: `src/test/rules/firestore-rules.test.ts` (2478 lines,
+three chunks), `src/test/rules/account-deletion.test.ts`, `src/lib/firebase/dataExport.coverage.test.ts`,
+`functions/src/communityRatings/runAggregate.test.ts`, `firestore.rules` (two chunks),
+`.claude/rules/data-model.md`.
+
+### The change since round 2
+
+`src/test/rules/firestore-rules.test.ts` only. Both copies of the BIN-797 comment (`:400` and
+`:1614`) now read, identically:
+
+```
+// BIN-797: the SINGLE-DIGIT boundary — `^(movie|tv)_[1-9][0-9]+$`, a `*`→`+` slip,
+// rejects every title numbered 1-9. This is the pin that reddens under it.
+```
+
+Round 2's finding was that "Without this line the block carries no one-digit id at all" is false
+(each block also carries `movie_0`/`tv_0` deny rows plus a grandfathered `movie_0` fixture). It was
+STRUCK, not reworded a third time. "still pass 100% of this suite" is gone too.
+
+### Grading the surviving sentence, clause by clause
+
+1. **"`^(movie|tv)_[1-9][0-9]+$`, a `*`→`+` slip"** — the live rule is `^(movie|tv)_[1-9][0-9]*$`
+   at `firestore.rules:333` and `:947` (both read this run). The quoted regex is the MUTANT and
+   says so in the same breath. Directly readable, no counting.
+2. **"rejects every title numbered 1-9"** — `[1-9][0-9]+` requires ≥2 digits. Arithmetic off the
+   quoted regex. Note it is an "every", not an "only", so it makes no exclusivity claim.
+3. **"This is the pin that reddens under it"** — the one clause that is still a tally (definite
+   article = "exactly one here"). Re-derived read-only rather than filed:
+   - `grep -nE "(movie|tv)_[0-9]('|\"|\`)" src/test/rules/firestore-rules.test.ts` → the only
+     single-digit namespaced ids in the file are `movie_1` (line 402, `assertSucceeds`), `tv_1`
+     (line 1616, `assertSucceeds`), and the `movie_0`/`tv_0` occurrences, which are deny rows
+     (421/422, 1635/1636) or rules-disabled seeds + UPDATE/DELETE paths (448/452/455, 1667/1671).
+     Update and delete never reach `canonicalWatchlistDocId`/`canonicalSwipeDocId` — both are
+     wired only into `allow create` (rules 361-362 and 1062).
+   - `grep -n "rules:" src/test/rules/*.ts` → 4 of the 6 emulator suites boot a local `OPEN_RULES`
+     string (`tmdb-sweep-`, `available-notify-`, `community-ratings-`, `retention-cleanup-`
+     orchestrators). Only `firestore-rules.test.ts` and `account-deletion.test.ts` read the real
+     file, and the latter's `movie_0` doc is written through `seed()` →
+     `withSecurityRulesDisabled`. So `tmdb-sweep-orchestrator.test.ts`'s `movie_1..movie_5`
+     watchlist seeds cannot redden under the slip.
+   - Conclusion: exactly one accepting single-digit create per block, two in the file. Each
+     comment's local "the pin" is TRUE, and round 2's handed-down "mutant B = exactly 2 red, one
+     per block" is structurally forced. Not a finding — a true sentence is not a defect, and a
+     fourth edit round on a comment re-stales the ledger for zero test-behaviour change.
+
+### The other prose in the diff, re-walked against the code
+
+- `firestore.rules:327-328` "`docToItem(d.data())` in WatchlistContext never sees the doc id, it
+  reads `data.tmdbId`" — `WatchlistContext.tsx:118` `function docToItem(data: Record<string,
+  unknown>)`, single parameter, `tmdbId: data.tmdbId as number` at :122. True.
+- `firestore.rules:329` "CREATE-only, so a pre-existing `_0` doc still reads, updates and deletes"
+  — `allow read, delete: if isOwner(uid)` (:258) and `allow update` (:365) carry no id guard. True.
+- `dataExport.coverage.test.ts:206` "`toExportDocs` maps `d.id` straight through" — `dataExport.ts:117-122`,
+  `snap.docs.map(d => ({ id: d.id, … }))`. True.
+- "`parseTmdbIdFromDocId` rejects `movie_0`" (both new test comments) — `mediaTypeDocId.ts:78`
+  `const CANONICAL_TMDB_ID = /^[1-9][0-9]*$/`, used at :107. True, and the rules regex is now the
+  same expression namespaced, so reader and rule agree by construction.
+- `runAggregate.test.ts:87-88` lost its "the rules deliberately still permit creating the DOC"
+  sentence (now false) and reads "This floor is what stops it becoming a rating anyone counts."
+  Still true after BIN-797: a GRANDFATHERED `movie_0` is still updatable, so `aggregateDocId`'s
+  floor remains the guard that matters. No count.
+- `.claude/rules/data-model.md:19` regex is byte-identical to `firestore.rules`' — correct-in-place,
+  the literal is readable straight off the code.
+
+### Nothing weakened
+
+No `.skip`/`.only`/`.todo`/`xit`/`xdescribe` anywhere in the four test files (grep, none). The two
+removed `assertSucceeds(… 'movie_0' …)` lines are a legitimate flip traced to a rule that genuinely
+narrowed, and each block gained strictly more: two `assertFails` alias rows, a single-digit positive
+control, and a grandfather test (edit+delete for watchlist, new-vote-key for swipes). No matcher
+loosened, no expectation rewritten to match output.
+
+### Round 1/2 findings still open, for the record — not re-filed, not struck
+
+- **B — `docs/workflow-map.html` quotes the OLD regex** (`create requires ^(movie|tv)_(0|[1-9][0-9]*)$`
+  in the BIN-624 swipes flow), so this commit falsifies it. `.claude/state/workflow-map-stale.json`
+  still carries `"triggers": ["firestore.rules"]`. Owed as its OWN commit per plan E1. Open work;
+  the record of it stays.
+- **C — plan C4's delete half lands in watchlist only.** Confirmed again from the rules read:
+  `allow delete` on swipes (`firestore.rules:1082-1083`) is host-only and never references
+  `canonicalSwipeDocId`, so a swipes delete test would have zero mutation value. The deviation
+  going in the commit message rather than into a vacuous test is the right call.
+
+Verdict: pass (0 blocking). Bullet updated in place under "Review protocol & scope discipline"
+(the comment-only-fix bullet); no new bullet added.
+
+## 2026-08-24 — BIN-797 r4 (final): the three strikes verified clean, PASS
+
+**Scope reviewed** (all opened with `Read` this run): `src/test/rules/firestore-rules.test.ts`,
+`src/test/rules/account-deletion.test.ts`, `src/lib/firebase/dataExport.coverage.test.ts`,
+`functions/src/communityRatings/runAggregate.test.ts`, `firestore.rules`,
+`.claude/rules/data-model.md`. Tree at HEAD `9b23aeb`, BIN-797 work STAGED (uncommitted).
+Read `.claude/rules/accepted-deviations.md` first; nothing filed below is listed there.
+
+**Diff reviewed.** `git diff --cached` over the six files. Both copies of the guard go
+`^(movie|tv)_(0|[1-9][0-9]*)$` → `^(movie|tv)_[1-9][0-9]*$` (`canonicalWatchlistDocId`
+firestore.rules:332-334, `canonicalSwipeDocId` 946-948). Tests added: `movie_1` accept +
+`['movie_0'…]`/`['tv_0'…]` deny rows + a grandfather edit/delete test in the watchlist block;
+`tv_1` accept + the same two deny rows + a grandfather new-vote-key test in the swipes block;
+a `movie_0` Art. 17 erasure test in `account-deletion.test.ts`; a `movie_0` export test in
+`dataExport.coverage.test.ts`. `runAggregate.test.ts` and `data-model.md` had stale
+"`movie_0` stays creatable" prose corrected.
+
+**The three strikes, all confirmed pure deletions with no replacement text:**
+1. `account-deletion.test.ts` — `because "the erasure happens to not parse ids" is a property
+   no test held before this one` GONE. Surviving comment stands alone and carries no novelty
+   claim. The test is NOT redundant with `flushes every chunk…` (460 docs `m0`…`m459`): those
+   exit `parseTmdbIdFromDocId` at the PREFIX check, `movie_0` exits at the id-0 floor —
+   different branches of the same function.
+2. `dataExport.coverage.test.ts` — `Art. 15` and the "invariant that holds only by
+   coincidence" clause GONE. `grep -n "Art\."` on the file returns only Art. 20 / Art. 17,
+   consistent with the header's framing. Test still non-vacuous: `toHaveLength(1)` +
+   `id === 'movie_0'`, both dependent on `toExportDocs` (dataExport.ts:117-122) mapping `d.id`
+   straight through; `mockResolvedValueOnce` is safe because `buildUserExport` calls
+   `collectUserDataSnapshots` exactly once (dataExport.ts:125).
+3. `firestore.rules:916-918` — `(ingen inledande nolla)` GONE.
+`grep` for `coincidence|Art\. 15|no test held` across the four reviewed source files and for
+`inledande nolla` across `firestore.rules` + `data-model.md`: zero hits, no dangling fragments.
+
+**Every quantifier in ADDED or SURVIVING text, re-counted with a command:**
+- "the cascade walks snapshot docs and their refs, never a re-derived id" — TRUE.
+  `grep -c "mediaTypeDocId\|parseTmdbIdFromDocId\|resolveTmdbId" src/lib/firebase/accountDeletion.ts`
+  → **0**; `grep -c "refs.push\|ref: "` → **49**; zero template-literal `doc(…\`…\`)` ids.
+- "`parseTmdbIdFromDocId` rejects id 0 since BIN-646" — TRUE.
+  `CANONICAL_TMDB_ID = /^[1-9][0-9]*$/` (mediaTypeDocId.ts:78), used at :107.
+- "`docToItem` reads `data.tmdbId`, never the doc id" — TRUE. Signature is
+  `docToItem(data: Record<string, unknown>)` (WatchlistContext.tsx:118), called as
+  `docToItem(d.data())` (:538); `tmdbId` read from the body at :122.
+- "CREATE-only, so a pre-existing `_0` doc still reads, updates and deletes" — TRUE.
+  `awk` over firestore.rules 200-384: `allow read, delete: if isOwner(uid)` (:258),
+  `allow update` (:365) and all four `allow read` clauses (:372-383) carry no id guard;
+  only `allow create` (:361-364) does.
+- "the grandfather test above only covers `'603'`" — TRUE, directly readable at :432-439.
+- "`^(movie|tv)_[1-9][0-9]+$`, a `*`→`+` slip, rejects every title numbered 1-9. This is the
+  pin that reddens under it" — TRUE and exactly placed.
+  `grep -n "'\(movie\|tv\)_[0-9]'" src/test/rules/firestore-rules.test.ts` → the only
+  single-digit CREATE-accept fixtures are `movie_1` (:402, watchlist) and `tv_1` (:1616,
+  swipes), one per block. The `movie_0`/`tv_0` hits at :448/452/455/1667/1671 are
+  update/delete paths, unreachable by a create-regex mutant.
+- "The same alias table the swipes guard uses… Kept identical on purpose" — TRUE, verified
+  mechanically: `sed -n '410,423p'` vs `sed -n '1624,1637p'`, whitespace-stripped, `diff`
+  clean across all 12 rows (only the post-table line differs, as expected). Still a superset
+  of `ALIASES_OF_42`'s five entries in `src/lib/mediaTypeDocId.parity.test.ts`.
+- "smalnade av `_0` i båda samtidigt" — TRUE, both regex edits are in the same staged diff.
+- `data-model.md`'s `` `^(movie|tv)_[1-9][0-9]*$` sedan BIN-797 `` — matches both rules copies
+  byte-for-byte.
+- NOT re-opened: `firestore-rules.test.ts:378`'s "35 fixtures" is a BIN-766-era count this
+  diff does not disturb (no fixture was renamed off a bare-numeric id here).
+
+**Mutations.** Not re-run — the brief supplied them and forbade mutating the tree. Both
+reported counts cross-checked read-only and found internally consistent:
+- Mutant A (restore `(0|[1-9][0-9]*)` in both copies) → **4 red**: the four
+  `denies CREATE at movie_0 / tv_0` rows, two per block. No other fixture's verdict moves.
+- Mutant B (`[0-9]*`→`[0-9]+`) → **2 red, one per block**: `movie_1` and `tv_1`, the only
+  single-digit accepts.
+- Suite scoping confirmed by reading each `initializeTestEnvironment({ rules: … })`: of the six
+  files in `src/test/rules/`, only `firestore-rules.test.ts` and `account-deletion.test.ts`
+  load the real `firestore.rules`. `tmdb-sweep-orchestrator.test.ts` (:44-57),
+  `available-notify-orchestrator` (:81), `community-ratings-orchestrator` (:94) and
+  `retention-cleanup-orchestrator` (:79) all boot an inline `OPEN_RULES`
+  (`allow read, write: if true`) — which is why `tmdb-sweep`'s `movie_1`…`movie_9` and
+  `movie_9` group fixtures cannot add a red under either mutant, and why "exactly 2" / "exactly
+  4" are the right numbers rather than an undercount.
+- Reported suite results taken as given: `npm run test:rules` 6 files / 346 tests;
+  `dataExport.coverage.test.ts` 7/7 — the latter cross-checked by counting `it(` blocks in the
+  file (**7**).
+
+**Findings: 0 blocking.** Three non-blocking carry-forwards, none filed as gaps:
+(a) `docs/workflow-map.html:1605` still quotes the old regex — named in the brief as
+known/deliberate, owed its OWN commit directly after (map edits are never bundled with feature
+code). Open work, recorded here so it is not lost.
+(b) No automated parity test pins the two rules regex copies byte-identical; behavioural
+coverage (2 deny rows + 1 single-digit accept PER block) means a one-sided drift reddens in
+the drifting block, so the risk is covered. Pre-existing, not introduced here.
+(c) Nobody ran the mutant that adds `canonicalWatchlistDocId(itemId)` to `allow update` /
+`allow delete`. The two grandfather tests would demonstrably flip under it — those rules carry
+no id guard (:258, :365) — so their non-vacuity is readable without a run. Worth adding if
+anyone re-measures; not required.
+
+**Verdict: pass (0 blocking).**

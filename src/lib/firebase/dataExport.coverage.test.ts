@@ -199,6 +199,32 @@ describe('GDPR export/delete completeness (BIN-328)', () => {
     }
   });
 
+  // BIN-797 / #6 Data Protection Officer. The rules now refuse to CREATE a `movie_0`
+  // watchlist doc, but any that already exist stay. The export must still reach them,
+  // or it has a hole exactly where the client reader has one: `parseTmdbIdFromDocId`
+  // rejects `movie_0`, so an export that gated on it would silently omit the row.
+  // It does not gate — `toExportDocs` maps `d.id` straight through — and this pins that.
+  it('a movie_0 watchlist doc still reaches the export, id dumped raw', async () => {
+    const snaps = Object.fromEntries(
+      coverageKeys.map(k => [
+        k,
+        (k === 'profileSnap' || k === 'publicProfileSnap') ? fakeDocSnap()
+          : k === 'watchlistSnap'
+            ? ({ docs: [{ id: 'movie_0', data: () => ({ tmdbId: 0, mediaType: 'movie' }) }] } as unknown as QuerySnapshot)
+            : fakeQuerySnap(),
+      ]),
+    ) as unknown as UserDataSnapshots;
+    // `Once`, not `mockResolvedValue`: the shared beforeAll fixture must resume for
+    // whatever test is appended after this one, or it silently inherits a watchlist
+    // of exactly one phantom doc.
+    vi.mocked(collectUserDataSnapshots).mockResolvedValueOnce(snaps);
+
+    const withPhantom = await buildUserExport('test-uid');
+
+    expect(withPhantom.watchlist).toHaveLength(1);
+    expect(withPhantom.watchlist[0].id).toBe('movie_0');
+  });
+
   it('every collection field in BingeExport has a backing snap (no orphan export field)', () => {
     const mappedTargets = new Set(
       coverageKeys.map(k => COVERAGE[k].export).filter((e): e is keyof BingeExport => e !== null),

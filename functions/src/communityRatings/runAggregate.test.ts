@@ -84,9 +84,8 @@ describe('aggregateDocId — the numeric part is canonicalised, not trusted (BIN
 
   it('id 0 is skipped, not written — TMDB numbers titles from 1', () => {
     // BIN-646: `Number.isFinite(0)` used to let a phantom `movie_0` past every
-    // downstream guard as if it named a title. `firestore.rules`' shape guard
-    // deliberately still permits creating the DOC (matching the swipes residual,
-    // BIN-797) — this is what stops it becoming a rating anyone counts.
+    // downstream guard as if it named a title. This floor is what stops it
+    // becoming a rating anyone counts.
     const log = logger();
     expect(aggregateDocId(ev('movie_0'), log)).toBeNull();
     expect(log.warn.mock.calls[0][0]).toContain('unparseable tmdbId');

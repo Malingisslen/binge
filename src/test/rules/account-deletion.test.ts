@@ -277,6 +277,28 @@ describe('GDPR account-deletion erasure (BIN-347 Part 2)', () => {
     expect(memberUids, 'my uid removed from member-group memberUids[]').toEqual([OTHER]);
   });
 
+  // BIN-797 / #6 Data Protection Officer. The rules now refuse to CREATE a `movie_0`
+  // watchlist doc; any that already exist stay, and the client reader cannot resolve
+  // their id (`parseTmdbIdFromDocId` rejects id 0 since BIN-646). Art. 17 must still
+  // reach them. It does — the cascade walks snapshot docs and their refs, never a
+  // re-derived id — and this pins it.
+  it('erases a watchlist doc whose id the client reader cannot resolve (movie_0)', async () => {
+    await seed(async db => {
+      await fsMod.setDoc(fsMod.doc(db, 'users', ME), { username: null });
+      await fsMod.setDoc(fsMod.doc(db, 'users', ME, 'watchlist', 'movie_0'), {
+        tmdbId: 0, mediaType: 'movie', status: 'vill_se',
+      });
+    });
+    expect(await exists(['users', ME, 'watchlist', 'movie_0']), 'seeded').toBe(true);
+
+    await runDeletion();
+
+    expect(
+      await exists(['users', ME, 'watchlist', 'movie_0']),
+      'a doc the client cannot name must still be erased (Art. 17)',
+    ).toBe(false);
+  });
+
   it('rules BLOCK a client delete on followers (follower-owned) and reports (retained)', async () => {
     await seedFullAccount();
     const db = meDb();

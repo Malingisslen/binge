@@ -397,12 +397,10 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'tv_42'), {
       ...validWatchlist(), tmdbId: 42, mediaType: 'tv',
     }));
-    // `movie_0` stays creatable, matching the swipes residual (BIN-797) rather than
-    // quietly diverging from it. TMDB numbers titles from 1, so this names nothing —
-    // and `aggregateDocId` skips it with a warning (runAggregate.test.ts pins that), so
-    // the effect is a document nobody reads, not a rating that silently counts.
-    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_0'), {
-      ...validWatchlist(), tmdbId: 0,
+    // BIN-797: the SINGLE-DIGIT boundary — `^(movie|tv)_[1-9][0-9]+$`, a `*`→`+` slip,
+    // rejects every title numbered 1-9. This is the pin that reddens under it.
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_1'), {
+      ...validWatchlist(), tmdbId: 1,
     }));
   });
 
@@ -420,6 +418,8 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     ['movie_xyz', 'non-numeric suffix'],
     ['603', 'bare legacy id — creatable before this guard, not any more'],
     ['MOVIE_42', 'prefix case must match — the regex is lowercase-anchored'],
+    ['movie_0', 'phantom id 0 — TMDB numbers titles from 1 (BIN-797)'],
+    ['tv_0', 'phantom id 0, tv namespace (BIN-797)'],
   ])('denies CREATE at %s (%s)', async (docId) => {
     await assertFails(setDoc(rawWatchlistRef(ownerDb(), docId), validWatchlist()));
   });
@@ -436,6 +436,23 @@ describe('users/{uid}/watchlist/{id} doc-id format guard (BIN-766)', () => {
     await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), '603'), {
       status: 'sedd', updatedAt: serverTimestamp(),
     }, { merge: true }));
+  });
+
+  // BIN-797 narrowed CREATE to reject `_0`. That is only safe without a migration if a
+  // document already sitting on such an id stays fully usable — otherwise the owner is
+  // locked out of a row they can see (WatchlistContext renders it: `docToItem` reads
+  // `data.tmdbId`, never the doc id) and, worse, cannot erase it (Art. 17). #27 and #6
+  // both asked for this; the grandfather test above only covers `'603'`.
+  it('a pre-existing movie_0 item can still be edited and deleted', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'watchlist', 'movie_0'), {
+        ...validWatchlist(), tmdbId: 0,
+      });
+    });
+    await assertSucceeds(setDoc(rawWatchlistRef(ownerDb(), 'movie_0'), {
+      status: 'sedd', updatedAt: serverTimestamp(),
+    }, { merge: true }));
+    await assertSucceeds(deleteDoc(rawWatchlistRef(ownerDb(), 'movie_0')));
   });
 
   // ── A two-field merge onto a title deleted mid-flight (BIN-941) ────────────────────
@@ -1594,16 +1611,9 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
       await seedParticipants();
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_42'), firstVote, { merge: true }));
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'tv_42'), firstVote, { merge: true }));
-      // `movie_0` is still WRITABLE here, and since BIN-646 the client refuses to
-      // READ it: TMDB numbers titles from 1, so no genuine title is 0, and
-      // `Number.isFinite(0)` was letting a `movie_0` doc past every downstream
-      // guard as if it named one. So this line no longer says "a legitimate id
-      // must stay writable" — it records a KNOWN residual: the rules regex is
-      // deliberately wider than the client's reader until the guard is narrowed,
-      // which is a firestore.rules change with its own plan and deploy (BIN-797).
-      // The effect meanwhile is a doc nobody can create by accident and nobody
-      // reads — not a vote that silently counts.
-      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_0'), firstVote, { merge: true }));
+      // BIN-797: the SINGLE-DIGIT boundary — `^(movie|tv)_[1-9][0-9]+$`, a `*`→`+` slip,
+      // rejects every title numbered 1-9. This is the pin that reddens under it.
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'tv_1'), firstVote, { merge: true }));
     });
 
     // The alias set from BIN-618/636 — this list must stay a SUPERSET of
@@ -1622,6 +1632,8 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
       ['movie_xyz', 'non-numeric suffix'],
       ['603', 'bare legacy id — creatable before this guard, not any more'],
       ['MOVIE_42', 'prefix case must match — the regex is lowercase-anchored'],
+      ['movie_0', 'phantom id 0 — TMDB numbers titles from 1 (BIN-797)'],
+      ['tv_0', 'phantom id 0, tv namespace (BIN-797)'],
       // Not asserted: a path-traversal id like `../evil`. The Firestore SDK
       // rejects it as a malformed reference before any rule is consulted, so
       // the case would pass without the guard and prove nothing.
@@ -1642,6 +1654,21 @@ describe('sessions/{id}/swipes — vote binding (BIN-509)', () => {
         });
       });
       await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), '603'), {
+        votes: { [OWNER]: 'no' }, updatedAt: serverTimestamp(),
+      }, { merge: true }));
+    });
+
+    // BIN-797's create-narrowing is only safe without a migration if a session that
+    // already holds a `_0` document keeps working. Same proposition as the bare-numeric
+    // grandfather above, on the shape this ticket closed (#27).
+    it('a pre-existing movie_0 doc can still receive a NEW vote key', async () => {
+      await seedParticipants();
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'sessions', 's1', 'swipes', 'movie_0'), {
+          votes: { other_uid: 'yes' }, updatedAt: serverTimestamp(),
+        });
+      });
+      await assertSucceeds(setDoc(rawSwipeRef(ownerDb(), 'movie_0'), {
         votes: { [OWNER]: 'no' }, updatedAt: serverTimestamp(),
       }, { merge: true }));
     });
