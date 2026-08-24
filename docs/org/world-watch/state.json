@@ -79,14 +79,14 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-08-17",
+      "lastScan": "2026-08-24",
       "snapshot": {
-        "nextjs-advisories": "2026-08-10: Direct WebFetch worked. No advisories published after 2026-07-21 (same 9-CVE July batch already tracked, issue #44 closed). package-lock.json still resolves next@16.2.12, still patched. No change.",
-        "ghsa-npm": "2026-08-10: Direct WebFetch worked. No new advisories surfaced this cycle for next, react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* packages. No change.",
-        "firebase-js-sdk-releases": "2026-08-10: Direct WebFetch worked. New release since last cycle: firebase@12.17.1 (2026-08-04) — bug fixes only (database-compat peerDeps-unbundling regression, data-connect backoff/header changes), no new security content; follows 12.17.0 (2026-07-30, already tracked). package-lock.json still resolves firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0 — still below the ReDoS-patched versions from last cycle. Issue #47 (opened 2026-08-03) remains OPEN and unresolved; not re-filed.",
-        "firestore-rules-relnotes": "2026-08-10: Direct WebFetch blocked by egress proxy (EGRESS_BLOCKED on firebase.google.com, not a 403 this time). WebSearch fallback found no entries dated after 2026-01-21. No rules-language change. No change.",
-        "recaptcha-enterprise-relnotes": "2026-08-10: Direct WebFetch blocked by egress proxy (docs.cloud.google.com). WebSearch fallback found no entries dated August 2026, and nothing affecting ReCaptchaV3Provider usage or App Check integration. No change.",
-        "gh-changelog-dependabot": "2026-08-10: Direct feed fetch blocked by egress proxy (github.blog). WebSearch fallback surfaced one new item since last scan: 'Customize Dependabot pull request branch names' (2026-08-04) — adds pull-request-branch-name options to dependabot.yml (prefix, separators, case, template); config-only, doesn't change how advisories/alerts reach the repo and Binge's dependabot.yml doesn't need it. Not filed."
+        "nextjs-advisories": "2026-08-24: Direct WebFetch worked. No advisories published after 2026-07-21 (same 9-CVE July batch + May 7 middleware-bypass follow-up, already tracked). package-lock.json still resolves next@16.2.12, still patched. No change.",
+        "ghsa-npm": "2026-08-24: Direct WebFetch worked. No advisories for next, react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (JSONata, Keystone, Defuddle, Unleash, NocoBase, node-opcua, logto-tunnel, various MCP servers — all unrelated). No change.",
+        "firebase-js-sdk-releases": "2026-08-24: Direct WebFetch worked. New release since last cycle: firebase@12.18.0 (2026-08-19) — Imagen removal, FunctionsError HTTP-status/URL details, signInWithPopup background-tab fix, App Check token-recognition fix for SQL Connect Realtime, on-device LanguageModel detection fix; no new security content. package-lock.json still resolves firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0 — still below the ReDoS-patched versions (12.17.0/4.17.0/1.15.2). Issue #47 (opened 2026-08-03) confirmed still OPEN this cycle; not re-filed.",
+        "firestore-rules-relnotes": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on firebase.google.com). Not retried this cycle.",
+        "recaptcha-enterprise-relnotes": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on docs.cloud.google.com). Not retried this cycle.",
+        "gh-changelog-dependabot": "2026-08-24: fetch failed, skipped (EGRESS_BLOCKED on github.blog). Not retried this cycle."
       },
       "_lastScanCoverage": "All 6 sources checked (3 direct WebFetch success: nextjs-advisories, ghsa-npm, firebase-js-sdk-releases; 3 required WebSearch fallback after egress-proxy blocks: firestore-rules-relnotes, recaptcha-enterprise-relnotes, gh-changelog-dependabot); repo cross-checked via package-lock.json resolved-version parse (next@16.2.12, firebase@12.12.1, @firebase/firestore@4.14.0, @firebase/util@1.15.0) and issue #47's still-open state.",
       "_janitorLeanScans": [

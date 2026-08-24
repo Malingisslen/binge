@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-08-17",
+  "lastRun": "2026-08-24",
   "dossiersRefreshed": 0,
   "worldWatchRoles": 1,
   "retroDue": true,
   "acceptRate": null,
-  "notes": "Dossier-staleness dir absent (gitignored local state); scanned security-architect (weekly, no material delta); full retro overdue since 2026-07-25; no accept-rate tool in this repo."
+  "notes": "Dossier-staleness dir absent (gitignored local state). World-watch: security-architect scanned (weekly due), no material delta, issue #47 (Firebase SDK ReDoS, still unpatched) re-confirmed open, not re-filed. legal-gdpr-counsel/data-protection-officer not yet due (28/30 days). Full retro overdue since 2026-07-25. No accept-rate tool in this repo. Cruft sweep: bin-505-plan.md left in place (22 unchecked boxes)."
 }
