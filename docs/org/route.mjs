@@ -486,7 +486,11 @@ function readStdin() {
 
 const ROLE_TITLES = { [UNMAPPED_FALLBACK_ROLE]: 'Software Architect' };
 
-function mdBlock(r) {
+// The `--md` form is what the tooling actually consumes: `.claude/shared-plugin.json` sets
+// `delivery.router.command` to `node docs/org/route.mjs --md`, and CLAUDE.md's casting step
+// reads the same block. Exported so route.test.mjs can pin it directly instead of scraping
+// stdout — the surface every gate reads was the one surface no test touched (BIN-832).
+export function mdBlock(r) {
   if (r.tier === 'skip') return '## Stakeholders\n\n_None — trivial / doc-only change (no review tier)._';
   const names = r.panel.map((n) => {
     const role = r.roles.find((x) => x.num === n);

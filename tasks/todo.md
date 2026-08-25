@@ -1,3 +1,346 @@
+# SPRINT 2026-08-25
+
+Planen för DENNA körning, skriven FÖRE bygget. Detta avsnitt är det enda underlaget
+sprinten graderas mot. Nya avsnitt läggs överst; inget arkiveras bort.
+
+6 biljetter i 5 buntar. Router körd på VARJE bunts faktiska filuppsättning vid HEAD
+`b417c62` (rå utdata inklistrad per bunt). Vidgar en kritik eller en fix
+filuppsättningen — kör om `node docs/org/route.mjs --md <filer>` innan bygget
+fortsätter (BIN-766-lärdomen).
+
+**Kapacitetskoll vid urvalet (BIN-744/776/917/976):** arbetaren är denna session, som
+KAN konvenera enskild rollkritik. Samtliga fem buntar routar `medium` → en blind
+kritik från den ägande rollen, körd FÖRE bygget. Ingen bunt routar `top`.
+
+## Ej valda, och varför
+
+| Biljett | Beslut |
+| -- | -- |
+| BIN-852 / BIN-935 / BIN-990 | **Parkerade handbromsar.** Var och en bär en obesvarad "Behöver ditt beslut". Byggs inte autonomt. |
+| BIN-972 | **Disposition redan skriven idag** (2026-08-25, kommentar + flytt till Backlog). Premissen mätt falsk vid HEAD. Ingen ny åtgärd. |
+| BIN-976 | Motorn bor i `C:/claude-plugins` — delad infra som inte får redigeras från en session som startar subagenter (2026-08-03). Tier D, kommenteras. |
+| BIN-971 | **Till stor del överspelad av händelser** — se close-out nedan. Stängs med redovisning, tar ingen byggplats. |
+| BIN-999 | **Tier D.** Kräver Admin-SDK-läsning per uid mot produktion. Kommenteras med exakta steg. |
+| BIN-964 / 965 / 966 / 974 / 977 / 978 / 984–987 / 992 / 995 | Post-mortem-bokföring på buntar vars patchar är förfallna vid HEAD. Ingen kod. Lämnas till ett städpass. |
+| BIN-189 / BIN-521 / BIN-170 | `idea`-etikett → `neverBuildLabels`. |
+| BIN-454 / BIN-402 | Stående "gör aldrig detta" — `mutateEnabled` är Malins konsolåtgärd. |
+
+---
+
+## Bunt A — Routerns utdata och testkorpus (#25 Engineering Manager / Release Manager)
+
+Router, rå utdata på `docs/org/route.mjs docs/org/route.test.mjs`:
+> Tier **medium** · #25 Engineering Manager / Release Manager
+
+### BIN-832 — `--md`/`mdBlock` är oexporterad och helt otestad
+**Tier A** · disposition `build` · router: `medium` · #25
+
+**Mätt vid HEAD `b417c62`:** `mdBlock` deklareras i `docs/org/route.mjs`, används av
+CLI-grenen, exporteras inte. `docs/org/route.test.mjs` importerar
+`{ route, isCodePath, TOOLING_CODE_FILES }` — `grep -c mdBlock docs/org/route.test.mjs`
+= **0**.
+
+**Vad ändras:** `mdBlock` exporteras och får tester i `route.test.mjs` som pinnar
+risknivåraden, de tillsatta rollnamnen, och att varningen om oägd kod dyker upp för
+`docs/org/route.mjs` men INTE för `scripts/serve-spa.mjs`.
+
+Acceptans:
+- [ ] `mdBlock` är exporterad ur `route.mjs` och importerad av `route.test.mjs`. *(kind: diff)*
+- [ ] Test pinnar risknivåraden och rollnamnen i `--md`-utdatan. *(kind: diff)*
+- [ ] Test pinnar att "unowned"-varningen syns för `docs/org/route.mjs` och saknas för `scripts/serve-spa.mjs`. *(kind: diff)*
+- [ ] `npx vitest run docs/org` grönt. *(kind: diff)*
+
+### BIN-833 — två testkorpusar, bara den ena körs av en grind
+**Tier A** · disposition `build` · router: `medium` · #25
+
+**Mätt vid HEAD `b417c62`:** `selftest()` finns i `docs/org/route.mjs` och körs via
+`--selftest` i CLI-grenen. `grep -n selftest docs/org/route.test.mjs` ger EN träff, och
+den är en kommentar — ingen testkod kör den.
+
+**Vad ändras:** ett test i `route.test.mjs` kör `node docs/org/route.mjs --selftest`
+som barnprocess och kräver exit 0. Då körs båda falllistorna av samma grind.
+(Alternativet — radera `--selftest` — väljs bort: dess fall är inte en delmängd av
+`route.test.mjs`, och en radering kastar täckning i stället för att koppla in den.)
+
+Acceptans:
+- [ ] `route.test.mjs` kör `node docs/org/route.mjs --selftest` och kräver exit 0. *(kind: diff)*
+- [ ] Efteråt körs varje falllista i filen av något `npm test` når. *(kind: diff)*
+- [ ] Ett medvetet fel i selftest-tabellen fäller `npm test` (sonderat, resultatet skrivs i commit-meddelandet). *(kind: diff)*
+
+---
+
+## Bunt B — Granskarnas kunskapsfiler (#25)
+
+Router, rå utdata på `.claude/agents/binge-{test,code,security}-reviewer.knowledge.md
+.claude/agents/binge-integration-reviewer.md scripts/check-knowledge-caps.mjs`:
+> Tier **medium** · #25 Engineering Manager / Release Manager
+
+### BIN-997 — kunskapsfilerna spränger sina egna tak
+**Tier A** · disposition `build` · router: `medium` · #25
+
+**Malins beslut 2026-08-25 ligger på biljetten och är bindande:**
+1. Taket höjs till ~80k och skrivs med IDENTISK formulering i alla filer som har ett.
+2. ENBART `binge-test-reviewer.knowledge.md` klipps ner till taket. Code (66 042) och
+   security (30 303) ryms redan och rörs INTE.
+3. Det som lyfts ur flyttas till `binge-test-reviewer.knowledge.archive.md`. Ingen
+   lärdom raderas utan att hamna i arkivet.
+4. Spärren är **icke-blockerande** — en varning i veckosvepet, med ett GOLV på antalet
+   filer den hittar. `npm test` får inte gå rött på ett överskridande.
+5. #25:s villkor 9: `binge-integration-reviewer.md` bär `tools: Read, Grep, Glob, Bash`
+   — utan `Write, Edit` är en instruktion att vika in lärdomar verkningslös. Läget
+   avgörs i skrift.
+
+**Mät om med `wc -c` före bygget** — filerna växer vid varje granskningsvarv.
+
+Acceptans:
+- [ ] Alla kunskapsfiler som finns ligger under det nya, identiskt formulerade taket, mätt med `wc -c` i commit-meddelandet. *(kind: diff)*
+- [ ] Ingen lärdom raderas utan att hamna i `binge-test-reviewer.knowledge.archive.md`. *(kind: diff)*
+- [ ] `scripts/check-knowledge-caps.mjs` varnar (exit 0) vid överskridande OCH fäller (exit ≠ 0) när den hittar färre filer än golvet. *(kind: diff)*
+- [ ] Skriptet bär en självtest enligt `scripts/scripts-self-tests-present.test.mjs`. *(kind: diff)*
+- [ ] `binge-integration-reviewer`s läge är avgjort i skrift — fil eller nedskrivet nej. *(kind: diff)*
+
+---
+
+## Bunt C — Symmetrikollens blinda fläck (#25)
+
+Router, rå utdata på `docs/org/gate-symmetry.test.mjs`:
+> Tier **medium** · #25 Engineering Manager / Release Manager
+
+### BIN-926 — omskalad: kriterium 2 är redan shippat
+**Tier A** · disposition `build` · router: `medium` · #25
+
+**Premisskoll vid HEAD `b417c62`:** kriterium 2 (de två 400-golven) är **åtgärdat** —
+båda står på 700 sedan 2026-08-18, med skälet skrivet i filen. Kriterium 1 står kvar:
+`docs/org/gate-symmetry.test.mjs` listar två kända blinda fläckar i sitt huvud, och
+`blockingGates()`s handkopia av hookens matchning är inte en av dem.
+
+**Vad ändras:** blind fläck 3 skrivs in i filens huvud. Att låta testet köra den
+riktiga hooken väljs bort: hooken bor i `C:/claude-plugins`, som inte är garanterat
+närvarande i CI — ett test som kräver den blir grönt av fel skäl på en maskin utan den.
+
+Acceptans:
+- [ ] Blind fläck 3 står skriven i filens huvud och namnger `blockingGates()` som en modell av hooken, inte hooken. *(kind: diff)*
+- [ ] Kriterium 2 redovisas som redan uppfyllt, med commit/datum — inte omskrivet. *(kind: diff)*
+- [ ] Inga golv ändras i denna bunt. *(kind: diff)*
+
+---
+
+## Bunt D — `watchedAt` räknas bara när status är sedd (#26 Information Architect)
+
+Router, rå utdata på `src/lib/watchedDate.ts src/hooks/useServiceValue.ts
+src/components/pages/UserProfilePageClient.tsx src/app/stats/page.tsx
+src/lib/taste/stats.ts src/lib/diary.ts src/lib/libraryView.ts`:
+> Tier **medium** · #26 Information Architect
+> ⚠ Unowned code path(s): src/app/stats/page.tsx
+
+### BIN-689 — sju handkopior av samma villkor
+**Tier A** · disposition `build` · router: `medium` · #26
+
+**Biljettens fillista är INAKTUELL** (plan-stale). Två av de sju sökvägarna finns inte
+vid HEAD: `src/components/pages/DiaryPageClient.tsx` och
+`src/components/pages/WatchlistPage.tsx`. Omhärledd från trädet med
+`grep -rn "=== 'sedd'" src/`, filtrerad till de ställen som parar villkoret med
+`watchedAt` — fortfarande exakt sju:
+
+| # | fil | symbol |
+| -- | -- | -- |
+| 1 | `src/components/watchlist/DiaryPageClient.tsx` | filmrader-filtret |
+| 2 | `src/lib/diary.ts` | `buildDiary`s filmgren |
+| 3 | `src/components/WatchlistPage.tsx` | `seenDate` |
+| 4 | `src/lib/taste/stats.ts` | 30-dagarsräknaren |
+| 5 | `src/app/stats/page.tsx` | `watched`-filtret + månadsnyckeln |
+| 6 | `src/hooks/useServiceValue.ts` | `seenFilms` |
+| 7 | `src/components/pages/UserProfilePageClient.tsx` | `watched` + `recentlyWatched` |
+
+(Symbolnamn, inte radnummer — ett radnummer i en plan är falskt i samma commit som det
+ligger i, BIN-954-lärdomen.)
+
+**Vad ändras:** ett rent predikat i `src/lib/` per test-extraction-mönstret som
+returnerar `watchedAt` endast när status är `sedd`, och alla sju anropare migreras i
+SAMMA ändring. En helper utan migrerade anropare är död kod.
+
+Acceptans:
+- [ ] Predikatet ligger i en egen fil i `src/lib/`-roten och importerar ingenting från Firebase. *(kind: diff)*
+- [ ] Alla sju anropare i tabellen ovan går via helpern; noll kvarvarande handkopior av paret (`status === 'sedd'` + `watchedAt`) utanför den. *(kind: diff)*
+- [ ] Ett test dödar mutanten "ta bort sedd-gaten" — bevisat genom att applicera mutanten, köra sviten, och skriva utfallet i commit-meddelandet. *(kind: diff)*
+- [ ] Beteendet är oförändrat för användaren: statistik, dagbok, profil och bibliotek visar samma sedd-datum som före. *(kind: diff)*
+- [ ] `npm run typecheck` och `npm test` grönt. *(kind: diff)*
+
+---
+
+## Bunt E — Beroendena (#25)
+
+Router, rå utdata på `package.json package-lock.json`:
+> Tier **medium** · #25 Engineering Manager / Release Manager
+> ⚠ Unowned code path(s): package-lock.json
+
+### BIN-603 — premissen har ändrats, mät om och ta det som är gratis
+**Tier A** · disposition `build` · router: `medium` · #25
+
+**Premisskoll vid HEAD `b417c62`, `npm audit --omit=dev`:** **4 high** (inte 2).
+`nanoid <3.3.18` (GHSA-2v37-7h3g-55p8) har tillkommit sedan biljetten skrevs. Och —
+avgörande — npm erbjuder nu `npm audit fix` **utan** `--force`. Biljettens kärnpåstående
+("npm's only offered remedy is `npm audit fix --force`") gäller inte längre.
+
+**Vad ändras:** kör `npm audit fix` (ALDRIG `--force`), verifiera att `next` inte
+flyttat sig, och redovisa vad som återstår. `postcss`/`sharp` sitter kvar inne i `next`
+och rörs inte med `overrides` i den här körningen — det kräver ett riktigt
+25k-sidorsbygge för att bevisa att bild- och CSS-kedjan håller, vilket inte är en billig
+kontroll.
+
+Acceptans:
+- [ ] `nanoid`-CVE:n är borta ur `npm audit --omit=dev`, med före/efter-talen i commit-meddelandet. *(kind: diff)*
+- [ ] `next`s version i `package.json` och `package-lock.json` är OFÖRÄNDRAD. *(kind: diff)*
+- [ ] `npm run typecheck`, `npm run lint` och `npm test` grönt efter låsfilsändringen. *(kind: diff)*
+- [ ] Det som återstår (postcss/sharp inne i next) är skrivet på biljetten som ett mätt kvarvarande läge, inte som löst. *(kind: diff)*
+
+---
+
+## Close-outs utan byggplats
+
+### BIN-971 — sprinten 2026-08-23 rapporterade 5 av 10
+De fem "spårlösa" biljetterna har alla en läsbar disposition vid HEAD idag:
+BIN-968 shippad i `9b23aeb`, BIN-797 shippad i `fb880f7`, BIN-909 och BIN-559 står i
+In Review, BIN-689 byggs i denna sprint (bunt D). Åtgärdspunkt 3 (kräv paret
+{commit, transition} per bunt i motorn) bor i `C:/claude-plugins` och kan inte byggas
+härifrån. Stängs med den redovisningen skriven på biljetten.
+
+### BIN-999 — räkna `movie_0`/`tv_0` i produktion
+Tier D. Kräver en Admin-SDK-`get` per uid. Kommenteras med de exakta stegen.
+
+### BIN-976 — kapacitetskollen körs i arbetaren
+Tier D för det här repot: fixen bor i sprintmotorn under `C:/claude-plugins`.
+Kommenteras. **Denna körning uppfyller ändå regeln i sak** — routern kördes på varje
+bunts filuppsättning vid urvalet, och kapaciteten matchades mot arbetaren före bygget.
+
+## Deviation log
+
+- [deviation] **2026-08-25, BIN-689, bunt D — buntens kriterium 2 är SUPERSEDERAT, inte
+  uppfyllt.** Planen skrev "Alla sju anropare i tabellen ovan går via helpern; noll
+  kvarvarande handkopior av paret (`status === 'sedd'` + `watchedAt`) utanför den".
+  Det kriteriet byggdes INTE, och ska inte byggas. Kriteriet står kvar ovan med flit —
+  det stryks inte, det supersederas här.
+
+  **Vad kritiken sa.** #26 Information Architects blinda kritik före bygget fällde
+  planen: de sju anropsställena är inte ett predikat utan TVÅ.
+  * **P1 — "har ett räknebart sedd-datum"** (status + ett datum). Fem ställen.
+  * **P2 — "står som sedd just nu"** (en medlemskapsräkning, utan datumkrav). Tre
+    ställen: `src/app/stats/page.tsx`s `watched`-filter,
+    `src/components/pages/UserProfilePageClient.tsx`s `watched`, och
+    `src/hooks/useServiceValue.ts`s `seenFilms`.
+
+  Att dra P2 genom en helper som KRÄVER ett datum tappar tyst en `sedd`-titel vars
+  `watchedAt` är null ur "Sedd"-rutorna på statistiksidan och den PUBLIKA profilen.
+  Det är en användarsynlig regression förklädd till refaktorering.
+
+  **Konservativt val:** en enda export, `seenDate(item): Date | null`, migrerar de FEM
+  P1-ställena. De tre P2-ställena behåller sin inline-kontroll. Uppdelningen och dess
+  skäl står i `src/lib/seenDate.ts`s huvud, som är den läsbara ytan — inte här.
+
+  **Till nästa läsare:** "avsluta migreringen" genom att dra in de tre är precis det
+  #26 blockerade. `src/hooks/useServiceValue.ts`s `seenFilms` SER ut som paret
+  (integrationsgranskaren räknade om det till sex par-ställen, inte fem, eftersom
+  datumkravet där ligger en fil bort i `watchedForValueFromItems`) — det är ändå P2 på
+  sitt eget anropsställe och rörs inte.
+
+- [deviation] **2026-08-25, bunt D — routern kördes om på den BYGGDA filuppsättningen och
+  bytte säte.** Planens rå-utdata ovan routades på en planerad filuppsättning som bl.a.
+  namngav `src/lib/watchedDate.ts` (en sökväg som aldrig existerade) och tre filer bygget
+  inte rör. Den satte `#26 Information Architect`. Den FAKTISKT byggda uppsättningen
+  svarar annorlunda:
+
+  ```
+  $ node docs/org/route.mjs --md src/lib/seenDate.ts src/lib/seenDate.test.ts \
+      src/app/stats/page.tsx src/components/WatchlistPage.tsx \
+      src/components/watchlist/DiaryPageClient.tsx src/lib/diary.ts \
+      src/lib/taste/stats.ts src/lib/watchlistWrites.ts
+  Tier **medium** · #28 Recommendations / Scoring-Integrity Engineer
+  ```
+
+  Nivån är oförändrad (`medium`, en kritik — den här arbetaren kan konvenera den), men
+  sätet är ett annat. Funnet av integrationsgranskaren, som körde kommandot i stället för
+  att läsa planens citat. Det är BIN-766-lärdomen i sin renaste form: kör om routern på
+  det som byggs, inte på det som planerades.
+
+  **Konservativt val:** #28:s blinda kritik körs FÖRE commit, utöver #26:s. Ingen bunt
+  committas på ett säte som aldrig fick titta.
+
+- [discovery] **2026-08-25, bunt A — BIN-833:s premiss föll vid HEAD.** Biljetten säger att
+  `--selftest` "inte är kopplad till någon grind". `git log -S"--selftest exits 0" --
+  docs/org/gate-symmetry.test.mjs` ger `851696d`, som la till fallet "the router's own
+  golden cases are wired to something that runs (BIN-880)" — det startar
+  `node docs/org/route.mjs --selftest` och kräver exit 0, under `npm test`.
+  → Konservativt val: bygg inte om en dubblett. Omskalad till den levande defekten
+  premissen pekade på — en mening i `docs/org/route.test.mjs`s huvud som fortfarande
+  påstod motsatsen. Den är struken.
+
+- [discovery] **2026-08-25, bunt C — BIN-926:s kriterium 2 var redan uppfyllt vid HEAD.**
+  Båda 400-golven står på 700 sedan 2026-08-18, med skälet skrivet i filen.
+  → Konservativt val: bunten omskalad till kriterium 1 ensamt. Inget golv rörs.
+
+- [needs-human] **2026-08-25, bunt E — BIN-603 dras ut ur commiten och får en egen.**
+  `npm audit fix --dry-run` (utan `--force`) flyttar `next` 16.2.12 → 16.3.3 och `sharp`
+  0.34.5 → 0.35.3, alltså ett major-steg för `sharp` och ett minor för `next`. Biljettens
+  kärnpåstående ("npm's only offered remedy is `npm audit fix --force`") gäller inte
+  längre. Push = deploy i det här repot, och `.claude/rules/deployment.md` namnger just den
+  här klassen: ett Next-versionssteg kan ändra formen på static-export-utdatan.
+  → Konservativt val: egen bunt, egen commit, och ett riktigt `npm run build` innan något
+  pushas. Inte hopbuntat med granskad kod som redan är grön.
+
+- [needs-human] **2026-08-25, bunt B — BIN-997 är INTE med i den här commiten.** Bunten
+  valdes, routades (`medium`, säte #25), och fick sin blinda kritik FÖRE bygget. Den
+  kritiken ligger stagead i `docs/org/metrics/events.jsonl` med `must_haves: 4`. Ingen kod
+  följer med. Mätt vid commit-tillfället: `scripts/check-knowledge-caps.mjs` finns inte, och
+  de tre kunskapsfilerna är oförändrade (`wc -c` → 295 844 / 66 042 / 30 303).
+
+  Det står här därför att en granskningsrad utan artefakt annars är oskiljbar från
+  "byggdes och tappades bort" — BIN-707/708/713:s evaporationsklass, och exakt vad den här
+  loggen lades till för att stoppa. Funnet av integrationsgranskaren, som noterade att
+  commiten skickar med en kritik för arbete den inte innehåller.
+
+  **Varför den inte är byggd i den här commiten:** #25:s kritik blockerade på EN namngiven
+  defekt — planen sa inte VAR veckosvepet anropar det nya skriptet, och en spärr som ingen
+  kör är ett dekorativt golv. Svaret finns nu (`deploy.yml` har redan
+  `schedule: cron '0 4 * * 1'`, så den icke-blockerande varningen hör hemma där, medan
+  fil-golvet får tänder i en vitest-fil), men bunten är inte byggd och får inte redovisas
+  som om den vore det.
+
+  **Bunt B fortsätter efter den här commiten, i en egen commit.** Blir den inte av, är det
+  den här posten som ska rättas — inte biljetten, som inte har någon kod att stå för.
+
+- [discovery] **2026-08-26, `.claude/state/workflow-map-stale.json` — omspårad, ingen
+  kartändring behövdes.** Flaggan stämplades av den här bunten med
+  `triggers: ["src/app/stats/page.tsx"]`. Det enda flödet som namnger den noden är
+  `flow-profile`, och båda dess `stats-page`-steg beskriver fortfarande vad koden gör efter
+  ändringen — aggregeringen har samma form, bara med status-grinden synlig i loopen i
+  stället för ärvd från `watched`. Flaggan är därför släckt utan att kartan rörs.
+  Flaggfilen är gitignorerad, så ingen diff-baserad grind kan säga att detta gjordes; det
+  är den enda platsen det står.
+
+- [deviation] **2026-08-26, ett fynd som återkom INNE i sin egen fix.** Integrations-
+  granskarens blockerande fynd 2 var att en kommentar i `src/lib/watchlistWrites.ts` blivit
+  falsk av den här diffen. Rättelsen jag skrev bar ett NYTT omätt påstående — "every surface
+  that reads a seen DATE goes through it" — som kodgranskaren fällde i nästa varv med två
+  motexempel (`src/components/pages/MoviePageClient.tsx` och
+  `src/lib/advisor/serviceValue.ts`). Båda kontrollerade av mig innan jag agerade.
+
+  Det är 2026-08-21-lärdomen i sin renaste form, och den kostade ett granskningsvarv.
+  Slutläget skriver därför ingen mening om mängden alls: båda strykningarna är bokförda
+  (inklusive att den andra var min och falsk när den skrevs) och kommentaren slutar med ett
+  `grep`-kommando i stället för ett tal.
+
+  **Två tal som INTE är samma sak, och som inte ska slås ihop:** integrationsgranskaren
+  räknade sex ställen som parar status-grinden med ett DATUMKRAV (de fem migrerade plus
+  `useServiceValue.ts` → `serviceValue.ts`). Kodgranskaren räknade två ställen som läser
+  `watchedAt` utan att själva applicera grinden (`MoviePageClient.tsx` och
+  `serviceValue.ts`). Mängderna överlappar bara i `serviceValue.ts`.
+  `MoviePageClient.tsx` ligger INUTI en `status === 'sedd'`-gren och matar
+  `WatchedDateEditor` — den kan aldrig driva isär, och att dra den genom `seenDate()` vore
+  en no-op. Den är alltså en datumläsare, inte en sjunde handkopia.
+
+
+---
+
 # SPRINT 2026-08-24
 
 Planen för DENNA körning, skriven FÖRE bygget. Detta avsnitt är det enda underlaget

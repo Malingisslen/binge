@@ -119,6 +119,35 @@
 //      agent must see which surface means a per-agent expectation (a fourth rule), and
 //      that is a real list of paths — the hand-copied thing this file exists to avoid —
 //      so it is deliberately not attempted here.
+//   3. `blockingGates()` is a MODEL of the blocking hook, not the hook. It re-implements
+//      the hook's matching by hand — `exact` ∪ `patterns`, minus `exclude` — inside the
+//      one file whose entire purpose is that two lists must not drift apart. It is
+//      faithful today. It is not pinned to anything, so a change to the hook's semantics
+//      leaves this file certifying symmetry against a copy that no longer describes what
+//      blocks a commit. Three shapes would do it silently: an `exclude` that also applies
+//      to `exact`, anchoring, and case-sensitivity.
+//
+//      One of those three is partly covered — the case named "the gate-matching helper
+//      subtracts excludes, like the real hook does" pins exclude-over-patterns. The
+//      `exact`+`exclude` combination is not exercised by anything, including the live
+//      config; derive that rather than trusting this sentence:
+//        node -e "const g=require('./.claude/shared-plugin.json').reviewGates; console.log(g.filter(x=>(x.exact||[]).length).length)"
+//      A zero there means the combination is latent, not live — a real gap, but one no
+//      current commit can walk into.
+//
+//      Having this file EXECUTE the real hook was considered and rejected. The hook lives
+//      in `C:/claude-plugins/plugins/workflow-guards/scripts/`, a sibling repo that is not
+//      guaranteed checked out in CI. A test that requires it fails on a clean runner; a
+//      test that skips when it is absent reports a pass in exactly the environment that
+//      gates the deploy, which is the shrink-reads-as-a-pass class (BIN-838/823/850) this
+//      whole file exists to stop. So this stays a stated limit rather than a mechanism —
+//      and it is a limit, not a check: nothing here compares the two. (BIN-926)
+//
+//      `blockingGates()` is not the only copy. `gateMatches()` in `docs/org/route.test.mjs`
+//      models the same hook the same way and carries the same exposure, so a change to the
+//      hook's semantics has two places to be reflected, not one. Fixing either without the
+//      other is how the two lists this file watches would start disagreeing about
+//      themselves.
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';

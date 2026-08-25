@@ -1,4 +1,5 @@
 import { subscriptionProviderIds } from '@/lib/watchlist/subscriptionProviders';
+import { seenDate } from '@/lib/seenDate';
 import type { WatchlistItem } from '@/types';
 
 export interface ProfileStats {
@@ -56,12 +57,10 @@ export function computeProfileStats(items: WatchlistItem[]): ProfileStats {
       providerCount.set(pid, (providerCount.get(pid) ?? 0) + 1);
     }
 
-    // BIN-593: watchedAt är användarägd data och rensas INTE när en titel lämnar
-    // 'sedd' — historiken ligger kvar i dokumentet. Utan status-grinden skulle en
-    // film som markerats sedd och sedan flyttats till en annan lista fortsätta
-    // räknas som "Sedd senaste 30 dagarna" på den PUBLIKA profilen. Samma grind
-    // som useServiceValue, DiaryPageClient och Statistik-sidan.
-    if (item.status === 'sedd' && within30Days(item.watchedAt)) watched += 1;
+    // Utan status-grinden i `seenDate` skulle en film som markerats sedd och sedan
+    // flyttats till en annan lista fortsätta räknas som "Sedd senaste 30 dagarna" på
+    // den PUBLIKA profilen. Regeln bor i src/lib/seenDate.ts sedan BIN-689.
+    if (within30Days(seenDate(item))) watched += 1;
     if (within30Days(item.addedAt)) added += 1;
     // BIN-349: "rated in last 30 days" should anchor on when the user actually
     // rated (ratedAt), not any edit (updatedAt); fall back for pre-ratedAt items.

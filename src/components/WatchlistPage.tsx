@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { getProvider } from '@/lib/tmdb/providers';
+import { seenDate } from '@/lib/seenDate';
 import ProviderDot from '@/components/ui/ProviderDot';
 import JustWatchCredit from '@/components/ui/JustWatchCredit';
 import { LoadingView } from '@/components/ui/LoadingView';
@@ -63,12 +64,10 @@ function fmtDate(d: Date | null): string {
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// BIN-593: watchedAt är användarägd data och rensas INTE längre när en titel
-// lämnar 'sedd' — historiken finns kvar i dokumentet. Sedd-kolumnen och
-// "Sedd datum"-sorteringen visas även i den ofiltrerade /my/all-vyn, så utan
-// den här grinden skulle ett sett-datum plötsligt stå bredvid en rad som är
-// märkt "Avbruten" eller "Vill se". Samma status-grind som useServiceValue.
-const seenDate = (i: WatchlistItem): Date | null => (i.status === 'sedd' ? i.watchedAt : null);
+// Sedd-kolumnen och "Sedd datum"-sorteringen visas även i den ofiltrerade /my/all-vyn,
+// så utan status-grinden i `seenDate` skulle ett sett-datum plötsligt stå bredvid en rad
+// som är märkt "Avbruten" eller "Vill se". Regeln och dess skäl bor i src/lib/seenDate.ts
+// sedan BIN-689 — den låg tidigare handkopierad här och på fyra andra ytor.
 type ViewMode = 'table' | 'grid' | 'cards';
 type MediaFilter = 'all' | 'movie' | 'tv';
 

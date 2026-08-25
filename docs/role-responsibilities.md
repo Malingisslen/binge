@@ -523,6 +523,14 @@ Owns wayfinding.
   split franchise (Doctor Who's eras). Deliberately navigation, not a merge, so it is
   wayfinding rather than part of the season/episode progress surface (#9).
   → `src/components/tv/RelatedSeriesStrip.tsx`
+- What counts as a "seen date". `watchedAt` survives a status change (BIN-593), so the
+  stored date and the current status answer different questions, and the library, the
+  diary, the stats page and the public profile must agree on which one they are asking.
+  This seat owns that distinction: `seenDate()` is the date accessor, and the separate
+  "is it marked sedd" membership check stays inline at the surfaces that count titles.
+  Collapsing the two drops titles from user-visible counts — this role's binding
+  condition on BIN-689, 2026-08-25.
+  → `src/lib/seenDate.ts`
 
 ---
 

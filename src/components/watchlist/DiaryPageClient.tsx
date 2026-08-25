@@ -11,6 +11,7 @@ import { LoadingView } from '@/components/ui/LoadingView';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { posterUrl, titleHref } from '@/lib/tmdb/client';
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
+import { seenDate } from '@/lib/seenDate';
 import RatingStars from '@/components/title/RatingStars';
 import { buildDiary, diaryEntryCount } from '@/lib/diary';
 import { computeBingeStats } from '@/lib/bingeStats';
@@ -35,9 +36,10 @@ export default function DiaryPageClient() {
   const total = diaryEntryCount(months);
 
   const films = useMemo(
-    () => items
-      .filter(i => i.mediaType === 'movie' && i.status === 'sedd' && i.watchedAt != null)
-      .map(i => ({ watchedAt: i.watchedAt as Date })),
+    () => items.flatMap(i => {
+      const watchedAt = i.mediaType === 'movie' ? seenDate(i) : null;
+      return watchedAt ? [{ watchedAt }] : [];
+    }),
     [items],
   );
   // BIN-102 — binge stats from the same watch data already loaded here.

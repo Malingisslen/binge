@@ -1,8 +1,14 @@
 // Tests for the blast-radius router (docs/org/route.mjs).
 //
-// Run: npm test (this file is in vitest.config.ts's `include`, deliberately —
-// route.mjs's own `--selftest` flag is wired to nothing, so a silent regression
-// there was invisible to every gate. BIN-802.)
+// Run: npm test (this file is in vitest.config.ts's `include`, deliberately — a test
+// file outside the runner's globs is silently never run by `npm test` while passing
+// when invoked by hand, so being in the globs is the whole point. BIN-802.)
+//
+// The clause that used to stand here — that route.mjs's `--selftest` flag "is wired to
+// nothing" — was struck 2026-08-25 (BIN-833). It stopped being true in 851696d, which
+// added `docs/org/gate-symmetry.test.mjs`'s "the router's own golden cases are wired to
+// something that runs (BIN-880)" case; that case spawns `node docs/org/route.mjs
+// --selftest` and requires exit 0, under this same `npm test`.
 //
 // Why this file exists: the router decides BOTH whether a stakeholder panel is
 // convened before a change is built AND — since BIN-776 — whether a sprint may
@@ -18,7 +24,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, globSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { route, isCodePath, TOOLING_CODE_FILES } from './route.mjs';
+import { route, isCodePath, TOOLING_CODE_FILES, mdBlock } from './route.mjs';
 // The REAL config object, imported the way vitest itself loads it — never scraped as text.
 // A routine reformat of vitest.config.ts would make a regex-scraped copy silently green,
 // which is the "a shrink reads as a pass" failure this whole family exists to stop
@@ -723,5 +729,89 @@ describe('input handling', () => {
 
   it('normalizes Windows separators and ./ prefixes', () => {
     expect(route(['.\\src\\lib\\firebase\\userData.ts']).tier).toBe('top');
+  });
+});
+
+describe('mdBlock — the `--md` form every tool actually consumes (BIN-832)', () => {
+  // `.claude/shared-plugin.json` sets `delivery.router.command` to
+  // `node docs/org/route.mjs --md`, so the markdown block — not the JSON — is what the
+  // sprint skill and /linear paste into a ticket. It had no coverage at all: 24f6612
+  // moved its warning line from `unmappedCode` to `unownedCode`, which fires on a
+  // different set of cases, and nothing in this file would have failed.
+  //
+  // The first cases feed mdBlock LITERAL result objects instead of live routes. That is
+  // deliberate. Anchoring the warning on a real repo path pins today's ownership map, so
+  // the day that path gains an owner the test fails for a reason that has nothing to do
+  // with mdBlock — which is how BIN-834 would have broken a naive version of this test.
+  // The live-route cases below cover the wiring; the literal ones cover the formatting.
+
+  it('names the tier, every seated role, and the reason', () => {
+    const md = mdBlock({
+      tier: 'medium',
+      reason: 'single medium-impact area → one owning role',
+      panel: [25],
+      roles: [{ num: 25, title: 'Engineering Manager / Release Manager' }],
+      unownedCode: [],
+    });
+    expect(md).toContain('Tier **medium**');
+    expect(md).toContain('#25 Engineering Manager / Release Manager');
+    expect(md).toContain('single medium-impact area → one owning role');
+  });
+
+  it('titles the unmapped-code fallback seat even though it has no matched paths', () => {
+    // The #14 seat is synthesised by route() for code nobody owns, so it never appears in
+    // `roles`. Without the ROLE_TITLES lookup the block would print a bare "#14" and the
+    // reader would have to go find out who that is.
+    const md = mdBlock({
+      tier: 'medium',
+      reason: 'code path(s) with no owning role',
+      panel: [14],
+      roles: [],
+      unownedCode: ['src/lib/no-such-dir/brandNew.ts'],
+    });
+    expect(md).toContain('#14 Software Architect');
+  });
+
+  it('prints the unowned-code warning only when there is unowned code', () => {
+    const base = {
+      tier: 'medium',
+      reason: 'single medium-impact area → one owning role',
+      panel: [25],
+      roles: [{ num: 25, title: 'Engineering Manager / Release Manager' }],
+    };
+    expect(mdBlock({ ...base, unownedCode: ['scripts/nobody-owns-me.mjs'] })).toContain(
+      '⚠ Unowned code path(s): scripts/nobody-owns-me.mjs',
+    );
+    expect(mdBlock({ ...base, unownedCode: [] })).not.toContain('⚠');
+    // The field is optional on older callers; a missing one must read as "none", not throw.
+    expect(mdBlock(base)).not.toContain('⚠');
+  });
+
+  it('says there is no review tier for a skip result, and names no roles', () => {
+    const md = mdBlock({ tier: 'skip', reason: 'no code paths', panel: [], roles: [] });
+    expect(md).toContain('no review tier');
+    expect(md).not.toContain('Tier **');
+    // …and seats nobody. Not `toContain('#')` — the block's own "## Stakeholders" heading
+    // makes that vacuously true, so match a role NUMBER instead.
+    expect(md).not.toMatch(/#\d/);
+  });
+
+  it('is wired to route(): a high-stakes path prints the full panel', () => {
+    // firestore.rules is pinned as `top` by the high-stakes block above, so the tier
+    // assertion cannot move with the ownership map. The role name and the absent warning
+    // CAN — both are read off the map — which is why the literal cases above carry the
+    // formatting contract and this one only proves the two ends are wired together.
+    const md = mdBlock(route(['firestore.rules']));
+    expect(md).toContain('Tier **top**');
+    expect(md).toContain('#4 Security Architect');
+    expect(md).not.toContain('⚠');
+  });
+
+  it('is wired to route(): code nobody owns carries its warning all the way out', () => {
+    // A path under a directory that does not exist can never acquire an owner, so this
+    // anchor cannot rot the way a real repo path can.
+    const md = mdBlock(route(['src/lib/no-such-dir/brandNew.ts']));
+    expect(md).toContain('Tier **medium**');
+    expect(md).toContain('⚠ Unowned code path(s): src/lib/no-such-dir/brandNew.ts');
   });
 });

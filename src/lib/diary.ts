@@ -1,5 +1,6 @@
 import type { WatchlistItem } from '@/types';
 import { resolveTmdbId } from '@/lib/mediaTypeDocId';
+import { seenDate } from '@/lib/seenDate';
 
 // BIN-103 — activity diary. Merges FILM watched-dates (WatchlistItem.watchedAt,
 // already in the loaded watchlist) with TV per-episode watched-dates
@@ -54,9 +55,10 @@ export function flattenEpisodeProgress(docs: RawProgressDoc[]): WatchedEpisode[]
 }
 
 function filmEntries(items: WatchlistItem[]): DiaryEntry[] {
-  return items
-    .filter(i => i.mediaType === 'movie' && i.status === 'sedd' && i.watchedAt != null)
-    .map(i => ({ item: i, date: i.watchedAt as Date, episodeCode: null }));
+  return items.flatMap(i => {
+    const date = i.mediaType === 'movie' ? seenDate(i) : null;
+    return date ? [{ item: i, date, episodeCode: null }] : [];
+  });
 }
 
 function episodeDiaryEntries(items: WatchlistItem[], episodes: WatchedEpisode[]): DiaryEntry[] {

@@ -7,6 +7,7 @@ import ProviderDot from '@/components/ui/ProviderDot';
 import StatCard from '@/components/ui/StatCard';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider } from '@/lib/tmdb/providers';
+import { seenDate } from '@/lib/seenDate';
 
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
@@ -62,15 +63,15 @@ function StatsContent() {
 
     const totalRewatches = items.reduce((sum, i) => sum + (i.rewatchCount ?? 0), 0);
 
-    // BIN-593: räkna bara titlar som FAKTISKT står som sedda. watchedAt är
-    // användarägd data och rensas inte längre när en film lämnar 'sedd', så ett
-    // `watchedAt != null`-filter över hela biblioteket skulle räkna avbrutna och
-    // återlagda filmer som sedda. Samma status-grind som useServiceValue och
-    // DiaryPageClient.
+    // Räkna bara titlar som FAKTISKT står som sedda: ett `watchedAt != null`-filter över
+    // hela biblioteket skulle räkna avbrutna och återlagda filmer som sedda. Regeln bor
+    // i src/lib/seenDate.ts sedan BIN-689, så grinden syns här i stället för att ärvas
+    // tyst från `watched` några rader upp.
     const monthlyActivity: Record<string, number> = {};
-    for (const item of watched) {
-      if (item.watchedAt) {
-        const key = `${item.watchedAt.getFullYear()}-${String(item.watchedAt.getMonth() + 1).padStart(2, '0')}`;
+    for (const item of items) {
+      const at = seenDate(item);
+      if (at) {
+        const key = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`;
         monthlyActivity[key] = (monthlyActivity[key] ?? 0) + 1;
       }
     }

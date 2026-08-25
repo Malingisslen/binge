@@ -269,12 +269,17 @@ export function buildStatusUpdate(
   // leaving 'sedd' must not erase the history.
   //
   // CONSEQUENCE FOR EVERY READER: a stored date does NOT mean "currently seen".
-  // Gate on `status` first. `useServiceValue`, `DiaryPageClient` and `diary.ts`
-  // already did; THREE had to be fixed during BIN-593 — `taste/stats.ts` (which
-  // fed a PUBLIC profile counter), `app/stats/page.tsx`, and `WatchlistPage.tsx`,
-  // which needed its own per-row `seenDate()` helper because it renders rows of
-  // mixed status rather than a pre-filtered list. Do not treat this list as a
-  // closed set — BIN-598 tracks giving the rule one shared home.
+  // Gate on `status` first. `src/lib/seenDate.ts` is where that gate is written down, and
+  // its header is where the rule and its boundaries live.
+  //
+  // TWO claims that stood here are struck rather than reworded, because neither can be
+  // corrected without counting call sites. The first was a per-reader list: it named
+  // WatchlistPage.tsx as needing its own `seenDate()` helper (it imports the shared one
+  // now) and pointed at BIN-598 for a shared home BIN-689 shipped. The second was written
+  // in the same edit that struck the first — "every surface that reads a seen date goes
+  // through it" — and was false when written. Derive the readers instead of trusting a
+  // sentence about them:
+  //   grep -rn "watchedAt" src/ --include=*.ts --include=*.tsx
   const stampWatchedAt =
     status === 'sedd' &&
     (ctx.watchedAtOverride !== undefined || canAutoStampWatchedAt(ctx.currentWatchedAt));
