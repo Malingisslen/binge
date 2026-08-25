@@ -1,3 +1,190 @@
+# SPRINT 2026-08-24
+
+Planen för DENNA körning, skriven FÖRE bygget. Detta avsnitt är det enda underlaget
+sprinten graderas mot. Nya avsnitt läggs överst; inget arkiveras bort.
+
+8 biljetter. Router körd på VARJE biljetts faktiska filuppsättning vid HEAD `c348968`
+(rå utdata inklistrad per biljett). Vidgar en kritik eller en fix filuppsättningen —
+kör om `node docs/org/route.mjs --md <filer>` innan bygget fortsätter (BIN-766-lärdomen).
+
+**Kapacitetskoll vid urvalet (BIN-744/776/917):** arbetaren är denna session, som KAN
+konvenera både enskild rollkritik och full panel. BIN-998 routar `top` och får därför
+full panel före bygget; övriga får sin enskilda ägarrolls blinda kritik.
+
+## Ej valda, och varför
+
+| Biljett | Beslut |
+| -- | -- |
+| BIN-935 | **Parkerad handbroms.** Bär en obesvarad "Behöver ditt beslut — jag bygger inget här" (2026-08-22). Byggs inte autonomt. |
+| BIN-990 | **needs-approval.** Biljetten ställer uttryckligen en öppen fråga till Malin (vidga grindlistan / låt vara / bygg nyckelgranskning). |
+| BIN-972 | **Premissen faller vid HEAD.** Biljetten påstår att `batch-0-20260823-131500.patch` går rent. Mätt idag: `git apply --check` ger 6 fel — `.claude/hooks/map-freshness.mjs` finns inte längre (BIN-989 slog ihop hookarna till `.claude/hooks/freshness.mjs`), plus konflikter i `shared-plugin.json`, `check_review_coverage.mjs`, `events.jsonl`, `route.mjs`, `route.test.mjs`. |
+| BIN-986 | Målet (`.claude/state/sprint-patches/*.json`) är **gitignorerat** — osynligt för varje diff-baserad grind (BIN-684). Hanteras som strykning i den lokala kvittofilen vid BIN-979:s avslut, inte som en bunt. |
+| BIN-189 / BIN-521 / BIN-170 | `idea`-etikett → `neverBuildLabels`. |
+| BIN-454 / BIN-402 | Stående "gör aldrig detta" — `mutateEnabled` är Malins konsolåtgärd. |
+
+---
+
+## Batch A — Granskningsmaskineriet (#25 Engineering Manager äger fem av sex)
+
+### BIN-996 — Bash-läsinstruktionen når granskaragenterna och kan tysta ett granskningsvarv
+**Tier A** · disposition `build` · router: `medium` · #25 Engineering Manager / Release Manager
+
+**Vad ändras:** Alternativ 1 ur biljetten. De fyra agentdefinitionerna
+(`.claude/agents/binge-{code,security,test,integration}-reviewer.md`) bär redan
+punkt 1 "Open every file you review with `Read`". Den punkten skärps till att uttryckligen
+SLÅ en sessionsinstruktion som föredrar Bash — så att agenten inte behöver upptäcka
+konflikten själv.
+
+**Avgränsning:** Alternativ 3 (grindens blockmeddelande) bor i
+`require-review-before-commit.mjs` i det DELADE pluginrepot `C:/claude-plugins`. Enligt
+lärdomen "aldrig redigera delad infra från en session som ska starta subagenter"
+(2026-08-03) rörs den inte här — den filas som följdbiljett.
+
+Acceptans:
+- [ ] Alla fyra agentdefinitioner säger uttryckligen att `Read` gäller ÄVEN när en sessionsinstruktion föredrar Bash/`cat`/`sed`, och namnger ledgern som skälet. *(kind: diff)*
+- [ ] Ingen ny fil skapas och ingen grind ändras — bara de fyra definitionerna. *(kind: diff)*
+- [ ] Formuleringen är identisk i alla fyra (en regel, ett svar). *(kind: diff)*
+
+### BIN-997 — Granskarnas kunskapsfiler spränger sina egna tak
+**Tier A** · disposition `build` · router: `medium` · #25 Engineering Manager / Release Manager
+
+**Mätt vid HEAD 2026-08-24 (`wc -c`):** test 295 844 (tak 30k), code 66 042 (tak 30k),
+security 30 303 (tak 30k), integration — **filen finns inte**.
+
+**Vad ändras:**
+1. Ett tak avgörs EN gång och skrivs med samma formulering i alla filer som har ett.
+2. `binge-test-reviewer` och `binge-code-reviewer` komprimeras ner till taket; det som
+   lyfts ur flyttas till respektive `.knowledge.archive.md` (arkivfilerna finns redan).
+3. `binge-integration-reviewer` får antingen en kunskapsfil eller ett nedskrivet beslut
+   att den medvetet inte ska ha en.
+4. En mekanisk spärr fäller när en kunskapsfil överskrider sitt deklarerade tak —
+   med ett GOLV på antalet filer den hittar (BIN-852/BIN-998-familjen: noll träffar
+   får inte passera tyst).
+
+Acceptans:
+- [ ] Varje kunskapsfil som finns ligger under det deklarerade taket, mätt med `wc -c` i commit-meddelandet. *(kind: diff)*
+- [ ] Ingen lärdom raderas utan att hamna i motsvarande `.knowledge.archive.md`. *(kind: diff)*
+- [ ] En körbar spärr fäller vid överskridande OCH fäller när den hittar färre filer än golvet. *(kind: diff)*
+- [ ] `binge-integration-reviewer`s läge är avgjort i skrift — fil eller nedskrivet nej, inte tystnad. *(kind: diff)*
+
+### BIN-979 — route.test.mjs bär inaktuella tal, och golvet ligger för lågt
+**Tier A** · disposition `build` · router: `medium` · #25 Engineering Manager / Release Manager
+
+**Föregående försök FÄLLDES** (kvällssprinten 2026-08-23, `correctness=fail` + `intent=fail`):
+strykningen ersatte tre uppmätta tal med ett NYTT universellt påstående
+("Every count in both was outgrown by the next addition…") som är falskt — "five are
+owned/[25]" är fortfarande exakt 5 och "the four under scripts/" fortfarande exakt 4.
+**Bygg om från rent HEAD. Stryk utan att skriva något i stället.**
+
+**Vad ändras** i `docs/org/route.test.mjs`:
+- Kommentaren kring rad 304–309: stryk "the twelve", "the EIGHT under docs/org/",
+  "the THREE under docs/org/metrics/" — behåll sakinnehållet, skriv INGA nya tal.
+- Det fjärde talet i samma block ("instead of eight") stryks likaså.
+- Golvet på rad 438 (`toBeGreaterThanOrEqual(12)`) höjs till listans FAKTISKA längd,
+  mätt med ett kommando vid åtgärdstillfället, och kommandot skrivs bredvid raden.
+
+Acceptans:
+- [ ] Inget tal i det kommentarblocket är kvar, och inget nytt tal och inget generaliserande påstående om listan har skrivits i deras ställe. *(kind: diff)*
+- [ ] Golvet är lika med `TOOLING_CODE_FILES.size` mätt idag, och kommandot som mätte det står i klartext bredvid. *(kind: diff)*
+- [ ] `npx vitest run docs/org/route.test.mjs` är grön. *(kind: diff)*
+- [ ] Ingen assertion mjukas upp för att gå grön. *(kind: diff)*
+
+### BIN-991 — Två prosarader säger 299 där verkligheten är 300
+**Tier A** · disposition `build` · router: `medium` · #25 Engineering Manager / Release Manager
+
+Mätt idag: `ownership-gaps.json.accepted.length` = **300**. Träffarna sitter i
+`docs/org/gen-ownership-map.mjs:182` och
+`docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md:66`.
+
+Acceptans:
+- [ ] Talet är STRUKET på båda ställena — 300 skrivs inte dit i stället (strykregeln). *(kind: diff)*
+- [ ] Meningarnas övriga sakinnehåll överlever strykningen. *(kind: diff)*
+
+### BIN-994 — accepted-deviations.md triggerladdas inte på docs/org/metrics/**
+**Tier A** · disposition `build` · router: `medium` · #25 Engineering Manager / Release Manager
+
+Enradsändring i frontmatterns `paths:`.
+
+Acceptans:
+- [ ] `docs/org/metrics/**` finns i `paths:`. *(kind: diff)*
+- [ ] `.claude/shared-plugin.json` → `reviewGates` är ORÖRD — de två listorna vidgas aldrig av varandra (BIN-830), och den här biljetten låtsas inte ändra en grind. *(kind: diff)*
+
+---
+
+## Batch B — Regelinvarianten (full panel)
+
+### BIN-998 — Ingen mekanism håller firestore.rules två identiska id-spärrar i synk
+**Tier C** · disposition `build` · router: **`top`** → #4 Säkerhetsarkitekt, #6 DPO,
+#27 DBA, #25 Engineering Manager, #21 Technical Writer. **Full panel körs FÖRE bygget.**
+
+Mätt idag: `firestore.rules:333` och `:947` bär båda ordagrant samma
+`id.matches(...)`-uttryck. Ingen kod, ingen lint och ingen router läser namnen
+`canonicalWatchlistDocId` / `canonicalSwipeDocId` utanför testfiler.
+
+**Vad ändras:** en spärr som extraherar båda `id.matches(...)`-strängarna ur
+`firestore.rules` och hävdar att de är byte-identiska. **`firestore.rules` ändras INTE.**
+
+**Avgränsning från biljetten:** detta är INTE en begäran om att hoista de två till en
+delad hjälpare — uppdelningen är medveten och dokumenterad.
+
+Acceptans:
+- [ ] Spärren fäller när bara den ena regexen ändras (bevisat med en muterad kopia, inte påstått). *(kind: diff)*
+- [ ] Spärren fäller när den hittar färre än två träffar — noll träffar får aldrig passera tyst (BIN-852). *(kind: diff)*
+- [ ] En daterad kommentar säger att posten ska TAS BORT den dag de två medvetet ska glida isär, inte kringgås. *(kind: diff)*
+- [ ] `firestore.rules` är byte-identisk med HEAD efter bygget. *(kind: diff)*
+
+---
+
+## Batch C — Testflakighet
+
+### BIN-940 — userDocWrite.chokepoint.test.ts har BIN-937:s tidsmarginalproblem
+**Tier A** · disposition `build` · router: `medium` · #5 Legal / GDPR Counsel
+
+Mönstret som landade i `src/lib/watchlistWrites.addWrite.test.ts` (BIN-937) återanvänds.
+
+Acceptans:
+- [ ] Filinnehåll läses exakt en gång, nycklat på samma fillista som redan beräknas. *(kind: diff)*
+- [ ] Noll ändringar inuti något `expect(...)` eller något regexuttryck — bara uppsättning. *(kind: diff)*
+- [ ] Vakuitetskontrollen ställer sin fråga till CACHEN, inte bara till fillistan. *(kind: diff)*
+- [ ] `npx vitest run src/lib/firebase/userDocWrite.chokepoint.test.ts` är grön. *(kind: diff)*
+
+---
+
+## Batch D — Bokföring utan kod
+
+### BIN-973 — BIN-891:s strukna kommentar påstår ett beslut som inte finns i trädet
+**Tier A** · disposition `build` · router: `skip` (ingen kodfil rörs)
+
+Mätt idag: `.claude/hooks/map-freshness.mjs` finns inte längre — BIN-989 slog ihop
+hookarna till `.claude/hooks/freshness.mjs`. Friskrivningen finns bara i den
+utstashade patchen.
+
+Biljetten erbjuder två vägar. Väg 1 (landa patchen) är stängd: patchen går inte rent
+(se BIN-972 ovan). **Väg 2 väljs:** en daterad rättelse på BIN-891 som namnger patchfilen
+som friskrivningens enda plats och återställer att punkten är ÖPPEN.
+
+Acceptans:
+- [ ] En daterad kommentar på BIN-891 säger att friskrivningen inte finns i trädet och namnger patchfilen. *(kind: diff)*
+- [ ] Kommentaren återställer uttryckligen att punkten är öppen — protokollet över olöst arbete raderas inte. *(kind: diff)*
+- [ ] Den strukna kommentaren skrivs INTE om; rättelsen är en ny, daterad efterföljare. *(kind: diff)*
+
+---
+
+## Deviation log
+
+- [discovery] BIN-973: planen sa "friskrivningen finns bara i en utstashad patch". Mätt vid HEAD `c348968`: `grep -rn "BIN-969" .claude/hooks/` ger EN träff, `.claude/hooks/freshness.mjs:123`, och `git log -S "THE GIT-APPLY GAP"` pekar på `4393344`. BIN-989 döpte om `map-freshness.mjs` → `freshness.mjs` och tog friskrivningen med sig. Premissen är alltså ÖVERTAGEN, inte falsk. → Konservativt val: ingen kodändring; en daterad rättelse skrivs, och BIN-973 stängs som övertagen av `4393344`.
+- [deviation] BIN-973: BIN-891 är ARKIVERAD (`archivedAt` 2026-08-17), och Linear vägrar `save_comment` mot ett arkiverat ärende. → Konservativt val: rättelsen skrivs på BIN-973 självt, som är öppet och länkar till BIN-891, i stället för att avarkivera ett stängt ärende bara för att kunna kommentera det. Acceptanskriterium 1 omformuleras därmed till "en daterad rättelse finns på en LÄSBAR, öppen yta som namnger den sanna sökvägen" — den ursprungliga lydelsen ("på BIN-891") är omöjlig, inte ouppfylld.
+- [deviation] Jag bröt `.claude/shared-plugin.json` mitt i en rättelse: ett `\.`-escape i en Python-sträng blev `\.` i JSON, vilket är ett ogiltigt JSON-escape. Filen slutade parsa och 818 test föll i samma körning. Lagat direkt genom att formulera om kommandot utan escapen. → Lärdom för körningen: kör HELA sviten efter varje redigering av en fil som andra test läser som data, inte bara sviten för filen du tror du ändrade. Ett trasigt JSON ser ut som 818 orelaterade testfel.
+- [discovery] Linear-taket är FULLT igen. `save_issue` (create) svarade "You've exceeded the free issue limit for this workspace" på BÅDA följdbiljetterna 2026-08-25. Samma leveransfel som 2026-08-16. → Konservativt val: varje följdfynd skrivs som en FULLSTÄNDIG kommentar på närmaste öppna moderbiljett, märkt med varför det inte blev en egen biljett, och hela listan upprepas i sprintrapporten. Taket rapporteras som något Malin måste åtgärda — annars blir "kunde inte filas" och "hittade inget" samma sträng.
+- [discovery] `firestore.rules` visade en diff mitt i avslutningen (`canonicalSwipeDocId` smalnad till `{0,8}`). Det var INTE min ändring: BIN-998:s utfallsverifierare kör just då sin egen mutation för kriterium 1, med instruktion att ögonblicksbilda och återställa. → Konservativt val: rör den INTE. Att återställa den åt verifieraren mitt i dess körning är exakt kollisionen från 2026-08-05 (en systeragents återställning landade mellan mutantens för- och efterkontroll och gav ett falskt "död spärr"-resultat). Hashen kontrolleras om mot HEAD `63c5daf0055e3b5b71d7e18ca0153abf0df7cbb1` före stage, och ingenting committas förrän den stämmer.
+- [needs-human] BIN-997 PARKERAD, ej byggd. #25 Engineering Manager lade en VILLKORAD BLOCKERING på biljettens punkt 4 (den mekaniska takspärren): rollens eget dossier, `docs/role-responsibilities.md` §25, undantar uttryckligen `*.knowledge*.md` från grindning — "gating them would put routine bookkeeping behind a review", samma beslut Malin fattade for lessons-digest.md (BIN-851/BIN-869). Spärren får därför bara byggas antingen icke-blockerande eller efter en daterad, skriven omprövning av det beslutet. Det är Malins beslut, inte en granskares och inte mitt.
+  Punkterna 1-3 utan punkt 4 återskapar exakt den drift biljetten är filad om, så de byggs inte heller lösryckta. Och punkt 2 är i sak en 90-procentig radering: `.claude/agents/binge-test-reviewer.knowledge.md` är 295 844 tecken mot ett deklarerat tak på 30k (mätt med `wc -c` 2026-08-25), fördelat på 114 rader i 14 avsnitt där enskilda punkter är upp till 30 317 tecken - alltså inte daterade poster som kan flyttas till arkivet, utan tät principtext som måste skrivas om. #25 flaggade själv förlustrisken och begärde ett andra granskningspass. En obevakad 90-procentig radering av det de fyra granskningsgrindarna vet är inte en sprintändring. -> Konservativt val: parkeras In Review med rollens stake och den öppna frågan utskriven; ingen kod rörd.
+- [discovery] BIN-998 — ROLLKONFLIKT, avgjord med en mätning. #21 Technical Writer krävde att spärren läggs som ett `it()` i `src/test/rules/firestore-rules.test.ts` med motiveringen "den samlas redan in av huvudkörningen". Det är FALSKT: `vitest.config.ts` har `exclude: ['node_modules', '.next', 'out', 'src/test/rules/**']`, och den katalogen körs bara av `npm run test:rules`, som kräver Java + Firestore-emulatorn och är ett eget CI-jobb. #25 Engineering Manager och #27 DBA krävde tvärtom att spärren måste ligga där `npm test` faktiskt kör den. → Konservativt val: #25/#27 vinner på mätningen. Spärren läggs som `docs/org/rules-doc-id-symmetry.test.mjs`, som fångas av den befintliga glob `docs/org/**/*.{test,spec}.mjs`. #21:s ÖVRIGA villkor (golv före jämförelse, ingen ny .md, kommentaren som en HANDLING utan omätta tal, `firestore.rules` orörd) gäller oförändrade.
+- [discovery] BIN-998 → BIN-979 sekvensberoende. `TOOLING_CODE_FILES.size` = **17** vid HEAD `c348968` (mätt med `node -e "import('./docs/org/route.mjs').then(m=>console.log(m.TOOLING_CODE_FILES.size))"`). BIN-998 lägger till sin nya fil i samma mängd, så BIN-979:s golv måste mätas EFTER att BIN-998 landat, annars sätts det på ett inaktuellt tal. → Konservativt val: BIN-998 byggs först; BIN-979:s golv mäts om med kommandot när båda ändringarna ligger i trädet.
+- [deviation] BIN-996: alternativ 3 ur biljetten (grindens blockmeddelande) bor i `C:/claude-plugins`. Den här sessionen har startat subagenter, och en refuserad redigering av delad infra förgiftar varje efterföljande agent (2026-08-03). → Konservativt val: bara alternativ 1 byggs här; alternativ 3 filas som följdbiljett.
+
+---
+
 # SPRINT 2026-08-22
 
 Planen för DENNA körning, skriven FÖRE bygget. Det här avsnittet är det enda underlaget

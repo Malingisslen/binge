@@ -301,24 +301,31 @@ const GATE_SCRIPTS = [...TOOLING_CODE_FILES];
 
 describe('the router and the gate scripts cannot clear themselves (BIN-805)', () => {
   it.each(GATE_SCRIPTS)('%s routes medium, not skip', (path) => {
-    // Assert the property this block is named for and nothing more — the twelve do not
-    // answer alike. Measured at these bytes: of the EIGHT under docs/org/, five are
-    // `owned`/[25] — BIN-834 + BIN-869 NAMED three of them in §25 and gen-ownership-map
-    // .test.mjs inherits, which is exactly why the two named tests below can assert
-    // `inherited === []` and that file could not. The THREE under docs/org/metrics/ are
-    // `unmapped-code`/[14], as are the four under scripts/.
+    // Assert the property this block is named for and nothing more — the entries do not
+    // answer alike.
     //
-    // Corrected 2026-08-17 (ninth integration pass): this said "the four under docs/org/
-    // are owned" and "the four under scripts/", counts that BIN-880 and then BIN-918 both
-    // outgrew. The substance mattered more than the arithmetic — it asserted that
-    // everything under docs/org/ has an owner, which is exactly the gap BIN-930 tracks.
+    // WHICH entry answers WHAT is not written here, and neither is how many. Deliberately
+    // (BIN-979). Enumerations here have gone stale repeatedly, and the rewrites meant to
+    // fix them kept carrying a fresh claim nobody had run a command against: the
+    // 2026-08-23 attempt was failed by the outcome verifier for exactly that, and so was
+    // the first attempt at THIS strike, which asserted a single inheriting file where the
+    // router names more, and partitioned the set into buckets that did not hold all of
+    // it. So the sentence is not written at all any more. Derive it instead, which is the
+    // only form that cannot go stale:
+    //   node -e "import('./docs/org/route.mjs').then(m=>{for(const p of [...m.TOOLING_CODE_FILES].sort()){const r=m.route([p]);console.log(p, r.reasonCode, JSON.stringify(r.panel))}})"
+    //
+    // (A "Corrected 2026-08-17" note stood here, recording that an earlier version of the
+    // paragraph above had miscounted which entries were owned. Struck 2026-08-25 with the
+    // paragraph it corrected — a correction whose subject no longer exists points at
+    // nothing, and the enumeration is not coming back.)
+    //
     // Pinning either specific answer HERE would defeat the point: the router's own
     // failure text tells you to fix an unowned path by naming it in
     // docs/role-responsibilities.md, and a `[14]` pin would make following that advice
     // fail `npm test`, which gates deploy.yml. Improving ownership must never break the
     // deploy; the same trap is refused for the gap baseline in gen-ownership-map.test.mjs.
     // Both specific answers ARE pinned, each in its own named test below, so flipping one
-    // reddens exactly one assertion instead of eight.
+    // reddens exactly one assertion, by name.
     //
     // BIN-874 dropped an `expect(isCodePath(path)).toBe(true)` that stood here: once the
     // list is DERIVED from TOOLING_CODE_FILES, isCodePath is true by construction for
@@ -335,7 +342,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
 
   it('seats the unmapped-code fallback while a gate script has no named owner', () => {
     // The specifics, isolated to ONE case so that naming an owner later flips exactly
-    // this test — a signal to update it — instead of eight scattered ones. That is what
+    // this test — a signal to update it — instead of scattered ones. That is what
     // happened: BIN-834 gave docs/org/route.mjs a real owner, so the example moved to a
     // script that is still unowned. The fallback itself is still the thing being pinned.
     const r = route(['scripts/check-workflow-map.mjs']);
@@ -426,7 +433,12 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // retired `expect(isCodePath(path)).toBe(true)` from the `it.each` above; the
     // dedup line on GATE_FILES further down is kept, because that list is two
     // independent `readdirSync` calls concatenated, not a Set being spread.
-    // Raised 9 → 12 with BIN-918's three additions. A FLOOR, not an equality — the
+    // Raised to the list's measured length on 2026-08-25 (BIN-979), because a floor that
+    // does not follow its list is a guard that never fires. No claim is made here about
+    // how many widenings it fell behind by — measure the list instead, with the command
+    // that set this number:
+    //   node -e "import('./docs/org/route.mjs').then(m=>console.log(m.TOOLING_CODE_FILES.size))"
+    // A FLOOR, not an equality — the
     // objection to equality pins above is about pinning a specific answer, not about
     // advancing a shrink guard with the list it guards. It matters most for
     // docs/org/metrics/log_event.mjs, the one new entry with NO `.test.mjs` sibling:
@@ -435,7 +447,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // its own blind spot 1) and the DISCOVERY half never nominates it. This floor is the
     // only thing left that would notice, and BIN-918 left it at 9 until the twelfth
     // integration pass measured it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(12);
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(18);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {

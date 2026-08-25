@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
@@ -21,7 +21,7 @@ import { join, relative, sep } from 'node:path';
  *
  * So it is a whitelist over the REFERENCE instead. Naming `users` or
  * `publicProfiles` as a document path or a bare collection is rare — five files
- * in a 497-file tree — and every one of them is listed below with why it is
+ * in the tree — and every one of them is listed below with why it is
  * allowed to. A new file that names it fails this test, whatever it then does
  * with it. That is deliberately stricter than the rule it enforces: the cost is
  * one line in a list, and the alternative is a guard that only catches the
@@ -107,7 +107,43 @@ function walk(dir: string): string[] {
 
 describe('users/{uid} write chokepoint (BIN-816, ADR 0019 c1)', () => {
   const files = walk(SRC).map(f => relative(SRC, f));
-  const referencing = files.filter(rel => PROFILE_DOC_REF.test(readFileSync(join(SRC, rel), 'utf8')));
+
+  /**
+   * BIN-940. Every file's text, read ONCE, keyed on the very list `walk` produced.
+   *
+   * It used to be a `readFileSync` per file inside the `referencing` filter, evaluated
+   * while the describe body ran. Say what moved precisely, because the obvious summary is
+   * wrong: BIN-937's sibling had its reads inside `it()` blocks, where vitest's 5s
+   * `testTimeout` applies, and this file's did NOT — a sweep in the describe body runs in
+   * the collection phase, which that limit does not govern. So this is not the same
+   * timeout bug; what it buys is that the sweep now runs once, inside a hook that IS
+   * governed, instead of once per collection with no ceiling over it.
+   *
+   * Nothing about WHAT is scanned changes: the same `walk`, the same `.tsx?` filter that
+   * excludes `.test.tsx?`, the same regex, the same lists.
+   *
+   * Do NOT widen this to the all-files sweep BIN-937 uses in
+   * watchlistWrites.addWrite.test.ts — that one includes test files. Measured 2026-08-25:
+   * three test files match PROFILE_DOC_REF (this file's own docstring quotes the pattern,
+   * plus two under src/test/rules/), so importing that file set wholesale would redden
+   * this guard on its own comment and invite exactly the exemption-padding ADR 0019
+   * condition 1 exists to refuse.
+   */
+  const source = new Map<string, string>();
+  let referencing: string[] = [];
+
+  beforeAll(() => {
+    for (const rel of files) source.set(rel, readFileSync(join(SRC, rel), 'utf8'));
+    referencing = files.filter(rel => {
+      const text = source.get(rel);
+      // THROW, never coerce. `source.get(rel) as string` was the first shape here and it
+      // fails OPEN: a missing key becomes the string "undefined", fails the regex, and the
+      // file drops silently out of `referencing` — i.e. is recorded as a NON-offender.
+      // That is the one direction this guard must never fail in.
+      if (text === undefined) throw new Error(`${rel} was walked but never cached`);
+      return PROFILE_DOC_REF.test(text);
+    });
+  });
 
   it('bara de granskade filerna får ens NÄMNA users/{uid} eller publicProfiles/{uid}', () => {
     const allowed = new Set([CHOKEPOINT, ...BATCH_WRITERS, ...READ_ONLY_FILES]);
@@ -126,10 +162,13 @@ describe('users/{uid} write chokepoint (BIN-816, ADR 0019 c1)', () => {
 
   it('varje undantagen batch-skrivare anropar assertProfileWritable', () => {
     for (const rel of BATCH_WRITERS) {
-      const source = readFileSync(join(SRC, rel), 'utf8');
+      // Läser ur samma cache som svepet, så en post som fallit ur fillistan blir ett
+      // hårt fel här i stället för en tyst omläsning från disk vid sidan av golvet.
+      const text = source.get(rel);
+      expect(text, `${rel} finns inte i det svepta filsetet`).toBeDefined();
       // Utan det här påståendet vore BATCH_WRITERS bara en lista över filer
       // som slipper undan — dvs exakt det hål testet finns för att stänga.
-      expect(source, `${rel} saknar assertProfileWritable`).toContain('assertProfileWritable(');
+      expect(text, `${rel} saknar assertProfileWritable`).toContain('assertProfileWritable(');
     }
   });
 
@@ -166,5 +205,11 @@ describe('users/{uid} write chokepoint (BIN-816, ADR 0019 c1)', () => {
     // katalogsteg som tyst slutar rekursera tar bort hundratals filer, och en
     // gräns på 200 mot 497 hade sovit igenom det.
     expect(files.length).toBeGreaterThan(450);
+
+    // Och vakuitetskontrollen ställer sin fråga till CACHEN, inte bara till fillistan
+    // (BIN-940). Utan den här raden kan en halvfylld cache göra `referencing` tomt, och
+    // ett tomt `referencing` gör både överträdelsetestet och det här golvet gröna på
+    // ingenting — golvet räknar ju fillistan, som är oförändrad.
+    expect(source.size).toBe(files.length);
   });
 });

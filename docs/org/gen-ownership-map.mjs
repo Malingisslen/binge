@@ -179,7 +179,7 @@ export function buildMap(tracked) {
 // made `matched` pattern-only goes red instead of silently reporting no gaps.
 //
 // The check is a SET ratchet against a committed baseline, never a count — a count-based
-// floor stays green while one path leaves and another arrives (BIN-823). 299 such files
+// floor stays green while one path leaves and another arrives (BIN-823). Such files
 // exist today, so failing on all of them would just make the generator unrunnable; it
 // fails on files that are NEW since the baseline, which is what "an owned folder GETS an
 // unowned sibling" means. Re-baseline deliberately with --update-gaps.

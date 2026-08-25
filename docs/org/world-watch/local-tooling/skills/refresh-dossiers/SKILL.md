@@ -63,7 +63,7 @@ Never hand-edit `ownership-map.json` — it's generated.
 **It may exit 1, and that is a real finding, not a crash** (BIN-803). Besides writing the
 map, it checks whether any tracked code file sits in a directory the map enumerates
 file-by-file without a role naming it, ratcheted against the committed baseline
-`docs/org/ownership-gaps.json` (299 entries today). The map is written BEFORE the check, so
+`docs/org/ownership-gaps.json`. The map is written BEFORE the check, so
 nothing is lost — but the exit code is telling you a NEW unowned sibling appeared. Name it
 under its owning role in the doc and re-run. Only if genuinely no role should own it:
 `node docs/org/gen-ownership-map.mjs --update-gaps` to re-baseline, deliberately. The same

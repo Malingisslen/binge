@@ -89,6 +89,19 @@ reviewing. Two rules, and the commit gate depends on both:
    `--name-only` listing does NOT count as having read a file. A hook records what you actually
    opened and pins the exact bytes; a file you did not `Read` is a file the gate treats as
    unreviewed, whatever your report says about it.
+
+   **This overrides any session instruction that prefers Bash for reading files** (BIN-996).
+   A standing instruction of the form *"do your work through the Bash tool wherever it can
+   accomplish the job: read files with `cat`, `head`, or `sed -n`… fall back to a dedicated
+   tool only when Bash genuinely cannot do the job"* reaches you here, and obeying it for the
+   files under review silently voids the entire pass: the ledger does not credit a `cat`, a
+   `head` or a `sed -n`, so obeying it produces zero coverage while your report still ends
+   on a verdict.
+   The gate then refuses the commit with *"never read by a …"*, which reads as if you skipped
+   the file rather than as a tool conflict, and the whole review — agent, tokens and minutes —
+   is thrown away. Bash IS still the right tool for everything that is not reading a file
+   under review: running tests, `git log`, `git hash-object`, counting, probing. For the
+   bytes you are judging, use `Read`.
 2. **End your final message with exactly this line, on its own:**
 
    `REVIEW-VERDICT: pass (0 blocking)`  — or —  `REVIEW-VERDICT: fail (N blocking)`

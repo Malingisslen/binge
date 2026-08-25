@@ -3,6 +3,7 @@ paths:
   - "src/**"
   - "functions/**"
   - "firestore.rules"
+  - "docs/org/metrics/**"
 ---
 
 # Accepted Deviations

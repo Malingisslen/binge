@@ -119,6 +119,18 @@ export const TOOLING_CODE_FILES = new Set([
   'docs/org/route.mjs',
   'docs/org/route.test.mjs',
   'docs/org/gate-symmetry.test.mjs',
+  // BIN-998. The twin id-shape guard: firestore.rules carries the same
+  // `id.matches(...)` expression twice, as two deliberate copies, and until this file
+  // existed nothing checked that they change together — the invariant lived only in
+  // prose at both sites. Added here in the SAME commit as its `reviewGates` pattern,
+  // per BIN-830: widening one of the two lists never widens the other.
+  //
+  // It is a plain vitest file rather than a `check-*.mjs` CLI, so it needs no entry in
+  // scripts/scripts-self-tests-present.test.mjs's REQUIRED floor. It is under docs/org/
+  // rather than src/test/rules/ because vitest.config.ts EXCLUDES that directory: the
+  // rules suite runs only behind `npm run test:rules`, which needs Java and the
+  // emulator, and this check reads firestore.rules as plain text and needs neither.
+  'docs/org/rules-doc-id-symmetry.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   'scripts/check-workflow-map.mjs',
