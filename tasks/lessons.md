@@ -558,3 +558,141 @@ konstaterar att just den commiten införde ett nytt räkneord medan den tog bort
 Regeln ligger i de fyra grindgranskarnas instruktioner och i den delade commit-spärrens
 block om fällor vid omförsök. **Bevakning:** det blocket har ingen storleksgräns — det får
 inte tyst växa till en andra digest.
+
+### 2026-08-25 — [Workflow] En hållen patch FÖRFALLER, och biljetten som beskriver den åldras tyst
+
+**Trigger:** en biljett vars åtgärd är "applicera om patchen / stashen — den går rent mot
+HEAD", eller vilket som helst påstående om att sparat arbete fortfarande passar trädet.
+
+**Regel:** kör `git apply --check` **vid urvalet, varje körning**. Ärv aldrig påståendet
+från biljettexten, hur noggrant mätt det än var när det skrevs.
+
+BIN-972 påstod ordagrant att patchen gick rent, och redovisade sin mätning: sex filer,
+noll fel, 2026-08-23. Mätt om 2026-08-25 gav samma kommando **sex fel**. Den första är
+den avgörande — `.claude/hooks/map-freshness.mjs: No such file or directory` — eftersom
+BIN-989 slog ihop de två freshness-hookarna och döpte om filen. De fem övriga är verkliga
+innehållskonflikter från fyra commits som landat under tiden.
+
+Påståendet var alltså **sant när det skrevs och falskt två dagar senare**, utan att någon
+rörde biljetten. Det är inte slarv i biljetten; det är patchens natur. Withdrawability
+DECAYS — det står redan i lärdomen från 2026-08-01 — men den lärdomen handlade om att
+`git apply -R --check` direkt efter apply. Den här halvan saknades: en patch som ligger
+kvar tappar värde varje gång någon annan rör samma filer, och en biljett kan inte veta det.
+
+**Följdregel:** när patchen inte längre går rent, bygg INTE om den blint och kör INTE
+`git apply` för att se vad som händer. Läs patchen hunk för hunk mot trädet och avgör vad
+som ännu inte finns — mycket av den kan redan ha landat under andra id:n. I det här fallet
+låg git-apply-friskrivningen på main sedan `4393344` och `route.test.mjs`-arbetet byggdes
+om från rent HEAD som BIN-979.
+
+---
+
+### 2026-08-25 — [Workflow] En granskare kan läsa SIN EGEN definition i stället för filen den grindar
+
+**Trigger:** varje gång du dispatchar en grindgranskare och tänker läsa dess rapport.
+
+**Regel:** härled granskarens skyldiga fillista ur `reviewGates` **själv**, före commit, och
+jämför med vad den säger sig ha läst. Rapporten är inte beviset — det är loggen, och den
+läser du inte, du låter grinden läsa den.
+
+`binge-security-reviewer` avslutade på `pass (0 blocking)` och listade sex lästa filer.
+Dess grindmönster matchade **två** stageade filer: `.claude/agents/binge-integration-reviewer.md`
+och `src/lib/firebase/userDocWrite.chokepoint.test.ts`. Den läste den andra — och läste
+`binge-security-reviewer.md`, sin egen definition, i stället för den första. Commiten
+refuserades med exakt den filen namngiven.
+
+Det är en ny variant av 2026-08-19:s lärdom. Den handlade om en granskare som läste
+**för få** filer. Den här läste rätt ANTAL men **fel** fil, och bytet var det som såg mest
+ut som en fil den borde bry sig om. En rapport som räknar upp sex filer ser fullständig ut.
+
+**Praktiskt:** ett kommando som skriver ut vem som är skyldig vad tar tio sekunder och
+sparar ett granskningsvarv:
+
+```
+node -e "const c=require('./.claude/shared-plugin.json');
+const f=require('child_process').execSync('git diff --cached --name-only',{encoding:'utf8'}).trim().split('\n');
+for(const g of c.reviewGates){const h=f.filter(x=>g.patterns.some(p=>new RegExp(p).test(x))&&!(g.exclude||[]).some(p=>new RegExp(p).test(x)));
+console.log(g.agent,'=>',h.join(', ')||'(inga)')}"
+```
+
+Räkna med ett omkörningsvarv i budgeten. Grinden fail:ar closed, så priset är tid, inte en
+ogranskad commit — men det är samma pris BIN-996 handlar om.
+
+---
+
+### 2026-08-25 — [Testing] En trasig JSON i en DATAFIL ser ut som hundratals orelaterade testfel
+
+**Trigger:** varje redigering av en fil som andra test läser som data — `shared-plugin.json`,
+`vitest.config.ts`, `ownership-map.json`, en fixtur.
+
+**Regel:** kör **hela** sviten efter en sådan redigering, aldrig bara sviten för filen du
+tror du ändrade.
+
+Jag skrev en rättelse i `.claude/shared-plugin.json` via ett Python-skript. En sträng bar
+`\\.` i Python-källan, vilket blev `\.` i JSON — ett ogiltigt escape. Filen slutade parsa.
+`docs/org/`-sviten föll från 967 gröna till **818 fällda**, spridda över filer som inte har
+något med ändringen att göra, eftersom `gate-symmetry.test.mjs` och `route.test.mjs` båda
+läser konfigfilen som indata.
+
+Symptomet pekade alltså åt exakt fel håll: en enda felaktig tecken i EN fil, presenterat som
+massiv, diffus regression. Hade jag bara kört filens "egen" svit hade jag sett noll fel och
+committat.
+
+**Verifiera separat att filen parsar** — `node -e "require('./<fil>')"` — som ett eget steg,
+inte som en följd av att sviten råkar vara grön. Samma familj som CRLF-lärdomen från
+BIN-891: verktyget rapporterar inte "din redigering var trasig", det rapporterar något helt
+annat.
+
+---
+
+### 2026-08-25 — [Workflow] Återställ ALDRIG en fil åt en syskonagent som muterar den
+
+**Trigger:** `git status` visar en fil som smutsig mitt i avslutningen, och du vet att en
+verifierare eller granskare kör mutationsprov på den.
+
+**Regel:** rör den inte. Behåll din egen hash-verifierade kopia från HEAD, och kontrollera
+före stage — men låt agenten återställa själv.
+
+Under den här körningen visade `firestore.rules` en diff tre gånger, en gång som en
+**strukturellt trasig** fil (obalanserade citattecken, en duplicerad funktion) eftersom en
+verifierares `String.replace` expanderade `$'` i ersättningssträngen. Frestelsen att
+"städa upp" var stark. Att göra det hade landat mitt mellan agentens för- och efterkontroll
+av mutanten och gett ett falskt resultat — exakt kollisionen från 2026-08-05, fast med
+rollerna ombytta: där var det en systeragent som återställde MIN mutant.
+
+Alla tre gångerna återställde agenten själv, och slutläget verifierades mot HEAD:s hash
+`63c5daf0055e3b5b71d7e18ca0153abf0df7cbb1` före stage. Filen är frånvarande ur commiten.
+
+**Gör i stället:** `git show HEAD:<fil> > <scratchpad>/<fil>.HEAD-<sha>` som din egen
+återställningsväg, och verifiera den med `git hash-object`. Lita inte på agentens
+scratchpad-kopia — den kan skriva över samma sökväg med sin mutant.
+
+---
+
+### 2026-08-25 — [Workflow] Den enda strykning som håller skriver ingen mening alls
+
+**Trigger:** ett fynd av formen "den här kommentaren räknar upp något som inte längre
+stämmer".
+
+**Regel:** ersätt uppräkningen med ett **kommando som härleder den**, inte med en mening om
+mängden. Varje mening om en mängd är ett påstående, och ett påstående någon inte körde ett
+kommando för är nästa rundas fynd.
+
+BIN-979 är nu tre försök på samma sex rader:
+
+* **2026-08-23:** ströks tre tal, skrev ett universellt påstående i deras ställe.
+  `correctness=fail`, `intent=fail`.
+* **2026-08-25, försök 1 (mitt):** ströks talen, skrev i stället att EN fil ärver sitt
+  ägarskap (routern namner tre) och delade mängden i hinkar som höll 15 av 18 poster —
+  plus ett färskt räknefel om antalet vidgningar i golvkommentaren. Fälld.
+* **2026-08-25, försök 2:** skriver ingen mening om mängden. Klistrar in
+  `node -e "…route([p]).reasonCode…"`. Godkänd.
+
+Lärdomen från 2026-08-19 ("rättelsen bär oftast ett nytt omätt tal") beskrev problemet.
+Den här beskriver **utvägen**, och den är smalare än den låter: det räcker inte att undvika
+siffror. "Den enda X", "alla Y", "de under Z svarar W" är samma sak i ord. Testet är: *kan
+ett kommando motsäga den här meningen?* Kan det, skriv kommandot i stället för meningen.
+
+Ett ANKARE följer med: när uppräkningen försvinner blir en `Corrected …`-notering som
+rättade den föräldralös. Stryk den i samma redigering — ett protokoll utan subjekt pekar på
+ingenting. (Undantaget kvarstår: aldrig stryka protokollet över **olöst** arbete.)
