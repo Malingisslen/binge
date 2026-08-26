@@ -4,6 +4,7 @@ paths:
   - "functions/**"
   - "firestore.rules"
   - "docs/org/metrics/**"
+  - ".claude/hooks/**"
 ---
 
 # Accepted Deviations
@@ -416,3 +417,26 @@ ANNAN än ägaren. Posten täcker en självägd rad, i en gren, i ett tvårundtu
 **Re-open when:** `removeItem` slutar bumpa generationen synkront, före sin första await.
 Också om en rapport visar en verklig återuppstådd titel i skarp drift: då är det inte
 det här fönstret utan något annat, och det ska mätas för sig.
+
+---
+
+## BIN-969: git-apply-hålet i färskhetsstämplingen — 2026-08-26
+
+Ett beslut, inte en öppen punkt. Fila inte "hooken missar kod som kommer in via `git apply`,
+`git stash pop`, `git checkout`, en merge eller en heredoc".
+
+**Beslutet självt står i** `.claude/hooks/freshness.mjs`, i kommentarsblocket över `stampMap`.
+Läs det där. Den här posten är en pekare, inte en kopia — två exemplar av ett beslut är två
+saker som kan glida isär, och koden är den som står bredvid mekanismen.
+
+**Varför posten behövs ändå:** den här filen är den enda liggare varje granskaragent måste
+läsa innan den filar något. Ett beslut som bara står vid mekanismen når ingen granskare av
+en framtida relaterad ändring, och nästa som råkar hitta hålet filar om det. Samma ärende
+vidgade `paths:` ovan med `.claude/hooks/**`, så filen nu också triggerladdas när någon rör
+hookarna.
+
+**Re-open when:** en commit som applicerat en hållen bunt (`git apply` av en patchfil under
+`.claude/state/sprint-patches/`) rör en fil som flödeskartan listar som en nods `path`, och
+varken den commiten eller nästa rör `docs/workflow-map.html`. Det är procedurens faktiska
+utfall. Åtgärden då: spåra om just de flödena och uppdatera kartans prosa — INTE att
+ompröva själva accepten, som är avgjord i BIN-969.

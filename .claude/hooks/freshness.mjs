@@ -177,9 +177,21 @@ function stampDossier(payload, repoRoot, rel) {
 //     boundaries), both directions, and ci.yml + deploy.yml run it. A rename, a deletion,
 //     a new route or Cloud Function still fails regardless of how the code arrived.
 //   SCOPE — this flag file only. No gate is weakened and no reviewer is skipped.
-//   TIME — revisit the first time a git-apply landing actually ships map prose that is
-//     wrong. Until then the remedy is procedural and already sits in the recovery path:
-//     whoever applies a held batch patch re-reads the flag and the flows it names.
+//   TIME — re-open when a commit that applied a held batch (`git apply` of a patch file
+//     under `.claude/state/sprint-patches/`) touches a file the workflow map lists as a
+//     node `path`, and neither that commit nor the next one touches `docs/workflow-map.html`.
+//     That is the procedure's actual outcome. The remedy when it does: re-trace
+//     those flows and update the map's prose — NOT reconsider the accept itself, which is
+//     decided here.
+//       (The first wording was "revisit the first time a git-apply landing actually ships map
+//       prose that is wrong". Struck 2026-08-26, BIN-981: the HONEST RESIDUE below says this
+//       flag is the only thing that asks anyone to re-trace and the linter does not read
+//       prose, so nothing could ever observe that condition — the shape accepted-deviations.md
+//       itself calls "permanent by construction". A second candidate, "the flag's `triggers`
+//       array did not name a file the patch changed", was rejected in the same round for the
+//       opposite reason: `git apply` fires no tool call, so on a cross-session recovery the
+//       flag will essentially NEVER name those files, and a trigger that fires on almost every
+//       recovery has stopped being an alarm.)
 //
 // WHY NOT PLUG IT HERE. A PostToolUse hook is handed a tool call; it is never told about
 // a git operation, so no edit to THIS file can close it. Closing it means a different
