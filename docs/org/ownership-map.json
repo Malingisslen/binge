@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 191,
+  "patternCount": 193,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -323,6 +323,8 @@
         "src/components/pages/DynamicRouter.tsx",
         "src/components/tv/RelatedSeriesStrip.tsx",
         "src/lib/libraryView.ts",
+        "src/lib/markedSeen.test.ts",
+        "src/lib/markedSeen.ts",
         "src/lib/seenDate.ts"
       ]
     },

@@ -1,3 +1,208 @@
+# SPRINT 2026-08-26 (fjärde körningen)
+
+Planen för DENNA körning, skriven FÖRE bygget. Sju biljetter, fyra buntar.
+
+Träd rent på `main` vid HEAD `4fefd4b`, i synk med origin.
+
+## Routern, körd på varje bunts FAKTISKA filuppsättning vid HEAD `4fefd4b`
+
+| Bunt | Biljetter | Filer | Tier | Säte |
+| -- | -- | -- | -- | -- |
+| A | BIN-1011, BIN-1012 | `src/contexts/WatchlistContext.tsx`, `src/lib/firebase/accountDeletion.ts` (endast läst) | `medium` | #27 DBA |
+| B | BIN-1010 | `src/contexts/WatchlistContext.tsx`, `src/lib/watchlistWrites.ts` | `medium` | #27 DBA |
+| C | BIN-978, BIN-1008 | `src/lib/watchlistWrites*.test.ts`, `src/app/stats/page.tsx`, `src/components/pages/UserProfilePageClient.tsx`, `src/hooks/useServiceValue.ts` | `medium` | #5 Legal, #26 IA |
+| D | BIN-1014, BIN-1021 | `docs/org/route.test.mjs`, `.claude/rules/routing.md` | `medium` / `skip` | #25 EM |
+
+Ingen bunt routar `top`. **Kapacitetskoll vid urvalet:** arbetaren är denna session och kan
+konvenera enskilda rollkritiker. Kritikerna körs FÖRE respektive bygge.
+
+## Ej valda, och varför
+
+| Biljett | Beslut |
+| -- | -- |
+| BIN-909 | Routern ger **`top`** (`src/contexts/AuthContext.tsx` är high-stakes) OCH biljetten bär en produktfråga som är Malins (vad återsamtyckesskärmen säger). **needs-approval.** |
+| BIN-603 | Parkerad handbroms: Malin har ett mätt a/b/c-val framför sig, rekommendationen är (a) vänta. Bygget föll rött två av två. |
+| BIN-1002 | `firestore.rules`-regexet mot klientens id-byggare — egen riskklass, egen körning. |
+| BIN-1013, BIN-1003 | Bor i `C:/claude-plugins`, kräver en session i det repot. Tier D. |
+| BIN-790 | **Ej byggd, avsiktligt.** Fixen biljetten beskriver (rensa en trigger vars fil är oförändrad mot HEAD) skulle radera arbetsordern i exakt det arbetsflöde lärdomsdigesten KRÄVER: kartändringar ligger i en EGEN commit efter funktionskoden, så triggerfilen är per definition oförändrad mot HEAD när kartan ännu inte är uppdaterad. Kommenterad; behöver en design, inte ett bygge. |
+| BIN-852, BIN-935, BIN-990 | Parkerade handbromsar. |
+| BIN-829, BIN-419, BIN-826, BIN-999 | Kräver Search Console / produktionsläsning. Tier D. |
+| BIN-454, BIN-402 | Stående "rör aldrig `mutateEnabled`" + konsolsteg. Tier D. |
+| BIN-189, BIN-170, BIN-521 | Etiketten `idea` → byggs aldrig av en obevakad sprint. |
+| BIN-559, BIN-590, BIN-624, BIN-658, BIN-871, BIN-924, BIN-929, BIN-930, BIN-938, BIN-939, BIN-959, BIN-613, BIN-824 | Lägre poäng, ryms inte i denna körning. |
+
+---
+
+## Bunt A — WatchlistContext, två mekaniska fixar
+
+### BIN-1011 — kontoraderingens kaskad ses inte av ett tillägg i flykten
+
+**Tier A** · `build` · router `medium` · säte #27
+
+Premisskoll vid HEAD: `isDeletionStarted` importeras redan (rad 16) och används på två
+ställen (rad 665, 726). Tilläggsvägen i `updateProgress` (rad 1199-1200) gör det INTE.
+
+Acceptanskriterier:
+
+1. Tilläggsvägen i `updateProgress` anropar `isDeletionStarted(uid)` och returnerar utan
+   skrivning när den är sann, i samma synkrona fönster som generationskontrollen före
+   `await upsertTitle(payload)`. *(kind: diff)*
+2. Ett test driver: radering startad → avsnittsbock med `addIfMissing` på en oföljd serie →
+   ingen skrivning går ut. *(kind: diff)*
+3. `src/lib/firebase/accountDeletion.ts` ändras INTE — fixen sitter på skrivsidan. *(kind: diff)*
+4. `WatchlistContext`-sviterna gröna. *(kind: diff)*
+
+### BIN-1012 — removeItem bygger samma nyckel två gånger
+
+**Tier A** · `build` · router `medium` · säte #14
+
+Premisskoll vid HEAD: fyra `${uid}:`-konstruktioner i filen (rad 1057, 1343, 1387, 1412);
+`removalGenKey` (1387) och rensningen (1412) är de två identiska.
+
+Acceptanskriterier:
+
+1. `removeItem` härleder `docId` EN gång, ovanför generationsbumpen, och både
+   `removalGenKey` och `addedByProgressRef`-rensningen använder det värdet. *(kind: diff)*
+2. Bumpen ligger kvar före funktionens första `await`. *(kind: diff)*
+3. `BIN-965: a SECOND removal of the same title is still seen by an add in flight` grön. *(kind: diff)*
+
+---
+
+## Bunt B — BIN-1010: den kvarliggande raden kan vara publikt läsbar
+
+**Tier A** · `build` · router `medium` · säte #27 · **Phase 1.5 utlöst** (security-etikett + single)
+
+### Riskbiljettens plan
+
+Premisskoll vid HEAD: `effectiveVisibilityNow()` (rad 800) returnerar
+`isPublic: eff === 'public'`, och `writeTitle` (rad 854) skickar den till `buildAddWrite`
+utan villkor. Den residuala rutan i `updateProgress` (rad 1228) upptäcker att en radering
+landade EFTER skrivningen och returnerar `false` — men dokumentet ligger kvar.
+
+**Vägval.** Biljettens alternativ 1 träffar inte fallet: generationskontrollen har inte
+fallit när skrivningen går ut — raderingen landar mellan kontrollen och Firestores svar.
+Alternativ 2 (aldrig stämpla synlighet på den här vägen) ändrar beteendet för VARJE
+avsnittsbock, inte bara den kapplöpta — ett publikt bibliotek skulle tappa titeln ur sin
+publika vy. Alternativ 3 kräver Malins beslut.
+
+**Vald väg (fjärde, härledd):** när den residuala kontrollen faller, skriv en
+synlighets-ENDAST merge som sätter `isPublic: false` / `effectiveVisibility: 'private'` på
+just det dokumentet. Det är ingen radering — BIN-965:s beslut ("kompensera inte med en
+`deleteDoc`") står orört — och det förstör ingenting: läggs titeln tillbaka i samma andetag
+återställs stämpeln av nästa statusskrivning, eftersom `shouldStampVisibility` är sann för
+en titel utan per-titel-override.
+
+Blast radius: `src/contexts/WatchlistContext.tsx` (den residuala grenen) + dess test.
+`firestore.rules` rörs INTE. Rollback: en revert av den ena hunken.
+
+Acceptanskriterier:
+
+1. En rad kvarlämnad av den residuala kapplöpningen kan inte serveras av den publika
+   läsklausulen: skrivvägen upptäcker generationsändringen efter skrivningen och nedgraderar
+   `isPublic`/`effectiveVisibility` till privat på det dokumentet. *(kind: diff)*
+2. Ingen kompenserande `deleteDoc` införs. *(kind: diff)*
+3. Test: residualfallet med `defaultVisibility: 'public'` → nedgraderingsskrivningen går ut;
+   OCH ett vanligt, okapplöpt tillägg stämplar fortfarande profilens standard. *(kind: diff)*
+4. `.claude/rules/accepted-deviations.md`:s BIN-965-post säger att det publikt läsbara fallet
+   nu är stängt. *(kind: diff)*
+
+---
+
+## Bunt C — testluckor
+
+### BIN-978 — ett förfalskat rewatchCount kan omdatera watchedAt
+
+**Tier A** · `build` · router `medium` · säte #5 · **Phase 1.5 utlöst** (prioritet 2 + single)
+
+Premisskoll vid HEAD: grinden i `buildAddWrite` är
+`item.status === 'sedd' && (countedRewatch || canAutoStampWatchedAt(...))` där
+`countedRewatch = 'rewatchCount' in rewatch` och `rewatch` HÄRLEDS av `rewatchFields`.
+Ett `rewatchCount` på nyttolasten går rakt in i `itemFields`-spridningen.
+
+Blast radius: endast `src/lib/watchlistWrites.addWrite.test.ts`. Ingen produktionskod.
+Rollback: radera testet.
+
+Acceptanskriterier:
+
+1. Ett test hävdar att en nyttolast som BÄR `rewatchCount` inte producerar `watchedAt` när
+   titeln redan har ett lagrat datum och skrivningen inte är en räknad omtitt. *(kind: diff)*
+2. Muteringen `'rewatchCount' in rewatch || 'rewatchCount' in item` FÄLLER minst ett test —
+   mätt genom att köra den, med muteringen assertad före OCH efter sviten i ETT kommando. *(kind: diff)*
+
+Rättelse: biljetten citerar verifieraren på "89/89" i båda sviterna. #5 körde om och mätte
+**88/88** både rent och muterat. Talet i biljetten är fel; 88 är det mätta.
+3. Ingen befintlig assertion försvagas. *(kind: diff)*
+
+### BIN-1008 — de tre inline-ställena som räknar sedda titlar
+
+**Tier A** · `build` · router `medium` · säte #26
+
+Acceptanskriterier:
+
+1. Vart och ett av de tre ställena (`src/app/stats/page.tsx`,
+   `src/components/pages/UserProfilePageClient.tsx`, `src/hooks/useServiceValue.ts`) har ett
+   test som hävdar att en `{status:'sedd', watchedAt:null}`-titel RÄKNAS. *(kind: diff)*
+2. Att byta ett av de tre till ett datumvillkor fäller dess test. *(kind: diff)*
+3. `npm test` grön. *(kind: diff)*
+
+---
+
+## Bunt D — två strykningar
+
+### BIN-1014 — route.test.mjs: stryk det namngivna exemplet
+
+**Tier A** · `build` · router `medium` · säte #25
+
+1. Kommentaren namnger ingen enskild fil som exempel. *(kind: diff)*
+2. Ingen ny fil nomineras. *(kind: diff)*
+3. `npx vitest run docs/org/route.test.mjs` grön. *(kind: diff)*
+
+### BIN-1021 — routing.md: stryk "(trigger-loaded på samma paths)"
+
+**Tier A** · `build` · router `skip`
+
+1. Parentesen är struken. *(kind: diff)*
+2. Ingen ersättande utsaga skrivs. *(kind: diff)*
+3. Punkt 2 i biljetten (`contextDiet.alwaysOn`) byggs INTE — den stämmer i dag. *(kind: diff)*
+
+---
+
+## Deviation log
+
+- [deviation] BIN-1012: #14:s villkor 1 säger att bumpen ska förbli "de två FÖRSTA satserna"
+  i `removeItem`. Biljettens egen föreskrivna fix kräver att en ren, synkron
+  `const docId`/`const docKey` hoistas ovanför den, så bumpen är inte längre sats 1.
+  Invarianten villkoret skyddar — ingen `await` mellan funktionens topp och bumpen — är
+  orörd, och #14:s egen graderbara form ("noll rader mellan bumpen och `await fsdb()`") är
+  uppfylld. Konservativt val: behåll hoisten, redovisa avvikelsen.
+- [discovery] BIN-1008: de tre ställena gick inte att pinna med ett test var utan att
+  rendera två sidkomponenter som i dag saknar testinfrastruktur. #26 blessade extraktion med
+  formkrav, så regeln flyttade till `src/lib/markedSeen.ts` (typad på `status` ENSAM, så
+  typen — inte en kommentar — hindrar att de två reglerna slås ihop) och de tre ställena
+  anropar den. `seenDate.ts`:s huvud påstod att den andra regeln "stays inline"; det blev
+  falskt i samma ändring och rättades på plats.
+- [deviation] BIN-1014 + BIN-1021 blev TVÅ commits, inte en. #25:s villkor 2, bindande.
+
+## Needs you (Tier D)
+
+- BIN-1013, BIN-1003 — kräver en session i `C:/claude-plugins`.
+- BIN-603 — ditt val a/b/c står kvar; rekommendation (a) vänta.
+- BIN-909 — `top`-tier + en produktfråga (vad återsamtyckesskärmen säger).
+- BIN-829, BIN-419, BIN-826, BIN-999 — Search Console / produktionsläsning.
+
+## Post-sprint
+
+1. `npm run lint` + `npm run typecheck` + `npm test`.
+2. Fila följdbiljetter FÖRE commit.
+3. Fyra commits, en per bunt, var och en med sin granskarrunda.
+4. Push (= deploy) → invänta `deploy.yml` grön → purga Cloudflare.
+5. Linear-övergångar PARVIS med varje commit.
+
+---
+---
+
+# ARKIV — tidigare körningar
+
 # SPRINT 2026-08-26 (tredje körningen)
 
 Planen för DENNA körning, skriven FÖRE bygget. EN biljett, en bunt.

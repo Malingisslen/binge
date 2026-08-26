@@ -526,11 +526,13 @@ Owns wayfinding.
 - What counts as a "seen date". `watchedAt` survives a status change (BIN-593), so the
   stored date and the current status answer different questions, and the library, the
   diary, the stats page and the public profile must agree on which one they are asking.
-  This seat owns that distinction: `seenDate()` is the date accessor, and the separate
-  "is it marked sedd" membership check stays inline at the surfaces that count titles.
-  Collapsing the two drops titles from user-visible counts — this role's binding
-  condition on BIN-689, 2026-08-25.
-  → `src/lib/seenDate.ts`
+  This seat owns that distinction: `seenDate()` is the date accessor, and `markedSeen()`
+  is the separate membership check used by the surfaces that count titles. Collapsing the
+  two drops titles from user-visible counts — this role's binding condition on BIN-689,
+  2026-08-25. The membership half was inline at three call sites until BIN-1008 gave it a
+  file and a suite; its signature is typed on `status` alone, so the type rather than a
+  comment is what stops the two being folded together.
+  → `src/lib/seenDate.ts`, `src/lib/markedSeen.ts`, `src/lib/markedSeen.test.ts`
 
 ---
 
