@@ -301,6 +301,33 @@ bunts filuppsättning vid urvalet, och kapaciteten matchades mot arbetaren före
   bara `--dry-run`. Biljetten står i Backlog med tre alternativ, en mätning och en
   rekommendation (alternativ a) skrivna till Malin.
 
+  **RÄTTELSE 2026-08-26, samma natt: skälet ovan var FALSKT, och det byggdes efteråt.**
+  Posten säger att TMDB-byggcachen är kall och att ett lokalt bygge därför är
+  175-minutersvägen. Cachen är `2,0 GB / 44 341 filer` — varm. Kommandot som skulle
+  mäta den timeoutade innan det skrev något, och tystnaden lästes som "tom".
+  Slutsatsen skrevs utan att mätningen kördes klart.
+
+  Det är samma klass som de tre strykningarna i den här sprinten, men värre: det satt
+  i skälet att INTE göra ett jobb, och hade parkerat fyra åtgärdbara sårbarheter på en
+  osanning. Ett tal som stoppar arbete måste mätas hårdare än ett tal som beskriver det.
+
+  **Vad som hände när det faktiskt kördes:** `npm audit fix` (utan `--force`) rensar
+  alla fyra CVE:erna, lämnar `package.json` orörd, typecheck rent, 4328 test gröna —
+  och 25k-sidorsbygget FALLER, två gånger identiskt, i PostCSS-steget med
+  `node process exited before we could connect to it with exit code: 0xc0000142`.
+
+  Kontrollprov kört: låsfilen återställd, `npm ci`, samma bygge på oförändrad kod
+  passerar samma steg (`✓ Compiled successfully in 23.9s`) och går vidare till
+  15 773 sidor. Samma maskin, samma minut. Det är uppdateringen, inte miljön.
+
+  Felkoden är Windows-specifik, så CI på ubuntu kan mycket väl vara opåverkad — men
+  det går inte att veta utan att pusha, och deployen är inte en testmiljö.
+
+  `package-lock.json` är återställd till HEAD. Ingenting committat. Biljetten står i
+  Backlog med tre alternativ; rekommendationen är nu **vänta**, motsatsen till vad
+  som stod innan bygget kördes.
+
+
 
 - [needs-human] **2026-08-25, bunt B — BIN-997 är INTE med i den här commiten.** Bunten
   valdes, routades (`medium`, säte #25), och fick sin blinda kritik FÖRE bygget. Den
