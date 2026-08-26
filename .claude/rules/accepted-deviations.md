@@ -440,3 +440,79 @@ hookarna.
 varken den commiten eller nästa rör `docs/workflow-map.html`. Det är procedurens faktiska
 utfall. Åtgärden då: spåra om just de flödena och uppdatera kartans prosa — INTE att
 ompröva själva accepten, som är avgjord i BIN-969.
+
+---
+
+## BIN-1010: den kvarliggande radens PUBLIKA halva är stängd — 2026-08-26
+
+Ändrar en av BIN-965-postens punkter ovan. Posten är append-only, så den står kvar
+ordagrant; den här posten säger vad som inte längre gäller.
+
+BIN-965-posten listar under *Fortfarande fileable*: **"varje läge där raden blir synlig
+för någon ANNAN än ägaren"**. Det läget fanns: raden skrivs av `buildAddWrite` med
+`visibilityFields: effectiveVisibilityNow()`, så för ett konto vars `defaultVisibility` är
+`'public'` landade den `isPublic: true` och serverades av `firestore.rules`' publika
+läsklausul tills användaren raderade titeln en andra gång.
+
+**MEKANISM.** När den residuala kontrollen faller skriver `updateProgress` en
+synlighets-ENDAST merge på samma dokument — `{ effectiveVisibility: 'private',
+isPublic: false }`, hårdkodade, inte hämtade ur `effectiveVisibilityNow()`.
+
+Det är en ENGÅNGSSTÄMPEL, ingen låsning, och den skillnaden är hela poängen: skrivningen
+sätter det denormaliserade paret men ingen per-titel-`visibility`, så
+`shouldStampVisibility` förblir sann för raden. Nästa synlighetsstämplande skrivning — och
+`cascadeVisibilityToItems` i `AuthContext`, som väljer just raderna utan override — sätter
+tillbaka kontots standard. Det som stängs är alltså fönstret direkt efter att användaren
+bett titeln försvinna, inte radens synlighet för all framtid.
+
+**ALLVARLIGHET.** Två skilda utfall, och de har olika pris:
+
+* Den kvarliggande raden blir privat i stället för publik. Det är fixens syfte, och den
+  kostar ingenting — ingen har bett om den raden.
+* Fönstret är smalnat, inte stängt till noll: en genuint samtidig återläggning kan lägga
+  sig mellan att kontrollen faller och att nedgraderingen landar. Då nedgraderas en LEVANDE
+  titel som användaren nyss lade tillbaka från publik till privat. Det är en annan sak än
+  BIN-965:s övergivna rad — det rör en titel någon faktiskt vill ha — men det är
+  självläkande utan användaråtgärd, via samma stämpling som stycket ovan beskriver, och
+  felriktningen är mot mer privat, aldrig mot mer publikt.
+
+**OMFÅNG.** Enbart `addIfMissing`-grenen i `updateProgress`, och enbart den residuala
+returvägen. Ingen annan skrivväg rörs, ingen granskare hoppas över, `firestore.rules`
+ändras inte — den tvåfältsmerge:n är redan tillåten av `isValidWatchlistItem`s allowlist
+som en UPDATE.
+
+Rader som hann bli publikt läsbara FÖRE den här fixen backfillas inte. De läker på samma
+sätt som allt annat i posten: nästa gång användaren rör titeln, eller nästa kaskad.
+
+**Vad som INTE ändrades, och inte får ändras:** BIN-965:s beslut att inte kompensera med
+en `deleteDoc` står orört. Nedgraderingen är ingen radering.
+
+**Vad som fortfarande är accepterat:** själva den kvarliggande, PRIVATA raden. Den är
+självägd och raderbar med samma knapp igen, precis som BIN-965-posten säger.
+
+**Vad som fortfarande är fileable:** de andra punkterna i BIN-965-postens lista — samma
+kapplöpning i någon annan gren än `addIfMissing`, och en återuppstådd titel observerad i
+skarp drift.
+
+**Konsekvens för 2026-08-20-postens skrivvägsinventering.** Den posten räknar `merge:
+true`-skrivarna i `WatchlistContext` och hur många av dem som sväljer nekandet via
+`guardedItemWrite`. Den här ändringen lägger till en skrivare och ett `guardedItemWrite`-
+anropsställe, så de talen beskriver inte längre koden. Posten ovan är append-only och
+rättas inte; härled i stället mängderna när du behöver dem:
+
+```
+grep -c "merge: true" src/contexts/WatchlistContext.tsx
+grep -n "guardedItemWrite('" src/contexts/WatchlistContext.tsx
+```
+
+Den nya skrivaren är INTE en av "de sex tystade redigeringsvägarna" den posten handlar om
+— den är fire-and-forget och har ingen anropare som bekräftar något.
+
+**RE-OPEN WHEN:** `kind: 'updateProgress-leftoverVisibility-failed'` dyker upp i
+Sentry-scopet `watchlist`. Den strängen betyder att nedgraderingen inte gick igenom av
+något annat skäl än det väntade, och den har medvetet ett eget namn: det VÄNTADE fallet
+rapporteras som `updateProgress-leftoverVisibility-refused`, och en enstaka träff där är
+godartad — har användaren raderat titeln en andra gång innan nedgraderingen landar är
+skrivningen en create för Firestore, och BIN-942:s create-golv nekar den, vilket är rätt
+svar när det inte finns någon rad kvar att skydda. Återkommande träffar på `-refused`
+betyder något annat och är också en re-open.

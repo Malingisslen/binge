@@ -92,6 +92,58 @@ async function guardedItemWrite(kind: string, write: () => Promise<void>): Promi
   }
 }
 
+/**
+ * BIN-1010 — force a leftover row PRIVATE, and only ever that.
+ *
+ * BIN-965 accepted the leftover row this window can produce: `removeItem` bumps the
+ * generation after the add's last check but its `deleteDoc` lands before our `setDoc`,
+ * so our write becomes a new row. That accept is scoped to a SELF-OWNED row — and its
+ * own text names "any state where the row becomes visible to someone OTHER than the
+ * owner" as still fileable. This is that state: the row is written with
+ * `effectiveVisibilityNow()`, so for an account whose `defaultVisibility` is 'public' it
+ * lands `isPublic: true` and `firestore.rules`' public-read clause serves a title the
+ * user just asked to remove, until they remove it a second time.
+ *
+ * NOT a compensating delete. BIN-965 decided that question and the decision stands: a
+ * delete that misfires destroys a title the user re-added in the same breath. This
+ * destroys nothing, and it is a ONE-SHOT stamp rather than a lock: it writes the
+ * denormalised pair and no per-item `visibility` override, so `shouldStampVisibility`
+ * stays true for that row and the next visibility-stamping write — or AuthContext's
+ * `cascadeVisibilityToItems`, which selects exactly the rows with no override — puts the
+ * account default back. That is the intended shape, not a leak: what must not happen is
+ * the row being public in the window right after the user asked for it to be gone.
+ *
+ * The two values are HARD-CODED rather than routed through `effectiveVisibilityNow()`:
+ * a leftover row's safety must not depend on what the account's profile default happens
+ * to be, which is the very thing that made it public. Do not "consolidate" this through
+ * the shared visibility helper.
+ *
+ * Fire-and-forget with its own catch, because the caller is already resolving its
+ * outcome. `permission-denied` is the EXPECTED benign case, not a failure: if the user
+ * removed the title a second time before this lands, the bare visibility-only merge is a
+ * create to Firestore and BIN-942's required-field floor refuses it — which is the right
+ * answer, since there is no row left to protect. Anything else is NOT benign, so it
+ * reports under its own `kind` — the same split `flushNextAirWrites` makes between its
+ * chunk and its setup failures, and the reason is the same: the accepted-deviations entry
+ * treats one of them as expected and the other as a signal.
+ *
+ * Narrows the window rather than closing it: a genuine concurrent re-add could still
+ * interleave between the mismatch and this write. Stated rather than implied.
+ */
+function downgradeLeftoverVisibility(uid: string, docId: string): void {
+  void (async () => {
+    const { db, doc, setDoc } = await fsdb();
+    await guardedItemWrite('updateProgress-leftoverVisibility-refused', () => setDoc(
+      doc(db, 'users', uid, 'watchlist', docId),
+      { effectiveVisibility: 'private', isPublic: false },
+      { merge: true },
+    ));
+  })().catch(err => {
+    console.error('[watchlist] updateProgress-leftoverVisibility-failed: nedgraderingen gick inte igenom', err);
+    captureError(err, { scope: 'watchlist', kind: 'updateProgress-leftoverVisibility-failed' });
+  });
+}
+
 // BIN-505: note bounds — NOTE_MAX_LEN mirrors the firestore.rules isValidNoteDoc
 // cap.
 //
@@ -1243,7 +1295,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // wrote. A compensating delete that misfires destroys a title the user re-added in
         // the same breath; a stray row destroys nothing. The asymmetry decides this, not
         // the odds — do not "complete" the fix with that delete.
-        return (removalGenRef.current.get(cacheKey) ?? 0) === removalGenAtStart;
+        //
+        // BIN-1010 — what the row may NOT be is publicly readable. Only here, and only on
+        // this branch: every earlier `return false` above leaves without writing anything,
+        // so there is no row to downgrade and firing there would touch a document this
+        // gesture never created.
+        const survived = (removalGenRef.current.get(cacheKey) ?? 0) === removalGenAtStart;
+        if (!survived) downgradeLeftoverVisibility(uid, docId);
+        return survived;
       })();
       inFlightAddsRef.current.set(cacheKey, addPromise);
       try {

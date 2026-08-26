@@ -1154,6 +1154,143 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(await tick).toBe('written');
   });
 
+  // BIN-1010 — the half of BIN-965's residual window that its own accept leaves fileable.
+  //
+  // The accept covers a SELF-OWNED leftover row and says so; it also names "any state
+  // where the row becomes visible to someone OTHER than the owner" as still open. For an
+  // account whose profile default is 'public', the leftover row lands `isPublic: true` and
+  // firestore.rules' public-read clause serves a title the user just asked to remove. The
+  // account default is the whole mechanism, so these tests only mean anything with it set
+  // to 'public'.
+  //
+  // The window is driven for real: the add's own write is HELD, the removal lands while it
+  // hangs (after the pre-write generation check, before our setDoc resolves), then the
+  // write is released. Setting the marker up front would exercise the pre-write guard
+  // instead — a different branch, and one that writes nothing at all.
+  it('BIN-1010: a row left behind by the residual race is forced private, not left publicly readable', async () => {
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+    let releaseWrite: () => void = () => {};
+    setDoc.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => { releaseWrite = resolve; });
+    });
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    // Fetch resolves → the pre-write generation check passes → the add's setDoc is issued
+    // and now hangs. This is the residual window, and nothing else can produce it.
+    await act(async () => { releaseShow(TV_SHOW); });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => { releaseWrite(); await tick; });
+
+    expect(await tick).toBe('refused');
+    await vi.waitFor(() => {
+      const writes = setDoc.mock.calls.filter(
+        c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_1399',
+      );
+      expect(writes).toHaveLength(2);
+    });
+    const writes = setDoc.mock.calls.filter(
+      c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_1399',
+    );
+    // The add's own write carried the account default — that is the leak.
+    expect(writes[0][1]).toMatchObject({ effectiveVisibility: 'public', isPublic: true });
+    // The downgrade carries the two fields and NOTHING else: it is not a delete, and it is
+    // not routed through effectiveVisibilityNow(), which would hand back 'public' again.
+    // A future "consolidate this through the shared helper" tidy-up fails right here.
+    expect(writes[1][1]).toEqual({ effectiveVisibility: 'private', isPublic: false });
+  });
+
+  it('BIN-1010: a downgrade that fails for an UNEXPECTED reason reports under its own kind', async () => {
+    // The re-open trigger in accepted-deviations.md keys on this exact string, and it is
+    // the only channel the failure has — nobody awaits this write and the user sees
+    // nothing. A silent rename would rot the trigger with the whole suite green, which is
+    // the shape `communityRatingMaintain`'s entry was rewritten to avoid.
+    //
+    // The EXPECTED refusal (create-floor permission-denied, the title was removed a second
+    // time) reports as `-refused` and is swallowed by guardedItemWrite. This drives the
+    // other branch: an `unavailable` is rethrown, reaches the outer catch, and must arrive
+    // at Sentry under `-failed`, without becoming an unhandled rejection.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+    let releaseWrite: () => void = () => {};
+    setDoc.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => { releaseWrite = resolve; });
+    });
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { releaseShow(TV_SHOW); });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    // The downgrade is the NEXT setDoc, and it goes down on a dropped connection.
+    setDoc.mockRejectedValueOnce(
+      Object.assign(new Error('The service is currently unavailable.'), { code: 'unavailable' }),
+    );
+    await act(async () => { releaseWrite(); await tick; });
+
+    expect(await tick).toBe('refused');
+    await vi.waitFor(() => {
+      expect(captureError).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'unavailable' }),
+        { scope: 'watchlist', kind: 'updateProgress-leftoverVisibility-failed' },
+      );
+    });
+  });
+
+  it('BIN-1010: an ordinary, un-raced add still stamps the profile default (control)', async () => {
+    // Without this, the test above passes on a fix that made every add private.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+    expect(await tick).toBe('written');
+    const writes = setDoc.mock.calls.filter(
+      c => (c[0] as { _path: string })._path === 'users/u1/watchlist/tv_1399',
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0][1]).toMatchObject({ effectiveVisibility: 'public', isPublic: true });
+  });
+
+  it('BIN-1010: a removal caught BEFORE the write downgrades nothing — there is no row to protect', async () => {
+    // Every earlier refusal in this branch returns without writing anything, so a
+    // downgrade there would touch a document this gesture never created. Pinned by name,
+    // because "no write happened" and "no downgrade happened" are the same assertion only
+    // for as long as the downgrade sits where it does.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+    expect(await tick).toBe('refused');
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
@@ -2948,8 +3085,15 @@ describe('WatchlistContext — the create-floor refusal is swallowed, nothing el
     return Object.assign(new Error('The service is currently unavailable.'), { code: 'unavailable' });
   }
 
-  // One row per guarded call site, so a seventh mutator added without a guard has no row
-  // here and a guard removed from one of the six fails exactly one row.
+  // The six EDIT paths the 2026-08-20 accepted-deviation entry names — that entry is this
+  // table's scope, and a guard removed from any of them fails exactly one row.
+  //
+  // BIN-1010: the clause claiming one row per `guardedItemWrite` call site is struck. It
+  // stopped being true when `downgradeLeftoverVisibility` became a seventh call site, and
+  // that one cannot be added here as-is: the row below asserts that a non-permission-denied
+  // error still REJECTS, and the downgrade's own outer catch swallows it by design. Derive
+  // the call sites rather than trusting a count: grep -n "guardedItemWrite('" on this file's
+  // production sibling.
   const GUARDED: [kind: string, run: () => Promise<ItemWriteOutcome>][] = [
     ['updateVisibility', () => updateVisibilityRef!('tv', 5, 'public')],
     ['updateStatus', () => updateStatusRef!('tv', 5, 'avbruten')],
