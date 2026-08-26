@@ -696,3 +696,69 @@ ett kommando motsäga den här meningen?* Kan det, skriv kommandot i stället f�
 Ett ANKARE följer med: när uppräkningen försvinner blir en `Corrected …`-notering som
 rättade den föräldralös. Stryk den i samma redigering — ett protokoll utan subjekt pekar på
 ingenting. (Undantaget kvarstår: aldrig stryka protokollet över **olöst** arbete.)
+
+---
+
+### 2026-08-26 — [Workflow] Ett tal vars sanning hänger på en outtalad premiss går inte att härleda om
+
+**Trigger:** du rättar ett påstående och skriver ett tal i den nya lydelsen.
+
+**Regel:** stryk talet, skriv inte ett annat. Ett FELRÄKNAT tal kan nästa läsare räkna om
+och laga. Ett tal vars sanning beror på en premiss meningen inte nämner kan ingen härleda
+om — läsaren mäter enligt SIN tolkning, får ett annat svar, och drar slutsatsen att raden
+är fel.
+
+Sprinten 2026-08-26 tog **elva** blockerande granskningsfynd. Varje enskilt var ett falskt
+PÅSTÅENDE i prosa jag skrivit — ett tal, en absolut sats, en föråldrad inventering. **Noll**
+var defekter i koden som kör. Två av de elva satt inne i fixen för ett tidigare fynd.
+
+Det avgörande exemplet: raden som bokförde ett ouppfyllt acceptanskriterium sa "muteringen
+INNE i `markedSeen` fäller **fyra** test". Granskaren härledde tre och fällde den. Båda hade
+rätt: ett bart `watchedAt != null` fäller fyra (den negativa tvillingen faller också), ett
+`seenDate(i) != null` fäller tre (statustermen sitter kvar inuti helpern). Ingendera
+muteringen namngavs. "Tre" hade shippat samma defekt med en annan siffra.
+
+Utvägen är den 2026-08-25 redan pekar på, en nivå strängare: kontrasten meningen behöver är
+oftast **något mot ingenting**, inte ett tal mot ett annat. Behöver du ändå ett tal — namnge
+mätningen som ger det.
+
+---
+
+### 2026-08-26 — [Workflow] En muterande granskare kolliderar med en LÄSANDE, inte bara med en annan muterare
+
+**Trigger:** du ska köra fler än en granskare på samma filuppsättning.
+
+**Regel:** kör granskare som muteringsprövar **ensamma**. Lärdomen från 2026-08-14 sa "två
+muteringstestande granskare på samma filer förstör varandras mätningar; läsande får gå
+parallellt". Andra halvan är fel så fort den andra parten muterar.
+
+2026-08-26 startade jag `binge-code-reviewer` medan `binge-integration-reviewer` läste om
+samma bunt. Kodgranskaren muteringsprövade — korrekt, och den städade efter sig. Men
+integrationsgranskaren såg `MM` på `WatchlistContext.tsx` mitt i sin läsning och fällde
+bunten på två mekaniska grunder: en levande mutant i trädet, och att dess egen ledger-post
+då pinnade mutantens bytes i stället för de som skulle committas. Inget av det var ett fynd
+i koden; hela varvet var min schemaläggning.
+
+Ordningen som höll resten av sprinten: en muterande granskare i taget, och
+integrationsgranskaren SIST, mot ett städat träd — den är push-grinden och behöver läsa
+exakt de bytes som går ut.
+
+---
+
+### 2026-08-26 — [Testing] En grön bunt är inte en grön svit — en NY fil är en ägarkartshändelse
+
+**Trigger:** en bunt lägger till en fil under en katalog som ägarkartan listar fil för fil.
+
+**Regel:** kör HELA sviten före push, inte bara buntens egna filer. `src/lib/markedSeen.ts`
+och dess test var gröna i varje per-bunt-körning och fällde ändå två test i
+`docs/org/gen-ownership-map.test.mjs` — de läser ägarbaslinjen som indata, så en ny
+ägarlös fil rödfärgar dem oavsett vad filen innehåller.
+
+Rätt åtgärd är att ge filen en **ägare** i `docs/role-responsibilities.md` och regenerera,
+aldrig att baslinjera bort den med `--update-gaps`: det senare gör hålet permanent, vilket
+är precis vad `ownership-gaps.json` finns för att göra svårt att skapa av misstag (BIN-1013).
+Sätet är oftast redan givet — här ägde #26 syskonfilen `seenDate.ts` och hade dessutom satt
+formkraven på extraktionen.
+
+Samma familj som "en trasig JSON i en datafil ser ut som hundratals orelaterade testfel"
+(2026-08-25): symptomet pekar åt fel håll.
