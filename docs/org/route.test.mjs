@@ -660,15 +660,10 @@ const REVIEW_CANDIDATES = [
 // redden it. The name here now says what this block actually covers.
 // BIN-906 #3 — and the DISCOVERY half below is keyed on a `.test.mjs` sibling, so a
 // tooling `.mjs` that nobody wrote a test for is nominated by nothing and stays invisible
-// to it (live example: .claude/hooks/preview-gate.mjs — a wired hook with no .test.mjs
-// sibling, so the DISCOVERY half never nominates it. The prior example here lived under
-// docs/org/world-watch/local-tooling/, deleted by BIN-872 on 2026-08-26.
-// docs/org/metrics/log_event.mjs WAS the other one and no longer is — BIN-918 put it in
-// both lists on 2026-08-17, after a reviewer rather than a check noticed that a commit
-// editing it reached nobody. It still has no test sibling, so it stays outside the
-// DISCOVERY half; what changed is that the gate now stops it). That is a stated
-// limit of the word "mechanical", NOT a request to widen: narrow-before-broad is Malin's
-// 2026-08-08 call, alternative (a).
+// to it. That is a stated limit of the word "mechanical", NOT a request to widen:
+// narrow-before-broad is Malin's 2026-08-08 call, alternative (a).
+// BIN-1014 — the named example is struck rather than replaced. The sentence above states
+// the limit completely on its own.
 describe('the advising list and the blocking gate cannot drift apart for tooling `.mjs` (BIN-874)', () => {
   it.each(TOOLING_MJS)('%s gets the same answer from both lists', (path) => {
     // The biconditional is the point: `isCodePath` false + gate true means a commit is
