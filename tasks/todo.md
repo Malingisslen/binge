@@ -182,6 +182,14 @@ Acceptanskriterier:
   anropar den. `seenDate.ts`:s huvud påstod att den andra regeln "stays inline"; det blev
   falskt i samma ändring och rättades på plats.
 - [deviation] BIN-1014 + BIN-1021 blev TVÅ commits, inte en. #25:s villkor 2, bindande.
+- [deviation] BIN-1008:s acceptanskriterium 2 ("att byta ett av de tre till ett datumvillkor
+  fäller dess test") är INTE uppfyllt, och kriteriet står kvar oändrat för att det ska synas.
+  Samma omskalning som `[discovery]`-raden ovan beskriver för kriterium 1: efter extraktionen
+  fälls en mutering INNE i `markedSeen`, men att byta tillbaka `markedSeen(items)` mot ett
+  datumfilter PÅ anropsstället rödfärgar fortfarande ingenting. Kontrasten är något mot
+  ingenting, inte ett tal mot ett annat. Kvarstående risk,
+  ordagrant: regeln har en kropp och en svit, men anropsställena är fortfarande obevakade.
+  Filad — se följdbiljetten om anropsställenas egna test.
 
 ## Needs you (Tier D)
 

@@ -472,9 +472,9 @@ bett titeln försvinna, inte radens synlighet för all framtid.
 * Fönstret är smalnat, inte stängt till noll: en genuint samtidig återläggning kan lägga
   sig mellan att kontrollen faller och att nedgraderingen landar. Då nedgraderas en LEVANDE
   titel som användaren nyss lade tillbaka från publik till privat. Det är en annan sak än
-  BIN-965:s övergivna rad — det rör en titel någon faktiskt vill ha — men det är
-  självläkande utan användaråtgärd, via samma stämpling som stycket ovan beskriver, och
-  felriktningen är mot mer privat, aldrig mot mer publikt.
+  BIN-965:s övergivna rad — det rör en titel någon faktiskt vill ha — men det läker via
+  samma stämpling som stycket ovan beskriver, och felriktningen är mot mer privat, aldrig
+  mot mer publikt.
 
 **OMFÅNG.** Enbart `addIfMissing`-grenen i `updateProgress`, och enbart den residuala
 returvägen. Ingen annan skrivväg rörs, ingen granskare hoppas över, `firestore.rules`
