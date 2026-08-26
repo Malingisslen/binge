@@ -1197,6 +1197,24 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // not a fix; the write must not happen. Returning `false` also keeps a waiter off
         // the merge branch — the same answer, for the same reason.
         if ((removalGenRef.current.get(cacheKey) ?? 0) !== removalGenAtStart) return false;
+        // BIN-1011 — the OTHER deleting actor, and the reason the generation counter
+        // above cannot see it. `removalGenRef` only knows about removals that went
+        // through `removeItem`; `src/lib/firebase/accountDeletion.ts` deletes every
+        // watchlist document via its own cascade and bumps nothing. Read fresh here,
+        // never snapshotted at the top of the gesture: `deleteAccount` puts the marker
+        // down BEFORE the cascade runs, so an add whose TMDB fetch is still in flight
+        // learns about it at exactly this moment. Same argument the notes migration and
+        // the addedAt repair already make — a write that can outlive the click that
+        // started it must re-ask.
+        //
+        // The cost of missing it is worse here than the leftover row BIN-965 accepts:
+        // that row is self-owned and re-deletable with the same button, whereas once
+        // `deleteUser()` succeeds this uid has no Auth account at all, and the orphan
+        // sweep looks for Auth accounts WITHOUT a profile — so nothing ever finds it.
+        // A residual remains (a write that clears this check microseconds before the
+        // cascade's delete lands), and it is deliberately NOT chased with a
+        // compensating delete — BIN-965 decided that question.
+        if (isDeletionStarted(uid)) return false;
         await upsertTitle(payload);
         // AFTER the write resolves, not before: this marks "the document exists now", and
         // a failed add must stay retryable. Marking BEFORE the write would be worse, not
@@ -1377,6 +1395,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const removeItem = useCallback(async (mediaType: MediaType, tmdbId: number) => {
     if (!uid) return;
+    // BIN-1012 — derived ONCE, for the whole function. Both caches this function
+    // invalidates key on `uid:docId`, and until now each rebuilt the formula for itself.
+    // That is precisely how a guard goes missing: the two stop being the same key and
+    // nothing says so. `mediaTypeDocId` is pure and synchronous, so deriving it here puts
+    // no await between the top of this function and the bump below — the ordering
+    // invariant that follows is untouched.
+    const docId = mediaTypeDocId(mediaType, tmdbId);
+    const docKey = `${uid}:${docId}`;
     // BIN-954: bumped SYNCHRONOUSLY, before any await, so an add already in flight sees
     // that a removal happened even when this function's own prune below runs first and
     // finds nothing. See removalTickRef's declaration for why the add cannot simply
@@ -1384,10 +1410,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     removalTickRef.current += 1;
     // BIN-965 — bumped in the same synchronous breath, never after an await: the add path
     // reads it to decide whether its write may still go out at all.
-    const removalGenKey = `${uid}:${mediaTypeDocId(mediaType, tmdbId)}`;
-    removalGenRef.current.set(removalGenKey, (removalGenRef.current.get(removalGenKey) ?? 0) + 1);
+    removalGenRef.current.set(docKey, (removalGenRef.current.get(docKey) ?? 0) + 1);
     const { db, doc, deleteDoc } = await fsdb();
-    const docId = mediaTypeDocId(mediaType, tmdbId);
     await deleteDoc(doc(db, 'users', uid, 'watchlist', docId));
     // BIN-593: drop it from the live ref immediately — REQUIRED, not defensive.
     // The snapshot echo can take a moment (and this function awaits two more
@@ -1409,7 +1433,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // re-creating the identity-less fragment this ticket removed — on the add-then-undo
     // sequence a user is most likely to perform. Pinned by "a series added by ticking and
     // then removed does not resurrect as a fragment" in WatchlistContext.test.tsx.
-    addedByProgressRef.current.delete(`${uid}:${docId}`);
+    addedByProgressRef.current.delete(docKey);
     // Best-effort: drop the sibling tags + notes docs so they never orphan
     // (their own owner-only collections aren't cascaded by the watchlist delete).
     try {

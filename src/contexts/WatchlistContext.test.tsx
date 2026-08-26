@@ -1102,6 +1102,58 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(await tick).toBe('refused');
   });
 
+  // BIN-1011 — the OTHER deleting actor, and the one `removalGenRef` structurally cannot
+  // see. `src/lib/firebase/accountDeletion.ts` deletes every watchlist document through
+  // its own cascade, never through `removeItem`, so no generation is bumped. Driven with
+  // a HELD TMDB fetch, because the marker goes down WHILE the add is in flight: a test
+  // that sets it before calling `updateProgress` sets up a different situation, and never
+  // reaches the branch this guards.
+  //
+  // What it costs to miss: the leftover row BIN-965 accepts is self-owned and re-deletable
+  // with the same button. This one lands under a uid whose Auth account is about to be
+  // gone, and the server sweep looks for Auth accounts WITHOUT a profile — so nothing ever
+  // finds it again.
+  it('BIN-1011: an account deletion starting mid-flight cancels the add', async () => {
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+
+    // `deleteAccount` puts the marker down BEFORE it runs the cascade. This is that
+    // moment, and the add's fetch has not resolved yet.
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+    try {
+      await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+      expect(setDoc).not.toHaveBeenCalled();
+      expect(await tick).toBe('refused');
+    } finally {
+      window.localStorage.removeItem('binge:deletionStarted:u1');
+    }
+  });
+
+  it('BIN-1011: and the identical add still goes through with no deletion in flight (control)', async () => {
+    // Without this the assertion above passes on an add that never ran at all — the
+    // failure mode where the precondition is set wrong and the test is green for the
+    // wrong reason.
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+    expect(setDoc).toHaveBeenCalled();
+    expect(await tick).toBe('written');
+  });
+
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
