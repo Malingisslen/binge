@@ -287,6 +287,21 @@ bunts filuppsättning vid urvalet, och kapaciteten matchades mot arbetaren före
   → Konservativt val: egen bunt, egen commit, och ett riktigt `npm run build` innan något
   pushas. Inte hopbuntat med granskad kod som redan är grön.
 
+  **SLUTLIG DISPOSITION 2026-08-26: bunten byggdes INTE, och fick ingen egen commit.**
+  Posten ovan sa att den skulle få en. Den rättas här i stället för att skrivas om.
+
+  Skälet är inte att fixen är fel — den är bättre än biljetten trodde, och rensar
+  `postcss` och `sharp` på köpet — utan att den inte gick att BEVISA härifrån. Den
+  flyttar `next` en minor och `sharp` en hel major, och det enda som visar att bild-
+  och CSS-kedjan håller är det riktiga 25k-sidorsbygget. TMDB-byggcachen i den här
+  checkouten är kall nog att en `ls` över den tar flera minuter, så ett lokalt bygge
+  är 175-minutersvägen, inte de 18 minuter CI klarar med varm cache.
+
+  `package-lock.json` och `package.json` är ORÖRDA — `npm audit fix` kördes aldrig,
+  bara `--dry-run`. Biljetten står i Backlog med tre alternativ, en mätning och en
+  rekommendation (alternativ a) skrivna till Malin.
+
+
 - [needs-human] **2026-08-25, bunt B — BIN-997 är INTE med i den här commiten.** Bunten
   valdes, routades (`medium`, säte #25), och fick sin blinda kritik FÖRE bygget. Den
   kritiken ligger stagead i `docs/org/metrics/events.jsonl` med `must_haves: 4`. Ingen kod
