@@ -10,16 +10,16 @@
 // answers to the same question.
 //
 // That list is what MOVED, not a census of what reads the field. Other surfaces still gate
-// inline — some because they count titles rather than dates (below), some simply because
+// inline — some because they count titles rather than dates, some simply because
 // BIN-689 did not reach them. Do not read the five as "and no others"; derive it:
 //   grep -rn "watchedAt" src/ --include=*.ts --include=*.tsx
 //
 // This is deliberately ONE of the two rules those surfaces use. The other — "is this item
-// currently marked sedd", a membership test with no date requirement — stays inline as
-// `status === 'sedd'` at the sites that count titles rather than dates. Routing those
-// through here would silently drop a sedd item whose watchedAt is missing from the "Sedd"
-// tiles on the stats page and the public profile. (#26 Information Architect's binding
-// condition on this ticket, 2026-08-25.)
+// currently marked sedd", a membership test with no date requirement — lives in
+// `src/lib/markedSeen.ts`.
+// Routing those through here would silently drop a sedd item whose watchedAt is missing
+// from the "Sedd" tiles on the stats page and the public profile. (#26 Information
+// Architect's binding condition on this ticket, 2026-08-25.)
 
 import type { WatchStatus } from '@/types/domain';
 

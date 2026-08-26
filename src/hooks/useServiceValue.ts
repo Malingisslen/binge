@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { canonicalUniqueProviders } from '@/lib/tmdb/providers';
 import { resolveEffectiveMonthlyCost } from '@/lib/advisor/effectiveCost';
 import { watchedForValueFromItems, rollupServiceValue, tvActiveProviderIdsFromItems, type ServiceValueRow } from '@/lib/advisor/serviceValue';
+import { markedSeen } from '@/lib/markedSeen';
 
 export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; monthLabel: string } {
   const { items } = useWatchlist();
@@ -30,7 +31,9 @@ export function useServiceValue(nowMs: number): { rows: ServiceValueRow[]; month
     // BIN-208: only films currently marked 'sedd' count. watchedAt is set when a
     // film is marked seen but NOT cleared if it later leaves 'sedd' (merge write),
     // so gating on watchedAt alone would count un-watched films and skew the verdict.
-    const seenFilms = items.filter(i => i.status === 'sedd');
+    // BIN-1008: through the shared membership rule, so the gate has one body and one
+    // suite.
+    const seenFilms = markedSeen(items);
     const watched = watchedForValueFromItems(seenFilms, owned, startMs, endMs);
 
     // BIN-513: providers carrying active TV usage — a followed series or a TV

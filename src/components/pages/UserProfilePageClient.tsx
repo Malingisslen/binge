@@ -15,6 +15,7 @@ import { usePageMeta } from '@/hooks/usePageMeta';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LoadingView } from '@/components/ui/LoadingView';
 import { NotFound } from '@/components/ui/NotFound';
+import { markedSeen } from '@/lib/markedSeen';
 
 export default function UserProfilePageClient({ username }: { username: string }) {
   const { data, isLoading } = usePublicProfile(username);
@@ -76,7 +77,9 @@ export default function UserProfilePageClient({ username }: { username: string }
   // i 'sedd' (TV i 'mina' med sub-state avslutad räknas inte med här —
   // användaren ser sina serier under "Följer", inte separat).
   const following = (watchlist ?? []).filter(i => i.status === 'mina' && !i.dropped);
-  const watched = (watchlist ?? []).filter(i => i.status === 'sedd');
+  // BIN-1008: the membership rule, not the date rule — a 'sedd' film with no
+  // watchedAt still belongs in this tile. See src/lib/markedSeen.ts.
+  const watched = markedSeen(watchlist ?? []);
   const rated = (watchlist ?? []).filter(i => i.rating !== null);
   const avgRating = rated.length > 0 ? rated.reduce((s, i) => s + (i.rating ?? 0), 0) / rated.length : 0;
   const recentlyWatched = watched.sort((a, b) => (b.watchedAt?.getTime() ?? 0) - (a.watchedAt?.getTime() ?? 0)).slice(0, 8);

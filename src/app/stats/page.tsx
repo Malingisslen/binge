@@ -8,6 +8,7 @@ import StatCard from '@/components/ui/StatCard';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { getProvider } from '@/lib/tmdb/providers';
 import { seenDate } from '@/lib/seenDate';
+import { markedSeen } from '@/lib/markedSeen';
 
 const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
@@ -22,7 +23,9 @@ function StatsContent() {
     // "Följer" på stats-sidan = TV-shows i 'mina' (samlingen), filmer i 'sedd'
     // räknas separat under "watched".
     const following = items.filter(i => i.status === 'mina' && !i.dropped);
-    const watched = items.filter(i => i.status === 'sedd');
+    // BIN-1008: the membership rule, not the date rule — a 'sedd' film with no
+    // watchedAt still belongs in this tile. See src/lib/markedSeen.ts.
+    const watched = markedSeen(items);
     const movies = items.filter(i => i.mediaType === 'movie');
     const tvShows = items.filter(i => i.mediaType === 'tv');
     const rated = items.filter(i => i.rating !== null);

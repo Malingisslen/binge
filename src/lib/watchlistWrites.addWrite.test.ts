@@ -349,6 +349,49 @@ describe('buildAddWrite — the coherence invariant (BIN-641)', () => {
     expect(out).not.toHaveProperty('watchedAt');
   });
 
+  // BIN-978 — the half the coherence cases above cannot reach. They all ask "does a
+  // count arrive without a re-date?", and they build the count the only legitimate way:
+  // by letting `rewatchFields` derive it. The question here is the mirror image — can a
+  // count the caller SUPPLIED buy a re-date? — and nothing pinned it: mutating the gate
+  // to `'rewatchCount' in rewatch || 'rewatchCount' in item` left both suites at 88/88.
+  //
+  // `watchedAt` is user-authored (Malin, 2026-07-25) and a stomped date is gone — the
+  // date picker can restore a MISSING one, never a replaced one. So the boundary that
+  // matters is not "may the key ride along" (BIN-928 decided it may, at the type level)
+  // but "may it decide anything". It may not.
+  //
+  // The cast is the point, not a shortcut: `buildAddPayload`'s `ServerOwned` set keeps
+  // `rewatchCount` off `WatchlistAddPayload`, so the only ways this value can appear at
+  // runtime are the ones types cannot reach — a cast, plain JS, or a future refactor
+  // widening the signature. Deliberately NOT fixed by widening the type here; that would
+  // reopen the boundary BIN-928 decided to keep closed.
+  const forged = (over: Partial<WatchlistAddPayload> = {}) =>
+    ({ ...payload(over), rewatchCount: 9 } as WatchlistAddPayload);
+
+  it.each(BOTH)('%s — a caller-supplied rewatchCount does not re-date a stored watchedAt', (intent) => {
+    // Tracked, NOT currently 'sedd', so `rewatchFields` derives nothing on either path —
+    // and the stored date exists, so `canAutoStampWatchedAt` refuses too. Under the
+    // merged-payload mutant the forged key alone would be enough.
+    const out = buildAddWrite(forged(), intent, ctx({ current: stored({ status: 'vill_se' }) }));
+    expect(out).not.toHaveProperty('watchedAt');
+  });
+
+  it('and the same forged payload cannot re-date on the bulk path even from a sedd title', () => {
+    // The one case where a REAL rewatch would re-date — except the bulk path never counts,
+    // so the only `rewatchCount` present is the caller's. It must still change nothing.
+    const out = buildAddWrite(forged(), 'bulk', ctx({ current: stored() }));
+    expect(out).not.toHaveProperty('watchedAt');
+    // The key itself still rides through untouched — that is BIN-928's decided boundary,
+    // and this assertion is what stops a later "fix" from silently moving it.
+    expect(out.rewatchCount).toBe(9);
+  });
+
+  it('control — a genuine counted rewatch DOES re-date, so the three above are not vacuous', () => {
+    const out = buildAddWrite(payload(), 'viewing', ctx({ current: stored() }));
+    expect(out.rewatchCount).toBe(3);
+    expect(out.watchedAt).toBe(TS);
+  });
+
   it('increments from the STORED count, and from 0 when it is missing', () => {
     // The `?? 0` default is the part that carries risk, not the comparison — an
     // off-by-one here is permanent, since rewatchCount is editable nowhere.
