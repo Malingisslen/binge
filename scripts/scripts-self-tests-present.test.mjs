@@ -34,7 +34,16 @@ const SELF = 'scripts-self-tests-present.test.mjs';
 // ADD A NEW SCRIPT SELF-TEST? Add its filename here and raise MIN below. That is the
 // whole protection: vitest will run it either way, but nothing notices when it stops
 // running unless it is named here.
-const REQUIRED = ['check-public-env.test.mjs', 'check-workflow-map.test.mjs'];
+const REQUIRED = [
+  'check-public-env.test.mjs',
+  'check-workflow-map.test.mjs',
+  // BIN-997. Not a release-path guard like the two above — it is where the knowledge-file
+  // COUNT floor gets teeth. The script exits non-zero on a floor failure, but its weekly
+  // deploy step is `continue-on-error` by design (the cap is a warning, Malin 2026-08-25),
+  // so that exit code is discarded on the one path that runs unattended. Lose this file
+  // and the check can measure an empty set forever.
+  'check-knowledge-caps.test.mjs',
+];
 
 // A LITERAL, deliberately not `REQUIRED.length`. Deriving it made this assertion unable
 // to fail on its own: deleting a name from REQUIRED lowered the floor in lockstep, so a
@@ -42,7 +51,7 @@ const REQUIRED = ['check-public-env.test.mjs', 'check-workflow-map.test.mjs'];
 // replaced BIN-838's MIN=2 to prevent, reproduced inside its own replacement. Growth is
 // free at the runner; raising this number is the deliberate act that keeps the new file
 // protected, and lowering it is the deliberate act a shrink must perform out loud.
-const MIN = 2;
+const MIN = 3;
 
 // Reads the DISK set, recursively and on both suffixes, to line up as closely as a
 // directory read can with what vitest's `scripts/**/*.{test,spec}.mjs` collects. It is not

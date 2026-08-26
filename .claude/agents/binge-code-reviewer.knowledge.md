@@ -2,7 +2,8 @@
 
 **PRINCIPLES, edited IN PLACE.** A lesson folds into the bullet it belongs to; dated raw
 entries go to `.archive.md`. A bullet earns its place only if a future review would DO
-something different because of it. Budget: 30k chars — pay for an addition with a cut.
+something different because of it.
+Cap: 80k chars — pay for an addition with a cut, and move what you cut verbatim to the archive file beside this one.
 
 ## Seed checklist — the non-obvious half of the CLAUDE.md rules
 - (`design-system.md`/`tmdb.md` trigger-load on `src/**` — don't re-derive them here.) The half they DON'T carry: progress never mutates status, TV sub-states derive rather than persist, "ej påbörjad" keys on progress. (`migrateStatus` → Status models below.)

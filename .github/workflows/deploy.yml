@@ -77,6 +77,23 @@ jobs:
       - name: Workflow map paths must exist
         run: node scripts/check-workflow-map.mjs
 
+      # Reviewer knowledge-file caps — a WARNING in the weekly sweep, never a gate.
+      # Malin's call 2026-08-25 (BIN-997): the cap should become true instead of staying
+      # decoration, but an unattended run must not throw away what the reviewers have
+      # learned, and `npm test` must not go red on an overrun. Two things keep that honest:
+      # the script exits 0 on an overrun, and `continue-on-error` means even its
+      # floor-failure cannot red a deploy.
+      #
+      # `if: schedule` is what makes this "the weekly sweep" rather than every push — this
+      # workflow's own `cron: '0 4 * * 1'`. The FLOOR (the glob stopped matching, so the
+      # check measured nothing) is asserted in scripts/check-knowledge-caps.test.mjs under
+      # `npm test`, which is where it gets teeth: `continue-on-error` here discards this
+      # step's exit code, floor failure included.
+      - name: Reviewer knowledge-file caps (warning only)
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        run: npm run check:knowledge-caps
+
       # The `Script self-tests` step that stood here was removed by BIN-850: these files
       # now run under `npm test` (vitest.config.ts includes scripts/**/*.{test,spec}.mjs),
       # so keeping the step would run them twice, two ways. Its MIN=2 floor did not come

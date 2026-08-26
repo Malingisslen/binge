@@ -84,7 +84,7 @@
         "\\.(ts|tsx)$",
         "^\\.github/(workflows|actions)/",
         "^\\.github/dependabot\\.yml$",
-        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|metrics/(check_events|log_event|check_review_coverage))|scripts/(check-workflow-map|check-public-env))(\\.test)?\\.mjs$",
+        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|metrics/(check_events|log_event|check_review_coverage))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps))(\\.test)?\\.mjs$",
         "^eslint-rules/no-bare-streaming-offers-id(\\.test)?\\.mjs$",
         "^eslint\\.config\\.mjs$",
         "^\\.claude/shared-plugin\\.json$",
@@ -108,6 +108,8 @@
   },
   "knowledge": {
     "agentsDir": ".claude/agents",
+    "_sizeLimitCharsNote": "BIN-997: the knowledge-freshness Stop hook and scripts/check-knowledge-caps.mjs read the same *.knowledge.md glob and each carry their own limit. Setting this explicitly pins the value against a future change to the hook's default, rather than relying on two defaults that happen to agree. It does NOT give the number one home: it is also CAP_CHARS in check-knowledge-caps.mjs and the cap sentence at the top of each knowledge file, and nothing enforces that they agree — all of them are changed by hand, together.",
+    "sizeLimitChars": 80000,
     "sizeLimit": 800,
     "windowDays": 30,
     "lessonsFile": "tasks/lessons.md",

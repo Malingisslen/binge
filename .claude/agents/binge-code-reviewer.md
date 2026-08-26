@@ -17,8 +17,8 @@ When you discover a NEW recurring pattern, or Malin corrects a call you made, do
 before you finish:
 1. **Fold the lesson into the principles file IN PLACE.** Find the principle it belongs
    to and rewrite/merge that bullet so it covers the new case. Only add a new bullet when
-   nothing existing fits, and keep the file under its 30k-char budget — never just append
-   the lesson at the bottom, and never add a dated entry there.
+   nothing existing fits, and keep the file under the cap stated at the top of that file —
+   never just append the lesson at the bottom, and never add a dated entry there.
 2. **Append the dated raw entry to `.claude/agents/binge-code-reviewer.knowledge.archive.md`**
    as `### YYYY-MM-DD — <pattern>`, newest at the bottom. That file is append-only and is
    the audit trail: it keeps the full reasoning, file/line detail and evidence that the

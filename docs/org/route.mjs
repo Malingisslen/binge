@@ -137,6 +137,18 @@ export const TOOLING_CODE_FILES = new Set([
   'scripts/check-workflow-map.test.mjs',
   'scripts/check-public-env.mjs',
   'scripts/check-public-env.test.mjs',
+  // BIN-997. The reviewer knowledge-file cap check. Added here in the SAME commit that
+  // creates it, per BIN-830 — widening one of the two lists never widens the other, and
+  // both of this repo's symmetry checks nominated these two files the moment they existed
+  // (route.test.mjs's BIN-874 block on the .mjs, gate-symmetry.test.mjs's rule B on the
+  // .test.mjs). That is the discovery half working as designed rather than a reviewer
+  // finding the hole afterwards.
+  //
+  // The check itself is a WARNING and cannot red a build (Malin, 2026-08-25). Its entry
+  // here is not about that: it is review machinery, so weakening it — raising the cap to
+  // fit, loosening the glob, lowering the file floor — must not be a change nobody reviews.
+  'scripts/check-knowledge-caps.mjs',
+  'scripts/check-knowledge-caps.test.mjs',
   // BIN-918. The metrics-log claim check. Added here in the SAME commit as its
   // `reviewGates` pattern. What named the gap was route.test.mjs's BIN-874 block —
   // "has a test in vitest's include globs but is missing from TOOLING_CODE_FILES" —

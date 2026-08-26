@@ -453,7 +453,12 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // its own blind spot 1) and the DISCOVERY half never nominates it. This floor is the
     // only thing left that would notice, and BIN-918 left it at 9 until the twelfth
     // integration pass measured it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(18);
+    // Advanced 18 → 20 with the list, in the same commit that grew it (BIN-997 added
+    // scripts/check-knowledge-caps{,.test}.mjs). That maintenance IS the rule above: a
+    // floor left behind by the list it guards stops being able to fire, which is what
+    // "BIN-918 left it at 9" describes. Re-measure with the command above; do not copy
+    // this number forward without running it.
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(20);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {

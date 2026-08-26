@@ -15,7 +15,8 @@ When you find a new class of issue or Malin corrects you, do BOTH:
 1. **Fold the lesson into the principles file in place** — rewrite the bullet it belongs to,
    merging with an existing principle wherever one covers the same failure class, and supersede
    anything it contradicts. Never just append a new bullet or section at the bottom, and keep the
-   file under 30,000 characters (it is read in full before every review).
+   file under the cap stated at the top of that file — it is read in full before every review, so
+   its size is a per-review cost.
 2. **Append a dated raw entry** (`### YYYY-MM-DD — <title>`) to
    `.claude/agents/binge-security-reviewer.knowledge.archive.md`, which IS append-only. That is the
    audit trail: the full trace, the PoC, the rejected fix options, the severity argument.

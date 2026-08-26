@@ -17,8 +17,8 @@ had not seen), do BOTH, in the same pass:
 1. **Fold the lesson into the principles file in place** — find the bullet it belongs to
    and rewrite that bullet to cover the new case, keeping the literal idiom (function
    name, threshold, rule predicate, command). Only start a new bullet when no existing
-   one fits; never just append at the bottom. Keep the file under its 30k-char cap by
-   merging rather than accumulating.
+   one fits; never just append at the bottom. Keep the file under the cap stated at the top
+   of that file, by merging rather than accumulating.
 2. **Append a dated raw entry to `.claude/agents/binge-test-reviewer.knowledge.archive.md`**
    (append-only, the audit trail) under a `## YYYY-MM-DD — <title>` heading, with the full
    trace: the diff reviewed, the mutations run and their output, and the verdict.

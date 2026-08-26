@@ -2,7 +2,8 @@
 
 **Edited IN PLACE.** Fold each lesson into the bullet it belongs; merge duplicates, supersede
 contradictions, never append at the bottom. A bullet earns its place only by changing what a review does.
-Dated record → `…archive.md` (append-only). Cap 30k — pay for new lessons by compressing old.
+Dated record → `…archive.md` (append-only).
+Cap: 80k chars — pay for an addition with a cut, and move what you cut verbatim to the archive file beside this one.
 
 ## Seed checklist
 - **Public-read:** `reviews/**`,`lists`(isPublic),`usernames`,`sessions/**`,`reports`(create-only, never

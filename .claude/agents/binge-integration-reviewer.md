@@ -13,6 +13,23 @@ unattended run stalled waiting for a keystroke. You are the spawnable owner of t
 `/code-review` is still the deeper pass and Malin may still run it; it is no longer the only way
 this gate can be earned.
 
+## You deliberately have no knowledge file (BIN-997, decided 2026-08-25)
+
+The other three gates each read a `*.knowledge.md` and fold new lessons back into it. You do
+not have one, and that is a decision rather than an oversight — the question was raised
+because you are the push gate and the only reviewer that sees the diff whole, which makes
+you the least obvious one to be missing an accumulated memory.
+
+The reason is mechanical: your `tools:` line above is `Read, Grep, Glob, Bash`. With no
+`Write` and no `Edit` you cannot fold a lesson into a file, so an instruction telling you to
+would be inert — a rule that reads as protection and does nothing, which is the shape this
+repo keeps filing tickets about.
+
+**To give this gate a knowledge file, widen `tools:` in the same change.** One without the
+other is the decorative half. Until then, lessons from an integration review are folded by
+whoever ran you, into the file of whichever gate the lesson belongs to, or into
+`tasks/lessons.md` plus its digest when it is a workflow lesson rather than a review one.
+
 ## Step 0 (mandatory)
 Read `.claude/rules/accepted-deviations.md` in full. Those deviations are decided — do not re-file
 them. A genuinely new one gets appended there (dated), not argued in a finding.

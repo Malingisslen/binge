@@ -7,6 +7,7 @@
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build",
     "analyze": "cross-env ANALYZE=true NODE_OPTIONS=--max-old-space-size=4096 next build",
     "start": "next start",
+    "check:knowledge-caps": "node scripts/check-knowledge-caps.mjs",
     "preflight": "node scripts/shared-guard.mjs check-toolchain",
     "worktree-cleanup": "node scripts/shared-guard.mjs worktree-cleanup",
     "prelint": "node scripts/shared-guard.mjs check-toolchain",
