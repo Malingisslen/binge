@@ -381,3 +381,38 @@ hängande pekare är för nästa granskare omtöjbart från en ofilad brist.
 inte matchar radens `must_haves`. Då är raden falsk, och frågan om en spärr är en annan
 fråga än den här. Att en batchanteckning säger "NOT convened" är däremot inget sådant fynd
 — det är vad den här posten handlar om.
+
+---
+
+## BIN-965: `updateProgress` kan svara `'refused'` om en rad som ändå skrevs — 2026-08-26
+
+Ett beslut, inte en öppen punkt. Fila inte "utfallet ljuger" eller "fixen är ofullständig,
+den lämnar ett race öppet", och föreslå INTE en kompenserande radering som städar raden.
+
+**Mekanismen (och bara den):** `removeItem` bumpar `removalGenRef` synkront och awaitar sedan
+sin `deleteDoc`. Tilläggsvägen i `updateProgress` läser samma generation som sista synkrona
+steg före `await upsertTitle(payload)`. Startar raderingen EFTER den kontrollen kan de två
+rundturerna landa i endera ordningen. Landar raderingen först blir vår skrivning en ny rad,
+medan kontrollen på returraden ser den bumpade generationen och rapporterar `'refused'`.
+
+**Allvarlighet:** en kvarliggande biblioteksrad för en titel användaren tog bort, ägd av
+användaren själv och raderbar med samma knapp igen. Utfallet lutar åt `'refused'`, alltså
+mot att INTE bekräfta något — ingen anropare toastar en falsk framgång.
+
+**Omfång:** enbart `addIfMissing`-grenen i `updateProgress`. Den ordinarie merge-grenen är
+inte berörd: dess payload saknar `tmdbId`/`mediaType`/`status`, så BIN-942:s create-golv
+nekar den om dokumentet hunnit raderas.
+
+**Why:** alternativet är att radera det vi just skrev när kontrollen faller. En kompensation
+som slår fel raderar en titel användaren hunnit lägga tillbaka i samma andetag; en kvarliggande
+rad förstör ingenting. Asymmetrin avgör, inte sannolikheten.
+
+**Fortfarande fileable, alltså INTE tystat av den här posten:** samma race i någon annan
+gren än `addIfMissing` (den ordinarie merge-grenen skyddas av BIN-942:s create-golv — faller
+det skyddet är det en annan sak); en återuppstådd titel som observerats i skarp drift utan
+att någon tagit bort den mitt i ett tillägg; och varje läge där raden blir synlig för någon
+ANNAN än ägaren. Posten täcker en självägd rad, i en gren, i ett tvårundturers fönster.
+
+**Re-open when:** `removeItem` slutar bumpa generationen synkront, före sin första await.
+Också om en rapport visar en verklig återuppstådd titel i skarp drift: då är det inte
+det här fönstret utan något annat, och det ska mätas för sig.

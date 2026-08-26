@@ -419,6 +419,18 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // just this title's: over-declining costs one redundant re-add on the next tick,
   // under-declining costs a ghost row on a public profile.
   const removalTickRef = useRef(0);
+  // BIN-965: the SAME question the counter above answers, asked per TITLE instead of
+  // per session. The counter's deliberate over-breadth is right for the session mark it
+  // was built for — declining to mark costs one redundant re-add — but it cannot decide
+  // whether a write goes out or what the caller is told, because then removing title A
+  // would refuse title B's add and report a successful write as refused. Keyed by the
+  // same `uid:docId` cacheKey as inFlightAddsRef; bumped SYNCHRONOUSLY in removeItem for
+  // the reason spelled out there. Never pruned, and NOT reset per uid the way
+  // addedByProgressRef is: every key carries the uid, so no account can read another's
+  // entry, and dropping one would read as "never removed" — the unsafe direction. What
+  // that costs is memory, in a tab that switches accounts and removes titles without
+  // ever reloading: one small entry per removed title, for the life of the tab.
+  const removalGenRef = useRef<Map<string, number>>(new Map());
   // Which uid the current `items` were loaded for — set by the watchlist listener
   // when a snapshot lands. The migration gates on this so it never runs against a
   // previous account's `items` during a same-session switch (cross-account guard).
@@ -1042,6 +1054,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // changed.
     const current = findItem(mediaType, tmdbId);
     const docId = mediaTypeDocId(mediaType, tmdbId);
+    const cacheKey = `${uid}:${docId}`;
+    // BIN-965 — read BEFORE the first await of this gesture, and that placement is the
+    // whole point. A call that ends up WAITING on someone else's in-flight add (the
+    // `pendingAdd` branch below) must compare against the world as it was when the user
+    // made the gesture, not as it is once the wait ends: a removal that lands during the
+    // wait has to be visible to it. Snapshotting inside the add branch instead reads the
+    // post-removal value, and the waiter then cheerfully re-adds the title just deleted.
+    const removalGenAtStart = removalGenRef.current.get(cacheKey) ?? 0;
     // BIN-954. Three separate facts decide what this write is allowed to be:
     //   * `current`      — the title is in the library, as of the last snapshot.
     //   * the ref        — WE added it moments ago and the snapshot hasn't landed yet.
@@ -1051,7 +1071,6 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     //     "absent from `items`" really means "absent from Firestore". Read off the same two
     //     refs writeTitle uses, not the derived `libraryKnown` state, which is computed
     //     below this callback and would drag a new dependency into it.
-    const cacheKey = `${uid}:${docId}`;
     const known = current != null || addedByProgressRef.current.has(cacheKey);
     const libraryKnown = isLibraryKnown(firstSnapshotSettledRef.current, listenerFailedRef.current);
     // BIN-955: a fourth fact, and the only one that is not synchronous — is an add for this
@@ -1102,6 +1121,13 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // `true` only when the document really exists, so a waiter can never be sent down
       // the merge branch against a document that was never created.
       const addPromise = (async (): Promise<boolean> => {
+        // BIN-965 — the cheap half of the same guard. A call that reaches this branch
+        // only AFTER waiting on someone else's add (whose promise resolved "does not
+        // exist") is entering it on a stale reading of the world, so it must not spend a
+        // TMDB fetch to arrive at the answer the check before the write would give it
+        // anyway. The check below is still required — it covers a removal that starts
+        // DURING the fetch, which this one cannot see.
+        if ((removalGenRef.current.get(cacheKey) ?? 0) !== removalGenAtStart) return false;
         let payload: WatchlistAddPayload | null = null;
         try {
           // A one-shot imperative fetch, not a query: it runs only on this cold branch, so
@@ -1161,6 +1187,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           captureError(err, { scope: 'watchlist', kind: 'updateProgress-add' });
         }
         if (!payload) return false;
+        // BIN-965 — the last synchronous moment before the write, and the guard that
+        // actually protects the document. The TMDB fetch above takes seconds, and
+        // Firestore makes "Ta bort" clickable the instant a pending write is issued, so a
+        // removal completing inside that window was previously followed by this add
+        // writing the title back — a FULL payload (tmdbId, mediaType, status, title,
+        // addedAt), so BIN-942's required-field floor passes it and the series the user
+        // just deleted reappears in the library. Reporting that correctly afterwards is
+        // not a fix; the write must not happen. Returning `false` also keeps a waiter off
+        // the merge branch — the same answer, for the same reason.
+        if ((removalGenRef.current.get(cacheKey) ?? 0) !== removalGenAtStart) return false;
         await upsertTitle(payload);
         // AFTER the write resolves, not before: this marks "the document exists now", and
         // a failed add must stay retryable. Marking BEFORE the write would be worse, not
@@ -1179,7 +1215,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         if (removalTickRef.current === removalTickAtStart) {
           addedByProgressRef.current.add(cacheKey);
         }
-        return true;
+        // BIN-965 — the RESIDUAL window, and deliberately a different question from the
+        // mark above. The check before the write cannot cover a removal that starts after
+        // it: `removeItem` bumps synchronously and then awaits its own delete, so the two
+        // round trips can land either way round. Per-title, not the session counter — an
+        // unrelated title's removal must not turn a successful add into 'refused'.
+        //
+        // DECIDED (BIN-965): the leftover row is NOT swept up by deleting what we just
+        // wrote. A compensating delete that misfires destroys a title the user re-added in
+        // the same breath; a stray row destroys nothing. The asymmetry decides this, not
+        // the odds — do not "complete" the fix with that delete.
+        return (removalGenRef.current.get(cacheKey) ?? 0) === removalGenAtStart;
       })();
       inFlightAddsRef.current.set(cacheKey, addPromise);
       try {
@@ -1336,6 +1382,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // finds nothing. See removalTickRef's declaration for why the add cannot simply
     // re-check `items`.
     removalTickRef.current += 1;
+    // BIN-965 — bumped in the same synchronous breath, never after an await: the add path
+    // reads it to decide whether its write may still go out at all.
+    const removalGenKey = `${uid}:${mediaTypeDocId(mediaType, tmdbId)}`;
+    removalGenRef.current.set(removalGenKey, (removalGenRef.current.get(removalGenKey) ?? 0) + 1);
     const { db, doc, deleteDoc } = await fsdb();
     const docId = mediaTypeDocId(mediaType, tmdbId);
     await deleteDoc(doc(db, 'users', uid, 'watchlist', docId));

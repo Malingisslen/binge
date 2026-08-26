@@ -981,6 +981,127 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     expect(await advance).toBe('refused');
   });
 
+  // BIN-965. Three tests for one gesture, because the three ways it can go wrong are
+  // independent. The verifier on the 2026-08-22 batch found the first, four reviewers
+  // having passed it; the other two came out of the blind role critique on the first
+  // attempted fix, which reported the outcome correctly and still let the write out.
+  // All three are driven with a held TMDB fetch — the state appears and vanishes.
+  it('BIN-965: a removal mid-flight cancels the add itself — the deleted series stays deleted', async () => {
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    let advance!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+      advance = updateProgressRef!('tv', 1399, 3, 0); // no flag — the auto-advance, a waiter
+    });
+
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => {
+      releaseShow(TV_SHOW);
+      await Promise.all([tick, advance]);
+    });
+
+    // NOT "one write, correctly reported" — none. The add's own payload carries tmdbId,
+    // mediaType, status and title, so BIN-942's floor would have passed it and the series
+    // the user just deleted would be back in the library.
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(await tick).toBe('refused');
+    expect(await advance).toBe('refused');
+    // And nothing claims a status for a title that is gone.
+    await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalled());
+    expect(syncProgressToGroups).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tmdbId: 1399, status: null }),
+    );
+  });
+
+  // The half a session-wide counter cannot express. `removalTickRef` counts EVERY removal
+  // by design — over-declining costs one redundant re-add, which is the right trade for the
+  // session mark it gates. Letting that same value decide whether a write goes out, or what
+  // the caller is told, makes an unrelated title's removal refuse this one.
+  it('BIN-965: removing a DIFFERENT title does not disturb an add in flight', async () => {
+    await mountSeeded([seedDoc({ tmdbId: 550, mediaType: 'movie' })]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { await removeItemRef!('movie', 550); });
+    await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+    // The add landed, and says so.
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    const [, added] = setDoc.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(added.tmdbId).toBe(1399);
+    expect(await tick).toBe('written');
+    await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalled());
+    expect(syncProgressToGroups).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tmdbId: 1399, status: 'mina' }),
+    );
+  });
+
+  // The waiter's own add intent. Once the promise it waited on answers "does not exist", a
+  // second tick carrying `addIfMissing` falls into the add branch on its own account — and
+  // would re-add the very title the removal just took away, with a second TMDB fetch and a
+  // second analytics event. Its snapshot is taken at the TOP of updateProgress, before it
+  // ever waited, which is what makes the removal visible to it.
+  it('BIN-965: a second ticking waiter does not re-add the title the removal took away', async () => {
+    await mountSeeded([]);
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+
+    let first!: Promise<ItemWriteOutcome>;
+    let second!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      first = updateProgressRef!('tv', 1399, 2, 5, { addIfMissing: true });
+      second = updateProgressRef!('tv', 1399, 2, 6, { addIfMissing: true });
+    });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => {
+      releaseShow(TV_SHOW);
+      await Promise.all([first, second]);
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    // One fetch, not two: the waiter bails before spending a second one.
+    expect(getTVShowLite).toHaveBeenCalledTimes(1);
+    expect(trackEvent.mock.calls.filter(c => c[0] === 'title_added_watchlist')).toHaveLength(0);
+    expect(await first).toBe('refused');
+    expect(await second).toBe('refused');
+  });
+
+  // The fourth case, and the one that forces the generation to COUNT rather than merely
+  // mark. Every test above removes the title at most once, so `set(key, 1)` — "this title
+  // has been removed" — is indistinguishable from `set(key, prev + 1)`. The Map is never
+  // pruned and lives as long as the tab, so a second remove/re-add cycle on the same title
+  // is an ordinary session, not an exotic one: with a constant, a call that snapshotted the
+  // value after the FIRST removal sees no change after the second and writes the title back.
+  // Found by mutation (test review, 2026-08-26): the constant survived all three above.
+  it('BIN-965: a SECOND removal of the same title is still seen by an add in flight', async () => {
+    await mountSeeded([]);
+    // First removal — the title has a generation now.
+    await act(async () => { await removeItemRef!('tv', 1399); });
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      // Snapshots the generation as it stands AFTER the first removal.
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+
+    // Second removal, while that add is in flight. A counter moves; a constant does not.
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    await act(async () => { releaseShow(TV_SHOW); await tick; });
+
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(await tick).toBe('refused');
+  });
+
   it('removeItem deletes the watchlist doc AND its sibling tags doc (BIN-164)', async () => {
     await mountSeeded([seedDoc({ tmdbId: 9 })]);
 
