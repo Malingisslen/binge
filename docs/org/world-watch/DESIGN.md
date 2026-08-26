@@ -26,8 +26,8 @@ when a role's watch fires, and what it's allowed to do about it._
 > role *map* against code, **not this design doc against the system's build state**. So when
 > you add or change a subsystem, update the status line above **and** the relevant section in
 > the same change. This doc is the one system surface nothing watches — that discipline is
-> the fix. (Any hook/skill named below lives in gitignored `.claude/`; its committed copy is
-> under [`local-tooling/`](./local-tooling/) — point fresh-checkout readers there.)
+> the fix. (`.claude/` is TRACKED since b20bf69, and the role-org skills ship from the
+> `role-org` plugin rather than from this repo — see §3.)
 
 This doc has four parts: the **constitution** (§1, decided org-wide — build to it, don't
 re-litigate), the **built system** (§2 — world-watch, Phase-2 deliberation, and the
@@ -189,31 +189,27 @@ doesn't apply; the canonical trio collapses to Legal + Privacy/DPO + Security.)
 | Artifact | Path | Role |
 |---|---|---|
 | Committed state file | [`docs/org/world-watch/state.json`](./state.json) | per-role cadence, authority, verified sources, `lastScan`, `snapshot` |
-| SessionStart hook | [`.claude/hooks/world-watch-due.ps1`](../../../.claude/hooks/world-watch-due.ps1) | deterministic due-check; injects a reminder; **does no scanning** |
-| `/world-watch` skill | [`.claude/skills/world-watch/SKILL.md`](../../../.claude/skills/world-watch/SKILL.md) | the actual poll → diff → impact-check → route → commit flow |
-| Hook registration | [`.claude/settings.json`](../../../.claude/settings.json) | wires the SessionStart hook |
+| SessionStart hook | `C:/claude-plugins/plugins/role-org/scripts/world-watch-due.mjs` | deterministic due-check; injects a reminder; **does no scanning** |
+| `/world-watch` skill | `role-org` plugin, `skills/world-watch/SKILL.md` | the actual poll → diff → impact-check → route → commit flow |
+| Hook registration | `role-org` plugin, `hooks/hooks.json` | wires the SessionStart hook |
 
 **Why state.json lives in `docs/org/` not `.claude/state/`:** `.claude/state/` is
 fully gitignored (it holds ephemeral review markers). The world-watch state — sources,
 snapshots, last-scan dates — must be *committed* so it survives across machines and
-sessions and is auditable. The once-per-day **lock** is the only ephemeral piece, and
-that goes in `.claude/state/` (gitignored).
+sessions and is auditable.
 
 ### 2.2 The SessionStart hook (deterministic, fail-open)
-`world-watch-due.ps1` runs on every session start. It:
+`world-watch-due.mjs` runs on every session start. It:
 1. Reads `state.json`.
 2. For each MVP role, computes `due = (now − lastScan) ≥ cadence` (weekly=7d,
    monthly=30d, quarterly=90d; `lastScan: null` ⇒ due).
-3. Applies a **once-per-day lock** (`.claude/state/world-watch-lastcheck`) so the
-   reminder appears at most once per calendar day, never nagging within a day.
+3. Applies a **once-per-day lock** so the reminder appears at most once per calendar
+   day, never nagging within a day.
 4. If anything is due, emits `additionalContext` (the SessionStart JSON contract)
    telling the session to run `/world-watch`.
 5. **Fails open** — any error exits 0 with no output. A hook bug must never block a
    session, and it must never scan (no model calls, no network).
 
-It mirrors the conventions of the existing hooks (`inject-checkpoint.ps1`,
-`stop-check.ps1`): PowerShell, `$ErrorActionPreference='Stop'`, try/catch → `exit 0`,
-repo-root via `git rev-parse`.
 
 ### 2.3 The `/world-watch` skill (the only model-using part)
 Invoked by the owner (prompted by the hook, or manually). Flow:
@@ -251,8 +247,8 @@ so the role map doesn't silently drift as files change.
 | Ownership map (generated, committed) | `docs/org/ownership-map.json` | role → owned path patterns |
 | Ownership-gap baseline (committed) | `docs/org/ownership-gaps.json` | unowned siblings in directories the map already enumerates file-by-file — the baseline the gap check ratchets against |
 | Map generator (committed) | `docs/org/gen-ownership-map.mjs` | parses the role doc; `node docs/org/gen-ownership-map.mjs` writes the map and then grades the gaps — see below |
-| PostToolUse hook (local) | `.claude/hooks/dossier-freshness.ps1` | edited path → match → stale marker per owning role |
-| `/refresh-dossiers` skill (local) | `.claude/skills/refresh-dossiers/SKILL.md` | re-audit ONLY flagged roles, update their sections, clear markers |
+| PostToolUse hook | `.claude/hooks/freshness.mjs` (BIN-989 merged the freshness hooks) | edited path → match → stale marker per owning role |
+| `/refresh-dossiers` skill | `role-org` plugin, `skills/refresh-dossiers/SKILL.md` | re-audit ONLY flagged roles, update their sections, clear markers |
 | Stale markers (gitignored) | `.claude/state/dossier-stale/<roleNumber>.marker` | ships empty (all fresh) |
 
 
@@ -276,8 +272,7 @@ code:
 - `--check` grades the COMMITTED map without writing anything.
 
 The same check runs under `npm test`, which gates CI and the deploy, so skipping it here
-only moves the failure later. `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md`
-step 5 carries the same rules for the dossier-refresh flow.
+only moves the failure later.
 
 **Contract.** The hook only ever writes documentation-freshness markers — never touches
 app code, never blocks, fails open. It skips the docs that *define* the system
@@ -294,11 +289,11 @@ The blind-critique panel from §1.1–1.3, now built and validated.
 
 | Artifact | Path | Role |
 |---|---|---|
-| `/stakeholder-review` skill (local) | `.claude/skills/stakeholder-review/SKILL.md` | router → parallel blind critics → synthesizer → escalate/decide → ADR |
+| `/stakeholder-review` skill | `role-org` plugin, `skills/stakeholder-review/SKILL.md` | router → parallel blind critics → synthesizer → escalate/decide → ADR |
 | Router data (committed) | `docs/org/ownership-map.json` | plan/fileset → stakeholder roles |
 | Priority rubric (committed) | this doc §1.2 | Chief-Architect tiebreak |
 | ADRs (committed, append-only) | `docs/org/adr/NNNN-*.md` | one per disagreement |
-| ExitPlanMode suggest-hook (local) | `.claude/hooks/exit-plan-suggest-review.ps1` | non-blocking suggestion on high-stakes plans |
+| ExitPlanMode suggest-hook | `C:/claude-plugins/plugins/role-org/scripts/suggest-stakeholder-review.mjs` | non-blocking suggestion on high-stakes plans |
 
 **Pipeline:** route to stakeholders (blast-radius tiered, panel capped ~6) → spawn one
 subagent per role that critiques **blind** from its own dossier + world-model (never
@@ -328,7 +323,7 @@ Security) + a synthesizer.
   $0/interactive; in API terms, justified *for a plan that deletes user data on a
   schedule*, but **wasteful if fired on every plan**. → the trigger must be **tiered**.
 
-**Decision on the auto-trigger:** wired, but **gated**. `exit-plan-suggest-review.ps1`
+**Decision on the auto-trigger:** wired, but **gated**. `suggest-stakeholder-review.mjs`
 scans a finalized plan for high-stakes signals (rules / GDPR-data / auth / functions /
 moderation / destructive-data ops) and only then **suggests** `/stakeholder-review` —
 non-blocking, never auto-running the panel. Low-risk plans get silence. This keeps the
@@ -376,8 +371,7 @@ before anything was built; they are retired by `correction` rows rather than edi
 World-watch + freshness are left **documented-optional** (`state.json` + the
 `dossier-stale/` markers already record those).
 
-**`/org-retro`** (skill; committed mirror at
-[`local-tooling/skills/org-retro/`](./local-tooling/skills/org-retro/SKILL.md)) reads the
+**`/org-retro`** (skill; ships from the `role-org` plugin) reads the
 log + ADRs + world-watch state + freshness markers and scores: Phase-2 value/rubber-stamp,
 trigger calibration, world-watch signal-to-noise + source health, freshness accuracy, and
 cost/review — plus a **manual false-negative spot-check** (the logs show what the system
@@ -386,9 +380,9 @@ reached the system). Two modes: **shakedown** (~3–4 days, qualitative) and **f
 (~3–4 weeks, quantitative). Read-only; advises.
 
 **Self-clearing retro reminder.** `docs/org/metrics/retro-schedule.json` (committed; goLive
-2026-06-27, `shakedown@4d` + `full@28d`) plus a SessionStart hook `org-retro-due-check.mjs`
-(Node — deterministic, fails open, once-per-day lock; committed mirror at
-[`local-tooling/hooks/`](./local-tooling/hooks/org-retro-due-check.mjs)) nudge you to run
+2026-06-27, `shakedown@4d` + `full@28d`) plus a SessionStart hook `org-retro-due.mjs`
+(Node — deterministic, fails open, once-per-day lock; ships from the `role-org` plugin)
+nudge you to run
 `/org-retro <mode>` once a window passes. It **self-clears**: a retro counts as done when a
 `{"type":"retro","mode":"<mode>"}` event lands in `events.jsonl` (the skill logs it on each
 run), so the reminder stops with no separate done-state — and it **survives a fresh
@@ -411,8 +405,8 @@ stdin) it returns `{ tier, panel, roles, highStakes, reason }`. It is the single
 truth for the tier; `--selftest` golden-checks it. This closes the §4 "router automation"
 remainder.
 
-**Where it's wired** (`/linear` + `/sprint-execute`, gitignored commands mirrored under
-`local-tooling/commands/`):
+**Where it's wired** (`/linear` + `/sprint-execute`, which ship from the `delivery`
+plugin):
 - **`/linear` (ticket creation)** — every `scan` / `scan night` / `ticket` runs the router
   on the finding's touched paths and stamps a `## Stakeholders` block (tier + owning roles)
   into the ticket body. The specialist is assigned the moment the ticket exists. `/linear`
@@ -454,113 +448,51 @@ may sit open legitimately; age is not drift for them.
 
 ---
 
-## 3. Rebuild local tooling (durability) — the most important fix
+## 3. Durability on a fresh checkout
 
-`.claude/` is gitignored here (all Claude harness config is local-only). That means the
-world-watch + freshness + stakeholder-review + measurement glue — **four hooks, four
-skills**, and the `settings.json` wiring — exists only on this machine. **Without this
-section, the system silently does not exist on any other checkout.** So everything is
-split clean:
+**Rewritten 2026-08-26 (BIN-872).** This section used to describe a committed *mirror* of
+the tooling at `docs/org/world-watch/local-tooling/`, and its whole premise was that
+`.claude/` is gitignored. That has been false since `b20bf69` (2026-08-08), which
+deliberately committed the harness config. The mirror was deleted in the same commit as
+this rewrite; a copy that nobody redeploys from is a second source of truth that drifts.
 
-- **State / data → committed under `docs/`** (survives git): the world-model
-  (`ROLE_WORLD_MODEL.md`), `state.json`, `ownership-map.json` + its generator, this
-  `DESIGN.md`, and the role map. These are the source of truth.
-- **Executable glue → local in `.claude/`** (gitignored), but **mirrored committed** at
-  [`local-tooling/`](./local-tooling/) so it can be redeployed.
+Derive what is tracked rather than trusting a list here:
 
-### What's gitignored, and where its committed source lives
-
-> **Stale as of 2026-08-17 (BIN-918).** This table lists the mirror targets as they were
-> designed, not as they are deployed. `.claude/hooks/` today holds only
-> `freshness.mjs` and `preview-gate.mjs`, and `.claude/commands/`
-> is empty — the rest moved to `C:/claude-plugins`. Concretely for the row below:
-> `trigger` rows are written by `suggest-stakeholder-review.mjs` in that plugin, not by
-> `exit-plan-suggest-review.ps1`, which is not deployed here. Disclosed rather than rewritten:
-> §3 is a design record, and re-deriving the whole mirror set is its own job.
-
-| Gitignored (runs) | Committed source (survives git) |
-|---|---|
-| `.claude/hooks/world-watch-due.ps1` | `docs/org/world-watch/local-tooling/hooks/world-watch-due.ps1` |
-| `.claude/hooks/dossier-freshness.ps1` | `docs/org/world-watch/local-tooling/hooks/dossier-freshness.ps1` |
-| `.claude/hooks/exit-plan-suggest-review.ps1` | `docs/org/world-watch/local-tooling/hooks/exit-plan-suggest-review.ps1` |
-| `.claude/hooks/org-retro-due-check.mjs` | `docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs` |
-| `.claude/skills/world-watch/SKILL.md` | `docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md` |
-| `.claude/skills/refresh-dossiers/SKILL.md` | `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` |
-| `.claude/skills/stakeholder-review/SKILL.md` | `docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md` |
-| `.claude/skills/org-retro/SKILL.md` | `docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md` |
-| `.claude/commands/linear.md` | `docs/org/world-watch/local-tooling/commands/linear.md` |
-| `.claude/commands/sprint-execute.md` | `docs/org/world-watch/local-tooling/commands/sprint-execute.md` |
-| `.claude/commands/sprint-parallel.md` | `docs/org/world-watch/local-tooling/commands/sprint-parallel.md` |
-| `.claude/settings.json` → `hooks` entries | `docs/org/world-watch/local-tooling/settings.hooks.json` |
-
-The **measurement layer** (`docs/org/metrics/` — `events.jsonl`, `log_event.mjs`,
-`check_events.mjs` + its test, `retro-schedule.json`, README) is committed data + helper, **not** gitignored glue, so it
-needs no mirror/rebuild. Only the `org-retro-due-check.mjs` hook that *reads* the schedule
-is gitignored glue (mirrored above).
-
-`state.json`, `ownership-map.json`, and **`route.mjs`** (the §2.8 router) already live
-committed under `docs/` — nothing to rebuild there. (The `/linear` + `/sprint-execute`
-commands now *depend* on `route.mjs`, so they were brought under the mirror above — without
-that, default-ON review would silently not exist on a fresh checkout, which is exactly what
-§3 protects against.)
-
-### Rebuild on a fresh checkout (from a Git Bash shell at the repo root)
-
-```bash
-# 1. deploy the hooks + skills into the gitignored .claude/ tree
-mkdir -p .claude/hooks .claude/skills/world-watch .claude/skills/refresh-dossiers .claude/skills/stakeholder-review
-cp docs/org/world-watch/local-tooling/hooks/* .claude/hooks/   # .ps1 + .mjs (org-retro-due-check)
-cp docs/org/world-watch/local-tooling/skills/world-watch/SKILL.md .claude/skills/world-watch/
-cp docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md .claude/skills/refresh-dossiers/
-cp docs/org/world-watch/local-tooling/skills/stakeholder-review/SKILL.md .claude/skills/stakeholder-review/
-mkdir -p .claude/skills/org-retro && cp docs/org/world-watch/local-tooling/skills/org-retro/SKILL.md .claude/skills/org-retro/
-
-# 1b. deploy the work-tracker commands (they depend on docs/org/route.mjs, committed)
-mkdir -p .claude/commands && cp docs/org/world-watch/local-tooling/commands/*.md .claude/commands/
-
-# 2. wire the hooks: merge ALL entries from settings.hooks.json into
-#    .claude/settings.json -> "hooks" (SessionStart x2 = world-watch + org-retro,
-#    PostToolUse = dossier-freshness, PreToolUse = ExitPlanMode suggest). If that file
-#    doesn't exist, create it as { "hooks": { ...those entries... } }. If an array already
-#    exists (e.g. a commit-gate PreToolUse), APPEND these rather than replacing it.
-cat docs/org/world-watch/local-tooling/settings.hooks.json
-
-# 3. (re)generate the ownership map so it's honest to the current role doc.
-#    This can exit 1 — that is a finding, not a crash. The map is already written by then;
-#    the non-zero code means a tracked code file has no owning role. Name it in
-#    docs/role-responsibilities.md and re-run, or re-baseline deliberately with
-#    --update-gaps. See the artifact table above.
-node docs/org/gen-ownership-map.mjs
-
-# 4. restart the Claude session so settings.json is reloaded; the SessionStart hooks then
-#    remind you when a world-watch scan or an /org-retro is due.
+```
+git ls-files .claude
 ```
 
-The exact `settings.json` hook entries to merge (also in `settings.hooks.json`):
+### Where each piece actually lives now
 
-```json
-"SessionStart": [
-  { "matcher": "startup|resume", "hooks": [ { "type": "command",
-    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\world-watch-due.ps1\"" } ] },
-  { "matcher": "startup|resume", "hooks": [ { "type": "command",
-    "command": "node \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\org-retro-due-check.mjs\"" } ] }
-],
-"PostToolUse": [
-  { "matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command",
-    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\dossier-freshness.ps1\"" } ] }
-],
-"PreToolUse": [
-  { "matcher": "ExitPlanMode", "hooks": [ { "type": "command",
-    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\exit-plan-suggest-review.ps1\"" } ] }
-]
-```
-(If `.claude/settings.json` already has a `PreToolUse` array — e.g. the commit-gate —
-**append** this entry rather than replacing it.)
+- **State and data — committed under `docs/`, and the source of truth.** The world-model
+  (`ROLE_WORLD_MODEL.md`), `state.json`, `ownership-map.json` and its generator,
+  `ownership-gaps.json`, `route.mjs`, the role map, this `DESIGN.md`, and the whole
+  measurement layer under `docs/org/metrics/`. Nothing here needs rebuilding — cloning the
+  repo is the rebuild.
+- **Repo-specific harness config — committed under `.claude/`.** Reviewer agents, rules,
+  `shared-plugin.json`, settings and hooks. Also just cloned; `git ls-files .claude`
+  enumerates it.
+- **The role-org's runnable skills — a separate repo.** They ship from the `role-org`
+  plugin under `C:/claude-plugins`, installed once per machine rather than copied per
+  repo; the delivery commands ship the same way from `delivery`. List them with
+  `ls C:/claude-plugins/plugins/*/skills`.
 
-> **Canonical direction:** to *change* the tooling, edit the committed copy under
-> `local-tooling/` and re-run step 1 to redeploy — that keeps the surviving copy
-> authoritative and avoids drift between the two. (These are PowerShell + Windows
-> paths, matching this repo's existing hooks; adapt the shell on another OS.)
+So the durability question this section exists to answer has a different shape than it did:
+nothing in this repo needs a deploy step, and what does need installing is a plugin, not a
+file copy. What survives a fresh clone is everything except the plugins.
+
+### What that leaves genuinely at risk
+
+The plugins are the part a fresh machine does not get for free, and this repo cannot fix
+that from inside itself — `C:/claude-plugins` has its own gate and its own session. The
+honest statement is that a checkout without them still builds, tests and deploys (those run
+from `package.json` and `.github/workflows/`), but the role-org's review and sprint
+machinery is absent until the plugins are installed.
+
+**Do not re-create a mirror to solve that.** It is the same trade this section got wrong
+once: a copy that is not the thing that runs tells you what someone intended, not what
+happens, and the two separate every time either side changes.
+
 
 ---
 

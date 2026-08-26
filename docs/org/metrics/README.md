@@ -2,8 +2,7 @@
 
 Does the virtual role-org actually *work*, or is it expensive theatre? This layer
 measures it. `events.jsonl` is an append-only log; `/org-retro` (the live skill lives in
-`C:/claude-plugins/plugins/role-org/skills/org-retro/` — the in-repo copy under
-`../world-watch/local-tooling/` is an older fork, kept for reference, not what runs)
+`C:/claude-plugins/plugins/role-org/skills/org-retro/`)
 reads it (plus the ADRs, world-watch `state.json`, and freshness markers) and scores the
 system on its own terms.
 
@@ -19,8 +18,8 @@ system on its own terms.
   use it: `.claude/shared-plugin.json` → `delivery.metrics.logReviewCommand` for `review`
   rows, and the `/org-retro` skill for its `retro` row (all three `retro` rows in
   `events.jsonl` — 1, 25 and 26 — were written THROUGH the helper; only row 25's `shakedown`
-  is a mode that skill emits today, so "through the helper" is the claim, not "by the skill"). The four copies under `docs/org/world-watch/local-tooling/` are dead
-  mirrors, not running code. Read any statement about "the writer" with that in mind.
+  is a mode that skill emits today, so "through the helper" is the claim, not "by the skill").
+  Read any statement about "the writer" with that in mind.
   **Second correction, same day:** the first version of this note said `logReviewCommand`
   was the ONE caller. That was asserted, not measured, and `/org-retro` disproves it — a
   helper with a single caller hardcoding `review` would never need the SIX-type enum this
@@ -205,18 +204,16 @@ Today they distort the rubber-stamp rate's **denominator** only — but they dis
 OTHER scores outright, and those have no bool protecting them. All 42 carry
 `via: "sprint-parallel"` or `"attended-review-pass"` and no `ticket`, so `/org-retro`
 classifies them as **ad-hoc** reviews that should each have had a preceding `trigger`:
-42 of 71 non-`skip` ad-hoc reviews against 19 triggers (the fork's calibration one-liner
-applies no tier filter and prints `adhoc 72` — the "excluding `tier:skip`" clause is
+42 of 71 non-`skip` ad-hoc reviews against 19 triggers (the deleted in-repo fork's calibration
+one-liner applied no tier filter and printed `adhoc 72` — the "excluding `tier:skip`" clause is
 scoped to the rubber-stamp rate, not to calibration), which reads as the hook massively
 under-firing when it is not. None carries `approx_tokens` (0 of 42), which drags the
 cost-per-review down the same way. The ONE thing holding the rubber-stamp line is the
-canonical `"rubber_stamp": false` every single one of them writes. Do not remove it. The
-only executable analyzer that exists is the in-repo FORK's one-liner (the one this file's
-opening paragraph calls "not what runs"), and it reads the bool first —
-`typeof x.rubber_stamp === 'boolean' ? … : derive`. The live skill has no executable
-rubber-stamp analyzer at all (it has a worked-example one-liner, but that one only counts
-rows by type), so there the bool is what a reader applies by hand. Either way the
-documented legacy derivation — zero conditions, no ADR, no conflicts or escalations, and
+canonical `"rubber_stamp": false` every single one of them writes. Do not remove it.
+The live skill has no executable rubber-stamp analyzer at all (it has a worked-example
+one-liner, but that one only counts rows by type), so the bool is what a reader applies
+by hand. The documented legacy derivation — zero conditions, no ADR, no conflicts or
+escalations, and
 an `outcome` carrying no park/override/correction/ruling verb — scores **41 of these 42
 rows as rubber-stamps**. Measured, not reasoned: `"declined-unattended"` contains none of
 those verbs, and the rows carry `must_haves: 0`, `adrs: []`, `conflicts: 0`,
@@ -249,7 +246,8 @@ the denominator — the rate the panel is judged by was being halved by reviews 
 > in `C:/claude-plugins` and was changed there, in its own session (Malin, 2026-08-06) —
 > claude-plugins `9559c55`.
 >
-> The in-repo fork under `docs/org/world-watch/local-tooling/` was fixed in the same pass:
+> An in-repo fork of the skill was fixed in the same pass. That fork was deleted by
+> BIN-872 on 2026-08-26, so this paragraph is history, not a pointer:
 > its calibration one-liner now filters `ran !== false` too, and it no longer dies on the
 > first trigger row (it called `.join()` on `signals`, which the writer emits as a
 > comma-separated STRING — BIN-885).
@@ -275,14 +273,6 @@ these rows rather than parse them. Do not trust either enum.
 | `signals` | the high-stakes tokens that matched in the plan, as a **comma-separated STRING** — `suggest-stakeholder-review.mjs:39` does `[...hitSet].sort().join(',')` before writing. Not an array. Re-counted 2026-08-19: 19 of 19 `trigger` rows are strings, 0 are arrays |
 | `fired` | always `true` on a written row — the hook only writes when it fires. Re-counted 2026-08-19: 19 of 19 rows carry it |
 | ~~`suggested`~~ | **never existed.** This table used to document it; ZERO rows have ever carried it (re-counted 2026-08-19: 0 of 19). The writer emits `fired`. Corrected by BIN-885 |
-
-> **The `signals`-shape crash, fixed 2026-08-19 (BIN-885).** The in-repo fork's calibration
-> one-liner did `(x.signals || []).join(',')` — and `String.prototype` has no `join`, so it
-> threw `TypeError: (x.signals || []).join is not a function` on the FIRST trigger row. The
-> falsy branch never saved it: no row carries an empty string. What made this invisible for
-> months is that the two summary lines print BEFORE the loop, so the section looked like one
-> that simply had nothing to say rather than one that died. It now handles both shapes and
-> runs through all 19 rows — verified by running it, not by reading it.
 
 > The hook can't know whether a review *actually ran* — `/org-retro` correlates `trigger`
 > events with later `review` events (by time) to score calibration: fired-and-a-review-ran
@@ -318,7 +308,7 @@ trends are visible across retros.
 Both run **interactively** (`/org-retro shakedown` / `/org-retro full`) — never headless
 ($0 model). The cadence is **automated as a reminder, not a scheduler**:
 `retro-schedule.json` (goLive + per-mode `afterDays`) drives a SessionStart hook
-(`org-retro-due-check.mjs`) that nudges you once a window passes. It **self-clears** — a
+(`org-retro-due.mjs`) that nudges you once a window passes. It **self-clears** — a
 mode counts as done when a `{"type":"retro","mode":"<mode>"}` event lands here (the skill
 logs it), so the nudge stops until the next window. The hook only reminds; you run the
 retro.

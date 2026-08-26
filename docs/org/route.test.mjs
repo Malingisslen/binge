@@ -660,7 +660,9 @@ const REVIEW_CANDIDATES = [
 // redden it. The name here now says what this block actually covers.
 // BIN-906 #3 — and the DISCOVERY half below is keyed on a `.test.mjs` sibling, so a
 // tooling `.mjs` that nobody wrote a test for is nominated by nothing and stays invisible
-// to it (live example: docs/org/world-watch/local-tooling/hooks/org-retro-due-check.mjs.
+// to it (live example: .claude/hooks/preview-gate.mjs — a wired hook with no .test.mjs
+// sibling, so the DISCOVERY half never nominates it. The prior example here lived under
+// docs/org/world-watch/local-tooling/, deleted by BIN-872 on 2026-08-26.
 // docs/org/metrics/log_event.mjs WAS the other one and no longer is — BIN-918 put it in
 // both lists on 2026-08-17, after a reviewer rather than a check noticed that a commit
 // editing it reached nobody. It still has no test sibling, so it stays outside the
