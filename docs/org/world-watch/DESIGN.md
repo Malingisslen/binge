@@ -249,10 +249,35 @@ so the role map doesn't silently drift as files change.
 | Artifact | Path | Role |
 |---|---|---|
 | Ownership map (generated, committed) | `docs/org/ownership-map.json` | role → owned path patterns |
-| Map generator (committed) | `docs/org/gen-ownership-map.mjs` | parses the role doc; run `node docs/org/gen-ownership-map.mjs` |
+| Ownership-gap baseline (committed) | `docs/org/ownership-gaps.json` | unowned siblings in directories the map already enumerates file-by-file — the baseline the gap check ratchets against |
+| Map generator (committed) | `docs/org/gen-ownership-map.mjs` | parses the role doc; `node docs/org/gen-ownership-map.mjs` writes the map and then grades the gaps — see below |
 | PostToolUse hook (local) | `.claude/hooks/dossier-freshness.ps1` | edited path → match → stale marker per owning role |
 | `/refresh-dossiers` skill (local) | `.claude/skills/refresh-dossiers/SKILL.md` | re-audit ONLY flagged roles, update their sections, clear markers |
 | Stale markers (gitignored) | `.claude/state/dossier-stale/<roleNumber>.marker` | ships empty (all fresh) |
+
+
+The generator is not a plain regeneration, and has not been since BIN-803. Read the exit
+code:
+
+- It writes `ownership-map.json` FIRST, then checks whether any tracked code file sits in
+  a directory the map enumerates file-by-file with no role naming it, ratcheted against
+  `ownership-gaps.json`. So a failing run has still updated the map — nothing is lost.
+  Note the narrowness: a file in a directory the map does NOT enumerate never enters this
+  computation at all, so the baseline is not a register of everything unowned. The
+  generator's own header says so, and names the bigger uncovered hole (a brand-new
+  unowned directory).
+- **Exit 1** has two causes, and they need different remedies. A NEW unowned sibling
+  appeared: that is a finding, not a crash — name the file under its owning role in
+  `docs/role-responsibilities.md` and re-run. The baseline file is missing entirely:
+  create it with `--update-gaps`. The script prints the right remedy for whichever case
+  it hit, so read its output rather than guessing between them.
+- `--update-gaps` re-baselines instead, and returns 0. Reach for it only when genuinely no
+  role should own the file — baselining is how a gap becomes permanent.
+- `--check` grades the COMMITTED map without writing anything.
+
+The same check runs under `npm test`, which gates CI and the deploy, so skipping it here
+only moves the failure later. `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md`
+step 5 carries the same rules for the dossier-refresh flow.
 
 **Contract.** The hook only ever writes documentation-freshness markers — never touches
 app code, never blocks, fails open. It skips the docs that *define* the system
@@ -500,7 +525,11 @@ mkdir -p .claude/commands && cp docs/org/world-watch/local-tooling/commands/*.md
 #    exists (e.g. a commit-gate PreToolUse), APPEND these rather than replacing it.
 cat docs/org/world-watch/local-tooling/settings.hooks.json
 
-# 3. (re)generate the ownership map so it's honest to the current role doc
+# 3. (re)generate the ownership map so it's honest to the current role doc.
+#    This can exit 1 — that is a finding, not a crash. The map is already written by then;
+#    the non-zero code means a tracked code file has no owning role. Name it in
+#    docs/role-responsibilities.md and re-run, or re-baseline deliberately with
+#    --update-gaps. See the artifact table above.
 node docs/org/gen-ownership-map.mjs
 
 # 4. restart the Claude session so settings.json is reloaded; the SessionStart hooks then

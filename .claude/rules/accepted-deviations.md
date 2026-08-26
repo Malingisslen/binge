@@ -8,10 +8,23 @@ paths:
 
 # Accepted Deviations
 
-Deliberate, decided deviations from otherwise-applicable rules. **Review agents
-(binge-code-reviewer, binge-security-reviewer, binge-test-reviewer) MUST read this before
-filing a finding** — the commit gate names this file when it blocks, and each agent's
-definition points here. Do not re-flag anything listed below.
+Deliberate, decided deviations from otherwise-applicable rules. **Every review agent —
+binge-code-reviewer, binge-security-reviewer, binge-test-reviewer and
+binge-integration-reviewer — MUST read this before filing a finding** — the commit gate
+names this file when it blocks, and each agent's definition points here. Do not re-flag
+anything listed below.
+
+The integration reviewer was missing from that sentence until BIN-1005, which mattered
+because it is the push gate. The names are written out rather than counted on purpose: a
+count goes stale the next time a reviewer is added or removed, and this file exists to
+stop stale claims, not to add one.
+
+A clause was struck here in the same edit that added this paragraph: it said the
+integration reviewer "blocks a commit on `docs/org/metrics/**`". That conflates the two
+lists this repo keeps filing tickets about (BIN-830). `paths:` above is a TRIGGER-LOAD
+list; `reviewGates` in `.claude/shared-plugin.json` is the BLOCKING one, and widening
+either never widens the other. Derive who blocks a given path rather than trusting a
+sentence about it.
 
 Append-only. Supersede an entry with a newer dated entry; never silently delete — retire it
 verbatim to `.claude/accepted-deviations.archive.md` instead; the archive file, not a diff, is

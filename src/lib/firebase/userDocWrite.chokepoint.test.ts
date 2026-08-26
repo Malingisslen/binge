@@ -203,7 +203,7 @@ describe('users/{uid} write chokepoint (BIN-816, ADR 0019 c1)', () => {
     // Golvet (BIN-838:s lärdom — ett mönster som ersätter en lista behöver ett
     // golv). Satt strax under det verkliga antalet, inte på hälften: ett
     // katalogsteg som tyst slutar rekursera tar bort hundratals filer, och en
-    // gräns på 200 mot 497 hade sovit igenom det.
+    // gräns på 200 hade sovit igenom det.
     expect(files.length).toBeGreaterThan(450);
 
     // Och vakuitetskontrollen ställer sin fråga till CACHEN, inte bara till fillistan

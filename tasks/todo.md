@@ -1,3 +1,177 @@
+# SPRINT 2026-08-26 (natten, andra körningen)
+
+Planen för DENNA körning, skriven FÖRE bygget. Liten med flit: föregående körning
+tog nio granskningsvarv, och det som återstår i backloggen som inte kräver Malins
+beslut är mestadels precisa texträttelser.
+
+3 biljetter i EN bunt. Router körd på buntens faktiska filuppsättning vid HEAD
+`7eafac1` (rå utdata nedan).
+
+**Kapacitetskoll vid urvalet (BIN-744/776/917/976):** arbetaren är denna session,
+som KAN konvenera en enskild rollkritik. Bunten routar `medium` → en blind kritik
+från den ägande rollen, körd FÖRE bygget.
+
+## Ej valda, och varför
+
+| Biljett | Beslut |
+| -- | -- |
+| BIN-603 | **Väntar på Malin.** Mätt i förra körningen: fixen rensar alla fyra CVE:erna men fäller 25k-bygget; kontrollprovet bygger rent. Tre alternativ skrivna på biljetten. |
+| BIN-872 | **needs-approval.** Biljetten säger uttryckligen "kräver ditt beslut, inte en textfix" och ställer en öppen fråga (ska `local-tooling/`-spegeln finnas kvar?). Byggs inte autonomt. |
+| BIN-790 | **Utdragen med skäl — se nedan.** Den byggbara halvan kräver en testbar hook, och `.claude/hooks/**` ligger utanför testkörarens globs. |
+| BIN-965 / BIN-966 | Står i `Todo` och ägs av en parallell session som byggt och håller en patch. Rörs inte. |
+| BIN-852 / BIN-935 / BIN-990 | Parkerade handbromsar med obesvarad fråga till Malin. |
+| BIN-964 / 974 / 977 / 978 / 984–987 / 992 / 995 | Post-mortem-bokföring på förfallna buntar. |
+| BIN-189 / BIN-521 / BIN-170 | `idea`-etikett → `neverBuildLabels`. |
+| BIN-454 / BIN-402 | Stående "gör aldrig detta". |
+
+### BIN-790 — varför den drogs ut, och vad som hittades på vägen
+
+Biljettens åtgärdspunkt 2 (en utstashad bunt ska rensa sina egna flaggor) bor i
+sprintmotorn under `C:/claude-plugins` och kan inte byggas härifrån.
+
+Punkt 1 (hooken ska verifiera triggers mot HEAD) ÄR byggbar — `.claude/hooks/freshness.mjs`
+är spårad i det här repot. Men den är också otestbar som det ser ut:
+
+* `find .claude -name "*freshness*"` ger EN fil, hooken själv. **Ingen testfil finns.**
+* `vitest.config.ts`s `include` täcker **inte** `.claude/hooks/**`. (Ingen uppräkning av
+  vad den DÄREMOT täcker skrivs här — en sådan lista är komplett tills någon lägger till
+  en glob, och det här är en bunt om just opinnade påståenden. Greppa filen.)
+
+Att bygga punkt 1 med test kräver alltså att `vitest.config.ts` vidgas, vilket är en
+egen grindad ändring och dessutom BIN-802:s kända fälla (en testfil utanför globarna
+körs tyst aldrig). Att bygga den UTAN test är en logikändring i mekanismen som stämplar
+arbetsordrar — precis det testgranskaren finns för att stoppa.
+
+Det är ett eget arbete, inte en delmängd av den här bunten. **Filas som följdbiljett:
+granskningshookarna har noll testtäckning och ligger utanför testkörarens globs.**
+
+---
+
+## Bunt A — tre inaktuella påståenden stryks
+
+Router, rå utdata på `.claude/rules/accepted-deviations.md
+src/lib/firebase/userDocWrite.chokepoint.test.ts docs/org/world-watch/DESIGN.md
+docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md`:
+> Tier **medium** · #5 Legal / GDPR Counsel
+
+Sätet är #5 för att `userDocWrite.chokepoint.test.ts` bevakar raderingskedjans
+chokepoint (BIN-816 / ADR 0019). Bunten ändrar ingen kod och ingen grind.
+
+### BIN-1005 — avvikelsefilen namnger tre granskare av fyra
+**Tier A** · disposition `build` · router: `medium` · #5
+
+**Mätt vid HEAD `7eafac1`:** `.claude/rules/accepted-deviations.md:12` räknar upp
+`binge-code-reviewer, binge-security-reviewer, binge-test-reviewer`.
+`ls .claude/agents/binge-*-reviewer.md` ger **fyra** filer — integrationsgranskaren
+saknas i uppräkningen. Den är repots push-grind.
+
+(En mening om att den "stoppar en commit på `docs/org/metrics/**`" stod här och är
+struken — den blandade ihop de två listorna. `paths:` i filens frontmatter är
+TRIGGER-listan; `reviewGates` är den BLOCKERANDE, och dess mönster namnger tre
+`.mjs`-skript under `metrics/`, inte katalogen. `docs/org/metrics/events.jsonl` når noll
+blockerande granskare — sonderat mot den levande konfigen, inte läst ur regexet.)
+
+**Vad ändras:** meningen namnger alla fyra i klartext. **Inget antal skrivs** — inte
+"alla fyra", eftersom det talet glider nästa gång en granskare läggs till. `reviewGates`
+rörs inte; det är prosan som är fel, inte mekaniken.
+
+Acceptans:
+- [ ] Alla fyra granskaragenterna som finns på disk namnges i klartext. *(kind: diff)*
+- [ ] Meningen innehåller inget antal. *(kind: diff)*
+- [ ] `reviewGates` i `.claude/shared-plugin.json` är oförändrad. *(kind: diff)*
+
+### BIN-1004 — ett inaktuellt tal i commiten som strök inaktuella tal
+**Tier A** · disposition `build` · router: `medium` · #5
+
+**Mätt vid HEAD `7eafac1`:** `src/lib/firebase/userDocWrite.chokepoint.test.ts:206`
+lyder `// gräns på 200 mot 497 hade sovit igenom det.` BIN-940 strök `497` ur
+dokumentationstexten högre upp i SAMMA fil och missade den här.
+
+**Vad ändras:** `mot 497` stryks, så meningen blir *"en gräns på 200 hade sovit igenom
+det."* **500 skrivs inte i stället** — biljetten säger det uttryckligen, och varje tal
+här blir inaktuellt nästa gång någon lägger till en fil under `src/`. Golvet i testet
+är 450 och rörs inte.
+
+Acceptans:
+- [ ] `mot 497` är struket, inte ersatt med ett annat tal. *(kind: diff)*
+- [ ] Ingen assertion och inget golv ändras — enbart kommentartext. *(kind: diff)*
+- [ ] Sviten grön. *(kind: diff)*
+
+### BIN-870 — instruktionerna beskriver den gamla generatorn
+**Tier A** · disposition `build` · router: `medium` (ensam: `skip`, doc-only) · #5
+
+`docs/org/world-watch/DESIGN.md` och
+`docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` säger båda
+"kör `node docs/org/gen-ownership-map.mjs`" som en enkel omgenerering. Kommandot kan
+numera avsluta med exit 1 och kräva `--update-gaps` — vilket jag själv sprang på i
+förra körningen, när en ny fil under `src/lib/` fällde generatorn.
+
+**Vad ändras:** båda dokumenten beskriver det faktiska beteendet — när kommandot
+fäller, vad `--update-gaps` gör, och när man ska köra det. DESIGN.md:s artefakttabell
+listar `docs/org/ownership-gaps.json`.
+
+**Avgränsning:** BIN-872:s frågor om `local-tooling/`-spegelns vara eller icke-vara
+och den falska gitignore-premissen rörs INTE — de är Malins beslut och en egen biljett.
+
+Acceptans:
+- [ ] Båda dokumenten namnger `--update-gaps` och när generatorn fäller. *(kind: diff)*
+- [ ] DESIGN.md:s artefakttabell listar `ownership-gaps.json`. *(kind: diff)*
+- [ ] Beteendet som beskrivs är verifierat mot generatorns faktiska utdata, inte mot biljettens text. *(kind: diff)*
+- [ ] Ingenting i BIN-872:s omfång ändras. *(kind: diff)*
+
+## Deviation log
+
+- [discovery] **2026-08-26, BIN-870 — halva biljetten var redan gjord vid HEAD.**
+  Biljetten säger att BÅDE `docs/org/world-watch/DESIGN.md` och
+  `docs/org/world-watch/local-tooling/skills/refresh-dossiers/SKILL.md` beskriver
+  generatorn som en enkel omgenerering. SKILL.md gör inte det: steg 5 bär redan ett helt
+  stycke om exit 1, `--update-gaps`, att kartan skrivs FÖRE kontrollen, och att samma
+  kontroll kör under `npm test`. Det står under rubriken *"It may exit 1, and that is a
+  real finding, not a crash (BIN-803)"*.
+  → Konservativt val: bara DESIGN.md ändras. SKILL.md rörs inte — den är redan sann, och
+  att skriva om den vore att byta ut en korrekt text mot en ny opröv­ad. DESIGN.md pekar
+  nu på SKILL.md.
+
+  (Klausulen "i stället för att upprepa reglerna en tredje gång" är struken — den
+  motsägs av sin egen diff. DESIGN.md:s nya punkter STATAR reglerna och pekar sedan
+  vidare. Åttonde falska påståendet i den här sprintbunten, och som de sju andra ett jag
+  skrev i en rättelse.)
+
+- [deviation] **2026-08-26, BIN-870 — BIN-872:s omfång lämnas orört med flit.**
+  Artefakttabellen i DESIGN.md, direkt under raden jag ändrade, namnger
+  `.claude/hooks/dossier-freshness.ps1`. `find .claude -name "*dossier*"` ger ingen sådan
+  fil under NÅGON ändelse — bara katalogen `.claude/state/dossier-stale/`. Raden under
+  namnger `.claude/skills/refresh-dossiers/SKILL.md`, som inte heller finns. Och hela §3
+  vilar på den falska premissen att `.claude/` är gitignorerad. Det är BIN-872, som
+  uttryckligen kräver Malins beslut om `local-tooling/`-spegelns vara eller icke-vara.
+
+  (Jag skrev först "Filen på disk heter `.mjs`" här, hämtat ur biljettens text utan att
+  köra kommandot. Struket — det hade skickat nästa läsare att ändra `.ps1` → `.mjs` och
+  fortfarande peka på ingenting.)
+  → Konservativt val: ingen rad utanför generatorbeskrivningen rörs. Att "passa på" hade
+  byggt ett parkerat beslut i förbifarten.
+
+- [discovery] **2026-08-26, BIN-1004 — talet var inaktuellt åt andra hållet än biljetten
+  trodde.** Biljetten säger att `walk(SRC)` ger 500. #5:s kritik mätte om med
+  `find src -type f \( -name '*.ts' -o -name '*.tsx' \) ! -name '*.test.ts' ! -name '*.test.tsx' | wc -l`
+  → **501**. Att biljettens egen ersättningssiffra redan hunnit glida på ett dygn är det
+  bästa argumentet för dess egen instruktion: skriv inget tal alls. `mot 497` är struket
+  och ingenting skrivet i stället.
+
+- [deviation] **2026-08-26, BIN-790 — utdragen ur bunten, med ett fynd som är värt mer än
+  biljetten.** Den byggbara halvan (hooken ska verifiera triggers mot HEAD) kräver ett
+  test. Mätt: `find .claude -name "*freshness*"` ger EN fil — hooken själv, ingen testfil
+  — och `vitest.config.ts`s `include` täcker INTE `.claude/hooks/**` (uppräkningen av vad
+  den täcker är medvetet utelämnad; den blir ofullständig vid nästa tillagda glob).
+  Granskningshookarna har alltså noll testtäckning och ligger utanför testkörarens globs.
+  → Konservativt val: bygg inte en logikändring i mekanismen som stämplar arbetsordrar
+  utan test, och vidga inte `vitest.config.ts` som en bisak i en texträttelsebunt —
+  BIN-802:s fälla är just att en testfil utanför globarna körs tyst aldrig. Filas som egen
+  biljett.
+
+
+---
+
 # SPRINT 2026-08-25
 
 Planen för DENNA körning, skriven FÖRE bygget. Detta avsnitt är det enda underlaget
