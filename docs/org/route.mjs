@@ -149,6 +149,16 @@ export const TOOLING_CODE_FILES = new Set([
   // fit, loosening the glob, lowering the file floor — must not be a change nobody reviews.
   'scripts/check-knowledge-caps.mjs',
   'scripts/check-knowledge-caps.test.mjs',
+  // BIN-1009. The PostToolUse hook that stamps the workflow-map staleness flag, and its
+  // first test. The hook was already in the blocking gate's pattern; it enters the
+  // ADVISING list now because it finally has a test inside vitest's include globs, which
+  // is the condition route.test.mjs's BIN-874 block keys on. Both names added together —
+  // widening one list never widens the other (BIN-830).
+  //
+  // It belongs here for the same reason route.mjs itself does: it decides what the NEXT
+  // session is told to re-trace, so weakening it must not be a change nobody reviews.
+  '.claude/hooks/freshness.mjs',
+  '.claude/hooks/freshness.test.mjs',
   // BIN-918. The metrics-log claim check. Added here in the SAME commit as its
   // `reviewGates` pattern. What named the gap was route.test.mjs's BIN-874 block —
   // "has a test in vitest's include globs but is missing from TOOLING_CODE_FILES" —

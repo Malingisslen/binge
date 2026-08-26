@@ -47,6 +47,17 @@ export default defineConfig({
       // discovered later, which is BIN-802's "a test file outside the include globs is
       // silently never run by `npm test` while passing when invoked by hand".
       'eslint-rules/**/*.{test,spec}.mjs',
+      // BIN-1009: the PostToolUse hooks. `freshness.mjs` is the mechanism that CREATES
+      // WORK ORDERS — it stamps `.claude/state/workflow-map-stale.json`, and CLAUDE.md
+      // tells the next session to re-trace the flows it names. A false positive there
+      // sends a session to re-trace a file nobody edited; BIN-790 is the ticket filed
+      // about it. (A count of past incidents stood here and was struck — two of the ids
+      // it named were the opposite failure, a correct flag left unread.) It had no test
+      // at all, and could not have one: it ran its CLI at import and called
+      // process.exit(0), so importing it from a test killed the runner.
+      // Added here in the SAME commit that guards its entry point, because the widening is
+      // only provably non-silent once a matching file exists — BIN-802's second half.
+      '.claude/hooks/**/*.{test,spec}.mjs',
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,

@@ -23587,3 +23587,83 @@ Each entry below is the COMPLETE original bullet, byte-for-byte as it stood in `
 
 - **A URL/route fixture is a factual claim: grep it back to the line that BUILDS it.** Plausible-looking invented routes recurred EIGHT times across BIN-640/645, once inside the fix for the previous one. Check three things per fixture — the route directory exists under `src/app/`, the query KEY is read by that page, and the query VALUE is one the app can actually produce: `/rekommendationer/?row=2` was wrong on all three (`RecRow.tsx` builds `` `/recommendations/?row=${encodeURIComponent(rowSpec.rowKey)}` `` and `rowKey(id)` is colon-joined, so `?row=person%3A1245`), and `/my/all?status=sedd` was wrong on two (`NumberedActionsList` builds `/my/series?provider=N&status=behind`; `WatchlistPage` only honours `?status=` when `status==='mina'`, i.e. `/my/series`). A fixture that names a surface the app never had keeps passing after that surface moves, so it pins nothing. Curated domain id lists get cross-checked against external ground truth AND the enums/label maps they derive from. Sitemap: two-sided enumeration with REAL constants + an auth/noindex-leak scan (BIN-337/305). **Same discipline for a rejected-Error fixture feeding a message-sniffing branch (`err.message.includes(CODE)`): grep the fixture's string back to the line that actually THROWS it, not to the constant's declaration alone.** BIN-777's `DeleteAccountSection.test.tsx` first shipped `new Error(STALE_SESSION_PREFLIGHT)` — just the bare code — when the real thrower (`AuthContext.tsx:991`, `` throw new Error(`${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): …`) ``) puts BOTH codes in one message on purpose, specifically so a caller sniffing in the wrong order can't tell them apart. A fixture with only the narrow code is reachable under EITHER branch order, so the swap mutant (check `REQUIRES_RECENT_LOGIN` before `STALE_SESSION_PREFLIGHT`) survived 5/5 — closed by rebuilding the fixture as the literal template string the thrower emits (verified live: swap mutant now fails 1/5 alone). Two sibling messages sharing an identical PREFIX (here, a promise-bearing sentence appended only on one branch) additionally want the differing suffix asserted on its own (`toContain` the promise clause / `not.toContain` it) so a prefix-preserving swap can't hide behind the shared substring.
 
+
+## 2026-08-26 — BIN-1009 round 4: stampDossier wiring verified, stampMap merge found unpinned
+
+**Diff reviewed.** Round-4 re-review of the three owed files under BIN-1009's `reviewGates`
+entry: `.claude/hooks/freshness.test.mjs` (changed since round 3 — `makeFixture` now takes
+an options object `{ nodePath, ownedPattern, roleNum }` and writes `docs/org/ownership-map.json`
+as well as `docs/workflow-map.html`; five new cases added under `describe('stampDossier
+end-to-end — the half that was covered by nothing')`), `docs/org/route.test.mjs` (unchanged
+since the round-3 pass), `vitest.config.ts` (unchanged since the round-3 pass). All three
+read with `Read`; index/worktree shas confirmed matching for all three before and after.
+
+**Round 3's finding, re-verified.** Claim: deleting `try { stampDossier(payload, repoRoot,
+rel); } catch {}` from `main()` fails 2 of 31 (was 0 of 26 before the fix). Reproduced
+independently: snapshotted `.claude/hooks/freshness.mjs` to scratchpad
+(`e9e39ac647f53dbbad1c7f8792685395fc5fc7a6`), spliced the call line to a comment by LINE
+INDEX (file is LF, no CRLF risk), ran `npx vitest run .claude/hooks/freshness.test.mjs
+--reporter=verbose` after `rm -rf node_modules/.vite/vitest`. Result: exactly 2 of 31 fail —
+`appends a marker for the owning role when mapped code is edited` and `runs BOTH stampers on
+one edit — neither shadows the other`. Restored from the scratchpad snapshot;
+`git hash-object` back to `e9e39ac6…`, matching `git rev-parse :<path>`. Claim confirmed, not
+inherited.
+
+**Probe (b): is the `.claude/` anti-self-trigger skip case load-bearing end-to-end?**
+Mutated `isDossierStampSkipped` to `return false` as its first statement (rest of the body
+becomes dead code, still syntactically valid — confirmed via `node -e "import(...)"` before
+running the suite). Result: 6 of 31 fail, including
+`honours the anti-self-trigger skip end-to-end, not just in the predicate` (the new round-4
+case) alongside the five direct `isDossierStampSkipped`/`isMapStampSkipped` unit cases. Not
+vacuous — restored and re-verified green (31/31).
+
+**Probe (c): the "runs BOTH stampers" test's comment.** Read the test body: it asserts both
+`markerIn(dir,'27')` and `flagIn(dir)` exist after one invocation, and nothing in the fixture
+or the hook throws during that run. The comment — "This does not prove the isolation
+(nothing here throws), but it does prove both are reached from a single invocation" —
+matches exactly what the test does and does not exercise. No finding.
+
+**Probe (e): `makeFixture`'s widened signature.** Grepped the file for `makeFixture(` — 9
+call sites total, all in this file (none elsewhere in the repo import or replicate the
+fixture builder). Each supplies exactly the options its case needs: the three top-level
+entry-point-guard cases pass `nodePath` only; the five `stampDossier end-to-end` cases pass
+`ownedPattern`/`roleNum` only; the "runs BOTH stampers" case passes all three. No case lost
+coverage in the rewrite from the old positional signature.
+
+**Round 4's own finding (new, surviving mutant).** `stampMap`'s flag-file write
+(`freshness.mjs` lines ~233–243) merges a freshly-written default object with whatever
+`docs/`-adjacent `.claude/state/workflow-map-stale.json` already holds
+(`flag = { ...flag, ...JSON.parse(readFileSync(flagPath, 'utf8')) }`), so a SECOND edit in
+the same session accumulates into the existing `triggers` array and preserves the original
+`firstStampedAt` rather than overwriting them. No test in the suite drives TWO invocations
+against the same fixture directory — every case calls `runHook` once per fresh `mkdtempSync`
+dir. Mutated the merge line to a no-op comment (so a pre-existing flag file's `triggers`/
+`firstStampedAt` are silently discarded on the next stamp): full suite stayed 31/31 green.
+Restored from the scratchpad snapshot; `git hash-object` confirmed `e9e39ac6…` again.
+
+This is the false-negative twin of BIN-790 (a false positive: a session sent to re-trace a
+file nobody edited). The undetected regression shape is a false negative: a session that
+edits file A then file B within the same Claude session would have its flag silently
+regress to naming only B, and CLAUDE.md's "re-trace ONLY the flows whose nodes match the
+flag's triggers" instruction would skip A's flows entirely, with nothing anywhere reporting
+it — the same silent-drift shape the whole hook exists to close, one level up on its own
+persisted state. Reported to the requesting session as a blocking finding: a fixture driving
+two sequential `runHook` calls against the same `dir` (edit a mapped file, edit a second
+mapped file, assert `flag.triggers` contains BOTH paths and `firstStampedAt` is unchanged
+from the first run) closes it and would have failed on this mutant.
+
+**Verbatim text cut from the live knowledge file to make room (BIN-1009, not a BIN-997
+Relocated-section entry — filed here per the same "cut it, archive it verbatim" rule):**
+the "Extract-then-test & layering" bullet citing [arkiv 32] ("Pure helper extracted, wiring
+untested…") previously read, in the middle: "Shapes where the untested half hides: a shared
+ERROR-TAG constant whose consumer HAND-BUILDS the tagged error (BIN-876's `CASCADE_PARTIAL`);
+an app-wide blocked state enforced in ONE shell render branch (`AppShell`'s `if (mounted &&
+uid && deletionInProgress) return <DeletionLimbo/>`); the CONSUME half of a stored-path
+feature (`expect(sessionStorage.getItem(KEY)).toBeNull()`); an observability feature's
+REGISTRATION side." That sentence is condensed in place to "Four worked shapes … are
+archived verbatim [arkiv 32]" (its content is unchanged from the pre-existing archive
+entry this cites) to make room for the new stampMap-merge lesson in the same bullet.
+
+**Verdict:** fail — 1 blocking (the `stampMap` merge-across-invocations gap above). Rounds
+1–3's findings (exit-code tautology, `matchesToken`'s dead branches, `stampDossier`'s missing
+wiring) confirmed still closed by this round's re-derivation, not inherited.

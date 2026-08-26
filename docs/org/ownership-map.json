@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 190,
+  "patternCount": 191,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -299,6 +299,7 @@
         ".claude/agents/binge-security-reviewer.md",
         ".claude/agents/binge-test-reviewer.md",
         ".claude/hooks/freshness.mjs",
+        ".claude/hooks/freshness.test.mjs",
         ".claude/hooks/preview-gate.mjs",
         ".claude/rules/accepted-deviations.md",
         ".claude/shared-plugin.json",

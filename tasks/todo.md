@@ -1,3 +1,134 @@
+# SPRINT 2026-08-26 (tredje körningen)
+
+Planen för DENNA körning, skriven FÖRE bygget. EN biljett, en bunt.
+
+Router på buntens faktiska filuppsättning vid HEAD `d6ff7cc`:
+> Tier **medium** · #25 Engineering Manager / Release Manager
+
+**Kapacitetskoll vid urvalet:** arbetaren är denna session och kan konvenera en enskild
+rollkritik. Den kördes FÖRE bygget och blockerade inte.
+
+## Ej valda, och varför
+
+| Biljett | Beslut |
+| -- | -- |
+| BIN-558 | **needs-approval.** Biljetten säger själv "worth a decision: raise the limit, add pagination, or add a reconciliation job". Tre olika produkter. Kommenterad med rekommendation. |
+| BIN-541 | **Blockerad på en uppgift bara Malin kan hämta** (den verkliga kvotens period + storlek ur RapidAPI-panelen). Fixen förgrenar sig på svaret. Kommenterad. |
+| BIN-603 / BIN-872 | Väntar på Malins beslut sedan tidigare körningar i natt. |
+| BIN-1002 | Rör `firestore.rules`-regexet mot klientens id-byggare — egen riskklass, egen körning. |
+| BIN-1003 | Bor i pluginrepot. |
+| BIN-965 / BIN-966 | Ägs av den parallella sessionen. |
+| BIN-852 / BIN-935 / BIN-990 | Parkerade handbromsar. |
+| Post-mortem-familjen | Bokföring på förfallna buntar. |
+
+---
+
+## Bunt A — BIN-1009: hooken som skapar arbetsordrar går inte att testa
+
+**Tier A** · disposition `build` · router: `medium` · #25
+
+### Vad som är fel, mätt vid HEAD `d6ff7cc`
+
+* `.claude/hooks/` innehåller `freshness.mjs` och `preview-gate.mjs`. Ingen av dem har en
+  testfil (`find .claude -iname "*test*"` → noll).
+* `vitest.config.ts`s `include` täcker inte `.claude/hooks/**`.
+* **`freshness.mjs` kör sin CLI vid import.** De två sista raderna är
+  `try { main(); } catch {}` och `process.exit(0)`, ogrindade, och `main()` börjar med
+  `readFileSync(0, 'utf8')`. Att importera modulen från ett test skulle äta testkörarens
+  stdin och sedan döda processen — BIN-802:s fälla, som repot redan gått på två gånger.
+* Ingenting i filen exporteras.
+
+### Varför det är värt att laga
+
+`freshness.mjs` är mekanismen som SKAPAR ARBETSORDRAR. När den stämplar
+`.claude/state/workflow-map-stale.json` instruerar CLAUDE.md nästa session att spåra om
+flöden för den filen. Ett falskt positivt skickar en session att jaga ett spöke — BIN-790
+är biljetten som är filad om just det. BIN-790:s fix går inte att bygga med bevis förrän
+det här är gjort.
+
+(Ett antal och en id-lista stod här och är strukna. Integrationsgranskaren mätte att två
+av de tre id:na var den ANDRA felformen: BIN-706:s commit heter "re-trace the four flows
+nine commits made wrong" och BIN-968 spårade om tre verkliga ändringar — flaggan hade
+alltså rätt och lästes inte, vilket `freshness.mjs` själv kallar "surviving sprints
+unread". Tionde falska påståendet den här natten, och som de nio andra ett jag skrev i en
+rättelse eller en motivering.)
+
+### Vad som byggs
+
+1. `vitest.config.ts` — `.claude/hooks/**/*.{test,spec}.mjs` läggs till i `include`,
+   additivt. Den nya filens namn ska synas i den fullständiga körningens fillista
+   (BIN-802:s andra halva: en glob som inte matchar är tyst).
+2. `.claude/hooks/freshness.mjs` — de rena hjälparna exporteras och CLI:n grindas bakom
+   en entry-point-kontroll, samma form som `docs/org/route.mjs` och
+   `scripts/check-knowledge-caps.mjs` redan använder. Skippreglerna extraheras till rena
+   predikat så de går att pinna.
+3. `.claude/hooks/freshness.test.mjs` — tester enligt #25:s villkor nedan.
+
+### #25:s villkor, invikta som acceptans
+
+- [ ] Barnprocesstestet använder den VERKLIGA anropsformen — `bash -c 'cd <dir>; exec node .claude/hooks/freshness.mjs'` — inte `node freshness.mjs` från repo-roten. En grind som bara håller för det ena beviset säger inget om den verkliga risken. *(kind: diff)*
+- [ ] Testet pinnar de tre anti-självtriggerskippen (`.claude/`, `docs/org/`, `docs/role-responsibilities.md`). *(kind: diff)*
+- [ ] Testet pinnar `patternMatch`/`matchesToken`s grenar: glob, katalogprefix, exakt rotfil, nästlad sökväg. Ett falskt positivt här ÄR den namngivna kostnaden. *(kind: diff)*
+- [ ] Testet pinnar att tom och trasig stdin fortfarande ger exit 0. *(kind: diff)*
+- [ ] De två stämplarnas `try/catch`-isolering är kvar — ett kast i den ena får aldrig kosta den andra dess körning. *(kind: diff)*
+- [ ] Allt i EN commit: konfigvidgningen går bara att bevisa icke-tyst när testfilen finns. *(kind: diff)*
+- [ ] `npm test` grönt, och `freshness.test.mjs` syns i körningens fillista. *(kind: diff)*
+- [ ] Hookens beteende är oförändrat för den verkliga anropsvägen — inga nya skip, inga borttagna. *(kind: diff)*
+
+**Ej i omfång:** BIN-790:s egentliga fix (rensa triggers vars fil är oförändrad mot HEAD).
+Den här bunten gör den bevisbar; den bygger den inte.
+
+## Deviation log
+
+- [discovery] **2026-08-26, BIN-1009 — mitt första barnprocesstest var VAKUÖST, och jag
+  hittade det själv med en sond.** Testet hävdade bara att hooken avslutar med 0. Mätt:
+  med entry-point-grinden satt till `if (false)` — alltså helt död — passerade 20 av 20.
+  En död grind avslutar också med 0, efter att ha gjort ingenting.
+
+  Det är den värsta formen i just den här biljetten: hooken failar öppet, så en grind som
+  slutat fyra rapporteras ingenstans. Ett test som inte kan skilja "fungerar" från "gör
+  ingenting" är sämre än inget test, för det läser som täckning.
+
+  → Omskrivet till att hävda SIDOEFFEKTEN: hooken körs mot en engångsprojektkatalog
+  (`CLAUDE_PROJECT_DIR`) med en minimal flödeskarta, och testet kräver att flaggan skapas
+  och namnger rätt trigger. Omsonderat: samma mutant fäller nu 1 av 21. Mutanten hävdad
+  FÖRE och EFTER körningen, återställd från ögonblicksbild.
+
+  Fixturen ligger i `os.tmpdir()`, inte i repots eget `.claude/state/` — en systersession
+  kör i samma checkout, och att skriva och återställa den delade flaggan är precis
+  2026-08-25-lärdomen om att aldrig återställa en fil åt en syskonagent.
+
+- [discovery] **2026-08-26, BIN-1009 — repots egna symmetrikontroller fällde bygget, som
+  de ska.** Att lägga en `.mjs` i `.claude/hooks/` drog in den i `route.test.mjs`s
+  härledda `GATE_FILES`, och fyra assertions föll: den nya filen nådde ingen blockerande
+  granskare och routade `skip` i stället för `medium`, och båda hook-filerna saknades i
+  `TOOLING_CODE_FILES`.
+  → Båda listorna vidgade i SAMMA commit (BIN-830): `TOOLING_CODE_FILES` i `route.mjs`
+  och `reviewGates`-mönstret i `shared-plugin.json`, och den blockerande bevisad med en
+  matchningssond i stället för att jag läste regexet. Det är andra gången på två dygn
+  samma mekanism fångar samma klass — förra gången `check-knowledge-caps.mjs`.
+
+- [deviation] **2026-08-26, BIN-1009 — ett tal i `route.test.mjs`s golvkommentar blev
+  falskt av min egen ändring.** Kommentaren sa "Counted from the directories, not
+  assumed: 4 reviewer files + 2 hooks". `.claude/hooks/` håller tre `.mjs` efter den här
+  bunten.
+  → Struket utan ersättningstal, med ett `ls`-kommando i stället. Golven själva rörs
+  inte: de är antivakuitetsgolv och ska fånga att listan går TOM, inte följa katalogens
+  storlek.
+
+- [deviation] **2026-08-26 — två produktbiljetter visade sig vara Malins beslut, inte
+  kod.** BIN-558 (konton i fler än 100 grupper trunkeras tyst) säger själv "worth a
+  decision: raise the limit, add pagination, or add a reconciliation job" — tre olika
+  produkter. BIN-541 (leverantörskvoten) är blockerad på en uppgift bara Malin kan hämta
+  ur RapidAPI-panelen, och fixen förgrenar sig på svaret.
+  → Konservativt val: ingendera byggd. Båda kommenterade med läget i klartext och en
+  rekommendation. Det var de enda två produktnära biljetterna i backloggen som inte redan
+  väntade på henne — värt att notera att den obevakat byggbara mängden nu är i princip
+  tom.
+
+
+---
+
 # SPRINT 2026-08-26 (natten, andra körningen)
 
 Planen för DENNA körning, skriven FÖRE bygget. Liten med flit: föregående körning

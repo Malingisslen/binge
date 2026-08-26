@@ -487,7 +487,7 @@ Owns the process.
   are deliberately NOT — the reviewers append to those on every ledger run, and
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
-  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/preview-gate.mjs`
+  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
   it decides from. Both are code by BIN-805's own ruling, and both routed as

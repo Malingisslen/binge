@@ -453,12 +453,19 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // its own blind spot 1) and the DISCOVERY half never nominates it. This floor is the
     // only thing left that would notice, and BIN-918 left it at 9 until the twelfth
     // integration pass measured it.
-    // Advanced 18 → 20 with the list, in the same commit that grew it (BIN-997 added
-    // scripts/check-knowledge-caps{,.test}.mjs). That maintenance IS the rule above: a
-    // floor left behind by the list it guards stops being able to fire, which is what
-    // "BIN-918 left it at 9" describes. Re-measure with the command above; do not copy
-    // this number forward without running it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(20);
+    // Advanced with the list every time the list grows, in the same commit that grows it
+    // — 18 → 20 for BIN-997's two check-knowledge-caps files, 20 → 22 for BIN-1009's two
+    // freshness hook files. That maintenance IS the rule above: a floor left behind stops
+    // being able to fire, which is what "BIN-918 left it at 9" describes.
+    //
+    // BIN-1009 nearly repeated it. Left at 20 against a list of 22, the guard's own
+    // motivating case goes green: removing docs/org/metrics/log_event.mjs from both lists
+    // gives 21, still ≥ 20, and nothing else sees it — that file has no `.test.mjs`
+    // sibling so the BIN-874 discovery half never nominates it, the TOOLING_MJS
+    // biconditional reads false === false, and gate-symmetry's A1 is keyed on isCodePath,
+    // which the removal switches off. Re-measure with the command above; never copy this
+    // number forward without running it.
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(22);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
@@ -558,12 +565,16 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
     // The floor is the whole defence for the `it.each` cases above: `it.each([])`
     // registers ZERO tests and reports no error, so an empty list would make every
     // assertion in this block vanish silently (verified — 46 tests become 32).
-    // Floors lowered 7→6 and 3→2 on 2026-08-23: dossier-freshness.mjs and
-    // map-freshness.mjs merged into the single freshness.mjs, so `.claude/hooks/`
-    // legitimately holds two .mjs files, not three. Counted from the directories,
-    // not assumed: 4 reviewer files + 2 hooks. The floors still do their only job —
-    // catching the derived list going EMPTY, which would make every `it.each` above
-    // vanish with no error.
+    // Floors lowered 7→6 and 3→2 on 2026-08-23 when dossier-freshness.mjs and
+    // map-freshness.mjs merged into the single freshness.mjs. They are deliberately NOT
+    // re-raised as the directories grow — these are anti-vacuity floors, and their only
+    // job is catching the derived list going EMPTY, which would make every `it.each`
+    // above vanish with no error.
+    //
+    // A tally of what the two directories hold stood here and was struck 2026-08-26
+    // (BIN-1009 added `.claude/hooks/freshness.test.mjs` and made it false the same day
+    // it was read). Derive it instead of trusting a sentence:
+    //   ls .claude/agents/*-reviewer.md .claude/hooks/*.mjs
     expect(GATE_FILES.length).toBeGreaterThanOrEqual(6);
     expect(new Set(GATE_FILES).size).toBe(GATE_FILES.length);
     expect(REVIEWER_INSTRUCTIONS.length).toBeGreaterThanOrEqual(4);

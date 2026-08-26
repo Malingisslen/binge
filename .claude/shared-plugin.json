@@ -90,7 +90,7 @@
         "^\\.claude/shared-plugin\\.json$",
         "^\\.claude/rules/accepted-deviations\\.md$",
         "^\\.claude/agents/binge-(code|security|integration|test)-reviewer\\.md$",
-        "^\\.claude/hooks/(freshness|preview-gate)\\.mjs$",
+        "^\\.claude/hooks/(freshness|preview-gate)(\\.test)?\\.mjs$",
         "^CLAUDE\\.md$",
         "^firebase\\.json$",
         "^next\\.config\\.mjs$",

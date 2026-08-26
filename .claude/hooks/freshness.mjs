@@ -32,7 +32,8 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const OWNERSHIP_REL = 'docs/org/ownership-map.json';
 const MAP_REL = 'docs/workflow-map.html';
@@ -57,7 +58,7 @@ function resolveRepoRoot() {
 // Repo-relative, forward-slash. Case-insensitive prefix strip: on Windows the path Claude
 // reports and the one `git rev-parse` returns routinely differ in drive-letter case, and a
 // case-sensitive compare leaves an absolute path that matches nothing.
-function toRepoRelative(filePath, repoRoot) {
+export function toRepoRelative(filePath, repoRoot) {
   let rel = String(filePath).replace(/\\/g, '/');
   const rootPosix = repoRoot.replace(/\\/g, '/').replace(/\/$/, '');
   if (rel.toLowerCase().startsWith(rootPosix.toLowerCase() + '/')) {
@@ -66,16 +67,44 @@ function toRepoRelative(filePath, repoRoot) {
   return rel.replace(/^\.\//, '');
 }
 
-function globToRegExp(pattern) {
+export function globToRegExp(pattern) {
   return new RegExp(
     '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$'
   );
 }
 
+/**
+ * The docs that DEFINE the system, plus anything outside the repo. Extracted so the
+ * anti-self-trigger rule can be pinned by a test (BIN-1009): if any of these skips is
+ * lost, editing the role doc stamps a marker that asks someone to re-audit the role doc,
+ * and the loop feeds itself.
+ */
+export function isDossierStampSkipped(rel) {
+  const relLower = String(rel).toLowerCase();
+  if (relLower.startsWith('.claude/')) return true;
+  if (relLower.startsWith('docs/org/')) return true;
+  if (relLower === 'docs/role-responsibilities.md') return true;
+  // Absolute paths never made it through toRepoRelative, so they are not ours.
+  if (String(rel).startsWith('/') || /^[a-zA-Z]:\//.test(String(rel))) return true;
+  return false;
+}
+
+/**
+ * The map stamper's own anti-loop guard: the map, the flag, and the hook machinery never
+ * stamp. Extracted for the same reason as above — a regression here is a session sent to
+ * re-trace a file that was never edited, which has cost four sprints.
+ */
+export function isMapStampSkipped(rel, mapRel = MAP_REL) {
+  if (!rel) return true;
+  if (rel === mapRel) return true;
+  if (String(rel).startsWith('.claude/')) return true;
+  return false;
+}
+
 // ── stampDossier ─────────────────────────────────────────────────────────────────
 
 // Port of Test-PatternMatch: case-insensitive, forward-slash patterns.
-function patternMatch(relLower, pattern) {
+export function patternMatch(relLower, pattern) {
   const p = String(pattern).replace(/\\/g, '/').toLowerCase();
   if (p.includes('*')) return globToRegExp(p).test(relLower);
   if (p.endsWith('/')) return relLower.startsWith(p);            // dir prefix
@@ -89,11 +118,7 @@ function stampDossier(payload, repoRoot, rel) {
 
   const relLower = rel.toLowerCase();
 
-  // Skip the docs that define the system (no self-trigger) + non-repo paths.
-  if (relLower.startsWith('.claude/')) return;
-  if (relLower.startsWith('docs/org/')) return;
-  if (relLower === 'docs/role-responsibilities.md') return;
-  if (rel.startsWith('/') || /^[a-zA-Z]:\//.test(rel)) return;   // outside repo
+  if (isDossierStampSkipped(rel)) return;
 
   const mapPath = join(repoRoot, OWNERSHIP_REL);
   if (!existsSync(mapPath)) return;
@@ -187,7 +212,7 @@ function mapTokens(repoRoot) {
   return tokens;
 }
 
-function matchesToken(rel, tok) {
+export function matchesToken(rel, tok) {
   if (rel === tok) return true;
   if (tok.includes('*') && globToRegExp(tok).test(rel)) return true;
   // token names a directory the edited file lives in
@@ -197,7 +222,7 @@ function matchesToken(rel, tok) {
 
 function stampMap(payload, repoRoot, rel) {
   // anti-loop: the map, the flag, and hook machinery never stamp
-  if (!rel || rel === MAP_REL || rel.startsWith('.claude/')) return;
+  if (isMapStampSkipped(rel)) return;
 
   if (!mapTokens(repoRoot).some((tok) => matchesToken(rel, tok))) return;
 
@@ -239,5 +264,20 @@ function main() {
   try { stampMap(payload, repoRoot, rel); } catch { /* fail open */ }
 }
 
-try { main(); } catch { /* fail open */ }
-process.exit(0);
+// Run the CLI only when this file IS the entry point. Without the guard, importing
+// anything from here runs main() — which reads fd 0, eating the test runner's stdin —
+// and then calls process.exit(0), killing the run with no output. That is BIN-802's trap,
+// and it is why this hook had no test until BIN-1009.
+//
+// The test spawns the command `.claude/settings.json` actually uses, rather than a
+// convenient one, and asserts the hook's SIDE EFFECT rather than its exit code — a guard
+// broken to `if (false)` also exits 0, having done nothing.
+//
+// (A sentence here claimed the `resolve()` on the left-hand side is what makes the
+// comparison survive settings.json's relative argv[1]. Struck: Node resolves the entry
+// script's argv[1] to an absolute path before user code runs, measured under that exact
+// invocation, so that is not what the call distinguishes.)
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  try { main(); } catch { /* fail open */ }
+  process.exit(0);
+}
