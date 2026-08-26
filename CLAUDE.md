@@ -113,26 +113,38 @@ before trusting your own judgment on that surface.
 
 Not loaded every session — only when Claude reads a file matching a rule's `paths:`.
 
+**Which paths trigger a rule is answered by that file's own `paths:` frontmatter, and only
+there.** This section names what each rule is FOR; it deliberately does not restate what
+each loads on. The enumeration that used to sit here was a second list nobody widened when
+the first one changed (BIN-1020): it had gone stale on `accepted-deviations.md`, and wrote
+`watchStatus*.ts` where the frontmatter names `src/lib/watchStatus.ts` and
+`src/lib/watchStatus.migration.ts`, with no glob reaching a third — so a reader trusting the
+star believed a new `watchStatus` file would trigger the rule. It would not.
+Open the rule file's first lines rather than trusting any paraphrase of them, here or
+elsewhere.
+
+The list of rule files below is still hand-maintained, and nothing checks it — `ls
+.claude/rules/` if you doubt it is complete. That is a smaller failure than the one above:
+a missing entry under-informs, a stale path list actively misdirects.
+
 - `design-system.md` — Direction H layout/tokens/tvåaccentregeln/poster-duotone/new-view
-  recipe. Loads on `src/**`, `*.css`, `tailwind.config.ts`.
-- `calendar.md` — calendar entry model + sources. Loads on the calendar hooks/components.
+  recipe.
+- `calendar.md` — calendar entry model + sources.
 - `accepted-deviations.md` — decided deviations; review agents must read before filing a
-  finding. Loads on `src/**`, `functions/**`, `firestore.rules`.
+  finding.
+- `html-previews.md` — Malin reads pictures, not code: a new or rebuilt screen starts with
+  an ASCII sketch in the plan and variants she can react to, before any code is written.
 - `tmdb.md` — shared `TMDB_STALE` cache keys, rate-limit/AbortSignal, API conventions,
-  provider-id normalization. Loads on `src/lib/tmdb/**`, `src/hooks/**`,
-  `src/components/title/**`.
+  provider-id normalization.
 - `data-model.md` — full Firestore collection tree, the GDPR export/delete helper contract,
-  the WatchStatus + TV sub-state schema (incl. migration), Auth setup. Loads on
-  `src/lib/firebase/**`, `watchStatus*.ts`, `libraryView.ts`, `AuthContext.tsx`,
-  `passwordStrength.ts`, `firestore.rules`, `firestore.indexes.json`.
+  the WatchStatus + TV sub-state schema (incl. migration), Auth setup.
 - `deployment.md` — build pipeline, byggtids-TMDB SEO pre-rendering (25k titles, cache +
-  timeout protections), CI workflow roles. Loads on `next.config.mjs`, `firebase.json`,
-  `.github/workflows/**`, the TMDB build-cache files.
+  timeout protections), CI workflow roles.
 - `routing.md` — static-export catch-all dispatch for dynamic routes; what breaks if you
-  add a route without updating both the dispatcher and the Firebase rewrite. Loads on
-  `src/app/**`, `DynamicRouter.tsx`, `firebase.json`.
-- `code-style.md`, `lessons-digest.md` — always-on (no `paths:`): doc-taxonomy +
-  test-extraction convention, and the running lessons digest.
+  add a route without updating both the dispatcher and the Firebase rewrite.
+- `code-style.md`, `lessons-digest.md` — **always-on**, and that is a property of the files
+  themselves (they carry no `paths:` block at all), not something to infer from an empty
+  one: doc-taxonomy + test-extraction convention, and the running lessons digest.
 
 Non-rules docs (read on demand, not trigger-loaded): `docs/data-export-format.md` (GDPR
 export JSON schema), `docs/data-retention-policy.md` (deletion/anonymization),
