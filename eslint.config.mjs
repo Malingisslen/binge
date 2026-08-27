@@ -16,6 +16,15 @@ export default [
       // ska inte tracka compileratet eller dess deps.
       'functions/lib/**',
       'functions/node_modules/**',
+      // `.gitignore` already excludes `scripts/recaps/*` — per-show scratch the recap
+      // pipeline writes locally and never commits. Linting it made `npm run lint`
+      // disagree with CI: on a machine that has run /recap the local run reported
+      // errors in files the repo does not contain, while ci.yml, deploy.yml and
+      // preview.yml lint a fresh checkout. A lint that is red
+      // only on the author's machine is worse than no lint: it trains you to ignore
+      // the output. Ignored HERE rather than deleted, because the scratch is the
+      // pipeline's own working set, not stale output.
+      'scripts/recaps/**',
     ],
   },
   {
