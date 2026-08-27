@@ -271,7 +271,7 @@ Owns caching and responsiveness.
 - 8-concurrent TMDB semaphore + Retry-After + AbortSignal propagation.
 - localStorage persist budget; per-show `useQueries` fan-out fix; CLS-safe images;
   3s persist throttle.
-  → `src/lib/queryClient.ts`, `src/hooks/useCalendar.ts`
+  → `src/lib/queryClient.ts`, `src/hooks/useCalendar.ts`, `src/components/Providers.tsx`
 
 ## 11. Localization / i18n
 
@@ -544,6 +544,15 @@ Owns wayfinding.
   search/discovery filter hierarchy; genre cross-media mapping; noindex-by-default
   on private pages.
   → `src/components/layout/{Subnav,MobileTabBar}.tsx`, `src/components/pages/DynamicRouter.tsx`, `firebase.json` (redirects), `src/lib/libraryView.ts`
+- Where a visitor ends up, and how she gets back. `AuthGuard` gates on `uid` rather
+  than `user` (the profile loads in parallel with the auth verdict) and carries the
+  return path; `WatchlistPage` is the screen the library taxonomy above renders into,
+  mirroring its filters in the URL. Both are wayfinding, not the status model (#9) or
+  the visual form (#1) — a change that moves a status between views is this seat's
+  question; a change to how a card looks is not, and lives elsewhere.
+  Seated here by Malin, 2026-08-27 (BIN-1030).
+  → `src/components/AuthGuard.tsx`, `src/components/AuthGuard.test.tsx`,
+  `src/components/WatchlistPage.tsx`, `src/components/WatchlistPage.test.tsx`
 - The "Samma serie" strip — crawlable links between the separate TMDB entries of one
   split franchise (Doctor Who's eras). Deliberately navigation, not a merge, so it is
   wayfinding rather than part of the season/episode progress surface (#9).

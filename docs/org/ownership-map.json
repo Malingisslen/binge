@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 206,
+  "patternCount": 211,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -133,6 +133,7 @@
       "title": "Performance Engineer",
       "slug": "performance-engineer",
       "patterns": [
+        "src/components/Providers.tsx",
         "src/hooks/useCalendar.ts",
         "src/lib/queryClient.ts",
         "src/lib/tmdb/cacheTiers.ts",
@@ -330,6 +331,10 @@
       "slug": "information-architect",
       "patterns": [
         "firebase.json",
+        "src/components/AuthGuard.test.tsx",
+        "src/components/AuthGuard.tsx",
+        "src/components/WatchlistPage.test.tsx",
+        "src/components/WatchlistPage.tsx",
         "src/components/layout/MobileTabBar.tsx",
         "src/components/layout/Subnav.tsx",
         "src/components/pages/DynamicRouter.tsx",
