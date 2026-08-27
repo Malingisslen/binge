@@ -138,9 +138,12 @@ rule.
 
 **And that escape hatch has a TRIGGER, so it does not need re-arguing.** Binding condition
 C2 from #25 Engineering Manager / Release Manager's blind critique, 2026-08-17: *the first
-time this assertion reddens a workflow run for a commit unrelated to the
+time this assertion reddens `deploy.yml` or `preview.yml` for a commit unrelated to the
 flagged ticket, it converts to a CLI-only check on the next commit that touches it — not
-re-litigated as a fresh decision.* Whoever meets it at 2am inherits a made decision, not an
+re-litigated as a fresh decision.* **Successor 2026-08-27 (BIN-1028):** `preview.yml` is
+deleted, and `pr-checks.yml` now runs `npm test` on pull requests. The condition's words are
+left as #25 wrote them; read the trigger as any workflow run, which is what it meant when
+only two could redden. Whoever meets it at 2am inherits a made decision, not an
 open question. Until that happens the live-file assertion stays: a false row means unreviewed
 code reached main, which is worth stopping for.
 

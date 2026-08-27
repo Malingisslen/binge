@@ -239,7 +239,7 @@ describe('resolveSelection — fastaket', () => {
   // HELA skyddet vilar på den här egenskapen: SELECTION_ALLOW_THIN stänger av
   // BÅDE täckningsgolvet och sitemapens kast, så den workflow som faktiskt
   // publicerar binge.nu får aldrig sätta den. Fram till nu stod det påståendet
-  // i fyra prosatexter (ADR 0018, deployment.md, ci.yml, JSDoc) och kontrollerades
+  // i flera prosatexter och kontrollerades
   // ingenstans. Läser filen i stället för att lita på att någon läst den.
   it('deploy.yml sätter ALDRIG SELECTION_ALLOW_THIN', () => {
     const deployYml = readFileSync(join(process.cwd(), '.github/workflows/deploy.yml'), 'utf8');

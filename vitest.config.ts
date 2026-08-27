@@ -61,10 +61,8 @@ export default defineConfig({
     ],
     exclude: ['node_modules', '.next', 'out', 'src/test/rules/**'],
     css: false,
-    // Report-only coverage (BIN-525): `npm run test:coverage` / CI's non-blocking
-    // step. Deliberately NO `thresholds` — a blocking coverage floor is a founder
-    // decision, explicitly deferred. Baseline at introduction (2026-07-16) is
-    // recorded in the CI step comment.
+    // Report-only coverage (BIN-525). Deliberately NO `thresholds` — a blocking
+    // coverage floor is a founder decision, explicitly deferred.
     coverage: {
       provider: 'v8',
       // Cover the frontend source, including untested files, so the number is
