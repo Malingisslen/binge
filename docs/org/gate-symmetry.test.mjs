@@ -423,8 +423,8 @@ describe("the router's own golden cases are wired to something that runs (BIN-88
   it('node docs/org/route.mjs --selftest exits 0', () => {
     // `--selftest` is advertised in route.mjs's usage block ("exit non-zero on fail") and
     // was invoked by NOTHING — not package.json, not deploy.yml, not a hook.
-    // A documented command nobody runs teaches the next reader to ignore it, and route.mjs
-    // line 418 pointed at this ticket to fix that. `npm test` gates deploy.yml, so running
+    // A documented command nobody runs teaches the next reader to ignore it, and
+    // route.mjs pointed at this ticket to fix that. `npm test` gates deploy.yml, so running
     // it here is the wiring: a red golden case now fails the deploy instead of a terminal
     // nobody opens.
     expect(() =>

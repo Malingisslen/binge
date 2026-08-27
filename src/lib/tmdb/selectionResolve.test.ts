@@ -398,7 +398,7 @@ describe('resolveSelection — golvet och fröna', () => {
     expect(ids).toEqual([7, 42, 43]);
   });
 
-  // Nyckellöst bygge: dummynyckel ⇒ varje hämtning failar ⇒ härledningen ger
+  // Bygge utan giltig TMDB-nyckel ⇒ varje hämtning failar ⇒ härledningen ger
   // noll. Next kräver ändå ≥1 param, så fallbacken måste finnas — och den
   // körningen måste ha sagt att den vet om att urvalet blir tunt.
   it('faller tillbaka på fallback-id när ingenting kunde härledas och tunt är tillåtet', async () => {

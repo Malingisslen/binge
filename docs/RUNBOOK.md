@@ -370,8 +370,9 @@ typecheck och test på pull requests — hamnar du här från en röd PR är det
 ### 6c. Preview-kanaler finns inte längre
 
 Borttagna med `preview.yml` i BIN-1028 (Malins beslut 2026-08-27). Workflowen
-körde aldrig på main och byggde en live-kanal med skarpa nycklar på varje
-dependabot-PR. Vill du ha en förhandsvisning i dag: bygg lokalt.
+körde aldrig på main, och dess byggsteg refererade `secrets.NEXT_PUBLIC_FIREBASE_*`
+medan deploy-steget publicerade en live-kanal. Vill du ha en förhandsvisning i dag:
+bygg lokalt.
 
 ### 6d. "took more than 60 seconds" / static export avbryts
 

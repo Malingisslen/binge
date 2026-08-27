@@ -19,16 +19,20 @@ name: PR checks
 #     against `npm audit --omit=dev --audit-level=high`. `deploy.yml` still
 #     surfaces audit findings as warnings on the path that ships.
 #
+#   · No `check-workflow-map.mjs` and no `check-public-env.mjs`. The deleted
+#     `ci.yml` ran both on the PR path. `deploy.yml` runs them before Build, so
+#     nothing reaching production is unchecked.
+#
 #   · No `rules-tests` job. The deleted `ci.yml` ran the Firestore emulator suite
 #     on pull requests too. `deploy.yml` still gates on its own copy via `needs`,
 #     so the production path is unchanged — but that suite does NOT run on a pull
 #     request any more, and this list would read as exhaustive without saying so.
 #
-#   · No build, and therefore NO SECRETS. `preview.yml` handed production
-#     Firebase credentials to a build triggered by a dependabot diff; #4
-#     Security Architect named that as a reason its removal was a net gain
-#     rather than a loss. This job installs, lints, typechecks and tests — none
-#     of which needs a key — so a PR can never reach one.
+#   · No build, and therefore NO SECRETS. `preview.yml`s build referenced
+#     `secrets.NEXT_PUBLIC_FIREBASE_*` and its deploy step published a live
+#     channel; #4 Security Architect named that as a reason its removal was a net
+#     gain rather than a loss. This job installs, lints, typechecks and tests —
+#     none of which needs a key — so a PR can never reach one.
 #
 # The job is named `quality` on purpose: that is the status check the branch
 # protection rule on main requires, and since `ci.yml` was its only producer the

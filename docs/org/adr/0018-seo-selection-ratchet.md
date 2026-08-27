@@ -171,7 +171,8 @@ egenskap golvet vilar på.
 
 > **Efterföljare 2026-08-27 (BIN-1028).** De två workflows som stycket ovan namnger,
 > `ci.yml` och `preview.yml`, är raderade på Malins beslut: de körde aldrig på main och
-> `preview.yml` byggde dessutom en live-kanal med skarpa nycklar på varje dependabot-PR.
+> `preview.yml`s byggsteg refererade dessutom `secrets.NEXT_PUBLIC_FIREBASE_*`, och dess
+> deploy-steg publicerade en live-kanal.
 > `SELECTION_ALLOW_THIN` sätts därmed av ingen workflow alls och är numera ett lokalt
 > verktyg. Beslutet i det här protokollet står oförändrat — det som ändrats är VAR flaggan
 > sätts, inte varför den finns eller varför `deploy.yml` aldrig får sätta den. Stycket ovan

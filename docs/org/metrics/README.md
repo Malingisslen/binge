@@ -115,10 +115,11 @@ different ways: it names a `commit_sha` that exists and is not newer than the ro
 resolved at all (*unverified* — see below). At the bytes that shipped with this section
 (BIN-918) the live file scored **0 evidenced, 4 retired, 1 grandfathered**: no row carried a
 `commit_sha` at all, so a reader who took "clean" as "verified" would have had it exactly
-backwards. As of BIN-917 (2026-08-18) it reads **5 evidenced, 4 retired, 1 grandfathered** —
-the first rows in this log to carry their sha. The point of the sentence is unchanged and is
-why it is worth keeping both numbers: "no unevidenced claim stands" is still weaker than
-"every claim is evidenced", and the four retired ones are retracted, not verified.
+backwards. Since BIN-917 (2026-08-18) rows carry their sha — the first in this log to do so. Derive
+the current split rather than reading it here, because it moves with every row:
+`node docs/org/metrics/check_events.mjs`. The point of the sentence is unchanged: "no
+unevidenced claim stands" is still weaker than "every claim is evidenced", and a retired
+claim is retracted, not verified.
 
 It does **NOT** verify that the named commit actually contains that ticket's work — a
 real sha cited for the wrong ticket, or a docs-only commit cited for a code claim, is
@@ -142,8 +143,7 @@ time this assertion reddens `deploy.yml` or `preview.yml` for a commit unrelated
 flagged ticket, it converts to a CLI-only check on the next commit that touches it — not
 re-litigated as a fresh decision.* **Successor 2026-08-27 (BIN-1028):** `preview.yml` is
 deleted, and `pr-checks.yml` now runs `npm test` on pull requests. The condition's words are
-left as #25 wrote them; read the trigger as any workflow run, which is what it meant when
-only two could redden. Whoever meets it at 2am inherits a made decision, not an
+left as #25 wrote them; read the trigger as any workflow run. Whoever meets it at 2am inherits a made decision, not an
 open question. Until that happens the live-file assertion stays: a false row means unreviewed
 code reached main, which is worth stopping for.
 
