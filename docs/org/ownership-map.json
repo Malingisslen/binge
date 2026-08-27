@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 193,
+  "patternCount": 206,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -46,6 +46,10 @@
       "title": "Security Architect",
       "slug": "security-architect",
       "patterns": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/preview.yml",
+        ".github/workflows/secret-scan.yml",
         "firebase.json",
         "firestore.rules",
         "src/lib/firebase/appCheck.ts",
@@ -186,9 +190,13 @@
       "slug": "growth-marketer",
       "patterns": [
         "public/robots.txt",
+        "src/app/guider/page.tsx",
         "src/app/page.tsx",
         "src/app/sitemap.ts",
         "src/lib/analytics.ts",
+        "src/lib/seo/franchises.ts",
+        "src/lib/seo/genreHubs.ts",
+        "src/lib/seo/jsonLd.ts",
         "src/lib/seo/selectionSeed.ts",
         "src/lib/tmdb/selectionManifest.ts",
         "src/lib/tmdb/seoCoverage.ts"
@@ -255,8 +263,11 @@
       "slug": "technical-writer-documentation",
       "patterns": [
         "docs/",
+        "docs/RUNBOOK.md",
+        "docs/SLO.md",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "docs/data-export-format.md",
+        "docs/data-retention-policy.md",
         "docs/moderation.md",
         "public/llms.txt"
       ]
@@ -276,6 +287,7 @@
       "patterns": [
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "functions/src/askbinge/",
+        "functions/src/leavingRollup/",
         "functions/src/streamingOffers/",
         "functions/src/titleRatings/"
       ]
@@ -332,6 +344,7 @@
       "title": "Database Administrator / Data-layer Engineer",
       "slug": "database-administrator-data-layer-engineer",
       "patterns": [
+        ".claude/rules/accepted-deviations.md",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "firestore.indexes.json",
         "firestore.rules",

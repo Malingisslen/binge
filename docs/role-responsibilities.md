@@ -117,8 +117,9 @@ services from 2025-06-28).
 
 Owns the **25 SEK/mån Firebase Blaze cap** (50/90/100% alerts).
 
-- Scheduled-function frequency cuts (rollup 4×/day → 1×/day; notifications daily)
-  with paginated reads.
+- Scheduled-function frequency cuts (rollup 4×/day → 1×/day) with paginated reads.
+  `episodeReleaseNotify` itself is `onSchedule('every 6 hours')` — 4×/day, unchanged
+  since it shipped, so it is not one of the cuts.
   → `functions/src/insights/rollup.ts`, `functions/src/episodeNotify/`
 - Build-time TMDB budget (1500-fetch code deploys vs weekly full refresh) +
   `.tmdb-cache/` persistence so most deploys cost ~0 TMDB calls.
@@ -150,6 +151,16 @@ is the real boundary.
 - App Check (reCAPTCHA v3, fail-closed default), CSP/HSTS headers, secrets via
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
   → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`
+- **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
+  blocks rather than assuming: `ci.yml` fires on `pull_request: branches:[main]` and
+  `push: branches-ignore:[main]`; `preview.yml` on `pull_request: branches:[main]` only.
+  This repo pushes direct to main with no PRs, so neither fires there. `deploy.yml`
+  (`push: branches:[main]`) and `secret-scan.yml` (bare `push:`) do. What this does NOT
+  mean is that main ships unchecked — `deploy.yml` runs Lint, Typecheck and Test itself,
+  and gates on its own `rules-tests` job. The one gate that genuinely differs is
+  `npm audit`: blocking in `ci.yml`, advisory in `deploy.yml` by BIN-344's decision.
+  Cite the workflow whose trigger matches the event, never "CI".
+  → `.github/workflows/ci.yml`, `.github/workflows/preview.yml`, `.github/workflows/deploy.yml`, `.github/workflows/secret-scan.yml`
 
 ## 5. Legal / GDPR Counsel
 
@@ -330,8 +341,14 @@ Owns acquisition and the top of the funnel.
   eviction) and the committed seed of ids Google already had indexed. A change that
   shrinks either de-indexes real pages (BIN-823).
   → `src/lib/tmdb/selectionManifest.ts`, `src/lib/seo/selectionSeed.ts`
-- 12 curated provider landing pages ("Vad streamar på Netflix i Sverige").
-  → `src/app/provider/[id]/page.tsx`
+- 12 curated provider landing pages ("Vad streamar på Netflix i Sverige"); the curated
+  genre landing pages (BIN-461); the franchise "billigaste"/"vad försvinner" pages
+  (BIN-178); the guides hub-of-hubs; and the shared JSON-LD escaper those pages inject
+  with.
+  → `src/app/provider/[id]/page.tsx`, `src/app/genre/[slug]/page.tsx`,
+  `src/app/billigaste/[slug]/page.tsx`, `src/app/forsvinner/[id]/page.tsx`,
+  `src/app/guider/page.tsx`, `src/lib/seo/genreHubs.ts`, `src/lib/seo/franchises.ts`,
+  `src/lib/seo/jsonLd.ts`
 - The anonymous landing page; Plausible conversion goals (`signed_up`,
   `first_title_added`, `onboarding_completed` by step); group/session invite-share
   loops.
@@ -393,7 +410,8 @@ Owns the human interface to the system.
 Owns what automated tests can't reach (there is **no E2E suite**).
 
 - Per-PR preview-channel testing (7-day TTL); post-deploy smoke tests
-  (`RUNBOOK.md` §11 checklist); cross-browser/device + dark-mode validation; real
+  (RUNBOOK.md has no smoke-test checklist — §11 is "Kontakter + resurser"; the closest
+  is §0 Quick triage); cross-browser/device + dark-mode validation; real
   Firebase auth/rules/FCM flow verification; SLO regression watching.
   → `.github/workflows/preview.yml`, `docs/RUNBOOK.md`, `docs/SLO.md`
 
@@ -402,10 +420,12 @@ Owns what automated tests can't reach (there is **no E2E suite**).
 Owns the `docs/` corpus.
 
 - Data-export-format spec + schema versioning; data-retention policy; the
-  12-section incident `RUNBOOK.md`; the moderation runbook; the
+  incident `RUNBOOK.md`; the moderation runbook; the
   `docs/analysis/EXTERNAL_ACTIONS.md` ops reference; `SLO.md`; `public/llms.txt`;
   the env-var reference; inline "why/gotcha" comment conventions.
-  → `docs/data-export-format.md`, `docs/moderation.md`, `public/llms.txt`
+  → `docs/data-export-format.md`, `docs/moderation.md`, `public/llms.txt`,
+  `docs/data-retention-policy.md`, `docs/RUNBOOK.md`, `docs/analysis/EXTERNAL_ACTIONS.md`,
+  `docs/SLO.md`
 
 ## 22. Data Analyst / BI
 
@@ -422,11 +442,13 @@ Owns measurement.
 Owns the third-party stack and its costs.
 
 - ~10 vendors (TMDB, MOTN/RapidAPI, OMDb, Firebase, Cloudflare, Sentry, Plausible,
-  reCAPTCHA, Gemini, Cineasterna), each with a per-service daily budget (MOTN
-  95/day under free 100; OMDb 900/day under 1000; Gemini 2000 global + 25/user);
+  reCAPTCHA, Gemini, Cineasterna), each with a per-service budget (MOTN ~450 of 500
+  requests per MONTH on a billing-cycle anchor, shared with `leavingRollup` — BIN-541
+  replaced the earlier "100/day" belief, which was never verified; OMDb 900/day under
+  free 1000; Gemini 2000 global + 25/user);
   secret lifecycle via `defineSecret`; free-vs-paid tradeoffs (MOTN Pro $39/mo);
   substitution planning.
-  → `functions/src/{streamingOffers,titleRatings,askbinge}/`, `docs/analysis/EXTERNAL_ACTIONS.md`
+  → `functions/src/{streamingOffers,titleRatings,askbinge,leavingRollup}/`, `docs/analysis/EXTERNAL_ACTIONS.md`
 
 ## 24. Monetization / Partnerships Lead
 
@@ -447,7 +469,10 @@ Owns the process.
   written-plan exception; the **"plan before large changes — cast the role-org
   first" governance rule** (route → convene the stakeholder panel → fold conditions
   into acceptance criteria, for ad-hoc work as well as sprints); the deploy
-  drift-guard (rules/functions never auto-ship); the 5 CI quality gates; BIN-* issue
+  drift-guard (rules/functions never auto-ship); the quality gates that run on the
+  push-to-main path — `deploy.yml` carries Lint, Typecheck, Test and its own
+  `rules-tests` job, because `ci.yml`'s triggers never fire there (BIN-1028), and it
+  downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`
@@ -585,8 +610,11 @@ findings here too.
 - **Doc-id contract & watchlist write payloads** — the `movie:123` / `tv:123` document
   id every watchlist, swipe and community-rating write is keyed on, and the helpers
   that build/repair those payloads. A silent change here collides or shadows real user
-  data (BIN-569, BIN-608, BIN-624, BIN-766).
-  → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlist/**`
+  data (BIN-569, BIN-608, BIN-624, BIN-766, BIN-965, BIN-1010, BIN-1011 — the last
+  three are the add-vs-delete race in `WatchlistContext`'s `addIfMissing` branch,
+  decided in `.claude/rules/accepted-deviations.md` rather than fixed with a
+  compensating delete).
+  → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlist/**`, `src/contexts/WatchlistContext.tsx`
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).
 
 **Watch-items (diagnostic):**
