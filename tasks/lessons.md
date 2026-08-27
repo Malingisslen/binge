@@ -803,3 +803,37 @@ localStorage-läsning.
 **Exempel:** lösningen fanns redan i filen — `profileLoading` sätts i samma synkrona block
 som `setUid` och nollställs i `.finally()`. Grinden blev
 `profileLoading || isDeletionStarted(uid) || pendingReconsent`.
+
+### [Workflow] En ändring som gör en fil sannare kan göra en granne falsk — och bara en helhetsläsning ser det (2026-08-27, BIN-1022/1025)
+
+**Trigger:** du rättar en mening i fil A, och fil B motiverar sitt eget beteende med ett
+påstående om hur fil A ser ut.
+
+**Regel:** kör helhetsgranskaren SIST, ensam, och kör om den efter varje rättelse — en
+rättelse är själva den sortens ändring som kan falsifiera en granne. Fråga specifikt: finns
+det något par av filer i trädet som nu säger emot varandra?
+
+**Exempel:** `watchlistDocKey.test.ts` motiverade sitt kommentarstrippande filter med "en rad
+i `WatchlistContext.tsx` diskuterar en äldre nyckelform i prosa". Tidigare i samma bunt hade
+jag skrivit om exakt den raden. Båda filerna var korrekta var för sig; `grep -n '\${uid}'`
+gav noll träffar. Fyra andra granskarpass hade läst båda filerna utan att se det, eftersom
+ingen av dem läser två filer mot varandra. Samma runda fällde helhetsgranskaren tre gånger,
+varje gång på ett påstående ingen typkontroll, inget test och ingen linter läser.
+
+### [Design] Att låta en delad skrivväg VÄGRA gör varje ovillkorlig bekräftelse till en lögn (2026-08-27, BIN-1025)
+
+**Trigger:** du lägger till ett avvisande (eller en tyst no-op) i en funktion som många
+anropare delar.
+
+**Regel:** innan du gör det, räkna upp varje anropare som BEKRÄFTAR något efteråt — en toast,
+ett UI-tillstånd, en räknare. Varje sådan bekräftelse som inte inväntar utfallet blir falsk i
+samma commit. Att `await`:a räcker inte: `await` propagerar, det hanterar inte. Det enda som
+skyddar är att bekräftelsen är kedjad på skrivningen.
+
+**Exempel:** `writeTitle` fick vägra under en pågående kontoradering. `MoviePageClient`s
+"Bevaka släpp" gjorde `void upsertTitle(...)` och toastade "Bevakar släppet av X"
+ovillkorligt — sant så länge skrivningen alltid landade, en lögn i samma sekund den kunde
+vägras. BIN-895:s falska bekräftelse, återöppnad av fixen som skulle skärpa säkerheten. Detta
+var sprintens ENDA äkta koddefekt, och den infördes av sprinten själv. Valet av form var
+redan rätt av samma skäl: två roller blockerade oberoende på att ett nytt FÄLT på utfallet
+hade varit ignorerbart hos åtta av nio anropare.
