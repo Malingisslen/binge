@@ -1,3 +1,123 @@
+# BIN-909 — planerat pass 2026-08-27
+
+`top`-tier. Panelen konvenerad FÖRE bygget. Malins produktbeslut fattade FÖRE panelen.
+
+## Vad som är fel
+
+`ensureUserProfile` (`src/contexts/AuthContext.tsx`) skapar `users/{uid}` när det saknas
+och stämplar `termsAcceptedAt` + `ageConfirmedAt` med serverns nu. Den grenen nås av två
+personer koden inte kan skilja åt: en genuint ny Google-inloggning (legitimt browse-wrap-
+samtycke, BIN-275/348) och en ÅTERVÄNDANDE användare vars profil är borta. Efter en
+avbruten radering är "profilen saknas" det avsiktliga sluttillståndet — appen tillverkar
+alltså ett samtycke åt någon som just bett att få lämna. GDPR art. 5(1)(d).
+
+Markören i `deletionMarker.ts` stoppar det på den enhet raderingen startades. På varje
+annan enhet finns ingen markör.
+
+## Malins beslut (bindande, 2026-08-27)
+
+1. Tidsgräns **5 minuter** på `firebaseUser.metadata.creationTime`.
+2. Skärmtexten, med "vi" struket efter #19:s fynd att det bryter `voice-and-tone.md` regel 1:
+   > **Välkommen tillbaka**
+   > Din profil är borta och behöver skapas på nytt. Det du sparat tidigare finns inte kvar.
+   > Godkänn villkoren för att fortsätta.
+   > ☐ Jag är minst 13 år. ☐ Jag godkänner användarvillkoren.
+   > [ Skapa profil ] [ Logga ut ]
+   > Hittade du hit av misstag? hej@binge.nu
+3. **Båda** tidsstämplarna frågas om. Ålder behandlas inte annorlunda.
+
+## Routning
+
+Första körningen: `top`, panel [5, 27, 2, 19, 26]. #6 lades till för hand — biljettens
+bindande villkor 3 och 4 är DPO:ns.
+
+#27 blockerade på att filuppsättningen är för smal: `WatchlistContext.tsx` måste med.
+**Omroutad** på den vidgade mängden → fortfarande `top`, panel [27, 5, 2, 14, 19]. #14
+tillkom och kritiserades separat.
+
+Sju roller, tre block (#27, #2, #19), alla upplösta nedan.
+
+## Design (efter panelen)
+
+- Ny konstant `RETURNING_ACCOUNT_MIN_AGE_MS = 5 min` bredvid `RECENT_LOGIN_MAX_AGE_MS`.
+- `ProfileLoad` får `pendingReconsent: boolean` — samma form som `deletionInProgress`,
+  trädd genom `AuthContext` till `AppShell`. **Inget Firestore-fält** (ADR 0019/0022).
+- Grinden sitter i `ensureUserProfile`, i `!snap.exists()`-grenen, EFTER läsningen men
+  FÖRE profilobjektet, transaktionen och `tryAutoClaimUsername`.
+- `ReconsentGate` i `src/components/layout/`, skal-övertagande som `DeletionLimbo`.
+  Inget nytt route, ingen `DynamicRouter`/`firebase.json`-ändring (#26).
+- Dokumentet skapas först vid submit, i en transaktion.
+- `WatchlistContext.tsx`: båda de självgående skrivarna får `|| pendingReconsent`.
+
+## Acceptanskriterier (panelens villkor, alla bindande)
+
+**#5 Juridik** (blockerar ej)
+1. Noll Firestore-skrivningar innan användaren submittar med båda rutorna ikryssade.
+   Test: 0/1/2 rutor → ingen `setDoc`/`runTransaction`; båda + klick → exakt en create
+   med `serverTimestamp()` på båda fälten. *(diff)*
+2. "Skapa profil" är disabled tills båda rutorna är individuellt ikryssade. Ingen
+   samlingsruta, inget förikryssat. *(diff)*
+3. `docs/data-retention-policy.md` säger att BIN-909 stänger ENBART den påhittade
+   samtyckesposten — inte ADR 0022:s accepterade sopnings-lucka. *(diff)*
+4. Regressionstest: konto med `creationTime` = nu får den direkta stämpeln,
+   `ReconsentGate` renderas aldrig. *(diff)*
+
+**#6 Dataskyddsombudet** (blockerar ej)
+5. Ingen kodväg skapar `users/{uid}` om gaten överges — test som simulerar avbrott
+   och omladdning och hävdar att dokumentet fortfarande inte finns. *(diff)*
+6. Båda stämplarna sätts vid klicket, aldrig bakdaterade från `creationTime`. *(diff)*
+7. `docs/data-retention-policy.md` dokumenterar 5-minutersgränsen OCH dess residual. *(diff)*
+8. `pendingReconsent` blockerar hela skalet, inte en banner. *(diff)*
+
+**#27 DBA** (BLOCKERADE — upplöst genom omroutning)
+9. Skapandet vid submit är en `runTransaction` med `tx.get` → exists-check → `tx.set`,
+   inte en bar `setDoc` (två flikar kan submitta samtidigt). *(diff)*
+10. `WatchlistContext`s självgående skrivare no-op:ar medan `pendingReconsent` är sann.
+    Test med items i snapshoten. *(diff)*
+11. Den nya early-returnen ligger före profilbygget, transaktionen och
+    `tryAutoClaimUsername`. *(diff)*
+12. Inget nytt fält/underkollektion under `users/{uid}`; `firestore.rules` orörd. *(diff)*
+
+**#2 Tillgänglighet** (BLOCKERADE)
+13. Nya grenen i `AppShell` behåller skip-länken och `DuotoneFilters`-wrappern, och
+    `ReconsentGate` använder `PageHeader` så sidan har exakt en `h1`. *(diff)*
+14. De två kryssrutorna är grupperade i `fieldset` med en `legend`. *(diff)*
+15. Disabled-knappen har `aria-describedby` mot synlig hjälptext som säger varför. *(diff)*
+
+**#19 Support** (BLOCKERADE)
+16. `hej@binge.nu` finns på skärmen (BIN-877:s precedent för skal-övertaganden). *(diff)*
+17. Texten säger att detta skapar en ny tom profil, inte återställer. *(diff)*
+18. "vi" struket — Malins beslut ovan. *(diff)*
+
+**#26 Informationsarkitekt** (blockerar ej)
+19. Inget nytt route: diffen rör inte `src/app/**`, `DynamicRouter.tsx` eller
+    `firebase.json`. *(diff)*
+20. Precedens `deletionInProgress` FÖRE `pendingReconsent`, med test som driver båda
+    sanna. *(diff)*
+21. `nextPath`/`sessionStorage` orörd över håll → submit → släpp. *(diff)*
+
+**#14 Arkitekt** (blockerar ej)
+22. `pendingReconsent` trädd exakt som `deletionInProgress`, default `false` i
+    defaultkontexten. *(diff)*
+23. Båda `WatchlistContext`-grindarna är ADDITIVA: den nya spärren läggs till de befintliga villkoren, inget villkor byts ut. *(diff)*
+24. Grenordningen i `AppShell` är utskriven i kommentar. *(diff)*
+
+## Open questions
+
+Inga arkitekturändrande okända kvar. Malins tre produktval är fattade och nedskrivna;
+#26 avgjorde skal-övertagande mot route; #14 avgjorde signalens form. Antaganden:
+`firebaseUser.metadata.creationTime` finns i Firebase Auth-SDK:n (verifieras vid bygget,
+och saknat värde faller genom till dagens beteende per #27:s andra concern).
+
+## Rollback
+
+En hunk per fil. Ingen schema-ändring, inga regler, ingen deploy-beroende ordning.
+
+---
+---
+
+# ARKIV — tidigare körningar
+
 # SPRINT 2026-08-26 (fjärde körningen)
 
 Planen för DENNA körning, skriven FÖRE bygget. Sju biljetter, fyra buntar.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act, screen } from '@testing-library/react';
+import { render, act, screen, cleanup } from '@testing-library/react';
 import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -13,6 +13,9 @@ type FakeUser = {
   photoURL: string | null;
   displayName: string | null;
   emailVerified: boolean;
+  // BIN-909: the ONLY thing separating a genuinely new sign-up from a returning
+  // account whose profile is gone. Mutable so a test can drive both.
+  metadata: { creationTime: string | undefined };
 };
 
 const fakeUser: FakeUser = {
@@ -21,6 +24,7 @@ const fakeUser: FakeUser = {
   photoURL: null,
   displayName: 'Malin',
   emailVerified: false,
+  metadata: { creationTime: new Date().toUTCString() },
 };
 
 // onAuthStateChanged-callbacken fångas så testen kan driva auth-sekvensen manuellt.
@@ -65,7 +69,7 @@ vi.mock('firebase/auth', () => ({
 // vi.hoisted: config-mockens factory refererar objektet EAGERT (till skillnad
 // från de lazy closure-referenserna i övriga mockar).
 const authObj = vi.hoisted(() => ({
-  currentUser: null as { uid: string; email: string | null; photoURL: string | null; displayName: string | null; emailVerified: boolean } | null,
+  currentUser: null as { uid: string; email: string | null; photoURL: string | null; displayName: string | null; emailVerified: boolean; metadata: { creationTime: string | undefined } } | null,
 }));
 vi.mock('@/lib/firebase/config', () => ({ auth: authObj }));
 
@@ -248,6 +252,7 @@ vi.mock('next/navigation', () => ({
 import AuthGuard from '@/components/AuthGuard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { REQUIRES_RECENT_LOGIN, STALE_SESSION_PREFLIGHT, classifyDeletionFailure } from '@/lib/authErrors';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal';
 
 // --- Harness -----------------------------------------------------------------
 
@@ -258,9 +263,13 @@ let ctx: ReturnType<typeof useAuth> | null = null;
 // happens and then goes away again. Reading `ctx` mid-cascade cannot see it.
 const deletionFlagRenders: boolean[] = [];
 
+// BIN-909 — every render's value of the gate flag, same shape as `deletionFlagRenders`.
+const reconsentFlagRenders: boolean[] = [];
+
 function Harness() {
   const value = useAuth();
   deletionFlagRenders.push(value.deletionInProgress);
+  reconsentFlagRenders.push(value.pendingReconsent);
   useEffect(() => { ctx = value; }, [value]);
   return <div>ready</div>;
 }
@@ -291,6 +300,10 @@ function userDocWrites() {
 }
 
 beforeEach(() => {
+  reconsentFlagRenders.length = 0;
+  // BIN-909: default every test to a brand-new account, so only the tests that
+  // deliberately age it reach the gate.
+  fakeUser.metadata.creationTime = new Date().toUTCString();
   setDoc.mockReset();
   setDoc.mockImplementation(async () => {});
   runTransaction.mockClear();
@@ -1886,5 +1899,197 @@ describe('AuthContext — an aborted deletion is not resurrected (BIN-816)', () 
 
     expect(thrown).toContain(REQUIRES_RECENT_LOGIN);
     expect(thrown).not.toContain('binge/cascade-partial');
+  });
+});
+
+// BIN-909 — `ensureUserProfile`'s create branch serves two people the code cannot tell
+// apart: a first-time Google sign-in (consent given at the login button, BIN-275/348) and
+// a RETURNING account whose profile is gone. For the second, stamping fresh
+// `termsAcceptedAt`/`ageConfirmedAt` invents a consent record. `metadata.creationTime` is
+// the only thing separating them; five minutes is Malin's threshold, 2026-08-27.
+describe('AuthContext — reconsent gate for a returning account (BIN-909)', () => {
+  // Old enough to be past RETURNING_ACCOUNT_MIN_AGE_MS by a wide margin, so the test does
+  // not sit on the boundary — the boundary itself gets its own case below.
+  function ageAccount(minutes: number) {
+    fakeUser.metadata.creationTime = new Date(Date.now() - minutes * 60 * 1000).toUTCString();
+    if (authObj.currentUser) authObj.currentUser.metadata.creationTime = fakeUser.metadata.creationTime;
+  }
+
+  function markAborted(uid = 'u1') {
+    window.localStorage.setItem(`binge:deletionStarted:${uid}`, JSON.stringify({ startedAt: 1 }));
+  }
+
+  it('a returning account with no profile writes NOTHING and is gated', async () => {
+    ageAccount(60);
+    renderAuth();
+    await login(null); // the create branch — the one that used to manufacture the stamp
+
+    expect(ctx!.pendingReconsent).toBe(true);
+    expect(ctx!.user).toBeNull();
+    // Not reaching the transaction at all is a stronger statement than "wrote nothing
+    // interesting" — the create lives inside it.
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(userDocWrites()).toHaveLength(0);
+  });
+
+  it('a gated account does not re-reserve a username either', async () => {
+    // Same second door BIN-816 closed for the deletion case: `tryAutoClaimUsername` runs
+    // on creation, so a handle must not be re-reserved for someone who has not consented.
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+
+    expect(claimUsername).not.toHaveBeenCalled();
+  });
+
+  it('exactly five minutes old is NOT gated, one millisecond older is', async () => {
+    // Without a fixture on the boundary, `>` and `>=` are indistinguishable: every other
+    // case here sits an hour past or seconds under. The same mutant survived the whole
+    // suite once already for the sibling `RECENT_LOGIN_MAX_AGE_MS` cutoff, which is why
+    // that test froze the clock too — `toUTCString()` has second granularity, so an
+    // unaligned "now" puts the age up to 999 ms off the boundary and the two operators
+    // agree again.
+    const anchor = Date.UTC(2026, 7, 27, 12, 0, 0);
+    fakeUser.metadata.creationTime = new Date(anchor - 5 * 60 * 1000).toUTCString();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(anchor);
+
+    try {
+      renderAuth();
+      await login(null);
+      expect(ctx!.pendingReconsent).toBe(false); // exactly at the threshold: still new
+      expect(runTransaction).toHaveBeenCalled();
+
+      cleanup();
+      setDoc.mockClear();
+      runTransaction.mockClear();
+      now.mockReturnValue(anchor + 1); // one millisecond older than the threshold
+
+      renderAuth();
+      await login(null);
+      expect(ctx!.pendingReconsent).toBe(true);
+      expect(runTransaction).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('a BRAND-NEW account is never gated — the control', async () => {
+    // Without this every assertion above passes on a provider that gates everyone, which
+    // would lock out every new sign-up.
+    renderAuth();
+    await login(null); // beforeEach leaves creationTime at "now"
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(runTransaction).toHaveBeenCalled();
+    expect(ctx!.user?.displayName).toBe('Malin');
+  });
+
+  it('an EXISTING profile on an old account is never gated', async () => {
+    // The gate sits after the read on purpose: everyone who has used the app for more
+    // than five minutes is "old", and gating them would be the whole user base.
+    ageAccount(60 * 24 * 30);
+    renderAuth();
+    await login({ username: 'malin' });
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.user?.username).toBe('malin');
+  });
+
+  it('an absent creationTime reads as NEW, not as returning', async () => {
+    // The error direction is deliberate: a bug in Firebase's metadata should cost a
+    // manufactured stamp in a rare case, never lock every new user out of signing up.
+    fakeUser.metadata.creationTime = undefined;
+    renderAuth();
+    await login(null);
+
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(runTransaction).toHaveBeenCalled();
+  });
+
+  it('deletionInProgress wins when a marked session is ALSO old', async () => {
+    // Both states are reachable at once, and they want opposite screens. The deletion
+    // return sits before the age check, so the limbo screen keeps precedence — an aborted
+    // deletion must never be offered a "create your profile" button.
+    markAborted();
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+
+    expect(ctx!.deletionInProgress).toBe(true);
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('signing out clears the gate for the next account on a shared device', async () => {
+    // The marker-based sibling flag is cleared here for the same reason. Leaving this
+    // one set would greet a genuinely NEW account with "Välkommen tillbaka" until its
+    // own profile load resolved — on a device two people share.
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+    expect(ctx!.pendingReconsent).toBe(true);
+
+    authObj.currentUser = null;
+    await act(async () => { authCallback!(null); });
+
+    expect(ctx!.pendingReconsent).toBe(false);
+  });
+
+  it('completeReconsent creates the profile with FRESH server-stamped consent', async () => {
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+    expect(userDocWrites()).toHaveLength(0); // still nothing written
+
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    const writes = userDocWrites();
+    expect(writes).toHaveLength(1); // exactly one create, not one per checkbox
+    const [, payload] = writes[0] as [unknown, Record<string, unknown>];
+    // 'ts' is what the harness's serverTimestamp() returns. Both stamps must be it —
+    // a value derived from metadata.creationTime would backdate the consent to a moment
+    // the user did not consent at, which is the record this ticket removes.
+    expect(payload.termsAcceptedAt).toBe('ts');
+    expect(payload.ageConfirmedAt).toBe('ts');
+    expect(payload.termsVersion).toBe(CURRENT_TERMS_VERSION);
+    expect(ctx!.pendingReconsent).toBe(false);
+    expect(ctx!.user?.displayName).toBe('Malin');
+  });
+
+  it('the gate stays up until completeReconsent is called — abandoning it leaves no document', async () => {
+    // The screen is a shell takeover, so "abandoning" means signing out or closing the
+    // tab. Nothing may be written on the way in OR on the way past.
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+
+    await act(async () => {}); // let every provider effect settle
+
+    expect(userDocWrites()).toHaveLength(0);
+    expect(claimUsername).not.toHaveBeenCalled();
+    expect(reconsentFlagRenders.at(-1)).toBe(true);
+  });
+
+  it('completeReconsent adopts nothing if a different account signed in meanwhile', async () => {
+    // Same account-switch guard the profile-load path uses. Without it a slow create
+    // lands its profile into a session that now belongs to someone else.
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+
+    // The switch has to happen DURING the create, not before it: the guard compares the
+    // user captured on the way in against `auth.currentUser` on the way out. Swapping
+    // first would just compare the new user to himself and prove nothing.
+    runTransaction.mockImplementationOnce(async (_db: unknown, updateFn: Parameters<typeof runTransaction>[1]) => {
+      authObj.currentUser = { ...fakeUser, uid: 'someone-else' };
+      return updateFn({
+        get: async () => ({ exists: () => false, data: () => ({}) }),
+        set: (ref: unknown, data: Record<string, unknown>) => { setDoc(ref, data); },
+      });
+    });
+    await act(async () => { await ctx!.completeReconsent(); });
+
+    expect(ctx!.user).toBeNull();
+    expect(ctx!.pendingReconsent).toBe(true); // still gated, nothing adopted
   });
 });

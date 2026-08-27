@@ -12,6 +12,7 @@ import Footer from '@/components/layout/Footer';
 import DuotoneFilters from '@/components/ui/DuotoneFilters';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
+import { ReconsentGate } from '@/components/layout/ReconsentGate';
 
 // Direction H "Schemat" chrome:
 //   Topbar (brand · week strip · search · avatar) sits above every page.
@@ -21,7 +22,7 @@ import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 //   `filter: url(#duo-…)` picks up the SVG defs.
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { uid, loading, deletionInProgress } = useAuth();
+  const { uid, loading, deletionInProgress, pendingReconsent } = useAuth();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -59,6 +60,38 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </a>
         <div className="app-shell">
           <DeletionLimbo />
+        </div>
+      </>
+    );
+  }
+
+  // BIN-909 — the third shell takeover, and the precedence between all three is written
+  // out because it is now a real question rather than an obvious one (#14, #26).
+  //
+  // AFTER `deletionInProgress` on purpose: the two states describe the same story from
+  // different devices, and they are not mutually exclusive by construction — one comes
+  // from the localStorage marker, the other from a missing profile doc. When both are
+  // true the deletion wins: finish the erasure that was already asked for before asking
+  // anyone to consent to a profile that may not survive the next minute.
+  //
+  // AHEAD of `isLandingForGuest` for the same reason the deletion branch is: this user IS
+  // signed in, so the branch below would otherwise hand them the whole app.
+  //
+  // The URL never changes here — no `router.push` — so whatever the visitor was heading
+  // for is still where they are once the gate lifts. `nextPath` is deliberately not read
+  // or written on this path (#26's condition 4).
+  if (mounted && uid && pendingReconsent) {
+    return (
+      <>
+        <DuotoneFilters />
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
+        >
+          Hoppa till innehåll
+        </a>
+        <div className="app-shell">
+          <ReconsentGate />
         </div>
       </>
     );

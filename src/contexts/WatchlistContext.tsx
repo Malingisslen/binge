@@ -392,7 +392,7 @@ const WatchlistContext = createContext<WatchlistState>({
 });
 
 export function WatchlistProvider({ children }: { children: ReactNode }) {
-  const { uid, user } = useAuth();
+  const { uid, user, pendingReconsent, profileLoading } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   // BIN-596: render-visible mirrors of firstSnapshotSettledRef / listenerFailedRef
@@ -714,7 +714,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // never rendered cannot write" is true of pages, not of providers. Read
     // fresh from the marker rather than through context: this is the tab-B case,
     // where React state may not have caught up yet (ADR 0020 q3).
-    if (isDeletionStarted(uid)) return;
+    // BIN-909 — the OTHER reason these repairs must not run, ORed into the same guard
+    // rather than added as a parallel one (#14 Software Architect's binding condition:
+    // reuse the mechanism, do not invent a third "don't write right now" idiom).
+    //
+    // While `ReconsentGate` is up, the session is signed in with NO `users/{uid}`. For a
+    // RETURNING user the watchlist listener yields rows immediately, so without this these
+    // effects would write under a uid whose profile does not exist — and `firestore.rules`
+    // would let them, because `isOwner(uid)` never requires the parent doc to exist. Read
+    // through context, not a marker: there is deliberately no durable signal for this
+    // state (ADR 0019/0022), so the tab-B argument above does not apply here.
+    // `profileLoading` is in front of `pendingReconsent` because it is the only one of
+    // the two that is true EARLY ENOUGH. `onAuthStateChanged` sets `uid` synchronously
+    // and the watchlist listener subscribes off it immediately, while `pendingReconsent`
+    // is not known until `ensureUserProfile`'s `getDoc` returns a full round trip later.
+    // Firestore runs a persistent local cache, so on a returning device the snapshot can
+    // deliver rows inside that window — and these effects would then write under a uid
+    // whose profile turns out to be missing, which is the exact case the flag beside it
+    // exists to prevent. `deletionInProgress` has no such hole: its marker is a
+    // synchronous localStorage read. This one needed the extra flag (code review).
+    if (profileLoading || isDeletionStarted(uid) || pendingReconsent) return;
     const legacy = items
       .filter(i => i.notes != null
         && notesByTmdbId[mediaTypeDocId(i.mediaType, i.tmdbId)] === undefined
@@ -748,7 +767,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [uid, items, notesByTmdbId]);
+    // `pendingReconsent` is in the deps because the guard above READS it. Missing from
+    // the array it would keep the value from the render that created the effect and could
+    // still write once the gate had gone up — the BIN-645 shape, where exhaustive-deps
+    // only warns.
+  }, [uid, items, notesByTmdbId, pendingReconsent, profileLoading]);
 
   // BIN-640 — write a real addedAt for docs that were added while the listener
   // was dead. Those docs have no stored addedAt (BIN-601 stops stamping in that
@@ -775,7 +798,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // never rendered cannot write" is true of pages, not of providers. Read
     // fresh from the marker rather than through context: this is the tab-B case,
     // where React state may not have caught up yet (ADR 0020 q3).
-    if (isDeletionStarted(uid)) return;
+    // BIN-909 — the OTHER reason these repairs must not run, ORed into the same guard
+    // rather than added as a parallel one (#14 Software Architect's binding condition:
+    // reuse the mechanism, do not invent a third "don't write right now" idiom).
+    //
+    // While `ReconsentGate` is up, the session is signed in with NO `users/{uid}`. For a
+    // RETURNING user the watchlist listener yields rows immediately, so without this these
+    // effects would write under a uid whose profile does not exist — and `firestore.rules`
+    // would let them, because `isOwner(uid)` never requires the parent doc to exist. Read
+    // through context, not a marker: there is deliberately no durable signal for this
+    // state (ADR 0019/0022), so the tab-B argument above does not apply here.
+    // `profileLoading` is in front of `pendingReconsent` because it is the only one of
+    // the two that is true EARLY ENOUGH. `onAuthStateChanged` sets `uid` synchronously
+    // and the watchlist listener subscribes off it immediately, while `pendingReconsent`
+    // is not known until `ensureUserProfile`'s `getDoc` returns a full round trip later.
+    // Firestore runs a persistent local cache, so on a returning device the snapshot can
+    // deliver rows inside that window — and these effects would then write under a uid
+    // whose profile turns out to be missing, which is the exact case the flag beside it
+    // exists to prevent. `deletionInProgress` has no such hole: its marker is a
+    // synchronous localStorage read. This one needed the extra flag (code review).
+    if (profileLoading || isDeletionStarted(uid) || pendingReconsent) return;
     const missing = items
       .filter(i => i.addedAtIsFallback
         && !repairedAddedAtRef.current.has(mediaTypeDocId(i.mediaType, i.tmdbId)))
@@ -809,7 +851,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [uid, items]);
+  }, [uid, items, pendingReconsent, profileLoading]);
 
   // Lazy-on-write (A4.3): re-assertera de denormaliserade synlighetsfälten
   // (effectiveVisibility + legacy isPublic-mirror) vid VARJE mutation. Gamla

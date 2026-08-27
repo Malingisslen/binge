@@ -55,8 +55,8 @@ const CHOKEPOINT = join('lib', 'firebase', 'userDocWrite.ts');
  */
 const BATCH_WRITERS = [
   // `resumeProvider`: users/{uid} + a pauseHistory doc must land together, or the
-  // pause and its history row disagree. Also `ensureUserProfile`'s create, which
-  // is a transaction (BIN-535) and is guarded by its own early return.
+  // pause and its history row disagree. Also the `users/{uid}` create, which is a
+  // transaction (BIN-535).
   join('contexts', 'AuthContext.tsx'),
   // `claimUsername`: users/{uid}.username + the usernames/* reservation move must
   // be atomic, or a handle is reserved for a profile that does not name it.

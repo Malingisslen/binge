@@ -10,7 +10,15 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 // useAuth: styrs per test via en mutable referens.
-const authState = { uid: 'u1' as string | null, user: { defaultVisibility: 'private' } as { defaultVisibility: string } | null };
+const authState = {
+  uid: 'u1' as string | null,
+  user: { defaultVisibility: 'private' } as { defaultVisibility: string } | null,
+  // BIN-909 — true while `ReconsentGate` is up: signed in, no `users/{uid}` yet.
+  pendingReconsent: false,
+  // BIN-909 — true from the instant `uid` is set until the profile read resolves. The
+  // flag beside it is not known yet during that window.
+  profileLoading: false,
+};
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => authState,
 }));
@@ -275,6 +283,8 @@ beforeEach(() => {
   batchCommit.mockImplementation(async () => {});
   authState.uid = 'u1';
   authState.user = { defaultVisibility: 'private' };
+  authState.pendingReconsent = false;
+  authState.profileLoading = false;
 });
 
 describe('WatchlistContext — first_title_added gating (BIN-56 + BIN-38)', () => {
@@ -2039,6 +2049,71 @@ describe('WatchlistContext — updateNotes + eager notes migration (BIN-505/BIN-
     }
   });
 
+  it('eager migration writes NOTHING while the reconsent gate is up (BIN-909)', async () => {
+    // Same shape as the deletion case above, different cause. A RETURNING user whose
+    // profile is gone still has a watchlist, so the listener yields rows the instant the
+    // gate renders — and `isOwner(uid)` never requires `users/{uid}` to exist, so these
+    // writes would land under an account that has not consented to anything.
+    authState.pendingReconsent = true;
+    await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+    await flushMigration();
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('and resumes normally once the gate is cleared (BIN-909 control)', async () => {
+    // Without this the assertion above passes on a provider that has stopped migrating
+    // for everyone — and the flag is only read inside the effect, so a stale-closure bug
+    // would look identical from the outside.
+    authState.pendingReconsent = true;
+    const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+    await flushMigration();
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => {
+      authState.pendingReconsent = false;
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await flushMigration();
+
+    expect(callsTo('users/u1/watchlistNotes/tv_50')).toHaveLength(1);
+  });
+
+  it('eager migration väntar tills profilbeskedet landat (BIN-909)', async () => {
+    // Samma fönster som addedAt-reparationen: raderna kan komma ur den lokala cachen
+    // innan profilläsningen svarat, och då är `pendingReconsent` ännu false.
+    authState.profileLoading = true;
+    await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+    await flushMigration();
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('och kör så fort profilbeskedet landat (BIN-909, kontroll)', async () => {
+    // Släpp-halvan, som systereffekten redan har: en hållning som aldrig upphör ser
+    // likadan ut som en korrekt spärr fram till den sekund den ska släppa.
+    authState.profileLoading = true;
+    const view = await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
+    await flushMigration();
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => {
+      authState.profileLoading = false;
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+    await flushMigration();
+
+    expect(callsTo('users/u1/watchlistNotes/tv_50')).toHaveLength(1);
+  });
+
   it('and resumes normally for an account with no deletion in flight (control)', async () => {
     // Without this, the assertion above passes on a migration that never runs.
     await mountSeeded([seedDoc({ tmdbId: 50, notes: 'privat anteckning' })]);
@@ -2366,6 +2441,81 @@ describe('WatchlistContext — dead listener: addedAt is neither destroyed nor f
     } finally {
       window.localStorage.removeItem('binge:deletionStarted:u1');
     }
+  });
+
+  it('addedAt-reparationen skriver INGENTING medan samtyckesspärren är uppe (BIN-909)', async () => {
+    // Systemisk skrivning, ingen användarhandling — samma resonemang som raderingsfallet
+    // ovan. Skillnaden är bara varför profilen saknas.
+    authState.pendingReconsent = true;
+    mount();
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: new Date('2025-11-20T18:30:00Z') })]));
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('och återupptas när spärren släpper (BIN-909, kontroll)', async () => {
+    // Utan den här passerar assertionen ovan på en reparation som aldrig kör för någon.
+    authState.pendingReconsent = true;
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: new Date('2025-11-20T18:30:00Z') })]));
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => {
+      authState.pendingReconsent = false;
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it('addedAt-reparationen väntar tills profilbeskedet landat (BIN-909)', async () => {
+    // `pendingReconsent` går inte att lita på i det här fönstret: `uid` sätts synkront
+    // och lyssnaren startar direkt, medan profilläsningen är en hel rundtur bort. Med
+    // Firestores lokala cache kan raderna komma först — och då är flaggan fortfarande
+    // false för ett konto som visar sig sakna profil.
+    authState.profileLoading = true;
+    mount();
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: new Date('2025-11-20T18:30:00Z') })]));
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('och kör så fort beskedet landat och profilen fanns (BIN-909, kontroll)', async () => {
+    authState.profileLoading = true;
+    const view = render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap([seedDoc({ tmdbId: 7, updatedAt: new Date('2025-11-20T18:30:00Z') })]));
+    });
+    expect(setDoc).not.toHaveBeenCalled();
+
+    await act(async () => {
+      authState.profileLoading = false;
+      view.rerender(
+        <WatchlistProvider>
+          <Harness />
+        </WatchlistProvider>,
+      );
+    });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
   });
 
   it('does not repair a previous account\'s rows on a same-session uid switch', async () => {

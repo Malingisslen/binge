@@ -103,3 +103,48 @@ describe('AppShell hands a half-deleted account over to the limbo screen (BIN-81
     expect(screen.queryByText('innehåll')).toBeNull();
   });
 });
+
+describe('AppShell hands a returning account with no profile to the reconsent gate (BIN-909)', () => {
+  beforeEach(() => useAuthMock.mockReset());
+
+  it('renders the gate INSTEAD of the page', () => {
+    useAuthMock.mockReturnValue({ uid: 'u1', loading: false, pendingReconsent: true });
+
+    render(<AppShell><p>innehåll</p></AppShell>);
+
+    expect(screen.getByText('Välkommen tillbaka')).toBeTruthy();
+    // Same load-bearing half as the limbo block above: the app not mounting is what
+    // stops `WatchlistContext`'s auto-writers reaching a uid with no profile. Showing
+    // a screen is decoration.
+    expect(screen.queryByText('innehåll')).toBeNull();
+  });
+
+  it('leaves a session with a profile alone', () => {
+    // The control. Without it a component that gated everyone would pass the above.
+    useAuthMock.mockReturnValue({ uid: 'u1', loading: false, pendingReconsent: false });
+
+    render(<AppShell><p>innehåll</p></AppShell>);
+
+    expect(screen.getByText('innehåll')).toBeTruthy();
+    expect(screen.queryByText('Välkommen tillbaka')).toBeNull();
+  });
+
+  it('the limbo screen wins when a session is BOTH marked and gated', () => {
+    // Both states are reachable at once and they want opposite screens. This ordering
+    // is load-bearing in a way the limbo block's own tests cannot pin: both branches
+    // need `uid`, so swapping them is NOT a no-op. An aborted deletion must never be
+    // offered a "create your profile" button.
+    useAuthMock.mockReturnValue({ uid: 'u1', loading: false, deletionInProgress: true, pendingReconsent: true });
+
+    render(<AppShell><p>innehåll</p></AppShell>);
+
+    expect(screen.getByText('Din radering är påbörjad men inte klar')).toBeTruthy();
+    expect(screen.queryByText('Välkommen tillbaka')).toBeNull();
+  });
+
+  it('gate layout exposes the same skip link targeting the focusable #main', () => {
+    useAuthMock.mockReturnValue({ uid: 'u1', loading: false, pendingReconsent: true });
+    render(<AppShell><p>innehåll</p></AppShell>);
+    expectSkipLinkWiring();
+  });
+});

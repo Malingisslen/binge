@@ -261,6 +261,44 @@ och då håller inte fördröjningsläsningen.
   spärren i `userDocWrite.ts` löser det INTE: den läser markören, som per
   definition saknas på den andra enheten.
 
+### Den omstämplade samtyckesposten → stängd, med en kvarvarande lucka för nyregistrerade konton (BIN-909, 2026-08-27)
+
+Efterföljare till sista punkten i avsnittet ovan, som säger att den påhittade
+samtyckesposten bryts ut till en egen biljett. Den biljetten är byggd. Punkten står kvar
+ordagrant — den beskrev öppet arbete — men beskriver inte längre koden.
+
+`ensureUserProfile` skiljer nu på de två personer dess skapandegren tidigare betjänade
+utan att kunna se skillnad: någon som loggar in med Google för första gången, och någon
+som KOMMER TILLBAKA till ett konto vars profil är borta. Det enda som skiljer dem är
+Auth-kontots ålder (`metadata.creationTime`).
+
+- **Tröskel: fem minuter** (Malins beslut 2026-08-27). Ett konto som är äldre än så
+  behandlas som återvändande: ingenting skrivs, och `ReconsentGate` ersätter hela appen
+  tills användaren kryssat i båda rutorna — ålder och villkor var för sig — och tryckt på
+  knappen. Först då skapas `users/{uid}`, och samtyckesstämplarna sätts med
+  `serverTimestamp()` i det ögonblicket. Aldrig bakåtdaterade ur `creationTime`.
+- **Felriktningen är vald.** En ny användare vars inloggning drar över fem minuter får
+  kryssa i två rutor hon ändå skulle kryssat i. Det motsatta felet är den påhittade
+  posten. Saknas `creationTime` helt läses kontot som NYTT — en bugg där ska kosta en
+  omstämpling i ett sällsynt fall, inte låsa ute varje ny registrering.
+- **ACCEPTERAD RESTLUCKA: ett Auth-konto som självt är högst lika gammalt som tröskeln.** Det som mäts
+  är Auth-kontots ålder, och den rörs inte av att `users/{uid}` raderas — ett konto som
+  passerat tröskeln gatas alltså hur kort tid som helst efter en radering. Fallet som INTE
+  täcks är ett konto som är HÖGST fem minuter gammalt — jämförelsen är ett strikt `>`, så
+  exakt fem minuter ligger kvar innanför — och som redan saknar profil: registrering, radering, kaskaden faller innan Auth-kontot hinner bort, och
+  sessionen når en enhet utan markör inom fönstret. Ingen mindre siffra stänger den — varje fast tröskel
+  har samma gräns — och den enda strukturella fixen vore en varaktig signal om att ett uid
+  en gång haft en profil, vilket ADR 0019 och 0022 uttryckligen förbjuder under
+  `users/{uid}`. Skriven här i stället för lämnad underförstådd, på #6 Dataskyddsombudets
+  villkor.
+- **Ingen varaktig markör finns, med flit.** Spärren lever i minnet i den flik som läste
+  auth-tillståndet. En annan flik är ogatad tills dess eget auth-tillstånd omprövas, och
+  det självläker vid omladdning. Det är samma avvägning som ADR 0022 redan gjort för
+  raderingsmarkören, av samma skäl.
+- **Företräde:** en påbörjad radering vinner. Är sessionen både märkt och gammal visas
+  limbo-skärmen, inte samtyckesspärren — ett avbrutet konto ska aldrig erbjudas en knapp
+  som skapar profilen på nytt.
+
 ### Avbrott mitt i kaskaden → kör om tills det är tomt
 
 `applyDeletionPlan` committar i klumpar om ≤450 operationer. Varje klump är
