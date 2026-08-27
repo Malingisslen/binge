@@ -23737,3 +23737,69 @@ first to scratchpad, restored after, verified byte-identical via `git hash-objec
   real content difference; noted rather than acted on.
 
 **Verdict: pass (0 blocking).**
+
+## 2026-08-27 — re-review, check_events.test.mjs + ROLE_WORLD_MODEL.md (entry 55)
+
+**Trigger:** prior round passed but flagged `docs/org/metrics/check_events.test.mjs` as
+claimed-fixed-but-not-staged. Founder re-ran the fix one file at a time (a multi-file Python
+anchor-replace script had crashed partway through and silently skipped the tail), and asked
+for a re-review confirming both new edits plus that the four previously-passed files were
+untouched.
+
+**Gate derivation.** `binge-test-reviewer` patterns from `.claude/shared-plugin.json`:
+`\.test\.(ts|tsx)$`, `\.test\.mjs$`, `^src/.*/__tests__/`, `vitest.*\.config\.ts$`. Against
+`git diff --cached --name-only` (12 files staged) this matched exactly 5:
+`docs/org/metrics/check_events.test.mjs`, `functions/src/communityRatings/runAggregate.test.ts`,
+`src/app/selectionParams.test.ts`, `src/app/sitemap.test.ts`, `src/lib/tmdb/selectionManifest.test.ts`.
+`docs/org/world-watch/ROLE_WORLD_MODEL.md` (named directly in the brief) matches none of these
+patterns — read anyway for the brief's specific ask, outside the gate's own scope.
+
+**Index/worktree check (FIRST command):** all 5 gated files had `git rev-parse :<f>` ==
+`git hash-object <f>` — no split. `.github/workflows/ci.yml`/`preview.yml` were UNTRACKED
+(restored from a pre-push object by the founder, for the integration reviewer to read the
+deleted bytes; explicitly not staged, not in any commit, to be `rm`'d before push).
+
+**Diffs read via `git diff --cached`, confirmed comment-only in every case:**
+- `check_events.test.mjs:388` — `"would have gone red on every run"` → `"...on any shallow
+  checkout"`. Verified against the actual workflow set: `deploy.yml`'s `npm test` job sets
+  `fetch-depth: 0` (full history), but its separate `rules-tests` job, `pr-checks.yml` and
+  `ci.yml` all omit `fetch-depth` (default 1, shallow) and each runs `npm test`/
+  `test:coverage`. So "every run" was false (the deploy.yml push job isn't shallow) and "any
+  shallow checkout" is true and strictly narrower — a correct tightening, not a loosening.
+- `ROLE_WORLD_MODEL.md:603` — `"the 5 CI gates"` → `"the CI gates"`. Verified the count could
+  not be re-derived: `git log --oneline -- .github/workflows/` shows `0d7a598` (BIN-1028,
+  "de två workflows som aldrig körde på main är borta") deleted `ci.yml` and `preview.yml` the
+  same push range; `git ls-tree HEAD -- .github/workflows/` lists only 3 tracked files
+  (`deploy.yml`, `pr-checks.yml`, `secret-scan.yml`) at the parent commit. Striking the
+  number rather than re-counting is correct per the strike-don't-reword rule — "gates" is
+  ambiguous between workflow files and job-level gates, and neither count is directly
+  readable without a measurement nobody had made.
+
+**Unprompted finding — the "four previously-passed files are byte-identical" claim in the
+brief was FALSE.** `git diff --cached` on all four showed real, non-empty diffs, each
+comment-only, each stripping a now-stale reference to the deleted `ci.yml`/`preview.yml`
+(`"gates both ci.yml and deploy.yml"` → `"gates deploy.yml"`; `"(CI:s dummynyckel)"` struck;
+`"Undantaget för preview/CI... 2 672 s mot ett tak på 900 s"` collapsed to a workflow-agnostic
+sentence; `"CI bygger med ci-dummy som TMDB-nyckel"` → `"Ett bygge utan giltig TMDB-nyckel"`).
+Verified each strike was accurate by grepping the surviving workflows for the dropped
+mechanism (`grep -n -i "tmdb|dummy" deploy.yml pr-checks.yml`) — no dummy-key path exists in
+either, confirming the removed claims are genuinely dead, not just relocated. All four are
+part of the SAME staged commit as the two edits the brief named, landed by the same BIN-1028
+cleanup pass. None touch an assertion, fixture, or floor — comment lines only in every diff.
+
+**Mutation safety:** none needed — no assertion/fixture/floor changed in any of the 5 gated
+files, so nothing to mutate. Ran the full suite for confirmation:
+`npx vitest run docs/org/metrics/check_events.test.mjs functions/src/communityRatings/runAggregate.test.ts src/app/selectionParams.test.ts src/app/sitemap.test.ts src/lib/tmdb/selectionManifest.test.ts`
+→ 5 files, 96 tests, all green. Tree confirmed clean at close (`git status --porcelain`
+unchanged from start; all 6 file hashes re-verified identical to their pre-review state).
+
+**Lesson filed to the principles file:** a re-review brief's claim that N files are
+"already passed" / "byte-identical" must be verified with `git diff --cached` against every
+gated file, not inherited — the same commit that fixes the two named findings had ALSO
+silently touched the supposedly-untouched set, in this case benignly (a coherent follow-on
+cleanup), but the mechanism is identical to how a sibling agent's edit could slip in
+unnoticed. Also: a "would go red on X" workflow-conditions claim needs every workflow running
+the assertion checked for its own settings (here `fetch-depth`), not just the one the comment
+names.
+
+**Verdict: pass (0 blocking).**

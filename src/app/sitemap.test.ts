@@ -137,11 +137,9 @@ describe('sitemap — urvalsmanifestet (BIN-823)', () => {
     expect(() => sitemap()).toThrow(/urvalsmanifestet för person saknas/);
   });
 
-  // Undantaget för preview/CI. Utan det är preview-lättnaden bara halv: en
-  // strypt personhärledning som slår i räddningstaket skriver aldrig något
-  // manifest, så previewen hade gått röd HÄR i stället för på golvet, trots
-  // SELECTION_ALLOW_THIN. Integrationsgranskningen 2026-08-08 spårade den
-  // grenen till den mätta persontiden 2 672 s mot ett tak på 900 s.
+  // Undantaget. Utan det är lättnaden bara halv: en strypt personhärledning som
+  // slår i ett tidstak skriver aldrig något manifest, så bygget hade gått röd HÄR
+  // i stället för på golvet, trots SELECTION_ALLOW_THIN.
   it('faller tillbaka på frö-id:n i stället för att kasta när tunt urval är tillåtet', () => {
     process.env.SELECTION_ALLOW_THIN = '1';
     rmSync(join(dir, 'selection-person.json'));

@@ -8,7 +8,7 @@
 // one. `runAggregate.ts` imports only `./logic` and `../shared/mediaTypeDocId` — no
 // `firebase-admin` — so this file matches `vitest.config.ts`'s
 // `functions/src/**/*.{test,spec}.ts` glob and runs under plain `npm test`, which gates
-// both ci.yml and deploy.yml. Emulator cost paid only where an emulator is the point.
+// deploy.yml. Emulator cost paid only where an emulator is the point.
 //
 // Deviation recorded rather than hidden: #13 Data/Integrations asked for `aggregateDocId`
 // to MOVE into `logic.ts` as a pure helper. It stays in `runAggregate.ts` because its two

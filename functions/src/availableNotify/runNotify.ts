@@ -5,7 +5,7 @@
  * Why it lives here and not in index.ts: index.ts imports firebase-admin +
  * firebase-functions, and NEITHER is installed in the root toolchain (`npm ci` at
  * the repo root is all CI's `rules-tests` job installs — see
- * .github/workflows/ci.yml). So any file the emulator harness must import has to
+ * .github/workflows/deploy.yml). So any file the emulator harness must import has to
  * be admin-free, exactly like ./logic.ts and ../releaseNotify/logic.ts. This
  * module therefore takes ALL of its outside world as one injected PORT
  * (`NotifyIo`) and imports nothing but pure siblings — index.ts implements the

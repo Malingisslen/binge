@@ -344,8 +344,8 @@ describe('täckningsgolvet', () => {
     expect(() => assertCoverageFloor('movie', 150, 0)).toThrow();
   });
 
-  // CI bygger med ci-dummy som TMDB-nyckel: varje hämtning failar och urvalet
-  // BLIR tunt, med flit. Den körningen måste säga det uttryckligen.
+  // Ett bygge utan giltig TMDB-nyckel: varje hämtning failar och urvalet BLIR
+  // tunt, med flit. Den körningen måste säga det uttryckligen.
   it('stängs av helt av SELECTION_ALLOW_THIN', () => {
     process.env.SELECTION_ALLOW_THIN = '1';
 

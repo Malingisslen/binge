@@ -385,7 +385,7 @@ describe('the live events.jsonl', () => {
     // Resolved from HEAD, not from a hard-coded historical sha. The first version named
     // 851696d — six commits back — and the integration review measured what that costs:
     // A shallow checkout sits at the default depth 1, where every historical
-    // sha is "unknown revision", so this would have gone red on every run while staying
+    // sha is "unknown revision", so this would have gone red on any shallow checkout while staying
     // green on the push path nobody watches. HEAD exists at any depth. The row's `ts` is
     // derived from the commit's own date so the freshness rule is genuinely satisfied
     // rather than dodged with a distant constant.

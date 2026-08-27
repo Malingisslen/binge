@@ -600,7 +600,7 @@ behavior changes change the working agreement.
 
 Signals: Claude Code releases (auto-mode safety/classifier, agent/permission, MCP,
 sandbox/destructive-command guards); Next.js release cadence + upgrade guides
-(deferred-upgrade decisions); GitHub platform/Actions changes touching the 5 CI gates
+(deferred-upgrade decisions); GitHub platform/Actions changes touching the CI gates
 + push-to-main deploy; Dependabot grouping changes; React cadence (gates Next.js
 timing).
 

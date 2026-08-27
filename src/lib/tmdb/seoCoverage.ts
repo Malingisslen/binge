@@ -159,7 +159,7 @@ export function latinDisplayIds(items: ReadonlyArray<SeoTitledItem>): number[] {
  * "Page is missing generateStaticParams()" och bryter builden.
  *
  * Normalt fyller TMDB-fetchen listorna med tusentals IDs. Men i miljöer utan
- * giltig TMDB-nyckel (t.ex. CI:s `ci-dummy`) failar alla fetchar och listan
+ * giltig TMDB-nyckel failar alla fetchar och listan
  * blir tom. Dessa handfull välkända, stabila TMDB-IDs garanterar att builden
  * alltid producerar ≥1 statisk sida per route. I produktion (riktig nyckel)
  * är de bara en delmängd av den fulla listan — ingen effekt på täckningen.

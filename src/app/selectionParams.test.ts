@@ -124,8 +124,8 @@ describe.each(ROUTES)('$name — urvalskopplingen (BIN-823)', (route) => {
     await expect(route.run()).rejects.toThrow(SelectionFloorError);
   });
 
-  // Den positiva tvillingen: när bygget medvetet får ha ett tunt urval (CI:s
-  // dummynyckel) ska en kraschad hämtning INTE fälla något.
+  // Den positiva tvillingen: när bygget medvetet får ha ett tunt urval ska en
+  // kraschad hämtning INTE fälla något.
   //
   // Den ger ett svar värt mer än fallbacken: det som byggs är FRÖNA — de
   // sidor Google faktiskt har indexerat. Även ett bygge där varenda TMDB-anrop

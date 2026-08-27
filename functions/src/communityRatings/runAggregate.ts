@@ -6,7 +6,7 @@
  * Why it lives here and not in index.ts: index.ts imports firebase-admin +
  * firebase-functions, and NEITHER is installed in the root toolchain (`npm ci` at
  * the repo root is all CI's `rules-tests` job installs — see
- * .github/workflows/ci.yml). So any file the emulator harness must import has to
+ * .github/workflows/deploy.yml). So any file the emulator harness must import has to
  * be admin-free, exactly like ./logic.ts. index.ts implements the port with the
  * Admin SDK; `src/test/rules/community-ratings-orchestrator.test.ts` implements it
  * with the client SDK against a real Firestore emulator. Third use of the pattern
