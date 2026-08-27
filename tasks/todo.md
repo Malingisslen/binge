@@ -94,7 +94,7 @@ Sju roller, tre block (#27, #2, #19), alla upplösta nedan.
     `firebase.json`. *(diff)*
 20. Precedens `deletionInProgress` FÖRE `pendingReconsent`, med test som driver båda
     sanna. *(diff)*
-21. `nextPath`/`sessionStorage` orörd över håll → submit → släpp. *(diff)*
+21. `nextPath` orörd över håll → submit → släpp. *(diff)*
 
 **#14 Arkitekt** (blockerar ej)
 22. `pendingReconsent` trädd exakt som `deletionInProgress`, default `false` i
