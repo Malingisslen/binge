@@ -127,8 +127,7 @@ by matching commit SUBJECT LINES and certified a docs commit for a code claim, s
 version refuses the inference and discloses where verification stops instead of guessing.
 **It blocks no commit — but it does gate the deploy, and that is worth knowing before the
 first one fires.** `check_events.test.mjs` asserts the LIVE `events.jsonl`, and `npm test` is
-a blocking step in `deploy.yml` and `preview.yml` (and runs without `continue-on-error` in
-`ci.yml`). Nothing here stops the sprint engine writing another past-tense
+a blocking step in `deploy.yml`. Nothing here stops the sprint engine writing another past-tense
 `declined-unattended-shipped` row tomorrow, so the next one turns CI red and holds the
 production hosting deploy of unrelated code until someone appends a `correction`. That is a
 deliberate trade — the row means unreviewed code reached main, which is worth stopping for —
@@ -139,7 +138,7 @@ rule.
 
 **And that escape hatch has a TRIGGER, so it does not need re-arguing.** Binding condition
 C2 from #25 Engineering Manager / Release Manager's blind critique, 2026-08-17: *the first
-time this assertion reddens `deploy.yml` or `preview.yml` for a commit unrelated to the
+time this assertion reddens a workflow run for a commit unrelated to the
 flagged ticket, it converts to a CLI-only check on the next commit that touches it — not
 re-litigated as a fresh decision.* Whoever meets it at 2am inherits a made decision, not an
 open question. Until that happens the live-file assertion stays: a false row means unreviewed
@@ -153,7 +152,7 @@ on an UNSTAGED row — which a sprint that just wrote it will read as its own ba
 Check `git status` for `events.jsonl` before suspecting the code under test. CI and the
 deploy only redden once the row is committed. Claims written before
 `2026-08-16T00:00:00.000Z` predate the rule and are grandfathered; the run prints how many.
-In a SHALLOW checkout (`ci.yml` and `preview.yml` use the default depth 1; only `deploy.yml`
+In a SHALLOW checkout (any workflow that omits `fetch-depth`; `deploy.yml`
 sets `fetch-depth: 0`) no historical sha resolves, so the existence and freshness lookups are
 reported as *unverified* rather than answered as absence — otherwise the first row written to
 this contract would fail CI while passing on deploy, and a check that punishes the first

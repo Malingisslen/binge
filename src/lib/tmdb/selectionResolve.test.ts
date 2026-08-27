@@ -42,7 +42,7 @@ beforeEach(() => {
   // ska göra mot ett riktigt bygge. Golv-testerna längst ned tar bort flaggan.
   process.env.SELECTION_ALLOW_THIN = '1';
   // De här testerna kör medvetet räddnings- och felvägar, som skriver
-  // `::warning::`-rader. ci.yml kör `npm test`, så utan spy blir varje grön
+  // `::warning::`-rader. Deploy-workflowen kör `npm test`, så utan spy blir varje grön
   // körning taggad med sju falska GitHub Actions-annoteringar.
   stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 });
@@ -210,7 +210,7 @@ describe('resolveSelection — fastaket', () => {
     expect(REFRESH_DERIVE_TIMEOUT_MS).toBeGreaterThan(RESCUE_DERIVE_TIMEOUT_MS);
   });
 
-  // deploy.yml:164 är en ternär: `schedule/full_refresh ? 175 : 45`. Båda
+  // deploy.yml:s `timeout-minutes` på byggsteget är en ternär: `schedule/full_refresh ? 175 : 45`. Båda
   // grenarna är egna gränser, så båda taken behöver sin egen pinne. Testat
   // 2026-08-08: 150 → 200 min överlevde 374/374, alltså helt opinnat — och det
   // gäller just veckobygget, den körning hela regimen finns för.
@@ -398,7 +398,7 @@ describe('resolveSelection — golvet och fröna', () => {
     expect(ids).toEqual([7, 42, 43]);
   });
 
-  // Exakt CI-fallet: dummynyckel ⇒ varje hämtning failar ⇒ härledningen ger
+  // Nyckellöst bygge: dummynyckel ⇒ varje hämtning failar ⇒ härledningen ger
   // noll. Next kräver ändå ≥1 param, så fallbacken måste finnas — och den
   // körningen måste ha sagt att den vet om att urvalet blir tunt.
   it('faller tillbaka på fallback-id när ingenting kunde härledas och tunt är tillåtet', async () => {

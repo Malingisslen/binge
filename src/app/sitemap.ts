@@ -43,7 +43,7 @@ export const dynamic = 'force-static';
  * Körs bara vid build. **Inga TMDB-anrop härifrån längre** — filen läser en
  * lokal artefakt som pre-rendren skrev i en tidigare byggfas. Den KASTAR om
  * manifestet saknas i stället för att falla tillbaka — utom under
- * `SELECTION_ALLOW_THIN` (CI/preview), där den returnerar frö-id:na. Se
+ * `SELECTION_ALLOW_THIN`, där den returnerar frö-id:na. Se
  * selectionOrThrow nedan för varför en halv sitemap är värre än inget bygge,
  * och varför undantaget ändå är rätt.
  */
@@ -86,13 +86,11 @@ function staticEntries(): MetadataRoute.Sitemap {
  * bältet till det hängslet.
  *
  * …UTOM under `SELECTION_ALLOW_THIN`, samma undantag som golvet. Utan det vore
- * preview-lättnaden bara halv: en strypt personhärledning som slår i
- * räddningstaket skriver ALDRIG något manifest (`resolveSelection` behåller
- * bara det befintliga, och på en kall preview finns inget), så previewen hade
- * gått röd här i stället för på golvet — den mätta persontiden är 2 672 s mot
- * ett tak på 900 s, alltså den förväntade grenen och inte ett hörnfall.
+ * lättnaden bara halv: en strypt personhärledning som slår i ett tidstak skriver
+ * ALDRIG något manifest (`resolveSelection` behåller bara det befintliga, och på en
+ * kall cache finns inget), så bygget hade fällt här i stället för på golvet.
  * Undantaget är säkert av samma skäl som golvets: `deploy.yml` sätter aldrig
- * flaggan, och en preview-kanals sitemap är aldrig binge.nu:s.
+ * flaggan, och det är enda vägen till binge.nu.
  */
 function selectionOrThrow(
   type: 'movie' | 'tv' | 'person',
@@ -200,7 +198,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // pre-rendren precis skrivit: saknas den har något gått grundligt fel, och en
   // halv sitemap vore ett aktivt felaktigt påstående till Google om vilka sidor
   // sajten har. Låt det kasta — på den enda väg som når binge.nu. Under
-  // `SELECTION_ALLOW_THIN` (bara CI och preview) faller selectionOrThrow
+  // `SELECTION_ALLOW_THIN` faller selectionOrThrow
   // tillbaka på fröna i stället; de byggena publicerar ingenting till Google.
   return [
     ...staticEntries(),

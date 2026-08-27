@@ -153,9 +153,9 @@
 // questions, both answers true. A rule keyed on that pair would refuse precisely the rows
 // the engine writes when it does the right thing.
 //
-// SHALLOW CHECKOUTS. ci.yml and preview.yml check out at the default depth 1 while
-// deploy.yml uses `fetch-depth: 0`, so a history walk sees one commit on two of the three
-// workflows. In that state this check reports `unverified` and asserts nothing — never a
+// SHALLOW CHECKOUTS. A workflow that omits `fetch-depth` checks out at depth 1 while
+// deploy.yml uses `fetch-depth: 0`, so a history walk sees one commit wherever the
+// checkout was shallow. In that state this check reports `unverified` and asserts nothing — never a
 // silent pass, never a false red. Same three-way honesty as the sibling.
 //
 // Run:  node docs/org/metrics/check_review_coverage.mjs

@@ -38,10 +38,11 @@ metadata som får uppdateras) och `TMDB_SELECTION_REFRESH` (om urvalet ska
 härledas om). Förlorar man cachen kostar nästa bygge en full härledning under
 fastak, och ett urval som ändå blir för tunt FÄLLER bygget (täckningsgolvet) i
 stället för att deploya en förkrympt sajt. `SELECTION_ALLOW_THIN=1` stänger av
-både golvet och sitemapens kast, och sätts i `ci.yml` (dummynyckel) OCH
-`preview.yml` (ingen cache-restore, ingen step-timeout — ett tunt urval är där
-det normala). `deploy.yml` sätter den ALDRIG, och det är den egenskapen hela
-skyddet vilar på. Hela resonemanget: ADR 0018.
+både golvet och sitemapens kast. Sedan BIN-1028 (2026-08-27) sätts den av INGEN
+workflow — de två som gjorde det är raderade — så den är numera ett rent lokalt
+verktyg. `deploy.yml` sätter den ALDRIG, och det är den egenskapen hela skyddet
+vilar på. Hela resonemanget: ADR 0018, vars beskrivning av de två raderade
+workflowsen är historik.
 
 Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet är
 `noindex` by default, så en icke-pre-renderad titel indexeras opålitligt
@@ -49,8 +50,10 @@ Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet
 
 Workflows ligger i `.github/workflows/`. Det som inte syns av filnamnen: **`deploy.yml`
 deployar BARA hosting** — rules och functions kräver alltid en manuell `firebase deploy`
-först (`ci.yml` tester/lint, `preview.yml` PR-previews, `secret-scan.yml` läcksökning —
-inga av dem rör rules/functions).
+först. `pr-checks.yml` kör lint/typecheck/test på pull requests (dit dependabot-bumpar
+landar), `secret-scan.yml` läcksökning. Ingen av dem rör rules eller functions, och ingen
+av dem bygger — bara `deploy.yml` gör det, och därmed är den enda som ser en nyckel.
+Härled listan i stället för att lita på den här meningen: `ls .github/workflows/`.
 
 ## Hosting-lagring: två kopplade kostnadskontroller
 
@@ -76,11 +79,9 @@ Ingen hämtar den: klient-routern bygger sin RSC-URL som
 `__next._tree.txt`-payloaderna, sitemap:en eller service workern.
 
 Den **ignoreras vid uppladdning, raderas inte efter bygget**. En delete-step i
-`deploy.yml` hade missat `preview.yml` (som deployar samma `out/` till en
-preview-kanal på samma projekts lagring) och varje lokal `firebase deploy` —
-och då hade previewen serverat en annan filuppsättning än prod, vilket gör
-PR-repetitionen otrogen för exakt den här klassen av ändring. En rad i
-`firebase.json` gäller alla tre vägarna.
+`deploy.yml` hade missat varje lokal `firebase deploy` — och då hade det man testar
+för hand serverat en annan filuppsättning än prod, vilket gör repetitionen otrogen
+för exakt den här klassen av ändring. En rad i `firebase.json` gäller båda vägarna.
 
 Premissen är ett Next.js-**internt** beteende, och repot tar Next-minors via den
 veckovisa dependabot-gruppen `react-next`. Därför verifierar steget *"Verify the

@@ -268,9 +268,9 @@ describe('findCoverageGaps', () => {
   });
 
   it('a shallow checkout asserts NOTHING — neither pass nor fail', () => {
-    // ci.yml and preview.yml check out at depth 1. A history walk there sees one commit, so
-    // every eligible commit would look absent. Reporting that as violations would turn every
-    // PR red; reporting it as clean would be a lie. It reports `unverified`.
+    // A shallow checkout sits at depth 1. A history walk there sees one commit, so
+    // every eligible commit would look absent. Reporting that as violations would turn
+    // the run red; reporting it as clean would be a lie. It reports `unverified`.
     const r = findCoverageGaps([commit('a8', 'fix(x): thing (BIN-999)')], reviewed, {
       historyAvailable: false,
     });
@@ -540,8 +540,8 @@ describe('the live repo', () => {
   it('every feat/fix commit since the epoch carries a review row', () => {
     // The real log and the real history, the way the sibling's live case works.
     //
-    // KNOW WHAT THIS ASSERTION COSTS: `npm test` is a blocking step in deploy.yml and
-    // preview.yml, so the next feat/fix commit that ships without anyone logging a review
+    // KNOW WHAT THIS ASSERTION COSTS: `npm test` is a blocking step in deploy.yml,
+    // so the next feat/fix commit that ships without anyone logging a review
     // row turns this red and holds the production deploy of unrelated code. Deliberate —
     // that is the silence the check exists to remove — but the remedy is to LOG THE ROW
     // (`ran:true`, or `ran:false` with the pull-out reason written on the ticket), never to

@@ -6,7 +6,7 @@
 // mid-line and the file fails to PARSE — but only on a checkout where it has
 // CRLF endings, i.e. only on Windows (core.autocrlf=true), never in CI. That
 // makes it a failure no remote gate can see. Nothing runs this file as a bare
-// executable: ci.yml, deploy.yml and the commit gate all invoke it as
+// executable: deploy.yml and the commit gate both invoke it as
 // `node scripts/check-workflow-map.mjs`, so the shebang bought nothing.
 //
 // The interactive workflow map (docs/workflow-map.html) is data-driven: its

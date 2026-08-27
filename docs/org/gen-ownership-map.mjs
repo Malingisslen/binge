@@ -198,7 +198,7 @@ export function buildMap(tracked) {
 // Nothing calls this script automatically — not package.json, not any workflow or hook;
 // only the interactive /refresh-dossiers skill runs it. The enforcement is
 // gen-ownership-map.test.mjs, which `vitest.config.ts` includes and `npm test` runs, and
-// `npm test` gates ci.yml AND deploy.yml — the only production path. So a new gap fails
+// `npm test` gates deploy.yml — the only production path. So a new gap fails
 // the DEPLOY. For that reason the test asserts the ratchet's DIRECTION, never equality
 // with the baseline: shrinking the gap list is the desired outcome and must never break
 // a deploy, even though `main()` below only logs it and returns 0.
@@ -235,7 +235,7 @@ function writeAcceptedGaps(gaps) {
           'enumerates file-by-file, without a pattern of their own. The router still reviews them by ' +
           'directory inheritance, but no role has named them. This is the BASELINE the generator ' +
           'ratchets against — a NEW gap fails `npm test` (docs/org/gen-ownership-map.test.mjs), ' +
-          'which gates ci.yml AND deploy.yml — so a new gap fails the DEPLOY, not just this script. ' +
+          'which gates deploy.yml — so a new gap fails the DEPLOY, not just this script. ' +
           'Shrink it by naming files in docs/role-responsibilities.md; re-baseline only on purpose.',
         generatedBy: 'docs/org/gen-ownership-map.mjs --update-gaps',
         count: gaps.length,

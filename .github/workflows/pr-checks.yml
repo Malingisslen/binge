@@ -1,0 +1,76 @@
+name: PR checks
+
+# The pre-merge check for pull requests, which in this repo means dependabot
+# bumps — nobody else opens one (solo, push-direct-to-main per CLAUDE.md).
+#
+# WHY THIS EXISTS (BIN-1028, Malin's decision 2026-08-27). `ci.yml` and
+# `preview.yml` were deleted because neither ever ran on main and both had been
+# red for months. That was right for main, but the two DID gate `pull_request`,
+# so deleting them alone would have left a dependency bump reaching main with
+# nothing run on it at all — the first execution would have been the production
+# deploy. This file is the deliberate replacement for exactly that gap, and
+# nothing more.
+#
+# WHAT IT DELIBERATELY DOES NOT DO:
+#
+#   · No `npm audit`. That is the step that made `ci.yml` red on every run, and
+#     lint never even ran behind it. Some of what it reported is decided (BIN-603,
+#     production deps); the rest is dev-only and was never examined. Derive the
+#     split rather than trusting a number here — `npm audit --audit-level=high`
+#     against `npm audit --omit=dev --audit-level=high`. `deploy.yml` still
+#     surfaces audit findings as warnings on the path that ships.
+#
+#   · No build, and therefore NO SECRETS. `preview.yml` handed production
+#     Firebase credentials to a build triggered by a dependabot diff; #4
+#     Security Architect named that as a reason its removal was a net gain
+#     rather than a loss. This job installs, lints, typechecks and tests — none
+#     of which needs a key — so a PR can never reach one.
+#
+# The job is named `quality` on purpose: that is the status check the branch
+# protection rule on main requires, and since `ci.yml` was its only producer the
+# rule had become permanently unsatisfiable (every push printed "Bypassed rule
+# violations"). This makes it satisfiable again for pull requests. It does NOT
+# fix direct pushes to main, which do not run this workflow — removing that
+# required check, or scoping it, is a GitHub-settings action only Malin can take.
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    # Nothing here calls the GitHub API — no PR comment, no check-run write (the
+    # deleted preview.yml needed both). Pinned read-only anyway, so a step pasted
+    # in later under this trigger inherits the narrow scope rather than the repo
+    # default: #4 Security Architect's hardening note, 2026-08-27.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The same suite deploy.yml gates on. It carries the org checks that read
+      # the working tree — the ownership map and the route selftests — so a
+      # dependency bump that breaks one of those is caught here rather than on the
+      # deploy. The history-reading checks are NOT covered: this is a shallow
+      # checkout, and they bail to `unverified` rather than assert on one commit.
+      - name: Test
+        run: npm test

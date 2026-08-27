@@ -618,7 +618,7 @@ describe("the reviewers' own instructions and the hooks reach a gate (BIN-869)",
 // TOOLING_CODE_FILES and already matched by the blocking gate — so weakening the check
 // itself cannot slip past a reviewer, the hole BIN-869 closed one file over.
 // `fs.globSync` needs Node >= 22 (still flagged experimental there, hence the one-line
-// warning in the run output); ci.yml, deploy.yml and preview.yml all pin node-version 22.
+// warning in the run output); `deploy.yml` pins node-version 22.
 const TOOLING_MJS = globSync(['docs/**/*.mjs', 'scripts/**/*.mjs'], { cwd: REPO_ROOT }).map(posix);
 
 // Files that a `.test.mjs` sibling nominates as candidates but that are deliberately NOT

@@ -174,7 +174,7 @@ function stampDossier(payload, repoRoot, rel) {
 //   SEVERITY — what can go unnoticed is PROSE drift on a node the map already lists.
 //     Structure is not affected: scripts/check-workflow-map.mjs walks the tree for node
 //     paths, flow-step references and all three universe lists (routes, functions, crash
-//     boundaries), both directions, and ci.yml + deploy.yml run it. A rename, a deletion,
+//     boundaries), both directions, and deploy.yml runs it. A rename, a deletion,
 //     a new route or Cloud Function still fails regardless of how the code arrived.
 //   SCOPE — this flag file only. No gate is weakened and no reviewer is skipped.
 //   TIME — re-open when a commit that applied a held batch (`git apply` of a patch file

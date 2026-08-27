@@ -152,15 +152,19 @@ is the real boundary.
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
   → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`
 - **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
-  blocks rather than assuming: `ci.yml` fires on `pull_request: branches:[main]` and
-  `push: branches-ignore:[main]`; `preview.yml` on `pull_request: branches:[main]` only.
-  This repo pushes direct to main with no PRs, so neither fires there. `deploy.yml`
-  (`push: branches:[main]`) and `secret-scan.yml` (bare `push:`) do. What this does NOT
-  mean is that main ships unchecked — `deploy.yml` runs Lint, Typecheck and Test itself,
-  and gates on its own `rules-tests` job. The one gate that genuinely differs is
-  `npm audit`: blocking in `ci.yml`, advisory in `deploy.yml` by BIN-344's decision.
-  Cite the workflow whose trigger matches the event, never "CI".
-  → `.github/workflows/ci.yml`, `.github/workflows/preview.yml`, `.github/workflows/deploy.yml`, `.github/workflows/secret-scan.yml`
+  blocks rather than assuming — read the `on:` block of every file in the workflows
+  directory (written without backticks on purpose: the generator harvests every
+  backtick-quoted tracked path in a section, so quoting the directory would seat this
+  role on the whole tree). A bare `push:` has no `branches:` key to grep for and is
+  invisible to a pattern search, which is why this says read rather than grep. The two
+  that fired on no main push at all were DELETED on Malin's decision 2026-08-27 rather
+  than repaired. They did gate `pull_request`, which is where dependabot bumps land, so
+  `pr-checks.yml` replaces exactly that — lint, typecheck and test, deliberately without
+  `npm audit` (the step that made the old one red on every run) and without a build, so a
+  pull request never touches a secret. `npm audit`
+  is advisory on the surviving path by BIN-344's decision. Cite the workflow whose
+  trigger matches the event, never "CI".
+  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `.github/workflows/secret-scan.yml`
 
 ## 5. Legal / GDPR Counsel
 
@@ -224,7 +228,7 @@ Owns CI/CD, hosting, observability, and incident response.
 
 - The GitHub Actions workflows; the rules-tests deploy gate; the **drift-guard**
   blocking silent rules/functions deploys.
-  → `.github/workflows/{ci,deploy,preview}.yml`
+  → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`
 - **The gitleaks secret scan** (BIN-922). It was the one workflow with no owning role:
   the blocking gate covers the whole workflows directory by prefix, so a change to it
   was stopped at commit time by a reviewer while the advising side called it
@@ -232,11 +236,12 @@ Owns CI/CD, hosting, observability, and incident response.
   remedy was an ownership decision for this role or #20, with nothing tracking it.
   Written without a backticked directory on purpose: the generator harvests every
   backtick-quoted tracked path in a section, so naming the workflows directory in a
-  sentence ABOUT it would have handed this role all four workflows as one pattern.
+  sentence ABOUT it would have handed this role the whole workflows directory as one
+  pattern.
   Seated here rather than with #4 Security Architect even though its SUBJECT is
   credential leakage: what a change to this file touches is CI plumbing — the pinned
   gitleaks version, the download step, the exit-code flag that decides whether a hit
-  fails the job — which is this role's surface, the same as the other three workflows.
+  fails the job — which is this role's surface, the same as the workflows above.
   #4 remains the escalation for what counts as a leak, which lives in the allowlist
   config rather than in the workflow.
   → `.github/workflows/secret-scan.yml`
@@ -410,11 +415,11 @@ Owns the human interface to the system.
 
 Owns what automated tests can't reach (there is **no E2E suite**).
 
-- Per-PR preview-channel testing (7-day TTL); post-deploy smoke tests
+- Post-deploy smoke tests
   (RUNBOOK.md has no smoke-test checklist — §11 is "Kontakter + resurser"; the closest
   is §0 Quick triage); cross-browser/device + dark-mode validation; real
   Firebase auth/rules/FCM flow verification; SLO regression watching.
-  → `.github/workflows/preview.yml`, `docs/RUNBOOK.md`, `docs/SLO.md`
+  → `docs/RUNBOOK.md`, `docs/SLO.md`
 
 ## 21. Technical Writer / Documentation
 
@@ -472,8 +477,7 @@ Owns the process.
   into acceptance criteria, for ad-hoc work as well as sprints); the deploy
   drift-guard (rules/functions never auto-ship); the quality gates that run on the
   push-to-main path — `deploy.yml` carries Lint, Typecheck, Test and its own
-  `rules-tests` job, because `ci.yml`'s triggers never fire there (BIN-1028), and it
-  downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
+  `rules-tests` job; it downgrades `npm audit` to advisory by BIN-344's decision; BIN-* issue
   taxonomy + sprint cadence; Dependabot grouping + framework upgrades (React 19 /
   Next 16 landed); the "explain in product terms" communication norm.
   → `CLAUDE.md` (working agreement + cast-the-panel rule), `.github/workflows/deploy.yml`, `.github/dependabot.yml`

@@ -144,7 +144,7 @@ function correctionKey(ts, ticket) {
  *          resolved. Then the two pure rules (a claim must carry a sha; it must look like
  *          one) still apply, and the existence/freshness lookup is recorded as UNVERIFIED
  *          rather than silently answered "does not exist". Those are three different
- *          states and must never collapse into one: `ci.yml` and `preview.yml` check out at
+ *          states and must never collapse into one: a SHALLOW checkout sits at
  *          depth 1, so without this every honest row would fail there while the same row
  *          passed on `deploy.yml` (fetch-depth 0) and locally. The check would then punish
  *          the first writer who obeyed it — which is how a check gets switched off.
@@ -264,7 +264,7 @@ export function gitCommitDate(sha) {
 }
 
 /**
- * True when this working copy holds full history. `ci.yml` and `preview.yml` check out at
+ * True when this working copy holds full history. A shallow checkout sits at
  * the default depth 1, `deploy.yml` uses `fetch-depth: 0` — so the same row is verifiable
  * on one workflow and not on another, and the difference is invisible from a local run.
  */

@@ -239,7 +239,7 @@ Runner-image deprecations and Node EOL are hard-deadline → auto-ticket. Status
 incidents are flag-only by nature, but the role's tooling drift is auto-ticket.
 
 Signals: GitHub Actions runner-image deprecations / label flips that break
-`ci/deploy/preview.yml`; Actions breaking changes (`checkout` v7 pwn-request
+the workflows under `.github/workflows/`; Actions breaking changes (`checkout` v7 pwn-request
 blocking, runner min-versions, action Node runtime bumps); Node.js LTS/EOL
 transitions (functions runtime + build `--max-old-space-size`); Firebase CLI changes
 (hosting deploy, emulator, region defaults); Cloudflare incidents; Sentry SDK

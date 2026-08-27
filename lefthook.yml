@@ -1,6 +1,5 @@
-# Local commit gates. CI (ci.yml) stays the backstop — these exist so a type
-# error or lint problem costs seconds at commit time instead of a push, a CI
-# round-trip and a red main.
+# Local commit gates. These exist so a type error or lint problem costs seconds at
+# commit time instead of a push, a CI round-trip and a red main.
 #
 # Ported from Butlery's lefthook.yml (2026-08-08). Butlery learned the hard way
 # that an ungated whole-project check runs on commits that contain no code at

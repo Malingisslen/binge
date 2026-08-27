@@ -360,7 +360,7 @@ describe('the live events.jsonl', () => {
     // dies. It passed only because no live row carries the field yet.
     //
     // KNOW WHAT THIS ASSERTION COSTS: it reads the LIVE log, and `npm test` is a blocking
-    // step in deploy.yml and preview.yml. The next `declined-unattended-shipped` row the
+    // step in deploy.yml. The next `declined-unattended-shipped` row the
     // sprint engine writes turns this red and holds the production deploy of unrelated
     // code. Deliberate — such a row means unreviewed code reached main — but the remedy is
     // append a `correction` keyed on {ts, ticket}, or add the missing `commit_sha`. Do not
@@ -384,8 +384,8 @@ describe('the live events.jsonl', () => {
     //
     // Resolved from HEAD, not from a hard-coded historical sha. The first version named
     // 851696d — six commits back — and the integration review measured what that costs:
-    // `ci.yml` and `preview.yml` check out at the default depth 1, where every historical
-    // sha is "unknown revision", so this would have gone red on every PR run while staying
+    // A shallow checkout sits at the default depth 1, where every historical
+    // sha is "unknown revision", so this would have gone red on every run while staying
     // green on the push path nobody watches. HEAD exists at any depth. The row's `ts` is
     // derived from the commit's own date so the freshness rule is genuinely satisfied
     // rather than dodged with a distant constant.

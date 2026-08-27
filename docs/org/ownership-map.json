@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 217,
+  "patternCount": 214,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -46,9 +46,8 @@
       "title": "Security Architect",
       "slug": "security-architect",
       "patterns": [
-        ".github/workflows/ci.yml",
         ".github/workflows/deploy.yml",
-        ".github/workflows/preview.yml",
+        ".github/workflows/pr-checks.yml",
         ".github/workflows/secret-scan.yml",
         "firebase.json",
         "firestore.rules",
@@ -105,9 +104,8 @@
       "title": "DevOps / SRE",
       "slug": "devops-sre",
       "patterns": [
-        ".github/workflows/ci.yml",
         ".github/workflows/deploy.yml",
-        ".github/workflows/preview.yml",
+        ".github/workflows/pr-checks.yml",
         ".github/workflows/secret-scan.yml",
         "docs/analysis/EXTERNAL_ACTIONS.md",
         "firebase.json"
@@ -255,7 +253,6 @@
       "title": "Manual / Release QA Tester",
       "slug": "manual-release-qa-tester",
       "patterns": [
-        ".github/workflows/preview.yml",
         "docs/RUNBOOK.md",
         "docs/SLO.md"
       ]

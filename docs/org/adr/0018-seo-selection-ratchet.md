@@ -169,6 +169,14 @@ resultat. Den farliga vägen har `previousCount = 0`, alltså inget att jämför
 `deploy.yml` — den enda vägen till produktion — sätter den ALDRIG, och det är den
 egenskap golvet vilar på.
 
+> **Efterföljare 2026-08-27 (BIN-1028).** De två workflows som stycket ovan namnger,
+> `ci.yml` och `preview.yml`, är raderade på Malins beslut: de körde aldrig på main och
+> `preview.yml` byggde dessutom en live-kanal med skarpa nycklar på varje dependabot-PR.
+> `SELECTION_ALLOW_THIN` sätts därmed av ingen workflow alls och är numera ett lokalt
+> verktyg. Beslutet i det här protokollet står oförändrat — det som ändrats är VAR flaggan
+> sätts, inte varför den finns eller varför `deploy.yml` aldrig får sätta den. Stycket ovan
+> är historik och redigeras inte.
+
 ### Fork D — Committad frö-lista över det Google faktiskt hade indexerat
 
 `src/lib/seo/selectionSeed.ts` bär de 116 TMDB-id:n (74 film, 32 person, 10 serie) som
@@ -203,6 +211,13 @@ den förväntade grenen. Under flaggan returneras frö-id:na, exakt samma mängd
 själv bygger i det läget. Att radera den grenen som "en bugg mot Fork E" gör varje
 dependabot-PR röd igen; det var precis vad den infördes för att stoppa. Undantaget är
 säkert av samma skäl som golvets: `deploy.yml` sätter aldrig flaggan.
+
+> **Efterföljaren 2026-08-27 (BIN-1028) gäller det här stycket också.** Previewen det
+> talar om finns inte längre — `preview.yml` och `ci.yml` är raderade. Dependabot-PR:erna
+> finns kvar; det är bara workflowen som byggde previewen som är borta. Undantaget i koden står kvar och är fortfarande rätt, men dess motivering är
+> numera ett lokalt bygge utan TMDB-nyckel, inte en preview-kanal. Stycket är historik och
+> redigeras inte; markören står här så att en läsare som landar mitt i protokollet ser
+> det utan att behöva hitta addendumet under Fork C.
 
 ## TMDB ToS §1.C — Malins beslut
 

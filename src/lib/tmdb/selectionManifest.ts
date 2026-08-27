@@ -97,19 +97,16 @@ export const SELECTION_ABSOLUTE_FLOOR: Record<SelectionType, number> = {
 /**
  * Bygget saknar med flit TMDB-åtkomst och får därför ha ett tunt urval.
  *
- * Sätts i ci.yml, som bygger med `NEXT_PUBLIC_TMDB_API_KEY: ci-dummy` för att
- * verifiera att koden kompilerar och exporterar — där failar varje hämtning och
- * SEO_FALLBACK_* är enda utvägen. Utan en uttrycklig flagga hade golvet fällt
- * den körningen, och att i stället gissa på nyckelns värde ("är den
- * 'ci-dummy'?") hade lagt en CI-detalj i produktionskod.
+ * INGEN workflow sätter den längre — de två som gjorde det raderades i BIN-1028
+ * (Malins beslut 2026-08-27) eftersom de aldrig körde på main. Kontrollera i stället
+ * för att tro på den här meningen: `grep -rn SELECTION_ALLOW_THIN .github/`. Flaggan
+ * är numera ett rent lokalt verktyg: den finns kvar för ett bygge man kör för hand
+ * utan TMDB-nyckel.
  *
- * Sätts ÄVEN i preview.yml, av ett annat skäl: previewen saknar både
- * `.tmdb-cache`-restore och step-timeout, så den härleder från kall cache varje
- * gång under 15-minuters räddningstaket. Ett tunt urval är där normalt, och en
- * preview ersätter aldrig binge.nu.
- *
- * deploy.yml sätter den ALDRIG — det är den enda vägen till produktion, och där
- * ska ett tunt urval fälla bygget.
+ * `deploy.yml` sätter den ALDRIG, och det är fortfarande den egenskap golvet vilar
+ * på — den är enda vägen till produktion, och där ska ett tunt urval fälla bygget.
+ * Att gissa på nyckelns värde i stället ("är den 'ci-dummy'?") vore att lägga en
+ * byggdetalj i produktionskod, vilket är varför flaggan är uttrycklig.
  */
 export function allowThinSelection(): boolean {
   return process.env.SELECTION_ALLOW_THIN === '1';
@@ -182,7 +179,7 @@ export function assertCoverageFloor(
         `en förkrympt sajt — se BIN-823.\n` +
         `  · Produktion: kör om deployen som workflow_dispatch med full_refresh=true ` +
         `(obegränsad budget, 175-minutersfönster) så härledningen hinner klart.\n` +
-        `  · Bygge helt utan TMDB-nyckel (endast CI): sätt SELECTION_ALLOW_THIN=1.`,
+        `  · Bygge helt utan TMDB-nyckel: sätt SELECTION_ALLOW_THIN=1.`,
     );
   }
 }
@@ -369,7 +366,7 @@ export async function resolveSelection(opts: {
   seedIds: readonly number[];
   /** Den färska härledningen — de dyra listanropen. Körs bara när den behövs. */
   derive: () => Promise<number[]>;
-  /** Sista utväg när ingenting annat finns (CI utan giltig TMDB-nyckel). */
+  /** Sista utväg när ingenting annat finns (bygge utan giltig TMDB-nyckel). */
   fallbackIds: readonly number[];
   now?: number;
 }): Promise<number[]> {
@@ -444,7 +441,7 @@ export async function resolveSelection(opts: {
   // bli tom om BÅDE manifestet och frölistan är tomma. Ingen riktig anropare gör
   // det — bara testerna, som skickar `seedIds: []` med flit.
   //
-  // Det betyder också att ett nyckellöst CI-bygge pre-renderar FRÖNA, inte
+  // Det betyder också att ett nyckellöst bygge pre-renderar FRÖNA, inte
   // `SEO_FALLBACK_*`. Beskriv inte det som fallback-vägen; en tidigare version
   // av den här kommentaren gjorde det och pekade ut fel mängd sidor.
   return ids.length > 0 ? ids : [...fallbackIds];

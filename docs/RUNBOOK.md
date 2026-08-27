@@ -356,8 +356,10 @@ någon som just bett att få lämna.
 
 ### 6a. Lint/typecheck fel
 
-Vanligt, fix direkt i PR:n eller lokalt. `.github/workflows/ci.yml`
-kräver alla 4 (lint, typecheck, test, build) före merge.
+Vanligt, fix lokalt. `.github/workflows/deploy.yml` kör lint, typecheck, test
+och sitt eget `rules-tests`-jobb på varje push till main — och sedan BIN-1028
+(2026-08-27) är den den enda workflow som gör det. Faller något där blir
+sajten inte uppdaterad; besökare får kvar förra bygget.
 
 ### 6b. Build-fel
 
@@ -365,13 +367,11 @@ kräver alla 4 (lint, typecheck, test, build) före merge.
   räcka för vår nuvarande bundle
 - Om OOM: kör `npm run analyze` (bundle-analyzer) och prunera stora deps
 
-### 6c. Preview-channel timeout
+### 6c. Preview-kanaler finns inte längre
 
-`preview.yml` använder FirebaseExtended/action-hosting-deploy@v0. Om den
-hänger:
-- Rerun workflow från GitHub UI
-- Om återkommande: kolla Firebase Hosting-kvoterna (Spark har 1 GB/mån
-  storage + 360 MB/dag transfer)
+Borttagna med `preview.yml` i BIN-1028 (Malins beslut 2026-08-27). Workflowen
+körde aldrig på main och byggde en live-kanal med skarpa nycklar på varje
+dependabot-PR. Vill du ha en förhandsvisning i dag: bygg lokalt.
 
 ### 6d. "took more than 60 seconds" / static export avbryts
 
@@ -437,12 +437,13 @@ längre kunna fälla bygget efter 2026-06 (AbortSignal.timeout i
      inte som en regression — gamla sajten ligger kvar, och åtgärden är att
      direkt köra `gh workflow run deploy.yml -f full_refresh=true`.
      Samma push är också första riktiga provet på att fasordningen
-     (`Collecting page data` klar före `Generating static pages`) håller —
-     CI och preview sätter båda `SELECTION_ALLOW_THIN` och kan inte falsifiera den.
+     (`Collecting page data` klar före `Generating static pages`) håller.
+     Sedan BIN-1028 sätter INGEN workflow `SELECTION_ALLOW_THIN` — de två som
+     gjorde det är borta — så flaggan är numera bara ett lokalt verktyg.
    - Gamla sajten ligger kvar under tiden; ett rött bygge deployar ingenting.
    - Sätt ALDRIG `SELECTION_ALLOW_THIN` i `deploy.yml` för att komma förbi. Den
-     stänger av både golvet och sitemapens kast och hör bara hemma i `ci.yml`
-     och `preview.yml`.
+     stänger av både golvet och sitemapens kast, och `deploy.yml` är den enda
+     vägen till produktion — det är hela egenskapen golvet vilar på.
 
 ---
 
@@ -552,8 +553,8 @@ bundlen, HTML:en, `__next._tree.txt`-payloaderna, sitemap:en eller service
 workern.
 
 Den ignoreras i stallet for att raderas efter bygget, sa att **en** rad tacker
-`deploy.yml`, `preview.yml` och lokala `firebase deploy` - ett raderingssteg i
-deploy-flodet hade fatt previewen att servera en annan filuppsattning an prod.
+bade `deploy.yml` och lokala `firebase deploy` - ett raderingssteg i deploy-flodet
+hade missat varje lokal `firebase deploy`.
 
 Premissen ar ett Next.js-internt beteende och repot tar Next-minors via den
 veckovisa dependabot-gruppen `react-next`. Steget *"Verify the ignored RSC twin

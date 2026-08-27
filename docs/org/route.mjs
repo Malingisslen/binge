@@ -589,8 +589,8 @@ function selftest() {
     // No breakdown of TOOLING_CODE_FILES is written here. Derive it from the set instead of
     // reading a number here.
     //
-    // `--selftest` used to be invoked by NOTHING — not package.json, not ci.yml, not
-    // deploy.yml, not a hook — so a stale pin here could not fail a deploy, and a
+    // `--selftest` used to be invoked by NOTHING — not package.json, not deploy.yml,
+    // not a hook — so a stale pin here could not fail a deploy, and a
     // documented command ("exit non-zero on fail" in the Usage block above) that nobody
     // runs teaches the next reader to ignore it. BIN-880 wired it: docs/org/gate-symmetry
     // .test.mjs spawns this exact command and fails if it exits non-zero, and `npm test`

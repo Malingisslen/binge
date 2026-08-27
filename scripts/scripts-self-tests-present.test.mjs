@@ -3,7 +3,7 @@
 // Run: npm test
 //
 // Why this file exists. Until BIN-850 the two guards under `scripts/` were tested by a
-// bespoke `Script self-tests` step in ci.yml and deploy.yml, and that step carried a
+// bespoke `Script self-tests` workflow step, and that step carried a
 // MIN=2 floor for a specific reason (BIN-838, 405a2fc): `node --test` over a zero-match
 // glob exits 0 having run nothing, so without a floor a file that quietly leaves the
 // pattern — renamed, moved, excluded — takes its coverage with it and everything stays
@@ -28,8 +28,8 @@ import { fileURLToPath } from 'node:url';
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const SELF = 'scripts-self-tests-present.test.mjs';
 
-// The guards that gate the release path today. Both are invoked by ci.yml and
-// deploy.yml as build steps; a test file that stops running leaves the guard itself
+// The guards that gate the release path today. Both are invoked by deploy.yml as
+// build steps; a test file that stops running leaves the guard itself
 // unverified, which is how BIN-849's three-month outage stayed invisible.
 // ADD A NEW SCRIPT SELF-TEST? Add its filename here and raise MIN below. That is the
 // whole protection: vitest will run it either way, but nothing notices when it stops
@@ -58,8 +58,8 @@ const MIN = 3;
 // the runner's own set, and the gap is worth naming: this floor lives INSIDE the glob it
 // guards, so narrowing that include line — or adding these paths to `exclude` — stops
 // collecting this file too, and it cannot fail. The step it replaces lived outside, in
-// ci.yml AND deploy.yml — and deploy.yml is the load-bearing half: ci.yml does not run on
-// main, so on the only path to production that step was the whole gate. What covers that gap is not this file but the commit gate:
+// a workflow step, on the path to production. What covers that gap is not this file
+// but the commit gate:
 // `vitest.*\.config\.ts$` is in binge-test-reviewer's patterns, so a hand narrowing the
 // include cannot land it unreviewed. Losses on the DISK side — delete, rename, move — are
 // this file's job, and it is measured on those, both ways round:
