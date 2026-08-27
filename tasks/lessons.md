@@ -762,3 +762,44 @@ formkraven på extraktionen.
 
 Samma familj som "en trasig JSON i en datafil ser ut som hundratals orelaterade testfel"
 (2026-08-25): symptomet pekar åt fel håll.
+
+---
+
+### 2026-08-27 — [Workflow] En restlucka mäts mot en klocka — namnge vilken innan du beskriver den
+
+**Trigger:** prosa som beskriver ett accepterat kvarvarande hål, en tröskel eller ett
+tidsfönster.
+
+**Regel:** skriv ut VILKEN storhet jämförelsen läser innan du beskriver vad som faller
+utanför, och läs meningen mot operatorn. BIN-909 mäter `metadata.creationTime`, alltså
+Auth-kontots egen ålder, som en radering av `users/{uid}` inte rör. Jag skrev tre gånger
+att luckan var "ett konto som raderas och återbesöks inom fem minuter" — fel klocka: ett
+konto som passerat tröskeln gatas hur snabbt ägaren än kommer tillbaka, och det verkliga
+hålet är ett konto som SJÄLVT är högst fem minuter gammalt. Version två och tre passerade
+var sin säkerhetsgranskning innan integrationsgranskaren fällde dem.
+
+**Exempel:** fjärde versionen behövde dessutom rätta gränsen — `>` är strikt, så exakt fem
+minuter ligger på den OGATADE sidan, och "yngre än tröskeln" namngav mängden ett ögonblick
+för liten. Gränstestet fanns redan och sa rätt sak; det var meningen bredvid som var fel.
+
+**Kostnad:** fyra granskningsvarv, sex fynd. Ett var en defekt i koden. Fem var falska
+påståenden i min egen prosa, varav två satt inne i rättelsen av ett tidigare fynd.
+
+---
+
+### 2026-08-27 — [Testing] En flagga som sätts efter en rundtur skyddar inte fönstret före den
+
+**Trigger:** en ny grind som läser ett tillstånd hämtat asynkront, medan konsumenten startar
+på ett värde som sätts synkront.
+
+**Regel:** kontrollera att grindens flagga är sann TILLRÄCKLIGT TIDIGT, inte bara att den
+är sann. `onAuthStateChanged` sätter `uid` synkront och `WatchlistContext`s lyssnare
+startar direkt på det, medan `pendingReconsent` inte är känd förrän `getDoc` svarat.
+Firestores lokala cache levererar rader inuti det glappet, så de självgående skrivarna
+hann skriva under ett uid vars profil visade sig saknas — precis det grinden byggdes för
+att hindra. `deletionInProgress` har inte hålet: dess markör är en synkron
+localStorage-läsning.
+
+**Exempel:** lösningen fanns redan i filen — `profileLoading` sätts i samma synkrona block
+som `setUid` och nollställs i `.finally()`. Grinden blev
+`profileLoading || isDeletionStarted(uid) || pendingReconsent`.
