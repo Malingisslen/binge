@@ -173,6 +173,7 @@ Owns data-protection compliance under Swedish/EU law.
   single chokepoint every `users/{uid}` / `publicProfiles/{uid}` write passes through.
   A change here decides whether an Art. 17 request can silently un-happen.
   → `src/lib/deletionMarker.ts`, `src/lib/deletionMarker.test.ts`,
+  `src/lib/deletionInProgressError.ts`,
   `src/lib/firebase/userDocWrite.ts`, `src/lib/firebase/userDocWrite.test.ts`,
   `src/lib/firebase/userDocWrite.chokepoint.test.ts`,
   `src/lib/firebase/accountDeletion.applyPlan.test.ts`
@@ -512,7 +513,7 @@ Owns the process.
   are deliberately NOT — the reviewers append to those on every ledger run, and
   gating them would put routine bookkeeping behind a review (the same call Malin
   made for `lessons-digest.md` in BIN-851).
-  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`
+  → `.claude/agents/binge-code-reviewer.md`, `.claude/agents/binge-security-reviewer.md`, `.claude/agents/binge-integration-reviewer.md`, `.claude/agents/binge-test-reviewer.md`, `.claude/hooks/freshness.mjs`, `.claude/hooks/freshness.test.mjs`, `.claude/hooks/preview-gate.mjs`, `.claude/hooks/preview-gate.test.mjs`
 - **The risk router and the ownership map it reads** (BIN-834, BIN-869). `route.mjs`
   decides which roles a change is shown to; `gen-ownership-map.mjs` computes the map
   it decides from. Both are code by BIN-805's own ruling, and both routed as
@@ -566,7 +567,11 @@ Owns wayfinding.
   2026-08-25. The membership half was inline at three call sites until BIN-1008 gave it a
   file and a suite; its signature is typed on `status` alone, so the type rather than a
   comment is what stops the two being folded together.
-  → `src/lib/seenDate.ts`, `src/lib/markedSeen.ts`, `src/lib/markedSeen.test.ts`
+  The three call sites got their own guards in BIN-1027, so a surface that swaps the
+  membership check back for a date filter now reddens where the swap happens rather than
+  only where the rule lives.
+  → `src/lib/seenDate.ts`, `src/lib/markedSeen.ts`, `src/lib/markedSeen.test.ts`,
+  `src/hooks/useServiceValue.test.ts`, `src/components/pages/UserProfilePageClient.test.tsx`
 
 ---
 
@@ -623,7 +628,7 @@ findings here too.
   three are the add-vs-delete race in `WatchlistContext`'s `addIfMissing` branch,
   decided in `.claude/rules/accepted-deviations.md` rather than fixed with a
   compensating delete).
-  → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlist/**`, `src/contexts/WatchlistContext.tsx`
+  → `src/lib/mediaTypeDocId.ts`, `src/lib/watchlistDocKey.ts`, `src/lib/watchlistDocKey.test.ts`, `src/lib/watchlist/**`, `src/contexts/WatchlistContext.tsx`
 - **Disaster recovery** — PITR + scheduled backups (region `eur3`).
 
 **Watch-items (diagnostic):**

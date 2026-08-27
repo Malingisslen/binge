@@ -125,6 +125,31 @@ describe('ReconsentGate', () => {
     expect(document.getElementById(hintId!)?.textContent).toContain('båda rutorna');
   });
 
+  it('BIN-1032: ett VÄGRAT skrivförsök får ett annat besked än ett nätverksfel', async () => {
+    // #19 Kundsupports blockerande villkor. Det generiska felet ber användaren kontrollera
+    // anslutningen och försöka igen. För ett vägrat skrivförsök är det fel råd: markören
+    // försvinner inte av sig själv, så varje omförsök faller likadant — och det här är en
+    // skärm vars besökare redan är förvirrad. `DELETION_IN_PROGRESS` finns som egen kod
+    // just för att en anropare ska kunna skilja de två åt.
+    auth.completeReconsent.mockRejectedValueOnce(
+      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+    );
+    render(<ReconsentGate />);
+
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[1]);
+    await act(async () => { fireEvent.click(submitButton()); });
+
+    const alert = screen.getByRole('alert').textContent!;
+    expect(alert).toContain('raderas');
+    // Det avgörande: inget råd om anslutningen, och ingen uppmaning att försöka igen.
+    expect(alert).not.toContain('anslutningen');
+    expect(alert).not.toContain('försök igen');
+    // Vägen framåt är support, eftersom omförsök inte är en väg framåt här.
+    expect(alert).toContain('hej@binge.nu');
+    expect(submitButton().disabled).toBe(false);
+  });
+
   it('ett fel vid skapandet säger vad som hände och låter användaren försöka igen', async () => {
     auth.completeReconsent.mockRejectedValueOnce(new Error('offline'));
     render(<ReconsentGate />);

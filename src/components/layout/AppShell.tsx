@@ -9,17 +9,18 @@ import AppTopbar from '@/components/layout/AppTopbar';
 import Subnav from '@/components/layout/Subnav';
 import MobileTabBar from '@/components/layout/MobileTabBar';
 import Footer from '@/components/layout/Footer';
-import DuotoneFilters from '@/components/ui/DuotoneFilters';
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner';
 import { DeletionLimbo } from '@/components/layout/DeletionLimbo';
 import { ReconsentGate } from '@/components/layout/ReconsentGate';
+import { ShellChrome } from '@/components/layout/ShellChrome';
 
 // Direction H "Schemat" chrome:
 //   Topbar (brand · week strip · search · avatar) sits above every page.
 //   Subnav below it (Hem · Bibliotek · Kalender · …).
 //   MobileTabBar at the bottom on small screens — Sök is the center tab.
 //   DuotoneFilters mounted once at the root so any <img> with
-//   `filter: url(#duo-…)` picks up the SVG defs.
+//   `filter: url(#duo-…)` picks up the SVG defs — it and the skip link are the
+//   `ShellChrome` pair every branch below opens with (BIN-1033).
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { uid, loading, deletionInProgress, pendingReconsent } = useAuth();
@@ -51,13 +52,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (mounted && uid && deletionInProgress) {
     return (
       <>
-        <DuotoneFilters />
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
-        >
-          Hoppa till innehåll
-        </a>
+        <ShellChrome />
         <div className="app-shell">
           <DeletionLimbo />
         </div>
@@ -83,13 +78,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (mounted && uid && pendingReconsent) {
     return (
       <>
-        <DuotoneFilters />
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
-        >
-          Hoppa till innehåll
-        </a>
+        <ShellChrome />
         <div className="app-shell">
           <ReconsentGate />
         </div>
@@ -104,13 +93,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isLandingForGuest) {
     return (
       <>
-        <DuotoneFilters />
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
-        >
-          Hoppa till innehåll
-        </a>
+        <ShellChrome />
         <main id="main" tabIndex={-1} className="outline-none">{children}</main>
         <Footer />
       </>
@@ -119,13 +102,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <DuotoneFilters />
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
-      >
-        Hoppa till innehåll
-      </a>
+      <ShellChrome />
       <div className="app-shell">
         <AppTopbar />
         <Subnav />

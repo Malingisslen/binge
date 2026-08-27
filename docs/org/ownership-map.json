@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 211,
+  "patternCount": 217,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -68,6 +68,7 @@
         "src/app/integritet/page.tsx",
         "src/app/villkor/page.tsx",
         "src/contexts/AuthContext.tsx",
+        "src/lib/deletionInProgressError.ts",
         "src/lib/deletionMarker.test.ts",
         "src/lib/deletionMarker.ts",
         "src/lib/firebase/accountDeletion.applyPlan.test.ts",
@@ -314,6 +315,7 @@
         ".claude/hooks/freshness.mjs",
         ".claude/hooks/freshness.test.mjs",
         ".claude/hooks/preview-gate.mjs",
+        ".claude/hooks/preview-gate.test.mjs",
         ".claude/rules/accepted-deviations.md",
         ".claude/shared-plugin.json",
         ".github/dependabot.yml",
@@ -338,7 +340,9 @@
         "src/components/layout/MobileTabBar.tsx",
         "src/components/layout/Subnav.tsx",
         "src/components/pages/DynamicRouter.tsx",
+        "src/components/pages/UserProfilePageClient.test.tsx",
         "src/components/tv/RelatedSeriesStrip.tsx",
+        "src/hooks/useServiceValue.test.ts",
         "src/lib/libraryView.ts",
         "src/lib/markedSeen.test.ts",
         "src/lib/markedSeen.ts",
@@ -364,6 +368,8 @@
         "src/lib/mediaTypeDocId.ts",
         "src/lib/watchStatus.migration.ts",
         "src/lib/watchlist/**",
+        "src/lib/watchlistDocKey.test.ts",
+        "src/lib/watchlistDocKey.ts",
         "src/test/rules/community-ratings-orchestrator.test.ts",
         "src/test/rules/firestore-rules.test.ts",
         "src/test/rules/retention-cleanup-orchestrator.test.ts"

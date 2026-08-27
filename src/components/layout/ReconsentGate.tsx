@@ -16,13 +16,13 @@
 //
 // The copy is Malin's, approved 2026-08-27, with one change she made in the same breath:
 // the first draft read "…så vi behöver skapa den på nytt". #19 Customer Support caught
-// that `docs/voice-and-tone.md` rule 1 bans "vi" outside legal text, and its anti-example
-// table carries that exact construction. She struck it.
+// that `docs/voice-and-tone.md` rule 1 bans "vi" outside legal text. She struck it.
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
 export function ReconsentGate() {
   const { completeReconsent, signOut } = useAuth();
@@ -43,9 +43,28 @@ export function ReconsentGate() {
     setError(null);
     try {
       await completeReconsent();
-    } catch {
+    } catch (err) {
       // Rule 6 in voice-and-tone: what happened + how to solve. Never the stack.
-      setError('Profilen kunde inte skapas. Kontrollera anslutningen och försök igen.');
+      //
+      // BIN-1032, #19 Customer Support's blocking condition: the two failures need
+      // different advice. A transaction that failed is worth retrying; a refused write is
+      // not — the marker does not clear on its own, so "försök igen" sends someone into a
+      // loop that fails identically every time, on a screen whose whole reason to exist is
+      // that its visitor is already confused. `DELETION_IN_PROGRESS` exists as its own
+      // code precisely so a caller can tell the two apart.
+      //
+      // The copy says only that a deletion is running, and says nothing about WHERE it was
+      // started. An earlier draft said "från en annan enhet"; the marker is localStorage,
+      // so this code can never observe another device — it can only observe a marker on
+      // this one. It opens on the same sentence as `useMarkSeen`'s refusal and then parts
+      // company deliberately — that screen offers no support address and this one does — so
+      // do not consolidate the two: two screens that disagree about what a refused write
+      // means teach the reader two things, but they are not the same screen.
+      setError(
+        isDeletionInProgressError(err)
+          ? 'Kontot håller på att raderas. Profilen kan inte skapas nu. Hör av dig till hej@binge.nu om det inte var meningen.'
+          : 'Profilen kunde inte skapas. Kontrollera anslutningen och försök igen.',
+      );
       setSubmitting(false);
     }
   }

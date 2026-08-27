@@ -338,6 +338,31 @@ användares grupper och i `editors` på delade listor. Ett omförsök städar de
 dem kvar — `reclaimOrphanFollows` täcker bara följare och vänner. Ingen sopning
 täcker den här luckan i dag.
 
+### Skrivvägar som vägrar under en pågående radering (BIN-1025, 2026-08-27)
+
+BIN-1011 gav `updateProgress`-vägen en läsning av raderingsmarkören. Tilläggsvägen
+(`upsertTitle` / `logViewing` → `writeTitle`) hade ingen, och den skriver en FULL nyttolast
+som BIN-942:s create-golv släpper igenom — så en gammal flik kunde skapa ett
+biblioteksdokument mitt under kaskaden. Nu vägrar `writeTitle` själv, genom att avvisa.
+
+Samtidigt gatas gruppsynken: `groups/{gid}/watchlist/{id}/progress/{uid}` skrevs tidigare på
+ALLA grenar av `updateProgress`, även den som inte skrev något lokalt. Det är ett medvetet
+beslut (Malin 2026-08-20, BIN-954) och står kvar — det enda som numera stoppar synken är
+markören, inte utfallet. Personuppgifter ska inte landa under ett uid vars radering pågår.
+
+**Vad detta INTE är, och texten säger det hellre än antyder det:**
+
+- **Ingen åtkomstkontroll.** `firestore.rules` är oförändrad och accepterar skrivningen på
+  sina egna meriter. Det som stängs är kapplöpningen i det vanliga UI-flödet.
+- **Enhetslokalt.** Markören bor i `localStorage`, så spärren finns bara på den enhet
+  raderingen startades från. En andra enhet har ingen markör och kan fortfarande skriva.
+  Den restposten är BIN-1023:s — ingen serversidig sopning hittar i dag ett
+  watchlist-dokument under ett uid vars Auth-konto är helt borta.
+- **Stänger inte BIN-965:s residual.** Den luckan (en skrivning som passerar kontrollen
+  mikrosekunder innan kaskadens radering landar) är avgjord och oförändrad, utan
+  kompenserande radering. Den här ändringen stänger en annan och bredare lucka: att det
+  inte fanns någon kontroll alls på den vägen.
+
 ## Tekniska implikationer
 
 `AuthContext.deleteAccount` implementerar redan hård radering via

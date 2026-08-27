@@ -13,7 +13,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { trackEvent } from '@/lib/analytics';
 import { migrateStatus } from '@/lib/watchStatus.migration';
 import { mediaTypeDocId } from '@/lib/mediaTypeDocId';
+import { watchlistDocKey } from '@/lib/watchlistDocKey';
 import { isDeletionStarted } from '@/lib/deletionMarker';
+import { DELETION_IN_PROGRESS, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import { buildStatusUpdate, normalizeTags, resolveCurrentWatchedAt, shouldStampVisibility, buildAddWrite, outcomeOfAddWrite, type WriteIntent, type TitleWriteOutcome } from '@/lib/watchlistWrites';
 import type { ItemVisibility, WatchlistItem, WatchStatus, MediaType } from '@/types';
 
@@ -405,7 +407,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   // second "Försök igen" after a second failure still re-runs the effect.
   const [retryNonce, setRetryNonce] = useState(0);
   const retryListener = useCallback(() => setRetryNonce(n => n + 1), []);
-  // BIN-402: `${uid}:${tmdbId}` keys of titles whose TMDB block we've lazy-refreshed
+  // BIN-402: `watchlistDocKey` keys of titles whose TMDB block we've lazy-refreshed
   // this session. Marked synchronously before the write so the pending-serverTimestamp
   // echo (which reads back null and would re-trip the staleness gate → write loop)
   // can't re-fire it. Keyed by uid too (mirrors nextAirReadRepair's writtenThisSession)
@@ -909,6 +911,48 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   ): Promise<TitleWriteOutcome> => {
     // BIN-895: no uid, no write — so nothing was counted, and the caller may say so.
     if (!uid) return { countedRewatch: false };
+    // BIN-1025 — the add door, gated at the door rather than at one caller.
+    //
+    // BIN-1011 put this check on the `updateProgress` path. `upsertTitle`/`logViewing`
+    // had none, and they write a FULL payload, so BIN-942's create-floor waves them
+    // through: an old tab whose `deletionInProgress` never flipped could still create a
+    // library document while the erasure cascade was running.
+    //
+    // IT THROWS, and that is the decided shape rather than a convenience (#14 Software
+    // Architect's and #27 Database Administrator's blocking conditions, both). The reason
+    // is the SHAPE, not a census: a new field on `TitleWriteOutcome` is ignorable, and a
+    // caller that does not read it — `QuickAddButton` and `StatusButton` both `await` and
+    // then toast — would confirm a write Firestore refused. That is the BIN-895 bug
+    // reopened. A rejection cannot be confirmed by accident.
+    //
+    // What a rejection does NOT do is get handled on its own: awaiting propagates. Most
+    // callers today end in an unhandled rejection, which shows the user nothing rather
+    // than something false. Which callers say what is BIN-1038's question, and the set is
+    // recorded there rather than counted here — three drafts of this comment carried three
+    // different tallies. Derive it:
+    //
+    //     grep -rn "upsertTitle(\|logViewing(" src
+    //
+    // Synchronous and ahead of the first await, like every other marker read in this file:
+    // the flag is a localStorage lookup, and one placed after a round trip guards a
+    // window that has already opened.
+    //
+    // What this is NOT: an access-control fix (#4 Security Architect's condition 1).
+    // `firestore.rules` is untouched and still accepts this write on its merits, so a
+    // client that does not run this code is unaffected. It closes the client-driven race
+    // for the ordinary UI path, and only on the device that holds the marker (#6 Data
+    // Protection Officer's condition 1) — a second device has none, and the orphan it can
+    // still leave behind is BIN-1023's to find.
+    if (isDeletionStarted(uid)) {
+      const refused = new Error(
+        `${DELETION_IN_PROGRESS}: kontot håller på att raderas — titeln får inte läggas till`,
+      );
+      // The refusal's only observation channel, mirroring `updateProgress`'s siblings:
+      // the user is on their way out and sees nothing, so without this line the branch
+      // firing in the wild is invisible (#4's condition 4).
+      captureError(refused, { scope: 'watchlist', kind: 'writeTitle-deletionRefused' });
+      throw refused;
+    }
     const { db, doc, setDoc, serverTimestamp } = await fsdb();
     const ref = doc(db, 'users', uid, 'watchlist', mediaTypeDocId(item.mediaType, item.tmdbId));
     // BIN-593: read the LIVE ref, not the render-closure `items` -- see itemsRef's
@@ -1148,7 +1192,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // changed.
     const current = findItem(mediaType, tmdbId);
     const docId = mediaTypeDocId(mediaType, tmdbId);
-    const cacheKey = `${uid}:${docId}`;
+    const cacheKey = watchlistDocKey(uid, mediaType, tmdbId);
     // BIN-965 — read BEFORE the first await of this gesture, and that placement is the
     // whole point. A call that ends up WAITING on someone else's in-flight add (the
     // `pendingAdd` branch below) must compare against the world as it was when the user
@@ -1309,7 +1353,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         // cascade's delete lands), and it is deliberately NOT chased with a
         // compensating delete — BIN-965 decided that question.
         if (isDeletionStarted(uid)) return false;
-        await upsertTitle(payload);
+        // BIN-1025 — `writeTitle` now refuses at its own door too, by throwing. That is
+        // the right shape for a caller that would otherwise confirm a write in a toast,
+        // but this caller is not one of them: it is one line past the same check,
+        // and it already has an answer for "did not add" — `false`, which also keeps a
+        // waiter off the merge branch. Letting the rejection through instead would turn
+        // `updateProgress` into a rejecting call for a race its own guard almost always
+        // wins, and its callers do not catch. Narrowed to this refusal by its code:
+        // anything else still propagates, because anything else is a real failure.
+        try {
+          await upsertTitle(payload);
+        } catch (err) {
+          if (isDeletionInProgressError(err)) return false;
+          throw err;
+        }
         // AFTER the write resolves, not before: this marks "the document exists now", and
         // a failed add must stay retryable. Marking BEFORE the write would be worse, not
         // better: a second call would then take the merge branch against a document that
@@ -1375,6 +1432,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // till en grupp. Efter BIN-954 är det AVBOCKNINGSvägen som når det läget — en
     // bockning i en gruppkontext (SeasonPageClient med ?fromGroup=) lägger numera till
     // serien i det egna biblioteket som 'mina', enligt Malins beslut 2026-08-20.
+    // BIN-1025 — the ONE thing that suppresses the sync, and it is not "the local write
+    // was refused".
+    //
+    // The paragraph above is a dated decision (Malin, 2026-08-20, BIN-954): the sync fires
+    // on every branch INCLUDING the one that writes nothing locally. Gating it on the
+    // general outcome would quietly reverse that. The deletion marker is a different
+    // reason to be on the no-write branch, and the only one that must also stop the group
+    // write — `groups/{gid}/watchlist/{id}/progress/{uid}` is personal data landing under a
+    // uid whose erasure is in flight (#5 Legal, #27, #14, all three said this separately).
+    //
+    // Read FRESH here rather than reused from the branch above: the two decisions are a
+    // round trip apart, and `deletionMarker.ts` warns against memoizing this read (#6's
+    // condition 3). `groups.ts` has no marker awareness of its own — this is the gate.
+    if (isDeletionStarted(uid)) return outcome;
     void import('@/lib/firebase/groups').then(({ syncProgressToGroups }) =>
       syncProgressToGroups({
         uid,
@@ -1459,7 +1530,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // Echo-proof dedupe (keyed by uid so an account switch doesn't suppress the new
     // user): once written this session, never re-fire — the pending serverTimestamp
     // reads back null and would otherwise re-trip the gate.
-    const dedupeKey = `${uid}:${mediaTypeDocId(mediaType, tmdbId)}`;
+    const dedupeKey = watchlistDocKey(uid, mediaType, tmdbId);
     if (refreshedThisSession.current.has(dedupeKey)) return;
     const current = items.find(i => i.tmdbId === tmdbId && i.mediaType === mediaType);
     if (!current) return; // only titles in the library carry the stamp / get swept
@@ -1503,7 +1574,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // no await between the top of this function and the bump below — the ordering
     // invariant that follows is untouched.
     const docId = mediaTypeDocId(mediaType, tmdbId);
-    const docKey = `${uid}:${docId}`;
+    const docKey = watchlistDocKey(uid, mediaType, tmdbId);
     // BIN-954: bumped SYNCHRONOUSLY, before any await, so an add already in flight sees
     // that a removal happened even when this function's own prune below runs first and
     // finds nothing. See removalTickRef's declaration for why the add cannot simply

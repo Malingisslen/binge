@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { useEffect } from 'react';
 
@@ -265,7 +265,18 @@ function firstTitleAddedCount() {
 
 beforeEach(() => {
   trackEvent.mockClear();
-  setDoc.mockClear();
+  // BIN-1026 — `mockReset`, not `mockClear`, and only for `setDoc`.
+  //
+  // `mockClear` empties the call log but keeps an UNCONSUMED `mockRejectedValueOnce` in
+  // the queue, so a queued rejection that its own test never reached fires inside the next
+  // one. It weakens no assertion today — the queue is drained in every real scenario — but
+  // it makes mutation runs unreadable. Measured on the `if (!survived)` mutant, this file
+  // alone: 124 failures with `mockClear`, 3 with `mockReset`. The 3 are the tests that
+  // actually assert the downgrade; the rest were the queue firing in strangers' tests.
+  //
+  // Safe because `vi.fn(impl)` remembers `impl`: reset restores it rather than leaving an
+  // undefined-returning stub. Vitest 4 semantics — check this line if that ever changes.
+  setDoc.mockReset();
   deleteDoc.mockClear();
   buildStatusUpdate.mockClear();
   syncProgressToGroups.mockClear();
@@ -1214,6 +1225,52 @@ describe('WatchlistContext — mutation paths (BIN-332)', () => {
     // not routed through effectiveVisibilityNow(), which would hand back 'public' again.
     // A future "consolidate this through the shared helper" tidy-up fails right here.
     expect(writes[1][1]).toEqual({ effectiveVisibility: 'private', isPublic: false });
+  });
+
+  it('BIN-1026: the EXPECTED refusal reports under the -refused kind', async () => {
+    // `.claude/rules/accepted-deviations.md`'s BIN-1010 entry makes recurring hits on
+    // `updateProgress-leftoverVisibility-refused` a re-open condition. Until this test the
+    // string existed in exactly one place — the production call — and nowhere in the
+    // suite, so renaming it rotted the trigger with everything green.
+    //
+    // Why the GUARDED parity table below does not already cover it: that table pins what
+    // `guardedItemWrite` DOES under six other names. It never pins the name argument at
+    // THIS call site, and the name is the whole channel.
+    authState.user = { defaultVisibility: 'public' };
+    await mountSeeded([]);
+
+    let releaseShow: (show: unknown) => void = () => {};
+    getTVShowLite.mockReturnValue(new Promise(resolve => { releaseShow = resolve; }));
+    let releaseWrite: () => void = () => {};
+    setDoc.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => { releaseWrite = resolve; });
+    });
+
+    let tick!: Promise<ItemWriteOutcome>;
+    await act(async () => {
+      tick = updateProgressRef!('tv', 1399, 2, 10, { addIfMissing: true });
+    });
+    await act(async () => { releaseShow(TV_SHOW); });
+    await act(async () => { await removeItemRef!('tv', 1399); });
+    // The downgrade is the NEXT setDoc, and the title was removed a second time before it
+    // landed: to Firestore the visibility-only merge is a create, and BIN-942's floor
+    // refuses it. That is the benign, expected branch this name exists for.
+    setDoc.mockRejectedValueOnce(
+      Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }),
+    );
+    await act(async () => { releaseWrite(); await tick; });
+
+    await vi.waitFor(() => {
+      expect(captureError).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'permission-denied' }),
+        { scope: 'watchlist', kind: 'updateProgress-leftoverVisibility-refused' },
+      );
+    });
+    // And it stays swallowed — the sibling `-failed` name is for the other branch.
+    expect(captureError).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: 'updateProgress-leftoverVisibility-failed' }),
+    );
   });
 
   it('BIN-1010: a downgrade that fails for an UNEXPECTED reason reports under its own kind', async () => {
@@ -3322,5 +3379,99 @@ describe('WatchlistContext — the create-floor refusal is swallowed, nothing el
       expect.anything(),
       expect.objectContaining({ kind: 'writeTitle' }),
     );
+  });
+});
+
+describe('WatchlistContext — the add door refuses during an account deletion (BIN-1025)', () => {
+  async function mountSeeded(docs: { data: () => Record<string, unknown> }[]) {
+    render(
+      <WatchlistProvider>
+        <Harness />
+      </WatchlistProvider>,
+    );
+    await act(async () => {
+      snapshotCallback!(snap(docs));
+    });
+  }
+
+  function markDeletion() {
+    window.localStorage.setItem('binge:deletionStarted:u1', JSON.stringify({ startedAt: 1 }));
+  }
+
+  afterEach(() => {
+    window.localStorage.removeItem('binge:deletionStarted:u1');
+  });
+
+  // These drive the DOOR, not one caller: `upsertTitle` and `logViewing` are one-line
+  // passthroughs to `writeTitle`, with no `updateProgress` guard in front of them. That
+  // is the gap the ticket names — BIN-1011 guarded the other path only.
+  it('upsertTitle refuses while a deletion is running, and writes nothing', async () => {
+    await mountSeeded([]);
+
+    // `writeTitle` reads the flag synchronously, ahead of its own first await — so there
+    // is no in-flight moment to drive it at, and marking before the call is the honest
+    // shape rather than a weaker one. What it proves is that the DOOR refuses: this goes
+    // through `upsertTitle` with no `updateProgress` guard anywhere in front of it.
+    markDeletion();
+
+    await act(async () => {
+      await expect(upsertTitleRef!(newTitle(901, 'movie'))).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    // Not merely "it threw": no document may reach Firestore. A full add payload passes
+    // BIN-942's create floor, so a write that got through would create a fresh library row
+    // under a uid whose erasure is already running — and the orphan sweep looks for Auth
+    // accounts WITHOUT a profile, so nothing would ever find it.
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('binge/deletion-in-progress') }),
+      { scope: 'watchlist', kind: 'writeTitle-deletionRefused' },
+    );
+  });
+
+  it('logViewing — the other name on the same door — refuses too', async () => {
+    // `upsertTitle` and `logViewing` differ only in the intent they pass. A guard added to
+    // one of them and not the other is the shape this ticket exists to remove.
+    await mountSeeded([]);
+    markDeletion();
+
+    await act(async () => {
+      await expect(logViewingRef!(newTitle(902, 'movie'))).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it('an ordinary add still writes (control)', async () => {
+    // Without this, every assertion above passes on a door that refuses everyone.
+    await mountSeeded([]);
+
+    await act(async () => { await upsertTitleRef!(newTitle(903, 'movie')); });
+
+    expect(setDoc).toHaveBeenCalledTimes(1);
+    expect(captureError).not.toHaveBeenCalled();
+  });
+
+  it('the group sync does NOT fire while a deletion is running', async () => {
+    // `groups/{gid}/watchlist/{id}/progress/{uid}` is personal data under a uid being
+    // erased. `groups.ts` has no marker awareness of its own, so this gate is the only one.
+    await mountSeeded([seedDoc({ tmdbId: 5, mediaType: 'tv', status: 'mina' })]);
+    markDeletion();
+
+    await act(async () => { await updateProgressRef!('tv', 5, 2, 3); });
+
+    expect(syncProgressToGroups).not.toHaveBeenCalled();
+  });
+
+  it('the group sync STILL fires on a branch that wrote nothing locally (BIN-954 control)', async () => {
+    // Malin's decision 2026-08-20: a series missing from your own library can still have
+    // progress worth syncing to a group. The deletion marker is the ONLY reason to suppress
+    // this call — a guard keyed on "did the local write happen" would silently reverse
+    // that decision, and this row is what catches it.
+    await mountSeeded([]);
+
+    await act(async () => { await updateProgressRef!('tv', 1399, 2, 3); });
+
+    await vi.waitFor(() => expect(syncProgressToGroups).toHaveBeenCalledTimes(1));
   });
 });

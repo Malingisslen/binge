@@ -1,3 +1,266 @@
+# Sprint 2026-08-27b — nio biljetter, tre buntar
+
+Urval kört 2026-08-27. Träd rent på `main` vid start (`ea687c2`). Alla nio premisser
+kontrollerade mot HEAD med grep, inte mot biljettexten.
+
+## Routning (körd på buntunionerna, rå utdata)
+
+| Bunt | Filuppsättning | tier | reasonCode | panel |
+| -- | -- | -- | -- | -- |
+| A | `AuthContext.tsx`, `ReconsentGate.tsx`, `AppShell.tsx` | **top** | high-stakes | 5, 27, 2, 19, 26 |
+| B | `firebase/watchlist.ts`, `WatchlistContext.tsx`, `watchlistWrites.ts`, `useMarkSeen.ts` | medium | owned | 27 |
+| C | `.claude/hooks/preview-gate.mjs`, `stats/page.tsx`, `UserProfilePageClient.tsx`, `useServiceValue.ts` | medium | owned | 25 |
+
+Arbetaren är denna session, som kan konvenera agenter. Ingen bunt går till en arbetare som
+inte kan hålla sin tier. `unownedCode` för bunt C: `src/app/stats/page.tsx`.
+
+---
+
+## Bunt A — BIN-909:s tre följdfynd (tier top, full panel)
+
+### BIN-1032 — `completeReconsent` läser inte raderingsmarkören [Tier C] [build]
+Disposition: build. Premiss kontrollerad: `completeReconsent` anropar
+`createProfileWithConsent` utan `assertProfileWritable`.
+
+- [x] AC1: `completeReconsent` anropar `assertProfileWritable(firebaseUser.uid)` före varje
+      skrivväg. *(kind: diff)*
+- [x] AC2: Ett test driver markören ner MEDAN submitten är i flykten och hävdar att inget
+      `users/{uid}` skapas. *(kind: diff)*
+- [x] AC3: `userDocWrite.chokepoint.test.ts`:s `BATCH_WRITERS`-regel gäller igen — antingen
+      täcker testet "every profile writer refuses…" den nya vägen, eller så smalnas dess
+      namn så att det slutar påstå täckning det inte har. *(kind: diff)*
+- [x] AC4: Ingen befintlig assertion försvagas. *(kind: diff)*
+
+### BIN-1034 — ReconsentGate-kommentaren påstår för mycket [Tier A] [build]
+Premiss kontrollerad: raden finns på `ReconsentGate.tsx:19`.
+
+- [x] AC5: Satsen "and its anti-example table carries that exact construction" är **struken**,
+      inte omformulerad. *(kind: diff)*
+- [x] AC6: Regel 1-hänvisningen före den står kvar oförändrad. *(kind: diff)*
+- [x] AC7: Ingen kod ändras — bara kommentartext. *(kind: diff)*
+
+### BIN-1033 — AppShell upprepar skal-preludiet i fyra grenar [Tier A] [build]
+Premiss kontrollerad: `grep -c DuotoneFilters` ger 6 i `AppShell.tsx`.
+
+- [x] AC8: Blocket (`<DuotoneFilters />` + skip-länk till `#main`) härleds ur EN plats som
+      alla fyra grenar använder. *(kind: diff)*
+- [x] AC9: Alla fyra grenar har kvar ett eget testfall som kör `expectSkipLinkWiring()`. En
+      gren får inte kunna tappa blocket utan att något faller. *(kind: diff)*
+- [x] AC10: Ingen synlig skillnad för användaren; DOM-ordningen i varje gren är oförändrad. *(kind: diff)*
+
+---
+
+## Bunt B — skrivvägarna i biblioteket (tier medium, säte #27)
+
+### BIN-1025 — spärren sitter på ett anropsställe [Tier C] [build]
+- [x] AC11: `writeTitle` skriver inte när `isDeletionStarted(uid)` är sann, och anroparen får
+      ett utfall som säger det. *(kind: diff)*
+- [x] AC12: `syncProgressToGroups` avfyras inte på en gren som vägrade skriva. *(kind: diff)*
+- [x] AC13: Ett test per väg som driver markören ner MEDAN skrivningen är i flykten, inte
+      satt före anropet. *(kind: diff)*
+- [x] AC14: Ingen befintlig assertion försvagas; `firestore.rules` orörd. *(kind: diff)*
+
+### BIN-1022 — `uid:docId` byggs på tre ställen [Tier A] [build]
+Premiss kontrollerad: nyckeln byggdes för hand som `cacheKey` i `updateProgress`,
+`dedupeKey` i `refreshTmdbFields` och `docKey` i `removeItem`. (Namn, inte radnummer —
+ett radnummer i ett plandokument är falskt i samma commit som det ligger i.)
+
+- [x] AC15: Alla tre härleder nyckeln ur EN ren, synkron funktion. *(kind: diff)*
+- [x] AC16: Inget anropsställes ordning mot dess första `await` ändras. *(kind: diff)*
+- [x] AC17: `WatchlistContext.test.tsx` grön, inklusive BIN-965- och BIN-954-testerna. *(kind: diff)*
+
+### BIN-1026 — `-refused`-namnet är obevakat, och en mock blöder [Tier A] [build]
+Premiss kontrollerad: `leftoverVisibility-refused` ger ett träff i `src`, noll i test.
+
+- [x] AC18: Ett test asserterar `captureError` med `-refused`-namnet; att byta strängen i
+      produktionskoden fäller det. *(kind: diff)*
+- [x] AC19: Att neutralisera `if (!survived)` fäller **exakt ett** test, inte tre — mätt
+      genom att applicera mutanten, köra sviten och skriva utfallet i commit-meddelandet. *(kind: diff)*
+- [x] AC20: Ingen befintlig assertion försvagas. *(kind: diff)*
+
+### BIN-1024 — `outcomeOfAddWrite` läser den färdiga nyttolasten [Tier A] [build]
+- [x] AC21: Ett test ger `buildAddWrite` en forcerad nyttolast och hävdar vad
+      `outcomeOfAddWrite` svarar. *(kind: diff)*
+- [x] AC22: Beslutet i JSDoc:en ändras INTE — ingen runtime-strip införs. *(kind: diff)*
+- [x] AC23: Ingen befintlig assertion försvagas. *(kind: diff)*
+
+---
+
+## Bunt C — verktyg och obevakade anropsställen (tier medium, säte #25)
+
+### BIN-1036 — `preview-gate.mjs` har noll tester [Tier A] [build]
+Premiss kontrollerad: `.claude/hooks/` innehåller `freshness.mjs`, `freshness.test.mjs`,
+`preview-gate.mjs`. Globen finns redan i `vitest.config.ts`.
+
+- [x] AC24: Sökvägsnormaliseringen och route-matchningen är exporterade och testade var för sig. *(kind: diff)*
+- [x] AC25: CLI:n ligger bakom en entry point-kontroll — att importera filen från ett test
+      dödar inte testkörarens process. *(kind: diff)*
+- [x] AC26: Ett test per släpp-igenom-gren: befintlig fil, icke-route-fil, `SKIP_PREVIEW_GATE=1`. *(kind: diff)*
+- [x] AC27: Ett test bevisar att hooken BLOCKERAR en ny route utan markör. *(kind: diff)*
+- [x] AC28: Testfilens namn syns i utskriften från en hel `npm test`-körning. *(kind: diff)*
+- [x] AC29: Hookens beteende är oförändrat för den verkliga anropsvägen. *(kind: diff)*
+
+### BIN-1027 — de tre anropsställena som räknar sedda titlar [Tier A] [build]
+- [x] AC30: Att byta ett av de tre anropsställena till ett datumvillkor fäller minst ett test
+      — bevisat med en applicerad mutant per ställe, utfallet i commit-meddelandet. *(kind: diff)*
+- [x] AC31: `useServiceValue`-täckningen asserterar på den **filtrerade mängden**, inte bara
+      på slutsumman. *(kind: diff)*
+- [x] AC32: Ingen befintlig assertion försvagas. *(kind: diff)*
+- [x] AC33: Varje NY fil under en katalog ägarkartan listar fil för fil får en ägare i
+      `docs/role-responsibilities.md` och kartan regenereras — **aldrig** `--update-gaps`.
+      Hela sviten körs före push. *(kind: diff)*
+
+---
+
+## Behöver dig (Tier D / needs-approval)
+
+- **BIN-1028** — `ci.yml`/`preview.yml` kör aldrig på main. Tre vägar, ingen vald, och
+  biljetten säger uttryckligen att valet delvis är ditt. Bygger inte.
+- **BIN-1013** — kräver en session i `C:/claude-plugins`. Att redigera delad infrastruktur
+  härifrån förgiftar varje subagent sprinten sedan startar.
+- **BIN-603** — avgjord 2026-08-27 (vänta). Rörs inte, frågan ställs inte igen.
+- **BIN-454 / BIN-402** — `mutateEnabled`-flippen. Stående "gör aldrig detta" i CLAUDE.md.
+- **BIN-829** — kräver Search Console-inloggning.
+- **BIN-189 / BIN-521 / BIN-170** — bär `idea`-etiketten. Byggs aldrig av en obevakad sprint.
+
+## Efter sprinten
+
+- [ ] `npm run typecheck` + `npm run lint` + hela `npm test`
+- [ ] Följdbiljetter filade FÖRE commit (obs: Linears gratistak har varit fullt förut —
+      om `create_issue` nekar, skriv hela fyndet som kommentar på närmaste öppna ärende och
+      rapportera taket)
+- [ ] Granskare per bunt enligt `reviewGates`; muterande granskare en i taget,
+      integrationsgranskaren SIST mot städat träd
+- [ ] Commit + push (push = deploy) + Linear-transitioner PER bunt
+- [ ] Deviationsloggen vikt tillbaka
+
+## Deviation log
+
+- [deviation] BIN-1025: routern kördes om. Biljetten pekade på `src/lib/firebase/watchlist.ts`,
+  som inte finns — `writeTitle` bor i `WatchlistContext.tsx` och `syncProgressToGroups` i
+  `src/lib/firebase/groups.ts`. På den VERKLIGA filuppsättningen går bunt B från `medium`
+  (säte 27) till **`top`**, panel [27, 4, 5, 6, 14]. Fyra extra blinda kritiker konvenerades
+  FÖRE bygget. Fileuppsättningen i en biljett är ett påstående, inte en mätning.
+- [deviation] BIN-1025: utfallets form är ett AVVISANDE, inte ett nytt fält på
+  `TitleWriteOutcome`. #14 och #27 blockerade båda på samma sak, oberoende: nio anropsställen
+  når `writeTitle` och bara `useMarkSeen` läser det returnerade värdet — `QuickAddButton` och
+  `StatusButton` gör `await upsertTitle(…)` och toastar sedan. Ett ignorerbart fält hade låtit
+  en vägrad skrivning bekräfta sig själv för användaren. Biljettens AC1 ("anroparen får ett
+  utfall som säger det") är uppfylld av avvisandet.
+- [deviation] BIN-1025: gruppsynken gatas på en FÄRSK `isDeletionStarted`-läsning, inte på
+  utfallet. Att gata den på "skrevs något lokalt" hade tyst rivit Malins beslut 2026-08-20
+  (BIN-954) att synken körs på ALLA grenar. Ett kontrolltest håller det beslutet uppe.
+- [needs-human] BIN-1032: #19 Kundsupport BLOCKERADE. Felmeddelandet på samtyckesskärmen
+  säger "Kontrollera anslutningen och försök igen" — fel råd för ett vägrat skrivförsök, som
+  misslyckas likadant varje gång eftersom markören inte försvinner av sig själv.
+  **TEXTEN GÅR UT MED DEN HÄR COMMITEN.** Att biljetten står i In Review parkerar biljetten,
+  inte koden (lärdomen från 2026-08-16). Det är rätt avvägning här: det som ersätts är ett
+  bevisligen felaktigt råd, alltså en bugg, och att låta buggen ligga kvar tills Malin läst en
+  mening är sämre än att skicka en sann mening hon kan ändra. Men det får inte beskrivas som
+  om texten väntade på godkännande. Vad hon faktiskt ska göra: läsa lydelsen och säga till om
+  den ska ändras — då är det en redigering, inte en återställning. Samma sak gäller den andra
+  meningen granskningen tvingade fram, i `useMarkSeen.ts`.
+- [discovery] BIN-1032: `DELETION_IN_PROGRESS` flyttades till `src/lib/deletionInProgressError.ts`.
+  Att importera den ur `userDocWrite.ts` drog in `./db` → `config.ts` → `getAuth()` i
+  `ReconsentGate`, och därmed i `AppShell.test.tsx`, som föll på `auth/invalid-api-key` innan
+  en enda assertion kördes. Värdet re-exporteras, så varje befintlig importör är orörd.
+- [deviation] BIN-1026:s AC19 sa "exakt ett test, inte tre". Talet stämmer inte längre, och
+  skälet är att täckningen VÄXTE: BIN-1026 lade till det tredje testet som asserterar att
+  nedgraderingen körs. Mätt i stället, med mutanten `if (!survived)` → `if (false)`:
+  **med** blödningen (`mockClear`) faller **124** test i filen; **utan** den (`mockReset`)
+  faller **3**, och de tre är just de som asserterar nedgraderingen. Blödningen var alltså
+  vida värre än biljettens uppskattning, och den är borta. (Ett tidigare utkast av den här
+  raden skrev "20+" — ett tal jag inte hade kört. Talen ovan är mätta.)
+- [discovery] BIN-1036: den nya testfilen är en ägarkartshändelse. `docs/org/route.test.mjs`
+  fällde tre test — `TOOLING_CODE_FILES` i `route.mjs` saknade BÅDA `preview-gate`-filerna, och
+  testfilen saknade ägare. Den BLOCKERANDE listan (`reviewGates`) täckte redan båda stavningarna,
+  så bara den korta listan vidgades. Kartan regenererades utan `--update-gaps`.
+
+- [deviation] Kodgranskningen fann att `useMarkSeen.ts` fångade BIN-1025:s nya avvisande i
+  sitt TMDB-catch och rapporterade det som "Kunde inte hämta serieinfo, försök igen". Samma
+  fel råd som #19 blockerade BIN-1032 på, genom en annan dörr — den enda skillnaden var att
+  ingen letade där. Catchen är avsmalnad, med ett kontrolltest för den generiska grenen.
+  Filen låg utanför planens filuppsättning; den drogs in för att fixen annars vore halv.
+- [deviation] En av mina `python -c`-redigeringar kördes med dubbla citattecken, så bash
+  expanderade backticks inne i kommentarstexten och tömde fyra identifierare ur en kommentar i
+  `WatchlistContext.test.tsx`. Fångat av kodgranskaren, inte av mig — `npm test` läser inte
+  prosa. Skalfelet syntes som "command not found"-rader jag avfärdade. Använd heredoc.
+
+- [deviation] Integrationsgranskningen (push-grinden) fällde tre blockerande fynd, alla
+  falska påståenden i min egen prosa, noll defekter i koden — utom det första, som också var
+  en text användaren läser. (1) Felmeddelandet sa "raderas **från en annan enhet**". Markören
+  är `localStorage`, alltså delad mellan FLIKAR på en enhet och aldrig mellan enheter, så den
+  grenen kan bara nås av en markör på DENNA enhet — meningen påstod motsatsen till vad som
+  hänt. Struken ur texten och ur två kommentarer som bar samma scenario. (2)
+  `deletionInProgressError.ts` sa "en profilskrivning" och namngav en kastare; samma commit
+  gjorde det till två kastare och tre matchare. (3) Anroparinventeringen i `WatchlistContext`
+  drog en skillnad mellan `void` och `await` som inte finns — båda propagerar, ingendera
+  hanterar. Alla tre STRUKNA och ersatta med kommandon som härleder mängden. Den riktiga
+  listan står på BIN-1038, vars omfång vidgades från två anropsställen till sju.
+
+- [deviation] Push-grindens andra varv hittade en ÄKTA regression den här bunten införde, och
+  den enda i hela sprinten: `MoviePageClient`s "Bevaka släpp" gjorde `void upsertTitle(...)`
+  och toastade "Bevakar släppet av X" ovillkorligt. Det var sant så länge skrivningen alltid
+  landade — en full nyttolast passerar BIN-942:s create-golv — men BIN-1025 lät den VÄGRA, och
+  då bekräftade knappen en skrivning Firestore aldrig tog emot. BIN-895:s falska bekräftelse,
+  återöppnad av min egen ändring. Toasten är nu kedjad på skrivningen, bara avvisandet sväljs
+  (det är redan rapporterat), allt annat kastas vidare som förut. Två test, mutanten prövad.
+  Toast-mocken i den filen hoistades samtidigt: den returnerade en ny `vi.fn()` per anrop, så
+  varje påstående om vad användaren fick se hade varit tomt.
+- [deviation] Samma varv: predikatet "är det här avvisandet?" hade blivit tre handskrivna
+  kopior på tre filer i den här bunten. Delat nu, som `isDeletionInProgressError` bredvid
+  konstanten — repots eget prejudikat är `isPermissionDenied` en fil bort. Buntens egen
+  utvidgning från noll till tre var skälet att göra det här och inte i en följdbiljett.
+- [deviation] Ytterligare två falska tal ur min prosa ströks i samma varv ("de åtta anropare",
+  "samma lydelse som `useMarkSeen`"). Summan för sprinten: sju falska påståenden av mig, ETT
+  fynd i koden som var mitt eget (toasten ovan) plus ett i texten användaren läser
+  ("från en annan enhet"). Granskarna hittade allihop; typkontroll, tester och lint läser
+  ingen prosa.
+
+- [deviation] Push-grindens tredje varv fällde ett till: kommentaren som INFÖRDE den delade
+  predikathjälparen skrev "tre handskrivna kopior … från noll till tre". Det talet beskrev ett
+  övergående tillstånd i arbetskopian som aldrig committas — `git grep` mot HEAD ger noll — och
+  det stod nio rader under samma fils egen uppmaning att härleda i stället för att lita på en
+  mening. Struket, inte omräknat. Två äldre påståenden rättades i samma varv, båda direkt
+  läsbara ur koden och därför rättade på plats snarare än strukna: en nyckelform
+  (`${uid}:${tmdbId}`) koden aldrig bygger, och en filhuvudrad som sa "tre layouter" i en fil
+  som testar fyra.
+
+- [deviation] Fjärde push-grindsvarvet fann den enda klassen bara en HELHETSLÄSNING kan se:
+  min rättelse av kommentaren i `WatchlistContext.tsx` gjorde en mening i `watchlistDocKey.test.ts`
+  falsk. Testfilen motiverade sin kommentarstrippande filter med "en rad i filen diskuterar en
+  äldre nyckelform i prosa" — och den raden var precis den jag just skrivit om. Båda filerna var
+  korrekta var för sig; bara tillsammans var de motsägande. Satsen struken, filtret står kvar
+  motiverat som ett framåtriktat skydd. Detta är själva skälet att integrationsgranskaren kör
+  SIST och ensam.
+
+- [discovery] Testgranskaren sonderade en följd av strykningen ovan: `watchlistDocKey.test.ts`
+  kommentarstrippande filter är i dag OEXERCERAT — tar man bort filtret passerar assertionen
+  likadant, eftersom ingen kommentar i `WatchlistContext.tsx` längre bär mönstret. Det är ett
+  framåtriktat skydd, inte ett falskt negativt (livekod kan inte börja med `//`), och det
+  lagas medvetet INTE här: en sen putsning mitt i femte granskningsvarvet ogiltigförklarar
+  ledgern för att pinna ett filter ingen har bett om. Att i stället hitta på en prosarad i
+  produktionsfilen bara för att ge filtret något att strippa vore värre. Noterat, inte filat —
+  det är en kommentarnit, inte en lucka i en spärr.
+
+## Mätningar (kommandon körda, inte påståenden)
+
+- Muterade `ShellChrome`-anropet i limbo-grenen → 1 fällt test (`AppShell.test.tsx`).
+- Muterade `isDeletionStarted` i `writeTitle` → 2 fällda test.
+- Muterade gruppsynkens grind → 1 fällt test.
+- Muterade `markedSeen`-anropet på vart och ett av de tre anropsställena → 2 fällda test per
+  ställe (`stats/page`, `UserProfilePageClient`, `useServiceValue`).
+- `npm run typecheck` rent. `npm run lint` 0 fel (55 förbefintliga varningar).
+- `npm test`: 271 filer, 4470 gröna, 4 överhoppade. `preview-gate.test.mjs` syns i fillistan.
+  (Raden har rättats två gånger — 4465, sedan 4468 — och båda gångerna för att ett
+  granskningsvarv lade till test EFTER att den skrevs. Ett tal som mäter något som fortfarande
+  växer hör inte hemma i en mening; det här är den sista mätningen före commit, och den enda
+  som betyder något.)
+
+---
+
+# ARKIV
+
 # BIN-909 — planerat pass 2026-08-27
 
 `top`-tier. Panelen konvenerad FÖRE bygget. Malins produktbeslut fattade FÖRE panelen.

@@ -1,5 +1,6 @@
 import { fsdb, type FirestoreKit } from './db';
 import { isDeletionStarted } from '../deletionMarker';
+import { DELETION_IN_PROGRESS } from '../deletionInProgressError';
 
 /**
  * BIN-816 / ADR 0019 condition 1 — the ONE gate every write to `users/{uid}`
@@ -30,8 +31,12 @@ import { isDeletionStarted } from '../deletionMarker';
  * Thrown when a profile write is attempted for an account whose deletion has
  * started. Its own code so a caller can tell it from a permission error: this
  * one means "you asked for this", not "something is broken".
+ *
+ * Re-exported, not declared here: the value lives in `src/lib/deletionInProgressError.ts`
+ * so a UI module can read it without pulling this file's Firebase graph in with it
+ * (BIN-1032). Every existing importer keeps working unchanged.
  */
-export const DELETION_IN_PROGRESS = 'binge/deletion-in-progress';
+export { DELETION_IN_PROGRESS } from '../deletionInProgressError';
 
 /**
  * Refuse a profile write for an account mid-deletion.

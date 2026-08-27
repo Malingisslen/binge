@@ -1280,6 +1280,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeReconsent = useCallback(async () => {
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) return;
+    // BIN-1032 — before the first await, like every other guarded profile write.
+    //
+    // This is a `users/{uid}` create that does not go through `mergeUserDoc`, so it is one
+    // of the batch writers `userDocWrite.chokepoint.test.ts` exempts, and the exemption's
+    // stated rule is that the writer calls the gate itself. It did not: `ensureUserProfile`
+    // reads the marker, but `completeReconsent` never goes through `ensureUserProfile`, so
+    // the whole click-to-write window was ungated. The check costs one synchronous
+    // localStorage read.
+    //
+    // It THROWS rather than returning quietly: `ReconsentGate.onSubmit` catches, so a
+    // silent return would leave the person looking at a form that did nothing.
+    assertProfileWritable(firebaseUser.uid);
     const { profile } = await createProfileWithConsent(firebaseUser);
     // Account-switch guard, same shape as the profile-load path above: only adopt the
     // result if the same person is still signed in when it lands.

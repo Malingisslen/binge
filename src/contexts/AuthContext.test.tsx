@@ -2070,6 +2070,39 @@ describe('AuthContext — reconsent gate for a returning account (BIN-909)', () 
     expect(reconsentFlagRenders.at(-1)).toBe(true);
   });
 
+  it('completeReconsent refuses once a deletion has started, and writes nothing (BIN-1032)', async () => {
+    // The gap the ticket names: `completeReconsent` never goes through
+    // `ensureUserProfile`, so the marker read that guards every other create path did
+    // not cover this one. The whole click-to-write window was ungated.
+    //
+    // The marker goes down AFTER the gate is already on screen — that is the only order
+    // that reaches the branch. A marker present at load makes `deletionInProgress` true,
+    // and `AppShell` gives the limbo screen precedence, so the gate never renders.
+    //
+    // `markAborted()` writes the marker this browser reads, which is what the guard reads
+    // too — the same device, mid-render. An earlier version of this comment called it the
+    // cross-device case; the marker is localStorage, so a second DEVICE never has one and
+    // the guard could not fire for it. Struck rather than replaced with a new scenario.
+    ageAccount(60);
+    renderAuth();
+    await login(null);
+    expect(reconsentFlagRenders.at(-1), 'förutsättningen: grinden är uppe').toBe(true);
+    expect(userDocWrites()).toHaveLength(0);
+
+    markAborted();
+
+    await act(async () => {
+      await expect(ctx!.completeReconsent()).rejects.toThrow('binge/deletion-in-progress');
+    });
+
+    // Not merely "it threw": the create must not have happened. `runTransaction` is the
+    // stronger assertion of the two — refusing before it means the guard sits ahead of
+    // the first await, not after a round trip that already opened the window.
+    expect(runTransaction, 'transaktionen fick aldrig startas').not.toHaveBeenCalled();
+    expect(userDocWrites(), 'och ingenting skrevs').toHaveLength(0);
+    expect(claimUsername).not.toHaveBeenCalled();
+  });
+
   it('completeReconsent adopts nothing if a different account signed in meanwhile', async () => {
     // Same account-switch guard the profile-load path uses. Without it a slow create
     // lands its profile into a session that now belongs to someone else.

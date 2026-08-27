@@ -52,6 +52,7 @@ import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import type { TMDBMovie } from '@/types';
+import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
 //   - Hero poster → duotone (identification)
@@ -258,8 +259,27 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
       providers: allProviderIds,
       subscriptionProviders: subscriptionProviderIdsForMovie,
       genreIds: movie.genres.map(g => g.id),
-    }));
-    toast(`Bevakar släppet av ${displayTitle}`);
+    // BIN-1025 follow-up (integration review, 2026-08-27): the toast waits for the write.
+    //
+    // It used to fire unconditionally beside a `void`ed call, which was true as long as the
+    // write always landed — a full payload clears BIN-942's create floor. `writeTitle` now
+    // REFUSES during an account deletion, so the unconditional toast became a confirmation
+    // of a write Firestore never accepted: the BIN-895 false-confirmation class, made
+    // reachable by that change and therefore this batch's to fix.
+    //
+    // A refusal now shows nothing rather than something false. Showing nothing is its own
+    // shortcoming and is BIN-1038's question, together with every other caller that is
+    // silent here — but silence and a lie are not the same defect.
+    })).then(() => {
+      toast(`Bevakar släppet av ${displayTitle}`);
+    }).catch((err: unknown) => {
+      // Only the refusal is swallowed, and only because it is already reported: the throw
+      // site in `writeTitle` sends it to Sentry under `writeTitle-deletionRefused`, so a
+      // second unhandled rejection here adds noise and no information. Anything else is a
+      // real failure and keeps behaving exactly as it did before this handler chained —
+      // rethrown, unhandled, visible.
+      if (!isDeletionInProgressError(err)) throw err;
+    });
   };
 
   return (

@@ -1,6 +1,6 @@
 // src/components/pages/MoviePageClient.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // Three things are pinned here, and they need different amounts of the page:
 //
@@ -114,7 +114,11 @@ vi.mock('@/hooks/useStreamingOffers', () => ({ useStreamingOffers: () => ({ offe
 vi.mock('@/hooks/useCineasternaCatalog', () => ({
   useCineasternaCatalog: () => ({ has: () => false, rentalFor: () => undefined }),
 }));
-vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: vi.fn() }) }));
+// BIN-1025 follow-up: ONE spy, hoisted. A factory returning a fresh `vi.fn()` per call
+// makes every assertion about what the user was told vacuous — the test would hold a
+// different function than the component called.
+const toastShow = vi.hoisted(() => vi.fn());
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toastShow }) }));
 
 // Children of the real body. Each of these owns its own Firestore listener,
 // react-query call or provider context and has its own tests; stubbing them
@@ -168,7 +172,11 @@ function signedInWithSettledLibrary() {
 beforeEach(() => {
   setRuntime.mockReset();
   refreshTmdbFields.mockReset();
+  // Resolves by default: the "Bevaka" handler now chains the toast onto the write, so a
+  // mock returning undefined would throw rather than test anything.
   upsertTitle.mockReset();
+  upsertTitle.mockResolvedValue(undefined);
+  toastShow.mockReset();
   router.push.mockReset();
   watchlist.loading = true;
   watchlist.snapshotSettled = false;
@@ -297,6 +305,36 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     expect(upsertTitle).toHaveBeenCalledWith(expect.objectContaining({
       tmdbId: 603, mediaType: 'movie', status: 'vill_se',
     }));
+  });
+
+  it('confirms the watch only once the write has landed', async () => {
+    signedInWithSettledLibrary();
+    render(<MoviePageClient id="603" />);
+
+    await act(async () => { fireEvent.click(bevaka()!); });
+
+    expect(toastShow).toHaveBeenCalledWith(expect.stringContaining('Bevakar släppet'));
+  });
+
+  it('says NOTHING when the write is refused during an account deletion', async () => {
+    // BIN-1025 made `writeTitle` refuse by throwing. This handler fired its toast
+    // unconditionally beside a `void`ed call, which was true only while the write always
+    // landed — so that change turned it into a confirmation of a write Firestore never
+    // accepted. The BIN-895 false-confirmation class, reachable again.
+    //
+    // Silence is not the end state anyone wants (BIN-1038 owns what every silent caller
+    // should say), but silence and a lie are different defects, and only one of them is
+    // this batch's to leave behind.
+    signedInWithSettledLibrary();
+    upsertTitle.mockRejectedValueOnce(
+      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+    );
+    render(<MoviePageClient id="603" />);
+
+    await act(async () => { fireEvent.click(bevaka()!); });
+
+    expect(upsertTitle).toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalled();
   });
 
   it('offers nothing to a signed-in visitor whose listener died, so the CTA cannot write', () => {

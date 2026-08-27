@@ -5,8 +5,8 @@ import AppShell from './AppShell';
 // BIN-325: the "Hoppa till innehåll" skip link + focusable #main target are the
 // only keyboard bypass-block in the app chrome and had no regression guard — they
 // could be removed silently. AppShell pulls in the whole topbar/subnav/auth graph,
-// so we stub the heavy collaborators and assert ONLY the skip-link wiring, in all
-// three layouts (the link exists in each branch).
+// so we stub the heavy collaborators and assert ONLY the skip-link wiring (the link
+// exists in each branch).
 //
 // BIN-816 added the third branch: an account whose deletion started and never
 // finished gets the limbo screen INSTEAD of the app. That swap is where Malin's
@@ -36,6 +36,15 @@ function expectSkipLinkWiring() {
   expect(main!.getAttribute('tabindex')).toBe('-1');
   // the actual a11y contract: the link's fragment target matches the main's id.
   expect(link.getAttribute('href')).toBe(`#${main!.id}`);
+  // BIN-1033, #2 Accessibility's condition 1: a skip link placed after other focusable
+  // chrome is not a skip link. The four branches share ONE `ShellChrome` now, so the
+  // property that used to be four separate literals has to be asserted rather than read
+  // off the source — an extraction that renders the pair anywhere but first would leave
+  // every assertion above green.
+  const focusable = document.body.querySelectorAll(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  );
+  expect(focusable[0]).toBe(link);
 }
 
 describe('AppShell skip link (BIN-325)', () => {

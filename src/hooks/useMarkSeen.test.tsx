@@ -169,6 +169,33 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     expect(watchlist.logViewing).not.toHaveBeenCalled();
     expect(toast.show).toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
   });
+
+  it('a REFUSED write during an account deletion is not reported as a failed lookup', async () => {
+    // BIN-1025 made `writeTitle` refuse by throwing, and this catch wraps both the TMDB
+    // fetch and the write — so the refusal arrived here and was described as a series
+    // lookup that failed. "Försök igen" is wrong advice for it: the deletion marker does
+    // not clear on its own, so every retry fails identically. Same reason #19 Customer
+    // Support blocked the generic message on `ReconsentGate` in BIN-1032.
+    watchlist.logViewing.mockRejectedValueOnce(
+      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+    );
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => { await result.current(series, { countsAsViewing: true }); });
+
+    expect(toast.show).not.toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
+    const said = toast.show.mock.calls.at(-1)![0] as string;
+    expect(said).toContain('raderas');
+    expect(said).not.toContain('försök igen');
+  });
+
+  it('control — any OTHER write failure is still the generic message', async () => {
+    // Without this the row above would pass on a branch that swallowed every failure.
+    watchlist.logViewing.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => { await result.current(series, { countsAsViewing: true }); });
+
+    expect(toast.show).toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
+  });
 });
 
 // BIN-814. `markSeen` is how most titles reach 'sedd'/'mina', and the add it performs

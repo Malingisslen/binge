@@ -23667,3 +23667,73 @@ entry this cites) to make room for the new stampMap-merge lesson in the same bul
 **Verdict:** fail — 1 blocking (the `stampMap` merge-across-invocations gap above). Rounds
 1–3's findings (exit-code tautology, `matchesToken`'s dead branches, `stampDossier`'s missing
 wiring) confirmed still closed by this round's re-derivation, not inherited.
+
+## 2026-08-27 — Sprint 2026-08-27b (BIN-1032/1034/1033/1025/1022/1026/1024/1036/1027) review
+
+Diff reviewed: 12 staged files across three batches — A (BIN-1032/1034/1033: `AuthContext.tsx`,
+`ReconsentGate.tsx`+test, `AppShell.tsx`+test, new `ShellChrome.tsx`, new
+`deletionInProgressError.ts`, `userDocWrite.ts`+chokepoint test), B (BIN-1025/1022/1026/1024:
+`WatchlistContext.tsx`+test, new `watchlistDocKey.ts`+test, `useMarkSeen.ts`+test,
+`watchlistWrites.addWrite.test.ts`), C (BIN-1036/1027: new `preview-gate.test.mjs`, new
+`stats/page.test.tsx`, new `UserProfilePageClient.test.tsx`, new `useServiceValue.test.ts`).
+
+All files opened with `Read`. Every mutation below applied to the real prod file, snapshotted
+first to scratchpad, restored after, verified byte-identical via `git hash-object` vs
+`git rev-parse :<f>`.
+
+**Mutations run and results (all matched the sprint's own "Mätningar" claims):**
+- `stats/page.tsx` `markedSeen(items)` → `items.filter(i => i.watchedAt != null)`: 2 failed
+  (matches claim). Same mutation on `UserProfilePageClient.tsx`: 2 failed. `useServiceValue.ts`
+  `markedSeen(items)` → `items.filter(i => i.watchedAt != null)`: 2 failed. **Distinct finding**:
+  the SAME two sites mutated instead to `items.filter(i => seenDate(i) != null)` (routing through
+  the already-status-gated helper) killed only 1 test each, not 2 — `seenDate` already excludes
+  the dropped-with-stale-date fixture, so only the "no watchedAt" case discriminates. Confirmed
+  this is a mutation-SHAPE ambiguity, not a coverage gap: AC30 only requires ≥1 failure per site,
+  which both shapes satisfy. Folded into knowledge.md bullet 12.
+- `AuthContext.tsx` `completeReconsent`: removed `assertProfileWritable(firebaseUser.uid);` →
+  exactly 1 test failed (`completeReconsent refuses once a deletion has started, and writes
+  nothing (BIN-1032)`), matching AC2/AC-per-ticket claim.
+- `AppShell.tsx`: removed `<ShellChrome />` from the `deletionInProgress` branch → exactly 1
+  test failed (the limbo-branch `expectSkipLinkWiring()` case), matching the claim.
+- `WatchlistContext.tsx` `writeTitle`'s `if (isDeletionStarted(uid))` → `if (false)`: 2 tests
+  failed (matches claim: BIN-1025's `upsertTitle refuses…` + `logViewing…refuses too`).
+- `WatchlistContext.tsx` group-sync gate `if (isDeletionStarted(uid)) return outcome;` → `if
+  (false) return outcome;`: 1 test failed (matches claim).
+- `WatchlistContext.tsx` `if (!survived) downgradeLeftoverVisibility(...)` → `if (false)`, with
+  `setDoc.mockReset()` (current beforeEach): 3 failed. Same mutation with `setDoc.mockClear()`
+  (the pre-fix state): 124 failed. Both exactly match BIN-1026's cited "124 vs 3" measurement in
+  `tasks/todo.md`.
+- `useMarkSeen.ts`: removed the `DELETION_IN_PROGRESS` narrowing branch in the TV catch → 1 test
+  failed (`a REFUSED write during an account deletion is not reported as a failed lookup`); the
+  control test (`control — any OTHER write failure is still the generic message`) stayed green,
+  confirming the narrowing is real and the control is non-vacuous.
+- `preview-gate.test.mjs`'s subprocess tests were checked for real-marker safety: all three
+  `execFileSync` invocations only read via `existsSync` (never write); the fixture slug
+  (`bin1036-fixture-not-a-real-screen`) cannot collide with a genuine `/preview` marker.
+
+**Other findings, all non-blocking / confirmed-accurate:**
+- `ReconsentGate.tsx:19` — BIN-1034's target sentence ("and its anti-example table carries that
+  exact construction") is STRUCK, not reworded, per `git diff --cached`; the rule-1 reference
+  before it is untouched. Correct application of the strike-don't-reword convention.
+- `WatchlistContext.test.tsx`'s `beforeEach` `setDoc.mockClear()` → `setDoc.mockReset()` is a
+  deliberate, well-commented, measured fix (see mutation above) — not a weakening. `mockReset`
+  is safe here because every `setDoc` call site uses `vi.fn(impl)`, whose base implementation
+  survives a reset (Vitest 4 semantics), and the file's own comment says so.
+- `BIN-1024`'s new test in `watchlistWrites.addWrite.test.ts` documents a KNOWN, ACCEPTED gap
+  (JSDoc "DECISION (BIN-928)" on `outcomeOfAddWrite`) rather than fixing it — confirmed the
+  JSDoc's claim (`'rewatchCount' in write`) matches the implementation and the test's own
+  behaviour (green, not a fix).
+- `npm test` at the end of the review: 271 files, 4468 green, 4 skipped — the sprint's own
+  "Mätningar" line claims 4465. A 3-test discrepancy, most plausibly from the late `useMarkSeen`
+  catch-narrowing deviation (2 tests) added to the file AFTER the "Mätningar" line was written,
+  plus one more untraced. LOW severity (directionally correct, not a safety claim) — the exact
+  number in `tasks/todo.md`'s Mätningar section is stale and should be corrected or struck at
+  the next touch of that file, but is not blocking since `tasks/todo.md` is a disposable sprint
+  scratch file per `code-style.md`, not a durable claim.
+- `git status --porcelain` reported `MM` for `WatchlistContext.test.tsx` after a restore even
+  though `git hash-object` matched `git rev-parse :<f>` exactly and `git diff` (git-aware, CRLF
+  filter applied) was empty — a plain `diff -u` against `git show :<f>` showed every line as
+  changed (CRLF-vs-LF artifact per `core.autocrlf=true`, matches archived bullet on that). Not a
+  real content difference; noted rather than acted on.
+
+**Verdict: pass (0 blocking).**

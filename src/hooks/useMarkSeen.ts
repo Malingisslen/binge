@@ -10,6 +10,7 @@ import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { trackEvent } from '@/lib/analytics';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { shouldPromptRating } from './useMarkSeen.helpers';
+import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { MediaType, TMDBTVShow } from '@/types';
 
 export interface MarkSeenInput {
@@ -121,7 +122,18 @@ export function useMarkSeen() {
           genreIds: input.genreIds,
           tmdbStatus: tvShow.status ?? input.tmdbStatus ?? undefined,
         })));
-      } catch {
+      } catch (err) {
+        // BIN-1025 follow-up (code review, 2026-08-27): this catch wraps BOTH the TMDB
+        // fetch and the write, and since `writeTitle` began REFUSING during an account
+        // deletion the refusal landed here and was reported as a failed series lookup.
+        // "Försök igen" is wrong advice for it — the marker does not clear on its own, so
+        // every retry fails identically. Same reasoning #19 Customer Support used to block
+        // BIN-1032's generic message on `ReconsentGate`; the two screens must not disagree
+        // about what a refused write means.
+        if (isDeletionInProgressError(err)) {
+          show('Kontot håller på att raderas. Ändringen sparades inte.');
+          return;
+        }
         show('Kunde inte hämta serieinfo, försök igen');
         return;
       }

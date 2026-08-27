@@ -159,6 +159,15 @@ export const TOOLING_CODE_FILES = new Set([
   // session is told to re-trace, so weakening it must not be a change nobody reviews.
   '.claude/hooks/freshness.mjs',
   '.claude/hooks/freshness.test.mjs',
+  // BIN-1036. The sibling gate — a PreToolUse(Write) block on creating a new screen
+  // before design directions have been shown. Its `.test.mjs` is new in this commit, and
+  // the discovery half of the BIN-874 check is keyed on that sibling existing: until now
+  // the production file was nominated by nothing, which is the blind spot the comment on
+  // `check_events.mjs` above names. `reviewGates`' integration pattern already covered
+  // both spellings, so this commit widens only the list that was actually short — BIN-830
+  // is about the two lists AGREEING, not about editing both reflexively.
+  '.claude/hooks/preview-gate.mjs',
+  '.claude/hooks/preview-gate.test.mjs',
   // BIN-918. The metrics-log claim check. Added here in the SAME commit as its
   // `reviewGates` pattern. What named the gap was route.test.mjs's BIN-874 block —
   // "has a test in vitest's include globs but is missing from TOOLING_CODE_FILES" —

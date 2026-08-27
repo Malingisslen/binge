@@ -18,7 +18,7 @@
 // title in every library. A behaviour change here is silent and retroactive.
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { buildAddWrite, type AddWriteContext, type WriteIntent } from './watchlistWrites';
+import { buildAddWrite, outcomeOfAddWrite, type AddWriteContext, type WriteIntent } from './watchlistWrites';
 import type { WatchlistItem, WatchStatus } from '@/types';
 import type { WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 
@@ -384,6 +384,31 @@ describe('buildAddWrite — the coherence invariant (BIN-641)', () => {
     // The key itself still rides through untouched — that is BIN-928's decided boundary,
     // and this assertion is what stops a later "fix" from silently moving it.
     expect(out.rewatchCount).toBe(9);
+  });
+
+  it('BIN-1024 — but it DOES buy the caller a rewatch REPORT, and that is the open half', () => {
+    // The other consequence of the same key. `buildAddWrite` refuses to let a supplied
+    // `rewatchCount` re-date `watchedAt` (the three rows above); `outcomeOfAddWrite` reads
+    // `'rewatchCount' in write`, which is the FINISHED payload, so the key rides in through
+    // `...itemFields` and the outcome says a rewatch was counted when nothing was.
+    //
+    // `outcomeOfAddWrite` is what gates the "Sedd igen" sentence the user reads. So the
+    // report is wrong even though the stored data is right — one key, two consequences,
+    // and BIN-978 only closed the one with teeth.
+    //
+    // This test does NOT change that. BIN-928 decided against a runtime strip and the
+    // JSDoc explains why (the strip beside it is a PRIVACY boundary, and folding an
+    // unrelated invariant in would leave neither reason legible). The protection is at the
+    // type level. What was missing was anything that FAILS if the type level stops
+    // holding, and this is it: widen `WatchlistAddPayload` to admit the key and this row
+    // is where a reviewer meets the decision.
+    const out = buildAddWrite(forged(), 'bulk', ctx({ current: stored() }));
+    expect(outcomeOfAddWrite(out as unknown as Record<string, unknown>)).toEqual({ countedRewatch: true });
+  });
+
+  it('control — an honest bulk write reports no rewatch, so the row above is not vacuous', () => {
+    const out = buildAddWrite(payload(), 'bulk', ctx({ current: stored() }));
+    expect(outcomeOfAddWrite(out as unknown as Record<string, unknown>)).toEqual({ countedRewatch: false });
   });
 
   it('control — a genuine counted rewatch DOES re-date, so the three above are not vacuous', () => {
