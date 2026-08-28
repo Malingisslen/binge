@@ -155,7 +155,7 @@ cache).
 ## Workflow map freshness
 
 `docs/workflow-map.html` (interactive, JSON-driven) documents the PWA/Firebase flows.
-CI + deploy fail if a referenced path stops existing OR if any entry in `docs/workflow-map-universe.json` (functions/routes) loses flow coverage (`node scripts/check-workflow-map.mjs`) — a new function or route requires a map flow.
+Deploy fails if a referenced path stops existing OR if any entry in `docs/workflow-map-universe.json` (functions/routes) loses flow coverage (`node scripts/check-workflow-map.mjs`) — a new function or route requires a map flow.
 A PostToolUse hook stamps `.claude/state/workflow-map-stale.json` when mapped code is edited.
 **If that flag exists:** re-trace ONLY the flows whose nodes match the flag's `triggers`,
 update the map's `<script id="data">` JSON (nothing else), run the linter, delete the flag,

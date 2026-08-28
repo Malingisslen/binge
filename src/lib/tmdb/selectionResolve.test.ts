@@ -43,8 +43,7 @@ beforeEach(() => {
   process.env.SELECTION_ALLOW_THIN = '1';
   // De här testerna kör medvetet räddnings- och felvägar, som skriver
   // `::warning::`-rader. Utan spy taggas varje grön körning med falska
-  // GitHub Actions-annoteringar — på varje workflow som kör `npm test`, och
-  // det är fler än en sedan BIN-1028 (härled dem:
+  // GitHub Actions-annoteringar — på varje workflow som kör `npm test` (härled dem:
   // `grep -l "npm test" .github/workflows/*.yml`).
   stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 });
