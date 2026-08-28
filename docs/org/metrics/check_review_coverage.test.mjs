@@ -38,6 +38,10 @@ import {
   stagedEventsLog,
   REPO_ROOT,
   DEFAULT_EVENTS_REL,
+  dependabotPrefixesFrom,
+  readDependabotPrefixes,
+  readBotBumpShas,
+  exemptionInputs,
 } from './check_review_coverage.mjs';
 import { EVENTS_PATH, parseEvents, historyIsAvailable } from './check_events.mjs';
 
@@ -554,7 +558,13 @@ describe('the live repo', () => {
     if (!historyIsAvailable()) return; // depth-1 checkout: the module asserts nothing, nor does this
 
     const reviewed = ticketsWithAReviewRow(parseEvents(readFileSync(EVENTS_PATH, 'utf8')));
-    const result = findCoverageGaps(readGitLog(), reviewed);
+    // BIN-1040: the exemption inputs go HERE too, from the SAME builder `main()` uses.
+    // Nothing automated calls `main()` — `lefthook.yml` invokes the `--message` mode — and
+    // the path that turns the DEPLOY red is `npm test` reaching this assertion. Wiring the
+    // exemption into `main()` alone left the defect exactly where it was reported from,
+    // under a docblock saying it was fixed. Found by the integration review before this
+    // shipped; "check WHERE the rule runs, not only where it was written" (BIN-744/776/917).
+    const result = findCoverageGaps(readGitLog(), reviewed, exemptionInputs(true));
 
     expect(
       result.violations.map(v => `${v.sha ?? '(whole walk)'} — ${v.reason}`),
@@ -577,5 +587,114 @@ describe('the live repo', () => {
       Date.parse(EPOCH),
       'the epoch is in the future, so this rule can never judge anything',
     ).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+describe('the dependabot exemption (BIN-1040)', () => {
+  const reviewed = new Set(['BIN-100']);
+  const BOT = new Set(['bot1']);
+
+  // The prefixes as the REAL config declares them, so every case below is driven by the
+  // same derivation the gate runs — never by a list retyped into this file.
+  const PREFIXES = readDependabotPrefixes();
+
+  it('derives exactly the prefixes .github/dependabot.yml declares today', () => {
+    // The pin #25's blind critique asked for. There is no YAML parser in this repo, so the
+    // derivation is a text scan; a re-quoting, a renamed prefix or a new ecosystem block
+    // must fail HERE rather than silently mis-derive and re-arm the trap under a new name.
+    // Sorted, because the scan reports file order and file order is not the contract.
+    expect(PREFIXES.slice().sort()).toEqual(['ci', 'deps', 'deps(functions)']);
+  });
+
+  it('reads a quoted, an unquoted and a single-quoted prefix, and ignores prose', () => {
+    expect(dependabotPrefixesFrom([
+      '    commit-message:',
+      '      prefix: "ci"',
+      '      prefix: deps',
+      "      prefix: 'deps(functions)'",
+      '      # prefix: not-a-real-one',
+      '      description: the prefix: word inside prose must not match',
+    ].join('\n'))).toEqual(['ci', 'deps', 'deps(functions)']);
+  });
+
+  it('exempts a dependabot Actions bump — the defect BIN-1040 was filed about', () => {
+    // Before this, merging one of these turned the deploy red and then blocked unrelated
+    // code until somebody hand-wrote a review row for a commit nobody wrote.
+    const r = findCoverageGaps(
+      [commit('bot1', 'ci(deps): bump actions/checkout from 4 to 7 (#37)')],
+      reviewed,
+      { botShas: BOT, dependabotPrefixes: PREFIXES },
+    );
+    expect(r.violations).toEqual([]);
+    expect(r.eligible, 'an exempt commit is not eligible, so it cannot be counted as covered')
+      .toBe(0);
+  });
+
+  it('still charges an ordinary ci(...) scope even from the bot — the SUBJECT half of the AND', () => {
+    // The scope half. `bot1` IS in `botShas`, so authorship alone would exempt this; the
+    // `deps` scope requirement is the only thing charging it, which is what keeps the
+    // exemption to version bumps rather than to everything the bot could ever author.
+    const r = findCoverageGaps(
+      [commit('bot1', 'ci(workflows): byt node-version (BIN-999)')],
+      reviewed,
+      { botShas: BOT, dependabotPrefixes: PREFIXES },
+    );
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('BIN-999');
+  });
+
+  it('still charges the bot SUBJECT FORM when git did not attribute it to the bot', () => {
+    // `ci(deps): …` is text a human can type. Authorship is asked of git, never read off
+    // the subject line, so an identical subject from a human author stays inside the rule.
+    const r = findCoverageGaps(
+      [commit('human1', 'ci(deps): bump actions/checkout from 4 to 7')],
+      reviewed,
+      { botShas: BOT, dependabotPrefixes: PREFIXES },
+    );
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].reason).toContain('no BIN-id');
+  });
+
+  it('charges a bot-authored commit whose subject is not a dependency bump at all', () => {
+    const r = findCoverageGaps(
+      [commit('bot1', 'feat(x): something the bot did not bump (BIN-999)')],
+      reviewed,
+      { botShas: BOT, dependabotPrefixes: PREFIXES },
+    );
+    expect(r.violations).toHaveLength(1);
+  });
+
+  it('grades exactly as before when no exemption inputs are passed', () => {
+    // The defaults must mean "nothing is exempt".
+    const r = findCoverageGaps([commit('bot1', 'ci(deps): bump actions/checkout from 4 to 7')], reviewed);
+    expect(r.violations).toHaveLength(1);
+  });
+
+  it('leaves owesReviewRow itself untouched, so the commit-msg hook still refuses', () => {
+    // `gradeSubject` grades a commit that does not exist yet and therefore has no author.
+    // It must not inherit the exemption: a human typing this subject still owes a row.
+    expect(owesReviewRow('ci(deps): bump actions/checkout from 4 to 7')).toBe(true);
+    expect(gradeSubject('ci(deps): bump actions/checkout from 4 to 7', reviewed).ok).toBe(false);
+  });
+
+  it('the npm ecosystems never tripped the rule, and still do not', () => {
+    // Measured on the real config: only the `github-actions` block's `ci` prefix is inside
+    // `OWES_REVIEW` at all. Pinned so a future widening of the denominator is noticed here.
+    expect(owesReviewRow('deps(deps-dev): bump eslint from 9.39.4 to 10.7.0')).toBe(false);
+    expect(owesReviewRow('deps(functions)(deps): bump firebase-admin')).toBe(false);
+  });
+
+  it('an unreadable dependabot.yml exempts NOTHING rather than everything', () => {
+    // Direction matters: failing open here would widen who escapes the rule.
+    expect(readDependabotPrefixes(mkdtempSync(join(tmpdir(), 'no-dependabot-')))).toEqual([]);
+  });
+
+  it('this repo really does have bot-authored commits, so the gate is not theoretical', () => {
+    if (!historyIsAvailable()) return;
+    expect(
+      readBotBumpShas().size,
+      'git attributes no commit to dependabot[bot] — either the author spelling changed or '
+      + 'the exemption is now guarding nothing and should be re-anchored, not deleted quietly',
+    ).toBeGreaterThan(0);
   });
 });

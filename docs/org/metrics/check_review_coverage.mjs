@@ -6,9 +6,16 @@
 // `--message <file>`  — COMMIT TIME. Grades the subject line of the commit being written and
 //                       refuses it. Called by lefthook's `commit-msg` hook. This is BIN-917's
 //                       criterion 4 as literally stated.
-// (no flag)           — HISTORY. Walks every commit and grades the ones already made. Runs
-//                       under `npm test`, so it gates the DEPLOY. This catches anything that
-//                       got in before the hook existed, or with the hook bypassed.
+// (no flag)           — HISTORY. Walks every commit and grades the ones already made. This
+//                       catches anything that got in before the hook existed, or with the
+//                       hook bypassed.
+//
+// WHICH RUNNER CALLS WHICH is derived, not asserted — a sentence here was the belief that
+// produced BIN-1040's first, inert fix (the exemption wired into `main()`, which nothing
+// runs, while the assertion that reds the deploy went on charging dependabot):
+//
+//     grep -rn check_review_coverage .github lefthook.yml package.json
+//     git grep -n "findCoverageGaps(" -- docs
 //
 // The first attempt at this ticket shipped only the second mode and declared the first
 // impossible: "there is no commit-time mechanism in this repo — `ls .husky` is empty and
@@ -31,8 +38,7 @@
 //     that runs on a given machine the config is present and the gate is not armed — the
 //     BIN-849 failure shape (a value wired in config and never in the build), which is why it
 //     is said here and flagged to the founder rather than assumed.
-//   * The history mode remains the backstop for all three, and it gates the deploy, not the
-//     commit: code can still reach `main` past a skipped hook, it just cannot reach users.
+//   * The history mode remains the backstop for all three.
 //
 // WHAT IT DOES CHECK
 // The sibling asks "does a claim carry its evidence?". This asks the opposite question:
@@ -212,6 +218,99 @@ export const COVERAGE_EFFECTIVE_FROM = '2026-08-18T00:00:00.000Z';
  */
 const OWES_REVIEW = /^(feat|fix|refactor|perf|test|build|ci)(\([^)]*\))?!?:/;
 
+/**
+ * Dependabot's own version bumps, and ONLY those, are exempt from owing a review row.
+ *
+ * The rule they are exempted from exists to catch MY unreviewed code (BIN-917). A robot's
+ * version bump is not that risk: there is no author to critique, and the content is graded
+ * by the suite `pr-checks.yml` runs on the pull request. Left un-exempted the rule is worse
+ * than useless — merging such a PR turns the deploy red and then blocks UNRELATED code until
+ * somebody hand-writes a row for a commit nobody wrote (BIN-1040). Which of the bot's open
+ * PRs can actually do that moves with every dependabot run, and only the ones whose subject
+ * `OWES_REVIEW` matches at all can: derive it rather than reading a number here.
+ *
+ * THE EXEMPTION IS TWO SIGNALS AND-ED, NEVER ONE.
+ *
+ *   1. AUTHORSHIP — the commit is authored by `dependabot[bot]`, established by asking git
+ *      itself (`readBotBumpShas`), not by reading the subject line.
+ *   2. SUBJECT FORM — the subject carries one of the prefixes DERIVED from
+ *      `.github/dependabot.yml`, followed by a `deps…` scope.
+ *
+ * Signal 2 alone is a governance hole, and #25's blind critique blocked on it: with
+ * `commit-message.prefix: "ci"` in that config, `ci(deps): …` is text a human can type, so a
+ * subject-only exemption would let a hand-written commit walk out of the rule under a name
+ * anyone can spell. Signal 1 alone is too broad in the other direction — it would exempt
+ * anything the bot ever authored, not only a version bump.
+ *
+ * The prefixes are DERIVED rather than listed here so that renaming one in
+ * `.github/dependabot.yml` carries the exemption with it instead of silently re-arming the
+ * trap under a new name. `dependabotPrefixesFrom` is pinned against the real file by a test.
+ *
+ * WHERE THIS DELIBERATELY DOES NOT APPLY: `gradeSubject` (the commit-msg hook) grades a
+ * commit that does not exist yet and therefore has no author. It exempts nothing, which is
+ * the behaviour you want — a human at a keyboard typing `ci(deps): …` still owes their row.
+ */
+const BOT_AUTHOR = 'dependabot\\[bot\\]';
+
+/**
+ * Every `commit-message.prefix` in `.github/dependabot.yml`, in file order.
+ *
+ * A hand-rolled scan rather than a parse: this repo has no YAML dependency, and adding one
+ * to a gate script is a bigger change than the gate itself. The scan is narrow (a `prefix:`
+ * key, optionally quoted) and it is PINNED BY A TEST against the real file, so a re-quoting
+ * or a new ecosystem block fails loudly here instead of mis-deriving in silence.
+ */
+export function dependabotPrefixesFrom(yamlText) {
+  const PREFIX_LINE = /^[ \t]*prefix:[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#][^#\r\n]*?))[ \t]*$/gm;
+  return [...yamlText.matchAll(PREFIX_LINE)]
+    .map((m) => (m[1] ?? m[2] ?? m[3]).trim())
+    .filter(Boolean);
+}
+
+/** The prefixes the checked-in `.github/dependabot.yml` declares; `[]` when it cannot be read. */
+export function readDependabotPrefixes(root = REPO_ROOT) {
+  try {
+    return dependabotPrefixesFrom(readFileSync(join(root, '.github', 'dependabot.yml'), 'utf8'));
+  } catch {
+    // No config, no robot, no exemption. Failing OPEN here would be the wrong direction: an
+    // unreadable config must never widen who escapes the rule.
+    return [];
+  }
+}
+
+/**
+ * The shas git attributes to `dependabot[bot]`. Asked of git rather than inferred, because
+ * an authorship claim read off a subject line is not an authorship claim.
+ */
+export function readBotBumpShas() {
+  try {
+    const raw = execFileSync(
+      'git',
+      ['log', '--no-merges', `--author=${BOT_AUTHOR}`, '--format=%H'],
+      { cwd: dirname(EVENTS_PATH), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+    );
+    return new Set(raw.split('\n').map((l) => l.trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * True only when BOTH signals agree that this commit is a robot dependency bump.
+ *
+ * The scope must START with `deps` — that is what dependabot's `include: "scope"` emits, and
+ * it is what holds the exemption to version bumps rather than to everything the bot could
+ * ever author.
+ */
+export function isBotDependencyBump(commit, botShas, prefixes) {
+  if (!botShas.has(commit.sha)) return false;
+  const subject = commit.subject.trim();
+  return prefixes.some((prefix) => {
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escaped}\\(deps[^)]*\\)!?:`).test(subject);
+  });
+}
+
 /** Every BIN-id in a commit SUBJECT. Global — one commit may legitimately close several. */
 const TICKET_IN_SUBJECT = /\bBIN-\d+\b/g;
 
@@ -303,7 +402,14 @@ export function readGitLog() {
  * exists to catch a broken read, which is a different failure from "nothing was eligible".
  * Conflating those two is how a shrink reads as a pass (BIN-838/823/850).
  */
-export function findCoverageGaps(commits, reviewed, { historyAvailable = true, effectiveFrom = COVERAGE_EFFECTIVE_FROM } = {}) {
+export function findCoverageGaps(commits, reviewed, {
+  historyAvailable = true,
+  effectiveFrom = COVERAGE_EFFECTIVE_FROM,
+  // BIN-1040. Both default to "nothing is exempt", so every caller that does not pass them
+  // grades exactly as this file did before the exemption existed.
+  botShas = new Set(),
+  dependabotPrefixes = [],
+} = {}) {
   // A depth-1 checkout can see exactly one commit, so it does not get to answer a question
   // about history at all. Reported, never assumed either way.
   if (!historyAvailable) {
@@ -318,6 +424,10 @@ export function findCoverageGaps(commits, reviewed, { historyAvailable = true, e
 
   for (const commit of commits) {
     if (!owesReviewRow(commit.subject)) continue;
+    // BIN-1040, and it sits HERE rather than inside `owesReviewRow` on purpose: the
+    // exemption needs the commit's AUTHOR, and the predicate only ever sees a subject. That
+    // is also why `gradeSubject` — which grades an unwritten commit — cannot reach it.
+    if (isBotDependencyBump(commit, botShas, dependabotPrefixes)) continue;
     if (Date.parse(commit.date) < epoch) { grandfathered++; continue; }
 
     eligible++;
@@ -366,11 +476,38 @@ export function findCoverageGaps(commits, reviewed, { historyAvailable = true, e
   return { violations, commitsWalked: commits.length, grandfathered, eligible, covered, unverified: false };
 }
 
+/**
+ * The exemption inputs, built in ONE place because there are TWO callers that grade this
+ * repo and they must not drift apart (BIN-1040, found by the integration review).
+ *
+ * `main()` is one. The other is the live-repo assertion in this module's test file, and
+ * THAT is the one that reds the deploy: nothing automated calls `main()` — `lefthook.yml`
+ * invokes the `--message` mode — while `deploy.yml` runs `npm test`, which reaches the
+ * test. Wiring the exemption into `main()` alone left the defect exactly where it was
+ * reported from, under a docblock saying it was fixed. "Check WHERE the rule runs, not only
+ * where it was written" is BIN-744/776/917's lesson; this is the same shape.
+ *
+ * Derive the callers rather than trusting this paragraph:
+ *
+ *     git grep -n "findCoverageGaps(" -- docs
+ */
+export function exemptionInputs(historyAvailable) {
+  return {
+    // No history, no authorship to ask git about — and an empty set exempts nothing, which
+    // is the safe direction.
+    botShas: historyAvailable ? readBotBumpShas() : new Set(),
+    dependabotPrefixes: readDependabotPrefixes(),
+  };
+}
+
 export function main() {
   const reviewed = ticketsWithAReviewRow(parseEvents(readFileSync(EVENTS_PATH, 'utf8')));
   const historyAvailable = historyIsAvailable();
   const commits = historyAvailable ? readGitLog() : [];
-  const result = findCoverageGaps(commits, reviewed, { historyAvailable });
+  const result = findCoverageGaps(commits, reviewed, {
+    historyAvailable,
+    ...exemptionInputs(historyAvailable),
+  });
 
   if (result.unverified) {
     console.log(

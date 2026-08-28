@@ -34,9 +34,11 @@ system on its own terms.
   fails when a code-changing commit has no `review` row at all. **Two modes**, and they gate
   different things: `--message <file>` is run by `lefthook.yml`'s `commit-msg` hook and
   REFUSES THE COMMIT, reading the log from the **index** (an unstaged row is invisible to it,
-  deliberately — see the function's own comment); with no flag it walks history under
-  `npm test` and gates the deploy, as the backstop for anything committed before the hook
-  existed or with `LEFTHOOK=0`. It shares `ticketOf` and `historyIsAvailable` with
+  deliberately — see the function's own comment); with no flag it walks history as the
+  backstop for anything committed before the hook existed or with `LEFTHOOK=0`. WHICH
+  RUNNER REACHES WHICH MODE is derived, not stated — the sentence that used to stand here
+  is what produced BIN-1040's first, inert fix, and the module header now carries the two
+  commands that answer it. It shares `ticketOf` and `historyIsAvailable` with
   `check_events.mjs` so both files answer "which ticket is this row about?" identically.
   Its header states what it does NOT catch, including that a `ran:false` row satisfies it.
 
