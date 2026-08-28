@@ -23587,6 +23587,9 @@ Each entry below is the COMPLETE original bullet, byte-for-byte as it stood in `
 
 - **A URL/route fixture is a factual claim: grep it back to the line that BUILDS it.** Plausible-looking invented routes recurred EIGHT times across BIN-640/645, once inside the fix for the previous one. Check three things per fixture — the route directory exists under `src/app/`, the query KEY is read by that page, and the query VALUE is one the app can actually produce: `/rekommendationer/?row=2` was wrong on all three (`RecRow.tsx` builds `` `/recommendations/?row=${encodeURIComponent(rowSpec.rowKey)}` `` and `rowKey(id)` is colon-joined, so `?row=person%3A1245`), and `/my/all?status=sedd` was wrong on two (`NumberedActionsList` builds `/my/series?provider=N&status=behind`; `WatchlistPage` only honours `?status=` when `status==='mina'`, i.e. `/my/series`). A fixture that names a surface the app never had keeps passing after that surface moves, so it pins nothing. Curated domain id lists get cross-checked against external ground truth AND the enums/label maps they derive from. Sitemap: two-sided enumeration with REAL constants + an auth/noindex-leak scan (BIN-337/305). **Same discipline for a rejected-Error fixture feeding a message-sniffing branch (`err.message.includes(CODE)`): grep the fixture's string back to the line that actually THROWS it, not to the constant's declaration alone.** BIN-777's `DeleteAccountSection.test.tsx` first shipped `new Error(STALE_SESSION_PREFLIGHT)` — just the bare code — when the real thrower (`AuthContext.tsx:991`, `` throw new Error(`${REQUIRES_RECENT_LOGIN} (${STALE_SESSION_PREFLIGHT}): …`) ``) puts BOTH codes in one message on purpose, specifically so a caller sniffing in the wrong order can't tell them apart. A fixture with only the narrow code is reachable under EITHER branch order, so the swap mutant (check `REQUIRES_RECENT_LOGIN` before `STALE_SESSION_PREFLIGHT`) survived 5/5 — closed by rebuilding the fixture as the literal template string the thrower emits (verified live: swap mutant now fails 1/5 alone). Two sibling messages sharing an identical PREFIX (here, a promise-bearing sentence appended only on one branch) additionally want the differing suffix asserted on its own (`toContain` the promise clause / `not.toContain` it) so a prefix-preserving swap can't hide behind the shared substring.
 
+### 56 — Same class, rules-vs-client (BIN-1002): a rules-regex-vs-client-fn agreement check
+
+- **The mirror-parity class (arkiv 31, `mediaTypeDocId` src/functions copies) extends past same-language mirrors: a rules-regex-vs-client-fn agreement check (BIN-1002, `docs/org/rules-id-client-symmetry.test.mjs`) needs neither side hand-restated.** Extract the rules regex from `firestore.rules` as TEXT (`id.matches(...)`'s quoted argument, anchored on the function name never a line number); call the REAL client fn imported into the SAME test — a plain `.mjs` test file CAN `import` a `.ts` module directly, vitest transforms it, no JS mirror needed. Generate the corpus across the boundaries the two sides have actually disagreed about before (`0`/BIN-646/797, a leading-zero alias/BIN-618, an empty suffix, a negative `Number()` accepts, a non-integer) rather than hand-listing examples — a hand-written example proves only that the example works. Assert THREE floors before comparing anything, because each means something different: the regex extraction returned something (an extraction that stops matching silently compares nothing to nothing); the corpus didn't collapse (a floor derived from the corpus's own length would be circular — hardcode it, e.g. `>=40`); and BOTH an accepted and a refused case exist (else agreement is vacuously about one side only). Verified live by mutating each side independently and checking the floors stayed green while only the agreement assertion reddened: widening the client's canonical-id regex (`/^[1-9][0-9]*$/` → `/^[0-9]+$/`) failed exactly the 8 leading-zero/zero cases; separately narrowing the rules regex (`[1-9][0-9]*` → `[1-9][0-9]{1,3}`) failed the agreement check on 10 cases AND the sibling twin-copy byte-identity check (BIN-998) in the same run — two independent guards, two independent findings, from one rules-side mutation. Full mutation-and-restore trace: `.claude/agents/binge-test-reviewer.knowledge.archive.md`, "2026-08-28 — BIN-1002".
 
 ## 2026-08-26 — BIN-1009 round 4: stampDossier wiring verified, stampMap merge found unpinned
 
@@ -23812,5 +23815,83 @@ cleanup), but the mechanism is identical to how a sibling agent's edit could sli
 unnoticed. Also: a "would go red on X" workflow-conditions claim needs every workflow running
 the assertion checked for its own settings (here `fetch-depth`), not just the one the comment
 names.
+
+**Verdict: pass (0 blocking).**
+
+## 2026-08-28 — BIN-1002: firestore.rules-vs-client id-shape symmetry check
+
+**Diff reviewed (staged only; a large unstaged sibling-ticket tree was ignored per
+instructions):** `docs/org/rules-id-client-symmetry.test.mjs` (NEW, 139 lines),
+`docs/org/route.mjs` (+7 lines, adds the new file to `TOOLING_CODE_FILES`, plus an
+unrelated same-file comment correction citing BIN-1040), `docs/org/rules-doc-id-symmetry.test.mjs`
+(header comment only: replaced "They do today, and nothing mechanical holds them there.
+That is the larger residual gap and it is not this file." with a pointer to the new file),
+`.claude/shared-plugin.json` (+1 line widening the `reviewGates` tooling alternation with
+`rules-id-client-symmetry`, plus `_note15` recording the same mutation trace below).
+
+**What the new file does:** extracts `firestore.rules`' `canonicalWatchlistDocId` id-shape
+regex as TEXT, and separately calls the REAL `mediaTypeDocId`/`parseTmdbIdFromDocId` from
+`src/lib/mediaTypeDocId.ts` (a `.mjs` test importing a `.ts` module — vitest transforms it,
+no JS mirror needed). Generates a corpus of docIds across `NUMERIC_CASES` (`0`, `00`, `042`,
+`0042`, `''`, `-1`, `-5`, `1.5`, `1e3`, `' 42'`, `'42 '`, `'4_2'`, `'xyz'`, `'4a2'`, plus
+ordinary 1/2/3/6/10-digit ids) × `['movie','tv']`, and asserts the rules' verdict and the
+client's verdict agree on every generated id. Three floors precede the comparison: the
+extraction returned something (`toBeTruthy`), the corpus didn't collapse (`>=40` cases), and
+both an accepted and a refused case exist (`>=10` each) — checked as real by reasoning (empty
+`NUMERIC_CASES` → `cases().length === 0`, which fails the 40-floor; a `GUARD_FUNCTION` typo →
+`rulesIdPattern` returns `null`, which fails the truthy check) and confirmed live by two full
+mutation runs that never tripped a floor while correctly tripping the agreement assertion.
+
+**Mutations run (protocol: `git rev-parse HEAD:<f>` vs `git hash-object <f>` before AND
+after, in one command; restore from a `git show HEAD:<f>` scratchpad snapshot; re-verify
+hash after restore; `rm -rf node_modules/.vite/vitest` before each run):**
+
+1. **Client-side widen.** `src/lib/mediaTypeDocId.ts`'s `CANONICAL_TMDB_ID` changed from
+   `/^[1-9][0-9]*$/` to `/^[0-9]+$/` (accepts leading zeros/`0`). Ran
+   `docs/org/rules-id-client-symmetry.test.mjs` + `docs/org/rules-doc-id-symmetry.test.mjs`
+   together: **6 passed, 1 failed** — only `agrees on every generated id`, listing exactly
+   the 8 leading-zero/`0` cases (`movie_0`, `movie_00`, `movie_042`, `movie_0042`, `tv_0`,
+   `tv_00`, `tv_042`, `tv_0042`) as `rules refuses, client accepts`. The sibling file's 4
+   tests (unrelated invariant) stayed green throughout. Restored via `cp` from a
+   `git show HEAD:...` snapshot; `git hash-object` matched HEAD's blob sha
+   (`c632f30...`) immediately, but `git status --porcelain` still showed `M` — `git diff`
+   confirmed zero content difference plus git's "LF will be replaced by CRLF" warning
+   (the EOL-normalization caveat this file's own protocol section names: hash-object
+   applies the clean filter and a matching sha proves nothing about the worktree's raw
+   bytes). Re-normalized LF→CRLF via a small python script (not `git checkout --`, to
+   avoid the destructive-command policy) and re-confirmed hash match with `git status
+   --porcelain` empty.
+2. **Rules-side narrow.** `firestore.rules`' `canonicalWatchlistDocId` body changed from
+   `id.matches('^(movie|tv)_[1-9][0-9]*$')` to `id.matches('^(movie|tv)_[1-9][0-9]{1,3}$')`
+   (rejects the 1-digit and 6+/10-digit ids the client still accepts). Same two files: **5
+   passed, 2 failed** — `rules-doc-id-symmetry.test.mjs`'s "byte-identical" twin check (the
+   two rules copies now disagree, exactly its job) AND `rules-id-client-symmetry.test.mjs`'s
+   agreement check (10 disagreements: `movie_1/2/9/999999/2147483647` × 2 types, `rules
+   refuses, client accepts`). Restored the same way (snapshot → python LF→CRLF normalize →
+   `git hash-object` match `63c5daf0...` → `git status --porcelain` empty). A third,
+   unrelated full run of both symmetry files plus `route.test.mjs` on the clean tree
+   afterward: **900 passed, 0 failed**, staged diff `--stat` unchanged from before mutation.
+
+**Disclaimers checked against the code, not assumed:**
+- "NOT anything about `update`" — confirmed: both `canonicalWatchlistDocId` (line 332,
+  `firestore.rules`) and `canonicalSwipeDocId` (line 946) are called only from their
+  collection's `allow create:` clause (lines 361-362, 1062); `allow update:` (line 365) has
+  no id-shape guard.
+- "NOT anything about LEGACY bare-`123` documents" — confirmed: `mediaTypeDocId` (the only
+  fn the corpus calls) always returns `` `${type}_${tmdbId}` ``, never a bare numeric string.
+- "NOT that the client and the SERVER helper agree" — confirmed out of scope by
+  `mediaTypeDocId.ts`'s own header, which documents the BIN-618 divergence and names
+  `mediaTypeDocId.parity.test.ts` as the file that owns it.
+- The sibling file's corrected sentence ("since BIN-1002 it is held by
+  docs/org/rules-id-client-symmetry.test.mjs...") is now true given the new file exists and
+  does exactly that.
+
+**No weakened or deleted assertions found** — `git diff --cached` on
+`rules-doc-id-symmetry.test.mjs` is a 2-line comment-only change (verified with `git diff
+--cached`, not the EOL-corrupted plain `diff` — the latter showed a spurious whole-file
+replace, the exact CRLF/autocrlf artifact this file's own knowledge entry [arkiv 46] warns
+against). `route.mjs`'s second hunk (a BIN-1040 comment correction) and `shared-plugin.json`'s
+`_note15` are prose-only, additive, and independently checkable (the `_note15` mutation claim
+matches this review's own reproduction exactly).
 
 **Verdict: pass (0 blocking).**

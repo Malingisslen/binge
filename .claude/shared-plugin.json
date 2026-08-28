@@ -84,7 +84,7 @@
         "\\.(ts|tsx)$",
         "^\\.github/(workflows|actions)/",
         "^\\.github/dependabot\\.yml$",
-        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|metrics/(check_events|log_event|check_review_coverage))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps))(\\.test)?\\.mjs$",
+        "^(docs/org/(route|gen-ownership-map|gate-symmetry|rules-doc-id-symmetry|rules-id-client-symmetry|metrics/(check_events|log_event|check_review_coverage))|scripts/(check-workflow-map|check-public-env|check-knowledge-caps))(\\.test)?\\.mjs$",
         "^eslint-rules/no-bare-streaming-offers-id(\\.test)?\\.mjs$",
         "^eslint\\.config\\.mjs$",
         "^\\.claude/shared-plugin\\.json$",
@@ -98,7 +98,8 @@
         "^package\\.json$",
         "^(functions/)?package-lock\\.json$",
         "^lefthook\\.yml$"
-      ]
+      ],
+      "_note15": "2026-08-28, BIN-1002: the THIRTEENTH widening — docs/org/rules-id-client-symmetry.test.mjs, folded into the same tooling alternation as its BIN-998 sibling for the same reason (one class, one spelling, one place to look). Added in the SAME commit as its TOOLING_CODE_FILES entry in docs/org/route.mjs, per BIN-830. WHY IT IS REVIEW MACHINERY: _note14 above records the sibling as holding firestore.rules two deliberate copies of the id-shape rule identical to EACH OTHER. This one holds that rule against the ids the CLIENT actually builds, which is the invariant that decides whether real writes go through — drift there means the app writes ids the rules refuse, or the rules admit shapes the app cannot read back. That is BIN-797 exactly (movie_0 written by the sweep, then refused by the client), and BIN-560/618/766/931/932 are the same family. HOW IT AVOIDS BEING A THIRD COPY OF THE RULE: it restates neither side. The rules regex is extracted from firestore.rules as text, and the client verdict comes from CALLING the real mediaTypeDocId and parseTmdbIdFromDocId — a .mjs test can import the TypeScript module under vitest, established by a throwaway probe before the file was written, not assumed. The cases are generated across the boundaries the two sides have actually disagreed about before (0, 042, empty suffix, negative, non-integer) rather than hand-listed, which is the change the ticket asked for: a hand-written example proves only that the example works. PROVEN, not asserted: CANONICAL_TMDB_ID in src/lib/mediaTypeDocId.ts was widened to /^[0-9]+$/, the mutant asserted present BEFORE and AFTER the suite run in one command, the agreement test failed, and the file was restored from a git-show snapshot and re-verified by git hash-object against its pre-mutation hash. Three floors are asserted BEFORE any agreement is compared — that a pattern was extracted at all, that the corpus did not collapse, and that BOTH an accepted and a refused case exist — so an extraction that stops matching fails loudly instead of comparing nothing to nothing. firestore.rules is unmodified by this commit. It claims nothing about the update path (both rules blocks guard ids on CREATE only, deliberately) and nothing about legacy bare-id documents (mediaTypeDocId never emits one). Widening only; nothing was removed."
     }
   ],
   "stopCheck": {

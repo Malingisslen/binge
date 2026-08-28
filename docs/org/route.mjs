@@ -131,6 +131,13 @@ export const TOOLING_CODE_FILES = new Set([
   // rules suite runs only behind `npm run test:rules`, which needs Java and the
   // emulator, and this check reads firestore.rules as plain text and needs neither.
   'docs/org/rules-doc-id-symmetry.test.mjs',
+  // BIN-1002. The sibling of the line above, and the LARGER of the two invariants: it holds
+  // firestore.rules' id-shape regex against the ids src/lib/mediaTypeDocId.ts actually
+  // builds. Drift between the two rules copies makes one collection stricter than the other;
+  // drift between the rules and the client means the app writes ids the rules refuse, or the
+  // rules admit shapes the app cannot read back — BIN-797's shape. Added here in the SAME
+  // commit as its `reviewGates` pattern, per BIN-830.
+  'docs/org/rules-id-client-symmetry.test.mjs',
   'docs/org/gen-ownership-map.mjs',
   'docs/org/gen-ownership-map.test.mjs',
   'scripts/check-workflow-map.mjs',
@@ -204,8 +211,10 @@ export const TOOLING_CODE_FILES = new Set([
   // but "is there a row at all", because the 2026-08-16 failure was silence rather than
   // a false claim. Two modes: `--message` runs from lefthook's `commit-msg` hook and refuses
   // the commit being written (BIN-917 criterion 4, literally); with no flag it walks history
-  // under `npm test` and gates the DEPLOY, as a backstop for anything that got in before the
-  // hook existed or with `LEFTHOOK=0`. The first draft shipped only the second and declared
+  // as a backstop for anything that got in before the hook existed or with `LEFTHOOK=0`.
+  // WHICH RUNNER REACHES WHICH MODE is derived, not stated here — a sentence claiming it
+  // stood in four places and was false in all four (BIN-1040); the module's own header
+  // carries the two commands that answer it. The first draft shipped only the second and declared
   // the first impossible — "no .husky, no precommit in package.json" — which was two true
   // probes and a false conclusion: `lefthook.yml` had been the commit-time mechanism here
   // since 2026-08-08.

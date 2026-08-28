@@ -23,8 +23,9 @@
 //     an anonymous session vote under a short TTL. This binds an id-shape string, and
 //     an id-shape string is syntax, not personal-data content.
 //   * NOT that the rules and the CLIENT's id builder (src/lib/mediaTypeDocId.ts) agree.
-//     They do today, and nothing mechanical holds them there. That is the larger
-//     residual gap and it is not this file.
+//     That is the larger invariant and it belongs to a different file — since BIN-1002 it
+//     is held by docs/org/rules-id-client-symmetry.test.mjs, which extracts the same
+//     expression and drives it against the ids mediaTypeDocId actually emits.
 //
 // WRITTEN 2026-08-25 (BIN-998), AND MEANT TO BE DELETED, NOT WORKED AROUND.
 // INTENDING TO LET THE TWO DIVERGE? DELETE the byte-identity assertion below, in the
