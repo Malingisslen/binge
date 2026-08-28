@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { MediaType, WatchlistItem } from '@/types';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 // BIN-641: useMarkSeen is THE "jag har sett den"-path — StatusButton and
 // QuickAddButton both route their 'sedd' choice through it, and so does the
@@ -242,5 +243,39 @@ describe('useMarkSeen — the two provider fields reach the write together (BIN-
     const payload = payloadOf(0);
     expect('providers' in payload).toBe(false);
     expect('subscriptionProviders' in payload).toBe(false);
+  });
+});
+
+describe('useMarkSeen — the FILM branch answers a refusal too (BIN-1038)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.upsertTitle.mockResolvedValue({ countedRewatch: false });
+    watchlist.logViewing.mockResolvedValue({ countedRewatch: false });
+  });
+
+  it('says the account is being deleted instead of leaving an unhandled rejection', async () => {
+    // The series branch got this on 2026-08-27; the film branch had no catch AT ALL, so the
+    // refusal left as an unhandled rejection and the user saw nothing — in `StatusButton`
+    // and `QuickAddButton`, the two components that call this hook.
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    const { result } = renderHook(() => useMarkSeen());
+    await act(async () => { await result.current(film); });
+
+    expect(toast.show).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    // No rating nudge and no confirmation: the write did not land, so nothing follows it.
+    expect(toast.showRating).not.toHaveBeenCalled();
+  });
+
+  it('control — any OTHER failure still propagates, so the catch cannot be a swallow', async () => {
+    // Without this the row above passes on a branch that reports every failure as a
+    // deletion, which is a worse lie than the silence it replaced.
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useMarkSeen());
+
+    await expect(
+      act(async () => { await result.current(film); }),
+    ).rejects.toThrow('offline');
+    expect(toast.show).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
   });
 });

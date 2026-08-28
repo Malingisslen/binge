@@ -13,6 +13,7 @@ import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { rewatchFields } from '@/lib/watchlistWrites';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
 interface StatusButtonProps {
   tmdbId: number;
@@ -125,13 +126,20 @@ export default function StatusButton({
     }
     // BIN-655: the BULK entry point. This branch is every status EXCEPT 'sedd'
     // (which returned above via markSeen), so it can never be a viewing.
-    await upsertTitle(buildWatchlistAddPayload({
-      tmdbId, mediaType, status, title, posterPath, releaseYear,
-      current, providers, subscriptionProviders, genreIds, tmdbStatus,
-      // Explicit null (not omitted): this surface owns the season count from
-      // its own props, so an absent prop clears it rather than carrying over.
-      totalSeasons: totalSeasons ?? null,
-    }));
+    // BIN-1038, the same answer QuickAddButton gives: the refusal was silent, never false.
+    // Only the refusal is caught; everything else propagates exactly as before.
+    try {
+      await upsertTitle(buildWatchlistAddPayload({
+        tmdbId, mediaType, status, title, posterPath, releaseYear,
+        current, providers, subscriptionProviders, genreIds, tmdbStatus,
+        // Explicit null (not omitted): this surface owns the season count from
+        // its own props, so an absent prop clears it rather than carrying over.
+        totalSeasons: totalSeasons ?? null,
+      }));
+    } catch (err) {
+      if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
+      throw err;
+    }
     toast(`${title} — ${labelFor(status)}`);
   }
 

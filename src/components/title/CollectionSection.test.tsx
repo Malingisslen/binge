@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import CollectionSection from './CollectionSection';
 import type { MediaType, WatchlistItem } from '@/types';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 // The most destructive write in the app: "Lägg alla osedda i vill se" hard-writes
 // status: 'vill_se' over up to ADD_UNSEEN_CAP (50) films in a loop. `status` is the
@@ -26,6 +27,7 @@ const watchlist = vi.hoisted(() => ({
   listenerFailed: false,
   get libraryKnown(): boolean { return this.snapshotSettled && !this.listenerFailed; },
 }));
+const toast = vi.hoisted(() => vi.fn());
 const collection = vi.hoisted(() => ({
   data: null as { name: string; parts: { id: number; title: string; release_date: string }[] } | null,
 }));
@@ -43,6 +45,7 @@ vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => auth }));
 vi.mock('@/hooks/useTMDB', () => ({ useCollection: () => collection }));
 vi.mock('@tanstack/react-query', () => ({ useQueries: () => [] }));
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
 
 const BULK = 'Lägg alla osedda i vill se';
 
@@ -131,5 +134,56 @@ describe('CollectionSection — the bulk add is gated on a KNOWN library (BIN-59
     await act(async () => {});
 
     expect(screen.queryByText(/av 2 sedda/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CollectionSection — a refused bulk add SAYS so (BIN-1038)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.upsertTitle.mockResolvedValue(undefined);
+    auth.uid = 'u1';
+    auth.loading = false;
+    collection.data = {
+      name: 'Matrix-samlingen',
+      parts: [
+        { id: 603, title: 'The Matrix', release_date: '1999-03-31' },
+        { id: 604, title: 'The Matrix Reloaded', release_date: '2003-05-15' },
+      ],
+    };
+  });
+
+  it('tells the user why the bulk add stopped, instead of stopping in silence', async () => {
+    // The loop already stopped at the first refusal before BIN-1038 — the throw left the
+    // `for` and the `finally` reset the spinner. What was missing was the answer to the
+    // user: the strip went quiet and looked exactly like a tap that never registered.
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<CollectionSection collectionId={1} currentMovieId={603} />);
+
+    await act(async () => { fireEvent.click(screen.getByText(BULK)); });
+
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('försök igen'));
+  });
+
+  it('control — any OTHER failure still propagates rather than being reported as a deletion', async () => {
+    const escaped: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { escaped.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      watchlist.upsertTitle.mockRejectedValueOnce(new Error('firestore/unavailable'));
+      render(<CollectionSection collectionId={1} currentMovieId={603} />);
+
+      await act(async () => { fireEvent.click(screen.getByText(BULK)); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      expect((escaped[0] as Error)?.message).toBe('firestore/unavailable');
+      expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

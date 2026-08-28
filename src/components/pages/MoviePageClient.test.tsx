@@ -158,6 +158,7 @@ vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
 
 import MoviePageClient from './MoviePageClient';
 import type { TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
+import { DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 /** Reset to a signed-in visitor whose library has settled, showing the body. */
 function signedInWithSettledLibrary() {
@@ -316,15 +317,15 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     expect(toastShow).toHaveBeenCalledWith(expect.stringContaining('Bevakar släppet'));
   });
 
-  it('says NOTHING when the write is refused during an account deletion', async () => {
+  it('SAYS the write was refused during an account deletion, and never confirms it', async () => {
     // BIN-1025 made `writeTitle` refuse by throwing. This handler fired its toast
     // unconditionally beside a `void`ed call, which was true only while the write always
     // landed — so that change turned it into a confirmation of a write Firestore never
     // accepted. The BIN-895 false-confirmation class, reachable again.
     //
-    // Silence is not the end state anyone wants (BIN-1038 owns what every silent caller
-    // should say), but silence and a lie are different defects, and only one of them is
-    // this batch's to leave behind.
+    // BIN-1038 closed the other half: silence and a lie are different defects, and the
+    // fix for the first was never meant to be the end state. Both halves are asserted
+    // here — the refusal is SAID, and the success line is still not.
     signedInWithSettledLibrary();
     upsertTitle.mockRejectedValueOnce(
       new Error('binge/deletion-in-progress: kontot håller på att raderas'),
@@ -334,7 +335,10 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     await act(async () => { fireEvent.click(bevaka()!); });
 
     expect(upsertTitle).toHaveBeenCalled();
-    expect(toastShow).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringContaining('Bevakar släppet'));
+    // The advice a retry would be: the marker does not clear on its own.
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringContaining('försök igen'));
   });
 
   it('offers nothing to a signed-in visitor whose listener died, so the CTA cannot write', () => {

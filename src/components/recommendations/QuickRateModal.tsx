@@ -11,6 +11,8 @@ import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import type { WatchlistItem, TMDBSearchResult } from '@/types';
 import { buildWatchlistAddPayload, type WatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { planQuickRateWrite } from '@/lib/watchlistWrites';
+import { useToast } from '@/contexts/ToastContext';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import {
   LIBRARY_UNREACHABLE_TITLE,
   LIBRARY_UNREACHABLE_BODY,
@@ -67,6 +69,7 @@ export default function QuickRateModal({ open, onClose }: Props) {
   // (from the context, never re-derived here) is the gate; `listenerFailed` is
   // read separately because only that half needs a way out.
   const { upsertTitle, getItem, updateRating, updateStatus, libraryKnown, listenerFailed, retryListener } = useWatchlist();
+  const { show: toast } = useToast();
   const [rated, setRated] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery({
@@ -102,7 +105,17 @@ export default function QuickRateModal({ open, onClose }: Props) {
     // below — that is BIN-895's rule, and it is why the add path is deliberately unguarded.)
     let landed = true;
     if (plan === 'add-as-seen') {
-      await upsertTitle(buildItemFromTmdb(t, 'sedd', rating, existing));
+      // BIN-1038: the add path rejects on a refusal (BIN-895's rule), which correctly kept
+      // the card from being retired — but said nothing, so the card simply stayed put with
+      // no explanation. The message is shown and the card is left un-retired, which is the
+      // same outcome the `landed` flag below produces for the other branch.
+      try {
+        await upsertTitle(buildItemFromTmdb(t, 'sedd', rating, existing));
+      } catch (err) {
+        if (!isDeletionInProgressError(err)) throw err;
+        toast(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
     } else {
       if (rating !== null) landed = await updateRating('movie', t.id, rating) === 'written';
       // 'rating-only' means the film is ALREADY 'sedd' — writing the status

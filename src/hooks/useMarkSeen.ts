@@ -10,7 +10,7 @@ import { TMDB_STALE } from '@/lib/tmdb/cacheTiers';
 import { trackEvent } from '@/lib/analytics';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { shouldPromptRating } from './useMarkSeen.helpers';
-import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { MediaType, TMDBTVShow } from '@/types';
 
 export interface MarkSeenInput {
@@ -131,7 +131,7 @@ export function useMarkSeen() {
         // BIN-1032's generic message on `ReconsentGate`; the two screens must not disagree
         // about what a refused write means.
         if (isDeletionInProgressError(err)) {
-          show('Kontot håller på att raderas. Ändringen sparades inte.');
+          show(DELETION_IN_PROGRESS_MESSAGE);
           return;
         }
         show('Kunde inte hämta serieinfo, försök igen');
@@ -141,16 +141,29 @@ export function useMarkSeen() {
       return;
     }
 
-    const { countedRewatch } = await write(buildWatchlistAddPayload({
-      tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear, current,
-      // See the TV branch: null means "unknown, preserve", not "clear".
-      totalSeasons: input.totalSeasons ?? undefined,
-      providers: input.providers,
-      // BIN-814: see the TV branch — the pair travels together or not at all.
-      subscriptionProviders: input.subscriptionProviders,
-      genreIds: input.genreIds,
-      tmdbStatus: input.tmdbStatus ?? undefined,
-    }));
+    // BIN-1038: the film branch had NO catch at all, so the refusal left here as an
+    // unhandled rejection and the user saw nothing. Narrow on purpose — only the refusal is
+    // answered; every other failure keeps propagating exactly as it did before, unhandled
+    // and visible, because this branch has never had error handling to inherit.
+    let countedRewatch: boolean;
+    try {
+      ({ countedRewatch } = await write(buildWatchlistAddPayload({
+        tmdbId, mediaType, status: 'sedd', title, posterPath, releaseYear, current,
+        // See the TV branch: null means "unknown, preserve", not "clear".
+        totalSeasons: input.totalSeasons ?? undefined,
+        providers: input.providers,
+        // BIN-814: see the TV branch — the pair travels together or not at all.
+        subscriptionProviders: input.subscriptionProviders,
+        genreIds: input.genreIds,
+        tmdbStatus: input.tmdbStatus ?? undefined,
+      })));
+    } catch (err) {
+      if (isDeletionInProgressError(err)) {
+        show(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
+      throw err;
+    }
     promptRating(countedRewatch);
   }, [getItem, upsertTitle, logViewing, updateRating, show, showRating, queryClient]);
 }

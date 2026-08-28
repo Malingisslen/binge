@@ -14,6 +14,8 @@ import { posterUrl, getDisplayTitle, getReleaseYear, isAddableMediaType } from '
 import { toneForGenreIds, toneForId } from '@/lib/duotone';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { takeNextPath } from '@/lib/nextPath';
+import { useToast } from '@/contexts/ToastContext';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import {
   LIBRARY_UNREACHABLE_TITLE,
   LIBRARY_UNREACHABLE_BODY,
@@ -318,6 +320,7 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
   // `src/lib/watchlist/libraryHoldCopy.ts`.
   const { items, upsertTitle, libraryKnown, listenerFailed, retryListener } = useWatchlist();
   const [addFailed, setAddFailed] = useState(false);
+  const { show: toast } = useToast();
 
   const canContinue = items.length > 0;
 
@@ -350,6 +353,15 @@ function StepFirstTitle({ onBack, onNext }: { onBack: () => void; onNext: () => 
         providers: [],
       }));
     } catch (err) {
+      // BIN-1038: a refusal during an account deletion is NOT the retryable failure this
+      // catch was written for. `SaveError` below says "kontrollera anslutningen och försök
+      // igen", and the deletion marker does not clear on its own — so every retry fails
+      // identically. Same reasoning #19 Customer Support used to block BIN-1032's generic
+      // message on `ReconsentGate`, and the same fix `useMarkSeen`'s series branch got.
+      if (isDeletionInProgressError(err)) {
+        toast(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
       // BIN-659: the add rejected unhandled, so the row simply never turned into
       // "Tillagd" — indistinguishable from a missed tap, and "Nästa" stayed
       // disabled with nothing explaining it. The row's button is the retry.

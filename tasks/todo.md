@@ -1,3 +1,168 @@
+# Sprint 2026-08-28 — tre biljetter, två buntar
+
+Urval kört 2026-08-28. Träd rent på `main` vid start (`4a55d64`). Varje premiss kontrollerad
+mot HEAD med grep/körning, inte mot biljettexten.
+
+## Routning (körd på buntunionerna, rå utdata)
+
+| Bunt | Filuppsättning | tier | reasonCode | panel |
+| -- | -- | -- | -- | -- |
+| A | `docs/org/metrics/check_review_coverage.mjs` (+test), ny `docs/org/rules-id-client-symmetry.test.mjs`, `docs/org/route.mjs`, `.claude/shared-plugin.json`, `docs/role-responsibilities.md`, `docs/org/ownership-map.json` | medium | owned | 25 |
+| B | `MoviePageClient.tsx`, `useMarkSeen.ts`, `QuickAddButton.tsx`, `StatusButton.tsx`, `CompanionSection.tsx`, `CollectionSection.tsx`, `QuickRateModal.tsx` | medium | owned | 26 |
+
+Kanonisk tier för båda: `single`. Arbetaren är denna session, som KAN konvenera en blind
+kritik — så kritiken körs före bygget, den parkeras inte som skuld.
+
+`unownedCode` bunt A: `check_review_coverage.mjs`, `check_review_coverage.test.mjs`.
+`unownedCode` bunt B: `QuickAddButton.tsx`, `StatusButton.tsx`, `CompanionSection.tsx`,
+`CollectionSection.tsx`, `QuickRateModal.tsx`.
+
+---
+
+## Bunt A — granskningstäckningen och id-symmetrin
+
+### BIN-1040 — dependabots commits kräver en granskningsrad de aldrig kan ha [Tier A] [build]
+Premiss kontrollerad: `OWES_REVIEW` på rad 213 innehåller `ci`;
+`.github/dependabot.yml`s `github-actions`-block har `commit-message.prefix: "ci"`.
+Malins val 2026-08-27: bygg undantaget.
+
+- [x] AC1: En dependabot-commit (`ci(deps): bump actions/checkout from 4 to 7 (#37)`) kräver
+      ingen granskningsrad; `findCoverageGaps` ger noll brott för den. *(kind: diff)*
+- [x] AC2: En HANDSKRIVEN `ci(...)`-commit kräver den fortfarande. *(kind: diff)*
+- [x] AC3: De undantagna prefixen HÄRLEDS ur `.github/dependabot.yml`, inte hårdkodade i
+      predikatet — ändras prefixet där följer undantaget med. *(kind: diff)*
+- [x] AC4: Ett test driver båda formerna genom det VERKLIGA predikatet
+      (`owesReviewRow`/`findCoverageGaps`), inte en kopia. *(kind: diff)*
+- [x] AC5: Ingen befintlig assertion försvagas. *(kind: diff)*
+
+### BIN-1002 — reglernas id-regex mot klientens byggare [Tier A] [build]
+Premiss kontrollerad: `src/lib/mediaTypeDocId.ts` bär `CANONICAL_TMDB_ID`;
+`firestore.rules` bär två kopior av `^(movie|tv)_[1-9][0-9]*$`. Inget mekaniskt band.
+
+- [x] AC6: Ett test extraherar regel-regexen ur `firestore.rules` och prövar den mot id:n som
+      `mediaTypeDocId()` FAKTISKT producerar — genererade fall, inte en handskriven lista. *(kind: diff)*
+- [x] AC7: Ett golv på antalet genererade fall, så att noll fall inte passerar tyst. *(kind: diff)*
+- [x] AC8: Filen registreras i BÅDE `route.mjs` `TOOLING_CODE_FILES` och
+      `shared-plugin.json` `reviewGates` i SAMMA commit (BIN-830). *(kind: diff)*
+- [x] AC9: `firestore.rules` är orörd, och ingen mening påstår att spärren också validerar
+      legacy- eller `update`-vägen (den är create-only, `update` avsiktligt ovaktad). *(kind: diff)*
+- [x] AC10: Den nya filen får en ÄGARE i `docs/role-responsibilities.md` och kartan
+      regenereras — aldrig `--update-gaps` (BIN-1013-lärdomen). *(kind: diff)*
+
+---
+
+## Bunt B — vad användaren ser när en skrivning vägras
+
+### BIN-1038 — sju tysta anropsställen [Tier B] [build-review]
+Premiss kontrollerad: `handleBevaka`s `.catch` i `MoviePageClient` hanterar redan
+avvisandet (den ohanterade rejectionen är BORTA sedan `96074f3`), men sväljer det tyst.
+Biljettens uppdaterade acceptans från integrationsgranskningen 2026-08-27 gäller: sju vägar
+visar ingenting.
+
+Meddelandet är INTE nytt. Det shippade i `useMarkSeen`s serie-gren 2026-08-27 och den här
+bunten lyfter det därifrån till en delad konstant — så efter commiten står literalen inte
+längre där den kom ifrån, och en sökväg hit skulle vara falsk i samma commit som den
+skrivs. Härledningen står daterad vid konstanten i `src/lib/deletionInProgressError.ts`.
+Sprinten hittar alltså ingen ny formulering på.
+
+- [x] AC11: Varje anropsställe i biljettens tabell visar antingen beskedet eller är medvetet
+      tyst med ett nedskrivet skäl. *(kind: diff)*
+- [x] AC12: Beskedet säger inte "försök igen". *(kind: diff)*
+- [x] AC13: Ett test per väg som får ett besked. *(kind: diff)*
+- [x] AC14: Ingen befintlig assertion försvagas. *(kind: diff)*
+- [x] AC15: Ingen NY användartext hittas på. *(kind: diff)*
+
+---
+
+## Stängs som obsoleta (premissen borta vid HEAD)
+
+- **BIN-1028** — Malin valde (a) 2026-08-27; `ci.yml`/`preview.yml` raderade i `0d7a598`,
+  `pr-checks.yml` är den avsiktliga ersättaren. Inget kvar att bygga.
+- **BIN-1039** — `grep -rn "ci\.yml" functions/src` ger noll träffar; alla fyra
+  huvudkommentarer pekar på `deploy.yml` sedan `a1bb569`.
+
+## Uttagna ur sprinten (handbroms eller fel session) — går INTE att bygga obevakat
+
+- **BIN-935**, **BIN-929**, **BIN-852** — bär alla en obesvarad "jag bygger inget här förrän
+  du sagt till"-kommentar. En parkerad markör är en uteslutning, inte en nedgradering.
+- **BIN-990** — ställer en öppen fråga till Malin (vidga grinden, låt vara, eller bygg
+  nyckelgranskningen?). Hennes call.
+- **BIN-1035**, **BIN-1013** — bor i `C:/claude-plugins`, ett annat repo med egen grind, och
+  biljetterna säger uttryckligen att de ska köras i en session som INTE startar subagenter.
+  Den här sessionen startar granskare.
+- **BIN-1023** — GDPR-raderingsvägen, ingen riktning vald, biljetten själv säger att den kan
+  routa `top`. Skriven plan + uttryckligt ja krävs enligt CLAUDE.md.
+- **BIN-559** — "needs its own design work, not a quick patch" (Cloud Function-trigger).
+
+## Needs you (Tier D / beslut)
+
+Se sprintrapporten.
+
+## Kritikernas bindande villkor (texterna; `events.jsonl` bär bara antalen)
+
+**BIN-1040 — #25 Engineering Manager / Release Manager (4):**
+1. Undantaget får inte vara textbaserat ensamt — `ci(deps): …` är text en människa kan skriva.
+   Namnge vilken signal som faktiskt skiljer en robotcommit från en handskriven.
+2. Repot har ingen YAML-parser; är härledningen en textskanning ska ett test pinna den mot den
+   VERKLIGA `.github/dependabot.yml`.
+3. Kontrollera dependabots faktiska ämnesradsform före regexen — verifiera, anta inte.
+4. Två orelaterade biljetter i en commit är BIN-712/754-formen. Hellre två commitar.
+
+**BIN-1002 — #25 (2):**
+1. Följ BIN-998:s precedens: golv före jämförelse, plain `*.test.mjs` under `docs/org/`, och
+   både `route.mjs` `TOOLING_CODE_FILES` och `reviewGates` i samma commit.
+2. Kontrollera att `firestore.rules`-diffen är tom som påstått.
+
+**BIN-1038 — #26 Information Architect (2) och #5 Legal/GDPR (3):**
+1. Ingen anropare får reagera på vägran med att NAVIGERA användaren någonstans.
+2. Bygg ingen andra, konkurrerande "kontot raderas"-skärm bredvid `DeletionLimbo`.
+3. Meddelandet får inte påstå att data gått förlorad utöver vad som är sant.
+4. Ingen anropare får parafrasera eller översätta om den delade strängen.
+5. `settings/import/page.tsx` måste behålla sin nedskrivna motivering för att vara tyst.
+
+Alla elva är uppfyllda. Ingen av de tre kritikerna blockerade.
+
+## Deviation log
+
+- [discovery] BIN-1040: routern seatade #25, vars blinda kritik BLOCKERADE på ett
+  ämnesradsbaserat undantag — `ci(deps): …` är text en människa kan skriva. Undantaget
+  ANDar nu två signaler: författarskap som git själv attribuerar (`--author=dependabot[bot]`)
+  OCH ämnesradsformen. `readBotBumpShas()` mätt vid HEAD ger 4 shas, så spärren är inte
+  teoretisk.
+- [discovery] BIN-1040: `gradeSubject` (commit-msg-hooken) betygsätter en commit som ännu
+  inte finns och därför saknar författare. Undantaget ligger i `findCoverageGaps`, inte i
+  `owesReviewRow`, så hooken kan inte ärva det — en människa som skriver `ci(deps): …`
+  är fortfarande skyldig sin rad. Pinnat med ett test.
+- [discovery] BIN-1002: ett `.mjs`-test KAN importera TypeScript-modulen under vitest.
+  Prövat med en slängd probefil före bygget, inte antaget. Därför anropar spärren den
+  riktiga `mediaTypeDocId`/`parseTmdbIdFromDocId` i stället för att textutvinna klientens
+  regex — ingen tredje kopia av regeln.
+- [discovery] BIN-1002: `rules-doc-id-symmetry.test.mjs` sa i sitt huvud att luckan
+  rules-mot-klient "is not this file". Sant före den här ändringen, falskt efter. Rättat i
+  samma commit — grannen som en fix gör falsk (lärdomen 2026-08-27).
+- [deviation] BIN-1038: biljettens tabell namngav fel sökvägar (`src/components/watchlist/`,
+  `src/components/franchise/CollectionSection.tsx`). De verkliga är `src/components/title/`
+  och `src/components/recommendations/`. Routern kördes om på de verkliga filerna.
+- [deviation] BIN-1038: fixen VIDGADE filuppsättningen (`OnboardingFlow.tsx`,
+  `settings/import/page.tsx`), och en omkörning av routern seatade då #5 i stället för #26.
+  En andra blind kritik kördes mot den faktiska uppsättningen (BIN-766-regeln). #5
+  blockerade inte; alla tre villkor uppfyllda.
+- [discovery] BIN-1038: `OnboardingFlow`s befintliga catch visade "kontrollera anslutningen
+  och försök igen" — fel råd för en vägran, exakt det #19 blockerade i BIN-1032. Rättat.
+  `settings/import` lämnas TYST med ett nedskrivet skäl: dess egen sammanfattning
+  ("Importerade N titlar · M misslyckades") är sann även för en vägran.
+- [discovery] BIN-1038: ett omkast ur en icke-inväntad async-klickhanterare blir en
+  ohanterad rejection som `act()` inte kan lämna tillbaka. Kontrolltesterna fångar den på
+  `process.on('unhandledRejection')` och spolar en MAKROtask — en mikrotask-spolning
+  observerar ingenting och testet hade lästs som "den kastade inte om".
+- [deviation] tre biljetter drogs ur urvalet på en obesvarad handbroms (BIN-935, BIN-929,
+  BIN-852) och två för att de bor i `C:/claude-plugins` och uttryckligen kräver en session
+  som inte startar subagenter (BIN-1035, BIN-1013). Den här sessionen startar granskare.
+
+---
+
+# ARKIV — tidigare sprintar
+
 # Sprint 2026-08-27b — nio biljetter, tre buntar
 
 Urval kört 2026-08-27. Träd rent på `main` vid start (`ea687c2`). Alla nio premisser
@@ -3093,8 +3258,8 @@ Kontrollen har därför TVÅ lägen, och skillnaden mellan dem måste sägas rak
 
 * `--message` — **commit-tid.** Bedömer ämnesraden på committen som håller på att skrivas och
   vägrar den. Det är kriterium 4 ordagrant, och det är vad `commit-msg`-hooken kör.
-* utan flagga — **historik.** Går igenom varje gjord commit och kör under `npm test`, alltså
-  grindar den DEPLOYEN. Backstop för allt som slank in innan hooken fanns, eller med
+* utan flagga — **historik.** Går igenom varje gjord commit. Backstop för allt som slank in
+  innan hooken fanns, eller med
   `LEFTHOOK=0`.
 
 Det historiska läget ensamt hade INTE uppfyllt kriterium 4, och den första versionen av den

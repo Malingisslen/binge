@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import QuickRateModal from './QuickRateModal';
 import type { WatchlistItem } from '@/types';
 import type { ItemWriteOutcome } from '@/contexts/WatchlistContext';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 // BIN-611 acceptance: "a test fails if updateStatus(…, 'sedd') is called for an
 // item already at 'sedd' via QuickRateModal's rating flow".
@@ -23,6 +24,7 @@ import type { ItemWriteOutcome } from '@/contexts/WatchlistContext';
 //
 // So the assertions below are on the WRITES, not on the verdict.
 
+const toast = vi.hoisted(() => vi.fn());
 const watchlist = vi.hoisted(() => ({
   getItem: vi.fn<(mediaType: string, tmdbId: number) => WatchlistItem | null>(() => null),
   upsertTitle: vi.fn<(payload: Record<string, unknown>) => Promise<void>>(async () => {}),
@@ -41,6 +43,7 @@ const watchlist = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/useWatchlist', () => ({ useWatchlist: () => watchlist }));
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
 vi.mock('@/lib/tmdb/client', () => ({
   discoverMovies: vi.fn(async () => ({
     results: [{ id: 603, title: 'The Matrix', release_date: '1999-03-31', poster_path: null, genre_ids: [28] }],
@@ -201,5 +204,47 @@ describe('BIN-643 — no write while the library is unknown', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await rate('Sett 4★');
     expect(watchlist.updateRating).toHaveBeenCalledWith('movie', 603, 4);
+  });
+});
+
+describe('QuickRateModal — a refused add SAYS so (BIN-1038)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.upsertTitle.mockResolvedValue(undefined);
+  });
+
+  it('leaves the card in place AND says why, rather than leaving it in place silently', async () => {
+    // The add path already rejected on a refusal (BIN-895's rule), so the card was correctly
+    // NOT retired — but nothing said so, and the card staying put reads exactly like a tap
+    // that did not register.
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    await openModal();
+    await rate('Sett 4★');
+
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('försök igen'));
+    // Still on screen: the write never landed, so the pass is not done with it.
+    expect(screen.getByText('The Matrix')).toBeInTheDocument();
+  });
+
+  it('control — any OTHER failure still propagates rather than being called a deletion', async () => {
+    const escaped: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { escaped.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      watchlist.upsertTitle.mockRejectedValueOnce(new Error('firestore/unavailable'));
+      await openModal();
+      await rate('Sett 4★');
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      expect((escaped[0] as Error)?.message).toBe('firestore/unavailable');
+      expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

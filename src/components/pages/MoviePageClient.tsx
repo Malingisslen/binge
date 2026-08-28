@@ -52,7 +52,7 @@ import PriceHistoryChart from '@/components/title/PriceHistoryChart';
 import { cinemaToStreaming } from '@/lib/calendar/releaseDate';
 import { useToast } from '@/contexts/ToastContext';
 import type { TMDBMovie } from '@/types';
-import { isDeletionInProgressError } from '@/lib/deletionInProgressError';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
 // Direction H movie-detail page. Same duotone/raw boundary as TV detail:
 //   - Hero poster → duotone (identification)
@@ -267,18 +267,21 @@ export default function MoviePageClient({ id, initialData }: { id: string; initi
     // of a write Firestore never accepted: the BIN-895 false-confirmation class, made
     // reachable by that change and therefore this batch's to fix.
     //
-    // A refusal now shows nothing rather than something false. Showing nothing is its own
-    // shortcoming and is BIN-1038's question, together with every other caller that is
-    // silent here — but silence and a lie are not the same defect.
+    // BIN-1038 answered that question: a refusal here now SAYS so, with the shared
+    // `DELETION_IN_PROGRESS_MESSAGE`. The wording is not new — it shipped on `useMarkSeen`'s
+    // series branch the same day — and it deliberately does not offer a retry, because the
+    // marker does not clear on its own. Which OTHER surfaces speak, and which stay silent
+    // on purpose, is not claimed here: `git grep DELETION_IN_PROGRESS_MESSAGE -- src`.
     })).then(() => {
       toast(`Bevakar släppet av ${displayTitle}`);
     }).catch((err: unknown) => {
-      // Only the refusal is swallowed, and only because it is already reported: the throw
-      // site in `writeTitle` sends it to Sentry under `writeTitle-deletionRefused`, so a
-      // second unhandled rejection here adds noise and no information. Anything else is a
-      // real failure and keeps behaving exactly as it did before this handler chained —
-      // rethrown, unhandled, visible.
+      // Anything that is NOT the refusal keeps behaving exactly as it did before this
+      // handler chained — rethrown, unhandled, visible. The refusal itself is not rethrown:
+      // it is already reported from the throw site in `writeTitle` under
+      // `writeTitle-deletionRefused`, so a second unhandled rejection adds noise and no
+      // information — what was missing was the answer to the user, not the report to us.
       if (!isDeletionInProgressError(err)) throw err;
+      toast(DELETION_IN_PROGRESS_MESSAGE);
     });
   };
 

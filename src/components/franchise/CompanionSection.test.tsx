@@ -1,6 +1,6 @@
 // src/components/franchise/CompanionSection.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // BIN-730/731 — the companion strip's "Lägg i vill se" is a full add surface
 // (it hard-writes status 'vill_se'), and until now nothing pinned who is allowed
@@ -24,6 +24,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 vi.mock('@/lib/firebase/config', () => ({ auth: {}, default: {} }));
 
 const upsertTitle = vi.hoisted(() => vi.fn());
+const toast = vi.hoisted(() => vi.fn());
 const getItem = vi.hoisted(() => vi.fn(() => undefined as unknown));
 const watchlist = vi.hoisted(() => ({
   snapshotSettled: false,
@@ -63,8 +64,10 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 vi.mock('@/components/title/SeenPosterCard', () => ({ default: () => null }));
 vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
 
 import CompanionSection from './CompanionSection';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 const addButton = () => screen.getByRole('button', { name: /Lägg i vill se/ }) as HTMLButtonElement;
 
@@ -73,6 +76,7 @@ beforeEach(() => {
   getItem.mockReset();
   getItem.mockReturnValue(undefined);
   router.push.mockReset();
+  toast.mockReset();
   watchlist.snapshotSettled = false;
   watchlist.listenerFailed = false;
   auth.uid = 'uid-1';
@@ -145,5 +149,46 @@ describe('CompanionSection — who may fire "Lägg i vill se" (BIN-730/596/731)'
     // Unknown is not "signed out": routing to /login here would bounce a
     // signed-in visitor out of the page they are still restoring.
     expect(addButton().disabled).toBe(true);
+  });
+});
+
+describe('CompanionSection — a refused add SAYS so (BIN-1038)', () => {
+  beforeEach(() => {
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'uid-1';
+    auth.loading = false;
+    upsertTitle.mockResolvedValue(undefined);
+  });
+
+  it('tells the user the account is being deleted rather than just dropping the spinner', async () => {
+    // The old shape was try/finally with no catch: the spinner reset and the strip looked
+    // exactly as it did before the tap, with nothing said and an unhandled rejection behind it.
+    upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<CompanionSection anchorMediaType="tv" anchorId={1396} />);
+
+    await act(async () => { fireEvent.click(addButton()); });
+
+    expect(upsertTitle).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('försök igen'));
+  });
+
+  it('control — any OTHER failure still propagates rather than being called a deletion', async () => {
+    const escaped: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { escaped.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      upsertTitle.mockRejectedValueOnce(new Error('firestore/unavailable'));
+      render(<CompanionSection anchorMediaType="tv" anchorId={1396} />);
+
+      await act(async () => { fireEvent.click(addButton()); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      expect((escaped[0] as Error)?.message).toBe('firestore/unavailable');
+      expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });

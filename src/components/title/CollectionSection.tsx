@@ -13,6 +13,8 @@ import SeenPosterCard from '@/components/title/SeenPosterCard';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { preferOriginalTitle } from '@/lib/utils/preferOriginalTitle';
 import { summarizeCollectionStreaming, seFlatrateProviderIds, streamingSummaryText } from '@/lib/collection/streamingSummary';
+import { useToast } from '@/contexts/ToastContext';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 
 /**
  * BIN-94 — franchise/collection completion tracking + BIN-135 streaming-summary.
@@ -39,6 +41,7 @@ export default function CollectionSection({
 }) {
   const { data: collection } = useCollection(collectionId);
   const { getItem, upsertTitle, libraryKnown } = useWatchlist();
+  const { show: toast } = useToast();
   const { user, uid, loading: authLoading } = useAuth();
   // BIN-596 — two different questions, and conflating them cost the signed-out
   // visitor a whole section.
@@ -130,6 +133,10 @@ export default function CollectionSection({
     if (adding || !libraryKnown || unseenNotInLibrary.length === 0) return;
     setAdding(true);
     try {
+      // BIN-1038: the loop below is a bulk add, so a refusal partway through leaves some
+      // films added and the rest not. The catch is OUTSIDE the loop on purpose — it stops
+      // at the first refusal rather than trying the remaining films, every one of which
+      // would be refused for the same reason and none of which can succeed.
       // BIN-159: bunden write-fan-out. Samlingar är normalt <30 filmer, men
       // cappa ändå så en patologiskt stor samling inte avfyrar hundratals
       // sekventiella Firestore-skrivningar.
@@ -147,6 +154,9 @@ export default function CollectionSection({
           providers: [],
         }));
       }
+    } catch (err) {
+      if (!isDeletionInProgressError(err)) throw err;
+      toast(DELETION_IN_PROGRESS_MESSAGE);
     } finally {
       setAdding(false);
     }

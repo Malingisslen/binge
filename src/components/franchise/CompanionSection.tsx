@@ -20,6 +20,8 @@ import {
   streamingSummaryText,
 } from '@/lib/collection/streamingSummary';
 import { companionsFor, type CompanionTitle } from '@/lib/franchise/companions';
+import { useToast } from '@/contexts/ToastContext';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { TMDBMovie } from '@/types';
 
 /**
@@ -111,6 +113,7 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
   const films = companions.filter((c) => c.mediaType === 'movie');
   const series = companions.filter((c) => c.mediaType === 'tv');
   const { getItem, upsertTitle, libraryKnown } = useWatchlist();
+  const { show: toast } = useToast();
   const { user, uid, loading: authLoading } = useAuth();
   // BIN-731: "Lägg i vill se" answers a signed-out tap the way every other add
   // affordance does — /login, then back to this page (BIN-714/645). Keyed on
@@ -176,6 +179,12 @@ function CompanionEnriched({ companions }: { companions: CompanionTitle[] }) {
         // OnboardingFlow for why a new doc must not omit the arrays.
         providers: [],
       }));
+    } catch (err) {
+      // BIN-1038. The try/finally only reset the spinner; a refusal left the strip looking
+      // exactly as it did before the tap, with nothing said. Narrow — anything else still
+      // propagates.
+      if (!isDeletionInProgressError(err)) throw err;
+      toast(DELETION_IN_PROGRESS_MESSAGE);
     } finally {
       setAddingId(null);
     }

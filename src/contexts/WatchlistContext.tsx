@@ -925,11 +925,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     // then toast — would confirm a write Firestore refused. That is the BIN-895 bug
     // reopened. A rejection cannot be confirmed by accident.
     //
-    // What a rejection does NOT do is get handled on its own: awaiting propagates. Most
-    // callers today end in an unhandled rejection, which shows the user nothing rather
-    // than something false. Which callers say what is BIN-1038's question, and the set is
-    // recorded there rather than counted here — three drafts of this comment carried three
-    // different tallies. Derive it:
+    // What a rejection does NOT do is get handled on its own: awaiting propagates. Which
+    // callers say what is BIN-1038's question, and the set is recorded there rather than
+    // counted here — three drafts of this comment carried three different tallies, and a
+    // fourth sentence about what "most" of them do was left standing until BIN-1038 made it
+    // false. Derive it:
     //
     //     grep -rn "upsertTitle(\|logViewing(" src
     //

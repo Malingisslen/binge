@@ -12,6 +12,7 @@ import { clearEpisodeProgress } from '@/lib/firebase/episodeProgress';
 import { buildWatchlistAddPayload } from '@/lib/watchlist/buildAddPayload';
 import { useSignedOutRedirect } from '@/hooks/useSignedOutRedirect';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
+import { DELETION_IN_PROGRESS_MESSAGE, isDeletionInProgressError } from '@/lib/deletionInProgressError';
 import type { WatchStatus, MediaType } from '@/types';
 
 interface QuickAddButtonProps {
@@ -73,10 +74,19 @@ export default function QuickAddButton({
       await markSeen({ tmdbId, mediaType, title, posterPath, releaseYear, providers, subscriptionProviders, genreIds });
       return;
     }
-    await upsertTitle(buildWatchlistAddPayload({
-      tmdbId, mediaType, status, title, posterPath, releaseYear,
-      current, providers, subscriptionProviders, genreIds,
-    }));
+    // BIN-1038. The toast already waited for the write, so a refusal never confirmed
+    // anything false — but it said nothing either, and the user was left with a menu that
+    // closed and no answer at all. Narrow on purpose: only the deletion refusal is answered
+    // here; every other failure keeps propagating exactly as it did before.
+    try {
+      await upsertTitle(buildWatchlistAddPayload({
+        tmdbId, mediaType, status, title, posterPath, releaseYear,
+        current, providers, subscriptionProviders, genreIds,
+      }));
+    } catch (err) {
+      if (isDeletionInProgressError(err)) { toast(DELETION_IN_PROGRESS_MESSAGE); return; }
+      throw err;
+    }
     toast(`${title} — ${labelFor(status)}`);
   }
 

@@ -158,6 +158,11 @@ function ImportContent() {
         n++;
         setImported(n);
       } catch {
+        // BIN-1038, the DELIBERATELY-silent case, and the reason is written here rather
+        // than left to be re-derived: a CSV import already reports its own outcome
+        // ("Importerade N titlar · M misslyckades"), which is true for a refusal too and
+        // offers no advice that cannot work. A per-row toast on top of that would fire once
+        // per remaining row. Left as-is on purpose; this is not an oversight.
         failed++;
         setImportFailed(failed);
       }

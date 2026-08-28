@@ -23895,3 +23895,93 @@ against). `route.mjs`'s second hunk (a BIN-1040 comment correction) and `shared-
 matches this review's own reproduction exactly).
 
 **Verdict: pass (0 blocking).**
+
+## 2026-08-29 — BIN-1038 re-review: struck comments verified, one DRY nit judged red-not-green
+
+**Trigger.** Second pass over BIN-1038 (19 staged files). First pass ended `pass (0
+blocking)` with a full mutation trace across three sites. The integration reviewer then
+found prose defects in two test-file comments and they were struck (not reworded):
+`CollectionSection.test.tsx`'s "This is the app's one bulk write" (falsified by
+`settings/import/page.tsx`'s `runImport`, which loops `upsertTitle` over up to 1000 CSV
+rows and calls itself "the most destructive path in the app after CollectionSection's
+bulk add"), and `useMarkSeen.test.tsx`'s "the app's two ordinary ways to mark a film
+seen" → "the two components that call this hook" (the old appositive was false because
+`QuickRateModal` also writes `status: 'sedd'`).
+
+**Diff verification.** `git show HEAD:<path>` vs staged bytes for both edited files
+confirmed the edits were comment-only — no assertion line touched in either diff. Full
+19-file sha loop (`git hash-object` vs `git rev-parse :<f>`) showed index==worktree for
+every staged file both before and after mutation testing.
+
+**Mechanism claim re-checked.** `grep -n "useMarkSeen("` across `src/` confirmed exactly
+two real call sites (`StatusButton.tsx:46`, `QuickAddButton.tsx:55`) — the new comment is
+true, not merely unfalsified.
+
+**Sweep for a third false comment (task's own expectation: "three consecutive rounds
+each found exactly one more").** Checked candidate superlatives/only-claims across all
+eight gated `*.test.tsx` files:
+- `CollectionSection.test.tsx:8` "The most destructive write in the app" — now consistent
+  with `settings/import/page.tsx:134-135`'s own "second most destructive, after
+  CollectionSection's bulk add" (both in-scope, in this diff, and mutually consistent).
+  `page.test.tsx`'s older, un-staged "most destructive write LEFT in the app after
+  BIN-596" (a ticket reference, not a ranking) is out of scope — untouched by this diff.
+- `CollectionSection.test.tsx:13` "The gate is therefore the ONLY defence" — verified
+  against `CollectionSection.tsx`: `status` has no payload-shape protection and
+  `unseenNotInLibrary` is derived straight from `getItem`, so the readiness gate is
+  genuinely the sole thing standing between a dead listener and a wrongly-demoted 'sedd'
+  film. True.
+- `StatusButton.test.tsx:9` "'Sedd igen' is the ONLY thing in the app that counts a
+  rewatch" — grepped `countsAsViewing: true` (only test fixtures) and
+  `handleSelect(status, countsAsViewing = false)` (only `StatusButton.tsx` passes a
+  non-default value). `buildStatusUpdate`'s own `rewatchFields` branch is reachable in
+  principle by any `updateStatus('sedd')` call on an already-'sedd' item, but the
+  function's own header comment (watchlistWrites.ts:246-253) states all four callers are
+  render-gated to never pass that transition, and names 'Sedd igen' as "the live rewatch
+  surface". Consistent with the claim being about REACHABLE behaviour, not theoretical
+  code paths. Not filed.
+- No fourth false comment found. Reported plainly rather than reaching for one.
+
+**Mutation spot-checks (not a full re-run — nothing moved besides the struck comments).**
+1. `CollectionSection.tsx`: `if (!isDeletionInProgressError(err)) throw err;` →
+   `if (false) throw err;`. Killed exactly
+   `CollectionSection.test.tsx`'s "control — any OTHER failure still propagates" case
+   (1 failed / 7 passed), nothing else. Restored; `git hash-object` == `git rev-parse
+   :<path>` == `0b804f14f01ce6f7260e97a40f7f379ab43eda57` before and after.
+2. `useMarkSeen.ts`: the film branch's `if (isDeletionInProgressError(err))` → `if
+   (false)`. Killed exactly "says the account is being deleted instead of leaving an
+   unhandled rejection" (1 failed / 15 passed), nothing else. Restored; sha
+   `1332aa2885cf72953680561199857f1245c066d8` before and after.
+3. Ran `CollectionSection.test.tsx` + `useMarkSeen.test.tsx` + `MoviePageClient.test.tsx`
+   together clean: 42/42 green.
+
+**Question posed by the task: is the hand-typed literal a silent-pass risk?**
+`useMarkSeen.test.tsx:181` and `MoviePageClient.test.tsx:331` type the literal
+`'binge/deletion-in-progress: kontot håller på att raderas'` instead of the
+`` `${DELETION_IN_PROGRESS}: …}` `` template every other of the eight sites in this batch
+uses (verified via `grep -rn "DELETION_IN_PROGRESS" src`, 6 template-literal sites vs 2
+hand-typed). Traced the failure mode: `isDeletionInProgressError` is a `startsWith`
+prefix check. If `DELETION_IN_PROGRESS`'s value ever changes, the stale hand-typed
+literal stops matching, `isDeletionInProgressError` returns `false`, and production takes
+its GENERIC-failure branch instead (`useMarkSeen.ts`'s TV-branch `show('Kunde inte hämta
+serieinfo, försök igen')`; `MoviePageClient.tsx`'s `.catch` re-throws via `throw err`).
+Both are asserted-against directly by the surrounding test (`toContain('raderas')`;
+`toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE)`), so the mismatch reddens the test —
+confirmed by re-reading both call sites, not merely asserted. Agreed with the integration
+reviewer: RED-not-green, not a silent-pass path. Filed as a DRY-consistency follow-up
+(fold the hand-typed literal into the template form used everywhere else in the batch),
+not a blocking finding. Folded into the active knowledge file's Money/catalog bullet
+rather than added as a new one.
+
+**Verdict: pass (0 blocking).**
+
+## Relocated 2026-08-29 — BIN-1038 knowledge-cap trim (oldest untouched entry, dated 2026-08-08 by blame)
+
+Moved verbatim to bring binge-test-reviewer.knowledge.md back under its 80,000-char cap
+after this session's Money/catalog bullet edit pushed it to 80,145 (over by 145, per
+`node scripts/check-knowledge-caps.mjs`). This bullet had not been touched since the
+file's original 2026-08-08 commit (confirmed via `git blame -w --date=short`) — the
+oldest untouched content in the file — so it is the one relocated, not condensed with an
+`[arkiv NN]` pointer, per the coordinator's "verbatim, nothing deleted, no other change"
+instruction. Text unchanged from the active file:
+
+- **A diff CARVED BY HAND out of a superset you already approved is a NEW review, and any earlier marker is stale by construction.** Two passes: (a) split-damage — grep the WHOLE tree for every symbol the removed half owned, confirm files it CREATED are gone AND unimported, the surviving consumer's types line up (`| null` vs `| undefined`), and no describe block lost its behaviour; (b) re-run EVERY mutation against the current bytes. Findings belonging to the parked half are OUT of scope: say so instead of filing.

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { OnboardingFlow } from './OnboardingFlow';
 import type { TMDBSearchResult, WatchlistItem } from '@/types';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 // Three defects, one flow (BIN-664 / BIN-659 / BIN-669):
 //
@@ -35,6 +36,7 @@ const search = vi.hoisted(() => ({
   isLoading: false,
 }));
 const setDoc = vi.hoisted(() => vi.fn(async () => {}));
+const toast = vi.hoisted(() => vi.fn());
 // ONE router object, hoisted — a per-call factory would make every assertion
 // about `push` vacuous (lesson from BIN-645).
 const push = vi.hoisted(() => vi.fn());
@@ -46,6 +48,7 @@ vi.mock('@/hooks/useTMDB', () => ({ useSearch: () => search }));
 // Identity: the 250ms debounce is not what these tests are about.
 vi.mock('@/hooks/useDebouncedValue', () => ({ useDebouncedValue: <T,>(v: T) => v }));
 vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }));
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ show: toast }) }));
 vi.mock('@/lib/firebase/db', () => ({
   fsdb: async () => ({ db: {}, doc: vi.fn(), setDoc, serverTimestamp: vi.fn() }),
 }));
@@ -317,5 +320,51 @@ describe('BIN-669 — the remembered path survives onboarding', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Klar/ })); });
     expect(push).toHaveBeenCalledWith('/');
+  });
+});
+
+describe('OnboardingFlow — a refused add is not offered a retry (BIN-1038)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1', myProviders: [] };
+    watchlist.items = [];
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    watchlist.upsertTitle.mockResolvedValue(undefined);
+    search.data = { results: [gotSeries] };
+    window.sessionStorage.clear();
+  });
+
+  it('says the account is being deleted instead of "kontrollera anslutningen och försök igen"', async () => {
+    // The generic `SaveError` this step already had is RETRY advice, and a retry can never
+    // work here: the deletion marker does not clear on its own, so every attempt is refused
+    // identically. Same reasoning #19 Customer Support used to block BIN-1032's generic
+    // message on `ReconsentGate` — the app's screens must not disagree about what a refused
+    // write means.
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Följ' })); });
+
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    // The retry banner must NOT appear — that is the whole finding.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('control — an ordinary failure still gets the retry banner, not the deletion message', async () => {
+    // Without this the row above passes on a catch that reports EVERY failure as a deletion,
+    // which would take the working retry away from the case it was built for (BIN-659).
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Följ' })); });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte lägga till titeln/);
+    expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
   });
 });

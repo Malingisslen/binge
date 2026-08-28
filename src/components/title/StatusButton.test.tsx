@@ -4,6 +4,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import StatusButton from './StatusButton';
 import { LIBRARY_UNAVAILABLE } from './libraryHold';
 import type { MediaType, WatchlistItem } from '@/types';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 // BIN-641 — "Sedd igen" is the ONLY thing in the app that counts a rewatch.
 //
@@ -375,5 +376,61 @@ describe('StatusButton — forwards both provider fields to the write (BIN-814)'
     const input = markSeen.mock.calls[0][0] as Record<string, unknown>;
     expect(input.providers).toEqual([VIAPLAY, 8]);
     expect(input.subscriptionProviders).toEqual([8]);
+  });
+});
+
+describe('StatusButton — a refused write SAYS so (BIN-1038)', () => {
+  const film = () => (
+    <StatusButton
+      tmdbId={603} mediaType="movie" title="The Matrix" posterPath={null} releaseYear={1999}
+    />
+  );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    watchlist.getItem.mockReturnValue(null);
+    watchlist.snapshotSettled = true;
+    watchlist.listenerFailed = false;
+    auth.uid = 'u1';
+    auth.user = { uid: 'u1' };
+    auth.loading = false;
+  });
+
+  it('tells the user the account is being deleted rather than closing the menu in silence', async () => {
+    watchlist.upsertTitle.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(film());
+
+    fireEvent.click(screen.getByRole('button', { name: /Lägg till|Vill se|Status/ }));
+    await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
+
+    expect(watchlist.upsertTitle).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    // The success line stays absent — BIN-895's rule, and what the early return protects.
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('The Matrix —'));
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('försök igen'));
+  });
+
+  it('still lets a GENUINE failure propagate — the catch is narrow, not a swallow', async () => {
+    // The handler is an unawaited async click handler, so a rethrow leaves as an unhandled
+    // rejection. It is captured and asserted rather than suppressed: the rethrow IS the
+    // behaviour under test. The flush is a MACROTASK — node only decides a rejection is
+    // unhandled at the end of the turn, so a microtask flush would observe nothing and this
+    // would read as "it did not rethrow".
+    const escaped: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { escaped.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      watchlist.upsertTitle.mockRejectedValueOnce(new Error('firestore/unavailable'));
+      render(film());
+
+      fireEvent.click(screen.getByRole('button', { name: /Lägg till|Vill se|Status/ }));
+      await act(async () => { fireEvent.click(screen.getByText('Vill se')); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+      expect((escaped[0] as Error)?.message).toBe('firestore/unavailable');
+      expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 });
