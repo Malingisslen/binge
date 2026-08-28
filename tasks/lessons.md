@@ -837,3 +837,41 @@ vägras. BIN-895:s falska bekräftelse, återöppnad av fixen som skulle skärpa
 var sprintens ENDA äkta koddefekt, och den infördes av sprinten själv. Valet av form var
 redan rätt av samma skäl: två roller blockerade oberoende på att ett nytt FÄLT på utfallet
 hade varit ignorerbart hos åtta av nio anropare.
+
+### [Workflow] En bunt som nästan bara är PROSA konvergerar inte — varje rättelse är ny prosa (2026-08-28, BIN-1028)
+
+**Trigger:** du raderar eller byter ut något som beskrivs på många ställen — en workflow,
+ett skript, ett fält — och upptäcker att fixen är två rader kod och tjugo meningar.
+
+**Regel:** räkna med att fyndfrekvensen INTE faller mot noll av sig själv. En kodfix
+granskas en gång och är klar; en prosafix skapar ny prosa som ingen mätt, så nästa varv
+har något nytt att hitta. Fyra av de sista fyndklasserna satt inne i rättelsen av det
+föregående fyndet. Det som bryter kedjan är att sluta skriva meningar: stryk hellre än
+formulera om, och där en mening ändå måste stå — skriv ett KOMMANDO som härleder den, och
+KÖR kommandot innan du committar. Ett "härled det själv" som författaren aldrig härledde
+är den pinsammaste varianten, och den inträffade.
+
+**Exempel:** BIN-1028 raderade två workflows. 41 blockerande fynd över nio granskningsvarv,
+NOLL defekter i koden — allihop falska påståenden i min egen prosa. Dominerande former:
+ett kvantifikator över en körningshistorik ingen räknat ("röd vid varje körning" — 112 av
+296 var gröna); ett påstående ärvt från en granskare och spritt till tre dokument utan
+mätning (dependabot-PR:er fick aldrig skarpa nycklar — 84 körningar, noll lyckade); en
+raderad workflow beskriven UTAN att namnges, vilket överlevde fyra grep-svep; och en
+rättelse som lämnade kvar just det den skulle ta bort. Kostnaden var inte fixen utan
+prosan runt den.
+
+### [Workflow] Ett flerfilsskript som kraschar mitt i skriver några filer och hoppar tyst över resten (2026-08-28, BIN-1028)
+
+**Trigger:** du redigerar N filer i ett `python - <<PY`-block där varje ändring har ett
+`assert anchor in s`.
+
+**Regel:** en assertion som brister avbryter HELA skriptet — men filerna före den är redan
+skrivna. Du får ett stack trace och ett halvfärdigt träd, och om du läser "ok" på de första
+raderna och går vidare rapporterar du ändringar som inte finns. Gör en fil i taget, eller
+grep:a varje ändring efteråt. `git status` räddar dig inte: filen du missade är oförändrad,
+alltså osynlig.
+
+**Exempel:** hände tre gånger i samma bunt. Två gånger rapporterade jag ändringar som
+gjorda utan att de fanns — en fångades av kodgranskaren, en av push-grinden. Tredje gången
+fångade jag den själv, för att jag då grep:ade efter varje enskild ändring i stället för
+att lita på skriptets utskrift.
