@@ -12,10 +12,9 @@ name: PR checks
 #
 # WHAT IT DELIBERATELY DOES NOT DO:
 #
-#   · No `npm audit`. That is the step that made `ci.yml` red — on every failure
-#     sampled it is `Audit (high+)` that falls, with Lint and everything after it
-#     skipped. Some of what it reported is decided (BIN-603,
-#     production deps); the rest is dev-only and was never examined. Derive the
+#   · No `npm audit`. That is the step that made `ci.yml` red. Some of what it
+#     reported is decided (BIN-603, production deps); the rest is dev-only and was
+#     never examined. Derive the
 #     split rather than trusting a number here — `npm audit --audit-level=high`
 #     against `npm audit --omit=dev --audit-level=high`. `deploy.yml` still
 #     surfaces audit findings as warnings on the path that ships.
