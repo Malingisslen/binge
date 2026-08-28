@@ -23766,6 +23766,17 @@ deleted bytes; explicitly not staged, not in any commit, to be `rm`'d before pus
   `ci.yml` all omit `fetch-depth` (default 1, shallow) and each runs `npm test`/
   `test:coverage`. So "every run" was false (the deploy.yml push job isn't shallow) and "any
   shallow checkout" is true and strictly narrower — a correct tightening, not a loosening.
+
+  **Correction 2026-08-28 (integration review, BIN-1028 push gate).** The clause "and each
+  runs `npm test`/`test:coverage`" above is FALSE for one of the three named. `deploy.yml`'s
+  `rules-tests` job runs `npm run test:rules`, which `package.json` defines as
+  `firebase emulators:exec --only firestore --project demo-binge-rules "vitest run --config
+  vitest.rules.config.ts"`, and that config's `include` is `['src/test/rules/**/*.test.ts']`
+  — so it never runs `npm test`, never runs `test:coverage`, and never reaches
+  `check_events.test.mjs`, which is the assertion the sentence was justifying. The entry's
+  CONCLUSION stands: `pr-checks.yml` is a shallow runner of `npm test`, so "any shallow
+  checkout" is still the correct tightening. Only the supporting clause was wrong. Appended
+  rather than edited in place, per this file's append-only convention.
 - `ROLE_WORLD_MODEL.md:603` — `"the 5 CI gates"` → `"the CI gates"`. Verified the count could
   not be re-derived: `git log --oneline -- .github/workflows/` shows `0d7a598` (BIN-1028,
   "de två workflows som aldrig körde på main är borta") deleted `ci.yml` and `preview.yml` the

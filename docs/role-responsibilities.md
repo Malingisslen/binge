@@ -152,15 +152,14 @@ is the real boundary.
   `NEXT_PUBLIC_*` / `defineSecret`, cache-clear on logout for shared devices.
   → `firestore.rules`, `firebase.json`, `src/lib/firebase/appCheck.ts`, `src/lib/firebase/db.ts`
 - **Which workflow actually runs on the path code takes** (BIN-1028). Read the `on:`
-  blocks rather than assuming — read the `on:` block of every file in the workflows
-  directory (written without backticks on purpose: the generator harvests every
+  block of every file in the workflows directory (written without backticks on purpose: the generator harvests every
   backtick-quoted tracked path in a section, so quoting the directory would seat this
   role on the whole tree). A bare `push:` has no `branches:` key to grep for and is
   invisible to a pattern search, which is why this says read rather than grep. The two
   that fired on no main push at all were DELETED on Malin's decision 2026-08-27 rather
   than repaired. They did gate `pull_request`, which is where dependabot bumps land, so
   `pr-checks.yml` replaces exactly that — lint, typecheck and test, deliberately without
-  `npm audit` (the step that made the old one red on every run) and without a build, so a
+  `npm audit` (the step that made the old one red) and without a build, so a
   pull request never touches a secret. `npm audit`
   is advisory on the surviving path by BIN-344's decision. Cite the workflow whose
   trigger matches the event, never "CI".

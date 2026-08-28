@@ -30,9 +30,9 @@
 // A clean run means no unevidenced claim STANDS. That is weaker than "every claim is
 // evidenced", and the output separates the ways a claim can stop standing: evidenced,
 // retired by a correction (retracted, not verified), grandfathered, or unverifiable in a
-// shallow checkout. As of this commit the live file scores 0 evidenced and 4 retired —
-// printing that as "clean" without the breakdown would be this file committing the
-// overclaim it exists to catch (integration review, third pass).
+// shallow checkout. Printing a bare "clean" without that breakdown would be this file
+// committing the overclaim it exists to catch (integration review, third pass). The live
+// split moves with every row — run the check rather than reading a number here.
 // It also does NOT verify that the named commit actually contains that ticket's work. A
 // real sha cited for the wrong ticket, or a docs-only commit cited for a code claim, is
 // invisible here. That is the same failure class that sank the first attempt at this check
