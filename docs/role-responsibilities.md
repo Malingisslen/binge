@@ -127,7 +127,7 @@ Owns the **25 SEK/mån Firebase Blaze cap** (50/90/100% alerts).
 - localStorage persist whitelist (per-title data banned after a 5MB overflow
   incident).
   → `src/lib/queryClient.ts`
-- europe-west1 function placement; preview-channel 7-day TTL; per-service daily
+- europe-west1 function placement; per-service daily
   budgets (see Vendor Manager).
 
 ## 4. Security Architect
@@ -732,7 +732,7 @@ Three pairs share a surface but split by **intent** — worth keeping distinct:
 
 - **Testing splits in two.** The _QA / Test Engineer_ (#7) owns automated Vitest +
   rules-tests + guard tests. The _Manual / Release QA Tester_ (#20) owns
-  exploratory, preview-channel, and device testing. The gap is real because there
+  exploratory and device testing. The gap is real because there
   is no Playwright/Cypress E2E suite.
 - **Social moderation splits in two.** _Trust & Safety_ (#12) **polices** UGC
   (reports, bans, escalation). The _Community Manager_ (#18) **builds and grows**
