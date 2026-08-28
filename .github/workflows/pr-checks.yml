@@ -12,8 +12,9 @@ name: PR checks
 #
 # WHAT IT DELIBERATELY DOES NOT DO:
 #
-#   · No `npm audit`. That is the step that made `ci.yml` red, and
-#     lint never even ran behind it. Some of what it reported is decided (BIN-603,
+#   · No `npm audit`. That is the step that made `ci.yml` red — on every failure
+#     sampled it is `Audit (high+)` that falls, with Lint and everything after it
+#     skipped. Some of what it reported is decided (BIN-603,
 #     production deps); the rest is dev-only and was never examined. Derive the
 #     split rather than trusting a number here — `npm audit --audit-level=high`
 #     against `npm audit --omit=dev --audit-level=high`. `deploy.yml` still
@@ -36,8 +37,8 @@ name: PR checks
 #
 # The job is named `quality` on purpose: that is the status check the branch
 # protection rule on main requires, and since `ci.yml` was its only producer the
-# rule had become permanently unsatisfiable (every push printed "Bypassed rule
-# violations"). This makes it satisfiable again for pull requests. It does NOT
+# rule had become permanently unsatisfiable. This makes it satisfiable again for
+# pull requests. It does NOT
 # fix direct pushes to main, which do not run this workflow — removing that
 # required check, or scoping it, is a GitHub-settings action only Malin can take.
 

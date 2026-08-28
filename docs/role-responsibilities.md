@@ -158,9 +158,9 @@ is the real boundary.
   invisible to a pattern search, which is why this says read rather than grep. The two
   that fired on no main push at all were DELETED on Malin's decision 2026-08-27 rather
   than repaired. They did gate `pull_request`, which is where dependabot bumps land, so
-  `pr-checks.yml` replaces exactly that — lint, typecheck and test, deliberately without
-  `npm audit` (the step that made the old one red) and without a build, so a
-  pull request never touches a secret. `npm audit`
+  `pr-checks.yml` covers part of that. What it does and deliberately does NOT do is
+  enumerated in its own header — read that file rather than a summary here, because a
+  second list is a second thing to keep true. `npm audit`
   is advisory on the surviving path by BIN-344's decision. Cite the workflow whose
   trigger matches the event, never "CI".
   → `.github/workflows/deploy.yml`, `.github/workflows/pr-checks.yml`, `.github/workflows/secret-scan.yml`
