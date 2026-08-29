@@ -26,7 +26,7 @@ jobs:
     # tests would never run on the path a rules change actually takes.
     needs: rules-tests
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history so the rules/functions drift-guard below can diff this
           # push (github.event.before..sha) to see which files changed.
@@ -362,7 +362,7 @@ jobs:
   rules-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
