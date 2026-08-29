@@ -993,3 +993,25 @@ tillstånd samma commit förstör. Min första lydelse sa "kör lintern efter at
 regenererat baslinjen" — omöjligt vid de bytes som committas, och fälld av helhetsgranskningen.
 Beskriv i stället härledningen mot en TIDIGARE version av datafilen, och kör den innan du skriver
 meningen.
+
+### [Workflow] "Det kräver en riktig körning" och "jag kan inte köra den" är två påståenden (2026-08-29, BIN-1050)
+
+**Trigger:** ett acceptanskriterium märkt `kind: run` — dispatch-bevis, en röd check, en räkning
+mot produktion.
+
+**Regel:** pröva om du kan bygga mätinstrumentet innan du skickar kriteriet till Malin. Jag skrev
+på BIN-1050 att beviset "kräver en riktig pull request, och den här sessionen öppnar inga PR:er".
+Första halvan var sann, andra var ett antagande jag aldrig prövade. En **tillfällig PR som aldrig
+mergas är ett mätinstrument**: gren `tmp/<biljett>-probe`, den avsiktliga defekten, `gh pr create`
+med "PROV, ska INTE mergas" i titeln, och `gh pr close --delete-branch` + `git fetch --prune`
+efteråt.
+
+**Och läs utfallet PER STEG, inte bara checkens färg:**
+`gh run view <id> --json jobs --jq '.jobs[] | .name as $j | .steps[] | "\(.conclusion)  \($j) / \(.name)"'`
+BIN-1050:s körning visade `Typecheck` success och `Typecheck functions` failure på samma commit.
+Att bara veta att checken blev röd hade inte skilt den nya grinden från vilket annat fel som helst.
+
+**Exempel på när det inte går:** en skärmdump av hur något SER ut är verkligen hennes. Men
+CI-utfall, produktionsräkningar (BIN-999 samma dag: en `list` + sex `get` gav svaret) och
+deploy-beteende är oftare nåbara än de först verkar. Fråga vilket instrument som saknas, inte om
+kriteriet är "run".
