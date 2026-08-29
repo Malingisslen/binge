@@ -516,3 +516,49 @@ godartad — har användaren raderat titeln en andra gång innan nedgraderingen 
 skrivningen en create för Firestore, och BIN-942:s create-golv nekar den, vilket är rätt
 svar när det inte finns någon rad kvar att skydda. Återkommande träffar på `-refused`
 betyder något annat och är också en re-open.
+
+---
+
+## 2026-08-29 — kodändrande commits FÖRE `COVERAGE_EFFECTIVE_FROM` kräver ingen `review`-rad (BIN-938)
+
+**Beslutat, permanent. Fila inte om det.**
+
+`docs/org/metrics/check_review_coverage.mjs` grindar på att varje kodändrande commit namnger
+en biljett som har en `review`-rad i `events.jsonl`. Regeln har en epok,
+`COVERAGE_EFFECTIVE_FROM`, och den är MEDVETET icke-retroaktiv — skälet, och den mätta
+jämförelsen mellan tre kandidatdatum, står i konstantens egen kommentar i den filen. Läs den
+där; den upprepas inte här.
+
+Följden är en permanent mängd äldre commits som saknar biljett-id i ämnesraden och som regeln
+aldrig kommer att nämna. **Den mängden är accepterad.** Att kräva rader i efterhand bevisar
+ingenting om vad som faktiskt granskades då, och en kontroll som är permanent röd blir
+avstängd.
+
+Detta ÖPPNAR INTE epokbeslutet. Posten bokför bara att den grandfathering beslutet medför är
+avsedd, så att nästa granskningsvarv inte filar den en gång till — vilket redan har hänt.
+
+Ingen uppräkning av de berörda commitarna står här: en lista går inaktuell nästa gång någon
+kör samma svep. Härled mängden i stället. Notera att robotens beroendehöjningar är undantagna
+via FÖRFATTARSKAP (`dependabot[bot]`), inte via ämnesraden — filtret nedan speglar det.
+Datumet jämförs i UTC, som regeln själv gör (`check_review_coverage.mjs` jämför med
+`Date.parse`); `%cI` ensamt bär en lokal offset och skulle lista en commit gjord strax efter
+midnatt lokal tid på epokdagen som om den låg efter epoken.
+
+Kommandot som det står skrivet svarar på RE-OPEN-frågan: det listar kodändrande commits PÅ
+eller EFTER epoken som varken namnger en biljett eller är robotens. Tom utdata är det friska
+läget, och var utdatan när posten skrevs.
+
+Byt datumet mot `2026-08-01` för att reproducera BIN-938:s ursprungliga augustifynd. Det är ett
+UTSNITT av den accepterade mängden, inte hela den — mängden sträcker sig bakåt så långt
+historiken gör. Ta bort `awk`-raden för att se hela.
+
+```
+TZ=UTC git log --no-merges --date=iso-strict-local --format='%cd|%an|%s' |
+  grep -E '[|](feat|fix|refactor|perf|test|build|ci)[(:!]' |
+  grep -Ev 'BIN-[0-9]+' |
+  grep -v dependabot |
+  awk -F'|' '$1 >= "2026-08-18"'
+```
+
+**RE-OPEN WHEN:** en kodändrande commit som ligger PÅ eller EFTER epoken saknar både ett
+biljett-id och robotundantaget. Det är regeln som fyrar, inte den här posten.

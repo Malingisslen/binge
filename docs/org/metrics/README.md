@@ -76,7 +76,7 @@ drifted the shakedown data; the writers are now pinned to this contract).
 | `ticket` | *(optional, sprint path)* the BIN-id under review |
 | `ran` | *(optional)* `false` when no critique actually happened — see below. NOTE: `trigger` rows also carry a `ran` field, with a DIFFERENT meaning (`null` = "did a review follow? unknown"). One name, two meanings, in one log |
 | `outcome` | *(optional)* free-form label (`approved-with-conditions`, `parked-conditional-block`, …) |
-| `via` | *(optional)* which writer. Derive the live set rather than reading a list here — it grows every time a new pass writes its first row, so any list written down goes stale without anyone noticing: `grep -o '"via":"[^"]*"' docs/org/metrics/events.jsonl \| sort -u` (every row carrying the field, not only `review` rows). Only `"sprint-execute"` is recognised as sprint-routed by `/org-retro` (it tests `via === "sprint-execute"` or a `ticket` field), so every other value lands in the **ad-hoc** set and is expected to have a preceding `trigger`. See the `ran: false` note — 42 rows currently land there wrongly |
+| `via` | *(optional)* which writer. Derive the live set rather than reading a list here — it grows every time a new pass writes its first row, so any list written down goes stale without anyone noticing: `grep -o '"via":"[^"]*"' docs/org/metrics/events.jsonl \| sort -u` (every row carrying the field, not only `review` rows). Only `"sprint-execute"` is recognised as sprint-routed by `/org-retro` (it tests `via === "sprint-execute"` or a `ticket` field), so every other value lands in the **ad-hoc** set and is expected to have a preceding `trigger`. See the `ran: false` note below, which covers the rows that land there wrongly |
 | `timing` | *(optional, added 2026-08-18 by BIN-917)* WHEN the critique ran relative to the code. The intended value is `"pre-build"` (before the first edit); `"retroactive"` means the code was already on main, so the review is real but the gate it should have been was not there. More spellings than that are in the log, because nothing validates the field — derive them rather than reading a list here, which is what the sentence that used to stand in this spot got wrong: `grep -o '"timing":"[^"]*"' docs/org/metrics/events.jsonl \| sort -u`. **Read by nothing today** — `/org-retro` does not consult it, verified 2026-08-18 by grepping the whole `role-org` plugin for `timing`/`retroactive`/`pre-build`. That grep is not empty: it returns exactly one hit, `skills/stakeholder-review/SKILL.md`, the words "ordering/timing dependency" in prose, which reads no field. Named here so the next person to run it does not think they have found a contradiction. It is recorded so a future rubber-stamp or calibration measurement can tell a post-hoc audit apart from a gate that worked, which it currently cannot: without this field the 7 rows written that day are indistinguishable from 7 reviews that fired on time. Documented here rather than left to drift, which is the whole point of this table |
 
 ### A row's prose is not authoritative on its own (BIN-918, 2026-08-17)
@@ -163,22 +163,42 @@ reported as *unverified* rather than answered as absence — otherwise the first
 this contract would fail CI while passing on deploy, and a check that punishes the first
 person to obey it gets switched off.
 
-> ⚠️ **The counts in the sections BELOW this block are stale.** They were measured when each
-> was written and have not been re-derived; the 2026-08-17 date on this block applies to this
-> block only. Measured 2026-08-17 for comparison: 53 `ran: false` rows (48 `declined-unattended`
-> + 4 `declined-unattended-shipped` + 1 `already-satisfied`), 52 of 53 via `sprint-parallel`,
-> 53 of 109 non-`skip` `review` rows. Every qualitative claim below still holds and every
-> ratio moved the same direction, so nothing there is misleading in substance — but the
-> figures are not current. Disclosed rather than silently re-derived, which is the same
-> discipline as the `correction` rows above. Tracked as BIN-929.
+> **Do not read a count out of the prose below — derive it.** The hardcoded counts that used to stand here were STRUCK rather than re-counted
+> (2026-08-29, BIN-929): each had been measured once and never re-derived, and a re-count
+> would only have restarted the same clock. `git show 6061a7a:docs/org/metrics/README.md` holds the text they replaced.
 >
-> **Partly superseded 2026-08-19 (BIN-881/885 pass).** Three figures below WERE re-derived
-> that day and are current: the `ran: false` share (53 of 122 non-`skip` rows), the
-> rubber-stamp rate measured both ways (3% unfiltered / 6% filtered, same numerator of 4),
-> and the `tier` enum breakdown over all 124 `review` rows. Each says the date it was
-> measured. Everything else below is still as this block describes it, and BIN-929 stays
-> open for the rest — a partial re-count that claimed to be a full one would be the same
-> defect in a smaller size.
+> ```bash
+> node -e '
+> const rows = require("fs").readFileSync("docs/org/metrics/events.jsonl", "utf8")
+>   .split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+> const rev = rows.filter((r) => r.type === "review");
+> const nonSkip = rev.filter((r) => r.tier !== "skip");
+> const dead = nonSkip.filter((r) => r.ran === false);
+> const held = nonSkip.filter((r) => r.ran !== false);
+> const by = (a, k) => a.reduce((m, r) => (m[r[k] ?? "(none)"] = (m[r[k] ?? "(none)"] || 0) + 1, m), {});
+> // The LEGACY rubber-stamp derivation, spelled exactly as the prose below describes it.
+> const legacy = (r) => !r.must_haves && !(r.adrs || []).length && !r.conflicts
+>   && !r.escalations && !/park|override|correction|ruling/i.test(r.outcome || "");
+> console.log({
+>   nonSkipReviewRows: nonSkip.length,
+>   ranFalse: dead.length,
+>   ranFalseShare: (dead.length / nonSkip.length * 100).toFixed(1) + "%",
+>   ranFalseByOutcome: by(dead, "outcome"),
+>   ranFalseByVia: by(dead, "via"),
+>   ranFalseCarryingTicket: dead.filter((r) => r.ticket).length,
+>   ranFalseCarryingApproxTokens: dead.filter((r) => r.approx_tokens !== undefined).length,
+>   ranFalseSayingApprove: dead.filter((r) => r.outcome === "approve").length,
+>   ranFalseScoredRubberStampByLegacyDerivation: dead.filter(legacy).length,
+>   adhoc: nonSkip.filter((r) => !(r.via === "sprint-execute" || r.ticket)).length,
+>   tierOverAllReviewRows: by(rev, "tier"),
+>   heldRows: held.length,
+> });
+> '
+> ```
+>
+> Figures were removed; what the section argues — why `ran: false` rows are not reviews, and
+> what excluding them does to each score — is unchanged. `git diff` against that sha is the
+> check on that.
 
 **Rows with `ran: false` are NOT reviews and must be excluded from every rate.** They exist
 because a review that was OWED and refused has to leave a trace — a repo where nothing
@@ -205,42 +225,38 @@ A third, `"already-satisfied"`, is hand-written by an attended pass that found t
 had already run. All three are excluded by the same `ran !== false` filter.
 
 Today they distort the rubber-stamp rate's **denominator** only — but they distort two
-OTHER scores outright, and those have no bool protecting them. All 42 carry
+OTHER scores outright, and those have no bool protecting them. Every one of them carries
 `via: "sprint-parallel"` or `"attended-review-pass"` and no `ticket`, so `/org-retro`
-classifies them as **ad-hoc** reviews that should each have had a preceding `trigger`:
-42 of 71 non-`skip` ad-hoc reviews against 19 triggers (the deleted in-repo fork's calibration
-one-liner applied no tier filter and printed `adhoc 72` — the "excluding `tier:skip`" clause is
-scoped to the rubber-stamp rate, not to calibration), which reads as the hook massively
-under-firing when it is not. None carries `approx_tokens` (0 of 42), which drags the
+classifies them as **ad-hoc** reviews that should each have had a preceding `trigger` (the
+deleted in-repo fork's calibration one-liner applied no tier filter — the "excluding
+`tier:skip`" clause is scoped to the rubber-stamp rate, not to calibration), which reads as
+the hook massively under-firing when it is not. None carries `approx_tokens`, which drags the
 cost-per-review down the same way. The ONE thing holding the rubber-stamp line is the
 canonical `"rubber_stamp": false` every single one of them writes. Do not remove it.
 The live skill has no executable rubber-stamp analyzer at all (it has a worked-example
 one-liner, but that one only counts rows by type), so the bool is what a reader applies
 by hand. The documented legacy derivation — zero conditions, no ADR, no conflicts or
 escalations, and
-an `outcome` carrying no park/override/correction/ruling verb — scores **41 of these 42
-rows as rubber-stamps**. Measured, not reasoned: `"declined-unattended"` contains none of
-those verbs, and the rows carry `must_haves: 0`, `adrs: []`, `conflicts: 0`,
-`escalations: 0`. Only the single `"already-satisfied"` row (`must_haves: 6`) comes back
-false. So a future `ran: false` writer that forgets the bool would inflate the
+an `outcome` carrying no park/override/correction/ruling verb — scores nearly all of them
+as rubber-stamps, because `"declined-unattended"` contains none of those verbs and those rows
+carry `must_haves: 0`, `adrs: []`, `conflicts: 0`, `escalations: 0`. The derivation block
+above computes that same classification, so the exact figure is a command away. So a future `ran: false` writer that forgets the bool would inflate the
 **numerator** — declined reviews counted as panels that agreed with themselves — which is
 a sharper reason for the `ran !== false` filter below than mere padding.
 
 (The scorecard's headline definition, `outcome:approve AND conditions:0 AND adr:null AND
 escalated:false`, is stated over the whole non-`skip` population rather than as the legacy
-path, and by THAT reading none of these rows qualifies: 0 of 42 say `approve`. Three
+path, and by THAT reading none of these rows qualifies — not one says `approve`. Three
 readings, two answers — which is itself the argument for filtering them out explicitly
 instead of relying on whichever one runs.)
 
-What they used to do was pad the population, and it is worth keeping the size of that in
-view: **re-counted 2026-08-19, 53 of 122 non-`skip` `review` rows are `ran: false`** — 43%
-of the population was reviews that never sat. (The figure read 42 of 93 when this was first
-written on 2026-08-13; the log has grown since, the proportion has not meaningfully moved.)
+What they used to do was pad the population, and the size of that is worth keeping in
+view — `ranFalseShare` in the derivation block above is that share.
 
-Unfiltered they push the headline rubber-stamp rate DOWN, i.e. they flatter the panel.
-Measured both ways on 2026-08-19, over the same log: **122 rows → 4 rubber-stamps (3%)**
-unfiltered, **69 rows → 4 rubber-stamps (6%)** with `ran !== false`. Same numerator, half
-the denominator — the rate the panel is judged by was being halved by reviews nobody held.
+Unfiltered they push the headline rubber-stamp rate DOWN, i.e. they flatter the panel: they
+enlarge the denominator without ever adding to the numerator, since every one of them writes
+`"rubber_stamp": false`. The derivation block prints `nonSkipReviewRows` and `heldRows` side
+by side, which is the whole of the effect.
 
 > **The shipped scorecard now filters them (BIN-881, landed 2026-08-19).** `/org-retro`
 > defines its population as "`review` events, excluding `tier:skip` **and excluding every
@@ -258,10 +274,9 @@ the denominator — the rate the panel is judged by was being halved by reviews 
 
 Those rows also write `panel` as role-title STRINGS rather than the numbers this table
 pins, and `tier` drifts the same way: the table pins the router's `top`/`medium`/`skip`,
-but the log actually holds (**re-counted 2026-08-19**, 124 `review` rows) `single` 78,
-`medium` 21, `full` 13, `top` 8, `skip` 2, `full-panel` 1 and one row with none — the
-sprint engine writes its own `tierMap` values, and all 53 `ran: false` rows are `single`
-(47) or `full` (6). Both drifts are pre-existing, and both are another reason to exclude
+but the log actually holds the sprint engine's own `tierMap` values as well, plus a row
+carrying none at all — `tierOverAllReviewRows` in the derivation block above is the live
+spread. Both drifts are pre-existing, and both are another reason to exclude
 these rows rather than parse them. Do not trust either enum.
 
 
@@ -274,9 +289,9 @@ these rows rather than parse them. Do not trust either enum.
 ### `trigger` — the ExitPlanMode suggest-hook fired *(instrumented — this is the calibration signal)*
 | field | meaning |
 |---|---|
-| `signals` | the high-stakes tokens that matched in the plan, as a **comma-separated STRING** — `suggest-stakeholder-review.mjs:39` does `[...hitSet].sort().join(',')` before writing. Not an array. Re-counted 2026-08-19: 19 of 19 `trigger` rows are strings, 0 are arrays |
-| `fired` | always `true` on a written row — the hook only writes when it fires. Re-counted 2026-08-19: 19 of 19 rows carry it |
-| ~~`suggested`~~ | **never existed.** This table used to document it; ZERO rows have ever carried it (re-counted 2026-08-19: 0 of 19). The writer emits `fired`. Corrected by BIN-885 |
+| `signals` | the high-stakes tokens that matched in the plan, as a **comma-separated STRING** — `suggest-stakeholder-review.mjs:39` does `[...hitSet].sort().join(',')` before writing. Not an array |
+| `fired` | always `true` on a written row — the hook only writes when it fires |
+| ~~`suggested`~~ | **never existed.** This table used to document it; ZERO rows have ever carried it. The writer emits `fired`. Corrected by BIN-885 |
 
 > The hook can't know whether a review *actually ran* — `/org-retro` correlates `trigger`
 > events with later `review` events (by time) to score calibration: fired-and-a-review-ran

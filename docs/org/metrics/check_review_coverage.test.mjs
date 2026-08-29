@@ -145,9 +145,9 @@ describe('ticketsWithAReviewRow', () => {
 
   it('finds the id in the PROSE when there is no `ticket` field — the real engine row shape', () => {
     // This case exists because the fixture above was a comfortable fiction. The sprint engine
-    // — the only writer that produces `ran:false` rows, and it lives out of tree — emits no
-    // `ticket` field at all; README counts 42 such rows. So the "a recorded decision is
-    // acceptable" contract above was UNREACHABLE for the only party that can exercise it.
+    // lives out of tree and emits no `ticket` field at all, so the "a recorded decision is
+    // acceptable" contract above was UNREACHABLE for rows of that shape. The fixture below is
+    // that shape.
     //
     // Worse, the four rows from the 2026-08-16 incident are exactly this shape, which means
     // the first version of this module would have refused a commit naming BIN-880/906 with
@@ -499,14 +499,12 @@ describe('stagedEventsLog — the gate reads the INDEX, not the working tree', (
   });
 
   it('the PRODUCTION defaults compose back to the real file', () => {
-    // Asserted DIRECTLY, without git, because no behavioural call can reach the branch that
-    // breaks. The first version of this test called
+    // Asserted DIRECTLY, without git. The first version of this test called
     // `stagedEventsLog(undefined, DEFAULT_EVENTS_REL)` and its comment claimed that forced the
     // fallback. It did not: that relPath is the real tracked file, so `git show :<relPath>`
     // succeeds from any cwd inside the repo and the git branch wins — the `join()` under test
-    // is never evaluated. Proven by the test reviewer: with the module's import-time assertion
-    // disabled and REPO_ROOT deliberately broken, all 43 tests stayed green. A test whose
-    // comment describes work it does not do is the defect this whole batch is about.
+    // is never evaluated. A test whose comment describes work it does not do is the defect
+    // that batch was about.
     //
     // The module asserts the same invariant at import (and that DOES fail loud — measured:
     // `Test Files 1 failed (1)`, exit 1). This is the copy that survives someone deleting it.

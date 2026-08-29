@@ -341,9 +341,9 @@ export function ticketsInSubject(subject) {
  *
  * It also made this function's own contract unreachable. The paragraph below says a
  * `ran:false` row WITH a written pull-out reason is an acceptable answer under BIN-917's
- * criterion 4 — but the only writer that produces such rows is the sprint engine, which lives
- * out of tree and (per README) has written 42 of them carrying no `ticket` field. The next
- * unattended sprint that did the right thing would have been refused anyway.
+ * criterion 4. A row whose id is only in its prose reaches that contract through
+ * `check_events.mjs`'s `ticketOf`, not through a `ticket` field. The next unattended sprint
+ * that did the right thing would have been refused anyway.
  *
  * A row's `ran` value is still deliberately NOT consulted: the pull-out reason lives on the
  * Linear ticket where no check can read it. What this rule refuses is the absence of any row
@@ -575,6 +575,44 @@ export function gradeSubject(subject, reviewed) {
   return { ok: true, tickets };
 }
 
+/** The repo root, and the path the defaults must compose to. Exported so a test can assert
+ *  the composition DIRECTLY, without git. */
+export const REPO_ROOT = join(dirname(EVENTS_PATH), '..', '..', '..');
+export const DEFAULT_EVENTS_REL = 'docs/org/metrics/events.jsonl';
+
+// The two defaults must compose back to the real file, so it is asserted at import.
+//
+// An import-time throw is normally the BIN-802 trap (a module that dies on import makes vitest
+// report "no tests" and the run can look healthy). Measured here rather than assumed: breaking
+// REPO_ROOT gives `Test Files 1 failed (1)` with this message printed, and vitest exits
+// non-zero. It fails LOUD, not silent.
+//
+// One dead end is worth keeping, because it is the obvious thing to try: calling
+// `stagedEventsLog(undefined, DEFAULT_EVENTS_REL)` does NOT force the fallback. That relPath is
+// the real tracked file, so `git show :<relPath>` succeeds from any cwd inside the repo and the
+// git branch wins — the join() such a test exists to exercise is never reached. With the
+// assertion disabled it stayed green, measured.
+//
+// Two absolutes stood here and are STRUCK rather than reworded (2026-08-29, BIN-935): that no
+// behavioural test can reach the fallback branch, and that this assertion is the only check
+// that would have caught the ENOENT. Both were measured false, and nothing is written in their
+// place — derive it instead of trusting a sentence:
+//
+//   * the fallback branch, under the production defaults and with no fixture override: import
+//     this module in a child process whose PATH does not contain `git`, call `stagedEventsLog()`
+//     with no arguments, and read `.source`.
+//   * what else catches a broken REPO_ROOT: disable this assertion, break the composition, and
+//     run `npx vitest run docs/org/metrics/check_review_coverage.test.mjs` — tests in this file
+//     fail, not none.
+//
+// The assertion stays because it fires at import, before any test has chosen what to read.
+if (join(REPO_ROOT, DEFAULT_EVENTS_REL) !== EVENTS_PATH) {
+  throw new Error(
+    `check_review_coverage: REPO_ROOT (${REPO_ROOT}) and the default relPath do not compose to `
+    + `EVENTS_PATH (${EVENTS_PATH}) — the worktree fallback would read a path that does not exist.`,
+  );
+}
+
 /**
  * The log AS IT WILL BE COMMITTED — the index, not the working tree.
  *
@@ -605,37 +643,8 @@ export function gradeSubject(subject, reviewed) {
  * is refused) rather than silently, but the docblock claimed a working fallback that could not
  * run, and all 42 tests missed it because every one passes an explicit repoDir that IS a root.
  * That is the seam drifting from production in exactly the axis the parameterisation was
- * reviewed for. `REPO_ROOT` and the assertion below exist so it cannot recur.
+ * reviewed for. `REPO_ROOT` and the import-time assertion above exist so it cannot recur.
  */
-/** The repo root, and the path the defaults must compose to. Exported so a test can assert
- *  the composition DIRECTLY — see the note below for why a behavioural test cannot. */
-export const REPO_ROOT = join(dirname(EVENTS_PATH), '..', '..', '..');
-export const DEFAULT_EVENTS_REL = 'docs/org/metrics/events.jsonl';
-
-// The two defaults must compose back to the real file. No behavioural test can reach this —
-// the failure only appears in the fallback branch, under the production defaults, which every
-// fixture overrides — so it is asserted at import instead. Cheap, and it is the single check
-// that would have caught the ENOENT above.
-//
-// An import-time throw is normally the BIN-802 trap (a module that dies on import makes vitest
-// report "no tests" and the run can look healthy). Measured here rather than assumed: breaking
-// REPO_ROOT gives `Test Files 1 failed (1)` with this message printed, and vitest exits
-// non-zero. It fails LOUD, not silent.
-//
-// AND NO BEHAVIOURAL TEST CAN REPLACE IT, which took a wrong turn to establish. The first
-// attempt called `stagedEventsLog(undefined, DEFAULT_EVENTS_REL)` and claimed to force the
-// fallback; it did not. That relPath is the real tracked file, so `git show :<relPath>`
-// SUCCEEDS from any cwd inside the repo and the git branch wins every time — the join() the
-// test existed to exercise is never reached. With the assertion disabled it stayed green,
-// measured. Hence the two exports above: the composition is asserted directly and without
-// git, which is the only form of the check that actually depends on REPO_ROOT being right.
-if (join(REPO_ROOT, DEFAULT_EVENTS_REL) !== EVENTS_PATH) {
-  throw new Error(
-    `check_review_coverage: REPO_ROOT (${REPO_ROOT}) and the default relPath do not compose to `
-    + `EVENTS_PATH (${EVENTS_PATH}) — the worktree fallback would read a path that does not exist.`,
-  );
-}
-
 export function stagedEventsLog(repoDir = REPO_ROOT, relPath = DEFAULT_EVENTS_REL) {
   try {
     return {
