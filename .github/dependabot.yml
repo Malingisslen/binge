@@ -80,6 +80,24 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "tailwindcss"
         update-types: ["version-update:semver-major"]
+      # eslint, 2026-08-29: blockerad UPPSTRÖMS, inte av arbetsinsats. eslint 10 tog bort
+      # det context-API `eslint-plugin-react` använder, och pluginen har inte följt efter —
+      # dess senaste version deklarerar `eslint: ^3 || … || ^9.7` i sina peerDependencies.
+      # Vi väljer den inte själva: `eslint-config-next` levererar den, och den ägs av next.
+      # PR #53 föll på `TypeError: Error while loading rule 'react/display-name'`.
+      # Utan den här posten öppnar roboten om samma omergebara PR varje vecka och en check
+      # står permanent röd, vilket gör rött till normaltillstånd — då slutar man titta.
+      # Sårbarheterna bakom höjningen är dev-only och når ingen besökare — härled dem:
+      #   npm audit --omit=dev --audit-level=high    (0 fynd = inget når produktion)
+      # BIN-658 bär avvägningen.
+      # TA BORT HELA DEN HÄR POSTEN — kommentaren OCH båda raderna under. Att bara ta bort
+      # `update-types` lämnar `- dependency-name: "eslint"` kvar, vilket för dependabot
+      # betyder ignorera VARJE eslint-uppdatering: en tyst utvidgning, inte ett syntaxfel.
+      # Blockeringen kan lösa sig på två sätt, så kolla båda:
+      #   npm view eslint-plugin-react@latest peerDependencies
+      #   npm view eslint-config-next@latest dependencies
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   # npm — Cloud Functions (egen package.json, scannas inte av root-blocket /).
   # Liten dep-tree → lågt PR-tak. firebase-admin + firebase-functions är

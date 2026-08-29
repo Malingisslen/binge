@@ -138,6 +138,16 @@ räckvidd och hör inte hemma mitt i en incident), och pinning är rätt instrum
 det här paketet men inget generellt svar — den stoppar återfall för typescript och gör
 ingenting åt blindheten, vilket är därför villkor 3 finns.
 
+**BIN-658 — #25 Engineering Manager / Release Manager (1), eslint-pinningen 2026-08-29:**
+1. Den rättade kommentarsblocket måste vara STAGEAT före commit. #25 blockerade just på
+   att fixen för integrationsgranskarens fynd låg kvar i arbetskopian — `git diff --cached`
+   bar fortfarande det felaktiga talet.
+
+Uppfyllt. Rollens nice-to-have — att något återkommande, inte bara en YAML-kommentar,
+påminner om att pröva blockeringen — är löst genom att BIN-658 blir återöppningsutlösaren.
+Kommandona som avgör om blockeringen släppt står i `.github/dependabot.yml`s egen kommentar,
+där de går att läsa utan att öppna spårningssystemet.
+
 ## Deviation log
 
 - [discovery] BIN-1040: routern seatade #25, vars blinda kritik BLOCKERADE på ett
