@@ -125,6 +125,19 @@ Se sprintrapporten.
 
 Alla elva är uppfyllda.
 
+**BIN-1051 — #25 Engineering Manager / Release Manager (3), incidenten 2026-08-29:**
+1. `functions/package.json`s devDependency `typescript` läser `^5.6.0`, och `npm ci` +
+   `npm run build` i `functions/` avslutar med 0.
+2. `functions/package-lock.json` får inte lösa till 7.x någonstans.
+3. En följdbiljett måste finnas INNAN det här stängs, och den ska namnge `pr-checks.yml`s
+   `quality`-jobb som målet för ett `functions`-typkollssteg. Det är **BIN-1050**.
+
+Alla tre uppfyllda. #25 blockerade inte. Rollen sa dessutom två saker som inte är villkor
+men som hör till protokollet: revert-först är rätt sekvensering (TS7-migreringen har egen
+räckvidd och hör inte hemma mitt i en incident), och pinning är rätt instrument för just
+det här paketet men inget generellt svar — den stoppar återfall för typescript och gör
+ingenting åt blindheten, vilket är därför villkor 3 finns.
+
 ## Deviation log
 
 - [discovery] BIN-1040: routern seatade #25, vars blinda kritik BLOCKERADE på ett

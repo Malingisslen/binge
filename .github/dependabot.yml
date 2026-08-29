@@ -116,6 +116,17 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "firebase-functions"
         update-types: ["version-update:semver-major"]
+      # typescript, 2026-08-29: rot-blocket ovan har ignorerat dess majors sedan länge;
+      # DET HÄR blocket gjorde det inte, så en robot-PR tog /functions från 5.9 till 7 och
+      # bygget dog på moduleResolution "node", som 7 har tagit bort. Ingen grind TYPKOLLAR
+      # functions/ — pr-checks.yml och deploy.yml kör bara rotens typecheck, och rotens
+      # tsconfig.json exkluderar functions uttryckligen — så felet syns först när någon
+      # försöker deploya funktionerna, vilket är den sämsta tänkbara stunden. Migreringen
+      # till 7 är ett eget arbete, inte en bump: commonjs kan inte paras med
+      # node16-resolution (TS5110), så module måste byta värde och det är en ändring med
+      # egen räckvidd att mäta.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions — håll CI-workflows färska
   - package-ecosystem: "github-actions"

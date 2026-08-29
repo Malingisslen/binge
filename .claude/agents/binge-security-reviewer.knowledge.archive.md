@@ -8554,3 +8554,70 @@ code depends on the rule, and the tightening denies nothing the currently-runnin
 
 **Verdict: pass (0 blocking), 0 non-blocking.** The r4 non-blocking finding (strike the mutation-justification
 clause in both copies) is discharged by strike 1.
+
+---
+
+### 2026-08-29 — functions/ TypeScript revert re-run (BIN-1051): pre-commit edits to an
+"append-only" log row, and a claim re-verification
+
+Re-run after my prior pass on this same `functions/` revert ended `pass (0 blocking)`. Between
+passes the integration reviewer found two blocking defects in PROSE/metadata only — nothing in
+`functions/` moved. Verified that directly rather than trusting the brief: `git diff --cached
+--name-only -- functions/` still returns exactly `functions/package.json` and
+`functions/package-lock.json`, no `functions/src/**`, no `functions/tsconfig.json`. `git
+hash-object` on both matches the diff header's post-image blob (`1b0d132`, `a1f430a`) —
+working tree and staged index agree, no drift introduced mid-review. Content: pure devDependency
+revert, `typescript` `^7.0.2` → `^5.6.0`, lockfile resolves to `5.9.3` (`grep -n
+'"node_modules/typescript"' -A2` confirms), zero residual `7.x` typescript entries, only the
+`@typescript/typescript-*` platform-native optional deps removed (fewer native binaries in the
+lockfile, not more attack surface). No secrets, no runtime dependency touched, no functions
+logic touched — lowest-risk shape a `functions/` change can take.
+
+**Question raised by the dispatcher: does editing a row in `docs/org/metrics/events.jsonl`
+twice before its first commit violate the file's "append-only, never rewrite past lines"
+contract?** Ruling: no. The contract (README + `check_events.mjs`'s whole `correction` design)
+protects the SHARED, COMMITTED git history — the scenario it was built for (BIN-918) is four
+rows that had already reached a commit and were read by someone before being found false. A row
+that has never been committed has never been a fact anyone could have observed or relied on;
+there is nothing yet to retire. `check_review_coverage.mjs`'s own commit-msg hook reads the log
+from the INDEX, not the commit history, which already treats "staged" as the operative unit
+for the gate — but that is about visibility to the gate, not about immutability. Editing a
+staged-only line to fix its `ticket`/`timing` before it is ever committed is ordinary drafting,
+not a rewrite of history; a `correction` row would be the wrong tool here (it exists to retire a
+row that already misled a reader, and this one never did). Re-open this ruling if a future
+row is edited AFTER it has been committed and pushed — that is the case the existing mechanism
+already covers, unambiguously, with a `correction` row.
+
+**Re-verified the row's own claims rather than transcribing them:**
+- `must_haves: 3` — counted three numbered conditions under `**BIN-1051 —
+  #25 …**` in `tasks/todo.md`'s newly-added block. Matches.
+- `timing: "pre-commit"` — is an EXISTING spelling in the log (`grep -o '"timing":"[^"]*"'
+  docs/org/metrics/events.jsonl | sort -u` → 7 distinct spellings including `pre-commit`), and
+  it is the true one here: `functions/package.json`/`package-lock.json` mtimes are
+  `2026-08-29T05:41Z`, the row's `ts` is `05:54:56.398Z` (code already written, review ran
+  before the commit that doesn't exist yet) — consistent with "pre-commit", not "pre-build"
+  (which would require the review before the first edit).
+- `ran: true`, `outcome: "support"`, `panel: [25]` — match `tasks/todo.md`'s own account ("Alla
+  tre uppfyllda. #25 blockerade inte.").
+- `claimsReachedMain()` (from `check_events.mjs`) does not fire on this row — no
+  committed/pushed/shipped language in `plan`/`note`, and `outcome` isn't `SHIPPED_OUTCOME` — so
+  the row asserts nothing about main it can't yet back up.
+
+**README.md's three claimed prose fixes, all confirmed against the actual diff:**
+1. The false "Three values are live" enumeration of `timing` (a stale, unmaintained list) is
+   struck and replaced with a derive command, matching the sibling `via` cell's phrasing.
+2. The pipe inside that new command is escaped `\|`, so it can't split the GFM table row —
+   matches the neighbouring `via` cell's existing escape.
+3. `SKILL.md:125` (a cross-repo line number, unpinned and therefore guaranteed to go stale) is
+   struck down to the bare filename `SKILL.md`, per the strike-not-reword rule for a number that
+   needs measuring to stay true.
+
+**Not independently re-run this pass:** `npm ci && npm run build` inside `functions/` (BIN-1051
+AC1's literal claim). Module resolution is consistent with success (typescript resolves cleanly
+to 5.9.3, no version conflict in the lock), and re-running a full build was judged out of scope
+for a security seat re-verifying prose fixes on unchanged code — flagged here rather than
+silently skipped. BIN-1050 (the named follow-up ticket for a `functions/` typecheck step in
+`pr-checks.yml`'s `quality` job) could not be confirmed to exist from this seat — no ticket-
+tracker tool available here; a process claim, not a code-security one.
+
+**Verdict: pass (0 blocking).**
