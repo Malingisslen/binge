@@ -875,3 +875,53 @@ alltså osynlig.
 gjorda utan att de fanns — en fångades av kodgranskaren, en av push-grinden. Tredje gången
 fångade jag den själv, för att jag då grep:ade efter varje enskild ändring i stället för
 att lita på skriptets utskrift.
+
+### [Workflow] En spärr inkopplad i en funktion ingenting anropar är overksam just där felet rapporterades (2026-08-29, BIN-1040)
+
+**Trigger:** du lagar en grind och kopplar in fixen där skriptets `main()` bygger sina
+indata.
+
+**Regel:** kontrollera vilken KODVÄG som faktiskt fäller det som gick fel, inte vilken som
+ser ut att vara ingången. `check_review_coverage.mjs` har ett `main()` — och ingenting
+automatiskt anropar det. `lefthook.yml` kör `--message`-läget, och det som gör deployen röd
+är `npm test` som når ett helhetspåstående i skriptets EGEN testfil. Undantaget satt i
+`main()`, med ett filhuvud som sa att det var fixat, medan den mergade robot-commiten
+fortfarande fälldes. Bygg indata på EN plats som båda anroparna använder, och härled
+anroparna med ett kommando (`git grep -n "findCoverageGaps(" -- docs`) i stället för att
+lita på en mening om dem.
+
+**Exempel:** integrationsgranskaren spelade upp en påhittad post-epok-robotcommit genom
+båda anropsformerna: den gamla gav 1 brott, den nya 0. Utan den mätningen hade fixen
+shippat som en fix och inte varit en. Samma klass som BIN-744/776/917 — "läs regeln där den
+UTLÖSER, inte bara där den skrevs".
+
+### [Workflow] En strykning i en commit lämnar kopian i nästa commit stående, och bara helhetsgranskningen över hela push-området ser det (2026-08-29, BIN-1040/1002/1038)
+
+**Trigger:** samma felaktiga mening bor på flera ställen, och du stryker dem i olika
+commitar.
+
+**Regel:** push-grindens helhetspass är inte ceremoni — det är den enda läsningen där en
+mening struken i commit 1 syns stå kvar i commit 3. Varje per-bunt-granskning såg EN bunt
+och passerade. Kör den, och räkna inte kopiorna i prosan: meningen "stod på fyra ställen"
+skrevs i commit 2 och var falsk när commit 3 strök den femte.
+
+**Exempel:** meningen "utan flagga kör den under `npm test` och grindar DEPLOYEN" bodde på
+fem ställen — två i modulhuvudet, ett i metrik-README:n, ett i routern och en svensk
+tvilling i sprintplanen. Tre ströks i första commiten, en i andra, den femte i tredje. Fyra
+granskningsvarv i rad hittade exakt en kopia till per varv. Rättelsen som räknade dem blev
+själv ett fynd.
+
+### [Workflow] En bunt kan göra en mening falsk i en fil den inte rör alls (2026-08-29, BIN-1038)
+
+**Trigger:** du ändrar hur ANROPARNA beter sig, och en annan fil beskriver anroparna.
+
+**Regel:** ingen per-fil-grind kan se det, för filen står inte i diffen. Fråga vid varje
+bunt: vilken fil BESKRIVER det jag just ändrade beteendet på? `WatchlistContext.tsx` sa "de
+flesta anroparna slutar i en ohanterad rejection" — sant när det skrevs, noll av nio efter
+den här bunten, och filen var orörd. Att laga det drar in filen i diffen och beväpnar om
+dess granskare, så räkna med den kostnaden i stället för att hoppa över fyndet.
+
+**Exempel:** hittades av helhetsgranskningen, inte av kod-, säkerhets- eller
+testgranskaren, som alla tre hade passerat på exakt de bytes som gick ut. Samma runda:
+`OnboardingFlow` har tre catchar för samma vägran och bunten lagade en — anteckningen som
+sa "rättat" fick smalnas av till vilken gren som faktiskt rättades.
