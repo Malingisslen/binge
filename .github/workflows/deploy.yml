@@ -139,7 +139,7 @@ jobs:
           exit 0
 
       - name: Restore .next build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .next/cache
           key: next-cache-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
@@ -163,7 +163,7 @@ jobs:
       # Bekräfta ändå på nästa riktiga hängning innan någon förlitar sig på det.
       - name: Restore TMDB build cache
         id: tmdb-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .tmdb-cache
           # Rullande nyckel: varje körning sparar en ny cache, restore-keys
@@ -244,7 +244,7 @@ jobs:
         # 'skipped' hade varit en tom bock som aldrig fyrar.
         if: always() && steps.tmdb-cache.outputs.cache-primary-key != ''
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .tmdb-cache
           key: ${{ steps.tmdb-cache.outputs.cache-primary-key }}
@@ -383,7 +383,7 @@ jobs:
         run: npm i -g firebase-tools@14.27.0
 
       - name: Cache Firestore emulator
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           # Version segment matches the firebase-tools pin above so a CLI bump
