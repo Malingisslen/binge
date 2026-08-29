@@ -1190,6 +1190,13 @@
           "verified": true
         },
         {
+          "from": "onboarding-flow",
+          "to": "web-app",
+          "payload": "finish() then calls takeNextPath() and pushes `destination ?? remembered ?? '/'` — so a finished new account lands back on the page AuthGuard bounced it from, rather than on '/'. An explicit `destination` passed by a step wins over the remembered path, and takeNextPath() removes the stored value before returning it either way, so the return path is consumed exactly once.",
+          "transport": "router.push",
+          "verified": true
+        },
+        {
           "from": "kalibrera-page",
           "to": "tmdb-api",
           "payload": "getTrending('all','week') → filter to addable types w/ poster+genres → pool of 10 (ROUND_SIZE)",
