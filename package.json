@@ -30,7 +30,7 @@
     "@tanstack/query-sync-storage-persister": "^5.102.4",
     "@tanstack/react-query": "^5.102.4",
     "@tanstack/react-query-persist-client": "^5.102.4",
-    "firebase": "^12.12.1",
+    "firebase": "^12.18.0",
     "lucide-react": "^1.11.0",
     "next": "^16.2.9",
     "react": "^19.2.5",
