@@ -7,7 +7,7 @@ mot HEAD med grep/körning, inte mot biljettexten.
 
 | Bunt | Filuppsättning | tier | reasonCode | panel |
 | -- | -- | -- | -- | -- |
-| A | `docs/org/metrics/check_review_coverage.mjs` (+test), ny `docs/org/rules-id-client-symmetry.test.mjs`, `docs/org/route.mjs`, `.claude/shared-plugin.json`, `docs/role-responsibilities.md`, `docs/org/ownership-map.json` | medium | owned | 25 |
+| A | `docs/org/metrics/check_review_coverage.mjs` (+test), ny `docs/org/rules-id-client-symmetry.test.mjs`, `docs/org/route.mjs`, `.claude/shared-plugin.json` | medium | owned | 25 |
 | B | `MoviePageClient.tsx`, `useMarkSeen.ts`, `QuickAddButton.tsx`, `StatusButton.tsx`, `CompanionSection.tsx`, `CollectionSection.tsx`, `QuickRateModal.tsx` | medium | owned | 26 |
 
 Kanonisk tier för båda: `single`. Arbetaren är denna session, som KAN konvenera en blind
@@ -22,7 +22,7 @@ kritik — så kritiken körs före bygget, den parkeras inte som skuld.
 ## Bunt A — granskningstäckningen och id-symmetrin
 
 ### BIN-1040 — dependabots commits kräver en granskningsrad de aldrig kan ha [Tier A] [build]
-Premiss kontrollerad: `OWES_REVIEW` på rad 213 innehåller `ci`;
+Premiss kontrollerad: `OWES_REVIEW` innehåller `ci`;
 `.github/dependabot.yml`s `github-actions`-block har `commit-message.prefix: "ci"`.
 Malins val 2026-08-27: bygg undantaget.
 
@@ -46,8 +46,11 @@ Premiss kontrollerad: `src/lib/mediaTypeDocId.ts` bär `CANONICAL_TMDB_ID`;
       `shared-plugin.json` `reviewGates` i SAMMA commit (BIN-830). *(kind: diff)*
 - [x] AC9: `firestore.rules` är orörd, och ingen mening påstår att spärren också validerar
       legacy- eller `update`-vägen (den är create-only, `update` avsiktligt ovaktad). *(kind: diff)*
-- [x] AC10: Den nya filen får en ÄGARE i `docs/role-responsibilities.md` och kartan
-      regenereras — aldrig `--update-gaps` (BIN-1013-lärdomen). *(kind: diff)*
+- [x] AC10: Den nya filen har en ägande roll, och ingen ägarlös lucka baslinjeras bort med
+      `--update-gaps` (BIN-1013-lärdomen). Härled i stället för att påstå:
+      `node docs/org/route.mjs docs/org/rules-id-client-symmetry.test.mjs` svarar `owned`,
+      panel `[25]`, `unownedCode: []` — filen ärver ägare ur sin katalog, så varken
+      dossiern eller ägarkartan behövde ändras. *(kind: diff)*
 
 ---
 
@@ -120,7 +123,7 @@ Se sprintrapporten.
 4. Ingen anropare får parafrasera eller översätta om den delade strängen.
 5. `settings/import/page.tsx` måste behålla sin nedskrivna motivering för att vara tyst.
 
-Alla elva är uppfyllda. Ingen av de tre kritikerna blockerade.
+Alla elva är uppfyllda.
 
 ## Deviation log
 
@@ -147,8 +150,14 @@ Alla elva är uppfyllda. Ingen av de tre kritikerna blockerade.
   `settings/import/page.tsx`), och en omkörning av routern seatade då #5 i stället för #26.
   En andra blind kritik kördes mot den faktiska uppsättningen (BIN-766-regeln). #5
   blockerade inte; alla tre villkor uppfyllda.
-- [discovery] BIN-1038: `OnboardingFlow`s befintliga catch visade "kontrollera anslutningen
-  och försök igen" — fel råd för en vägran, exakt det #19 blockerade i BIN-1032. Rättat.
+- [discovery] BIN-1038: `OnboardingFlow`s catch i `handleAdd` visade "kontrollera
+  anslutningen och försök igen" — fel råd för en vägran, exakt det #19 blockerade i
+  BIN-1032. Rättat DÄR, och bara där: samma fil har två andra catchar (`finish()` och
+  `StepProviders.save()`) som visar samma råd på samma vägran, den vägen genom
+  `mergeUserDoc` → `assertProfileWritable`. De ligger utanför BIN-1038:s omfång, som är
+  `writeTitle`-anroparna. Linears gratistak var fullt när fyndet gjordes, så det står som
+  en fullständig kommentar på BIN-1038 i stället för som egen biljett — taket är något
+  Malin måste åtgärda, annars blir "kunde inte filas" och "hittade inget" samma sträng.
   `settings/import` lämnas TYST med ett nedskrivet skäl: dess egen sammanfattning
   ("Importerade N titlar · M misslyckades") är sann även för en vägran.
 - [discovery] BIN-1038: ett omkast ur en icke-inväntad async-klickhanterare blir en

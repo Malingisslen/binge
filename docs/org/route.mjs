@@ -212,9 +212,8 @@ export const TOOLING_CODE_FILES = new Set([
   // a false claim. Two modes: `--message` runs from lefthook's `commit-msg` hook and refuses
   // the commit being written (BIN-917 criterion 4, literally); with no flag it walks history
   // as a backstop for anything that got in before the hook existed or with `LEFTHOOK=0`.
-  // WHICH RUNNER REACHES WHICH MODE is derived, not stated here — a sentence claiming it
-  // stood in four places and was false in all four (BIN-1040); the module's own header
-  // carries the two commands that answer it. The first draft shipped only the second and declared
+  // WHICH RUNNER REACHES WHICH MODE is derived, not stated here (BIN-1040); the module's
+  // own header carries the commands that answer it. The first draft shipped only the second and declared
   // the first impossible — "no .husky, no precommit in package.json" — which was two true
   // probes and a false conclusion: `lefthook.yml` had been the commit-time mechanism here
   // since 2026-08-08.
