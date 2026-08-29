@@ -812,7 +812,7 @@
         {
           "from": "auth-context",
           "to": "web-app",
-          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first — and LoginPage is the app's ONLY router into it. The remembered path is then dropped by OnboardingFlow: open as BIN-669, together with AuthGuard's bounce, which sends people to /login without remembering anything.",
+          "payload": "BIN-645 landing — LoginPage redirects once `uid` exists AND `profileLoading` has settled either way, latched by a ref because takeNextPath() consumes. A profile that could not be read cannot claim the account needs onboarding, so it routes to the remembered path (or '/') rather than stranding a signed-in visitor on the sign-in form. A genuinely new account still goes to /onboarding/ first — and LoginPage is the app's ONLY router into it.",
           "transport": "router.push",
           "verified": true
         },
