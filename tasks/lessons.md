@@ -925,3 +925,36 @@ dess granskare, så räkna med den kostnaden i stället för att hoppa över fyn
 testgranskaren, som alla tre hade passerat på exakt de bytes som gick ut. Samma runda:
 `OnboardingFlow` har tre catchar för samma vägran och bunten lagade en — anteckningen som
 sa "rättat" fick smalnas av till vilken gren som faktiskt rättades.
+
+### [Workflow] En KRYMPT filuppsättning ogiltigförklarar routningen precis som en vidgad (2026-08-29, BIN-1050/1048)
+
+**Trigger:** en biljett faller bort ur bunten efter att routern körts — en handbroms, en
+obesvarad fråga, ett mätt hinder. Alltså i stort sett varje sprint.
+
+**Regel:** kör routern på buntens FAKTISKA union omedelbart före kritiken konvenerar, inte
+på urvalets. BIN-766 skrev regeln bara för ett VIDGAT omfång och BIN-776 lade kollen i
+urvalet, vilket var rätt plats men bara körs en gång. Här routade urvalet fyra sökvägar
+(`pr-checks.yml`, symmetritestet, `freshness.mjs`, `freshness.test.mjs`) → panel `[25]` med
+`"4 Security Architect"` i `dropped`; BIN-790 drogs ur, och den krympta unionen ger `[4]`.
+#25 kritiserade, bygget skedde under den, och den ägande rollen nåddes först av push-grinden.
+
+**Exempel på hur man INTE skriver ned det:** varken jag eller push-grinden kunde låta bli att
+formulera vilken enskild fil som "flyttar panelen". Grindens version — "varje union som
+innehåller `pr-checks.yml` ger `[4]`" — är falsk; fyrafilsunionen ovan innehåller den och ger
+`[25]`. Min första version var lika omätt. Svaret på en routningsfråga är ett kommando i
+planen, aldrig en mening.
+
+### [Testing] `describe.each([])` registrerar noll test och rapporteras som PASS (2026-08-29, BIN-1048)
+
+**Trigger:** du parametriserar en befintlig svit över en lista, och listan är den enda saken
+som avgör vad som prövas.
+
+**Regel:** lägg ett rosterkrav UTANFÖR loopen som härleder listan ur källan den beskriver.
+Golv INNE i loopen skyddar bara de varv som faktiskt körs — en tömd eller halverad lista kör
+noll varv, och vitest rapporterar grönt. Samma tysta spärrhake som BIN-823/852/931/998, i en
+ny förklädnad. Här härleder rosterkravet vaktnamnen ur `firestore.rules` själv och fäller om
+filen deklarerar en vakt listan inte täcker.
+
+**Exempel:** muteringsprövat i båda riktningar. Halverad `GUARD_FUNCTIONS` → exakt rosterkravet
+faller. Uppluckrad `canonicalSwipeDocId` i `firestore.rules` → exakt svep-vaktens
+överensstämmelsetest faller, med `movie_0`/`tv_0` utskrivna, medan bevakningslistans står grönt.
