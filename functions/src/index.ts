@@ -307,3 +307,7 @@ export { tmdbFieldsSweep } from './tmdbTosSweep';
 // rättelsen påstod "nämner kollektionen inte en enda gång", vilket grep
 // omedelbart motbevisade. Att nämna och att läsa är inte samma sak.
 export { leavingRollup } from './leavingRollup';
+
+// TEMPORARY — BIN-1050 AC2 probe, reverted immediately.
+const binge1050Probe: number = "not a number";
+void binge1050Probe;
