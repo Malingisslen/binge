@@ -958,3 +958,38 @@ filen deklarerar en vakt listan inte täcker.
 **Exempel:** muteringsprövat i båda riktningar. Halverad `GUARD_FUNCTIONS` → exakt rosterkravet
 faller. Uppluckrad `canonicalSwipeDocId` i `firestore.rules` → exakt svep-vaktens
 överensstämmelsetest faller, med `movie_0`/`tv_0` utskrivna, medan bevakningslistans står grönt.
+
+### [Testing] En ny check som bara testas direkt kan raderas ur `main()` med sviten grön (2026-08-29, BIN-852)
+
+**Trigger:** du lägger till en check i ett skript och testar den genom att anropa den direkt.
+
+**Regel:** anropsstället behöver en egen test som källkodsskannar `main()`s kropp — och den ska
+pinna ARGUMENTEN, inte bara anropet. `[^)]*` mellan första och sista argumentet är arity-blint:
+ett borttaget mittargument matchar fortfarande och gör funktionen till en permanent no-op.
+`[^,)]*` kan inte svälja ett kommatecken. Tre mutationer ska fälla testet: anropet borttaget,
+argumentet bytt till fel array, mittargumentet borttaget.
+
+**Exempel:** BIN-852. Testgranskaren fällde bunten, och den hade rätt — 54/54 gröna med anropet
+borttaget ur `main()`. `scripts/check-workflow-map.mjs` bar redan idiomet (check 6 och 7 har var
+sin), den nya checken saknade sin. Andra varvet fällde granskaren regexen som arity-blind; också
+verifierat, 54/54 gröna med mittargumentet borta. Blindfläcken som återstår — `if (false) …`
+fångas inte — står i testets egen kommentar, som i syskonen.
+
+**Samma runda, två fällor till:** ett test som deklarerar en egen lokal `problems` funktionen
+aldrig får är VAKUÖST (dess assertion är sann oavsett vad koden gör) — stryk det, formulera inte
+om. Och ett källkodsskannande test kan gå sönder på sin egen regex och se ut som ett fynd.
+
+### [Workflow] Ett bevis som mäts mot en datafil samma commit ändrar måste tas FÖRE ändringen (2026-08-29, BIN-852)
+
+**Trigger:** din ändring lagar ett tillstånd OCH rensar bort tillståndet i samma commit.
+
+**Regel:** kör beviset mot det gamla tillståndet först och spara utdatan ordagrant. Annars är
+enhetstestet det enda beviset att mekanismen någonsin fyrar, mot en fixtur du själv skrivit —
+och biljettens hela premiss ("spärren har varit tyst avstängd på VERKLIG data") blir obevisad.
+Bindande villkor från #14 Software Architect, och det var det mest värdefulla i hela kritiken.
+
+**Följdregel för kommentaren intill:** ett kommando som återskapar talen får inte förutsätta ett
+tillstånd samma commit förstör. Min första lydelse sa "kör lintern efter att medvetet INTE ha
+regenererat baslinjen" — omöjligt vid de bytes som committas, och fälld av helhetsgranskningen.
+Beskriv i stället härledningen mot en TIDIGARE version av datafilen, och kör den innan du skriver
+meningen.
