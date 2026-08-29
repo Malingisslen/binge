@@ -1015,3 +1015,44 @@ Att bara veta att checken blev röd hade inte skilt den nya grinden från vilket
 CI-utfall, produktionsräkningar (BIN-999 samma dag: en `list` + sex `get` gav svaret) och
 deploy-beteende är oftare nåbara än de först verkar. Fråga vilket instrument som saknas, inte om
 kriteriet är "run".
+
+### [Workflow] Ett publicerat kommando som KÖR men ger tom utdata passerar "extrahera och kör det" (2026-08-29, BIN-929/935/938)
+
+**Trigger:** du skriver ett kommando i en kommentar, ett beslutsprotokoll eller en README, som
+läsaren ska köra i stället för att lita på en siffra.
+
+**Regel:** kör det committade kommandot ordagrant OCH LÄS UTDATAN. Att det kör räcker inte.
+Jag publicerade `git show <sha> -- <fil>` för att visa vad en struken text sa. Kommandot kör
+felfritt och ger **noll bytes**, eftersom den commiten aldrig rörde filen — pathspec-formen
+visar en diff, inte ett innehåll. Jag hade kört kolonformen (`git show <sha>:<fil>`, som
+fungerar) och publicerat den andra. Push-grinden fångade det; min egen "extrahera och kör"-
+metod gjorde det inte, för den bara körde.
+
+**Samma runda, samma familj:** `\r` och `\n` i ett dokumenterat kommando kollapsade TVÅ gånger
+till riktiga styrtecken när det skrevs via en heredoc, och gav `SyntaxError: Invalid regular
+expression`. Skriv hellre kommandon som inte behöver escape-tecken alls (`grep -E '[|](feat|fix)'`
+i stället för `\|`), och extrahera alltid ur den committade filen — aldrig ur ditt utkast.
+
+**Följdregel om tidszon:** `%cI` bär lokal offset. Ett `awk`-datumfilter på den strängen
+jämför alltså inte samma klocka som en regel som använder `Date.parse`. Använd
+`TZ=UTC git log --date=iso-strict-local` när kommandot ska spegla en UTC-baserad spärr.
+
+### [Workflow] Planens egen gruppering av en bunt kan vara det som felsätter panelen (2026-08-29, BIN-938/1052)
+
+**Trigger:** en sprintplan som buntar flera biljetter och motiverar buntningen med en mening om
+vilka filer de rör.
+
+**Regel:** routa på biljetternas UNION av filer, inte på planens mening om dem — och routa om
+mot `git diff --cached --name-only` omedelbart före commit. Min plan skrev "de rör samma två
+filer" om tre biljetter. Falskt: BIN-938:s hela leverans låg i en TREDJE fil
+(`.claude/rules/accepted-deviations.md`), och just den filen vänder `reasonCode` från
+`unmapped-code` till `owned` och panelen från #14 till #25. Den ägande rollen nåddes aldrig
+förrän push-grinden och en parallell session hittade det oberoende av varandra.
+
+Det är BIN-1050/1048:s lärdom i den VIDGANDE riktningen, en dag efter att den skrevs ned.
+Åtgärden när det inträffar är inte att formulera om planen: **committa splittat**, så att varje
+commits filuppsättning routar till den kritik som faktiskt kördes för den. Verifiera per commit
+med routern före du skriver.
+
+**Och tick aldrig av ett villkor som säger "committas splittat" innan commitarna finns** —
+push-grinden fällde exakt det. Den som håller shan skriver fullbordandet, ingen annan.
