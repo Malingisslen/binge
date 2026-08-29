@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DELETION_IN_PROGRESS } from '@/lib/deletionInProgressError';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ReconsentGate } from './ReconsentGate';
 
@@ -132,7 +133,7 @@ describe('ReconsentGate', () => {
     // skärm vars besökare redan är förvirrad. `DELETION_IN_PROGRESS` finns som egen kod
     // just för att en anropare ska kunna skilja de två åt.
     auth.completeReconsent.mockRejectedValueOnce(
-      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+      new Error(`${DELETION_IN_PROGRESS}: refused`),
     );
     render(<ReconsentGate />);
 

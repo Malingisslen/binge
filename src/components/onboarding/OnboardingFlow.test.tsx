@@ -368,3 +368,75 @@ describe('OnboardingFlow — a refused add is not offered a retry (BIN-1038)', (
     expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
   });
 });
+
+describe('OnboardingFlow — the PROFILE write path says the same thing (BIN-1047)', () => {
+  // BIN-1038 fixed ONE of this file’s three catches for the same refusal — the watchlist add.
+  // The other two reach a different guard (`assertProfileWritable`, via `mergeUserDoc`) and still
+  // rendered `SaveError`, whose established meaning in this file is "the same button is the
+  // retry". The deletion marker never clears, so that advice is false on every retry. The
+  // message is deliberately guard-agnostic, so no new wording is introduced here.
+  beforeEach(() => {
+    watchlist.items = [item(1399, 'tv')];
+  });
+
+  it('finish() — a refused completion stamp says the account is being deleted', async () => {
+    setDoc.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<OnboardingFlow />);
+    await goToLastStep();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Klar/ })); });
+
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    // The retry banner must not appear at all — a correct message inside a banner that still
+    // invites a retry contradicts itself.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // Still not navigated: the stamp did not land.
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('finish() control — an ordinary failure still gets the retry banner', async () => {
+    setDoc.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await goToLastStep();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Klar/ })); });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte spara att du är klar/);
+    expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+  });
+
+  it('"Hoppa över" reaches the same catch, and says the same thing', async () => {
+    setDoc.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<OnboardingFlow />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Hoppa över' })); });
+
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('StepProviders.save() — a refused provider save says the account is being deleted', async () => {
+    auth.updateProviders.mockRejectedValueOnce(new Error(`${DELETION_IN_PROGRESS}: refused`));
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+
+    expect(toast).toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // Still on step 2 — the save did not land, so the step must not advance.
+    expect(screen.getByRole('heading', { name: 'Vilka tjänster har du?' })).toBeInTheDocument();
+  });
+
+  it('StepProviders.save() control — an ordinary failure still gets the retry banner', async () => {
+    auth.updateProviders.mockRejectedValueOnce(new Error('offline'));
+    render(<OnboardingFlow />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Börja/ })); });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Nästa/ })); });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Kunde inte spara dina tjänster/);
+    expect(toast).not.toHaveBeenCalledWith(DELETION_IN_PROGRESS_MESSAGE);
+  });
+});

@@ -15,6 +15,12 @@
 // the exact shape of BIN-797 (`movie_0` written by the sweep, then refused by the client) and of
 // BIN-560/618/766/931/932.
 //
+// AND WHY IT DOES NOT LEAN ON THAT SIBLING (BIN-1048). Every guard function in GUARD_FUNCTIONS is
+// extracted and compared on its own, so this file's coverage does not depend on the two rules
+// copies staying byte-identical. The sibling's header invites its own deletion the day they are
+// meant to diverge; when that happens, this file keeps checking both against the client rather
+// than silently dropping one of the two collections.
+//
 // HOW IT AVOIDS BEING A THIRD COPY OF THE RULE. Nothing here restates either side:
 //   * the rules regex is EXTRACTED from firestore.rules as text;
 //   * the client's verdict comes from CALLING the real `mediaTypeDocId` and
@@ -51,7 +57,10 @@ const RULES = readFileSync(join(REPO_ROOT, 'firestore.rules'), 'utf8');
 
 // Anchored on the FUNCTION NAME, never on a line number — a line number is false in the same
 // commit it ships in (BIN-954).
-const GUARD_FUNCTION = 'canonicalWatchlistDocId';
+//
+// BOTH of firestore.rules' id-guarding functions, each checked on its own (BIN-1048). Adding a
+// third guard to the rules means adding its name here; the floors below then apply to it too.
+const GUARD_FUNCTIONS = ['canonicalWatchlistDocId', 'canonicalSwipeDocId'];
 
 /** The quoted argument of the single `id.matches(…)` inside the named rules function. */
 function rulesIdPattern(name) {
@@ -91,16 +100,39 @@ function cases(pattern) {
   );
 }
 
-describe('firestore.rules vs the client id builder (BIN-1002)', () => {
+// THE ROSTER FLOOR, outside the per-guard block on purpose (BIN-1048). `describe.each([])`
+// registers no tests and vitest reports a pass, so an emptied — or halved — GUARD_FUNCTIONS
+// would silence every assertion below without failing anything. This is the one check that
+// cannot live inside the loop.
+describe('the guard roster itself', () => {
+  it('names every id-guarding function firestore.rules declares', () => {
+    const declared = [...RULES.matchAll(/function\s+(canonical\w*DocId)\s*\(/g)].map((m) => m[1]);
+    const unique = [...new Set(declared)].sort();
+
+    expect(unique.length, 'firestore.rules declares no canonical*DocId function at all — either '
+      + 'the guards were removed (delete this file with them) or renamed past this pattern')
+      .toBeGreaterThanOrEqual(2);
+    expect(
+      [...GUARD_FUNCTIONS].sort(),
+      'firestore.rules declares an id-guarding function this file does not check. Add its name '
+      + 'to GUARD_FUNCTIONS — a guard nobody compares against the client is exactly the gap '
+      + 'BIN-1048 was filed about. If a guard is deliberately out of scope, delete it from the '
+      + 'rules or say why here; do not shrink this assertion.',
+    ).toEqual(unique);
+  });
+});
+
+describe.each(GUARD_FUNCTIONS)('firestore.rules %s vs the client id builder (BIN-1002)', (guard) => {
   // THE FLOOR, and it is the load-bearing half of this file — the silent-ratchet shape this
   // repo has hit in BIN-823, BIN-852, BIN-931 and BIN-998. An extraction that stops matching
   // returns null, a corpus that stops generating returns nothing, and comparing nothing to
   // nothing passes. So all three are asserted BEFORE any agreement is checked, and each says
-  // something different because each means something different.
+  // something different because each means something different. They run PER guard function:
+  // one shared floor over a merged corpus would still pass with one guard's extraction blind.
   it('extracts a pattern from firestore.rules at all', () => {
     expect(
-      rulesIdPattern(GUARD_FUNCTION),
-      `No id.matches(...) found inside ${GUARD_FUNCTION} in firestore.rules. Either the guard `
+      rulesIdPattern(guard),
+      `No id.matches(...) found inside ${guard} in firestore.rules. Either the guard `
       + 'was removed — in which case this whole check is obsolete and should be deleted with '
       + 'it, not silenced — or it was reworded so this extraction no longer sees it, in which '
       + 'case the guard is now blind and must be re-anchored.',
@@ -108,7 +140,7 @@ describe('firestore.rules vs the client id builder (BIN-1002)', () => {
   });
 
   it('generates enough cases, on BOTH sides of the accept boundary', () => {
-    const generated = cases(rulesIdPattern(GUARD_FUNCTION));
+    const generated = cases(rulesIdPattern(guard));
     const accepted = generated.filter((c) => c.rulesAccepts).length;
     const rejected = generated.length - accepted;
 
@@ -122,14 +154,14 @@ describe('firestore.rules vs the client id builder (BIN-1002)', () => {
   });
 
   it('agrees on every generated id — the rules and the app admit the same set', () => {
-    const disagreements = cases(rulesIdPattern(GUARD_FUNCTION))
+    const disagreements = cases(rulesIdPattern(guard))
       .filter((c) => c.rulesAccepts !== c.clientAccepts)
       .map((c) => `${c.docId} — rules ${c.rulesAccepts ? 'accepts' : 'refuses'}, `
         + `client ${c.clientAccepts ? 'accepts' : 'refuses'}`);
 
     expect(
       disagreements,
-      'firestore.rules and src/lib/mediaTypeDocId.ts no longer admit the same doc ids. '
+      `firestore.rules' ${guard} and src/lib/mediaTypeDocId.ts no longer admit the same doc ids. `
       + 'Whichever side moved, move the other in the same commit — an id the rules accept and '
       + 'the app cannot read is an invisible document (BIN-797), and an id the app writes and '
       + 'the rules refuse is a write that silently fails. Do not normalise or allowlist the '

@@ -178,14 +178,14 @@ describe('useMarkSeen — forwards the intent it was given (BIN-641)', () => {
     // not clear on its own, so every retry fails identically. Same reason #19 Customer
     // Support blocked the generic message on `ReconsentGate` in BIN-1032.
     watchlist.logViewing.mockRejectedValueOnce(
-      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+      new Error(`${DELETION_IN_PROGRESS}: refused`),
     );
     const { result } = renderHook(() => useMarkSeen());
     await act(async () => { await result.current(series, { countsAsViewing: true }); });
 
     expect(toast.show).not.toHaveBeenCalledWith('Kunde inte hämta serieinfo, försök igen');
     const said = toast.show.mock.calls.at(-1)![0] as string;
-    expect(said).toContain('raderas');
+    expect(said).toBe(DELETION_IN_PROGRESS_MESSAGE);
     expect(said).not.toContain('försök igen');
   });
 

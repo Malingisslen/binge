@@ -75,6 +75,28 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # functions/ is a SECOND npm project: its own package-lock.json, its own
+      # tsconfig.json, its own pinned typescript. The root typecheck above cannot see
+      # it — tsconfig.json excludes `functions` on purpose — and `npm test` runs its
+      # vitest specs without typechecking them, because vitest transpiles. So nothing
+      # in this repo typechecked functions/ at all, and a dependabot bump to
+      # typescript 7 reached main with every check green; it surfaced only when a
+      # human ran `firebase deploy --only functions` by hand (BIN-1051). This step is
+      # BIN-1050: catch that here, before the merge.
+      #
+      # `npm ci`, never `npm install` — install can rewrite the lockfile in CI.
+      # `--noEmit` because this is a check, not a build (`npm run build` is bare `tsc`
+      # and would write functions/lib/). Run from inside functions/ so the tsc that
+      # checks is the version functions/package.json pins, not the root one — a
+      # mismatch there is the exact class of failure being guarded against.
+      - name: Install functions deps
+        working-directory: functions
+        run: npm ci
+
+      - name: Typecheck functions
+        working-directory: functions
+        run: npx tsc --noEmit
+
       # The same suite deploy.yml gates on. It carries the org checks that read
       # the working tree — the ownership map and the route selftests — so a
       # dependency bump that breaks one of those is caught here rather than on the

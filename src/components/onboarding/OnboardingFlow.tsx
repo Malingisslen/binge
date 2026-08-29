@@ -69,6 +69,7 @@ function SaveError({ message }: { message: string }) {
 export function OnboardingFlow() {
   const router = useRouter();
   const { uid, user } = useAuth();
+  const { show: toast } = useToast();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -111,6 +112,16 @@ export function OnboardingFlow() {
       const remembered = takeNextPath();
       router.push(destination ?? remembered ?? '/');
     } catch (err) {
+      // BIN-1047: a refusal during an account deletion is not the retryable failure this
+      // catch was written for. `SaveError` below means "the same button is the retry", and
+      // the deletion marker does not clear on its own — so the advice is false and every
+      // retry fails identically. `setSaveFailed` is deliberately NOT reached: showing the
+      // right words inside a banner that still invites a retry would contradict itself.
+      // Same shape as `handleAdd` below, `useMarkSeen` and `QuickAddButton` (BIN-1038).
+      if (isDeletionInProgressError(err)) {
+        toast(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
       // BIN-659: this rejected unhandled before, so a failed write left the
       // visitor on the last step with a dead-looking button and no idea the
       // account was still flagged as un-onboarded. Navigation stays blocked on
@@ -211,6 +222,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 
 function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const { user, updateProviders } = useAuth();
+  const { show: toast } = useToast();
   const [selected, setSelected] = useState<number[]>(
     user?.myProviders && user.myProviders.length > 0
       ? user.myProviders
@@ -231,6 +243,14 @@ function StepProviders({ onBack, onNext }: { onBack: () => void; onNext: () => v
       await updateProviders(selected);
       onNext();
     } catch (err) {
+      // BIN-1047: same refusal, same reason as `finish` above — `updateProviders` reaches
+      // `assertProfileWritable` through `updateUserField` → `mergeUserDoc`. The banner's
+      // meaning here is "the same button is the retry", which a deletion refusal makes
+      // false; so the toast replaces it rather than sitting inside it.
+      if (isDeletionInProgressError(err)) {
+        toast(DELETION_IN_PROGRESS_MESSAGE);
+        return;
+      }
       // BIN-659: a rejected write used to leave "Nästa" looking simply dead —
       // the step never advanced and nothing said why. The selection is still in
       // state, so the same button is the retry.

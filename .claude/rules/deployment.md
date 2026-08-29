@@ -51,7 +51,7 @@ Skär **inte** ner pre-render-antalet för att fixa byggtid — catch-all-skalet
 Workflows ligger i `.github/workflows/`. Det som inte syns av filnamnen: **`deploy.yml`
 deployar BARA hosting** — rules och functions kräver alltid en manuell `firebase deploy`
 först. `pr-checks.yml` kör lint/typecheck/test på pull requests (dit dependabot-bumpar
-landar), `secret-scan.yml` läcksökning. Ingen av dem rör rules eller functions, och ingen
+landar), `secret-scan.yml` läcksökning. Ingen
 av dem bygger — bara `deploy.yml` gör det, och därmed är den enda som ser en nyckel.
 Härled listan i stället för att lita på den här meningen: `ls .github/workflows/`.
 

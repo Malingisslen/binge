@@ -158,7 +158,7 @@ vi.mock('@/components/ui/JustWatchCredit', () => ({ default: () => null }));
 
 import MoviePageClient from './MoviePageClient';
 import type { TmdbDenormFields } from '@/lib/watchlist/tmdbFieldsRefresh';
-import { DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
+import { DELETION_IN_PROGRESS, DELETION_IN_PROGRESS_MESSAGE } from '@/lib/deletionInProgressError';
 
 /** Reset to a signed-in visitor whose library has settled, showing the body. */
 function signedInWithSettledLibrary() {
@@ -328,7 +328,7 @@ describe('MoviePageClient — who may fire "Bevaka släpp" (BIN-730/596/731)', (
     // here — the refusal is SAID, and the success line is still not.
     signedInWithSettledLibrary();
     upsertTitle.mockRejectedValueOnce(
-      new Error('binge/deletion-in-progress: kontot håller på att raderas'),
+      new Error(`${DELETION_IN_PROGRESS}: refused`),
     );
     render(<MoviePageClient id="603" />);
 
