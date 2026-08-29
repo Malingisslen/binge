@@ -883,18 +883,30 @@ describe('loopens form', () => {
 
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
+    let firstEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { firstEntered = resolve; });
     const io = makeIo(db, d, {
       fetchSeFlatrate: async (tmdbId, mediaType) => {
         d.calls.push(`fetchSeFlatrate:${mediaType}:${tmdbId}`);
-        if (tmdbId === 1) await held;
+        if (tmdbId === 1) { firstEntered(); await held; }
         return d.flatrate.get(`${mediaType}:${tmdbId}`) ?? null;
       },
     });
 
     const run = runAvailableNotify(io);
-    // A real timer, not a microtask flush: the loop awaits emulator I/O between
-    // titles, so anything that COULD run in parallel would have started by now.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // No wall clock. `entered` resolves inside the double the instant title 1's fetch
+    // is called, so the observation point is the event itself rather than a guess about
+    // how long a runner takes to reach it. The 100 ms sleep that used to stand here
+    // reddened two deploy runs (33204410725, 33252807463) and passed on re-run against
+    // unchanged code.
+    //
+    // Awaiting it still catches the Promise.all mutant, and that is a property of
+    // `processTitle` rather than an assumption: its FIRST await is the
+    // `io.fetchSeFlatrate` call itself, and everything above that line is synchronous.
+    // A `map()` over the titles would therefore drive BOTH into the double in one
+    // synchronous burst, and both pushes land before this `await` resumes on the next
+    // microtask. Measured by applying the mutant, not reasoned about.
+    await entered;
     expect(d.calls).toContain('fetchSeFlatrate:movie:1');
     expect(d.calls).not.toContain('fetchSeFlatrate:movie:2');
 

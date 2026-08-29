@@ -24085,3 +24085,76 @@ generalizable idiom in its last sentence was kept in place; everything before it
 historical trace, superseded by its own final correction and no longer actionable on its own):
 
  **CLOSED in the same batch (BIN-917, before commit): the test file imports `mainMessage` and drives all four exit-code paths against real message fixtures; inverting the verdict branch now fails four cases — verified by mutation.** **A NEW residual survives that close, one function over**: `stagedEventsLog()` — which chooses between `git show :events.jsonl` (the INDEX) and a `readFileSync` fallback (the WORKING TREE), a distinction its own comment calls "the difference between a gate and a rubber stamp" — has no test making the two sources DISAGREE. Close it as the docstring describes the threat: stage a review row for a fixture ticket NOT present in the working tree, then assert `mainMessage` grades against the STAGED content. BLOCKING, because the sprint engine writing UNSTAGED review rows is real and current. **The first "CLOSED" note was ITSELF the bug** (`repoDir = dirname(EVENTS_PATH)`: `git show :<relPath>` tolerates ANY cwd inside the repo, the fallback's `join(repoDir, relPath)` does not) — no test caught it because every one passes an explicit `repoDir` that IS a root: **the seam drifted from production in exactly the axis it was parameterised for**. **Idiom for a git-branch-always-wins seam: export the constants the composition is built from (`REPO_ROOT`, `DEFAULT_EVENTS_REL`) and assert the join DIRECTLY, without the git-dependent function**, plus an asymmetry case computed via a genuinely DIFFERENT code path than production's. [arkiv 33]
+
+## 2026-08-29c — BIN-935 re-review (round 2): two struck sentences verified true-to-strike, 0 blocking
+
+**Context.** Round 1 of this review passed `available-notify-orchestrator.test.ts` at 0 blocking
+(unchanged since, confirmed by `git rev-parse :<f>` == `git hash-object <f>` == `77b3810f…`).
+`binge-integration-reviewer` then failed the batch on 5 findings, all false claims in the
+orchestrator's own prose (none in code), and fixing them edited
+`docs/org/metrics/check_review_coverage.test.mjs`, re-arming this reviewer on that file plus its
+production sibling `check_review_coverage.mjs`.
+
+**The diff reviewed** (`git diff --cached -- docs/org/metrics/check_review_coverage.test.mjs`):
+two sentences struck from the comment on `it('the PRODUCTION defaults compose back to the real
+file')`, no `expect` touched.
+1. "Asserted DIRECTLY, without git, because no behavioural call can reach the branch that
+   breaks." → "Asserted DIRECTLY, without git."
+2. "Proven by the test reviewer: with the module's import-time assertion disabled and REPO_ROOT
+   deliberately broken, all 43 tests stayed green." → struck outright, nothing written in its
+   place.
+
+**Mutations run, in an isolated backup/restore cycle** (`git rev-parse :<f>` == `git hash-object
+<f>` == `9c567ffe…` before, after, and at every restore point — confirmed 4 times):
+
+- Claim 1 probe: a Node ESM script imported `check_review_coverage.mjs` via `pathToFileURL` with
+  `PATH="/c/Program Files/nodejs"` (git stripped), called `stagedEventsLog()` with zero
+  arguments, printed `.source`. Result: `"the WORKING TREE — the index could not be read"`. The
+  struck absolute ("no behavioural call can reach the branch") is FALSE, confirmed independently
+  of the round's own stated reason.
+- Claim 2 probe, attempt 1 (wrong shape): commented out the import-time `throw`, and widened
+  `REPO_ROOT`'s `join(..., '..', '..', '..')` to four `'..'` (one level too far up, landing at
+  `C:\`). `rm -rf node_modules/.vite/vitest && npx vitest run
+  docs/org/metrics/check_review_coverage.test.mjs` → **9 failed | 46 passed (55)** — the extra
+  failures came from `readDependabotPrefixes(root = REPO_ROOT)` and `stagedEventsLog`'s own
+  default param, both of which also consume `REPO_ROOT` and broke independently of the
+  composition invariant under test. Restored, hash reconfirmed.
+- Claim 2 probe, attempt 2 (correct shape — "break the composition" via the OTHER half):
+  same disabled throw, `REPO_ROOT` left untouched, `DEFAULT_EVENTS_REL` changed to
+  `'docs/org/metrics/WRONG.jsonl'`. Same command → **5 failed | 50 passed (55)**, exactly
+  matching the round's own re-measurement, including that `the PRODUCTION defaults compose back
+  to the real file` (the test whose comment is under review) is one of the 5 — so striking the
+  rationale did NOT leave a vacuous test: it still fails under exactly the mutation its comment
+  now claims nothing specific about. Restored, hash reconfirmed.
+- Adjacent claim (untouched by this diff, checked for completeness): "the module asserts the
+  same invariant at import (... `Test Files 1 failed (1)`, exit 1)". Broke only
+  `DEFAULT_EVENTS_REL`, left the import-time throw ENABLED → `Test Files 1 failed (1)` / `Tests
+  no tests`, matching.
+
+**Verdict on the strike.** Both struck sentences were false as measured; the replacement text
+makes no new false claim and (per the file's own "strike, don't reword" convention) introduces no
+new unmeasured number. The surviving test is non-vacuous — proven above, not assumed.
+
+**Full suite state at close.** `check_review_coverage.mjs` restored byte-identical
+(`9c567ffe3f6aa82e15b41f1b89f880448a43e80a`, index == worktree). `npx vitest run
+docs/org/metrics/check_review_coverage.test.mjs` clean: 55 passed (55). `git status --porcelain`
+showed only the batch's own staged files afterward; no stray mutation left behind.
+
+**Knowledge-file edits made in this pass** (in place, cap enforced by trimming elsewhere, moved
+verbatim below): extended the arkiv-33 `mainMessage`/`stagedEventsLog` pointer with the new
+false-absolutes-recur observation and the "mutate the constant with no other consumer" idiom;
+condensed the BIN-1038 DRY-nit sentence in the Money/catalog bullet (line ~92) to a shorter
+pointer to pay for the addition and stay under the 80k cap.
+
+## Relocated 2026-08-29c — BIN-1038 condensation
+
+Full sentence, verbatim, before condensing it to a shorter pointer in the active file:
+
+**A test hand-typing an EXPORTED constant's composed literal instead of importing it
+(`useMarkSeen.test.tsx`/`MoviePageClient.test.tsx` typing `'binge/deletion-in-progress: …'` while
+six sibling call sites in the same batch write `` `${DELETION_IN_PROGRESS}: …` ``) is a DRY nit,
+not a coverage gap — check the FAILURE MODE before filing: if the matcher is a
+`startsWith`/prefix check, a future edit to the constant's value makes the stale literal miss the
+match and the assertion goes RED (the generic-failure branch fires instead), never silently
+green. File it as a follow-up for consistency, not as a blocking finding, once you've confirmed
+red-not-green (BIN-1038).
