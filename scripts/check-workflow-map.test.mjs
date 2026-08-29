@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import {
   checkFlowContent,
   checkContentRatchet,
+  checkBaselineStaleness,
   flowContentLen,
   buildBaseline,
   checkCoverage,
@@ -149,6 +150,101 @@ test('checkContentRatchet — no baseline (or empty) is a no-op, not a crash', (
   checkContentRatchet([healthyFlow()], {}, problems);
   checkContentRatchet([healthyFlow()], { flows: {} }, problems);
   assert.deepEqual(problems, []);
+});
+
+// ── Check 5b — is the ratchet still armed? (BIN-852) ────────────────────────────────
+//
+// Literal numbers, not derived from the fixture, so the boundary is pinned by the test
+// rather than by whatever `healthyFlow` happens to be long enough to say this week. A
+// fixture-derived threshold moves with the fixture and stops testing the constant.
+//
+// A flow whose content is exactly 1000 chars makes the arithmetic readable: baseline 801
+// is 19.9% below (silent), baseline 799 is 20.1% below (warns). The production constant
+// is 20 and the comparison is strict, so 800 exactly — 20.0% — must ALSO stay silent, and
+// that case is asserted too because "more than X%" is where an off-by-one lives.
+function flowOfContentLength(id, total) {
+  // description + one step payload; `flowContentLen` sums the trimmed lengths.
+  const desc = 'd'.repeat(total - 10);
+  return { id, label: 'Sized fixture', description: desc, steps: [{ from: 'a', to: 'b', payload: 'p'.repeat(10) }] };
+}
+
+test('flowOfContentLength builds the exact size the boundary cases assume', () => {
+  assert.equal(flowContentLen(flowOfContentLength('flow-x', 1000)), 1000);
+});
+
+test('checkBaselineStaleness — silent just under the threshold (19.9%)', () => {
+  const flow = flowOfContentLength('flow-x', 1000);
+  const warnings = [];
+  checkBaselineStaleness([flow], { flows: { 'flow-x': 801 } }, warnings);
+  assert.deepEqual(warnings, []);
+});
+
+test('checkBaselineStaleness — silent AT the threshold: "more than X%" is strict (20.0%)', () => {
+  const flow = flowOfContentLength('flow-x', 1000);
+  const warnings = [];
+  checkBaselineStaleness([flow], { flows: { 'flow-x': 800 } }, warnings);
+  assert.deepEqual(warnings, []);
+});
+
+test('checkBaselineStaleness — warns just over the threshold, naming the flow and BOTH numbers (20.1%)', () => {
+  const flow = flowOfContentLength('flow-x', 1000);
+  const warnings = [];
+  checkBaselineStaleness([flow], { flows: { 'flow-x': 799 } }, warnings);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].includes("flow 'flow-x'"), warnings[0]);
+  assert.ok(warnings[0].includes('799'), warnings[0]);
+  assert.ok(warnings[0].includes('1000'), warnings[0]);
+  assert.ok(warnings[0].includes('--update-baseline'), warnings[0]);
+});
+
+test('checkBaselineStaleness — check 5b is actually WIRED INTO main(), with the WARNINGS array', () => {
+  // Two failures this catches, and the first is why the test exists at all: every other
+  // test here calls checkBaselineStaleness directly, so deleting its one call site in
+  // main() leaves all of them green while the linter silently stops warning. Measured
+  // during test review, 2026-08-29: removing that line kept the whole file passing.
+  //
+  // The second is the regression AC2 exists to prevent — swapping `warnings` for
+  // `problems` at the call site would turn a signal into a deploy gate, punishing the
+  // healthy behaviour (a flow's prose growing) this check was built to encourage. The
+  // regex pins the ARGUMENT, not just the call, so that swap reddens this too.
+  //
+  // Source-level for the same reason the check-6 and check-7 wiring tests above are:
+  // main() reads the real, passing repo and cannot be driven to a failure from here.
+  // A third edit it must catch, found by the test reviewer on the first version of this
+  // regex: dropping the MIDDLE argument — `checkBaselineStaleness(data.actions || [], warnings)`
+  // — leaves the function a permanent no-op while still looking like a live call. So every
+  // argument is anchored, not just the first and last; `[^,)]*` cannot swallow a comma.
+  //
+  // Same known blind spot as check 6 and check 7 — this catches DELETION or rewording of the
+  // call, not the disabling of its execution (`if (false) …`). Written down, not papered over.
+  const src = readFileSync(join(ROOT, 'scripts/check-workflow-map.mjs'), 'utf8');
+  const body = src.slice(src.indexOf('export function main('));
+  assert.ok(
+    /checkBaselineStaleness\(\s*data\.actions[^,)]*,\s*baseline\s*,\s*warnings\s*\)/.test(body),
+    'the call to checkBaselineStaleness(data.actions || [], baseline, warnings) is gone from '
+    + 'main(), or no longer passes `warnings` — check 5b is either dead code or has become a '
+    + 'build gate, and AC2 says it must never be one',
+  );
+});
+
+test('checkBaselineStaleness — a baselined flow missing from the map is check 5s job, not warned twice', () => {
+  const warnings = [];
+  checkBaselineStaleness([healthyFlow('flow-x')], { flows: { 'flow-gone': 900 } }, warnings);
+  assert.deepEqual(warnings, []);
+});
+
+test('checkBaselineStaleness — zero-content flow is skipped, not reported as NaN%', () => {
+  const warnings = [];
+  checkBaselineStaleness([guttedFlow('flow-y')], { flows: { 'flow-y': 0 } }, warnings);
+  assert.deepEqual(warnings, []);
+});
+
+test('checkBaselineStaleness — no baseline (or empty) is a no-op, not a crash', () => {
+  const warnings = [];
+  checkBaselineStaleness([healthyFlow()], null, warnings);
+  checkBaselineStaleness([healthyFlow()], {}, warnings);
+  checkBaselineStaleness([healthyFlow()], { flows: {} }, warnings);
+  assert.deepEqual(warnings, []);
 });
 
 // ── Check 3 — coverage cross-check (BIN-789) ────────────────────────────────────────

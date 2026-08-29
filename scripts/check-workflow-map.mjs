@@ -83,6 +83,23 @@ const MIN_FLOW_DESC = 80; // a real sentence of prose, not a stub
 const MIN_STEP_PAYLOAD = 8; // a step must say what it carries
 const MIN_FLOW_CONTENT = 150; // description + all step payloads, combined
 
+// How far a per-flow baseline may sit BELOW the live content before check 5b says so
+// (BIN-852). Not a floor on prose — a floor on how much of check 5's own guard is still
+// doing work. Strict `>`: the ticket asks for "more than X% below".
+//
+// Measured 2026-08-29, against the baseline as it stood BEFORE this commit regenerated
+// it: 7 of 31 flows over 20% slack, the highest 68.9%, the next flow down 16.5%. 20 sits
+// in that 3.8-point gap.
+//
+// That state is gone — this same commit regenerated the baseline, so the linter now
+// prints zero warnings and no command run against these bytes alone can show the
+// distribution the number was chosen from. Reproduce it against an earlier baseline
+// instead: read `docs/workflow-map-content-baseline.json` from a commit before this one,
+// compare each entry with `flowContentLen` of the same flow in today's map, and sort by
+// (curr - base) / curr. Re-measure that way before moving this constant; a threshold
+// chosen against a different distribution says nothing about this one.
+const BASELINE_STALE_PCT = 20;
+
 export function extractDataJson(html) {
   const m = html.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/);
   if (!m) throw new Error('no <script id="data"> block found');
@@ -180,6 +197,46 @@ export function checkContentRatchet(actions, baseline, problems) {
     if (curr < baseLen) {
       problems.push(
         `flow '${id}': prose shrank (${curr} < baseline ${baseLen} chars across description + step payloads) — net loss vs the committed baseline. Re-trace the flow, or regenerate the baseline if the reduction is intentional (node scripts/check-workflow-map.mjs --update-baseline).`,
+      );
+    }
+  }
+}
+
+// Check 5b — is the RATCHET ITSELF still armed? (BIN-852)
+//
+// Check 5 fails only when a flow shrinks BELOW its baseline. So a baseline sitting far
+// under reality is a ratchet that cannot catch anything short of near-total deletion, and
+// the linter prints OK exactly as it does when everything is healthy. Green means "not
+// below the floor", never "the floor is in the right place" — the silent-ratchet shape
+// this repo hit in BIN-823, BIN-852, BIN-931 and BIN-998.
+//
+// This is a WARNING, deliberately, and the reasoning is load-bearing rather than timid: a
+// hard failure would force a reflexive --update-baseline on any commit that grows a flow's
+// prose, punishing the one behaviour this file exists to encourage and defeating check 5's
+// own stated intent that regeneration be "a conscious, reviewable step".
+//
+// Writes to `warnings`, never `problems`. Nothing here may reach the exit code.
+export function checkBaselineStaleness(actions, baseline, warnings) {
+  const flows = baseline?.flows;
+  if (!flows || typeof flows !== 'object') return;
+  const byId = new Map((actions || []).filter((a) => a && a.id).map((a) => [a.id, a]));
+  for (const [id, baseLen] of Object.entries(flows)) {
+    if (typeof baseLen !== 'number') continue;
+    const action = byId.get(id);
+    // A baselined flow missing from the map is already a hard problem in check 5. Warning
+    // about it too would report one defect twice under two severities.
+    if (!action) continue;
+    const curr = flowContentLen(action);
+    // Guard the divide: a zero-content flow is check 4's business, and dividing by it
+    // yields NaN%, which reads as a broken linter rather than a finding.
+    if (curr === 0) continue;
+    const slackPct = ((curr - baseLen) / curr) * 100;
+    if (slackPct > BASELINE_STALE_PCT) {
+      warnings.push(
+        `flow '${id}': baseline is ${Math.round(slackPct)}% below current content `
+        + `(${baseLen} vs ${curr} chars) — the ratchet for this flow can only catch a much `
+        + `larger deletion than it looks like it does. Regenerate with `
+        + `--update-baseline if the growth is real.`,
       );
     }
   }
@@ -540,6 +597,8 @@ export function main() {
   }
   const data = extractDataJson(readFileSync(mapPath, 'utf8'));
   const problems = [];
+  // Separate array on purpose: nothing pushed here may reach the exit code (BIN-852).
+  const warnings = [];
   const nodeIds = new Set();
 
   for (const node of data.nodes || []) {
@@ -574,7 +633,11 @@ export function main() {
     } catch (err) {
       problems.push(`content baseline ${BASELINE_FILE} is not valid JSON: ${err.message}`);
     }
-    if (baseline) checkContentRatchet(data.actions || [], baseline, problems);
+    if (baseline) {
+      checkContentRatchet(data.actions || [], baseline, problems);
+      // Check 5b — is that ratchet still armed? (BIN-852). Warnings only; see the function.
+      checkBaselineStaleness(data.actions || [], baseline, warnings);
+    }
   }
 
   // Check 3 — coverage cross-check against the enumerated universe (see checkCoverage).
@@ -594,6 +657,11 @@ export function main() {
     checkRouteEnumeration(universe, problems);
   }
 
+  // Printed BEFORE the pass/fail branch and regardless of it: a warning is not a problem,
+  // but a warning only reachable on a green run would vanish on exactly the runs where the
+  // map is already under scrutiny.
+  for (const w of warnings) console.warn(`workflow-map linter: WARNING — ${w}`);
+
   if (problems.length) {
     console.error(`workflow-map linter: ${problems.length} problem(s) in ${MAP_FILE}:`);
     for (const p of problems) console.error(`  - ${p}`);
@@ -604,7 +672,8 @@ export function main() {
   }
   console.log(
     `workflow-map linter: OK — ${nodeIds.size} nodes, ${(data.actions || []).length} flows, all referenced paths exist` +
-      (universeSize ? `, coverage ${covered}/${universeSize}` : '')
+      (universeSize ? `, coverage ${covered}/${universeSize}` : '') +
+      (warnings.length ? `, ${warnings.length} baseline-staleness warning(s) above` : '')
   );
   return 0;
 }

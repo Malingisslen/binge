@@ -23985,3 +23985,103 @@ oldest untouched content in the file — so it is the one relocated, not condens
 instruction. Text unchanged from the active file:
 
 - **A diff CARVED BY HAND out of a superset you already approved is a NEW review, and any earlier marker is stale by construction.** Two passes: (a) split-damage — grep the WHOLE tree for every symbol the removed half owned, confirm files it CREATED are gone AND unimported, the surviving consumer's types line up (`| null` vs `| undefined`), and no describe block lost its behaviour; (b) re-run EVERY mutation against the current bytes. Findings belonging to the parked half are OUT of scope: say so instead of filing.
+
+
+## 2026-08-29 — BIN-852: check 5b (baseline-staleness warning) reviewed and mutation-verified
+
+**Diff reviewed** (staged): `scripts/check-workflow-map.mjs` (+67/-16), `scripts/check-workflow-map.test.mjs` (+77 new tests only), `docs/workflow-map-content-baseline.json` (regenerated), `tasks/todo.md` (plan/mutation-evidence doc, scratch).
+
+**What shipped**: a new `checkBaselineStaleness(actions, baseline, warnings)` — check 5b — warns (never gates) when a flow's committed content baseline sits more than `BASELINE_STALE_PCT` (20) below live content, i.e. detects when check 5's own ratchet has gone slack. Writes to a dedicated `warnings` array, never `problems`; `main()` prints warnings unconditionally and appends a count to the OK summary line, but nothing in `warnings` can flip the exit code. Malin's decision + #14 Software Architect's blind critique (accept-with-conditions, 0 blocking) set this shape and the threshold.
+
+**Baseline regeneration check** (`node -e` diff of HEAD vs staged `docs/workflow-map-content-baseline.json`): 31 flows total, 13 raised, 0 lowered, 18 unchanged, 0 added/removed. Matches the sprint's own claimed table exactly.
+
+**Mutation 1 — boundary `>` → `>=`** on `scripts/check-workflow-map.mjs`, snapshotted/restored via scratchpad + `git hash-object` (`de1a0b7c200c9fc94bf5be36637fbde7e21d90c1` before and after): `npx vitest run scripts/check-workflow-map.test.mjs` → exactly 1 of 54 tests failed, the "silent AT the threshold (20.0%)" case — precisely the boundary the test claims to pin. Confirmed the trio (19.9/20.0/20.1) genuinely separates `>` from `>=`, not a fixture-picked illusion: `flowOfContentLength(id, 1000)` sums to exactly 1000 chars (separately asserted and reproduced by hand), so 801/800/799 are exactly 19.9/20.0/20.1% slack.
+
+**Mutation 2 — `warnings.push(` → `problems.push(` inside `checkBaselineStaleness`'s body** (parameter name unchanged, so `problems` is now an undefined identifier in that scope): unit run → 2 of 54 tests failed, both via `ReferenceError: problems is not defined`, NOT via any assertion detecting a write into a real `problems` array. This matters because the file's own "never writes to problems" test declares a **local, never-passed** `problems = []` and asserts `deepEqual(problems, [])` — that assertion is unconditionally true regardless of the function's internals, since the local var is never wired to the call. The observed failure came from the crash, not from the property under test being exercised.
+
+Then reproduced the sprint's own reported CLI claim directly: with the OLD (pre-fix, git-HEAD) baseline in place — which genuinely has flows ≥20% stale — the same body mutation makes `node scripts/check-workflow-map.mjs` **crash** with an uncaught `ReferenceError`, exit code 1. Confirmed true, but only against the stale baseline; against the just-regenerated (now-committed) baseline the same mutation runs to completion with exit 0, because no flow currently exceeds the 20% threshold, so the mutated line is never reached. Not a false claim by the sprint — just baseline-state-dependent, and the tasks/todo.md mutation table doesn't say against which baseline it was run (informational nit only, scratch doc, not blocking).
+
+**Mutation 3 (unprompted, added by this review) — delete the entire `checkBaselineStaleness(...)` call from `main()`'s existsSync(baselinePath) block**: `npx vitest run` → 54/54 GREEN. Nothing in the test file calls `main()` or scans its source for this call site, unlike the file's own established idiom for checks 6 and 7 (`enumeration — check 6 is actually WIRED INTO main()`, `check 7 — both new checks are actually WIRED INTO main()`, both regex-scanning `main()`'s body). Check 5b can be silently disabled forever with the entire suite green — the same "guard exists, guard doesn't run" shape [arkiv 27] already names, but here with ZERO test at all (not even the weak, documented, source-scan version), and with no "known blind spot" comment acknowledging the omission the way checks 6/7's wiring tests do.
+
+**Verdict at commit time**: 1 blocking finding — the missing check-5b wiring test (main() call-site regression) plus the vacuous "never writes to problems" unit test, both closable with the exact idiom the same file already uses twice (source-scan regex on `main()`'s body, keyed on the `checkBaselineStaleness(...)` call text, analogous to the check-6/7 tests already in the file). Everything else (boundary trio, baseline regeneration direction, no weakened assertions) verified clean by direct mutation.
+
+**Knowledge-file edit made in the same pass**: extended the arkiv-27 bullet (sibling-precedent clause) and the vacuous-oracle "shape to hunt" bullet (declared-but-unpassed-argument idiom) in `binge-test-reviewer.knowledge.md`; trimmed the BIN-766 doc-id-mirror bullet to a shorter pointer to stay under the 80k-char cap.
+
+
+## 2026-08-29b — BIN-852 re-run: fix verified, one residual + one plan-number correction found
+
+**Re-run of the gate above**, same diff plus the fix for its 1 blocking finding. Read (via `Read`
+tool, hashes pinned before/after every mutation, worktree/index checked equal for both files
+against `de1a0b7c200c9fc94bf5be36637fbde7e21d90c1` / `ef32169b7ef33c3582c1a9a0a3d99a30ba357511`):
+`scripts/check-workflow-map.test.mjs`, `scripts/check-workflow-map.mjs`, `tasks/todo.md`,
+`.claude/rules/accepted-deviations.md`.
+
+**Fix graded**: the vacuous "never writes to problems" test is gone (grepped — zero remaining
+`problems` reference in the file belongs to `checkBaselineStaleness`; every hit is a different,
+legitimately-`problems`-writing check). A new wiring test scans `main()`'s body with
+`/checkBaselineStaleness\(\s*data\.actions[^)]*,\s*warnings\s*\)/`.
+
+**Mutations run** (scratchpad snapshot/restore, `git hash-object` verified before and after each,
+`rm -rf node_modules/.vite/vitest` before every run):
+1. Call site truly deleted from `main()` → wiring test fails, 1 failed / 53 passed. (First attempt
+   only *commented out* the line with a `// MUTANT-REMOVED:` prefix — the literal call text stayed
+   in the source and the regex still matched it, so that attempt stayed 54/54 green. Not a gap in
+   the test; a mutation-construction mistake on my part, caught by re-reading the diff before
+   trusting the result.)
+2. `…, baseline, warnings)` → `…, baseline, problems)` → wiring test fails, 1 failed / 53 passed.
+   Matches the plan's claimed table exactly.
+3. **New probe, not in the plan**: drop the middle `baseline` argument entirely —
+   `checkBaselineStaleness(data.actions || [], warnings)`. Stays 54/54 GREEN. The regex's
+   `[^)]*` between `data.actions` and `,\s*warnings\s*\)` is arity-blind: it only requires
+   "data.actions" to appear before a trailing "warnings)" with no `)` in between, so a dropped
+   middle argument (which shifts `warnings` into the `baseline` parameter slot, making `flows`
+   undefined and the whole function a silent no-op) still satisfies the pattern. This is the exact
+   "either dead code" failure mode the test's own assertion message names, reached by a different
+   edit than the two it was written for. Reported as a residual, not reopened as blocking, because
+   it is narrower than the original defect (full call-site deletion or the specific AC2 swap are
+   both caught) and the fix — anchoring the middle argument too — is a one-line, low-risk regex
+   change that can ship as a follow-up rather than holding the commit.
+4. Also re-ran mutation 2 directly against `main()` (the real CLI, `node scripts/check-workflow-map.mjs`)
+   against the CURRENT, already-regenerated (`--update-baseline`, staged) baseline file: exit stays
+   0, because no flow's slack exceeds `BASELINE_STALE_PCT` post-regeneration, so the mutated
+   `problems.push(` line inside `checkBaselineStaleness` is never reached. Also re-ran the vitest
+   unit-test count for the same mutation: **1 of 54 failed**, not the "2 of 54" the sprint's own
+   `tasks/todo.md` and this file's own prior (2026-08-29) archive entry both claimed. Re-run twice
+   to be sure (`--reporter=verbose`); only `checkBaselineStaleness — warns just over the threshold
+   …` fails, via `ReferenceError: problems is not defined`.
+
+**Plan (`tasks/todo.md`) accuracy checked, two findings**, both non-blocking (scratch doc, not
+shipped code) but real per the "verify every number" instruction:
+- Line "`warnings.push(` → `problems.push(` | två test faller OCH lintern går från `exit=0` till
+  `exit=1`" is wrong twice over: it's 1 test, not 2 (see mutation 4 above), and the exit-code half
+  is true ONLY against the Step-A (pre-`--update-baseline`) stale baseline — which the plan itself
+  already replaced in Step B, two sections earlier in the same file. Run against the baseline that
+  is actually staged/shipping, the identical mutation never flips the exit code. The plan never
+  states which baseline the claim was measured against, so a reader has no way to tell this from
+  the text alone.
+- The parent orchestrator's message for this re-run asserted the pre-regeneration caveat "is now
+  recorded in tasks/todo.md" — checked (grep for "regenererad/regenerering/bara/endast" near the
+  claim, then read the whole 154-line file top to bottom): it is NOT recorded anywhere in the file.
+  Treated as an unverified handed-down claim per the house method, not taken on trust.
+
+**Verdict**: fix confirmed sound for the exact regression it was built for (AC2's `warnings`→
+`problems` swap, and outright call-site deletion), both proven red-alone by mutation. One narrower,
+newly-discovered blind spot (arity-dropped middle argument) and one plan-accuracy correction
+(mutation count + unqualified exit-code claim) — both real, neither blocking a diff whose only
+shipping artifacts are `scripts/check-workflow-map.mjs` and its test file. `tasks/todo.md` is
+scratch/plan documentation, not gated code.
+
+**Knowledge-file edits made in this pass** (in place, cap enforced by trimming elsewhere, moved
+verbatim below): extended the arkiv-27 "check N is actually WIRED INTO main()" bullet with the
+arity-blind-middle-argument case; extended the arkiv-03 "Verify, never inherit, claims" bullet
+with the data-file-regenerated-mid-diff state-dependence case; condensed the arkiv-33
+`mainMessage`/`stagedEventsLog` paragraph (fully resolved, no longer teaching anything the shorter
+pointer doesn't) to pay for both additions and stay under the 80k cap.
+
+## Relocated 2026-08-29b — arkiv 33 condensation
+
+Full bullet text, verbatim, before condensing it to a short pointer in the active file (the
+generalizable idiom in its last sentence was kept in place; everything before it is the resolved
+historical trace, superseded by its own final correction and no longer actionable on its own):
+
+ **CLOSED in the same batch (BIN-917, before commit): the test file imports `mainMessage` and drives all four exit-code paths against real message fixtures; inverting the verdict branch now fails four cases — verified by mutation.** **A NEW residual survives that close, one function over**: `stagedEventsLog()` — which chooses between `git show :events.jsonl` (the INDEX) and a `readFileSync` fallback (the WORKING TREE), a distinction its own comment calls "the difference between a gate and a rubber stamp" — has no test making the two sources DISAGREE. Close it as the docstring describes the threat: stage a review row for a fixture ticket NOT present in the working tree, then assert `mainMessage` grades against the STAGED content. BLOCKING, because the sprint engine writing UNSTAGED review rows is real and current. **The first "CLOSED" note was ITSELF the bug** (`repoDir = dirname(EVENTS_PATH)`: `git show :<relPath>` tolerates ANY cwd inside the repo, the fallback's `join(repoDir, relPath)` does not) — no test caught it because every one passes an explicit `repoDir` that IS a root: **the seam drifted from production in exactly the axis it was parameterised for**. **Idiom for a git-branch-always-wins seam: export the constants the composition is built from (`REPO_ROOT`, `DEFAULT_EVENTS_REL`) and assert the join DIRECTLY, without the git-dependent function**, plus an asymmetry case computed via a genuinely DIFFERENT code path than production's. [arkiv 33]
