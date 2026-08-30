@@ -610,10 +610,8 @@ findings here too.
   `functions/src/communityRatings/runAggregate.ts`,
   `src/test/rules/community-ratings-orchestrator.test.ts`,
   `src/hooks/usePublicProfile.ts`
-- **Retention/TTL cleanup** — `retentionCleanup` (daily; seven sweeps: sessions,
-  notifications, joinAttempts, release-dedup markers, push tokens for accounts Auth no
-  longer honours, and — since BIN-816/875 — Firebase Auth accounts orphaned by an
-  aborted deletion plus the username reservations they leave behind) and
+- **Retention/TTL cleanup** — `retentionCleanup` (daily; the roster of sweeps lives in
+  `runRetentionCleanup` — read it there rather than from a list here) and
   `reclaimOrphanFollows` (weekly orphan sweep, `GRACE_MS` race window). Since BIN-727
   the sweep's orchestration lives behind an injected port (`runCleanup.ts`, importing
   no firebase-admin) and is driven against a live Firestore emulator — so the

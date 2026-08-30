@@ -356,8 +356,7 @@ markören, inte utfallet. Personuppgifter ska inte landa under ett uid vars rade
   sina egna meriter. Det som stängs är kapplöpningen i det vanliga UI-flödet.
 - **Enhetslokalt.** Markören bor i `localStorage`, så spärren finns bara på den enhet
   raderingen startades från. En andra enhet har ingen markör och kan fortfarande skriva.
-  Den restposten är BIN-1023:s — ingen serversidig sopning hittar i dag ett
-  watchlist-dokument under ett uid vars Auth-konto är helt borta.
+  Den restposten är BIN-1023:s.
 - **Stänger inte BIN-965:s residual.** Den luckan (en skrivning som passerar kontrollen
   mikrosekunder innan kaskadens radering landar) är avgjord och oförändrad, utan
   kompenserande radering. Den här ändringen stänger en annan och bredare lucka: att det
@@ -498,11 +497,12 @@ så cascade-bara-data (avsnitts-reaktioner m.fl.) blir kvar. För den
 **säkerhetskänsliga** delen — plaintext-invite-tokenet i `joinAttempts` (BIN-329)
 — är detta nu täppt: den schemalagda `retentionCleanup`-sweepen raderar varje
 joinAttempt äldre än 1 timme oavsett hur kontot försvann (admin SDK kringgår
-reglerna). Reaktioner/övrig cascade-bara-data efter en Console-radering är
-fortfarande en öppen, bredare lucka (låg känslighet — inget hemligt) som ägs av
-en framtida server-side reaper för konton vars ägar-uid inte längre finns.
-**`fcmTokens` är däremot INTE längre kvar i den luckan** — de har ett eget svep
+reglerna). **`fcmTokens` är INTE längre kvar i den luckan** — de har ett eget svep
 sedan BIN-848, se §"Push-tokens för konton Auth inte längre erkänner" nedan.
+
+**Sedan BIN-1023 är luckans uid-nycklade del också täppt** — se §"Data vars
+ägar-uid inte längre finns i Auth" nedan för exakt vad svepet raderar, vilken
+klocka fönstret mäts mot, och vad som fortfarande står kvar.
 
 ## Retention-policy för icke-raderad data
 
@@ -642,6 +642,54 @@ så samma användare inte får en andra push för samma digitala släppdatum. Do
   lokala pekare: hen måste slå AV och PÅ den igen för att få tillbaka notiser. #27 DBA lyfte det som skäl att lämna `disabled`-hinken till ett eget
   beslut; Malin namngav uttryckligen spärrade konton som fallet hon ville ha
   täckt, så hinken byggdes.
+
+### Data vars ägar-uid inte längre finns i Auth (BIN-1023, 2026-08-30)
+
+Spegelbilden av orphan-auth-svepet ovan. Det svepet letar ett Auth-konto utan
+data; det här letar data utan Auth-konto.
+
+**Vad som producerar läget.** En radering av Auth-användaren direkt i Firebase
+Console. Ingen klient-cascade körs, så varje dokument under `users/{uid}` ligger
+kvar — och ägaren kan inte längre logga in för att göra om raderingen. Biljetten
+beskrev en avbruten klient-cascade som orsak; det stämmer nästan aldrig, eftersom
+`collectDeletionRefs` köar watchlist i sektion 1 och `users/{uid}` i sektion 9
+och committar chunkarna i ordning.
+
+**Vad svepet raderar.** Hela `users/{uid}`-trädet via `recursiveDelete` — alltså
+profildokumentet och samtliga undersamlingar, inte bara `watchlist` — plus
+`publicProfiles/{uid}`. Den senare ligger utanför trädet och är världsläsbar, så
+den raderas FÖRST: när trädet är borta slutar uid:t dyka upp i genomsökningen och
+en kvarlämnad projektion vore onåbar för varje senare körning.
+
+**Fönstret, och vilken klocka det mäts mot.** `ORPHAN_DATA_MIN_OBSERVED_MS` = **3
+dygn**, och storheten är *hur länge vi själva har observerat uid:t som bekräftat
+frånvarande från Auth* — inte kontots ålder. Kontots ålder finns inte att läsa
+här; kontot är borta. Första körningen som ser uid:t frånvarande skriver
+`orphanWatch/{uid}` med `firstSeenAt` och raderar ingenting. En senare körning
+raderar när stämpeln är äldre än golvet. Läser uid:t närvarande igen städas
+stämpeln bort och klockan nollställs.
+
+Tre dygn garanterar minst två dagliga körningar även om en körning fallerar helt
+och nästa infaller på en helg, och lämnar fyra veckor kvar inom den månad
+Art. 12(3) medger. Systersvepets sju dygn är ett annat tal för en annan storhet
+och ska inte harmoniseras hit.
+
+**Skyddsräcken.** Frånvaro läses bara ur `getUsers()`s egen `notFound`-lista, så
+en fallerad batch bidrar med noll kandidater och ett `disabled: true`-konto — hur
+moderering stänger av någon — räknas aldrig som borta. Det delade taket
+(`withinOrphanCeiling`) vägrar hela körningen om kandidatmängden är orimlig.
+
+**Vad som INTE täcks, och det är avsiktligt.** Innehåll som ägs via ett FÄLT i
+stället för via uid:t i sökvägen: `reviews` (med `likes`/`comments`), `lists`,
+hostade `sessions`, ägda `groups`, och speglingarna på andra användares dokument
+(`followers`, `friends`, `friendRequests*`), och avsnittsreaktionerna i
+`episodeReactions/*/reactions/*`, som ligger utanför `users/*` och ägs av ett
+`uid`-fält. Den delen kräver en fråga per samling och bär ett eget produktval — en ägd grupp med kvarvarande medlemmar ska
+antingen raderas eller lämnas över, och det avgörs inte inuti ett svep. Filad som
+egen biljett och bokförd i `.claude/rules/accepted-deviations.md`.
+
+**Berör inte** det separat dokumenterade läget "delvis kaskaderad, Auth
+fortfarande vid liv" (ADR 0022) — andra förutsättningar, annat svep.
 
 ### Framtida (ej byggt)
 

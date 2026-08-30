@@ -32,6 +32,14 @@
  *     what makes the surviving account a documented DELAY under Art. 12(3)
  *     rather than an unfinished Art. 17 request — Malin's decision 2026-08-11,
  *     conditional on this running. See docs/data-retention-policy.md.
+ *   - users/{uid} — the WHOLE tree, plus publicProfiles/{uid} — for uids Auth
+ *     does not know at all, observed absent since an earlier run (BIN-1023):
+ *     an account deleted from the Firebase Console runs no client cascade, so
+ *     every document survives an erasure its owner can no longer retry (they
+ *     cannot sign in). The mirror image of the sweep above it, and the most
+ *     destructive operation in this file — see docs/data-retention-policy.md
+ *     §"Data vars ägar-uid inte längre finns i Auth" for the window, the clock
+ *     it is measured against, and what it deliberately does NOT reach.
  *   - usernames/{name} whose uid resolves to neither a users/{uid} document nor
  *     a live auth account (BIN-875, ADR 0020): the reservation used to be
  *     resolved from the profile document the first attempt had already deleted,
@@ -117,6 +125,8 @@ function baseQuery(kind: ScanKind): Query {
       return db.collectionGroup('fcmTokens').select();
     case 'usernames':
       return db.collection('usernames').select('uid');
+    case 'orphanWatch':
+      return db.collection('orphanWatch').select('firstSeenAt');
   }
 }
 
@@ -159,6 +169,44 @@ const adminIo: CleanupIo = {
   listAuthAccounts: async (pageToken) => {
     const page = await getAuth().listUsers(1000, pageToken);
     return { users: page.users, pageToken: page.pageToken };
+  },
+
+  // BIN-1023. `listDocuments()` rather than a query on purpose: a query returns
+  // only documents that EXIST, and this sweep must also see a uid whose
+  // `users/{uid}` doc is gone while its subcollections survive. `listDocuments`
+  // returns those ghost refs too.
+  //
+  // The one scan here that is NOT bounded by PAGE_SIZE, because this API has no
+  // cursor to bound it with. It returns refs only (no document reads), so the
+  // cost is one list call and one short string per account.
+  listUserUids: async () => {
+    const db = getFirestore();
+    const refs = await db.collection('users').listDocuments();
+    return refs.map((r) => r.id);
+  },
+
+  deleteUserTree: async (uid) => {
+    const db = getFirestore();
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+  },
+
+  stampOrphanWatch: async (uids, nowMs) => {
+    const db = getFirestore();
+    const batch = db.batch();
+    // Milliseconds, not serverTimestamp(): the value is read back by
+    // `collectOrphanedUserData` and compared against the run's injected clock,
+    // and a Timestamp would make the two sides of that comparison different
+    // types.
+    //
+    // This DOES overwrite any existing firstSeenAt, and that is safe only
+    // because `partitionOrphanData` never hands a uid here once it has a
+    // readable record — a uid whose record is merely too young is left out of
+    // every list. Writing this unconditionally on every run would move the
+    // deadline forward as fast as the clock and the floor would never elapse.
+    for (const uid of uids) {
+      batch.set(db.doc(`orphanWatch/${uid}`), { firstSeenAt: nowMs });
+    }
+    await batch.commit();
   },
 
   deleteAuthUsers: async (uids) => {

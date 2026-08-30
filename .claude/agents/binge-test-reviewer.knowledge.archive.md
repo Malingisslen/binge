@@ -24158,3 +24158,206 @@ not a coverage gap — check the FAILURE MODE before filing: if the matcher is a
 match and the assertion goes RED (the generic-failure branch fires instead), never silently
 green. File it as a follow-up for consistency, not as a blocking finding, once you've confirmed
 red-not-green (BIN-1038).
+
+## Relocated 2026-08-30 — BIN-1023 review trim (entry 59)
+
+Full bullet text, verbatim, before condensing it to a short pointer in the active file to make
+room for the BIN-1023 `listUserUids` ghost-case lesson in the "Verify, never inherit, claims"
+bullet:
+
+A cache-invalidation test must PRIME the cache first (BIN-510). An "unsorted input" test needs a
+fixture whose output CHANGES when the sort is dropped (BIN-185); `.sort()`-before-compare is
+blind to any order contract claimed (BIN-407). **A React-Query `queryKey` term IS a guard needing
+its own fixture**: pinning the movie/tv split at the DOC ID leaves `queryKey: ['x', mediaType,
+id]` free — dropping `mediaType` keeps every doc-id test green while movie N and TV N share one
+cache entry. Fixture (BIN-564, verified): ONE `QueryClient` hoisted out of the per-test wrapper,
+render both types against it, assert the second gets its own `checkedAt` AND read its own doc.
+
+## 2026-08-30 — BIN-1023: orphan-data sweep (retentionCleanup) — 1 blocking
+
+**Context.** New server-side sweep (Admin SDK, bypasses `firestore.rules`) that recursively
+deletes `users/{uid}` + `publicProfiles/{uid}` for a uid confirmed absent from Firebase Auth,
+after a 3-day cross-run observation floor (`orphanWatch/{uid}.firstSeenAt`). Obliged files per
+`reviewGates`: `functions/src/retentionCleanup/orphans.test.ts`,
+`src/test/rules/retention-cleanup-orchestrator.test.ts`. Also read (not gated, informational):
+`orphans.ts`, `runCleanup.ts`, `index.ts`, `logic.ts`, `docs/data-retention-policy.md`,
+`.claude/rules/accepted-deviations.md` (BIN-1023's 2026-08-30 entry: scope split — uid-keyed data
+only, field-owned data (reviews/lists/sessions/groups) deferred to BIN-1063 — read and respected,
+not re-flagged), `tasks/todo.md`.
+
+**Index/worktree parity, first command:** `git rev-parse :<f>` == `git hash-object <f>` for all 8
+staged files before any mutation; re-confirmed after every restore. `orphans.ts` = `b669a980…`,
+`runCleanup.ts` = `f610bbc2…`, `logic.ts` (untouched by this diff, mutated anyway to probe a
+shared helper) = `e8621ac6…`.
+
+**Mutations run, each in a scratchpad-backup/restore cycle, hash-verified before and after:**
+
+1. `partitionOrphanData`'s anti-latch guard, `orphans.ts`: `else if (seen === null) stamp.push(uid)`
+   → `else stamp.push(uid)` (unconditional re-stamp on every run). Root suite
+   (`functions/src/retentionCleanup/orphans.test.ts`, 42 tests): exactly 2 red — "RÖR INTE ett uid
+   vars stämpel bara är för ung" and "delar en blandad mängd utan att tappa någon" — matching the
+   claim in the task brief exactly. A SECOND, different mutation of the same branch (`seen ===
+   null` → `seen !== null`, i.e. re-latch on YOUNG stamps instead of unconditional) was also
+   tried: 4 red, a superset including the anti-latch test and the "stämplar en första
+   observation"/"stämplar om … OLÄSBAR" cases. Neither mutation survives — the guard is real, not
+   an accident of fixture shape.
+2. `runCleanup.ts`'s orphan-data ceiling call site: `const { allowed: erasableUids, refused } =
+   withinOrphanCeiling(orphanData.erase, orphanData.checkedUserRoots);` → unconditional
+   `erasableUids = orphanData.erase; refused = false` (ceiling deleted outright). Orchestrator
+   suite (isolated emulator, offset ports 8091/4491/4592/9151, project
+   `binge-retention-orchestrator-test`, 20 tests): exactly 1 red — "refuses the whole run rather
+   than erase an implausible share of the base" (the 8-uid test) — `expected 8 to be +0`. The
+   3-uid "still erases a SMALL candidate set" test stayed green, correctly: that test's job is
+   proving the FLOOR allows a small batch, not catching ceiling removal, and 3 was never refused
+   either way. Confirms the 8-uid fixture is the one load-bearing against a deleted ceiling.
+3. `logic.ts`'s `revokedUidsInBatches` catch handler (shared by all three Auth-lookup sweeps):
+   added `revoked.push(...batch)` on a thrown batch (treat "could not verify" as "confirmed
+   absent"). Orchestrator suite: 2 red — the pre-existing BIN-848 push-token test ("an Auth lookup
+   that throws deletes NOTHING it could not verify", expected 0 got 3) AND the BIN-1023 test
+   ("erases nothing when the Auth lookup FAILS — a dead check is not a licence", expected 0 got
+   1). The BIN-1023 fixture stamps `orphanWatch/consoled.firstSeenAt` old enough BEFORE making
+   `lookupUsers` throw, so only the lookup guard stands between the data and deletion — confirmed
+   it reddens for the guard's own reason, not because the floor hadn't elapsed.
+4. `runCleanup.ts`'s `eraseOrphanedUserData`: swapped write order, `deleteUserTree` before
+   `deleteDocs([publicProfiles/${uid}])` instead of after. Orchestrator suite: **0 red, all 20
+   green.** The function's own comment calls this order "load-bearing" and explains why
+   (`publicProfiles` must go first so a mid-failure never strands a world-readable projection
+   unreachable by any later run) — `.claude/rules/accepted-deviations.md`'s BIN-1023 entry, point
+   2, independently lists "publicProfiles deleted AFTER the tree" as explicitly NOT accepted. No
+   fixture in the file injects a failure BETWEEN the two calls (the only way the two orders can
+   ever produce different end states), so the ordering claim is completely unpinned. **Reported as
+   blocking.**
+5. `runCleanup.ts`'s `eraseOrphanedUserData`: narrowed the tree delete to a single known watchlist
+   doc (`await io.deleteDocs(['users/${uid}/watchlist/movie_42'])` instead of
+   `await io.deleteUserTree(uid)`). Orchestrator suite: exactly 1 red — "erases the WHOLE user tree
+   and the public projection once the floor has elapsed" (the `episodeProgress` sibling-collection
+   assertion the fixture was specifically built to pin, per its own comment). Confirms the
+   orchestration-level "whole tree, not just watchlist" claim (acceptance criterion 4) is real.
+6. `orphans.ts`'s `absentUidsFromLookup`: added a clause counting `disabled: true` accounts as
+   absent (matching the WIDER push-token predicate instead of the deliberately narrower one).
+   Orchestrator suite: 6 red, including "never touches a live account or a DISABLED one, however
+   long it waits" at the exact `users/banned/watchlist/movie_42` assertion the disabled carve-out
+   exists to protect. Confirms acceptance criterion 2 for the new sweep, not just the pre-existing
+   BIN-848/875 coverage of the same predicate.
+
+**Restore discipline.** Every mutation restored from a scratchpad copy taken before any edit;
+`git hash-object` re-verified against the original staged blob after each restore (all matched:
+`b669a980…` orphans.ts ×3 restores, `f610bbc2…` runCleanup.ts ×3 restores, `e8621ac6…` logic.ts
+×1 restore). Final `git status --porcelain` on all 8 staged files shows only the expected `M `
+(staged-modified, no unstaged drift) for the ticket's own diff.
+
+**Finding (blocking).** `functions/src/retentionCleanup/runCleanup.ts`'s
+`eraseOrphanedUserData` — the "publicProfiles before the tree" order, which the function's own
+comment calls load-bearing and which `accepted-deviations.md` independently forbids reversing, has
+no test that can tell the two orders apart (mutation 4 above: 0/20 red). The test should inject a
+failure between the two `await`s (e.g. `deleteUserTree` throws) and assert `publicProfiles/{uid}`
+is ALREADY gone at that point, then a second fixture where `deleteDocs([publicProfiles])` throws
+and `deleteUserTree` still runs — proving the write order, not just the eventual all-succeeded
+state.
+
+**Also verified, not blocking.** `src/test/rules/retention-cleanup-orchestrator.test.ts`'s
+`listUserUids` port comment ("The ghost case is therefore driven by overriding this method in the
+one test that needs it, never assumed") is FALSE — grepped the whole file for `listUserUids:`
+overrides: exactly one (line 875, a thrown-error test for the -1/skip discipline, not a ghost-uid
+fixture). No test synthesizes a uid with surviving subcollections but no backing `users/{uid}`
+doc — the exact shape production's `listDocuments()` was chosen over a query to catch. Folded into
+the knowledge file as the "Verify, never inherit, claims" bullet's newest clause. Judged
+non-blocking here only because it is a documented STRUCTURAL harness limitation (client SDK has no
+`listDocuments()` equivalent) rather than a silent one, and the false sentence is a comment-
+accuracy defect distinct from the coverage gap itself — but flagged loudly, since the promise it
+makes is specifically about the destructive path's least-tested corner.
+
+**Verdict:** fail (1 blocking) on first pass. The publicProfiles-before-tree ordering gap is real
+and unpinned; the `listUserUids` comment misdescribes coverage that doesn't exist. Both reported
+to the requesting agent; neither is in `accepted-deviations.md`'s BIN-1023 entry (which covers
+scope, not order-of-operations or harness fidelity).
+
+## 2026-08-30 — BIN-1023 re-run: both findings closed — 0 blocking
+
+**Context.** Re-review of the same staged diff (still 10 files) after the reported fixes: two new
+tests in `src/test/rules/retention-cleanup-orchestrator.test.ts` for the ordering gap, plus a new
+ghost-uid test exercising the promised `listUserUids` override. Read every file with `Read` before
+judging it (`orphans.ts`, `orphans.test.ts`, `runCleanup.ts`, `index.ts`, the orchestrator test
+file, `accepted-deviations.md`, both halves of this knowledge pair).
+
+**Index/worktree parity, first command:** `git hash-object` == `git rev-parse :<f>` for
+`runCleanup.ts` (`f610bbc2b73b109a1e10ad54590e1a90318dd701`) before touching anything.
+
+**Mutation re-run (the prior fail's own mutation 4, independently reproduced, not inherited).**
+Snapshot to scratchpad, swap the two `await`s in `eraseOrphanedUserData`
+(`deleteUserTree(uid)` before `deleteDocs([publicProfiles/${uid}])`), clear
+`node_modules/.vite/vitest`, run the orchestrator suite on an isolated offset-port emulator
+(`8091/4491/4592`, project `demo-binge-rules-ctl`, scratch `firebase.json` with `singleProjectMode`
+and no `firestore.rules` — permissive by omission, matching the file's own documented Admin-SDK
+rules-bypass rationale). Result: **2 failed / 21 passed**, and the two failures are exactly the two
+new tests, each red for the reason its name claims:
+- "deletes publicProfiles BEFORE the tree — proven by failing in between" — `expected true to be
+  false` on `exists(db, 'publicProfiles/consoled')` (production now leaves it stranded when order
+  is reversed and the tree-delete throws).
+- "leaves the tree alone when the public projection cannot be deleted" — `expected false to be
+  true` on `exists(db, 'users/consoled/watchlist/movie_42')` (production now deletes the tree
+  before the publicProfiles failure can stop it).
+
+Restored from the scratchpad snapshot; `git hash-object` matched the pre-mutation blob exactly
+afterward. This reproduces the ticket's own claimed "2 failed / 21 passed" independently rather
+than transcribing it, closing mutation 4 from the first pass's archive entry above.
+
+**Clean control, same run family.** Before mutating, ran the FULL rules suite (all 6 files, offset
+ports) as a baseline: 357 passed (6 files), including all 23 orchestrator tests (21 pre-existing +
+2 new). Establishes the suite is green at HEAD-of-staged before any mutation is introduced.
+
+**Order-reversal reasoning, checked by hand against both new tests' fixtures, not just the mutation
+run:** with the order reversed, test 1 (mutate `deleteUserTree` to throw) would leave
+`publicProfiles/consoled` UNDELETED at the failure point — contradicting its own "already gone"
+assertion; test 2 (mutate `deleteDocs` for the `publicProfiles/` path to throw) would leave the
+tree ALREADY DELETED before the failure — contradicting its own "tree survives" assertion. Each
+test therefore reds under the reversed order for the reason its title claims, confirmed both by the
+live mutation run above and by this independent trace through the code.
+
+**Production code re-read.** `eraseOrphanedUserData` (runCleanup.ts) keeps both awaits inside ONE
+`try`; a first-delete failure throws into the catch and returns `false` without attempting the
+second delete — so pressing on after a `publicProfiles` failure (the reviewer's originally
+suggested mirror assertion, "assert `deleteUserTree` still ran when the publicProfiles delete
+throws") is not what the code does, and asking for it would have demanded a DIFFERENT, worse
+production behaviour (the exact half-done state — tree gone, projection surviving — the function's
+own comment and `accepted-deviations.md`'s BIN-1023 entry point 2 both name as the one unrecoverable
+outcome). Agreed with the coordinator's reasoning on this point; no finding here.
+
+**Ghost-uid test, checked for vacuity.** "reaches a GHOST uid whose profile doc is gone but whose
+subcollections survive" seeds `users/ghost/watchlist/*` + `publicProfiles/ghost` +
+`orphanWatch/ghost` (already past the observation floor) with NO `users/ghost` document
+(`exists(db, 'users/ghost')` asserted `false` before the run), and overrides `listUserUids` to
+append `'ghost'` to the real query result — the shape only Admin's `listDocuments()` can produce.
+Traced the fixture's OTHER absent-from-Auth uid, `consoled` (seeded by the shared `seedOrphanData`
+helper, no matching Auth account in `ORPHAN_DATA_ACCOUNTS`): it has no pre-existing `orphanWatch`
+record in this test, so `partitionOrphanData` routes it to `stamp`, not `erase` — this run's ONLY
+eraseable uid is `ghost`. The test's `expect(summary.erasedOrphanDataUids).toBeGreaterThanOrEqual(1)`
+is loose (an exact `toBe(1)` would be tighter), but it is not vacuously green on `consoled`: the two
+follow-on assertions (`users/ghost/watchlist/movie_7` gone, `publicProfiles/ghost` gone) name the
+ghost uid's own data directly and cannot pass on a neighbour. Removing the `'ghost'` push from the
+override (by inspection, not re-run — the default `listUserUids` already provably excludes it,
+proven by the pre-run `exists` assertion) would leave `erase` empty and fail
+`toBeGreaterThanOrEqual(1)` alone. Non-blocking style note only: prefer `toBe(1)` over
+`toBeGreaterThanOrEqual(1)` here since the eraseable set is fully determined by the fixture — not
+filed, since the two direct assertions already make the count assertion non-load-bearing.
+
+**Comment re-verified true.** `makeIo`'s `listUserUids` comment ("The ghost case is therefore driven
+by overriding this method in the ghost test below, never assumed") now matches the file: exactly one
+override at the ghost-uid test, doing exactly what the comment describes. Knowledge-file bullet
+above updated in place to record the closure without erasing the general lesson (grep the literal
+override every round the comment is touched).
+
+**Minor completeness observation, not filed.** Test 1's own comment says the watch record is "KEPT
+with its original stamp"; the assertion only checks `exists(...) === true`, not the stamp's value.
+True by construction — the catch branch that returns `false` never calls `stampOrphanWatch` or
+`deleteDocs(['orphanWatch/...'])`, so nothing can touch the record on that path without an
+unrelated code change no mutation in this pass produced — but noting it so a future round doesn't
+mistake "exists" for "unchanged value" if the catch block ever grows a write.
+
+**Restore discipline.** `runCleanup.ts` restored from the scratchpad snapshot taken before mutating;
+`git hash-object` matched `f610bbc2b73b109a1e10ad54590e1a90318dd701` after restore. Final
+`git status --porcelain` shows only the same 10 files, all `M ` (staged), no unstaged drift.
+
+**Verdict:** pass (0 blocking). Both of the first pass's findings are independently confirmed
+closed: the ordering gap is now pinned by a live mutation that reds exactly the two new tests for
+their named reasons, and the `listUserUids` comment is now true.

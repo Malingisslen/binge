@@ -18,7 +18,8 @@
  * projections, `recursiveDelete`, `getAll`, `getUsers`, `listUsers`,
  * `deleteUsers`, one batch commit) stays in the port. Everything the sweep
  * DECIDES lives here, under test:
- *   - paging and cursor advance for all six Firestore scans
+ *   - paging and cursor advance for the Firestore scans (`ScanKind`; the one
+ *     exception is `listUserUids`, which the Admin API gives no cursor to page)
  *   - which docs each TTL predicate reaps (and that a doc ON the threshold is kept)
  *   - the uid derivation for `users/{uid}/fcmTokens/*`
  *   - "could not verify" is never "gone": a failed lookup batch skips only itself
@@ -46,6 +47,7 @@ import {
   absentUidsFromLookup,
   isOrphanCandidate,
   orphanedReservations,
+  partitionOrphanData,
   withinOrphanCeiling,
 } from './orphans';
 
@@ -57,14 +59,17 @@ export interface ScanDoc {
   readonly data: Record<string, unknown>;
 }
 
-/** The six Firestore scans, named so a port cannot silently answer the wrong one. */
+/** The Firestore scans, named so a port cannot silently answer the wrong one. */
 export type ScanKind =
   | 'sessions'
   | 'notifications'
   | 'joinAttempts'
   | 'releaseMarkers'
   | 'fcmTokens'
-  | 'usernames';
+  | 'usernames'
+  // BIN-1023: `orphanWatch/{uid}` holds `firstSeenAt` — the run-to-run memory
+  // that turns "absent right now" into "absent on two separate days".
+  | 'orphanWatch';
 
 /** One Firebase Auth account, narrowed to the fields the orphan sweep reads. */
 export interface AuthAccount {
@@ -126,6 +131,28 @@ export interface CleanupIo {
   listAuthAccounts(pageToken: string | undefined): Promise<AuthPage>;
   /** One `deleteUsers` batch. Never called with more than 1000 uids. */
   deleteAuthUsers(uids: readonly string[]): Promise<AuthDeleteResult>;
+
+  /**
+   * BIN-1023 — every uid that OWNS data under `users/*`, in one call.
+   *
+   * Deliberately not a `scanPage('users', …)`: a query returns only documents
+   * that EXIST, and the state this sweep hunts includes a `users/{uid}` doc that
+   * was deleted while its subcollections survived. The Admin SDK's
+   * `listDocuments()` returns those ghost refs too, so the port answers with
+   * uids rather than doc paths and the loop never has to know the difference.
+   *
+   * UNPAGED, unlike every other scan here, because `listDocuments()` offers no
+   * cursor to page WITH. Inventing one on top of it would mean re-listing the
+   * whole collection per page — strictly more work than reading it once — so the
+   * honest contract is the one the API actually has. The bound is one short
+   * string per account, and the sibling orphan-auth sweep already holds a
+   * candidate list of the same order.
+   */
+  listUserUids(): Promise<readonly string[]>;
+  /** Delete `users/{uid}` AND every subcollection under it. */
+  deleteUserTree(uid: string): Promise<void>;
+  /** Record `firstSeenAt = nowMs` for each uid, in ONE commit. Never more than deleteBatchSize. */
+  stampOrphanWatch(uids: readonly string[], nowMs: number): Promise<void>;
 }
 
 /** Uids per `deleteUsers` call — the Admin API's own ceiling. */
@@ -158,6 +185,12 @@ export interface CleanupSummary {
   checkedReservations: number;
   orphanUsernameSkippedProfileBatches: number;
   orphanUsernameSkippedAuthBatches: number;
+  orphanDataUids: number;
+  erasedOrphanDataUids: number;
+  checkedUserRoots: number;
+  watchedOrphanDataUids: number;
+  clearedOrphanDataWatches: number;
+  orphanDataSkippedAuthBatches: number;
 }
 
 /**
@@ -419,6 +452,105 @@ async function collectOrphanedUsernames(io: CleanupIo): Promise<{
 }
 
 /**
+ * BIN-1023 — Firestore data whose owner has no Firebase Auth account at all.
+ *
+ * The sibling sweep above hunts the opposite shape (an auth account with no
+ * data). This one exists because `docs/data-retention-policy.md` already names
+ * the gap: an account removed from the Firebase Console runs NO client cascade,
+ * so every `users/{uid}` document survives an erasure nobody can undo — the
+ * owner cannot sign in to retry, and the data is addressable by uid forever.
+ *
+ * NOT, despite the ticket's own wording, an interrupted client cascade: that
+ * path queues the watchlist in `collectDeletionRefs` section 1 and `users/{uid}`
+ * in section 9 and commits the chunks strictly in order, so a confirmed-missing
+ * profile almost always implies the library went with it. The Console deletion
+ * is the shape the tests drive.
+ *
+ * Three independent brakes, none of which this function decides on its own:
+ *  - absence comes from `getUsers()`'s own `notFound` list (`absentUidsFromLookup`),
+ *    so a failed batch contributes nobody and a DISABLED account is never absent;
+ *  - a uid must read absent on a run at least `ORPHAN_DATA_MIN_OBSERVED_MS`
+ *    after the run that first saw it (`partitionOrphanData`), so one bad lookup
+ *    cannot erase anything;
+ *  - the ceiling (applied by the caller) refuses the whole run if the candidate
+ *    set is implausible.
+ */
+async function collectOrphanedUserData(io: CleanupIo, nowMs: number): Promise<{
+  erase: string[];
+  stamp: string[];
+  clearWatch: string[];
+  checkedUserRoots: number;
+  skippedAuthBatches: number;
+}> {
+  const uids = [...(await io.listUserUids())];
+  if (uids.length === 0) {
+    return { erase: [], stamp: [], clearWatch: [], checkedUserRoots: 0, skippedAuthBatches: 0 };
+  }
+
+  const { revoked: authAbsentUids, skippedBatches: skippedAuthBatches } = await revokedUidsInBatches(
+    uids,
+    (batch) => io.lookupUsers(batch),
+    (err, size) => io.log.error('retentionCleanup: orphan data getUsers batch failed, skipping', { size, err }),
+    // Existence, not honour: a disabled account still owns its data, exactly as
+    // in the username sweep. The push sweep's wider predicate would be wrong here.
+    absentUidsFromLookup,
+  );
+
+  // The watch collection is bounded by the number of uids ever seen absent, so
+  // it is read whole rather than paged per-uid. `firstSeenAt` is stored as
+  // milliseconds by `stampOrphanWatch`, so it needs no Timestamp conversion —
+  // but an absent or non-numeric value must read as null, which
+  // `isObservedLongEnough` treats as "stamp again", never as "old enough".
+  const firstSeenAt = new Map<string, number | null>();
+  await pageThrough(io, 'orphanWatch', (docs) => {
+    for (const d of docs) {
+      const uid = d.path.split('/').pop();
+      if (!uid) continue;
+      const raw = d.data.firstSeenAt;
+      firstSeenAt.set(uid, typeof raw === 'number' ? raw : null);
+    }
+  });
+
+  const parts = partitionOrphanData(uids, new Set(authAbsentUids), firstSeenAt, nowMs);
+  return { ...parts, checkedUserRoots: uids.length, skippedAuthBatches };
+}
+
+/**
+ * Erase one orphaned owner's data; never throw.
+ *
+ * Order is load-bearing. `publicProfiles/{uid}` goes FIRST because it lives
+ * outside the `users/{uid}` path tree: once the tree is gone the uid stops
+ * appearing in `listUserUids`, and a projection left behind would be
+ * unreachable by any later run — publicly readable, and permanently.
+ *
+ * The watch record goes LAST, and only after both succeeded. A failure while
+ * ERASING leaves the record in place with its original `firstSeenAt`, and the
+ * uid still in `listUserUids`, so the next run retries immediately rather than
+ * restarting a three-day clock. A failure deleting the RECORD itself is a
+ * different case with a different outcome — see that catch block.
+ */
+async function eraseOrphanedUserData(io: CleanupIo, uid: string): Promise<boolean> {
+  try {
+    await io.deleteDocs([`publicProfiles/${uid}`]);
+    await io.deleteUserTree(uid);
+  } catch (err) {
+    io.log.error('retentionCleanup: orphan data erase failed, watch record kept for retry', { uid, err });
+    return false;
+  }
+  try {
+    await io.deleteDocs([`orphanWatch/${uid}`]);
+  } catch (err) {
+    // The data is gone, which is the point, so this must not be reported as a
+    // failed erase. The record does leak permanently rather than being retried:
+    // the uid no longer appears in `listUserUids`, and `partitionOrphanData`
+    // only ever iterates uids from there. One small document, on a double
+    // failure, holding nothing but a timestamp.
+    io.log.error('retentionCleanup: orphan data erased but watch record survived', { uid, err });
+  }
+  return true;
+}
+
+/**
  * Delete each session tree (doc + participants/* + swipes/*); never throw.
  * Serial on purpose — steady state is tiny (sessions TTL at 7 days, this runs
  * daily).
@@ -495,9 +627,14 @@ async function deleteAuthAccounts(
 }
 
 /**
- * One retentionCleanup invocation. Never throws: each of the seven sweeps is
- * caught on its own so a single failure — an Auth outage, a missing index —
- * cannot starve the other six. Returns the same record it logs.
+ * One retentionCleanup invocation. Never throws: EVERY sweep is caught on its
+ * own so a single failure — an Auth outage, a missing index — cannot starve the
+ * rest. Returns the same record it logs.
+ *
+ * No count here on purpose: a number in this very sentence went stale when a
+ * sweep was added and had to be struck. Read the body if you need the roster —
+ * a `grep` for catch handlers counts more than the sweeps, so there is no
+ * one-liner that answers it honestly.
  */
 export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary> {
   const nowMs = io.now();
@@ -535,9 +672,10 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   const deletedReleaseMarkers = await deleteInBatches(io, staleReleaseMarkers);
   const deletedRevokedTokens = await deleteInBatches(io, revokedPushTokens.paths);
 
-  // The five sweeps above are done; say so BEFORE the two below start. They page
-  // every auth account and can be the first casualty of the 300s budget, and a
-  // run that times out inside them would otherwise print no summary at all.
+  // The sweeps above are done; say so BEFORE the ones below start. Those reach
+  // Auth and can be the first casualty of the 300s budget, and a run that times
+  // out inside them would otherwise print no summary at all. No count here: this
+  // sentence has carried a stale one every time a sweep was added.
   io.log.info('retentionCleanup: scheduled sweeps done', {
     expiredSessions: expiredSessions.length,
     deletedSessions,
@@ -585,6 +723,60 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
   }
   const deletedOrphanUsernames = await deleteInBatches(io, releasableUsernames);
 
+  // BIN-1023 — LAST, and after the auth sweep on purpose. Deletion still waits
+  // for the observation floor, so nothing is erased on the strength of one
+  // reading.
+  const orphanData = await collectOrphanedUserData(io, nowMs).catch((err) => {
+    io.log.error('retentionCleanup: orphaned user-data scan failed', err);
+    // -1 for both, like every sibling: the scan died, so nothing was checked and
+    // the zeros below must not read as "everyone has an account".
+    return {
+      erase: [] as string[],
+      stamp: [] as string[],
+      clearWatch: [] as string[],
+      checkedUserRoots: -1,
+      skippedAuthBatches: -1,
+    };
+  });
+  // The same ceiling, for the sharpest version of the same reason: this sweep
+  // recursively deletes a person's entire library. A successful-but-wrong read —
+  // a wrong project id, an Auth outage answering `notFound` for everyone — looks
+  // exactly like a busy day, and the run is unrecoverable.
+  const { allowed: erasableUids, refused: orphanDataRefused } =
+    withinOrphanCeiling(orphanData.erase, orphanData.checkedUserRoots);
+  if (orphanDataRefused) {
+    io.log.error('retentionCleanup: orphan data sweep exceeded its ceiling — erasing NOTHING', {
+      candidates: orphanData.erase.length,
+      checkedUserRoots: orphanData.checkedUserRoots,
+      hint: 'verify the getUsers lookup before raising this — the ceiling is the only backstop left, rules do not apply to the Admin SDK',
+    });
+  }
+  let erasedOrphanDataUids = 0;
+  for (const uid of erasableUids) {
+    if (await eraseOrphanedUserData(io, uid)) erasedOrphanDataUids += 1;
+  }
+  // Stamping and clearing run whether or not the ceiling refused: both are
+  // non-destructive bookkeeping, and a refused run that also skipped them would
+  // never build the observation history a later run needs.
+  let stampedOrphanDataUids = 0;
+  for (const batch of chunkUids(orphanData.stamp, io.deleteBatchSize)) {
+    try {
+      await io.stampOrphanWatch(batch, nowMs);
+      // Counted AFTER the commit, like every sibling counter here. Counting the
+      // intent instead would make a run whose stamps never commit — a denied
+      // write, a quota — look identical to the healthy day after a Console
+      // deletion, and that run re-stamps forever and erases nothing. The runbook
+      // tells the operator to wait out the window on that signature.
+      stampedOrphanDataUids += batch.length;
+    } catch (err) {
+      io.log.error('retentionCleanup: orphan watch stamp failed', { size: batch.length, err });
+    }
+  }
+  const clearedOrphanDataWatches = await deleteInBatches(
+    io,
+    orphanData.clearWatch.map((uid) => `orphanWatch/${uid}`),
+  );
+
   const summary: CleanupSummary = {
     expiredSessions: expiredSessions.length,
     deletedSessions,
@@ -615,6 +807,21 @@ export async function runRetentionCleanup(io: CleanupIo): Promise<CleanupSummary
     checkedReservations: orphanUsernames.checkedReservations,
     orphanUsernameSkippedProfileBatches: orphanUsernames.skippedProfileBatches,
     orphanUsernameSkippedAuthBatches: orphanUsernames.skippedAuthBatches,
+    // BIN-1023: same reading rule again, and here it matters most — this is the
+    // one sweep that recursively deletes a library. `orphanDataUids: 0` means
+    // "nobody's account is missing" only when checkedUserRoots > 0 AND
+    // orphanDataSkippedAuthBatches is 0; otherwise it means "we do not know".
+    orphanDataUids: orphanData.erase.length,
+    erasedOrphanDataUids,
+    checkedUserRoots: orphanData.checkedUserRoots,
+    // Absent uids seen for the FIRST time this run: recorded, deliberately not
+    // erased. A non-zero here with a zero above is the healthy steady state on
+    // the day after a Console deletion, not a stalled sweep.
+    watchedOrphanDataUids: stampedOrphanDataUids,
+    // Watch records dropped because the uid read PRESENT again — a returning
+    // account, or an earlier lookup that was simply wrong.
+    clearedOrphanDataWatches,
+    orphanDataSkippedAuthBatches: orphanData.skippedAuthBatches,
   };
   io.log.info('retentionCleanup done', summary);
   return summary;

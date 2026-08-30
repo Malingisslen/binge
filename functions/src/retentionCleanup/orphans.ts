@@ -109,9 +109,10 @@ export const ORPHAN_AUTH_MAX_FRACTION = 0.25;
  * against the public web key). That residual is loud — one `logger.error` per
  * run — and clearable by hand; `docs/RUNBOOK.md` §5d names it.
  *
- * Note the two call sites count DIFFERENT populations: the auth sweep divides by
- * accounts checked, the username sweep by reservations checked. Neither number
- * governs both, and reservations are always the smaller set.
+ * Note the call sites count DIFFERENT populations — accounts checked, reservations
+ * checked, user roots checked. Neither number governs another. Derive the roster
+ * rather than trusting a number here:
+ * `grep -n "withinOrphanCeiling(" runCleanup.ts`.
  */
 export const ORPHAN_AUTH_MIN_CEILING = 5;
 
@@ -243,4 +244,100 @@ export function withinOrphanCeiling<T>(
 ): { allowed: T[]; refused: boolean } {
   const refused = exceedsOrphanAuthCeiling(items.length, checked);
   return { allowed: refused ? [] : [...items], refused };
+}
+
+/**
+ * BIN-1023 — how long a uid must have been OBSERVED as absent from Firebase
+ * Auth before its Firestore data is erased.
+ *
+ * NAME THE CLOCK. `ORPHAN_AUTH_MIN_AGE_MS` above measures the auth account's own
+ * creation time, and that quantity does not exist here: the account is gone, so
+ * there is no age left to read. Reusing the constant would be measuring a
+ * different thing with the same number. This one measures OUR OWN observation —
+ * how long ago the first run recorded this uid as confirmed-absent, stored in
+ * `orphanWatch/{uid}`.
+ *
+ * The seven days above buy something specific: a live person whose profile write
+ * merely failed keeps their account. That person cannot exist here — Auth's own
+ * `notFound` list says the uid does not exist, so there is nobody left to
+ * protect from a false positive of THAT shape. What this floor buys instead is a
+ * second, independent observation on a later run: a lookup that was wrong once
+ * (a bad batch, a wrong project id) does not survive being asked again a day
+ * later, and the watch record is cleared the moment the uid reads present.
+ *
+ * Three days, not seven, and the difference is deliberate. It guarantees at
+ * least two daily runs even if one run fails entirely and the next falls on a
+ * weekend, while leaving four weeks inside the one month Art. 12(3) allows.
+ * Longer would delay an erasure that, unlike the sibling sweep's, is already
+ * overdue the moment it is detectable: a uid with no auth account is a person
+ * whose account is already gone.
+ */
+export const ORPHAN_DATA_MIN_OBSERVED_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Has this uid been confirmed absent from Auth for long enough to erase?
+ *
+ * Negated comparison rather than `>=`, matching `isReapableOrphanAge`: a missing
+ * or unparseable `firstSeenAt` yields null/NaN, and that must mean "leave it
+ * alone and stamp it again" rather than riding a silent false through to a
+ * recursive delete of someone's whole account tree.
+ *
+ * `null` is the FIRST observation — this run records it and deletes nothing.
+ */
+export function isObservedLongEnough(firstSeenAtMs: number | null, nowMs: number): boolean {
+  if (firstSeenAtMs === null || Number.isNaN(firstSeenAtMs)) return false;
+  return nowMs - firstSeenAtMs > ORPHAN_DATA_MIN_OBSERVED_MS;
+}
+
+/**
+ * Split every uid that owns Firestore data into the three things a run does with
+ * it, given which uids Auth CONFIRMED absent and what the watch collection
+ * already remembers.
+ *
+ * One function rather than three loops in the handler for the reason
+ * `withinOrphanCeiling` exists: the wiring is where a guard gets dropped without
+ * failing a test. Production acts on exactly these three lists, so a bypass has
+ * to change what it returns rather than delete an `if`.
+ *
+ * - `erase`      — confirmed absent AND first observed before the floor.
+ * - `stamp`      — confirmed absent with NO readable observation yet. Recorded,
+ *                  not deleted.
+ * - `clearWatch` — has a watch record but reads PRESENT now. The account came
+ *                  back, or the earlier lookup was wrong; either way the record
+ *                  is dropped rather than left to age into a deletion. This is
+ *                  also what stops the watch collection growing forever.
+ *
+ * A uid absent with a record that is merely TOO YOUNG appears in NO list — it is
+ * neither erased nor re-stamped. Re-stamping it would be the latch this whole
+ * mechanism is meant to avoid: writing `firstSeenAt = now` on every run moves
+ * the deadline forward exactly as fast as the clock, so the floor could never
+ * elapse and nothing would ever be erased. The record written on the first
+ * observation is the one that must survive untouched until it is old enough.
+ *
+ * A uid that is neither absent nor watched appears in no list at all — the
+ * overwhelming majority, and the run must not touch them.
+ */
+export function partitionOrphanData(
+  uids: readonly string[],
+  authAbsent: ReadonlySet<string>,
+  firstSeenAt: ReadonlyMap<string, number | null>,
+  nowMs: number,
+): { erase: string[]; stamp: string[]; clearWatch: string[] } {
+  const erase: string[] = [];
+  const stamp: string[] = [];
+  const clearWatch: string[] = [];
+  for (const uid of uids) {
+    if (!authAbsent.has(uid)) {
+      if (firstSeenAt.has(uid)) clearWatch.push(uid);
+      continue;
+    }
+    const seen = firstSeenAt.get(uid) ?? null;
+    if (isObservedLongEnough(seen, nowMs)) erase.push(uid);
+    // Only a uid with NOTHING readable on record is stamped. `seen === null`
+    // covers both "no record" and "a record whose firstSeenAt is unusable" —
+    // the latter is re-stamped because an unreadable clock must restart, not
+    // count as elapsed.
+    else if (seen === null) stamp.push(uid);
+  }
+  return { erase, stamp, clearWatch };
 }

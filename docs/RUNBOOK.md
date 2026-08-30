@@ -251,10 +251,37 @@ Console, i den här ordningen:
   en enda registrering mot den publika webbnyckeln. Radera dem för hand i
   Console, så går nästa körning igenom. Samma rad finns för användarnamnen
   (`orphan username sweep exceeded its ceiling`).
+- **Data vars Auth-konto är HELT borta** (BIN-1023, spegelbilden av raden ovan —
+  vanligast efter en radering av kontot direkt i Console, som inte kör någon
+  klientkaskad). Loggraden: `retentionCleanup done` → `orphanDataUids` /
+  `erasedOrphanDataUids`. **Läs dem mot `checkedUserRoots` och
+  `orphanDataSkippedAuthBatches`** — `orphanDataUids: 0` betyder "ingen saknar
+  konto" bara när `checkedUserRoots` är **>0** och `orphanDataSkippedAuthBatches`
+  är **0**. `-1` i någondera betyder att sopningen aldrig kördes.
+- **`watchedOrphanDataUids` >0 med `erasedOrphanDataUids: 0` är det FRISKA läget
+  dagen efter en konsolradering**, inte en stannad sopning. Svepet raderar aldrig
+  på en enda observation: första körningen som ser uid:t frånvarande skriver
+  `orphanWatch/{uid}`, och raderingen sker först när den stämpeln är äldre än
+  `ORPHAN_DATA_MIN_OBSERVED_MS`. Klockan mäter hur länge VI har observerat
+  frånvaron — inte kontots ålder, som inte finns kvar att läsa. Vänta ut fönstret
+  innan du felsöker. Talet räknar stämplar som FAKTISKT skrevs; misslyckas en
+  skrivning loggas `orphan watch stamp failed` och de uid:na räknas inte in.
+- `clearedOrphanDataWatches` >0 betyder att ett uid läste närvarande igen och att
+  klockan nollställdes. Ett konto som kom tillbaka, eller ett uppslag som var fel.
+  Återkommande utan att någon återskapat ett konto är värt att titta på.
+- Står `erasedOrphanDataUids: 0` medan `orphanDataUids` är >0 efter att fönstret
+  passerat: låt LOGGRADEN avgöra vilket av två lägen det är, gissa inte.
+  `orphan data sweep exceeded its ceiling` betyder att taket vägrade och att
+  INGENTING raderades — höj det inte, reglerna gäller inte för Admin-SDK:n, så
+  taket är sista spärren mot ett uppslag som lyckades och hade fel.
+  `orphan data erase failed, watch record kept for retry` betyder i stället att
+  själva raderingen föll för ett enskilt uid; stämpeln är kvar med sin
+  ursprungliga tid, så nästa körning försöker igen direkt.
 - **Saknas raden `retentionCleanup done` helt** men `retentionCleanup: scheduled
-  sweeps done` finns: körningen dog i de två sista sopningarna (de kör sist inom
-  300 s-budgeten). De fem första gick igenom — det är just därför den raden
-  skrivs separat. Ingen larmar på detta idag (BIN-468 är öppen).
+  sweeps done` finns: körningen dog i en av de sopningar som kör EFTER den
+  raden, inom 300 s-budgeten. De som kör före gick igenom — det är just därför
+  raden skrivs separat. Vilka som ligger på vilken sida framgår av
+  `runRetentionCleanup` i `functions/src/retentionCleanup/runCleanup.ts`. Ingen larmar på detta idag (BIN-468 är öppen).
 
 ### 5e. "Mitt gamla användarnamn är upptaget av ingen"
 
@@ -325,8 +352,10 @@ permanent, eftersom den letar efter Auth-konton som saknar profil.
    var återskapad kan underkollektioner ha hunnit skapas igen (watchlist-poster
    om hen använde appen, en ny `fcmTokens`-post om hen slog på push).
 
-   Utan den bockade rutan blir watchlist-poster och övriga underkollektioner
-   kvar för alltid utan förälder. **`fcmTokens` är undantaget** — BIN-848:s svep
+   Bocka rutan ändå: det är den omedelbara vägen, och den enda som är klar
+   samma dag. Två svep når resten i efterhand om du missar den — BIN-1023:s
+   når hela `users/{uid}`-trädet när Auth-kontot är borta, först efter sitt
+   observationsfönster (§5d), och BIN-848:s svep
    hittar dem via collection-group på sökvägen, inte via föräldradokumentet, och
    raderar dem inom ett dygn när Auth-kontot är borta (se
    `docs/data-retention-policy.md`, §"Push-tokens för konton Auth inte längre
@@ -336,11 +365,10 @@ permanent, eftersom den letar efter Auth-konton som saknar profil.
    Alla tre behövs, av två olika skäl. Sopningen som frigör användarnamnet kräver
    att BÅDE profilen och Auth-kontot saknas (`orphanedReservations`:
    `profileMissing && authMissing`), och i det här läget finns den tunna profilen
-   kvar — se igenkänningssteg 3 ovan. Och `publicProfiles` städas av ingenting
-   alls: molnfunktionerna nämner den inte på ett enda ställe, det finns ingen
-   Auth-`onDelete`-trigger, och ingen sopning rör en profil vars konto är borta.
-   Missar du något av de tre blir det kvar för alltid. Med alla tre borta släpper
-   sopningen handtaget inom ett dygn (§5e).
+   kvar — se igenkänningssteg 3 ovan. Och `publicProfiles` når BIN-1023:s sopning
+   bara när uid:t fortfarande syns under `users/*`; är hela trädet redan borta
+   finns ingenting kvar att hitta den med. Med alla tre borta släpper sopningen
+   handtaget inom ett dygn (§5e).
 4. **Logga fallet.** Enmånadsfönstret i Art. 12(3) räknas från den FÖRSTA
    begäran, inte från supportärendet, så det är sannolikt redan passerat när
    detta syns.

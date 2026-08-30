@@ -562,3 +562,47 @@ TZ=UTC git log --no-merges --date=iso-strict-local --format='%cd|%an|%s' |
 
 **RE-OPEN WHEN:** en kodändrande commit som ligger PÅ eller EFTER epoken saknar både ett
 biljett-id och robotundantaget. Det är regeln som fyrar, inte den här posten.
+
+---
+
+## BIN-1023: orphan-datasvepet täcker det UID-NYCKLADE, inte det fältägda — 2026-08-30
+
+Ett omfångsbeslut, inte en öppen brist. Fila inte "svepet missar reviews/lists/
+sessions/groups" eller "kaskaden och svepet täcker olika mycket".
+
+`retentionCleanup`s BIN-1023-svep raderar data vars ägar-uid är bekräftat borta ur
+Firebase Auth. Det tar **hela `users/{uid}`-trädet** (`recursiveDelete`) plus
+**`publicProfiles/{uid}`** — allt som är adresserbart direkt ur uid:t.
+
+**Utanför svepet, med flit:** innehåll som ägs via ett FÄLT och kräver en fråga per
+samling — `reviews` (och deras `likes`/`comments`), `lists`, hostade `sessions`,
+ägda `groups`, avsnittsreaktionerna i `episodeReactions/*/reactions/*`, samt
+speglingarna på ANDRA användares dokument (`followers`, `friends`,
+`friendRequests*`). Klientkaskaden i `collectDeletionRefs` täcker dem; svepet gör
+det inte. Lita inte på uppräkningen — härled mängden ur `collectUserDataSnapshots`
+i `src/lib/firebase/userData.ts`, som är den enda plats som måste vara komplett.
+
+**Why:** Malins omfångsbeslut 2026-08-30, efter #27 DBA:s villkor 3, som uttryckligen
+tillåter uppdelningen förutsatt att luckan filas OCH bokförs här. Den fältägda halvan
+bär ett produktval som inte får avgöras inuti ett svep: en ägd grupp med kvarvarande
+medlemmar ska antingen raderas eller lämnas över, och policydokumentet självt har
+den överlämningen som en öppen TODO sedan tidigare. Att bygga halvan blint hade
+avgjort den frågan i förbigående.
+
+**Varför posten behövs:** utan den läser nästa granskare skillnaden mellan kaskadens
+räckvidd och svepets som en ofullständig implementation. Den är avsedd, och den andra
+halvan har en egen biljett.
+
+**Vad som INTE är accepterat:**
+1. Att svepet skulle täcka MINDRE än `users/{uid}`-trädet + `publicProfiles/{uid}`.
+   Biljetten var skriven om `watchlist` ensam; att bara städa den lämnar ett
+   sämre läge än i dag — allt föräldralöst UTOM den enda samling svepet rörde.
+2. Att `publicProfiles/{uid}` skulle raderas EFTER trädet. Den ligger utanför trädet,
+   så när trädet är borta slutar uid:t dyka upp i genomsökningen och projektionen
+   blir onåbar — världsläsbar, permanent.
+3. Att observationsgolvet skulle harmoniseras med systersvepets sju dygn. De mäter
+   olika storheter; se `ORPHAN_DATA_MIN_OBSERVED_MS`ʼ egen kommentar.
+
+**Re-open when:** den fältägda halvan byggs, eller en rapport visar publikt innehåll
+som står kvar attribuerat till ett konto som raderats i konsolen. Det senare är
+utfallet den här uppdelningen medvetet lämnar öppet.

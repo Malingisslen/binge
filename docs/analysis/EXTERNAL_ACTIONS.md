@@ -49,6 +49,7 @@ permissions below on the runtime service account, the calls throw, nothing is de
 |---|---|---|---|
 | Revoked push tokens (BIN-848) | `getUsers()` | `firebaseauth.users.get` | 2026-08-10, present via `roles/editor` |
 | Orphaned auth accounts (BIN-816) | `listUsers()`, `deleteUsers()` | `firebaseauth.users.get` + `firebaseauth.users.delete` | 2026-08-13, present via `roles/editor` |
+| Orphaned user DATA (BIN-1023) | `getUsers()` | `firebaseauth.users.get` — already held, no new scope | 2026-08-30, same permission as the row above it |
 
 **Check the permission, not the outcome.** The first version of this said "check the first
 run's log line: `orphanAuthAccounts > 0` must be matched by `deletedOrphanAuthAccounts > 0`".

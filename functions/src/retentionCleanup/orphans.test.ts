@@ -11,6 +11,9 @@ import {
   creationTimeToMillis,
   absentUidsFromLookup,
   orphanedReservations,
+  ORPHAN_DATA_MIN_OBSERVED_MS,
+  isObservedLongEnough,
+  partitionOrphanData,
 } from './orphans';
 
 // BIN-816 (ADR 0019 c5b) + BIN-875 (ADR 0020) — the predicates that decide what
@@ -248,5 +251,99 @@ describe('withinOrphanCeiling', () => {
     const { allowed } = withinOrphanCeiling(input, 100);
     allowed.push('b');
     expect(input).toEqual(['a']);
+  });
+});
+
+
+// BIN-1023 — predikaten som avgör när en användares HELA data raderas för att
+// Auth-kontot inte längre finns. Den mest destruktiva sopningen i kodbasen, så
+// det som pinnas här är inte lyckofallet utan varje sätt att svara "jag vet inte"
+// och den spärrhake som får golvet att faktiskt löpa ut.
+
+describe('isObservedLongEnough', () => {
+  it('raderar när den första observationen är äldre än golvet', () => {
+    expect(isObservedLongEnough(NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1, NOW)).toBe(true);
+  });
+
+  it('avstår PÅ golvet — jämförelsen är strikt', () => {
+    expect(isObservedLongEnough(NOW - ORPHAN_DATA_MIN_OBSERVED_MS, NOW)).toBe(false);
+  });
+
+  it('avstår när ingenting observerats än', () => {
+    expect(isObservedLongEnough(null, NOW)).toBe(false);
+  });
+
+  it('avstår på en oläsbar stämpel i stället för att rida ett tyst falskt vidare', () => {
+    expect(isObservedLongEnough(Number.NaN, NOW)).toBe(false);
+  });
+
+  it('mäter en ANNAN storhet än systersopningens kontoålder', () => {
+    // Talen får glida isär med flit; det som inte får hända är att någon
+    // "städar" ihop dem, för klockorna mäter olika saker. En observation som är
+    // äldre än detta golv men yngre än kontoåldersgolvet ska räcka här.
+    expect(ORPHAN_DATA_MIN_OBSERVED_MS).toBeLessThan(ORPHAN_AUTH_MIN_AGE_MS);
+    const between = NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1;
+    expect(isObservedLongEnough(between, NOW)).toBe(true);
+    expect(isReapableOrphanAge(between, NOW)).toBe(false);
+  });
+});
+
+describe('partitionOrphanData', () => {
+  const old = NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1;
+  const young = NOW - 1000;
+
+  it('raderar bara ett uid som är bekräftat borta OCH observerat före golvet', () => {
+    const parts = partitionOrphanData(['a'], new Set(['a']), new Map([['a', old]]), NOW);
+    expect(parts).toEqual({ erase: ['a'], stamp: [], clearWatch: [] });
+  });
+
+  it('stämplar en första observation i stället för att radera på den', () => {
+    const parts = partitionOrphanData(['a'], new Set(['a']), new Map(), NOW);
+    expect(parts).toEqual({ erase: [], stamp: ['a'], clearWatch: [] });
+  });
+
+  it('RÖR INTE ett uid vars stämpel bara är för ung — annars nollställs klockan varje körning', () => {
+    // Spärrhaken. Att lägga det här uid:t i `stamp` skriver om firstSeenAt till
+    // nu vid varje daglig körning, så deadlinen flyttas fram precis lika fort
+    // som klockan går och golvet kan aldrig löpa ut. Sopningen skulle se
+    // fullständigt frisk ut och radera ingenting, för alltid.
+    const parts = partitionOrphanData(['a'], new Set(['a']), new Map([['a', young]]), NOW);
+    expect(parts).toEqual({ erase: [], stamp: [], clearWatch: [] });
+  });
+
+  it('stämplar om ett uid vars stämpel är OLÄSBAR — en trasig klocka startar om', () => {
+    const parts = partitionOrphanData(['a'], new Set(['a']), new Map([['a', null]]), NOW);
+    expect(parts).toEqual({ erase: [], stamp: ['a'], clearWatch: [] });
+  });
+
+  it('rör inte alls ett uid vars konto finns kvar', () => {
+    const parts = partitionOrphanData(['a'], new Set(), new Map(), NOW);
+    expect(parts).toEqual({ erase: [], stamp: [], clearWatch: [] });
+  });
+
+  it('städar bort bevakningen när uid:t läser NÄRVARANDE igen', () => {
+    // Kontot kom tillbaka, eller det tidigare uppslaget var fel. Utan det här
+    // åldras posten vidare mot en radering av ett konto som finns.
+    const parts = partitionOrphanData(['a'], new Set(), new Map([['a', old]]), NOW);
+    expect(parts).toEqual({ erase: [], stamp: [], clearWatch: ['a'] });
+  });
+
+  it('ett uid som saknas ur frånvarolistan för att batchen FALLERADE raderas inte', () => {
+    // `absentUidsFromLookup` bidrar med noll uid från en trasig batch, så ett
+    // verkligt föräldralöst uid hamnar utanför mängden. Det ska ge exakt samma
+    // utfall som ett levande konto: ingenting alls.
+    const parts = partitionOrphanData(['a'], new Set(), new Map([['a', old]]), NOW);
+    expect(parts.erase).toEqual([]);
+  });
+
+  it('delar en blandad mängd utan att tappa någon', () => {
+    const uids = ['gammal', 'ny', 'ostämplad', 'levande', 'återvänd'];
+    const parts = partitionOrphanData(
+      uids,
+      new Set(['gammal', 'ny', 'ostämplad']),
+      new Map([['gammal', old], ['ny', young], ['återvänd', old]]),
+      NOW,
+    );
+    expect(parts).toEqual({ erase: ['gammal'], stamp: ['ostämplad'], clearWatch: ['återvänd'] });
   });
 });

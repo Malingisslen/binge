@@ -22,6 +22,7 @@ import {
 } from '../../../functions/src/retentionCleanup/logic';
 import {
   ORPHAN_AUTH_MIN_AGE_MS,
+  ORPHAN_DATA_MIN_OBSERVED_MS,
   ORPHAN_AUTH_MIN_CEILING,
   ORPHAN_AUTH_MAX_FRACTION,
 } from '../../../functions/src/retentionCleanup/orphans';
@@ -170,6 +171,7 @@ const SCAN_SOURCE: Record<ScanKind, { group: boolean; id: string }> = {
   releaseMarkers: { group: true, id: 'notified' },
   fcmTokens: { group: true, id: 'fcmTokens' },
   usernames: { group: false, id: 'usernames' },
+  orphanWatch: { group: false, id: 'orphanWatch' },
 };
 
 /**
@@ -235,6 +237,36 @@ function makeIo(db: Firestore, auth: FakeAuth, overrides: Partial<CleanupIo> = {
     listAuthAccounts: (pageToken) => auth.listAuthAccounts(pageToken),
     deleteAuthUsers: (uids) => auth.deleteAuthUsers(uids),
 
+    // BIN-1023. The Admin port uses listDocuments(), which also returns a uid
+    // whose users/{uid} DOC is gone but whose subcollections survive. The client
+    // SDK cannot do that, so this harness sees only uids with a real document —
+    // a strict SUBSET of production's view. The ghost case is therefore driven
+    // by overriding this method in the ghost test below, never assumed.
+    //
+    // Unpaged, matching the port's own contract: listDocuments() has no cursor,
+    // so there is no pagination here for the harness to diverge from.
+    listUserUids: async () => {
+      const snap = await getDocs(query(collection(db, 'users'), orderBy(documentId())));
+      return snap.docs.map((d) => d.id);
+    },
+
+    // No recursiveDelete on the client SDK either; reap the subcollections these
+    // fixtures actually use, then the document, exactly as the Admin call does.
+    deleteUserTree: async (uid) => {
+      for (const sub of ['watchlist', 'episodeProgress', 'notifications', 'fcmTokens']) {
+        const kids = await getDocs(collection(db, `users/${uid}/${sub}`));
+        for (const k of kids.docs) await deleteDoc(k.ref);
+      }
+      await deleteDoc(doc(db, 'users', uid));
+    },
+
+    stampOrphanWatch: async (uids, nowMs) => {
+      if (uids.length > TEST_DELETE_BATCH) throw new Error(`stamp chunk too large: ${uids.length}`);
+      const batch = writeBatch(db);
+      for (const uid of uids) batch.set(doc(db, 'orphanWatch', uid), { firstSeenAt: nowMs });
+      await batch.commit();
+    },
+
     ...overrides,
   };
 }
@@ -244,12 +276,15 @@ async function exists(db: Firestore, path: string): Promise<boolean> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The full seven-sweep fixture
+// The full fixture for the sweeps this describe block drives
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * One database containing, for every sweep, something it MUST reap and something
- * it MUST leave alone. #27's condition 1: a test that drives only the four
+ * One database containing, for the sweeps this fixture drives, something each
+ * MUST reap and something each MUST leave alone. The BIN-1023 orphan-data sweep
+ * is NOT among them — it has its own describe block with its own fixture.
+ * #27's condition 1: a test that
+ * drives only the four
  * harmless Firestore sweeps waves through exactly the code this ticket exists to
  * protect.
  */
@@ -311,7 +346,7 @@ const FULL_ACCOUNTS: FakeAccount[] = [
   { uid: 'suspended', ageMs: 30 * 24 * 60 * 60 * 1000, disabled: true },
 ];
 
-describe('retentionCleanup orchestrator — all seven sweeps in one run (BIN-727 #27 condition 1)', () => {
+describe('retentionCleanup orchestrator — the sweeps this fixture seeds, in one run (BIN-727 #27 condition 1)', () => {
   it('reaps exactly what is past its threshold and leaves every live neighbour alone', async () => {
     const db = adminLikeDb();
     const auth = makeAuth(FULL_ACCOUNTS);
@@ -509,7 +544,7 @@ describe('retentionCleanup orchestrator — the orphan ceiling at its decisive e
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('retentionCleanup orchestrator — one broken category never takes the others down', () => {
-  it('a thrown notifications scan leaves the other six sweeps completed', async () => {
+  it('a thrown notifications scan leaves every other sweep in this fixture completed', async () => {
     const db = adminLikeDb();
     const auth = makeAuth(FULL_ACCOUNTS);
     await seedEverything(db);
@@ -526,7 +561,7 @@ describe('retentionCleanup orchestrator — one broken category never takes the 
     expect(summary.staleNotifications).toBe(0);
     expect(summary.deletedNotifications).toBe(0);
     expect(await exists(db, 'users/alive/notifications/old')).toBe(true);
-    // …while all six others finished their work.
+    // …while the others this fixture seeds finished their work.
     expect(summary.deletedSessions).toBe(2);
     expect(summary.deletedJoinAttempts).toBe(1);
     expect(summary.deletedReleaseMarkers).toBe(1);
@@ -648,5 +683,318 @@ describe('retentionCleanup orchestrator — one broken category never takes the 
     expect(summary.deletedNotifications).toBe(1);
     const left = await getDocs(collectionGroup(db, 'notifications'));
     expect(left.size).toBe(2);
+  });
+});
+
+/**
+ * BIN-1023 — the inverse orphan: Firestore data whose owner has no Auth account.
+ *
+ * Driven as a CONSOLE deletion, which is the shape that actually produces this
+ * state. The ticket blamed an interrupted client cascade; `collectDeletionRefs`
+ * queues the watchlist in section 1 and `users/{uid}` in section 9 and commits
+ * the chunks in order, so a confirmed-missing profile almost always means the
+ * library went with it. Deleting the Auth user from the Console runs no cascade
+ * at all, and leaves every document in place.
+ */
+const ORPHAN_DATA_ACCOUNTS: FakeAccount[] = [
+  { uid: 'keeper', ageMs: 30 * 24 * 60 * 60 * 1000 },
+  { uid: 'banned', ageMs: 30 * 24 * 60 * 60 * 1000, disabled: true },
+];
+
+/** Every uid has an Auth account — used to drive the watch-record reset. */
+const ALL_PRESENT_ACCOUNTS: FakeAccount[] = [
+  ...ORPHAN_DATA_ACCOUNTS,
+  { uid: 'consoled', ageMs: 30 * 24 * 60 * 60 * 1000 },
+];
+
+/** `consoled` owns data but no Auth account; `keeper` and `banned` do have one. */
+async function seedOrphanData(db: Firestore): Promise<void> {
+  for (const uid of ['consoled', 'keeper', 'banned']) {
+    await setDoc(doc(db, 'users', uid), { username: uid + 'handle' });
+    await setDoc(doc(db, 'users', uid, 'watchlist', 'movie_42'), { tmdbId: 42 });
+    // A SIBLING subcollection: the ticket asked only for watchlist, and the
+    // panel's whole objection was that erasing that alone leaves the rest
+    // orphaned under the same dead uid. This doc is what pins the wider scope.
+    await setDoc(doc(db, 'users', uid, 'episodeProgress', 'tv_1399'), { season: 1 });
+    await setDoc(doc(db, 'publicProfiles', uid), { displayName: uid });
+  }
+}
+
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
+describe('retentionCleanup orchestrator — data whose owner is gone from Auth (BIN-1023)', () => {
+  it('records a first observation and erases NOTHING on that run', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.watchedOrphanDataUids).toBe(1);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+    // The record the second run reads. Its value is what makes the floor a real
+    // window rather than a number nobody measures against.
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+it('does not count a stamp that never committed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+
+    // The counter must report what was WRITTEN, not what was attempted. A run
+    // whose stamps all fail — a denied write, a quota — would otherwise be
+    // byte-identical in the summary to the healthy day after a Console
+    // deletion, and §5d of the runbook tells the operator to wait out the
+    // window on exactly that signature. That run never erases anything and
+    // re-stamps forever, so the wait would never end.
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        stampOrphanWatch: async () => { throw new Error('stamp commit failed'); },
+      }),
+    );
+
+    expect(summary.watchedOrphanDataUids).toBe(0);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(false);
+    // The uid is still a candidate; nothing was erased on the strength of an
+    // observation that was never recorded.
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+  });
+
+  it('erases the WHOLE user tree and the public projection once the floor has elapsed', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+    const summary = await runRetentionCleanup(makeIo(db, auth, { now: () => later }));
+
+    expect(summary.erasedOrphanDataUids).toBe(1);
+    expect(await exists(db, 'users/consoled')).toBe(false);
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(false);
+    // #27's condition 2, the reason the scope was widened past the ticket: a
+    // sibling subcollection must go too, or the sweep leaves a worse state than
+    // it found — everything orphaned EXCEPT the one collection it cleaned.
+    expect(await exists(db, 'users/consoled/episodeProgress/tv_1399')).toBe(false);
+    // #6 DPO's condition: publicProfiles is world-readable and lives outside the
+    // users/{uid} tree, so it must be erased in the same pass or it is
+    // unreachable by any later run.
+    expect(await exists(db, 'publicProfiles/consoled')).toBe(false);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(false);
+  });
+
+  it('never touches a live account or a DISABLED one, however long it waits', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+
+    await runRetentionCleanup(makeIo(db, auth));
+    const later = NOW + ORPHAN_DATA_MIN_OBSERVED_MS + ONE_DAY;
+    await runRetentionCleanup(makeIo(db, auth, { now: () => later }));
+
+    expect(await exists(db, 'users/keeper/watchlist/movie_42')).toBe(true);
+    // Moderation suspends by disabling the Auth user and leaving Firestore
+    // alone. A disabled account EXISTS, so it is never absent — erasing its
+    // library would quietly turn a suspension into a deletion.
+    expect(await exists(db, 'users/banned/watchlist/movie_42')).toBe(true);
+    expect(await exists(db, 'publicProfiles/banned')).toBe(true);
+  });
+
+  it('erases nothing when the Auth lookup FAILS — a dead check is not a licence', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    // Give it a record old enough that only the lookup stands between the data
+    // and deletion; otherwise this test would pass for the wrong reason.
+    await setDoc(doc(db, 'orphanWatch', 'consoled'), {
+      firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+    });
+
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        lookupUsers: async () => { throw new Error('auth outage'); },
+      }),
+    );
+
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    expect(summary.orphanDataSkippedAuthBatches).toBeGreaterThan(0);
+    expect(await exists(db, 'users/consoled')).toBe(true);
+  });
+
+  it('drops the watch record when the uid reads PRESENT again', async () => {
+    const db = adminLikeDb();
+    await seedOrphanData(db);
+    await setDoc(doc(db, 'orphanWatch', 'keeper'), {
+      firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+    });
+
+    const summary = await runRetentionCleanup(makeIo(db, makeAuth(ALL_PRESENT_ACCOUNTS)));
+
+    // An account that came back, or a lookup that was simply wrong once. Either
+    // way the clock resets instead of ageing on toward deleting a live library.
+    expect(summary.clearedOrphanDataWatches).toBe(1);
+    expect(await exists(db, 'orphanWatch/keeper')).toBe(false);
+    expect(await exists(db, 'users/keeper/watchlist/movie_42')).toBe(true);
+  });
+
+  it('refuses the whole run rather than erase an implausible share of the base', async () => {
+    const db = adminLikeDb();
+    // Nobody has an Auth account: the shape a wrong project id, or an Auth
+    // outage answering notFound for everyone, produces. Every uid reads
+    // orphaned, every record is old enough, and the ceiling is the only thing
+    // left — the Admin SDK does not consult firestore.rules.
+    //
+    // EIGHT uids, not three, and the number is doing work. The shared ceiling
+    // refuses at `candidates > max(ORPHAN_AUTH_MIN_CEILING, checked * FRACTION)`
+    // — 8 > max(5, 2). Three of three would NOT refuse, because the absolute
+    // floor of 5 deliberately lets a small project reap a realistic day's worth
+    // (see the constant's own comment). That is the documented residual, not a
+    // bug, and the sibling test below pins it so nobody "fixes" it into a latch.
+    const auth = makeAuth([]);
+    const uids = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8'];
+    for (const uid of uids) {
+      await setDoc(doc(db, 'users', uid), { username: uid + 'handle' });
+      await setDoc(doc(db, 'users', uid, 'watchlist', 'movie_42'), { tmdbId: 42 });
+      await setDoc(doc(db, 'orphanWatch', uid), {
+        firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+      });
+    }
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.orphanDataUids).toBe(8);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // Not the pruned set — a half-run looks like a successful one.
+    for (const uid of uids) {
+      expect(await exists(db, 'users/' + uid + '/watchlist/movie_42')).toBe(true);
+    }
+  });
+
+  it('still erases a SMALL candidate set — the floor under the ceiling is deliberate', async () => {
+    const db = adminLikeDb();
+    // The other side of the constant above. Without the absolute floor of 5 a
+    // bare fraction refuses even one orphan in a three-account project, and the
+    // sweep latches shut forever: the candidate set only grows, and the
+    // denominator only grows with new signups. Three of three must go through.
+    const auth = makeAuth([]);
+    await seedOrphanData(db);
+    for (const uid of ['consoled', 'keeper', 'banned']) {
+      await setDoc(doc(db, 'orphanWatch', uid), {
+        firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+      });
+    }
+
+    const summary = await runRetentionCleanup(makeIo(db, auth));
+
+    expect(summary.orphanDataUids).toBe(3);
+    expect(summary.erasedOrphanDataUids).toBe(3);
+  });
+
+
+  it('deletes publicProfiles BEFORE the tree — proven by failing in between', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await setDoc(doc(db, 'orphanWatch', 'consoled'), {
+      firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+    });
+
+    // The order is load-bearing, and only a failure BETWEEN the two deletes can
+    // tell the two orders apart: with the tree gone first, the uid stops
+    // appearing in `listUserUids`, so a publicProfiles doc left behind would be
+    // world-readable and unreachable by every later run. Reversing the two
+    // statements passes every other test in this file.
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        deleteUserTree: async () => { throw new Error('recursiveDelete failed'); },
+      }),
+    );
+
+    // Already gone — so it was deleted first, before the failure.
+    expect(await exists(db, 'publicProfiles/consoled')).toBe(false);
+    // The tree survives, and the run does not claim an erasure it did not make.
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(true);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    // The watch record is KEPT with its original stamp, so the next run retries
+    // at once instead of restarting the three-day clock.
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  it('leaves the tree alone when the public projection cannot be deleted', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    await setDoc(doc(db, 'orphanWatch', 'consoled'), {
+      firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+    });
+
+    // The mirror of the test above. The first delete failing must abort the
+    // whole erase rather than press on: a deleted tree with a surviving public
+    // projection is the one half-done state that cannot be recovered from.
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        deleteDocs: async (paths) => {
+          if (paths.some((p) => p.startsWith('publicProfiles/'))) {
+            throw new Error('publicProfiles delete failed');
+          }
+          return makeIo(db, auth).deleteDocs(paths);
+        },
+      }),
+    );
+
+    expect(await exists(db, 'users/consoled/watchlist/movie_42')).toBe(true);
+    expect(await exists(db, 'publicProfiles/consoled')).toBe(true);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    expect(await exists(db, 'orphanWatch/consoled')).toBe(true);
+  });
+
+  it('reaches a GHOST uid whose profile doc is gone but whose subcollections survive', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+    // The shape `index.ts` chose `listDocuments()` over a query to catch: no
+    // `users/ghost` document, but data underneath it. The client SDK cannot
+    // enumerate that, so the harness's default `listUserUids` is a strict
+    // subset of production's view — this override supplies what only the Admin
+    // SDK can see, rather than leaving the case untested.
+    await setDoc(doc(db, 'users', 'ghost', 'watchlist', 'movie_7'), { tmdbId: 7 });
+    await setDoc(doc(db, 'publicProfiles', 'ghost'), { displayName: 'ghost' });
+    await setDoc(doc(db, 'orphanWatch', 'ghost'), {
+      firstSeenAt: NOW - ORPHAN_DATA_MIN_OBSERVED_MS - 1,
+    });
+    expect(await exists(db, 'users/ghost')).toBe(false);
+
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        listUserUids: async () => {
+          const snap = await getDocs(query(collection(db, 'users'), orderBy(documentId())));
+          return [...snap.docs.map((d) => d.id), 'ghost'];
+        },
+      }),
+    );
+
+    expect(summary.erasedOrphanDataUids).toBeGreaterThanOrEqual(1);
+    expect(await exists(db, 'users/ghost/watchlist/movie_7')).toBe(false);
+    expect(await exists(db, 'publicProfiles/ghost')).toBe(false);
+  });
+
+  it('a dead scan reports -1, not a zero that reads as "everyone has an account"', async () => {
+    const db = adminLikeDb();
+    const auth = makeAuth(ORPHAN_DATA_ACCOUNTS);
+    await seedOrphanData(db);
+
+    const summary = await runRetentionCleanup(
+      makeIo(db, auth, {
+        listUserUids: async () => { throw new Error('listDocuments failed'); },
+      }),
+    );
+
+    expect(summary.checkedUserRoots).toBe(-1);
+    expect(summary.orphanDataSkippedAuthBatches).toBe(-1);
+    expect(summary.erasedOrphanDataUids).toBe(0);
+    expect(await exists(db, 'users/consoled')).toBe(true);
   });
 });
