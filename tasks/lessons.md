@@ -1056,3 +1056,43 @@ med routern före du skriver.
 
 **Och tick aldrig av ett villkor som säger "committas splittat" innan commitarna finns** —
 push-grinden fällde exakt det. Den som håller shan skriver fullbordandet, ingen annan.
+
+### [Design] En stämpel som skrivs om varje körning når aldrig sitt eget golv (2026-08-30, BIN-1023)
+
+**Trigger:** en spärr som ska mogna över tid och därför behöver ett minne mellan körningar —
+"radera först när X har varit sant i N dygn".
+
+**Rule:** låt bara den som SAKNAR minne skriva minnet. Ett objekt vars klocka går men ännu
+inte löpt ut ska hamna i INGEN hink alls: varken behandlas eller stämplas om. Skrivs stämpeln
+om vid varje kontroll flyttas deadlinen exakt lika fort som klockan går, golvet löper aldrig
+ut, och mekanismen ser fullständigt frisk ut i loggen medan den aldrig gör något.
+
+`merge: true` räddar inte: merge slår ihop FÄLT, den bevarar inte ett fält du skriver. En
+kommentar som påstår att den gör det är ett falskt påstående, inte en säkring.
+
+**Example:** BIN-1023:s orphan-datasvep stämplar `orphanWatch/{uid}` med `firstSeenAt` och
+raderar först när stämpeln är äldre än `ORPHAN_DATA_MIN_OBSERVED_MS`. Mitt första bygge lade
+varje frånvarande uid i `stamp`-hinken, även de som redan hade en för ung stämpel. Fixen:
+`else if (seen === null)`, och ett test som håller ett för ungt värde och hävdar att alla tre
+hinkarna är tomma. Muteringen `else` fäller två test.
+
+Samma tysta spärrhake som BIN-823/852/931/998 i ny förklädnad.
+
+**Två följdregler ur samma runda:**
+
+1. **Namnge vilken STORHET klockan mäter, innan du återanvänder ett tal.** Systersvepets
+   `ORPHAN_AUTH_MIN_AGE_MS` mäter Auth-kontots egen ålder. Den storheten finns inte när kontot
+   är raderat — det är hela premissen för det nya svepet. Att återanvända sjuan hade varit att
+   mäta fel sak med rätt siffra.
+2. **En räknare som rapporterar AVSIKT gör en trasig körning oskiljbar från en frisk.**
+   `watchedOrphanDataUids` räknade kandidater, inte skrivningar. En körning vars stämplar alla
+   nekades hade sett identisk ut med den friska dagen efter en konsolradering — och `RUNBOOK.md`
+   §5d säger åt operatören att vänta ut fönstret på just den signaturen. Räkna EFTER commit, som
+   syskonräknarna gör. Två mutanter (flytta ökningen före `await`; ersätt med `stamp.length`)
+   överlevde hela sviten tills testet skrevs.
+
+**Och en ordningsregel:** när två raderingar hör ihop men en av dem gör den andra oadresserbar,
+är ordningen bara bevisad av ett test som FALLERAR MELLAN dem. `publicProfiles/{uid}` ligger
+utanför `users/{uid}`-trädet, så när trädet är borta slutar uid:t synas i genomsökningen. Att
+kasta i `deleteUserTree` och hävda att projektionen redan är borta skiljer de två ordningarna;
+inget annat test i filen gjorde det (mutationen överlevde 20 av 20).
