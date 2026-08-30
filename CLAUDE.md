@@ -62,9 +62,8 @@ single-file fixes ship without ceremony.
 
 ## Commit gates (shared workflow-guards plugin; config in .claude/shared-plugin.json)
 
-Three gates block `git commit`: specialist reviews, `/code-review`, and plan evidence.
-Each one prints its own remedy — including which reviewer is missing and the exact command
-to record it — so follow the block message rather than reciting the procedure from here.
+Each gate prints its own remedy, so follow the block message rather than reciting the
+procedure from here.
 
 The gates also name `.claude/rules/accepted-deviations.md`: deliberate deviations are
 decided, and a review must not re-flag them. That file is trigger-loaded (it carries

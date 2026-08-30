@@ -19,6 +19,18 @@
   },
   "_reviewProof": "2026-08-01: proof of review moved from hand-written marker files to the RECORDED ledger. A marker is a separate act of writing performed by the party being audited â€” twelve such writes were flagged as forged in Butlery on 2026-08-01, and every stricter spelling of the assertion (name the file, pin the sha, list what you read) was still an assertion. In ledger mode a PostToolUse hook records which reviewer read which bytes and a SubagentStop hook records the verdict it ended on; nothing is hand-writable, and a later fix silently un-proves the file it touched. This repo's four agents already pinned shas honestly, so this is a hardening rather than a repair. All four carry the two rules it depends on: open files with Read, and end on REVIEW-VERDICT: pass|fail (N blocking).",
   "reviewProof": "ledger",
+  "_claimLint": "2026-08-30: turns on the claim-lint commit gate for THIS repo. Why the gate is opt-in at all is recorded where the opt-in is read, in claim-lint.mjs. Binge was the repo the rules were calibrated against; measure this repo again before changing this line, by driving hookMain with this config the way the hook does. exemptPaths is spelled out here rather than inherited: the script's DEFAULT_EXEMPT_PATHS carries docs/adr/**, and this repo's decision records live under docs/org/adr/, so inheriting the defaults would have gated them. What is exempt is the list below and nothing else; read it rather than a sentence about it. tasks/todo.md is deliberately not exempt.",
+  "claimLint": {
+    "enabled": true,
+    "exemptPaths": [
+      "**/*.knowledge.md",
+      "**/*.knowledge.archive.md",
+      "**/accepted-deviations.archive.md",
+      "tasks/lessons.md",
+      ".claude/rules/lessons-digest*.md",
+      "docs/org/adr/**"
+    ]
+  },
   "pushGate": {
     "agent": "binge-integration-reviewer"
   },
