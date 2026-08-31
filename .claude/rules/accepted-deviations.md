@@ -606,3 +606,92 @@ halvan har en egen biljett.
 **Re-open when:** den fältägda halvan byggs, eller en rapport visar publikt innehåll
 som står kvar attribuerat till ett konto som raderats i konsolen. Det senare är
 utfallet den här uppdelningen medvetet lämnar öppet.
+
+---
+
+## BIN-590: lösenordsstyrkan är klientsidig, och det är ett beslut — 2026-08-31
+
+Fila inte "lösenordskravet går att kringgå" eller "scorePassword saknar en serversidig
+motsvarighet". Malins beslut 2026-08-31, efter #19 Customer Success blinda kritik.
+
+**MEKANISM.** `scorePassword` (`src/lib/passwordStrength.ts`) kräver minst 8 tecken, avvisar
+en blocklista på kända läckta lösenord och kräver score ≥ 2. Den utvärderas på exakt ett
+ställe — registreringsgrenen i `src/app/login/page.tsx` — före
+`createUserWithEmailAndPassword`. Firebase Auth själv kräver bara 6 tecken — appen påstår det redan på två ställen
+(`minLength={mode === 'register' ? 8 : 6}` och `auth/weak-password`-grenens text i
+`src/app/login/page.tsx`); talet kommer därifrån, inte från en mätning här. En kontoskapande
+väg som inte går genom formuläret (ett direkt SDK-anrop mot den publika webbnyckeln, ett
+skript) får därför bara Firebases eget golv.
+
+Härled anropsställena, lita inte på meningen ovan:
+```
+grep -rn "scorePassword" src functions
+```
+
+**ALLVARLIGHET.** Den som utnyttjar det sätter ett svagt lösenord på **sitt eget** konto,
+och gör det medvetet — hen måste själv gå runt formuläret. Ingen annans konto blir svagare.
+Ingen användare som går genom appen påverkas, eftersom formuläret stoppar dem först.
+
+Men skadan stannar inte vid kontot om det sedan knäcks. `firestore.rules` serverar
+watchlist-poster med `effectiveVisibility == 'friends'` till den som ligger i ägarens
+`friends`-samling, så den som tar över det svaga kontot läser också det VÄNNERNA delat dit.
+De personerna har inte valt det svaga lösenordet. Det ska inte skrivas bort. Watchlist-posterna
+är inte det enda som når dit — härled vad en övertagning läser bortom kontot självt:
+
+```
+grep -n "friends/\$(request.auth.uid)" firestore.rules
+```
+
+**OMFÅNG.** Accepten når kontoSKAPANDE och ingenting annat. Den säger ingenting om
+inloggning, och får aldrig citeras för att motivera att någon annan validering flyttas till
+klienten. Den täcker inte heller ett framtida lösenordsBYTE eller en återställningsväg — se
+nedan.
+
+**TID.** Gäller tills re-open-utlösaren nedan inträffar. Ingen kalenderfrist: hålet växer
+inte av sig självt.
+
+**WHY.** Den enda vägen till serversidig efterlevnad som inte skriver om inloggningen är en
+blockeringsfunktion (`beforeUserCreated`), och Firebases dokumentation säger rakt ut: "To use
+blocking functions you must upgrade your Firebase project to Firebase Authentication with
+Identity Platform." Uppgraderingen är gratis vid Binges storlek och kräver ingen
+kodmigrering — men Google dokumenterar ingen väg tillbaka. Att det inte går att ångra är en
+slutsats ur en frånvaro, inte något någon här kunnat kontrollera; vill man luta sig mot den
+måste den kollas mot Google Cloud Support först. Det räcker ändå för beslutet: att byta
+produkt under inloggningen på oklara villkor står inte i proportion till ett hål som kräver
+att kontoägaren själv kringgår formuläret. Alternativet — att lägga registreringen bakom en anropbar
+funktion med custom token — skriver om hela `AuthContext`s inloggningsväg, där varje bugg
+låser ute riktiga användare, för samma vinst.
+
+**Om servergrinden ändå byggs någon gång**, gäller #19:s tre villkor oförändrade:
+1. Ett serversidigt avslag måste mappa till ett meddelande som redan finns i
+   `passwordStrength.ts` — inte till `handleSubmit`s catch-all, som skyller på nätverket.
+2. Serverkollen återanvänder `COMMON_PASSWORDS`/`scorePassword`, aldrig en andra lista. Två
+   listor som glider isär betyder att mätaren visar "Bra" om något som ändå avvisas.
+3. Endast vid kontoskapande. En `beforeSignIn`-hook skulle låsa ute befintliga användare vars
+   redan satta lösenord senare hamnar på listan — en supportkris, ingen säkerhetsvinst.
+
+**INTE accepterat, fortfarande fileable:**
+1. **En lösenordsÅTERSTÄLLNING eller ett lösenordsBYTE som inte går genom samma kontroll.**
+   Ingen sådan väg finns i dag, vilket är just därför den här accepten är billig — härled det
+   med kommandot nedan, som ska ge tom utdata:
+
+   ```
+   grep -rnE "sendPasswordResetEmail|updatePassword|confirmPasswordReset" src
+   ```
+
+   Bygger någon en, öppnas luckan på ett andra ställe och den halvan är inte avgjord här.
+2. **Att blocklistan eller längdgolvet försvagas eller tas bort ur formuläret.** Accepten
+   gäller att kontrollen bara finns på ETT ställe, inte att den får bli svagare där.
+3. **En andra kontoskapande väg i APPEN som hoppar över `scorePassword`.** Accepten gäller en
+   väg utanför appen; en ny knapp inuti den som kringgår mätaren är en vanlig bugg.
+
+**RE-OPEN WHEN:** Identity Platform slås på av något ANNAT skäl (tvåfaktor, SAML,
+granskningsloggar). Då kostar blockeringsfunktionen ~30 rader och ingen produktändring, och
+accepten har inget motiv kvar.
+
+Det är MEDVETET den enda utlösaren. Ett utkast här hade också "ett konto observeras med ett
+lösenord ur blocklistan" — den kan aldrig fyra: Firebase lagrar hashar, ingenting i repot kan
+visa ett lösenord i klartext, och den som kringgått formuläret rapporterar det inte. En accept
+vars re-open-fakta är onåbara är permanent by construction, precis som
+`communityRatingMaintain`-posten ovan skriver ut. Utlösaren som står kvar är skönsmässig, och
+det ska läsas som att accepten gäller tills någon aktivt öppnar dörren för något annat.
