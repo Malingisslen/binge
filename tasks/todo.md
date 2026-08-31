@@ -99,47 +99,19 @@ Alla `kind: diff` om inget annat står.
 
 ---
 
-## BIN-590 — lösenordskravet gäller bara i formuläret
+## BIN-590 — AVGJORD 2026-08-31, byggs inte
 
-**Tier A/D — mekanismvalet avgör.** Router: `medium`, panel `[19]`. Kritiken
-körd; inga blockeringar.
+Malin valde att acceptera residualen i stället för att bygga servergrinden. Skälet
+och alla fyra gränserna står i `.claude/rules/accepted-deviations.md` (posten
+daterad 2026-08-31) — det är beslutets enda hem, den här filen är slask.
 
-### Öppen fråga före bygget
-
-Kravet kan bara hålla serversidigt på ett av två sätt:
-
-- **(a) Blockeringsfunktion (`beforeUserCreated`).** ~30 rader, exakt rätt
-  ställe. Kräver att **Identity Platform slås på i konsolen** — Malins åtgärd,
-  och ett byte av produkttjänst under Auth.
-- **(b) Anropbar funktion + custom token.** Ingen konsolätgärd, men skriver om
-  hela registreringsflödet genom `AuthContext` — betydligt större, och ändrar
-  inloggningens form.
-
-Kontrollerat 2026-08-30: `grep -rn "identity\|beforeUserCreated\|beforeCreate"
-functions/src firebase.json` ger noll träffar bland kod — ingen
-blockeringsfunktion finns i dag, så ingetdera är redan påslaget.
-
-Frågan ställs till Malin. Fram till svar byggs biljetten inte.
-
-### Acceptanskriterier (gäller vilket mekanismval som än vinner)
-
-1. **(#19:1)** Ett serversidigt avslag mappar till ett svenskt meddelande som
-   redan finns i `passwordStrength.ts` — inte till formulärets catch-all, som i
-   dag skyller på nätverket.
-2. **(#19:2)** Serverkollen återanvänder `COMMON_PASSWORDS`/`scorePassword`, inte
-   en andra handskriven lista.
-3. **(#19:3)** Kravet gäller endast vid kontoSKAPANDE, aldrig vid inloggning.
-   Ett test pinnar att ingen `beforeSignIn`-väg finns.
-4. **(#19, noterat)** Om (a) väljs: kollen hoppas över för inloggningsleverantörer
-   som aldrig sätter ett lösenord, så en Google-användare aldrig får ett
-   obegripligt lösenordsfel.
+Villkoren från #19 Customer Support bevarades där, inklusive carve-outen för
+inloggningsleverantörer som aldrig sätter ett lösenord.
 
 ---
 
 ## Behöver dig (Tier D)
 
-- **BIN-590:** välj mekanism (a) eller (b) ovan. (a) kräver att du slår på
-  Identity Platform i Firebase-konsolen.
 - **BIN-624:** nollräkningen på riktig data som du själv satte som villkor har
   inget spår av att ha körts. Utan den får serverdelen inte skärpas.
 
@@ -153,5 +125,5 @@ Frågan ställs till Malin. Fram till svar byggs biljetten inte.
   när Auth-kontot är borta. Ny klocka införd (observerad frånvaro), namngiven i
   koden, med eget golv.
 - [needs-human] BIN-590: serversidig efterlevnad kräver antingen en
-  konsoläktivering eller en omskrivning av registreringsflödet. Byggs inte
-  förrän Malin valt.
+  konsolaktivering eller en omskrivning av registreringsflödet. AVGJORD
+  2026-08-31: Malin accepterade residualen; se accepted-deviations.
