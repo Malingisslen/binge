@@ -1,8 +1,8 @@
 {
-  "lastRun": "2026-08-24",
+  "lastRun": "2026-08-31",
   "dossiersRefreshed": 0,
-  "worldWatchRoles": 1,
+  "worldWatchRoles": 3,
   "retroDue": true,
   "acceptRate": null,
-  "notes": "Dossier-staleness dir absent (gitignored local state). World-watch: security-architect scanned (weekly due), no material delta, issue #47 (Firebase SDK ReDoS, still unpatched) re-confirmed open, not re-filed. legal-gdpr-counsel/data-protection-officer not yet due (28/30 days). Full retro overdue since 2026-07-25. No accept-rate tool in this repo. Cruft sweep: bin-505-plan.md left in place (22 unchecked boxes)."
+  "notes": "Dossier-staleness dir absent (gitignored local state). World-watch: security-architect (weekly), legal-gdpr-counsel + data-protection-officer (monthly, 35d overdue) all scanned; issue #47 (Firebase SDK ReDoS) CLOSED — package-lock now resolves patched versions; Next.js Aug-2026 critical RCE advisory already patched (next@16.3.3); no new material findings, no new issues filed. Full retro overdue since 2026-07-25 (no full-mode event in events.jsonl). No accept-rate tool in this repo. Cruft sweep: bin-505-plan.md left in place (22 unchecked boxes, ground rule); recap-50-shows-progress.md left in place (ongoing initiative, no clear completion commit)."
 }

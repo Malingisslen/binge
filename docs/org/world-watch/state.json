@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-26",
+  "updated": "2026-08-31",
   "note": "World-watch state for Binge's virtual role-org MVP. Committed (not in .claude/state, which is gitignored). cadenceDays maps the cadence label to a due-interval. snapshot holds the last-seen marker per source so /world-watch can diff and emit only deltas. lastScan null = never scanned = due. See docs/org/world-watch/DESIGN.md.",
   "cadenceDays": {
     "weekly": 7,
@@ -79,7 +79,7 @@
           "note": "How vuln alerts/grouping reach the repo."
         }
       ],
-      "lastScan": "2026-08-24",
+      "lastScan": "2026-08-31",
       "snapshot": {
         "nextjs-advisories": "2026-08-24: Direct WebFetch worked. No advisories published after 2026-07-21 (same 9-CVE July batch + May 7 middleware-bypass follow-up, already tracked). package-lock.json still resolves next@16.2.12, still patched. No change.",
         "ghsa-npm": "2026-08-24: Direct WebFetch worked. No advisories for next, react, react-dom, firebase, firebase-admin, firebase-functions, or @firebase/* surfaced among recent entries (JSONata, Keystone, Defuddle, Unleash, NocoBase, node-opcua, logto-tunnel, various MCP servers — all unrelated). No change.",
@@ -94,6 +94,11 @@
           "date": "2026-08-17",
           "via": "weekly-janitor-sweep",
           "note": "Lean WebSearch check: Next.js/React CVEs, Firebase JS SDK release. No material delta vs 2026-08-10 baseline (same tracked CVE batch, issue #47 still open). Full per-source snapshot not refreshed this cycle."
+        },
+        {
+          "date": "2026-08-31",
+          "via": "weekly-janitor-sweep",
+          "note": "Lean WebSearch check. Next.js August 2026 security release disclosed two critical unauthenticated-RCE issues (GHSA-2xp9-vwfh-vxw4 AVIF/libheif optimization RCE; CVE-2026-75604 Windows path traversal, CVSS 9.0), patched in v16.3.3/v15.5.24 — repo's package-lock.json already resolves next@16.3.3 (package.json range is ^16.3.3), so already patched; no action. Firebase JS SDK: no new firestore/util security patch since 12.18.0 (undici bump for an old low-severity CVE-2024-30260, not material). Firestore rules release notes: no hasOnly/field-whitelist-affecting language change (cross-service Storage rules, Rules Playground debugger, raised access-call limits — none apply). Issue #47 (Firebase ReDoS) CLOSED this cycle: package-lock now resolves firebase@12.18.0/firestore@4.17.1/util@1.15.3, all at/above the 12.17.0/4.17.0/1.15.2 patched thresholds. recaptcha-enterprise-relnotes and gh-changelog-dependabot not checked this cycle (lean budget, lower material-risk sources)."
         }
       ]
     },
@@ -162,7 +167,7 @@
           "note": "Catch-all with AI/data-protection/digital-services filters."
         }
       ],
-      "lastScan": "2026-07-27",
+      "lastScan": "2026-08-31",
       "snapshot": {
         "edpb-news": "2026-07-27: no update to the right-to-object/erasure OSS case digest since the 2026-06-25 version already escalated as BIN-214. Newest EDPB activity is the 2026-07-16/17 Dublin meeting on cross-DPA/cross-regulator information sharing (institutional cooperation, not a rights-shape change) — nothing affecting Art.17/Art.20 export or erasure shape this cycle.",
         "imy-nyheter": "2026-07-27: since the 2026-06-15 AI-Act-supervisor item (BIN-215, no change to that role this cycle), newest IMY items are: EDPB guidelines on web-scraping for generative-AI training (2026-07-08, IMY as rapporteur — N/A, Binge doesn't scrape to train models), EDPB guidelines on anonymisation and on blockchain processing (2026-07-09), an EU Court ruling on a Swedish publisher-credentialed search engine republishing criminal court decisions (2026-07-09, not analogous to Binge's UGC model), and the 2026-07-16/17 Dublin cross-DPA meeting. IMY's 2026 priorities (AI, children, law enforcement) unchanged.",
@@ -170,7 +175,14 @@
         "ec-dsa-enforcement": "2026-07-27 (baseline, first scan): DSA enforcement maturing; child-protection-provision scrutiny trending toward smaller platforms, but reporting ties expansion to platforms with 50+ employees/EUR10M turnover. Binge (solo-founder) sits below that bar. Core DSA duties already covered by villkor/community-guidelines and the submitReport Cloud Function.",
         "ec-news": "2026-07-27 (baseline, first scan): headline item is the Digital Omnibus AI track — final act signed 2026-07-08, awaiting Official Journal publication. Separate Data Omnibus (GDPR/ePrivacy/NIS2/DORA amendments) remains in negotiation, not adopted."
       },
-      "_lastScanCoverage": "All 5 sources were geo-blocked/JS-rendered (403 on WebFetch) and covered via WebSearch fallback; 3 of 5 are first-time baselines."
+      "_lastScanCoverage": "All 5 sources were geo-blocked/JS-rendered (403 on WebFetch) and covered via WebSearch fallback; 3 of 5 are first-time baselines.",
+      "_janitorLeanScans": [
+        {
+          "date": "2026-08-31",
+          "via": "weekly-janitor-sweep",
+          "note": "Lean WebSearch check (monthly cadence, 35 days since 2026-07-27 full scan). DPF/noyb (issue #45): noyb's threatened CJEU challenge ('Schrems III') still not confirmed filed — most recent coverage still says 'coming weeks' as of the last dateable reporting found; Latombe appeal C-703/25 P still pending at CJEU, no hearing date, experts expect a ruling late 2026/2027. Status quo vs issue #45, not re-filed. EDPB anonymisation guidelines (issue #46): still in public consultation to 2026-10-30, no final text yet. Status quo, not re-filed. AI Act Art.50 transparency duties went live 2026-08-02 as already tracked in the 2026-07-27 baseline; no new milestone found. No new EDPB/EC item found affecting Art.17/Art.20 export-erasure shape or DSA scope. Full per-source re-snapshot not refreshed this cycle (lean budget)."
+        }
+      ]
     },
     "data-protection-officer": {
       "roleNumber": 6,
@@ -239,7 +251,7 @@
           "note": "Actively-maintained Google inventory; freshness cross-check for the Firebase list."
         }
       ],
-      "lastScan": "2026-07-27",
+      "lastScan": "2026-08-31",
       "snapshot": {
         "sentry-subprocessors": "2026-07-27 (WebSearch, 403'd direct on both RSS and HTML): current published list still version 2.3.0 dated 2026-06-01 — same version already escalated as BIN-216. No new subprocessor change detected. Not re-filed.",
         "imy-nyheter-rss": "2026-07-27 (WebSearch, 403'd direct): no new IMY item matching DPO watch items since the prior 2026-06-15/2026-06-11 items. New but Legal/AI-Act-adjacent, not filed here: IMY confirmed as AI Act market-surveillance authority; IMY lead rapporteur on EDPB's generative-AI web-scraping guidelines.",
@@ -248,7 +260,14 @@
         "firebase-subprocessors": "First baseline, 2026-07-27 (WebSearch, 403'd direct): page lists Accenture LLP, EPAM Systems Inc., Fastly Inc., Firebase Inc. with a last-visible-edit date around 2021-09-23 — confirms the page is edge-cached/stale, cross-checked against GCP list, no material gap found.",
         "gcp-subprocessors": "First baseline, 2026-07-27 (WebSearch, 403'd direct): actively maintained changelog, most recent entries 2026-05-19, 2026-04-28, 2026-04-22, 2026-03-02, 2026-01-30 — no entry after 2026-05-19. Used as freshness cross-check for the stale Firebase list; no new subprocessor identified."
       },
-      "_lastScanCoverage": "All 6 sources covered via WebSearch fallback after WebFetch 403'd on every URL; no source was skipped."
+      "_lastScanCoverage": "All 6 sources covered via WebSearch fallback after WebFetch 403'd on every URL; no source was skipped.",
+      "_janitorLeanScans": [
+        {
+          "date": "2026-08-31",
+          "via": "weekly-janitor-sweep",
+          "note": "Lean WebSearch check (monthly cadence, 35 days since 2026-07-27 full scan). Sentry subprocessors: still version 2.3.0 (2026-06-01), same as tracked in BIN-216 — no change. IMY nyheter: newest item found is 2026-08-25 guidance on streaming of children's/youth sports (GDPR compliance for sports clubs) — not analogous to Binge's TV/movie-tracking UGC model, not filed. No EU-US transfer or subprocessor delta beyond what issue #45 already tracks. Full per-source re-snapshot not refreshed this cycle (lean budget)."
+        }
+      ]
     }
   }
 }
