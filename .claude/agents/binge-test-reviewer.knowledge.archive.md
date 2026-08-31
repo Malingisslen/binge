@@ -24361,3 +24361,56 @@ mistake "exists" for "unchanged value" if the catch block ever grows a write.
 **Verdict:** pass (0 blocking). Both of the first pass's findings are independently confirmed
 closed: the ordering gap is now pinned by a live mutation that reds exactly the two new tests for
 their named reasons, and the `listUserUids` comment is now true.
+
+## 2026-08-31 — BIN-1060 processTitle await-anchor guard
+
+**Diff reviewed.** Two staged files: `functions/src/availableNotify/runNotify.processTitle.test.ts`
+(new) and `src/test/rules/available-notify-orchestrator.test.ts` (5 comment-only lines
+added inside the `loopens form` describe block, no assertion touched — confirmed via
+`git diff --cached -- src/test/rules/available-notify-orchestrator.test.ts`).
+
+The new file source-scans `functions/src/availableNotify/runNotify.ts` from disk, cuts
+`processTitle`'s body out brace-balanced, blanks comments/string/template literals, and asserts
+the first `await` keyword in the body is `io.fetchSeFlatrate(`. It exists to pin the property the
+sibling emulator test's `loopens form` case depends on for its own soundness (first await ==
+the fetch, so a reintroduced `Promise.all` fails deterministically instead of racing).
+
+**Mutation run.** Snapshotted `functions/src/availableNotify/runNotify.ts` to scratchpad
+(`git hash-object` == `git rev-parse HEAD:...` == `2875e0cf6d3c253bb39ee790a069ab7484330fed`
+before mutating). Inserted `await Promise.resolve();` above the fetch line on disk via a small
+node script, confirmed present with `grep -n`, ran
+`npx vitest run functions/src/availableNotify/runNotify.processTitle.test.ts --reporter=verbose`,
+confirmed present again with `grep -n` immediately after. Result: 2 of 4 tests failed — the primary
+invariant test (named reason: "An await was inserted before io.fetchSeFlatrate…") and, as an
+expected side-effect, the negative-control test (its own fixture re-derives from the now-mutated
+real `source`, so it legitimately reddens too). Restored from the scratchpad snapshot; hash
+matched `2875e0cf6d3c253bb39ee790a069ab7484330fed` again; `git status --porcelain` on the file was
+empty. Clean-control re-run: 4/4 green.
+
+**New finding, not previously known.** Built a throwaway untracked probe test inside
+`functions/src/availableNotify/` (never staged, deleted immediately after) importing the new
+file's own exported `blankCommentsAndStrings`/`firstAwaitIndex` and fed it
+`` `${await foo()}`\nawait io.fetchSeFlatrate(...)` ``. Output: the entire template literal —
+including its `${await foo()}` interpolation, which is executable code, not string content — was
+blanked to spaces, so `firstAwaitIndex` skipped straight to the fetch's `await` and reported no
+violation. This is a genuine false-negative shape in the guard's own algorithm: a real `await`
+written inside a template-literal interpolation above the anchor call would be invisible to it.
+Verified live, not reasoned about. Checked against the real file: `processTitle` today contains no
+template-literal interpolation containing an `await`, so this does not currently misfire — graded
+non-blocking, a documented residual, per the house convention for named source-scan blind spots.
+Folded into
+`.claude/agents/binge-test-reviewer.knowledge.md`'s existing "Source-scan blind spots to name"
+bullet (Extract-then-test & layering section) rather than opening a new bullet.
+
+**Other checks.** Signature-reformatted-across-lines: the guard's `decl` search
+(`'async function processTitle('`) already matches the REAL file's existing multi-line parameter
+list (confirmed passing in the clean run above) — not a gap. Destructured-local
+(`const { fetchSeFlatrate } = io`) and a nested-arrow-with-an-unrelated-await-defined-but-not-
+invoked-before-the-fetch: both would make the guard FALSE-POSITIVE (fail loudly on a harmless
+refactor), not silently pass a real violation — informational, not a coverage gap, and not filed.
+`processTitle` awaiting nothing at all is explicitly asserted by the guard's own first expectation
+(`toBeGreaterThan(-1)`), which is what the "processTitle awaits nothing" fixture is for — not a
+gap. Read `.claude/rules/accepted-deviations.md` in full; nothing there covers this pattern.
+
+**Verdict:** pass (0 blocking). One informational, non-blocking finding filed and folded into the
+principles file in the same pass.

@@ -906,6 +906,11 @@ describe('loopens form', () => {
     // A `map()` over the titles would therefore drive BOTH into the double in one
     // synchronous burst, and both pushes land before this `await` resumes on the next
     // microtask. Measured by applying the mutant, not reasoned about.
+    //
+    // That property is PINNED rather than merely relied on, by
+    // functions/src/availableNotify/runNotify.processTitle.test.ts (BIN-1060). Read that
+    // file for what its scan does and does not see. Without it this test would stay green
+    // while the reasoning under it was gone.
     await entered;
     expect(d.calls).toContain('fetchSeFlatrate:movie:1');
     expect(d.calls).not.toContain('fetchSeFlatrate:movie:2');
