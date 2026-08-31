@@ -62,3 +62,19 @@ commit-msg:
       run: node docs/org/metrics/check_review_coverage.mjs --message {1}
       fail_text: "This commit names a ticket with no stakeholder-review row (BIN-917). Log the review, or fix the subject."
       priority: 1
+
+    # BIN-1059, and the sibling above owns the other half of the same question. That one asks
+    # whether a review row EXISTS; this one asks whether it names the roles the STAGED files
+    # actually route to. The selection routes the file set once and the set then moves — a
+    # ticket is pulled, a critique widens the scope, a fix drags in a neighbour — and sprints
+    # have committed under a panel that no longer matched. The named cases are in the module's
+    # own header.
+    #
+    # `commit-msg` for the same reason as the sibling, and it is load-bearing rather than
+    # tidy: the review rows are keyed by TICKET, and the ticket ids live in the subject line,
+    # which does not exist yet while `pre-commit` runs. The staged files are readable in both
+    # phases; the ids are not, so this cannot move up.
+    staged-routing:
+      run: node docs/org/metrics/check_staged_routing.mjs --message {1}
+      fail_text: "The staged files route to a role no review row names (BIN-1059). Convene it, or commit split."
+      priority: 2

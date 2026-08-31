@@ -184,6 +184,13 @@ export const TOOLING_CODE_FILES = new Set([
   // tooling .mjs shipped without a test is nominated by nothing at all.
   'docs/org/metrics/check_events.mjs',
   'docs/org/metrics/check_events.test.mjs',
+  // BIN-1059. The commit-msg gate that re-routes the STAGED files and refuses a commit
+  // whose panel no `review` row names. It is review machinery in the most direct sense —
+  // it decides which critique a change owed — so weakening it must not be a change nobody
+  // reviews. Added here in the SAME commit as its `reviewGates` pattern, per BIN-830:
+  // one list advises, the other blocks, and widening one has never widened the other.
+  'docs/org/metrics/check_staged_routing.mjs',
+  'docs/org/metrics/check_staged_routing.test.mjs',
   // The log's only IN-REPO writer helper, added alongside its reader. It routed
   // skip/doc-only with no gate at all, so this commit's TWO edits to it — `correction`
   // added to its type enum, and its shebang deleted — reached zero reviewers. And
@@ -523,7 +530,11 @@ function readStdin() {
   }
 }
 
-const ROLE_TITLES = { [UNMAPPED_FALLBACK_ROLE]: 'Software Architect' };
+// Exported for the same reason `mdBlock` is: a consumer that names a role in a BLOCK message
+// has to be able to name the fallback seat too. It is never in `roles`, because nothing
+// matched it — so a reader deriving titles from `roles` alone gets a bare number for the one
+// case the router itself invented (BIN-1059).
+export const ROLE_TITLES = { [UNMAPPED_FALLBACK_ROLE]: 'Software Architect' };
 
 // The `--md` form is what the tooling actually consumes: `.claude/shared-plugin.json` sets
 // `delivery.router.command` to `node docs/org/route.mjs --md`, and CLAUDE.md's casting step

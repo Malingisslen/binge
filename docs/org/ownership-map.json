@@ -3,7 +3,7 @@
   "generatedBy": "docs/org/gen-ownership-map.mjs",
   "note": "Auto-generated — do not hand-edit. Regenerate: node docs/org/gen-ownership-map.mjs",
   "roleCount": 28,
-  "patternCount": 214,
+  "patternCount": 216,
   "roles": {
     "1": {
       "title": "Product Designer / UX",
@@ -319,6 +319,8 @@
         ".github/workflows/deploy.yml",
         "CLAUDE.md",
         "docs/org/gen-ownership-map.mjs",
+        "docs/org/metrics/check_staged_routing.mjs",
+        "docs/org/metrics/check_staged_routing.test.mjs",
         "docs/org/route.mjs",
         "docs/org/route.test.mjs",
         "lefthook.yml",

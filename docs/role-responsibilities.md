@@ -488,6 +488,16 @@ Owns the process.
   `precommit` script, found neither, and concluded no commit-time mechanism existed. It had
   been here since 2026-08-08.
   → `lefthook.yml`
+- **The staged-routing gate** (BIN-1059). The commit-msg check that re-runs the blast-radius
+  router on `git diff --cached --name-only` and refuses a commit whose panel no `review` row
+  names. It exists because the panel is decided ONCE at selection and the file set then moves
+  — a ticket is dropped, a critique widens the scope, a fix drags in a neighbour — and sprints
+  have committed under a panel that no longer matched. It decides which critique a
+  change owed, so it is this role's machinery in the most direct sense, and it is seated here
+  rather than left on the #14 fallback for the same reason `lefthook.yml` is: the fallback is
+  a seat of last resort for code nobody claimed, not an answer for a file that decides how
+  everything else is reviewed.
+  → `docs/org/metrics/check_staged_routing.mjs`, `docs/org/metrics/check_staged_routing.test.mjs`
 - **The dependency manifest those upgrades land in** (BIN-919). `package.json` carries the
   framework pins, the npm scripts every gate and workflow invokes, and the test/lint
   wiring — so it decides how the repo builds and how it is checked. It was the one tracked
