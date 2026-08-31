@@ -81,18 +81,6 @@ Run 2026-08-13: **all three pass.** Re-run them if the function is ever moved to
 dedicated, least-privileged service account — that is exactly when this breaks, and the log
 line will not tell you.
 
-**This batch needs BOTH halves deployed, in this order.** `functions/**` changed, so
-`deploy.yml`'s drift guard fails the push-triggered hosting job **by design** — a red
-workflow next to a green tree reads as "shipped" and is not:
-
-1. `firebase deploy --only functions:retentionCleanup` — the server half (both sweeps).
-2. Re-run `deploy.yml` via **workflow_dispatch** — the client half (the limbo screen, the
-   write chokepoint, the username uid-query). Until this lands, a marked session is not
-   blocked from writing and an aborted deletion still resurrects the profile.
-
-No rules or index deploy is needed: `usernames` already carries `allow read: if true`
-(covering `list`) and `firestore.indexes.json` has no `fieldOverrides` for it.
-
 **Runtime reading of the orphan-auth sweep** (diagnosis, not acceptance — the permission is
 verified statically above). On a `retentionCleanup done` line: if `orphanAuthAccounts > 0`
 is ever matched by `deletedOrphanAuthAccounts: 0`, either the permission was revoked (look
