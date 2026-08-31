@@ -525,9 +525,8 @@ betyder något annat och är också en re-open.
 
 `docs/org/metrics/check_review_coverage.mjs` grindar på att varje kodändrande commit namnger
 en biljett som har en `review`-rad i `events.jsonl`. Regeln har en epok,
-`COVERAGE_EFFECTIVE_FROM`, och den är MEDVETET icke-retroaktiv — skälet, och den mätta
-jämförelsen mellan tre kandidatdatum, står i konstantens egen kommentar i den filen. Läs den
-där; den upprepas inte här.
+`COVERAGE_EFFECTIVE_FROM`, och den är MEDVETET icke-retroaktiv — skälet står i konstantens
+egen kommentar i den filen. Läs det där; det upprepas inte här.
 
 Följden är en permanent mängd äldre commits som saknar biljett-id i ämnesraden och som regeln
 aldrig kommer att nämna. **Den mängden är accepterad.** Att kräva rader i efterhand bevisar

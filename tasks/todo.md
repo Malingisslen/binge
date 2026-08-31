@@ -1,3 +1,232 @@
+# Sprint 2026-08-31 — fyra biljetter, alla `medium`/`single`
+
+Föregående sprintplan arkiverad under `---` längst ned.
+
+## Urval
+
+24 oppna biljetter i backloggen. Fem valda, en (BIN-790) utdragen FORE bygget nar
+kommentarstraden lastes — dess punkt 1 som den ar skriven raderar arbetsordern mellan
+funktionskodens commit och kartans egen commit. Fyra byggs. Skälen till att resten INTE valdes står
+under "Inte valda" nedan, ett skäl per grupp. Ett av dem är att fixen bor i
+`C:/claude-plugins` och kräver en egen session i det repot (lärdomen 2026-08-03: en
+session som rör delad infra och sedan startar subagenter förgiftar dem — och den här
+sessionen startar granskare).
+
+Routningen kördes på varje biljetts filuppsättning; kommandot står i biljettens eget
+avsnitt nedan. Var och en gav `tier: medium`. Routningen körs OM på den faktiska stageade
+unionen omedelbart före varje commit (BIN-1052/1050:s lärdom).
+
+
+## Bindande villkor ur de blinda rollkritikerna (2026-08-31)
+
+Villkoren nedan är kritikernas egna och är folded in som acceptanskriterier. Varje kritik
+var blind för de andra. Rubrikerna nedan säger vilken roll som svarade på vad, och när.
+
+### BIN-1059 — #25 Engineering Manager / Release Manager: **block** tills 1–5 är uppfyllda
+
+1. **Fasfel i förslaget.** `lefthook.yml` kör `pre-commit` FÖRE `commit-msg`; commit-meddelandet
+   — och därmed biljetts-id:t — finns inte när `pre-commit` kör. Kollen måste ligga i
+   `commit-msg`, bredvid `review-coverage`. *(kind: diff)* — verifierat själv: `lefthook.yml`
+   har ett `commit-msg`-block som kör `check_review_coverage.mjs --message {1}`.
+2. **`panel`-fältet i `events.jsonl` skrivs olika på olika rader** — tal på vissa, strängar
+   (`"#25 Engineering Manager / …"`) på andra. Härled fördelningen; ett tal här går inaktuellt
+   varje gång en rad läggs till:
+
+   ```
+   node -e "const fs=require('fs');const c={};for(const raw of fs.readFileSync('docs/org/metrics/events.jsonl','utf8').split(String.fromCharCode(10))){const l=raw.trim();if(!l)continue;const o=JSON.parse(l);if(o.type!=='review')continue;const p=o.panel;const k=Array.isArray(p)?(p.length?typeof p[0]:'empty'):'missing';c[k]=(c[k]||0)+1}console.log(c)"
+   ```
+
+   Kollen måste normalisera formerna till samma typ före jämförelse, annars blockerar den
+   falskt. Ett testfall matar in strängformatet. *(kind: diff)*
+3. **Fällan om `.claude/agents/*.knowledge.md` måste AVGÖRAS och testas**, inte bara nämnas:
+   ett test matar in en stageuppsättning där de två valen ger olika paneler och asserterar
+   vilket som vinner. Skälet skrivs i koden. *(kind: diff)*
+4. **En riktig körning måste visa att spärren fäller**, inte bara enhetstestets egen fixtur.
+   *(kind: run)*
+5. **Inte ett nytt BIN-1040-hål:** kommandot står i en lista lefthook faktiskt kör. *(kind: diff)*
+
+Icke-blockerande: felmeddelandet ger ett klistrbart kommando (konventionen i `review-coverage`).
+
+### BIN-1060 — #13 Data / Integrations Engineer: **accept-with-conditions**
+
+1. Mutationsprov: ett syntetiskt `await` inskjutet i `processTitle` FÖRE `io.fetchSeFlatrate`
+   ska FÄLLA vakten. *(kind: run)*
+2. Samma vakt mot HEAD oförändrad ska PASSERA. *(kind: run)*
+3. Segmentet får INTE klistras in som literal sträng i testet — det läses från `runNotify.ts`
+   och skärs ut mekaniskt. *(kind: diff)*
+4. Sökningen efter `await` i preambeln får inte träffa kommentarer eller strängar. *(kind: diff)*
+5. Vakten pinnar ENDAST `processTitle`s inre ordning, inte den yttre loopen i
+   `runAvailableNotify` — den täcks av det befintliga `entered`-testet. *(kind: diff)*
+
+Väntat felläge, ordagrant: en naiv sökning efter `await` i HELA funktionskroppen träffar ett
+senare `await` och rapporterar PASS oavsett var regressionen sitter. Villkor 1 är det som
+fångar det.
+
+### BIN-1061 — #14 Software Architect: **accept-with-conditions**
+
+1. Stryk HELA tabellen, alla tre raderna — en tabell med en struken rad läser som att de
+   kvarvarande fortfarande gäller. *(kind: diff)*
+2. Ersätt inte med nya tal. Om något ska stå kvar som bevis: ett KOMMANDO, inte ett tal.
+   *(kind: diff)*
+3. Epokens MOTIVERING måste överleva strykningen — `accepted-deviations.md`s BIN-938-post
+   pekar hit för just den. Diffen får INTE röra `accepted-deviations.md`. *(kind: diff)*
+4. Efter ändringen: `node docs/org/metrics/check_review_coverage.mjs` kör rent, och
+   kommentarblocket innehåller ingen ny siffra utan ett kommando bredvid. *(kind: run)*
+
+### BIN-1061, andra varvet — #25 Engineering Manager / Release Manager: **accept**
+
+Bygget VIDGADE filuppsättningen. `.claude/rules/accepted-deviations.md`s BIN-938-post pekade
+läsaren mot just den tabell som ströks, så klausulen blev falsk i samma ändring. Routern kördes
+om på den faktiska unionen:
+
+```
+node docs/org/route.mjs docs/org/metrics/check_review_coverage.mjs .claude/rules/accepted-deviations.md
+→ tier medium, panel [25], reasonCode owned
+```
+
+#14:s villkor 3 sa "diffen får INTE röra `accepted-deviations.md`" — motiverat med att en
+redigering där kräver en egen granskning. Den granskningen konvenerades i stället för att
+undvikas: #25, som äger filen, läste diffen och svarade **accept** med två villkor (ingen
+kvarvarande hänvisning till tabellen eller dess tal; kommandot måste köra rent). Båda mötta.
+Att lämna klausulen falsk hade varit den sämre av de två, och det är precis den situation
+BIN-1059 bygger en spärr för.
+
+### BIN-1064 — #8 DevOps / SRE: **accept-with-conditions**
+
+1. Strykningen får inte ta med sig ordningsregeln "deploya functions före hosting" — den är
+   självdokumenterad i `.github/workflows/deploy.yml`. Diffen rör bara det batch-bundna
+   stycket; IAM-tabellen, permission-kollen, Cloudflare-regeln och secrets-tabellen står kvar.
+   *(kind: diff)*
+2. Rad 7 i `binge-test-reviewer.knowledge.md` ersätts med ett `grep`-kommando eller stryks —
+   ingen uppräkning, ingen ny siffra. *(kind: diff)*
+3. Efter patchen: `grep -c "^## Relocated" …archive.md` ger fortfarande fler än 1. *(kind: run)*
+
+Icke-blockerande fynd att fila: `docs/RUNBOOK.md` pekar på "EXTERNAL_ACTIONS.md §1.2" men
+filen har ingen numrering alls — referensen är trasig sedan tidigare.
+
+---
+
+## BIN-1059 — routningskollen ska fällas av en maskin, inte av mitt minne
+
+**Tier C** (grind-infrastruktur). Prio Hög.
+```
+node docs/org/route.mjs lefthook.yml docs/org/metrics/check_staged_routing.mjs docs/org/metrics/check_staged_routing.test.mjs
+```
+
+Biljetten pekar ut två möjliga hem: sprintmotorn i `C:/claude-plugins` (kräver egen
+session) eller ett repo-lokalt `lefthook.yml`-steg här. **Vi bygger den repo-lokala
+varianten** — `docs/org/route.mjs` bor redan här, `lefthook.yml` kör redan
+pre-commit-steg, och den delade maskinen slipper röras från en session som spawnar
+granskare.
+
+### Acceptanskriterier (biljettens egna, ordagrant)
+
+1. Kollen körs av något som FÄLLER en commit, inkopplad i den kodväg som faktiskt
+   kör — inte i en funktion ingenting anropar (BIN-1040:s form). *(kind: diff)*
+2. Ett test som källkodsskannar inkopplingen och pinnar ARGUMENTEN, så kollen inte
+   kan raderas ur anropsvägen med sviten grön (BIN-852:s form). *(kind: diff)*
+3. Prövad i BÅDA riktningarna med mutation: en union som routar en roll utan loggad
+   rad → blockerar; en union där panelen matchar → passerar. Mutanten asserteras
+   närvarande FÖRE och EFTER sviten, i ETT kommando. *(kind: diff)*
+4. Blockmeddelandet namnger den saknade rollen OCH kommandot som reproducerar
+   routningen. *(kind: diff)*
+5. Ingen befintlig grind försvagas. *(kind: diff)*
+6. **Ägarskap:** varje NY fil under en katalog `ownership-map.json` listar fil för
+   fil får en ägare i `docs/role-responsibilities.md` och kartan regenereras —
+   aldrig `--update-gaps` (BIN-1013). Hela sviten körs före push. *(kind: diff)*
+
+### Fällan biljetten namnger — mätt, och biljettens formulering håller inte
+
+Biljetten skriver att routningen svarar olika beroende på om granskarnas egna
+`*.knowledge.md` räknas med i unionen. Mätt 2026-08-31 gör den inte det: en
+`*.knowledge.md` är ingen kodsökväg, så den hamnar i `unmapped` och kan aldrig sätta
+en roll i panelen.
+
+```
+node docs/org/route.mjs .claude/agents/binge-test-reviewer.knowledge.md
+node docs/org/route.mjs lefthook.yml .claude/agents/binge-test-reviewer.knowledge.md
+node docs/org/route.mjs lefthook.yml
+```
+
+Följden för #25:s villkor 3: ett test "där de två valen ger olika paneler" går inte att
+skriva, eftersom det läget inte finns. Villkoret återgår till #25. Kollen måste
+fortfarande välja EN mängd och skriva ned skälet i koden, och valet pinnas i båda
+riktningarna — notesfilen utanför unionen, granskarens INSTRUKTIONSfil kvar i den.
+
+---
+
+## BIN-1060 — pinna invarianten som gör tidstestets signal tillräcklig
+
+**Tier A.** `node docs/org/route.mjs src/test/rules/available-notify-orchestrator.test.ts`
+→ `medium`, panel `[13]`.
+
+1. Ett test pinnar att inget `await` står mellan `processTitle`s öppning och
+   `io.fetchSeFlatrate`-anropet. *(kind: diff)*
+2. Mutationsprövat i BÅDA riktningarna: ett inskjutet `await` före hämtningen fäller
+   det; koden som den står gör det grönt. Mutanten asserteras FÖRE och EFTER
+   körningen, i ett kommando. *(kind: diff)*
+3. Prövat att det källkodsskannande testet fäller av RÄTT skäl, inte på sin egen
+   regex. *(kind: diff)*
+4. Ingen befintlig assertion försvagas. *(kind: diff)*
+
+---
+
+## BIN-1061 — stryk epoktabellen i `check_review_coverage.mjs`
+
+**Tier A.** `node docs/org/route.mjs docs/org/metrics/check_review_coverage.mjs`
+→ `medium`, panel `[14]`, `reasonCode: unmapped-code` (filen saknar ägare —
+`unownedCode` är icke-tom).
+
+Biljettens egen rekommendation är att STRYKA tabellen, inte skriva nya tal.
+
+1. Tabellen (raderna kring `2026-08-18 (this)`) är struken, inte omformulerad.
+   *(kind: diff)*
+2. Epokens motivering finns kvar i en form som INTE bär ett omätt tal — annars ett
+   kommando som härleder talen. *(kind: diff)*
+3. Kontrollerat med grep om något ANNAT ställe citerar tabellens tal; träffar
+   åtgärdas i samma commit. *(kind: diff)*
+
+---
+
+## BIN-1064 — två föråldrade meningar i driftdokumenten
+
+**Tier A.** `node docs/org/route.mjs docs/analysis/EXTERNAL_ACTIONS.md .claude/agents/binge-test-reviewer.knowledge.md`
+→ `medium`, panel `[8]`.
+
+1. Det batch-bundna stycket i `EXTERNAL_ACTIONS.md` är STRUKET, inte omskrivet.
+   *(kind: diff)*
+2. Klausulen som pekar ut en enskild arkivrubrik är STRUKEN. Ingen ny uppräkning,
+   inget nytt tal. *(kind: diff)*
+3. Steg som fortfarande är sanna för vilken `functions/**`-ändring som helst står
+   kvar. *(kind: diff)*
+
+---
+
+## Inte valda — och varför
+
+**Kräver en egen session i `C:/claude-plugins`** (fixen bor där; den här sessionen
+startar granskare): BIN-1052, BIN-1013, BIN-1035, samt del 1 av BIN-959.
+
+**Väntar på Malin (produktval eller öppen fråga i biljetten):** BIN-990 (vidga
+grindlistan, låt vara, eller bygg nyckelgranskning?), BIN-1063 (bär designvalet
+"ägd grupp med kvarvarande medlemmar: radera eller lämna över?"), BIN-939 (ska #4
+grinda `package.json`?), BIN-189 / BIN-521 / BIN-170 (`idea`-etikett).
+
+**Stående stopp:** BIN-454 och BIN-402 — `mutateEnabled` är Malins konsolåtgärd.
+**Kostnadssatt, uttryckligen inte nu:** BIN-824.
+**Övriga, valbara nästa körning:** BIN-613, BIN-826, BIN-871, BIN-658, BIN-624,
+BIN-559, BIN-959 (delarna 2–5).
+
+## Needs you (Tier D)
+
+- `firebase deploy --only functions` för BIN-1023 (från sprinten 2026-08-30) står
+  fortfarande kvar enligt sessionsminnet — bekräfta mot konsolen.
+
+## Deviation log
+
+
+---
+
 # Sprint 2026-08-30 — BIN-1023 + BIN-590
 
 Föregående sprintplan arkiverad under `---` längst ned.

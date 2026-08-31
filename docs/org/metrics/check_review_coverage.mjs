@@ -82,9 +82,7 @@
 // the incident. A checker that misses the case it was written for is worse than none.
 //
 // So the list is `feat|fix|refactor|perf|test|build|ci`: everything that changes executable
-// code or the release path. Measured cost of the widening: ZERO eligible commits added today
-// (both variants see the same 2 since the epoch), and 74 rather than 55 over the whole of
-// August, all of which are grandfathered anyway.
+// code or the release path.
 //
 // What is deliberately OUT, and this is a real limit rather than a claim of completeness:
 //   * `docs`, `chore`, `style` — 61 of the 135 commits since 2026-08-01. Nightly comment
@@ -174,15 +172,13 @@ import { fileURLToPath } from 'node:url';
 import { EVENTS_PATH, parseEvents, historyIsAvailable, ticketOf } from './check_events.mjs';
 
 /**
- * The epoch. Deliberately NOT check_events.mjs's `RULE_EFFECTIVE_FROM` (2026-08-16), and the
- * cost of each candidate was MEASURED rather than argued — run the grader at three epochs
- * against the same history and log:
+ * The epoch. Deliberately NOT check_events.mjs's `RULE_EFFECTIVE_FROM` (2026-08-16).
+ * `findCoverageGaps` takes an `effectiveFrom`, so any candidate epoch can be graded against
+ * the same history whenever the question is reopened. What the epoch in force costs today:
  *
- *     2026-08-18 (this)  →  2 eligible,  2 covered,  0 violations, 587 grandfathered
- *     2026-08-16 (reuse) →  8 eligible,  4 covered,  4 violations, 581 grandfathered
- *     2026-08-01         → 74 eligible, 21 covered, 53 violations, 515 grandfathered
+ *     node docs/org/metrics/check_review_coverage.mjs
  *
- * Reusing the sibling's epoch would ship RED on day one, on four commits written before any
+ * Reusing the sibling's epoch would ship RED on day one, on commits written before any
  * such requirement existed. Their absence is not dishonesty, and failing them would be noise
  * — which is how a check gets switched off. Pinned instead to the day this rule ships, so the
  * earliest commits it judges are from that same day. (It does NOT judge the commit that
@@ -190,17 +186,6 @@ import { EVENTS_PATH, parseEvents, historyIsAvailable, ticketOf } from './check_
  * on day one are `634d62e` and `2e5993a`, the pair whose missing rows it found and which this
  * batch backfilled. An earlier draft said "the first commit it judges is the one that
  * introduces it", which is tidier and untrue.)
- *
- * The 2026-08-01 row is the honest measure of what this rule does NOT retroactively assert:
- * 53 of the last 74 code-changing commits have no review row. That is the backlog this epoch
- * declines to litigate, not a claim that those commits were reviewed.
- *
- * That row read 5 covered / 69 violations for one round — measured before this same commit
- * taught `ticketsWithAReviewRow` to resolve ids through `ticketOf`. The widened lookup found
- * rows for 16 more commits, so the fix did not only correct a message: it shrank the
- * un-litigated backlog by 16. A number measured against a reader the same commit replaces is
- * the third distinct way this batch produced a stale figure, and the integration review
- * caught all three.
  *
  * The count of commits skipped as older than this is PRINTED on every run, so "clean" can
  * never be mistaken for "every commit in history was reviewed".
