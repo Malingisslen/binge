@@ -695,3 +695,11 @@ visa ett lösenord i klartext, och den som kringgått formuläret rapporterar de
 vars re-open-fakta är onåbara är permanent by construction, precis som
 `communityRatingMaintain`-posten ovan skriver ut. Utlösaren som står kvar är skönsmässig, och
 det ska läsas som att accepten gäller tills någon aktivt öppnar dörren för något annat.
+
+**Historiska konton — mätt av Malin 2026-08-31, luckan är tom.** Lösenordskravet landade
+`d1b1adb` (2026-04-24); registrering med lösenord fanns redan `009a936` (2026-03-27). Konton
+skapade däremellan prövades aldrig mot kravet, och utan återställningsväg kan de inte stärkas
+inifrån appen. Malin läste Firebase-konsolens Authentication-lista och **inga konton finns i
+det fönstret**. Accepten täcker därför bara framtida kringgåenden, inte en kvarvarande
+population — vilket den inte hade gjort om svaret varit ett annat. Mätningen går inte att
+göra om ur repot; svarar någon på frågan igen måste den komma från konsolen.
