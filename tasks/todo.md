@@ -174,8 +174,6 @@ riktningarna — notesfilen utanför unionen, granskarens INSTRUKTIONSfil kvar i
 ## BIN-1061 — stryk epoktabellen i `check_review_coverage.mjs`
 
 **Tier A.** `node docs/org/route.mjs docs/org/metrics/check_review_coverage.mjs`
-→ `medium`, panel `[14]`, `reasonCode: unmapped-code` (filen saknar ägare —
-`unownedCode` är icke-tom).
 
 Biljettens egen rekommendation är att STRYKA tabellen, inte skriva nya tal.
 

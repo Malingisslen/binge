@@ -52,12 +52,13 @@ pre-commit:
 # does not exist yet, so nothing can walk history for it, but the message being written names
 # the tickets. `{1}` is the path to the message file.
 #
-# NOT glob-gated, unlike the two above, and deliberately: the check reads the SUBJECT, not the
-# staged files, and a code-changing commit that touches no `.ts` is exactly the case that
-# escaped on 2026-08-16 (049f21b is a test-file commit). It costs one node process and one
-# file read — no toolchain, no compile. Measured well under a second.
 commit-msg:
   commands:
+    # NOT glob-gated, unlike the two pre-commit steps, and deliberately: this check reads the
+    # SUBJECT, not the staged files, and a code-changing commit that touches no `.ts` is
+    # exactly the case that escaped on 2026-08-16 (049f21b is a test-file commit). It costs
+    # one node process and one file read — no toolchain, no compile. Measured well under a
+    # second.
     review-coverage:
       run: node docs/org/metrics/check_review_coverage.mjs --message {1}
       fail_text: "This commit names a ticket with no stakeholder-review row (BIN-917). Log the review, or fix the subject."

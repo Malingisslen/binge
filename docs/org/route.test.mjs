@@ -403,10 +403,9 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
   it('leaves the rest of scripts/ and docs/ routing as before', () => {
     // The narrow list is the decision (Malin, 2026-08-08, alternative (a)):
     // pulling all of docs/ + scripts/ in would put a reviewer on every helper tweak.
-    // These are the load-bearing negatives. This ROUTER-side list has been widened once
-    // since BIN-805 created it (here, by BIN-864/873); the blocking gate's own pattern
-    // array has moved four times. Either way, a widening must still leave ordinary
-    // helper scripts alone — that is what makes it a narrow list rather than a glob.
+    // These are the load-bearing negatives. Both lists have been widened repeatedly since
+    // BIN-805 created this one. Either way, a widening must still leave ordinary helper
+    // scripts alone — that is what makes it a narrow list rather than a glob.
     expect(isCodePath('scripts/serve-spa.mjs')).toBe(false);
     expect(isCodePath('scripts/gen-app-icons.mjs')).toBe(false);
     expect(isCodePath('docs/org/ownership-map.json')).toBe(false);
@@ -453,10 +452,6 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // its own blind spot 1) and the DISCOVERY half never nominates it. This floor is the
     // only thing left that would notice, and BIN-918 left it at 9 until the twelfth
     // integration pass measured it.
-    // Advanced with the list every time the list grows, in the same commit that grows it
-    // — 18 → 20 for BIN-997's two check-knowledge-caps files, 20 → 22 for BIN-1009's two
-    // freshness hook files. That maintenance IS the rule above: a floor left behind stops
-    // being able to fire, which is what "BIN-918 left it at 9" describes.
     //
     // BIN-1009 nearly repeated it. Left at 20 against a list of 22, the guard's own
     // motivating case goes green: removing docs/org/metrics/log_event.mjs from both lists
@@ -465,7 +460,7 @@ describe('the router and the gate scripts cannot clear themselves (BIN-805)', ()
     // biconditional reads false === false, and gate-symmetry's A1 is keyed on isCodePath,
     // which the removal switches off. Re-measure with the command above; never copy this
     // number forward without running it.
-    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(22);
+    expect(GATE_SCRIPTS.length).toBeGreaterThanOrEqual(27);
   });
 
   it('names every one of those scripts in the BLOCKING list too (BIN-864/873)', () => {
@@ -710,17 +705,18 @@ describe('the advising list and the blocking gate cannot drift apart for tooling
     // `it.each([])` registers ZERO tests and reports no error, so an include array that
     // stopped matching — a moved directory, a renamed glob, a config import that started
     // resolving to something else — would delete both blocks above in total silence.
-    // Floors at the measured values, per BIN-838: the floor is not decoration.
+    // Anti-vacuity floors: they exist to make a list that stopped matching fail loudly,
+    // not to pin today's length.
     expect(vitestConfig.test.include.length).toBeGreaterThanOrEqual(5);
     expect(MJS_TEST_FILES.length).toBeGreaterThanOrEqual(6);
     expect(REVIEW_CANDIDATES.length).toBeGreaterThanOrEqual(11);
-    // TOOLING_MJS is the exception: its floor is NOT the measured value. The measurement
-    // is ~780 and 774 of those are one-off scripts/recaps/*.mjs, so a count pinned near it
+    // TOOLING_MJS is the exception: its floor is NOT the measured value. The glob is
+    // dominated by one-off scripts/recaps/*.mjs, so a count pinned near the measurement
     // would break on every new recap without ever guarding the thing that matters. The
     // floor stays low and the SHAPE is pinned instead — one file per glob entry, below.
     expect(TOOLING_MJS.length).toBeGreaterThanOrEqual(19);
     // One pin per glob entry, because a count cannot see a HALF disappear. Dropping
-    // 'docs/**/*.mjs' leaves 774 scripts/ files — over any plausible floor — while
+    // 'docs/**/*.mjs' leaves every scripts/ file — over any plausible floor — while
     // silently removing route.mjs, route.test.mjs, gen-ownership-map.mjs and its test
     // from the symmetry check: precisely the four paths BIN-830 was filed about. That
     // shrink-reads-as-a-pass class (BIN-838/823/850) is what this whole block exists to

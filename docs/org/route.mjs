@@ -31,7 +31,7 @@
 //
 // BIN-788 — two things this router used to get wrong, both of which made a risky change
 // look cleared:
-//   1. The ownership map enumerates FILES (149 exact paths). A brand-new file in a
+//   1. The ownership map enumerates FILES. A brand-new file in a
 //      directory with ten owned siblings matched nothing. Resolution is now
 //      DIRECTORY-based for code paths: a role that owns a file in a directory owns that
 //      directory's other code files too (reported per role in `inherited`).
@@ -261,9 +261,8 @@ export const TOOLING_CODE_FILES = new Set([
   // DEPLOY. It was never caught at COMMIT time, and code reaching main past a red suite is
   // exactly what the two-list pairing exists to stop.
   //
-  // COST: `git log --oneline --no-merges -- eslint.config.mjs | wc -l` answers 4 for the
-  // whole history of the repo, so the new obligation lands on a file that has changed four
-  // times ever. Malin's narrow-over-broad standing call (2026-08-08, alternative (a)) was
+  // COST: the new obligation lands on a file that changes rarely — derive it with
+  // `git log --oneline --no-merges -- eslint.config.mjs | wc -l`. Malin's narrow-over-broad standing call (2026-08-08, alternative (a)) was
   // the previous entry's reason for leaving it out and is honoured rather than overridden:
   // one exact filename in each of the two lists, the shape BIN-934 used for
   // package-lock.json — not a directory, not a glob.

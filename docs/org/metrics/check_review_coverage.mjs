@@ -85,33 +85,25 @@
 // code or the release path.
 //
 // What is deliberately OUT, and this is a real limit rather than a claim of completeness:
-//   * `docs`, `chore`, `style` — 61 of the 135 commits since 2026-08-01. Nightly comment
-//     sweeps, janitor runs, lessons-digest folds. Automation that never owed a critique;
+//   * `docs`, `chore`, `style`. Nightly comment sweeps, janitor runs, lessons-digest
+//     folds. Automation that never owed a critique;
 //     demanding rows would make the check permanently red, and a permanently red check gets
 //     switched off.
 //   * `revert` (4 subjects in history), and any commit with NO conventional prefix. Neither
 //     matches, so neither is judged, and a revert of reviewed code is a real change this rule
 //     will not ask about.
 //
-//     THE "unprefixed" COUNT DEPENDS ENTIRELY ON THE DEFINITION, so here is the definition
-//     with its number rather than a number on its own — a reviewer and I measured this three
-//     times and got 129, 142 and 146, all correct for different readings. Over the 948
-//     non-merge commits, subjects NOT matching:
-//         /^[a-z]+(\([^)]*\))?!?:/                    → 129   (this module's grammar)
-//         /^[a-z]+(\([^)]*\))?(\+[a-z]+)*!?:/         → 114   (…allowing `feat(x)+test:`)
-//         /^(feat|fix|…|style)(\([^)]*\))?!?:/        → 146   (only the 10 known types)
-//         /^[^:\s][^:]*:/                             →  34   (anything before a colon)
-//     The 129 are mostly this repo's older `feat(watchlist)+rules:` / `fix(providers)+test:`
+//     HOW MANY subjects go unprefixed depends entirely on which grammar you count with, so
+//     derive it rather than reading a figure here:
+//
+//         TZ=UTC git log --no-merges --date=iso-strict-local --format='%cd|%s'
+//
+//     They are mostly this repo's older `feat(watchlist)+rules:` / `fix(providers)+test:`
 //     style, where the suffix after the scope parenthesis breaks the conventional grammar.
-//     They are not untraceable commits; they are a spelling this regex does not parse. All
-//     of them predate the epoch, so none is judged either way today.
+//     They are not untraceable commits; they are a spelling this regex does not parse.
 //   * SUBJECT ONLY, never the body. `6d157c5` is a pure documentation correction that names
 //     BIN-565 in its body alone; a body-scanning rule would demand a review row for every
 //     follow-up comment fix on already-reviewed work.
-//
-// METHOD, because the method is part of the number. Every figure above comes from ONE
-// procedure: `git log --no-merges --format=%cI`, every commit's committer date compared in
-// UTC against the boundary. 135 commits since 2026-08-01.
 //
 // Do NOT cross-check these with `git log --since=…`. It answers a different question — its
 // own timezone handling and, for a bare date, the time of day you happen to run it — so it
@@ -124,11 +116,6 @@
 // review round. The eventual fix was not a better explanation. It was to stop explaining
 // something incidental and name the one procedure the numbers actually come from — which is
 // the same lesson as the counts themselves: state the method, not a theory about it.
-// An earlier draft of this header asserted a "66" that no window produces, and then, in the
-// correction for it, explained the 132 as "git reads --since in LOCAL time" — which is
-// backwards, and was caught by the same reviewer on the next pass. A wrong causal story
-// inside a paragraph about being careful with numbers. If you re-derive these, say which
-// window you used.
 //
 // ONE MORE THING IT DOES NOT DO. A ticket is "covered" by ANY `review` row bearing its id,
 // with no test of recency or scope. A ticket re-opened and re-shipped weeks later is still

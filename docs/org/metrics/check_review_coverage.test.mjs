@@ -4,9 +4,9 @@
 // sibling's "does this row carry its evidence?". Two properties make that easy to get wrong
 // and are pinned hardest here:
 //
-//   1. THE DENOMINATOR. A rule that demands a row from every commit goes permanently red
-//      (61 of the 135 commits since 2026-08-01 UTC are docs/chore/style automation) and a
-//      rule that demands one from too few is vacuous. Every branch of `owesReviewRow` is driven
+//   1. THE DENOMINATOR. A rule that demands a row from every commit goes permanently red —
+//      much of this repo's history is docs/chore/style automation — and a rule that demands
+//      one from too few is vacuous. Every branch of `owesReviewRow` is driven
 //      directly, including the `feat!:` breaking-change spelling and the bare `fix:` with no
 //      scope, because a regex that silently stopped matching one of them would shrink the
 //      denominator without failing anything.
@@ -85,8 +85,8 @@ describe('owesReviewRow — the denominator, driven branch by branch', () => {
   });
 
   it('docs, chore and style do not — the automation classes', () => {
-    // 61 of the 135 commits since 2026-08-01. Nightly comment sweeps, janitor runs,
-    // lessons-digest folds. Demanding rows from these is how the check gets switched off.
+    // Nightly comment sweeps, janitor runs, lessons-digest folds. Demanding rows from
+    // these is how the check gets switched off.
     for (const subject of [
       'docs(map): re-trace a flow (BIN-6)',
       'chore(janitor): weekly maintenance sweep',
@@ -97,12 +97,10 @@ describe('owesReviewRow — the denominator, driven branch by branch', () => {
   });
 
   it('an unprefixed commit and a revert are OUT OF SCOPE, not silently passed', () => {
-    // A stated limit rather than a hidden one: neither matches, so neither is judged, and 0
-    // such commits fall in the judged window anyway. The module header carries the historical
-    // count against FOUR different definitions of "unprefixed" (129 / 114 / 146 / 34) rather
-    // than one bare number, because a reviewer and I measured it three times and got three
-    // answers, each right for a different reading. Pinned here so that if someone later
-    // decides these SHOULD be judged, this test is where the decision lands.
+    // A stated limit rather than a hidden one: neither matches, so neither is judged. How
+    // many such commits exist depends on which grammar you count with — the module header
+    // carries the deriving command rather than a figure. Pinned here so that if someone
+    // later decides these SHOULD be judged, this test is where the decision lands.
     expect(owesReviewRow('Revert "feat(x): thing (BIN-1)"')).toBe(false);
     expect(owesReviewRow('update the thing')).toBe(false);
   });
