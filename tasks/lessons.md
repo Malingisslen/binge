@@ -1096,3 +1096,51 @@ Samma tysta spärrhake som BIN-823/852/931/998 i ny förklädnad.
 utanför `users/{uid}`-trädet, så när trädet är borta slutar uid:t synas i genomsökningen. Att
 kasta i `deleteUserTree` och hävda att projektionen redan är borta skiljer de två ordningarna;
 inget annat test i filen gjorde det (mutationen överlevde 20 av 20).
+
+### [Workflow] Push-grinden är ett EGET granskningsvarv, inte ett `git push` (2026-09-01, BIN-1059)
+
+**Trigger:** en sprint planerar sitt anslag efter antalet buntar.
+
+**Regel:** `require-integration-review-before-push.mjs` kräver EN
+`binge-integration-reviewer`-körning som läst varje granskningsbar fil i hela `@{u}..HEAD`.
+Per-bunts-granskningar summerar inte till det, och grinden säger det rakt ut: *"Per-batch
+proofs do not add up to it."* Räkna alltså push som ett varv med samma vikt som en bunt, och
+lägg det där det finns anslag kvar. Att splitta i FLER commitar gör det dyrare, inte
+billigare — varje commit lägger till filer i intervallet utan att ta bort behovet av ett pass
+över alltihop.
+
+**Exempel:** sprinten 2026-08-31 brände sitt anslag på fyra per-bunts-kedjor, slog i
+användningstaket precis när intervallgranskningen krävdes, och fyra färdiga commitar blev
+liggande opushade över natten. Ingenting gick förlorat — de låg lokalt, den femte som en
+arkiverad patch — men leveransen sköts ett halvt dygn.
+
+**Och den är den som hittar mest.** Den fann åtta fynd ingen per-bunts-granskning kunde se,
+varav två som sprinten själv orsakade: ett publicerat routningsresultat i en TIDIGARE commits
+fil som en senare commit gjorde falskt, och en spärrhake vars lista bunten växte från 25 till
+27 utan att höja golvet från 22 — ett golv som ligger efter sin lista kan inte längre fyra.
+Båda osynliga per commit, båda uppenbara över intervallet.
+
+### [Workflow] Nitton granskningsvarv, ETT fynd i koden (2026-09-01, BIN-1059/1060/1061/1064)
+
+**Trigger:** en bunt som mest är text — kommentarer, planer, beslutsprotokoll, granskarnas
+egna anteckningar.
+
+**Regel:** stryk hellre än formulera om, och sök efter kopiorna FLERRADIGT. Samma mening är
+radbruten olika i olika filer, så en enkelradig `grep` hittar en av tre. Där en mening måste
+stå kvar, skriv ett KOMMANDO som härleder den — och kör kommandot innan du skriver meningen.
+Skriv kommandon HELT utan escape-tecken - anvand `String.fromCharCode(10)` i stallet
+for ett radbrytningsescape.
+
+**Exempel:** sprinten 2026-08-31 tog nitton varv över fem buntar. Exakt ett fynd låg i koden.
+Alla övriga var meningar jag själv skrivit och ingen mätt, och fem av dem satt inne i
+rättelsen av ett tidigare fynd. Formerna som återkom: ett tal som glidit (587→585, 948→1070,
+149→152, 22→27); en superlativ över en oräknad mängd ("den vanligaste orsaken" = 4 av 19); ett
+publicerat kommando vars radbrytningsescape kollapsat till ett riktigt styrtecken sa att
+det inte ens gick att kora - ANDRA gangen samma familj biter, och en TREDJE gang i den
+har lardomens egen text; en mening struken pa ett stalle som levde kvar
+elva rader ovanför, och en till i en syskonfil; och ett påstående ärvt ur biljetten och skrivet
+in i koden utan att mätas (BIN-1059:s premiss om granskarnas kunskapsfiler var mätbart falsk —
+en `*.knowledge.md` är ingen kodsökväg och kan aldrig sätta en roll i panelen).
+
+**Följdregel:** en strykning som lämnar ett stycke bredvid utan subjekt är ett nytt fynd. Ta
+med det som hänger löst i samma redigering.
