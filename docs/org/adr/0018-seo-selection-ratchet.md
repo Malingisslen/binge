@@ -315,3 +315,28 @@ innan sidornas egen metadata hämtas, kastar `fetchForBuild` och varje
 self-canonical. Bygget blir alltså GRÖNT med tunnare sidor än vanligt — inte rött.
 Självläker nästa bygge när cachen är varm. Risken är liten men den är av annan art än
 den som stod här.
+
+### Efterföljare 2026-09-02 (BIN-826): härledningens storlek syns numera i loggen
+
+Konsekvensposten "Härledningen är opålitlig, och det var okänt innan detta arbete" ovan
+slutar med *"Värt en egen biljett om det ska mätas."* Den biljetten är byggd. Posten står kvar
+ordagrant — ett beslutsprotokoll rättas inte, det får en daterad efterföljare — men den
+beskriver inte längre nuet.
+
+`resolveSelection` skriver sedan den här ändringen en rad per typ vid varje LYCKAD
+härledning:
+
+```
+::notice::[selection] <typ> utbyte: behållna N, evakuerade N, nytillkomna N,
+varav omhärledda N av N. Härledningen gav N id, manifestet håller N (tak N). …
+```
+
+`Härledningen gav N id` är precis det tal som saknades: en halverad härledning syns nu
+som ett halverat tal, bygge för bygge. Två tysta vägar till stängdes i samma ändring — en
+härledning som LYCKAS med tom lista, och en härledning som når taket och därmed
+degraderar spärrhaken till rotation — båda som `::warning::`.
+
+Vad som INTE är löst: `Promise.allSettled` sväljer fortfarande de listsidor som failar,
+så raden mäter utfallet, inte orsaken. Och `REFRESH_DERIVE_TIMEOUT_MS` är oförändrad —
+den kräver några veckors data och är fortfarande spårad i
+BIN-826, som därför inte får stängas som helt klar.

@@ -247,8 +247,7 @@ export const RESCUE_DERIVE_TIMEOUT_MS = 15 * 60_000;
 // ska rädda. Taket ska rymmas i `175 − rendreringstiden`, och rendreringen mättes
 // till 90–120 min, vilket ger ett fönster på 55–85 min. 44,5 under 55 med tio minuters
 // marginal — för tunt för att välja blint när båda ändarna är enskilda mätningar.
-// Rätt värde kräver några veckors data. Spårat i BIN-826, som ändå ska röra det
-// här blocket; ändra det EN gång, med siffror.
+// Rätt värde kräver några veckors data. Spårat i BIN-826.
 export const REFRESH_DERIVE_TIMEOUT_MS = 150 * 60_000;
 
 /**

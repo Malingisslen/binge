@@ -252,7 +252,11 @@ describe('resolveSelection — fastaket', () => {
     // `timeout-minutes` i deploy.yml blir de tyst inaktuella — de skulle pinna
     // en marginal mot ett tak som inte längre gäller. Filen är redan läst här,
     // så det kostar en rad att koppla ihop dem.
-    expect(deployYml).toContain('&& 175 || 45');
+    // Radbunden, inte `toContain`: delsträngen `|| 45` finns också i `|| 450`, så
+    // en `toContain`-form överlever den mutationen — och en sänkt live-rad plus en
+    // kommentar någon annanstans i filen som citerar den gamla ternaryn uppfyller
+    // den likaså. Ankaret binder matchningen till raden som faktiskt sätter taket.
+    expect(deployYml).toMatch(/^\s*timeout-minutes:.*&& 175 \|\| 45 \}\}\s*$/m);
   });
 });
 
@@ -414,5 +418,157 @@ describe('resolveSelection — golvet och fröna', () => {
     });
 
     expect(ids).toEqual([603, 604]);
+  });
+});
+
+/**
+ * BIN-826 — spärrhaken har tre tysta vägar, och den här sviten pinnar att de
+ * inte längre är tysta.
+ *
+ * Skälet att utbytesraden är värd ett test alls: om spärrhaken slutar behålla
+ * något märks det annars först i Search Console, veckor senare.
+ */
+describe('resolveSelection — utbytesraden och de två varningarna (BIN-826)', () => {
+  function written(): string[] {
+    return stderr.mock.calls.map((c: unknown[]) => String(c[0]));
+  }
+
+  it('rapporterar behållna, evakuerade, nytillkomna och omhärledda på en refresh', async () => {
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    seedManifest('movie', [1, 2, 3]);
+
+    await resolveSelection({
+      type: 'movie',
+      seedIds: [],
+      fallbackIds: [],
+      // 2 och 3 härleds om, 1 gör det inte, 4 är ny. Inget evakueras — taket är
+      // 15 000 och det här är fyra id.
+      derive: async () => [2, 3, 4],
+      now: NOW + 1,
+    });
+
+    const line = written().find(l => l.includes('utbyte:'));
+    expect(line).toBeDefined();
+    expect(line).toContain('behållna 3');
+    expect(line).toContain('evakuerade 0');
+    expect(line).toContain('nytillkomna 1');
+    expect(line).toContain('omhärledda 2 av 3');
+  });
+
+  it('kortar av id-uppräkningen i stället för att skriva ut hela urvalet', async () => {
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    seedManifest('movie', []);
+
+    // Tolv nya id mot ett urvalsprov på fem ⇒ sju ska döljas bakom "och N till".
+    await resolveSelection({
+      type: 'movie',
+      seedIds: [],
+      fallbackIds: [],
+      derive: async () => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      now: NOW + 1,
+    });
+
+    const line = written().find(l => l.includes('utbyte:'))!;
+    // Pinnas på den avgränsade uppräkningen SJÄLV, inte på frånvaron av "12":
+    // det talet står ändå kvar i räknarna ("nytillkomna 12", "gav 12 id"), så en
+    // frånvaro-assertion hade varit falsk av rätt skäl och sann av fel.
+    expect(line.split('Nytillkomna: ')[1].trim()).toBe('1, 2, 3, 4, 5 … och 7 till.');
+  });
+
+  it('räknar EVAKUERADE när taket faktiskt trycker ut poster', async () => {
+    // `evicted` är det tal `reportExchange`s docblock pekar ut som svaret på hur mycket
+    // andrum spärrhaken har kvar. Ingen övrig fixtur här når ÖVER taket — evakuering
+    // kräver `merged.length > ceiling`, så at-taket-fallet nedan räcker inte heller — så
+    // `evicted` är tom av konstruktion i dem och `evakuerade 0` uppfylls oavsett om
+    // beräkningen fungerar. Testgranskningen bevisade det: att låta `after` permanent vara
+    // lika med `before` — så att en verklig evakuering för alltid rapporteras som noll —
+    // lämnade hela filen grön. Den här fixturen driver en riktig evakuering i stället.
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    // Taket för person är 1 000, litet nog att fylla i ett test.
+    const sitting = Array.from({ length: 1_000 }, (_, i) => i + 1);
+    seedManifest('person', sitting, NOW - 1000);
+
+    // 200 HELT nya id ⇒ sammanslaget 1 200 mot ett tak på 1 000 ⇒ 200 måste ut. De som går
+    // är de äldsta, alltså sittande som inte härleddes om — ingen av de färska bär `NOW`.
+    const fresh = Array.from({ length: 200 }, (_, i) => 2_001 + i);
+    await resolveSelection({
+      type: 'person',
+      seedIds: [],
+      fallbackIds: [],
+      derive: async () => fresh,
+      now: NOW + 1,
+    });
+
+    const line = written().find(l => l.includes('utbyte:'))!;
+    expect(line).toContain('evakuerade 200');
+    expect(line).toContain('behållna 800');
+    expect(line).toContain('nytillkomna 200');
+    // Och ingen av de sittande härleddes om — det är därför just de gick ut.
+    expect(line).toContain('omhärledda 0 av 1000');
+    // Uppräkningen av de evakuerade är avgränsad på samma sätt som de nytillkomna.
+    expect(line.split('Evakuerade: ')[1].split('.')[0]).toContain('och 195 till');
+  });
+
+  it('varnar när en härledning LYCKAS med tom lista — och den varningen är inte utbytesraden', async () => {
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    seedManifest('movie', [1, 2, 3]);
+
+    await resolveSelection({
+      type: 'movie',
+      seedIds: [],
+      fallbackIds: [],
+      derive: async () => [],
+      now: NOW + 1,
+    });
+
+    const warning = written().find(l => l.includes('TOM lista'));
+    expect(warning).toBeDefined();
+    expect(warning).toContain('::warning::');
+
+    // Bägge raderna fyrar på SAMMA händelse (0 evakuerade, 0 nytillkomna), så en
+    // läsare måste kunna skilja dem åt på lydelsen — inte bara på utlösaren.
+    const exchange = written().find(l => l.includes('utbyte:'));
+    expect(exchange).toBeDefined();
+    expect(exchange).not.toContain('TOM lista');
+    expect(warning).not.toContain('utbyte:');
+  });
+
+  it('varnar när härledningen når taket — spärrhaken har då ingen luft kvar', async () => {
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    seedManifest('person', []);
+
+    // Taket för person är 1 000, litet nog att fylla i ett test. Villkoret är `>=`,
+    // så exakt taket ska räcka.
+    const atCeiling = Array.from({ length: 1_000 }, (_, i) => i + 1);
+    await resolveSelection({
+      type: 'person',
+      seedIds: [],
+      fallbackIds: [],
+      derive: async () => atCeiling,
+      now: NOW + 1,
+    });
+
+    const warning = written().find(l => l.includes('ingen luft kvar'));
+    expect(warning).toBeDefined();
+    expect(warning).toContain('::warning::');
+    expect(warning).toContain('1000 id mot taket 1000');
+  });
+
+  it('varnar INTE om taket när härledningen ligger under det', async () => {
+    process.env.TMDB_SELECTION_REFRESH = '1';
+    seedManifest('person', []);
+
+    const belowCeiling = Array.from({ length: 999 }, (_, i) => i + 1);
+    await resolveSelection({
+      type: 'person',
+      seedIds: [],
+      fallbackIds: [],
+      derive: async () => belowCeiling,
+      now: NOW + 1,
+    });
+
+    expect(written().some(l => l.includes('ingen luft kvar'))).toBe(false);
+    // Men utbytesraden skrivs ändå — den är inte ett larm.
+    expect(written().some(l => l.includes('utbyte:'))).toBe(true);
   });
 });

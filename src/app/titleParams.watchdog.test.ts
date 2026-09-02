@@ -160,8 +160,6 @@ describe.each(ROUTES)('$name generateStaticParams — build watchdog (BIN-815)',
     void route.run().catch(() => {});
     await vi.advanceTimersByTimeAsync(60_000);
     const perTick = lines.filter((l) => l.includes('STUCK')).length;
-    // 1000 queued calls behind an 8-slot semaphore would otherwise all read as
-    // stuck; the cap is what keeps the signal readable.
     expect(perTick).toBeLessThanOrEqual(10);
     expect(lines.some((l) => /och \d+ till$/.test(l))).toBe(true);
   });

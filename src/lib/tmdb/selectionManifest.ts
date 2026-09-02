@@ -79,8 +79,7 @@ export const SELECTION_CEILING: Record<SelectionType, number> = {
 //
 // Nivån är satt efter mätning, inte gissning. Ett lokalt bygge 2026-08-08 gav
 // 4 375 film-id mot produktionens ~9 850 (sitemapen hade 20 763 URL:er) — TMDB
-// stryper hårt och `Promise.allSettled` sväljer de sidor som failar, så en
-// härledning kan vara halverad utan att något syns. Ett golv på 5 000 fällde
+// stryper hårt och `Promise.allSettled` sväljer de sidor som failar. Ett golv på 5 000 fällde
 // det bygget, vilket blandade ihop "fallback-katastrof" med "strypt nätverk"
 // och hade kunnat blockera den allra första produktionsdeployen (som per
 // definition saknar manifest och måste härleda).
@@ -337,6 +336,73 @@ export function writeSelectionManifest(manifest: SelectionManifest): void {
 }
 
 /**
+ * Hur många id:n en utbytesrad räknar upp innan den kortar av. Formen är
+ * `buildFetch.ts`s (`… och N till`) och finns av samma skäl: taket för movie/tv
+ * är 15 000, så en full uppräkning är oläsbar och riskerar loggradsgränsen.
+ */
+const EXCHANGE_SAMPLE_LIMIT = 5;
+
+function sample(ids: readonly number[]): string {
+  if (ids.length === 0) return '—';
+  const head = ids.slice(0, EXCHANGE_SAMPLE_LIMIT).join(', ');
+  return ids.length > EXCHANGE_SAMPLE_LIMIT
+    ? `${head} … och ${ids.length - EXCHANGE_SAMPLE_LIMIT} till`
+    : head;
+}
+
+/**
+ * Utbytet vid mergen (BIN-826) — utan det märks ett tyst haveri först i Search
+ * Console, veckor senare. Skrivs vid varje LYCKAD härledning, alltså även på en
+ * räddningshärledning under en vanlig kod-deploy, inte bara i veckobygget.
+ *
+ * Härleds ur `mergeManifest`-körningens in- och utdata; funktionen
+ * anropas aldrig en andra gång för att "återskapa" det evakuerade, eftersom en
+ * andra körning med ett annat `now` inte är samma beräkning.
+ *
+ * Talet som svarar på hur länge personsidornas andrum räcker är `evicted`, inte
+ * `refreshed`: en post lämnar urvalet när taket trycker ut den.
+ */
+function reportExchange(
+  type: SelectionType,
+  previous: SelectionManifest | null,
+  freshIds: readonly number[],
+  merged: SelectionManifest,
+): void {
+  const before = new Set((previous?.ids ?? []).map(e => e.id));
+  const after = new Set(merged.ids.map(e => e.id));
+  const fresh = new Set(freshIds);
+
+  const retained: number[] = [];
+  const evicted: number[] = [];
+  for (const id of before) (after.has(id) ? retained : evicted).push(id);
+  const added = merged.ids.filter(e => !before.has(e.id)).map(e => e.id);
+  let refreshed = 0;
+  for (const id of before) if (fresh.has(id)) refreshed += 1;
+
+  process.stderr.write(
+    `::notice::[selection] ${type} utbyte: behållna ${retained.length}, ` +
+      `evakuerade ${evicted.length}, nytillkomna ${added.length}, ` +
+      `varav omhärledda ${refreshed} av ${before.size}. ` +
+      `Härledningen gav ${freshIds.length} id, manifestet håller ${after.size} ` +
+      `(tak ${SELECTION_CEILING[type]}). Evakuerade: ${sample(evicted)}. ` +
+      `Nytillkomna: ${sample(added)}.\n`,
+  );
+
+  // Över taket degraderar spärrhaken TYST till rotation: allt som härleds får
+  // plats bara om det ryms, och resten evakueras varje vecka — exakt det
+  // nederlag modulen finns för att stoppa. Invarianten TAK > HÄRLEDNING är
+  // framtvingad bara för person (800 mot 1 000); för film och serie vilar den
+  // på ett TMDB-överlapp.
+  if (freshIds.length >= SELECTION_CEILING[type]) {
+    process.stderr.write(
+      `::warning::[selection] ${type}: härledningen gav ${freshIds.length} id mot taket ` +
+        `${SELECTION_CEILING[type]}. Spärrhaken har ingen luft kvar och degraderar till ` +
+        `rotation — höj taket med en kostnadssatt biljett, eller krymp härledningen.\n`,
+    );
+  }
+}
+
+/**
  * Hela urvalsbeslutet för en route, på ett ställe.
  *
  * Ligger här och inte i de tre route-filerna av samma skäl som ADR 0005 gav för
@@ -427,8 +493,21 @@ export async function resolveSelection(opts: {
       derived = { ok: false };
     }
     if (derived.ok) {
+      // En härledning som LYCKAS MED TOM LISTA är en tredje tyst väg, skild från
+      // taket och kastet ovan: `mergeManifest` returnerar då `previous` oförändrat,
+      // golvet mäter mot samma tal som förra bygget och passerar, och ingenting i
+      // loggen skiljer den från ett bygge som faktiskt hämtade allt. Raden nedan
+      // namnger just det fallet — den delar medvetet inte lydelse med
+      // utbytesraden, som fyrar på SAMMA händelse med 0 evakuerade och 0 nya.
+      if (derived.value.length === 0) {
+        process.stderr.write(
+          `::warning::[selection] ${type}: härledningen returnerade TOM lista utan att ` +
+            `misslyckas. Ingen id-hämtning skedde.\n`,
+        );
+      }
       manifest = mergeManifest(previous, type, derived.value, now);
       writeSelectionManifest(manifest);
+      reportExchange(type, previous, derived.value, manifest);
     }
   }
 
