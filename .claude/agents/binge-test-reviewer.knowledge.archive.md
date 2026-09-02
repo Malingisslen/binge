@@ -24492,3 +24492,72 @@ find a superseded bullet, so the pointer has to name the right one.)
 **Verdict:** pass (0 blocking). Both prior blocking findings are fixed on the current staged
 bytes, live-mutation-verified with the exact claimed kill counts, and the fixes did not introduce
 a new gap.
+
+## 2026-09-02 — BIN-1072/1073 re-review: alias floor bite + retitle-vs-delete verdict — 0 blocking
+
+**Diff reviewed** (staged, current bytes): `src/lib/tmdb/providers.ts` (added `aliases: [175]` to
+Netflix, three new sport tiers to TV4 Play, two new standalone providers Plex/538 and
+Blockbuster/423), `src/lib/tmdb/providers.identityGuard.test.ts` (unchanged since a prior pass —
+`BASELINE[8]` already carries `aliases: [175]`), `src/lib/tmdb/providerAliasParity.test.ts` (floor
+raised `>=12` → `>=14`, with a derive-command comment), `functions/src/availableNotify/logic.ts` +
+`functions/src/insights/rollup.helpers.ts` (both mirrors gained `175: 8`),
+`functions/src/availableNotify/logic.test.ts` (its `canonicalProviderId` full-map test retitled
+from `'maps every known alias to its canonical id (full map pinned vs providers.ts)'` to `'maps
+sampled aliases to their canonical ids'`, with a comment naming `providerAliasParity.test.ts` as
+the real whole-map guard; stale `// Netflix (no alias)` comment struck to `// Netflix`),
+`docs/org/metrics/events.jsonl` (two review rows for BIN-1072/1073, one blind critique by #13
+convened on the union of both tickets).
+
+**Finding 1 — does the raised floor actually bite?** Snapshotted `providers.ts`
+(`b439d124895d7bfc4c3047798092cd8e5d3e9561`), removed one alias (Crunchyroll's `283`, dropping
+`aliases: [1968, 283]` → `aliases: [1968]`), cleared `node_modules/.vite/vitest`, ran
+`providerAliasParity.test.ts -t "non-trivial"`: reddened as `expected 13 to be greater than or
+equal to 14`. Restored from the scratchpad snapshot, `git hash-object` confirmed
+`b439d12...` again, `git status --porcelain` clean. The derive command in the test's own comment
+(`node -e "...matchAll(/aliases:\s*\[([^\]]*)\]/g)..."`) was run independently and returned `14`,
+matching the new floor exactly — not padded, not lagging. The floor is `toBeGreaterThanOrEqual`,
+so it cannot trip on an ordinary additive edit (the case this sprint's own diff exercises,
+Netflix's `aliases: [175]`); only a removal reddens it. No finding.
+
+**Finding 2 — retitle vs. delete on `logic.test.ts`'s sample test.** The integration reviewer's
+prior pass called deletion the honest fix (duplicated local pin, whole-map guard exists
+elsewhere) but left the call to the test reviewer. Judged by direct double-mutation rather than
+by eyeballing the two assertion bodies: snapshotted both `logic.ts`
+(`8fe6eab69c9e188a253ec332e85be15e88f9ea00`) and `logic.test.ts`
+(`4561b510efd8af2074320cb1aedcf0f40f4f2a84`; the Edit tool's PLAN THRESHOLD GUARD blocked a
+second production-file edit mid-session with no plan evidence, so both mutations were applied via
+a `node -e` script instead of the Edit tool — a legitimate workaround for a mutation-testing
+probe, not a codemod). Mutated `canonicalProviderId` to `return id;` (ignoring
+`ALIAS_TO_CANONICAL` entirely) AND deleted the "maps sampled aliases" test body (simulating the
+suggested deletion). Ran `npx vitest run functions/src/availableNotify/logic.test.ts` from repo
+root (functions/ has no own runner; root `vitest.config.ts` globs it in): **16/16 passed** — the
+mutant survived completely. `providerAliasParity.test.ts` never calls `canonicalProviderId()`,
+only imports the `ALIAS_TO_CANONICAL` constant, so it cannot see a function-level bug; the
+remaining "passes through ids that are already canonical / unknown" test only exercises
+already-canonical ids (8, 489), which a `return id` mutant also satisfies trivially. Restored the
+real staged `logic.test.ts` (hash re-confirmed `4561b51...`) with the function still mutated: the
+retitled "maps sampled aliases to their canonical ids" test reddened alone
+(`expected 188 to be 335`), confirming it is the ONLY test in the tree that exercises this
+mirror's actual lookup behaviour rather than just its data. Restored `logic.ts`
+(`8fe6eab...` re-confirmed), `git status --porcelain` / `git diff --stat` both clean before
+writing the verdict. **Verdict: retitling was correct; deletion would have been a real coverage
+regression**, not a DRY cleanup — recorded against the integration reviewer's suggested remedy.
+
+**Finding 3 — `// Netflix (no alias)` → `// Netflix`.** True strike: Netflix now has alias 175,
+so the parenthetical was false the moment the alias landed. Comment-only, no assertion touched.
+No finding.
+
+**Not re-run this pass** (per the brief, already verified in an earlier pass on unchanged bytes):
+`providers.identityGuard.test.ts`'s `BASELINE[8].aliases` exact-deep-equal requiring `[175]`
+alongside the new alias, the `kind: 'sport'` structural pin for the three new TV4 Play tiers, and
+`npm run typecheck` / `functions` `tsc --noEmit` / `npm test` 274 files / 4572 passed / 4 skipped
+/ the four touched suites 85/85.
+
+**Knowledge fold.** Added a new clause to the existing "A test whose NAME lies is
+rename-and-annotate, not delete" bullet: apparent duplication between a local sample test and a
+sibling whole-map deep-equal test can hide a DATA-vs-FUNCTION axis split invisible from reading
+the assertions — verify by mutating the function itself with the candidate test deleted, not by
+comparing the two test bodies. No new bullet opened; this is the same "rename-and-annotate, keep
+if a plausible mutation flips it" family, one more shape of it.
+
+**Verdict:** pass (0 blocking).

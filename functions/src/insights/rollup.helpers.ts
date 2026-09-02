@@ -19,6 +19,7 @@ import { mediaTypeDocId } from '../shared/mediaTypeDocId';
 // SWEDISH_PROVIDERS.aliases and fail CI on any future drift (BIN-420). Frozen so
 // an importer can't mutate the shared map and silently corrupt canonicalisation.
 export const ALIAS_TO_CANONICAL: Readonly<Record<number, number>> = Object.freeze({
+  175: 8,                // Netflix Kids (variantpost, inte en egen tjanst)
   1899: 384, 1825: 384,   // Max
   493: 520,               // SVT Play
   1944: 489, 1759: 489,   // TV4 Play

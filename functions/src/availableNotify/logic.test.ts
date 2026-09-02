@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { diffNewProviders, qualifyingProviders, canonicalProviderId, normalizeMediaType, availableStateDocId, inboxNotifId } from './logic';
 
 describe('canonicalProviderId (BIN-60)', () => {
-  it('maps every known alias to its canonical id (full map pinned vs providers.ts)', () => {
+  // This list is a SAMPLE, not the map. Whole-map equality against providers.ts is
+  // src/lib/tmdb/providerAliasParity.test.ts's job, in both directions; this one has been
+  // missing entries for a while (531 before BIN-1073, 175 after it) without anything
+  // reddening, which is exactly what a duplicated pin does.
+  it('maps sampled aliases to their canonical ids', () => {
     const expected: Record<number, number> = {
       1899: 384, 1825: 384,   // Max
       493: 520,               // SVT Play
@@ -19,7 +23,7 @@ describe('canonicalProviderId (BIN-60)', () => {
     }
   });
   it('passes through ids that are already canonical / unknown', () => {
-    expect(canonicalProviderId(8)).toBe(8);     // Netflix (no alias)
+    expect(canonicalProviderId(8)).toBe(8);     // Netflix
     expect(canonicalProviderId(489)).toBe(489); // already canonical
   });
 });

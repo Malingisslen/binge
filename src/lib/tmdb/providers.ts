@@ -35,6 +35,14 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   {
     // live-verifierat 2026-07-02 — https://help.netflix.com/en/node/24926 (SE-höjning ~2026-05-15, +20 kr rakt över, ordinarie ej kampanj)
     id: 8, name: 'Netflix', shortName: 'Netflix', color: '#E50914', type: 'flatrate', defaultMonthlyCost: 169,
+    // 175 = "Netflix Kids", TMDB:s egen variantpost för samma abonnemang — inte en egen
+    // tjänst. Utan aliaset renderas en titel TMDB märker med 175 som en okänd leverantör.
+    // Id:t kommer ur BIN-1073:s svep av /watch/providers/movie?watch_region=SE 2026-09-02
+    // och är INTE oberoende omverifierat i den commit som lade in det (ingen TMDB-nyckel i
+    // den sessionen, och repot har ingen sparad ögonblicksbild av SE-katalogen att jämföra
+    // mot). Ett fel ALIAS viker tyst in vad 175 än verkligen är i Netflix identitet överallt
+    // — märken, dedup, kostnadssummor. Kontrollera det före nästa aliastillägg. (BIN-1073)
+    aliases: [175],
     tiers: [
       { id: 'basic', name: 'Basic', cost: 129 },
       { id: 'standard', name: 'Standard', cost: 169 },
@@ -86,9 +94,17 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
     // (uppgick i TV4 Play); finns inte längre i TMDB:s live-katalog men gammal
     // sparad provider-data kan innehålla det → canonicalisera till TV4 Play.
     aliases: [1944, 1759],
+    // live-verifierat 2026-09-02 — https://tv4play.se/paket — TV4 säljer numera FEM paket.
+    // De tre mellannivåerna saknades helt. De billigare
+    // raderna på sidan är 12 mån bindning, inte ordinarie, och modelleras inte. Reklam-
+    // varianterna av sportpaketen är MEDVETET utelämnade: katalogen har ingen reklam-variant
+    // av någon sportnivå, och en sådan axel är Malins beslut, inte ett svep. (BIN-1072)
     tiers: [
       { id: 'plus-ads', name: 'Plus med reklam', cost: 69 },
       { id: 'plus', name: 'Plus utan reklam', cost: 169 },
+      { id: 'sport-bas', name: 'Sport utan reklam', cost: 399, kind: 'sport' },
+      { id: 'sport-fotboll', name: 'Sport Fotboll utan reklam', cost: 499, kind: 'sport' },
+      { id: 'sport-hockey', name: 'Sport Hockey utan reklam', cost: 649, kind: 'sport' },
       { id: 'sport', name: 'Sport Total utan reklam', cost: 699, kind: 'sport' },
     ],
   },
@@ -154,6 +170,12 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // kandidat). Ligger MEDVETET inte i FREE_PUBLIC_PROVIDER_IDS (isFree) — det lagret är för
   // skattefinansierad public service (SVT), inte kommersiellt AVOD (BIN-410).
   { id: 300, name: 'Pluto TV', shortName: 'Pluto', color: '#FFE100', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
+  // Plex — gratis reklamfinansierad AVOD, samma form som Pluto TV ovan: flatrate + kostnad 0
+  // + isAds, vilket är det som gör att advisor bara föreslår den för den som redan använder
+  // reklam-tjänster. `type: 'rent'` hade sett rimligt ut och tyst tagit den ur precis den
+  // logiken. Id 538 ur BIN-1073:s SE-svep 2026-09-02, ej oberoende omverifierat i den commit
+  // som lade in det. (BIN-1073)
+  { id: 538, name: 'Plex', shortName: 'Plex', color: '#E5A00D', type: 'flatrate', defaultMonthlyCost: 0, isAds: true },
   // live-verifierat 2026-07-02 — https://www.triartplay.se — INTE längre fri flatrate-streaming:
   // numera en hyr-tjänst med medlemsklubb ("Klubben" 49 kr/mån = en gratisfilm + hyrrabatter). (BIN-406)
   { id: 578, name: 'TriArt Play', shortName: 'TriArt', color: '#222222', type: 'rent', aliases: [517] },
@@ -163,6 +185,11 @@ export const SWEDISH_PROVIDERS: SwedishProvider[] = [
   // SF Anytime — stor svensk hyr/köp-tjänst (TVOD). TMDB SE-id 426 (live-verifierat
   // 2026-06-20). Tidigare saknad → titlar som bara finns där såg "otillgängliga" ut. (BIN-64)
   { id: 426, name: 'SF Anytime', shortName: 'SF Anytime', color: '#E4002B', type: 'rent' },
+  // Blockbuster — svensk hyr/köp-tjänst (Telenor). Samma lucka SF Anytime fyllde i BIN-64:
+  // en titel som bara finns där ser "otillgänglig" ut. Som `rent` bär den ingen prisdata att
+  // underhålla och räknas aldrig in i någon månadskostnad. Id 423 ur BIN-1073:s SE-svep
+  // 2026-09-02, ej oberoende omverifierat i den commit som lade in det. (BIN-1073)
+  { id: 423, name: 'Blockbuster', shortName: 'Blockbuster', color: '#003399', type: 'rent' },
 ];
 
 export const PROVIDER_MAP: Map<number, SwedishProvider> = (() => {

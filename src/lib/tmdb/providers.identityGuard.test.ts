@@ -37,7 +37,7 @@ interface ProviderIdentity {
 }
 
 const BASELINE: Record<number, ProviderIdentity> = {
-  8: { name: 'Netflix', shortName: 'Netflix', aliases: [], isFree: false, isAds: false, tiers: {
+  8: { name: 'Netflix', shortName: 'Netflix', aliases: [175], isFree: false, isAds: false, tiers: {
     basic: { name: 'Basic', kind: null }, standard: { name: 'Standard', kind: null }, premium: { name: 'Premium', kind: null },
   } },
   119: { name: 'Amazon Prime Video', shortName: 'Prime', aliases: [], isFree: false, isAds: false, tiers: {} },
@@ -54,6 +54,9 @@ const BASELINE: Record<number, ProviderIdentity> = {
   520: { name: 'SVT Play', shortName: 'SVT', aliases: [493], isFree: true, isAds: false, tiers: {} },
   489: { name: 'TV4 Play', shortName: 'TV4 Play', aliases: [1944, 1759], isFree: false, isAds: false, tiers: {
     'plus-ads': { name: 'Plus med reklam', kind: null }, plus: { name: 'Plus utan reklam', kind: null },
+    'sport-bas': { name: 'Sport utan reklam', kind: 'sport' },
+    'sport-fotboll': { name: 'Sport Fotboll utan reklam', kind: 'sport' },
+    'sport-hockey': { name: 'Sport Hockey utan reklam', kind: 'sport' },
     sport: { name: 'Sport Total utan reklam', kind: 'sport' },
   } },
   350: { name: 'Apple TV+', shortName: 'Apple', aliases: [2243], isFree: false, isAds: false, tiers: {} },
@@ -77,6 +80,8 @@ const BASELINE: Record<number, ProviderIdentity> = {
   3: { name: 'Google Play Movies', shortName: 'Google', aliases: [], isFree: false, isAds: false, tiers: {} },
   2: { name: 'Apple TV', shortName: 'Apple', aliases: [], isFree: false, isAds: false, tiers: {} },
   426: { name: 'SF Anytime', shortName: 'SF Anytime', aliases: [], isFree: false, isAds: false, tiers: {} },
+  423: { name: 'Blockbuster', shortName: 'Blockbuster', aliases: [], isFree: false, isAds: false, tiers: {} },
+  538: { name: 'Plex', shortName: 'Plex', aliases: [], isFree: false, isAds: true, tiers: {} },
 };
 
 describe('SWEDISH_PROVIDERS identity guard (immutable id/name/kind — prices may change freely)', () => {

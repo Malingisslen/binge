@@ -36,7 +36,10 @@ describe('provider alias map parity (BIN-420)', () => {
   // future refactor that silently empties the map and makes both mirrors "match"
   // an empty expectation).
   it('derives a non-trivial map that includes the SkyShowtime merge alias', () => {
-    expect(Object.keys(expected).length).toBeGreaterThanOrEqual(12);
+    // Raise this WITH the source. A floor that lags the list it guards stops being able to
+    // fire — the shape BIN-852/1048 keep finding. Derive the current count with:
+    //   node -e "const s=require('fs').readFileSync('src/lib/tmdb/providers.ts','utf8');console.log([...s.matchAll(/aliases:\s*\[([^\]]*)\]/g)].flatMap(m=>m[1].split(',')).length)"
+    expect(Object.keys(expected).length).toBeGreaterThanOrEqual(14);
     expect(expected[531]).toBe(431); // nedlagda Paramount+ → SkyShowtime
     expect(expected[1899]).toBe(384); // legacy HBO Max → Max
   });
